@@ -11,6 +11,7 @@
 ## Global Constraints
 
 - Pin Superpowers to version `6.1.1` and preserve its MIT license.
+- Preserve executable file modes from the official Superpowers `v6.1.1` Git tag.
 - Store repository skills under `.agents/skills/`.
 - Use the unauthenticated Streamable HTTP endpoint `https://learn.microsoft.com/api/mcp`.
 - Do not add secrets, setup downloads, hooks, application code, or `.codex/config.toml` MCP fallback configuration.
@@ -33,7 +34,7 @@
 
 - [x] **Step 1: Copy the complete skill directories**
 
-Copy every directory from the verified Superpowers `6.1.1` `skills/` folder into `.agents/skills/` without changing file content or executable bits.
+Copy every directory from the verified Superpowers `6.1.1` `skills/` folder into `.agents/skills/` without changing file content. Preserve executable modes from the official Git tag if a packaged plugin cache has flattened them.
 
 - [x] **Step 2: Record version and licensing metadata**
 
@@ -53,9 +54,10 @@ Run:
 diff -qr /home/krzysztof/.codex/plugins/cache/openai-curated-remote/superpowers/6.1.1/skills .agents/skills --exclude SUPERPOWERS_VERSION --exclude SUPERPOWERS_LICENSE
 cmp /home/krzysztof/.codex/plugins/cache/openai-curated-remote/superpowers/6.1.1/LICENSE .agents/skills/SUPERPOWERS_LICENSE
 test "$(cat .agents/skills/SUPERPOWERS_VERSION)" = "6.1.1"
+git -C /tmp/mailmcp-superpowers-v6.1.1-source ls-tree -r v6.1.1 skills
 ```
 
-Expected: all commands exit with status `0` and produce no diff output.
+Expected: all commands exit with status `0`, produce no content diff output, and every upstream `100755` skill script remains executable in the repository.
 
 - [x] **Step 4: Verify skill metadata**
 

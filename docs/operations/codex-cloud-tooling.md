@@ -41,9 +41,10 @@ Treat Superpowers as a pinned third-party dependency:
 2. Replace every vendored skill directory with the complete skill set from one release.
 3. Update `.agents/skills/SUPERPOWERS_VERSION` to that exact release version.
 4. Replace `.agents/skills/SUPERPOWERS_LICENSE` with the license from the same release.
-5. Compare the vendored directories recursively with the selected upstream snapshot.
+5. Compare the vendored directories recursively with the selected upstream snapshot, including executable file modes recorded by Git.
 6. Confirm that every first-level skill directory contains `SKILL.md` and that its frontmatter name is unique.
-7. Review and commit the complete snapshot as one dependency update.
+7. Run shell and JavaScript syntax checks for bundled scripts.
+8. Review and commit the complete snapshot as one dependency update.
 
 Do not download mutable Superpowers content from a setup script. A reviewed repository update keeps Cloud sessions reproducible and makes third-party changes visible in the Git history.
 
