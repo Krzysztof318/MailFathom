@@ -1,0 +1,34 @@
+{
+  "name": "mailmcp-microsoft-learn",
+  "version": "0.1.0",
+  "description": "Search and fetch current Microsoft Learn documentation while developing MailMcp.",
+  "author": {
+    "name": "MailMcp contributors",
+    "url": "https://github.com/Krzysztof318/MailMcp"
+  },
+  "homepage": "https://learn.microsoft.com/",
+  "repository": "https://github.com/Krzysztof318/MailMcp",
+  "keywords": [
+    "documentation",
+    "dotnet",
+    "microsoft-learn",
+    "mcp"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "MailMcp Microsoft Learn",
+    "shortDescription": "Search current Microsoft Learn documentation",
+    "longDescription": "Use the public Microsoft Learn MCP server to search and fetch current official Microsoft documentation while developing MailMcp.",
+    "developerName": "MailMcp contributors",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read"
+    ],
+    "websiteURL": "https://learn.microsoft.com/",
+    "privacyPolicyURL": "https://privacy.microsoft.com/privacystatement",
+    "termsOfServiceURL": "https://learn.microsoft.com/legal/termsofuse",
+    "defaultPrompt": [
+      "Verify current Microsoft and .NET documentation before implementation."
+    ]
+  }
+}
