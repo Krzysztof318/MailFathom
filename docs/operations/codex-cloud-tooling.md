@@ -51,6 +51,30 @@ Treat Superpowers as a pinned third-party dependency:
 
 Do not download mutable Superpowers content from a setup script. A reviewed repository update keeps Cloud sessions reproducible and makes third-party changes visible in the Git history.
 
+
+## .NET development tooling
+
+Codex Cloud runs `.codex/setup.sh` when a new repository environment is prepared. The script installs the .NET SDK from the official Microsoft `dotnet-install.sh` endpoint into `${DOTNET_INSTALL_DIR:-$HOME/.dotnet}` using channel `10.0`, exports `DOTNET_ROOT` to that SDK directory, then prepends that directory and `${DOTNET_CLI_HOME:-$HOME}/.dotnet/tools` to `PATH`.
+
+The repository also includes `global.json` so .NET CLI commands resolve to SDK `10.0.100` or a later .NET 10 feature band when Codex Cloud has already cached a compatible SDK. This keeps command behavior aligned with the repository rule that MailMcp targets .NET 10.
+
+After the SDK is available, the setup script installs or updates these command-line tools for the Codex Cloud user:
+
+- `dotnet-ef` version `10.0.10`, installed as a global .NET tool so migrations and design-time EF Core commands are available through `dotnet ef`;
+- Aspire CLI version `13.4.6`, installed as the `Aspire.Cli` global .NET tool from NuGet so `aspire` commands are available for future AppHost work.
+
+The setup is intentionally user-local and does not use `sudo`, system package managers, repository secrets, or application package references. Re-run `.codex/setup.sh` to refresh the SDK/tooling in an existing environment. To override defaults for a diagnostic session, set `DOTNET_CHANNEL`, `DOTNET_INSTALL_DIR`, `DOTNET_CLI_HOME`, `DOTNET_INSTALL_SCRIPT_URL`, `DOTNET_EF_VERSION`, or `ASPIRE_CLI_VERSION` before invoking the script.
+
+Verify a prepared environment with:
+
+```bash
+dotnet --info
+dotnet ef --version
+aspire --version
+```
+
+If setup fails while downloading scripts or tools, first check Codex Cloud network access to `dot.net` and `nuget.org`. If `dotnet` commands still select the wrong SDK, confirm that `$HOME/.dotnet` appears before older SDK locations in `PATH` and that `global.json` remains at the repository root.
+
 ## References
 
 - [Codex skills](https://learn.chatgpt.com/docs/build-skills)
