@@ -11,6 +11,8 @@ Codex discovers repository skills from `.agents/skills/`. Start a new Codex sess
 
 The vendored snapshot contains the complete upstream skill set and its supporting resources. `.agents/skills/SUPERPOWERS_VERSION` records the pinned version and `.agents/skills/SUPERPOWERS_LICENSE` preserves the upstream MIT license.
 
+The root `.gitattributes` disables Git whitespace diagnostics only for `.agents/skills/**`. This preserves upstream content exactly while leaving ordinary repository files subject to the normal whitespace checks.
+
 ## Microsoft Learn plugin
 
 The `mailmcp-microsoft-learn` plugin uses the public Streamable HTTP endpoint:
@@ -44,7 +46,8 @@ Treat Superpowers as a pinned third-party dependency:
 5. Compare the vendored directories recursively with the selected upstream snapshot, including executable file modes recorded by Git.
 6. Confirm that every first-level skill directory contains `SKILL.md` and that its frontmatter name is unique.
 7. Run shell and JavaScript syntax checks for bundled scripts.
-8. Review and commit the complete snapshot as one dependency update.
+8. Confirm `.gitattributes` still scopes the whitespace exception only to `.agents/skills/**`.
+9. Review and commit the complete snapshot as one dependency update.
 
 Do not download mutable Superpowers content from a setup script. A reviewed repository update keeps Cloud sessions reproducible and makes third-party changes visible in the Git history.
 

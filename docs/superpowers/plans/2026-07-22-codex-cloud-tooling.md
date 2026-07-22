@@ -24,6 +24,7 @@
 ### Task 1: Vendor the pinned Superpowers skill snapshot
 
 **Files:**
+- Create: `.gitattributes`
 - Create: `.agents/skills/<superpowers-skill-name>/**`
 - Create: `.agents/skills/SUPERPOWERS_VERSION`
 - Create: `.agents/skills/SUPERPOWERS_LICENSE`
@@ -58,6 +59,8 @@ git -C /tmp/mailmcp-superpowers-v6.1.1-source ls-tree -r v6.1.1 skills
 ```
 
 Expected: all commands exit with status `0`, produce no content diff output, and every upstream `100755` skill script remains executable in the repository.
+
+Preserve upstream file content exactly. Configure `.agents/skills/** -whitespace` in `.gitattributes` so an upstream whitespace issue does not weaken checks for MailMcp-owned files.
 
 - [x] **Step 4: Verify skill metadata**
 
