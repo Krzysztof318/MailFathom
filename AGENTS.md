@@ -11,6 +11,16 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Preserve unrelated user changes. Stage only files that belong to the current task.
 - Make architectural decisions before implementation. Keep changes small, reviewable, and aligned with the architecture draft in `specs/`.
 
+## Third-party licensing
+
+- MailMcp must remain compatible with both commercial closed-source distribution and open-source publication.
+- Before adding, upgrading, replacing, bundling, or distributing a third-party component, verify the current upstream license from official project, package, or vendor sources.
+- Only use third-party components whose licenses permit commercial use and do not require MailMcp itself to be relicensed or distributed as source code. Prefer permissive licenses such as MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, and PostgreSQL License.
+- Do not introduce GPL, AGPL, SSPL, BUSL, Commons Clause, PolyForm Noncommercial, source-available-only, field-of-use-restricted, or otherwise non-permissive dependencies without explicit owner approval.
+- Treat hosted services, AI models, provider APIs, container images, generated assets, and copied code samples as separately reviewable from SDK licenses. A permissive SDK license does not approve the service terms, model terms, data-use policy, trademark terms, or redistribution conditions.
+- Keep the root `LICENSES.md` third-party license register current. Add or update its entries in the same change set as any dependency, service, protocol SDK, container image, generated asset, or externally sourced code sample change.
+- When a dependency is pinned in `Directory.Packages.props`, record the exact package name, version, license expression, upstream URL, and any required attribution or NOTICE handling in `LICENSES.md`.
+
 ## Documentation workflow
 
 - Before using or changing a library, framework, protocol, CLI, or external API, consult its latest official documentation.
