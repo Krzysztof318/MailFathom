@@ -338,20 +338,6 @@ The SQL above is an illustrative profile with ID `1` and 1536 dimensions; it doe
 
 Remote expunge marks the message as deleted; its raw MIME is retained for a configurable grace period before PostgreSQL garbage collection. PostgreSQL backups are the authoritative offline-mail backup in the initial deployment.
 
-### 10.1 Planned MinIO migration
-
-All raw-content operations use the application-owned `IMessageContentStore` port with streaming put, open-read, existence, and delete operations. The first implementation stores content in PostgreSQL; neither the application nor domain layer receives a PostgreSQL-specific locator or `bytea` type.
-
-The later MinIO migration is performed online in controlled stages:
-
-1. Add the MinIO adapter and explicit content-backend/locator metadata while PostgreSQL remains authoritative.
-2. Stream existing MIME rows to MinIO in bounded background batches.
-3. Verify every copied object against its stored byte length and SHA-256 hash.
-4. Enable dual-read with PostgreSQL fallback and repair while new content is written to the selected backend.
-5. Switch MinIO to authoritative reads only after coverage and consistency metrics reach the required threshold.
-6. Retain PostgreSQL MIME for a safety interval, then remove migrated `bytea` values in bounded maintenance batches.
-
-No MinIO package, credentials, process, bucket, or deployment volume is included in the first release.
 
 ## 11. IMAP synchronization
 
@@ -579,7 +565,34 @@ Persistent volumes:
 One PostgreSQL backup contains metadata, raw MIME, search data, chunks, embeddings, jobs, and outbox state at a consistent logical point. Backup and restore procedures must be tested, and database volumes and backups must use encrypted storage. TLS certificates and the Data Protection key ring are backed up separately through the deployment secret-management process.
 
 
-## 19. Development orchestration with Aspire
+## 19. Future ideas
+
+These ideas are deliberately outside the first release. They are recorded here so the initial architecture keeps stable seams for later work without adding premature packages, services, test projects, or operational dependencies.
+
+### 19.1 Agent Governance Toolkit (AGT)
+
+Microsoft Agent Governance Toolkit (AGT) may become useful when MailMcp exposes agent-mediated actions beyond read-only retrieval, especially if future MCP tools can send mail, mutate local state, delegate work, or call external systems. AGT is a governance layer for agents and MCP tool calls: it can help make policy checks, input/output inspection, and allow/deny decisions explicit instead of burying those decisions inside prompt text or ad-hoc tool handlers.
+
+AGT is not part of the first release because the public MCP surface is read-only, deterministic tool authorization is enforced at the transport and application boundaries, and MailMcp already treats retrieved mail as untrusted input. Before adopting AGT, the team must verify package maturity, .NET 10 compatibility, license and service-term implications, policy authoring model, telemetry data exposure, and whether AGT decisions can be expressed without leaking provider-specific concepts into `Domain`, `Application`, or `Mcp`.
+
+Potential AGT evaluation scenarios include governing a future `send_email` MCP tool, blocking prompt-injected tool escalation from message content, enforcing per-client tool policies, recording auditable governance decisions, and validating that denied actions fail closed with safe MCP error codes.
+
+### 19.2 MinIO object storage migration
+
+All raw-content operations use the application-owned `IMessageContentStore` port with streaming put, open-read, existence, and delete operations. The first implementation stores content in PostgreSQL; neither the application nor domain layer receives a PostgreSQL-specific locator or `bytea` type. This seam keeps a future MinIO or S3-compatible object-storage migration possible without changing mail use cases.
+
+A later MinIO migration would be performed online in controlled stages:
+
+1. Add the MinIO adapter and explicit content-backend/locator metadata while PostgreSQL remains authoritative.
+2. Stream existing MIME rows to MinIO in bounded background batches.
+3. Verify every copied object against its stored byte length and SHA-256 hash.
+4. Enable dual-read with PostgreSQL fallback and repair while new content is written to the selected backend.
+5. Switch MinIO to authoritative reads only after coverage and consistency metrics reach the required threshold.
+6. Retain PostgreSQL MIME for a safety interval, then remove migrated `bytea` values in bounded maintenance batches.
+
+No MinIO package, credentials, process, bucket, deployment volume, or object-storage test fixture is included in the first release. Any future MinIO SDK, container image, or hosted object-storage dependency must be pinned, license-reviewed, and recorded in `LICENSES.md` before adoption.
+
+### 19.3 Development orchestration with Aspire
 
 Aspire is planned as a development-time orchestration and observability layer, not as the production runtime or application framework. A future `MailMcp.AppHost` may model the host process, PostgreSQL with pgvector, local secret/configuration bindings, and test-only services so contributors can run the distributed development environment consistently from one entry point.
 
@@ -587,7 +600,7 @@ The AppHost should stay minimal: explicit resource names, explicit dependencies,
 
 Future integration testing can reuse Aspire orchestration when it improves repeatability, but integration-test infrastructure remains separate from the initial unit-test-only solution.
 
-## 20. Future integration testing with smtp4dev
+### 19.4 Future integration testing with smtp4dev
 
 A future integration-test suite should include smtp4dev as the controlled SMTP target for delivery scenarios. smtp4dev is a fake SMTP server intended for development and testing, is available as Docker/OCI images and a .NET tool, and its NuGet package currently declares the BSD-3-Clause license. Before adding it to the repository, the exact package, container image, or tool version must be pinned and recorded in `LICENSES.md`.
 
@@ -595,7 +608,7 @@ The smtp4dev-based tests should validate SMTP connection policy, STARTTLS behavi
 
 The first release still does not add integration-test projects, Testcontainers, Docker fixtures, smtp4dev packages, or smtp4dev container references.
 
-## 21. Future administration CLI
+### 19.5 Future administration CLI
 
 The dedicated administration CLI is named `mcpmail` and is a future operational interface rather than an initial implementation requirement. The first release can be administered through validated YAML configuration plus deployment secret references, with account-test and migration workflows added only when their application services exist.
 
@@ -619,7 +632,7 @@ Candidate future commands:
 
 The CLI requires local operating-system access and is not exposed through MCP.
 
-## 22. Delivery stages
+## 20. Delivery stages
 
 1. Repository and solution foundation, unit-test projects, Kestrel HTTPS configuration, PostgreSQL, and migrations.
 2. YAML-based configuration binding, typed option validation, secret-reference resolution, and MailKit connection validation with mocked IMAP/SMTP boundary tests.
@@ -630,9 +643,9 @@ The CLI requires local operating-system access and is not exposed through MCP.
 7. Agent Framework RAG and conditional `ask_mail`.
 8. SMTP outbox and delivery service with unit-tested state transitions and retry behavior.
 9. ChatGPT OAuth/mTLS validation and general OAuth MCP client profile.
-10. Future Aspire AppHost for local orchestration, future `mcpmail` CLI design, production hardening, backup, metrics, recovery exercises, and design of the future integration suite with smtp4dev for SMTP scenarios.
+10. Production hardening, backup, metrics, recovery exercises, and explicit evaluation plans for future ideas: AGT governance, Aspire local orchestration, MinIO object storage, `mcpmail`, and smtp4dev-backed SMTP integration tests.
 
-## 23. Acceptance criteria
+## 21. Acceptance criteria
 
 - Synchronizing and retrieving an unread message leaves its remote `\Seen` flag unchanged.
 - Repeated synchronization is idempotent for the same account, folder, UIDVALIDITY, and UID.
@@ -649,9 +662,9 @@ The CLI requires local operating-system access and is not exposed through MCP.
 - IMAP/SMTP success, failure, disconnect, cancellation, and capability scenarios are reproducible through NSubstitute-based protocol boundaries.
 - First-release configuration can be expressed in YAML without placing secrets or encrypted secret values in Git.
 - Future CLI work is explicitly deferred and uses `mcpmail` with `System.CommandLine` when implemented.
-- Future integration-test design identifies smtp4dev for SMTP delivery verification without adding integration infrastructure to the initial solution.
+- Future ideas are collected separately from first-release scope, including AGT governance evaluation, MinIO migration, Aspire orchestration, `mcpmail`, and smtp4dev-backed SMTP delivery verification.
 
-## 24. References verified for this draft
+## 22. References verified for this draft
 
 - [.NET releases and support](https://learn.microsoft.com/en-us/dotnet/core/releases-and-support)
 - [Microsoft Agent Framework overview](https://learn.microsoft.com/en-us/agent-framework/overview/)
@@ -686,3 +699,5 @@ The CLI requires local operating-system access and is not exposed through MCP.
 - [smtp4dev NuGet package](https://www.nuget.org/packages/Rnwood.Smtp4dev)
 - [smtp4dev Docker image](https://hub.docker.com/r/rnwood/smtp4dev)
 - [smtp4dev installation documentation](https://raw.githubusercontent.com/rnwood/smtp4dev/master/docs/Installation.md)
+- [Agent Governance Toolkit documentation](https://microsoft.github.io/agent-governance-toolkit/)
+- [Agent Governance Toolkit GitHub repository](https://github.com/microsoft/agent-governance-toolkit)
