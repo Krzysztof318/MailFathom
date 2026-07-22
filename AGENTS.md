@@ -11,14 +11,15 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Preserve unrelated user changes. Stage only files that belong to the current task.
 - Make architectural decisions before implementation. Keep changes small, reviewable, and aligned with the architecture draft in `specs/`.
 
-## Documentation and docs-first development
+## Documentation workflow
 
 - Before using or changing a library, framework, protocol, CLI, or external API, consult its latest official documentation.
 - Prefer Microsoft Learn, official project documentation, specifications, and upstream repositories over blog posts or secondary examples.
 - Confirm package compatibility with .NET 10 before adding or updating a dependency.
 - Pin package versions centrally in `Directory.Packages.props`. Do not use floating versions.
 - Write repository documentation in English and keep durable documentation under `docs/`.
-- Create or update the relevant `docs/` page while implementing code, not as a later cleanup task. Code and its documentation belong in the same commit.
+- Develop and verify tests and production code before writing the corresponding repository documentation. Documentation must describe the behavior that actually exists, not an intended implementation.
+- After the code is implemented and verified, create or update the relevant `docs/` page before completing the task. Code and its documentation normally belong in the same commit or reviewable change set.
 - Document architecture, feature behavior, configuration, security assumptions, operational procedures, failure modes, and important implementation trade-offs when they are introduced or changed.
 - Keep a discoverable documentation structure such as `docs/architecture/`, `docs/features/`, `docs/operations/`, and `docs/decisions/`. Add an index when more than a few pages exist.
 - Update examples, configuration snippets, command names, and diagrams whenever the corresponding code changes. Stale documentation is a defect.
