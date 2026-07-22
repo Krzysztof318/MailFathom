@@ -11,12 +11,18 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Preserve unrelated user changes. Stage only files that belong to the current task.
 - Make architectural decisions before implementation. Keep changes small, reviewable, and aligned with the architecture draft in `specs/`.
 
-## Documentation-first development
+## Documentation and docs-first development
 
 - Before using or changing a library, framework, protocol, CLI, or external API, consult its latest official documentation.
 - Prefer Microsoft Learn, official project documentation, specifications, and upstream repositories over blog posts or secondary examples.
 - Confirm package compatibility with .NET 10 before adding or updating a dependency.
 - Pin package versions centrally in `Directory.Packages.props`. Do not use floating versions.
+- Write repository documentation in English and keep durable documentation under `docs/`.
+- Create or update the relevant `docs/` page while implementing code, not as a later cleanup task. Code and its documentation belong in the same commit.
+- Document architecture, feature behavior, configuration, security assumptions, operational procedures, failure modes, and important implementation trade-offs when they are introduced or changed.
+- Keep a discoverable documentation structure such as `docs/architecture/`, `docs/features/`, `docs/operations/`, and `docs/decisions/`. Add an index when more than a few pages exist.
+- Update examples, configuration snippets, command names, and diagrams whenever the corresponding code changes. Stale documentation is a defect.
+- Do not create documentation that merely repeats type names or folder structure. Explain purpose, contracts, invariants, data flow, operational impact, and the reason behind important decisions.
 
 ## Architecture
 
@@ -38,7 +44,11 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Treat compiler and analyzer warnings as errors in repository code. Suppress a diagnostic only at the narrowest scope and document the concrete reason.
 - Maintain one repository `.editorconfig` and let automated formatting define whitespace and layout. Do not hand-format against configured rules.
 - Prefer immutable records or value objects for data that represents values; use entities only when identity and lifecycle matter.
-- Use domain-correct, descriptive names. Avoid abbreviations except established terms such as IMAP, SMTP, MIME, MCP, UID, TLS, and RAG.
+- Use domain-correct, descriptive names for types, methods, parameters, variables, fields, and files. Avoid abbreviations except established terms such as IMAP, SMTP, MIME, MCP, UID, TLS, and RAG.
+- Prefer a longer name that communicates intent, constraints, or result over a short ambiguous name. Long method names are acceptable when every word adds useful domain meaning.
+- Keep names proportionate and avoid redundant context already supplied by the containing type or namespace. Do not produce sentence-like names when a smaller precise name communicates the same contract.
+- Name methods after observable behavior or the result they produce. Avoid vague verbs such as `Handle`, `Process`, `Manage`, `Do`, or `Execute` unless the surrounding application pattern gives them a precise established meaning.
+- Rename unclear identifiers as part of the code change that exposes them. Do not rely on comments to compensate for misleading or abbreviated names.
 - Keep public APIs small and predictable. Make types and members `internal` unless they are intentionally part of a cross-project contract.
 - Prefer one primary type per file and align namespaces with folders. File names match their primary type.
 - Use `sealed` for concrete classes not designed for inheritance. Prefer composition over inheritance and do not use inheritance only to share implementation.
@@ -61,7 +71,13 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Catch exceptions only when adding useful context, translating at a boundary, applying a defined retry policy, or completing cleanup. Preserve the original exception as `InnerException`.
 - Use explicit result types for expected application failures; reserve exceptions for exceptional or infrastructure failures.
 - Keep methods focused and classes cohesive. Prefer readable control flow over clever expressions or premature generic abstractions.
-- Add comments only for non-obvious reasoning, protocol hazards, or security constraints that naming cannot express.
+- Use English XML documentation comments to make code contracts useful to developers, IDE tooling, and future agents.
+- Generate XML documentation files for production projects and keep missing public API documentation visible through compiler or analyzer diagnostics.
+- Document every public type and public member. Also document internal interfaces, extension points, domain invariants, protocol boundaries, concurrency rules, security-sensitive behavior, and non-obvious lifecycle or ownership requirements.
+- Use `<summary>`, `<param>`, `<returns>`, `<exception>`, `<remarks>`, and `<example>` where they add concrete contract information. Describe cancellation behavior and side effects for asynchronous or state-changing operations.
+- Keep XML documentation accurate when signatures or behavior change. Missing or stale documentation is part of the implementation and must be fixed in the same change.
+- Add inline comments for non-obvious reasoning, protocol hazards, algorithms, workarounds, security constraints, or decisions that cannot be expressed through naming and types.
+- Explain why the code must behave a certain way; do not narrate what an immediately readable statement already does. Prefer better naming or extraction over explanatory comments for ordinary control flow.
 
 ## API and application design
 
