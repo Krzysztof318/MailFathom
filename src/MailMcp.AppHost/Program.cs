@@ -1,3 +1,5 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 var postgres = builder.AddPostgres("postgres");
