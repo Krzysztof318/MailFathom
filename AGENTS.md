@@ -37,7 +37,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 
 ## Architecture
 
-- Build a modular monolith with clear `Domain`, `Application`, `Infrastructure`, `AI`, `Mcp`, `Host`, and `Cli` boundaries.
+- Build a clean-architecture modular monolith with clear `Domain`, `Application`, `Infrastructure`, `AI`, `Mcp`, `Host`, and `Cli` boundaries.
 - `Domain` contains business concepts and invariants and has no dependency on infrastructure frameworks.
 - `Application` contains use cases and ports and depends only on `Domain`.
 - `Infrastructure` implements persistence, IMAP/SMTP, message-content storage, security, and observability ports.
@@ -95,8 +95,8 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Model one application use case per handler or service operation with explicit input and output contracts.
 - Validate untrusted input at the outer boundary and enforce business invariants again in the domain object that owns them.
 - Keep transport contracts, application contracts, domain models, and persistence models distinct. Map explicitly at boundaries.
-- Do not return exceptions, stack traces, internal identifiers, or provider responses through MCP or administrative endpoints.
-- Use stable machine-readable error codes with safe human-readable messages for expected failures.
+- Do not return exceptions, stack traces, internal identifiers, inner-exception details, or provider responses through MCP or administrative endpoints.
+- Use stable machine-readable error codes with safe human-readable messages for expected failures. Model domain invariant failures with domain-specific exceptions only for exceptional states, and translate them at MCP boundaries into safe serialized errors without leaking inner exceptions.
 - Keep query result sizes bounded. Use keyset pagination and stable deterministic ordering.
 - Make retryable commands idempotent and carry an idempotency identity where duplicate execution could cause an external side effect.
 - Keep authorization close to the use case as well as at the transport boundary so alternate entrypoints cannot bypass it.
@@ -146,14 +146,14 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 ## Unit testing policy
 
 - Unit tests are part of every behavior change, feature, and bug fix. Write or update the failing test before production code when practical.
-- Use xUnit.net v3 as the test framework and NSubstitute for test doubles.
+- Use xUnit.net v3 on Microsoft Testing Platform as the test framework and NSubstitute for test doubles.
 - Keep unit tests in separate projects under `tests/`, named after the production boundary they cover:
   - `MailMcp.Domain.UnitTests`
   - `MailMcp.Application.UnitTests`
   - `MailMcp.Infrastructure.UnitTests`
   - `MailMcp.AI.UnitTests`
   - `MailMcp.Mcp.UnitTests`
-- Follow Arrange, Act, Assert. Separate the phases with blank lines when it improves readability; do not add `Arrange`, `Act`, or `Assert` comments.
+- Follow Arrange, Act, Assert. Add explicit `// Arrange`, `// Act`, and `// Assert` comments in unit tests so test phases are visually consistent across the repository.
 - Name tests `Member_Scenario_ExpectedBehavior`. Use `[Fact]` for one scenario and `[Theory]` for the same behavior over multiple inputs.
 - Test observable behavior and domain invariants, not private implementation details. One test should describe one behavior even if several assertions are needed to prove it.
 - Tests must be fast, isolated, repeatable, order-independent, and safe to run in parallel. Do not use real clocks, random nondeterministic values, shared mutable fixtures, sleeps, network calls, databases, containers, or the filesystem in unit tests.

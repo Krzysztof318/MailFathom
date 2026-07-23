@@ -23,9 +23,9 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 - MCP reads from local storage and never performs a blocking IMAP fetch while serving a tool request.
 - Microsoft Agent Framework is the primary agent and RAG orchestration framework.
 - Semantic Kernel may be added only as an adapter for a capability unavailable or insufficient in Agent Framework.
-- Chat and embedding providers are deployment choices and are not fixed in this draft.
+- Chat and embedding providers remain configuration choices, not constants compiled into project code. The initial deployment profile uses OpenAI `text-embedding-3-small` for embeddings and `gpt-5.6-terra` for chat when that model is available to the deployment; startup validation fails or disables `ask_mail` if configured model access is unavailable.
 - The public server supports ChatGPT and remains compatible with other remote MCP clients such as Claude Code.
-- Unit tests are developed from the beginning with xUnit.net v3 and NSubstitute.
+- Unit tests are developed from the beginning with xUnit.net v3, Microsoft Testing Platform, and NSubstitute.
 - Integration tests are planned for a later phase but are not created in the initial solution.
 - The solution is named `MailMcp`, uses `MailMcp.slnx`, and applies the `MailMcp.*` prefix consistently to projects, assemblies, and root namespaces.
 
@@ -41,12 +41,12 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 - PostgreSQL full-text search and pgvector semantic search.
 - Background chunking and embedding generation.
 - Agent Framework RAG integration through `TextSearchProvider`.
-- Read-only MCP tools:
+- First-release read-only MCP tools:
   - `list_emails`
   - `get_email_content`
   - `search_emails`
-- A conditional `ask_mail` tool, enabled only when a chat provider and embedding profile are configured.
-- SMTP sending application service and durable outbox without a public MCP tool in the first release.
+  - `ask_mail`, advertised only when a chat provider and embedding profile are configured and healthy.
+- SMTP sending application service and durable outbox are designed but not first-release priorities; the first release prioritizes IMAP synchronization, RAG, and the four read-only MCP tools.
 - OAuth 2.1, HTTPS, and client-aware mTLS policies.
 - Aspire AppHost for first-release local development orchestration of the host, PostgreSQL, and developer observability.
 - Administration is primarily configuration-file driven in the first release; a dedicated `mcpmail` CLI is a future operational convenience, not an initial requirement.
@@ -64,7 +64,7 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 
 ## 4. Architecture
 
-The service is a modular monolith. One deployable ASP.NET Core host contains the public Kestrel endpoint and background workers, while internal projects enforce boundaries between mail domain logic, infrastructure, RAG, and protocol adapters. Kestrel is the Internet-facing HTTPS server; no reverse proxy is required in the initial deployment.
+The service is a clean-architecture modular monolith. One deployable ASP.NET Core host contains the public Kestrel endpoint and background workers, while internal projects enforce boundaries between mail domain logic, application use cases, infrastructure, RAG, and protocol adapters. Kestrel is the Internet-facing HTTPS server; no reverse proxy is required in the initial deployment.
 
 ```text
 ChatGPT                 Claude Code / other MCP clients
@@ -207,16 +207,16 @@ Each unit-test project references only the production boundary it verifies and t
 | AI abstractions | `Microsoft.Extensions.AI` | Provider-neutral `IChatClient` and embedding abstractions |
 | Optional compatibility | Semantic Kernel | Added behind adapters only when justified by a missing MAF capability |
 | Authentication | ASP.NET Core JWT bearer + external OAuth 2.1 IdP | Auth0 is the default deployment choice |
-| Observability | OpenTelemetry + JSON console logging | Traces, metrics, and structured logs |
-| Unit testing | xUnit.net v3 + NSubstitute | Isolated behavior tests and mocked protocol boundaries |
+| Observability | Aspire ServiceDefaults + OpenTelemetry + JSON console logging | Logs, metrics, traces, health checks, and OTLP export are scaffolded through shared extensions |
+| Unit testing | xUnit.net v3 + Microsoft Testing Platform + NSubstitute | Isolated behavior tests and mocked protocol boundaries |
 | Local orchestration | Aspire AppHost | First-release development-time orchestration and observability for MailMcp and PostgreSQL |
 | Future CLI parser | `System.CommandLine` | Official Microsoft command-line parser for the later `mcpmail` administration CLI |
 
-Package versions are centrally pinned in `Directory.Packages.props`. Preview Agent Framework packages are acceptable, but every update is explicit and reviewed.
+Package versions are centrally pinned in `Directory.Packages.props`. The .NET SDK is pinned in `global.json`. Shared compiler, analyzer, nullable, documentation, warnings-as-errors, and test-project defaults belong in `Directory.Build.props` wherever they can be expressed once for the repository. Preview Agent Framework packages are acceptable, but every update is explicit and reviewed.
 
 ### 6.1 Unit testing strategy
 
-Unit tests are delivered with every behavior change. They follow Arrange, Act, Assert; remain deterministic and order-independent; and avoid network, filesystem, database, container, and wall-clock dependencies.
+Unit tests are delivered with every behavior change. They use xUnit.net v3 on Microsoft Testing Platform, follow Arrange, Act, Assert with explicit `// Arrange`, `// Act`, and `// Assert` comments, remain deterministic and order-independent, and avoid network, filesystem, database, container, and wall-clock dependencies.
 
 The application layer defines narrow interfaces for IMAP sessions, SMTP transports, message-content storage, local persistence, and AI providers. Unit tests use NSubstitute to model IMAP/SMTP server behavior through these interfaces, including advertised capabilities, authentication results, mailbox responses, disconnects, timeouts, and transient failures. Production code does not attempt to mock concrete MailKit clients.
 
@@ -225,7 +225,7 @@ The initial unit suite prioritizes:
 - preserving the remote `\Seen` flag on every metadata and content retrieval path;
 - UIDVALIDITY changes, duplicate events, idempotent resynchronization, and reconnect behavior;
 - STARTTLS/TLS policy, authentication allow-lists, and rejection of unsafe configuration;
-- SMTP outbox state transitions, retries, cancellation, and duplicate-send prevention;
+- SMTP outbox state transitions, retries, cancellation, and duplicate-send prevention when SMTP work begins after the initial IMAP/RAG/MCP release slice;
 - offline list/get/search behavior when IMAP is unavailable;
 - MCP authorization, input validation, pagination, and bounded output;
 - chunking, hybrid-result fusion, citations, and provider-independent RAG orchestration.
@@ -390,6 +390,7 @@ The default is a complete initial synchronization. An optional `InitialSyncSince
 - INBOX uses IDLE by default.
 - NOTIFY is used when the server supports notifications for multiple folders.
 - IDLE is periodically renewed before typical server timeouts.
+- Time-based synchronization is the configured fallback and may also be selected explicitly for accounts where push-style behavior is not desired.
 - When a notification arrives, IDLE is exited, changes are synchronized, and IDLE is re-entered.
 - CONDSTORE/QRESYNC and modification sequences are used when available.
 - Servers without IDLE fall back to bounded polling.
@@ -407,17 +408,18 @@ Each account has an independent supervisor. A failing account cannot stop synchr
 3. Remove quoted history and signatures conservatively while retaining the original text.
 4. Create deterministic chunks with overlap and stable content hashes.
 5. Store chunks and PostgreSQL `tsvector` data.
-6. Generate embeddings through the configured `IEmbeddingGenerator`.
+6. When embeddings are enabled for the instance and the active profile is healthy, automatically generate embeddings through the configured `IEmbeddingGenerator` for new or changed messages.
 7. Upsert vectors under the active `EmbeddingProfile`.
 
 Chunk records include account, folder, message, sender, recipients, date, subject, and source coordinates. The agent can therefore cite a stable local message ID and the exact chunk used.
 
 ### 12.2 Provider-neutral operation
 
-- Without an embedding provider, synchronization and PostgreSQL full-text search continue to work.
-- Without a chat provider, `list_emails`, `get_email_content`, and lexical `search_emails` remain available.
+- RAG is part of the first release. The four first-release MCP tools are `list_emails`, `get_email_content`, `search_emails`, and `ask_mail`; `ask_mail` is exposed only when the configured chat and embedding profile are enabled and healthy.
+- Without an embedding provider, synchronization and PostgreSQL full-text search continue to work, but semantic search and `ask_mail` are disabled with a safe capability status.
+- Without a chat provider, `list_emails`, `get_email_content`, and lexical `search_emails` remain available, while `ask_mail` is not advertised as available.
 - When an embedding provider is configured, `search_emails` becomes hybrid.
-- When both embedding and chat providers are configured, the MAF-backed `ask_mail` tool is enabled.
+- The default first-release configuration profile uses OpenAI `text-embedding-3-small` for embeddings and `gpt-5.6-terra` for chat, but these names are configuration values validated at startup and are never hard-coded into domain, application, MCP, or AI contracts.
 - Changing an embedding profile creates a new vector generation and reindexes in the background; old vectors remain active until the new generation is complete.
 
 ### 12.3 Hybrid retrieval
@@ -484,6 +486,8 @@ Available only when chat and embedding profiles are healthy. It uses Agent Frame
 
 ### 13.5 Tool annotations and authorization
 
+Every MCP tool descriptor uses the current protocol metadata deliberately, including human-readable `title`, input and output schemas, safe descriptions, OAuth security scheme metadata, and behavior annotations. The read-only tools explicitly set `readOnlyHint=true`, `destructiveHint=false`, `idempotentHint=true`, and `openWorldHint=false` unless a future tool genuinely reaches outside MailMcp-controlled local state. These annotations are contract metadata, not comments; tests should verify the advertised `tools/list` metadata so clients can reason about read-only, destructive, idempotent, and external-world behavior before invoking a tool.
+
 - Read tools declare `readOnlyHint=true` and non-destructive semantics.
 - Each tool declares an OAuth security scheme and the required `mail.read` scope.
 - Future sending requires `mail.send` and explicit ChatGPT confirmation semantics.
@@ -496,7 +500,7 @@ Available only when chat and embedding profiles are healthy. It uses Agent Frame
 - An idempotency key prevents accidental duplicate delivery.
 - Retry is limited to transient failures; permanent SMTP failures are terminal and visible through CLI status.
 - A successfully sent message may be appended to a configured Sent folder when the server does not do this automatically.
-- SMTP capability is not exposed through MCP in the first public tool set.
+- SMTP capability is not exposed through MCP in the first public tool set and is not a first-release priority compared with IMAP synchronization, RAG, and read-only MCP tools.
 
 ## 15. Public MCP security
 
@@ -556,13 +560,16 @@ Certificate material and private keys are supplied through protected deployment 
 - Missing or corrupt MIME content is reported explicitly and queued for repair without a synchronous IMAP fetch in the tool request.
 - Poison messages are quarantined after bounded parsing attempts without blocking the folder checkpoint.
 - Background jobs are persisted in PostgreSQL; no separate queue is required initially.
+- Expected application failures are represented with explicit result/error types and stable safe error codes. Domain invariant violations use domain-specific exceptions only for exceptional states; adapters may wrap lower-level failures as inner exceptions for diagnostics, but MCP serialization never includes exception types, stack traces, internal identifiers, provider payloads, or `InnerException` details.
 - At first-release startup, the service applies pending EF Core migrations automatically before accepting work. This arbitrary initial policy keeps a single-owner deployment simple while the schema is young. Migrations must still be reviewed before release, must be idempotent from the application perspective, and must fail startup rather than silently running with an unknown schema. A later operational hardening phase can move destructive or long-running migrations to `mcpmail`.
 
 ## 17. Observability
 
+- Aspire ServiceDefaults provide the initial shared `Extensions.cs` scaffold for OpenTelemetry logs, metrics, traces, health checks, service discovery hooks where useful, and OTLP export configuration. MailMcp extends those defaults rather than duplicating per-project telemetry setup.
 - Structured JSON logs with account IDs and message IDs, never addresses, subjects, bodies, tokens, or credentials by default.
-- OpenTelemetry traces for MCP calls, database operations, synchronization cycles, retrieval, agent runs, and SMTP delivery.
-- Metrics include sync lag, reconnect count, cached messages, missing content, embedding backlog, retrieval latency, token usage when available, outbox depth, and tool errors.
+- OpenTelemetry traces for MCP calls, database operations, IMAP push or time-based synchronization cycles, retrieval, embedding generation, agent runs, and SMTP delivery when SMTP is implemented.
+- Metrics include sync lag, reconnect count, cached messages, missing content, embedding backlog, retrieval latency, token usage when available, outbox depth when SMTP is implemented, and tool errors.
+- Health checks expose separate private endpoints for startup, healthy/readiness, and alive/liveness. Startup reports completion of configuration validation, EF Core migration, Data Protection key loading, and required local service initialization. Healthy/readiness includes PostgreSQL connectivity, migration state, background worker readiness, and configured AI provider readiness when RAG is enabled. Alive/liveness remains lightweight and process-local so external transient dependencies do not cause restart loops.
 - Protocol logging is disabled by default and, when temporarily enabled, is redacted and written to a protected location.
 
 ## 18. Deployment
@@ -655,12 +662,12 @@ The CLI requires local operating-system access and is not exposed through MCP.
 
 1. Repository and solution foundation, Aspire AppHost, unit-test projects, Kestrel HTTPS configuration, PostgreSQL, and migrations.
 2. JSON-based configuration binding, typed option validation, systemd/container secret-reference resolution, and MailKit connection validation with mocked IMAP/SMTP boundary tests.
-3. Read-only initial and continuous IMAP synchronization with offline MIME storage and `\Seen` regression tests.
-4. Deterministic MCP tools `list_emails` and `get_email_content` with unit-tested authorization and mapping.
-5. PostgreSQL full-text indexing and `search_emails`.
-6. pgvector ingestion with configurable embedding profile.
-7. Agent Framework RAG and conditional `ask_mail`.
-8. SMTP outbox and delivery service with unit-tested state transitions and retry behavior.
+3. Read-only initial and continuous IMAP synchronization with configurable push-style IDLE/NOTIFY or time-based sync, offline MIME storage, and `\Seen` regression tests.
+4. Deterministic MCP tools `list_emails`, `get_email_content`, `search_emails`, and `ask_mail`, with RAG enabled when configured, rich MCP annotations, safe error mapping, unit-tested authorization, and mapping.
+5. PostgreSQL full-text indexing plus automatic embedding generation for new mail when embeddings are enabled.
+6. pgvector ingestion with configurable embedding profile and first-release defaults for OpenAI `text-embedding-3-small` plus configurable chat model.
+7. Agent Framework RAG hardening, prompt-injection isolation, citations, and provider-health gating.
+8. Deferred SMTP outbox and delivery service with unit-tested state transitions and retry behavior after the IMAP/RAG/MCP slice.
 9. ChatGPT OAuth/mTLS validation and general OAuth MCP client profile.
 10. Production hardening, backup, metrics, recovery exercises, and explicit evaluation plans for future ideas: AGT governance, MinIO object storage, `mcpmail`, and smtp4dev-backed SMTP integration tests.
 
@@ -668,21 +675,22 @@ The CLI requires local operating-system access and is not exposed through MCP.
 
 - Synchronizing and retrieving an unread message leaves its remote `\Seen` flag unchanged.
 - Repeated synchronization is idempotent for the same account, folder, UIDVALIDITY, and UID.
-- `list_emails`, `get_email_content`, and `search_emails` work while IMAP is unavailable.
+- `list_emails`, `get_email_content`, `search_emails`, and configured `ask_mail` work from local storage while IMAP is unavailable; `ask_mail` may additionally require healthy configured AI providers.
 - A tool request never triggers a synchronous IMAP body fetch.
 - Tens of thousands of messages use indexed keyset queries rather than full scans or offset pagination.
-- A message is searchable lexically after extraction and semantically after its active-profile embedding is stored.
-- RAG answers cite stable local message IDs and never gain mail mutation capabilities.
+- A message is searchable lexically after extraction and semantically after its active-profile embedding is stored; embedding generation starts automatically for new synchronized mail when enabled for the instance.
+- RAG answers from `ask_mail` cite stable local message IDs and never gain mail mutation capabilities.
 - ChatGPT requests require a valid OpenAI client certificate and a valid owner OAuth token.
 - A general OAuth MCP client can connect without weakening the ChatGPT mTLS profile.
 - Invalid issuer, audience, expiry, subject, scope, certificate chain, SAN, or host name is rejected before tool execution.
-- Secrets and mail content do not appear in default logs or telemetry.
+- Secrets, mail content, internal exceptions, stack traces, provider payloads, and inner-exception details do not appear in MCP responses, default logs, or telemetry.
 - The complete xUnit unit suite passes without network, database, container, or filesystem dependencies.
-- IMAP/SMTP success, failure, disconnect, cancellation, and capability scenarios are reproducible through NSubstitute-based protocol boundaries.
+- IMAP success, failure, disconnect, cancellation, push-sync, time-based sync, and capability scenarios are reproducible through NSubstitute-based protocol boundaries; SMTP scenarios are added when SMTP leaves deferred scope.
 - First-release configuration can be expressed in JSON without placing secrets or encrypted secret values in Git.
 - Future CLI work is explicitly deferred and uses `mcpmail` with `System.CommandLine` when implemented.
 - Aspire AppHost can start the local development environment for MailMcp and PostgreSQL without introducing production runtime coupling.
 - Future ideas are collected separately from first-release scope, including AGT governance evaluation, MinIO migration, `mcpmail`, and smtp4dev-backed SMTP delivery verification.
+- Shared repository settings are centralized in `global.json`, `Directory.Build.props`, and `Directory.Packages.props` whenever possible instead of being repeated in individual projects.
 
 ## 23. References verified for this draft
 
@@ -692,6 +700,7 @@ The CLI requires local operating-system access and is not exposed through MCP.
 - [Agent Framework integrations and vector stores](https://learn.microsoft.com/agent-framework/integrations/)
 - [Official MCP C# SDK](https://github.com/modelcontextprotocol/csharp-sdk)
 - [MCP C# SDK getting started](https://csharp.sdk.modelcontextprotocol.io/concepts/getting-started.html)
+- [MCP tool annotations specification](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
 - [OpenAI Apps SDK authentication](https://developers.openai.com/apps-sdk/build/auth)
 - [Connect an MCP app from ChatGPT](https://developers.openai.com/apps-sdk/deploy/connect-chatgpt)
 - [Claude Code MCP](https://docs.anthropic.com/id/docs/claude-code/mcp)
@@ -706,6 +715,8 @@ The CLI requires local operating-system access and is not exposed through MCP.
 - [Kestrel HTTPS endpoints and client certificates](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel/endpoints?view=aspnetcore-10.0)
 - [.NET unit testing best practices](https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-best-practices)
 - [xUnit.net v3 getting started](https://xunit.net/docs/getting-started/v3/getting-started)
+- [xUnit.net v3 Microsoft Testing Platform](https://xunit.net/docs/getting-started/v3/microsoft-testing-platform)
+- [Microsoft Testing Platform overview](https://learn.microsoft.com/en-us/dotnet/core/testing/microsoft-testing-platform-intro)
 - [NSubstitute documentation](https://nsubstitute.github.io/)
 - [.NET configuration providers](https://learn.microsoft.com/en-us/dotnet/core/extensions/configuration-providers)
 - [ASP.NET Core configuration](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/configuration/?view=aspnetcore-10.0)
@@ -714,6 +725,9 @@ The CLI requires local operating-system access and is not exposed through MCP.
 - [systemd-creds](https://www.freedesktop.org/software/systemd/man/systemd-creds.html)
 - [Aspire overview](https://aspire.dev/get-started/what-is-aspire/)
 - [Aspire AppHost](https://aspire.dev/get-started/app-host/)
+- [Aspire Service Defaults](https://aspire.dev/get-started/csharp-service-defaults/)
+- [Aspire health checks](https://aspire.dev/fundamentals/health-checks/)
+- [ASP.NET Core health checks](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/health-checks?view=aspnetcore-10.0)
 - [System.CommandLine overview](https://learn.microsoft.com/en-us/dotnet/standard/commandline/)
 - [System.CommandLine NuGet package](https://www.nuget.org/packages/System.CommandLine)
 - [System.CommandLine GitHub repository](https://github.com/dotnet/command-line-api)
