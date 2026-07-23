@@ -10,6 +10,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Never commit directly on `main` or `master`. Create a branch named `agent/<short-description>` before committing.
 - Preserve unrelated user changes. Stage only files that belong to the current task.
 - Make architectural decisions before implementation. Keep changes small, reviewable, and aligned with the architecture draft in `specs/`.
+- Treat MailMcp as an enterprise-grade system even during early scaffolding: preserve seams for governance, auditability, privacy controls, operational hardening, compliance evidence, and future Agent Governance Toolkit (AGT) adoption without prematurely adding runtime dependencies.
 
 ## Third-party licensing
 
@@ -121,6 +122,15 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Keep transactions short and define their boundary in the application operation. Do not hold a database transaction open across IMAP, SMTP, or AI network calls.
 - Review generated migrations and SQL. Add indexes from demonstrated query shapes and inspect query plans for performance-critical paths.
 - Use provider-supported parameterization. Never construct SQL from untrusted strings; any dynamic identifier must come from validated application-owned metadata.
+
+## Enterprise governance, privacy, and GDPR readiness
+
+- Design every feature with GDPR-aligned privacy by design and by default: data minimization, purpose limitation, storage limitation, confidentiality, integrity, availability, and accountable processing must be visible in the architecture, tests, and documentation.
+- Email content, metadata, embeddings, retrieval snippets, audit events, and model/tool traces can contain personal data. Classify them as sensitive by default and avoid broad access, unnecessary copying, long retention, or unredacted logging.
+- Keep explicit seams for future data-subject workflows such as access, export, rectification support, erasure, restriction of processing, retention holds, and audit evidence, even when those workflows are not implemented in the first release.
+- Do not treat embeddings or derived indexes as anonymous. They inherit the classification, retention, access-control, deletion, and export constraints of the source mail content unless a reviewed privacy design proves otherwise.
+- Future AGT adoption must remain an adapter-level governance concern. AGT policy decisions, audit records, and tool-call controls must not leak provider-specific or governance-framework types into `Domain` or `Application`.
+- Before adding AGT or any governance/compliance package, verify the current official documentation, .NET 10 compatibility, license, service terms, telemetry behavior, and data-processing implications; update `LICENSES.md` for any dependency or externally sourced component.
 
 ## Reliability, security, and performance
 

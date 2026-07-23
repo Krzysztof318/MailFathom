@@ -3,12 +3,15 @@
 **Status:** Draft for review
 **Date:** 2026-07-22
 **Target:** Debian/Ubuntu, .NET 10, single owner, many mail accounts
+**Enterprise posture:** Enterprise-grade architecture, GDPR-ready privacy posture, and future AGT governance seams from the beginning
 
 The product and solution name is `MailMcp`. The repository uses the XML solution format in `MailMcp.slnx`, and all .NET projects use the `MailMcp.*` naming prefix.
 
 ## 1. Purpose
 
 The service synchronizes mail from multiple IMAP accounts, keeps a durable offline copy, sends mail through SMTP, indexes messages for lexical and semantic retrieval, and exposes controlled capabilities through a public MCP endpoint.
+
+MailMcp is designed as an enterprise-grade system even before the first release implements every enterprise feature. The architecture must preserve clear seams for governance, compliance evidence, privacy controls, operational hardening, auditability, and future Agent Governance Toolkit (AGT) adoption. These requirements influence boundaries and data handling from day one, but they do not justify premature dependencies or broad first-release scope.
 
 The initial public MCP surface is read-only. Sending exists as an application capability but is not exposed as an MCP tool until its authorization and confirmation flow is reviewed separately.
 
@@ -25,6 +28,8 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 - Semantic Kernel may be added only as an adapter for a capability unavailable or insufficient in Agent Framework.
 - Chat and embedding providers remain configuration choices, not constants compiled into project code. The initial deployment profile uses OpenAI `text-embedding-3-small` for embeddings and `gpt-5.6-terra` for chat when that model is available to the deployment; startup validation fails or disables `ask_mail` if configured model access is unavailable.
 - The public server supports ChatGPT and remains compatible with other remote MCP clients such as Claude Code.
+- GDPR readiness is an architectural requirement. First-release features must not block later implementation of data-subject access/export, erasure, restriction, retention, and processing-record workflows.
+- Embeddings, chunks, snippets, audit events, and model/tool traces inherit the sensitivity and governance constraints of the source mailbox data unless a reviewed privacy design explicitly proves otherwise.
 - Unit tests are developed from the beginning with xUnit.net v3, Microsoft Testing Platform v2, and NSubstitute.
 - Integration tests are planned for a later phase but are not created in the initial solution.
 - The solution is named `MailMcp`, uses `MailMcp.slnx`, and applies the `MailMcp.*` prefix consistently to projects, assemblies, and root namespaces.
@@ -54,6 +59,8 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 ### 3.2 Excluded from the first release
 
 - Multiple service users or tenants.
+- Fully automated GDPR data-subject request workflows, retention-policy engines, legal-hold workflows, DPIA tooling, or compliance-report generation. The first release must keep seams for these capabilities but does not implement them end to end.
+- Runtime AGT enforcement. AGT is evaluated later for agent-mediated actions and enterprise governance, but first-release read-only tools rely on deterministic application authorization and safe local retrieval.
 - Editing remote flags, including `\Seen`, from MCP.
 - Moving or deleting messages.
 - Returning attachment bytes through MCP.
@@ -94,7 +101,15 @@ HTTPS + OpenAI mTLS + OAuth           | HTTPS + OAuth
                                   FTS + pgvector
 ```
 
-### 4.1 Boundary rules
+### 4.1 Enterprise-grade design posture
+
+Enterprise grade means MailMcp is operable, auditable, secure by default, privacy-aware, and maintainable under change. The initial repository should therefore prefer explicit contracts, deterministic behavior, bounded resource use, documented trade-offs, repeatable verification, least privilege, durable state transitions, and safe failure modes. Enterprise grade does not mean adding every enterprise subsystem immediately; it means first-release shortcuts must not close the path to later governance, compliance, recovery, or scale-out work.
+
+GDPR readiness is treated as a design invariant rather than a post-release documentation exercise. MailMcp stores email bodies, headers, recipient data, attachments, search text, chunks, embeddings, and tool traces that may all contain personal data. The architecture must therefore keep ownership, purpose, retention, access, export, deletion, and audit boundaries explicit. The first release is not a complete compliance product, but it must avoid designs that make later compliance workflows impractical, such as untracked derived data, unbounded logs, provider-specific records in core contracts, or deletion paths that cannot reach chunks and embeddings.
+
+AGT is reserved for future governance of agent-mediated and higher-risk tool calls. The first release keeps read-only MCP tools deterministic and application-authorized, while preserving an adapter seam where a future governance engine can evaluate tool invocations, policy decisions, contextual risk, and audit outcomes without changing domain or application contracts.
+
+### 4.2 Boundary rules
 
 Dependencies point inward and never flow in the wrong direction. Outer adapters may know about inner contracts, but inner layers must not reference implementation details from their consumers or adapters. A type from EF Core, Npgsql, MailKit, ASP.NET Core, MCP SDKs, Agent Framework, Semantic Kernel, pgvector, container tooling, systemd integration, or a hosted AI provider must not appear in `Domain` or `Application` contracts unless this draft explicitly says otherwise. Cross-layer communication uses application-owned request/response contracts, ports, domain value objects, and explicit mappers.
 
@@ -551,7 +566,51 @@ Certificate material and private keys are supplied through protected deployment 
 - OpenAI egress IP allowlisting may be an additional signal but never replaces mTLS or OAuth.
 - Health, metrics, PostgreSQL, and administration endpoints are not public.
 
-## 16. Failure handling
+## 16. GDPR and privacy architecture
+
+MailMcp is not launched as a complete GDPR automation product, but it must be GDPR-ready by design. Regulation (EU) 2016/679 establishes principles such as lawful, fair, transparent processing; purpose limitation; data minimization; accuracy; storage limitation; integrity and confidentiality; accountability; data protection by design and by default; records of processing activities; security of processing; and data-subject rights including access, erasure, restriction, and portability. The first-release architecture records these concerns explicitly so later compliance work extends known seams instead of retrofitting unknown data flows.
+
+### 16.1 Personal-data inventory
+
+The following data classes are treated as personal data or potentially personal data by default:
+
+- mailbox account identifiers and connection configuration;
+- sender, recipient, subject, message IDs, thread headers, dates, folder names, and remote flags;
+- raw RFC 822 content, MIME parts, attachment metadata, extracted text, sanitized HTML, snippets, chunks, and embeddings;
+- OAuth subject identifiers, client identifiers, authorization decisions, and operational audit events;
+- model prompts, retrieved context, generated answers, token usage, and tool-call traces whenever they include or derive from mail content.
+
+Derived search artifacts are not considered anonymous merely because they are transformed. Chunks, embeddings, full-text indexes, snippets, cached context, and agent traces inherit the retention, access-control, export, and deletion requirements of their source messages unless a future privacy review documents a stronger guarantee.
+
+### 16.2 First-release privacy requirements
+
+- Data minimization: MCP tools return bounded projections and snippets; list/search operations never include raw MIME or attachment bytes.
+- Purpose limitation: synchronized content is used for owner-controlled mailbox retrieval, search, RAG, local backup, and explicitly configured SMTP workflows only.
+- Storage limitation: retention settings must exist for remotely expunged messages, raw MIME grace periods, logs, traces, and future derived artifacts. Conservative defaults retain data only while needed for the configured mailbox copy and recovery model.
+- Confidentiality: secrets, tokens, mail bodies, attachment bytes, raw MIME, embeddings, and provider payloads are excluded from default logs and MCP errors.
+- Integrity: content length and SHA-256 checks bind metadata to stored MIME and support consistency repair.
+- Accountability: important access, synchronization, configuration, deletion, export, and governance decisions should emit redacted audit events with actor, purpose, target, outcome, and time.
+- Provider boundaries: external AI providers receive only bounded retrieved context needed for the requested answer, never complete mailbox dumps. Provider configuration must make data-processing implications reviewable before enabling `ask_mail`.
+
+### 16.3 Deferred GDPR workflows
+
+The first release does not implement full data-subject request automation. It must nevertheless preserve application-level seams for later workflows:
+
+- access/export of mailbox metadata, selected message content, derived chunks, and audit records in structured machine-readable formats;
+- erasure and restriction across raw MIME, metadata, search text, chunks, embeddings, jobs, caches, and provider traces controlled by MailMcp;
+- retention-policy execution with explicit treatment of remotely expunged mail, backups, and legal holds;
+- records of processing activities and evidence showing which systems, providers, scopes, and retention policies apply;
+- operator review steps for requests that may affect third-party correspondence or conflict with backup, legal, or security requirements.
+
+Backups are not rewritten synchronously for ordinary erasure requests in the first design. A later compliance design must define backup retention windows, restore-time deletion replay, and evidence of eventual removal without weakening recovery guarantees.
+
+### 16.4 Enterprise audit and governance seam
+
+Authorization checks, MCP tool invocations, RAG retrieval decisions, SMTP outbox state transitions, configuration changes, and future data-subject workflows should pass through explicit application services that can emit redacted audit events. Audit events must avoid message bodies, attachment contents, raw prompts, access tokens, credentials, and provider payloads unless a future protected audit store is deliberately designed for that sensitivity.
+
+A future AGT adapter can subscribe to the same governance seam before higher-risk tool execution. AGT decisions must fail closed, be testable independently from model prompts, and produce safe application errors at the MCP boundary. AGT records are compliance evidence, not a replacement for application authorization, OAuth scopes, mTLS policies, or domain invariants.
+
+## 17. Failure handling
 
 - Tool requests return local data during IMAP outages.
 - Responses include synchronization freshness so stale data is explicit.
@@ -563,7 +622,7 @@ Certificate material and private keys are supplied through protected deployment 
 - Expected application failures are represented with explicit result/error types and stable safe error codes. Domain invariant violations use domain-specific exceptions only for exceptional states; adapters may wrap lower-level failures as inner exceptions for diagnostics, but MCP serialization never includes exception types, stack traces, internal identifiers, provider payloads, or `InnerException` details.
 - At first-release startup, the service applies pending EF Core migrations automatically before accepting work. This arbitrary initial policy keeps a single-owner deployment simple while the schema is young. Migrations must still be reviewed before release, must be idempotent from the application perspective, and must fail startup rather than silently running with an unknown schema. A later operational hardening phase can move destructive or long-running migrations to `mcpmail`.
 
-## 17. Observability
+## 18. Observability
 
 - Aspire ServiceDefaults provide the initial shared `Extensions.cs` scaffold for OpenTelemetry logs, metrics, traces, health checks, service discovery hooks where useful, and OTLP export configuration. MailMcp extends those defaults rather than duplicating per-project telemetry setup.
 - Structured JSON logs with account IDs and message IDs, never addresses, subjects, bodies, tokens, or credentials by default.
@@ -572,7 +631,7 @@ Certificate material and private keys are supplied through protected deployment 
 - Health checks expose separate private endpoints for startup, healthy/readiness, and alive/liveness. Startup reports completion of configuration validation, EF Core migration, Data Protection key loading, and required local service initialization. Healthy/readiness includes PostgreSQL connectivity, migration state, background worker readiness, and configured AI provider readiness when RAG is enabled. Alive/liveness remains lightweight and process-local so external transient dependencies do not cause restart loops.
 - Protocol logging is disabled by default and, when temporarily enabled, is redacted and written to a protected location.
 
-## 18. Deployment
+## 19. Deployment
 
 Default deployment uses Docker Compose or rootless Podman Compose managed by systemd:
 
@@ -591,7 +650,7 @@ Persistent volumes:
 
 One PostgreSQL backup contains metadata, raw MIME, search data, chunks, embeddings, jobs, and outbox state at a consistent logical point. Backup and restore procedures must be tested, and database volumes and backups must use encrypted storage. TLS certificates and the Data Protection key ring are backed up separately through the deployment secret-management process.
 
-## 19. Development orchestration with Aspire
+## 20. Development orchestration with Aspire
 
 Aspire is included from the start as a development-time orchestration and observability layer, not as the production runtime or application framework. `MailMcp.AppHost` models the host process, PostgreSQL with pgvector, local secret/configuration bindings, and developer observability so contributors can run the local distributed environment consistently from one entry point.
 
@@ -599,19 +658,19 @@ The AppHost stays minimal: explicit resource names, explicit dependencies, separ
 
 The first AppHost covers local development only. Future integration testing can reuse Aspire orchestration when it improves repeatability, but integration-test infrastructure remains separate from the initial unit-test-only solution.
 
-## 20. Future ideas
+## 21. Future ideas
 
 These ideas are deliberately outside the first release. They are recorded here so the initial architecture keeps stable seams for later work without adding premature packages, services, test projects, or operational dependencies.
 
-### 20.1 Agent Governance Toolkit (AGT)
+### 21.1 Agent Governance Toolkit (AGT)
 
 Microsoft Agent Governance Toolkit (AGT) may become useful when MailMcp exposes agent-mediated actions beyond read-only retrieval, especially if future MCP tools can send mail, mutate local state, delegate work, or call external systems. AGT is a governance layer for agents and MCP tool calls: it can help make policy checks, input/output inspection, and allow/deny decisions explicit instead of burying those decisions inside prompt text or ad-hoc tool handlers.
 
 AGT is not part of the first release because the public MCP surface is read-only, deterministic tool authorization is enforced at the transport and application boundaries, and MailMcp already treats retrieved mail as untrusted input. Before adopting AGT, the team must verify package maturity, .NET 10 compatibility, license and service-term implications, policy authoring model, telemetry data exposure, and whether AGT decisions can be expressed without leaking provider-specific concepts into `Domain`, `Application`, or `Mcp`.
 
-Potential AGT evaluation scenarios include governing a future `send_email` MCP tool, blocking prompt-injected tool escalation from message content, enforcing per-client tool policies, recording auditable governance decisions, and validating that denied actions fail closed with safe MCP error codes.
+Potential AGT evaluation scenarios include governing a future `send_email` MCP tool, blocking prompt-injected tool escalation from message content, enforcing per-client tool policies, recording auditable governance decisions, mapping policy evidence to enterprise compliance controls, and validating that denied actions fail closed with safe MCP error codes. AGT must complement, not replace, OAuth scopes, mTLS, application authorization, and GDPR-aligned data minimization.
 
-### 20.2 MinIO object storage migration
+### 21.2 MinIO object storage migration
 
 All raw-content operations use the application-owned `IMessageContentStore` port with streaming put, open-read, existence, and delete operations. The first implementation stores content in PostgreSQL; neither the application nor domain layer receives a PostgreSQL-specific locator or `bytea` type. This seam keeps a future MinIO or S3-compatible object-storage migration possible without changing mail use cases.
 
@@ -626,7 +685,7 @@ A later MinIO migration would be performed online in controlled stages:
 
 No MinIO package, credentials, process, bucket, deployment volume, or object-storage test fixture is included in the first release. Any future MinIO SDK, container image, or hosted object-storage dependency must be pinned, license-reviewed, and recorded in `LICENSES.md` before adoption.
 
-### 20.3 Future integration testing with smtp4dev
+### 21.3 Future integration testing with smtp4dev
 
 A future integration-test suite should include smtp4dev as the controlled SMTP target for delivery scenarios. smtp4dev is a fake SMTP server intended for development and testing, is available as Docker/OCI images and a .NET tool, and its NuGet package currently declares the BSD-3-Clause license. Before adding it to the repository, the exact package, container image, or tool version must be pinned and recorded in `LICENSES.md`.
 
@@ -634,7 +693,7 @@ The smtp4dev-based tests should validate SMTP connection policy, STARTTLS behavi
 
 The first release still does not add integration-test projects, Testcontainers, Docker fixtures, smtp4dev packages, or smtp4dev container references.
 
-### 20.4 Future administration CLI
+### 21.4 Future administration CLI
 
 The dedicated administration CLI is named `mcpmail` and is a future operational interface rather than an initial implementation requirement. The first release can be administered through validated JSON configuration plus deployment secret references, with account-test and migration workflows added only when their application services exist.
 
@@ -658,7 +717,7 @@ Candidate future commands:
 
 The CLI requires local operating-system access and is not exposed through MCP.
 
-## 21. Delivery stages
+## 22. Delivery stages
 
 1. Repository and solution foundation, Aspire AppHost, unit-test projects, Kestrel HTTPS configuration, PostgreSQL, and migrations.
 2. JSON-based configuration binding, typed option validation, systemd/container secret-reference resolution, and MailKit connection validation with mocked IMAP/SMTP boundary tests.
@@ -669,9 +728,9 @@ The CLI requires local operating-system access and is not exposed through MCP.
 7. Agent Framework RAG hardening, prompt-injection isolation, citations, and provider-health gating.
 8. Deferred SMTP outbox and delivery service with unit-tested state transitions and retry behavior after the IMAP/RAG/MCP slice.
 9. ChatGPT OAuth/mTLS validation and general OAuth MCP client profile.
-10. Production hardening, backup, metrics, recovery exercises, and explicit evaluation plans for future ideas: AGT governance, MinIO object storage, `mcpmail`, and smtp4dev-backed SMTP integration tests.
+10. Production hardening, backup, metrics, recovery exercises, GDPR workflow design, enterprise audit evidence, and explicit evaluation plans for future ideas: AGT governance, MinIO object storage, `mcpmail`, and smtp4dev-backed SMTP integration tests.
 
-## 22. Acceptance criteria
+## 23. Acceptance criteria
 
 - Synchronizing and retrieving an unread message leaves its remote `\Seen` flag unchanged.
 - Repeated synchronization is idempotent for the same account, folder, UIDVALIDITY, and UID.
@@ -690,9 +749,11 @@ The CLI requires local operating-system access and is not exposed through MCP.
 - Future CLI work is explicitly deferred and uses `mcpmail` with `System.CommandLine` when implemented.
 - Aspire AppHost can start the local development environment for MailMcp and PostgreSQL without introducing production runtime coupling.
 - Future ideas are collected separately from first-release scope, including AGT governance evaluation, MinIO migration, `mcpmail`, and smtp4dev-backed SMTP delivery verification.
+- The draft identifies personal-data classes, derived-data sensitivity, first-release privacy controls, and deferred GDPR workflows so later compliance implementation has explicit seams.
+- Enterprise-grade posture is visible in boundaries for auditability, governance, privacy, operational hardening, deterministic policy enforcement, and safe failure modes without prematurely adding first-release dependencies.
 - Shared repository settings are centralized in `global.json`, `Directory.Build.props`, and `Directory.Packages.props` whenever possible instead of being repeated in individual projects.
 
-## 23. References verified for this draft
+## 24. References verified for this draft
 
 - [.NET releases and support](https://learn.microsoft.com/en-us/dotnet/core/releases-and-support)
 - [Microsoft Agent Framework overview](https://learn.microsoft.com/en-us/agent-framework/overview/)
@@ -736,4 +797,8 @@ The CLI requires local operating-system access and is not exposed through MCP.
 - [smtp4dev Docker image](https://hub.docker.com/r/rnwood/smtp4dev)
 - [smtp4dev installation documentation](https://raw.githubusercontent.com/rnwood/smtp4dev/master/docs/Installation.md)
 - [Agent Governance Toolkit documentation](https://microsoft.github.io/agent-governance-toolkit/)
+- [EU GDPR official legal text](https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng)
+- [GDPR Article 25: data protection by design and by default](https://gdpr-info.eu/art-25-gdpr/)
+- [GDPR Article 17: right to erasure](https://gdpr-info.eu/art-17-gdpr/)
+- [GDPR Article 20: right to data portability](https://gdpr-info.eu/art-20-gdpr/)
 - [Agent Governance Toolkit GitHub repository](https://github.com/microsoft/agent-governance-toolkit)
