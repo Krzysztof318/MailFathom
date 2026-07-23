@@ -146,7 +146,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 ## Unit testing policy
 
 - Unit tests are part of every behavior change, feature, and bug fix. Write or update the failing test before production code when practical.
-- Use xUnit.net v3 on Microsoft Testing Platform as the test framework and NSubstitute for test doubles.
+- Use xUnit.net v3 on Microsoft Testing Platform v2 as the test framework and NSubstitute for test doubles.
 - Keep unit tests in separate projects under `tests/`, named after the production boundary they cover:
   - `MailMcp.Domain.UnitTests`
   - `MailMcp.Application.UnitTests`

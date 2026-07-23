@@ -25,7 +25,7 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 - Semantic Kernel may be added only as an adapter for a capability unavailable or insufficient in Agent Framework.
 - Chat and embedding providers remain configuration choices, not constants compiled into project code. The initial deployment profile uses OpenAI `text-embedding-3-small` for embeddings and `gpt-5.6-terra` for chat when that model is available to the deployment; startup validation fails or disables `ask_mail` if configured model access is unavailable.
 - The public server supports ChatGPT and remains compatible with other remote MCP clients such as Claude Code.
-- Unit tests are developed from the beginning with xUnit.net v3, Microsoft Testing Platform, and NSubstitute.
+- Unit tests are developed from the beginning with xUnit.net v3, Microsoft Testing Platform v2, and NSubstitute.
 - Integration tests are planned for a later phase but are not created in the initial solution.
 - The solution is named `MailMcp`, uses `MailMcp.slnx`, and applies the `MailMcp.*` prefix consistently to projects, assemblies, and root namespaces.
 
@@ -208,7 +208,7 @@ Each unit-test project references only the production boundary it verifies and t
 | Optional compatibility | Semantic Kernel | Added behind adapters only when justified by a missing MAF capability |
 | Authentication | ASP.NET Core JWT bearer + external OAuth 2.1 IdP | Auth0 is the default deployment choice |
 | Observability | Aspire ServiceDefaults + OpenTelemetry + JSON console logging | Logs, metrics, traces, health checks, and OTLP export are scaffolded through shared extensions |
-| Unit testing | xUnit.net v3 + Microsoft Testing Platform + NSubstitute | Isolated behavior tests and mocked protocol boundaries |
+| Unit testing | xUnit.net v3 + Microsoft Testing Platform v2 + NSubstitute | Isolated behavior tests and mocked protocol boundaries |
 | Local orchestration | Aspire AppHost | First-release development-time orchestration and observability for MailMcp and PostgreSQL |
 | Future CLI parser | `System.CommandLine` | Official Microsoft command-line parser for the later `mcpmail` administration CLI |
 
@@ -216,7 +216,7 @@ Package versions are centrally pinned in `Directory.Packages.props`. The .NET SD
 
 ### 6.1 Unit testing strategy
 
-Unit tests are delivered with every behavior change. They use xUnit.net v3 on Microsoft Testing Platform, follow Arrange, Act, Assert with explicit `// Arrange`, `// Act`, and `// Assert` comments, remain deterministic and order-independent, and avoid network, filesystem, database, container, and wall-clock dependencies.
+Unit tests are delivered with every behavior change. They use xUnit.net v3 on Microsoft Testing Platform v2, follow Arrange, Act, Assert with explicit `// Arrange`, `// Act`, and `// Assert` comments, remain deterministic and order-independent, and avoid network, filesystem, database, container, and wall-clock dependencies.
 
 The application layer defines narrow interfaces for IMAP sessions, SMTP transports, message-content storage, local persistence, and AI providers. Unit tests use NSubstitute to model IMAP/SMTP server behavior through these interfaces, including advertised capabilities, authentication results, mailbox responses, disconnects, timeouts, and transient failures. Production code does not attempt to mock concrete MailKit clients.
 
@@ -715,7 +715,7 @@ The CLI requires local operating-system access and is not exposed through MCP.
 - [Kestrel HTTPS endpoints and client certificates](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel/endpoints?view=aspnetcore-10.0)
 - [.NET unit testing best practices](https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-best-practices)
 - [xUnit.net v3 getting started](https://xunit.net/docs/getting-started/v3/getting-started)
-- [xUnit.net v3 Microsoft Testing Platform](https://xunit.net/docs/getting-started/v3/microsoft-testing-platform)
+- [xUnit.net v3 Microsoft Testing Platform v2](https://xunit.net/docs/getting-started/v3/microsoft-testing-platform)
 - [Microsoft Testing Platform overview](https://learn.microsoft.com/en-us/dotnet/core/testing/microsoft-testing-platform-intro)
 - [NSubstitute documentation](https://nsubstitute.github.io/)
 - [.NET configuration providers](https://learn.microsoft.com/en-us/dotnet/core/extensions/configuration-providers)
