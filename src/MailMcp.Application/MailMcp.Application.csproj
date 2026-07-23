@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\MailMcp.Domain\MailMcp.Domain.csproj" />
+  </ItemGroup>
+</Project>

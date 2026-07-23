@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MailMcp.Application\MailMcp.Application.csproj" />
+    <ProjectReference Include="..\MailMcp.Domain\MailMcp.Domain.csproj" />
+  </ItemGroup>
+</Project>

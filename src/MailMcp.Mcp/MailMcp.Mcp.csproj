@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MailMcp.Application\MailMcp.Application.csproj" />
+    <ProjectReference Include="..\MailMcp.Domain\MailMcp.Domain.csproj" />
+  </ItemGroup>
+</Project>
