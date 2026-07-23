@@ -48,7 +48,8 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 - A conditional `ask_mail` tool, enabled only when a chat provider and embedding profile are configured.
 - SMTP sending application service and durable outbox without a public MCP tool in the first release.
 - OAuth 2.1, HTTPS, and client-aware mTLS policies.
-- CLI-based administration; no administration web UI.
+- Aspire AppHost for first-release local development orchestration of the host, PostgreSQL, and developer observability.
+- Administration is primarily configuration-file driven in the first release; a dedicated `mcpmail` CLI is a future operational convenience, not an initial requirement.
 
 ### 3.2 Excluded from the first release
 
@@ -101,7 +102,7 @@ HTTPS + OpenAI mTLS + OAuth           | HTTPS + OAuth
 - `AI` implements chunking, embedding orchestration, hybrid retrieval, and Agent Framework composition.
 - `Mcp` maps MCP schemas to application requests and contains no persistence or mail protocol logic.
 - `Host` contains only configuration, dependency injection, middleware, endpoint mapping, and process lifetime.
-- `Cli` reuses application services for account setup, connection tests, synchronization status, and RAG profile management.
+- A future `Cli` project hosts the `mcpmail` administration tool and reuses application services for account setup, connection tests, synchronization status, and RAG profile management. It is not part of the first implementation slice.
 
 ## 5. Proposed project structure
 
@@ -153,7 +154,9 @@ mail-mcp/
 │   │   ├── Configuration/
 │   │   ├── Hosting/
 │   │   └── Program.cs
-│   └── MailMcp.Cli/
+│   ├── MailMcp.AppHost/
+│   │   └── Program.cs
+│   └── MailMcp.Cli/                  # future `mcpmail` CLI, not initial scaffold
 │       ├── Accounts/
 │       ├── Synchronization/
 │       └── Rag/
@@ -191,6 +194,8 @@ Each unit-test project references only the production boundary it verifies and t
 | Authentication | ASP.NET Core JWT bearer + external OAuth 2.1 IdP | Auth0 is the default deployment choice |
 | Observability | OpenTelemetry + JSON console logging | Traces, metrics, and structured logs |
 | Unit testing | xUnit.net v3 + NSubstitute | Isolated behavior tests and mocked protocol boundaries |
+| Local orchestration | Aspire AppHost | First-release development-time orchestration and observability for MailMcp and PostgreSQL |
+| Future CLI parser | `System.CommandLine` | Official Microsoft command-line parser for the later `mcpmail` administration CLI |
 
 Package versions are centrally pinned in `Directory.Packages.props`. Preview Agent Framework packages are acceptable, but every update is explicit and reviewed.
 
@@ -239,7 +244,13 @@ MailKit 4.17.0 does not provide a built-in GSSAPI/Kerberos SASL mechanism. Versi
 
 Clear-text password mechanisms are rejected over an unencrypted channel unless both insecure transport and that mechanism are explicitly allowed.
 
-### 7.3 Secret handling
+### 7.3 Configuration files and secret handling
+
+The first release should prefer a small YAML configuration file for non-secret operational settings because mail account definitions, folder policies, TLS profiles, OAuth resource metadata, and RAG profiles are naturally hierarchical. .NET does not ship an in-box YAML configuration provider, so the implementation must either add a permissively licensed YAML provider after license review or load YAML through a narrowly owned host-boundary parser that maps into typed options. YAML is an operator-facing source format only; domain, application, infrastructure, AI, and MCP projects consume validated options and never parse YAML directly.
+
+Configuration precedence is explicit: built-in defaults, committed example YAML, deployment YAML, environment-specific overrides, environment variables for non-secret automation, and command-line overrides. The host validates all bound options at startup with fail-fast errors for missing TLS material, unsafe mail transport settings, invalid OAuth audience/resource values, unbounded result sizes, missing database settings, or incompatible RAG profiles.
+
+Secrets are never committed to YAML. YAML may contain secret references such as credential names, file paths under a protected secrets directory, systemd credential names, or container secret names. Development may use .NET Secret Manager for local-only convenience, but because user secrets are not encrypted and are not a production secret store, production deployments must use systemd credentials, container secrets, an approved external secret provider, or protected files provisioned outside Git.
 
 - Account secrets are encrypted before storage in PostgreSQL.
 - ASP.NET Core Data Protection protects ciphertext with a persistent key ring.
@@ -330,20 +341,6 @@ The SQL above is an illustrative profile with ID `1` and 1536 dimensions; it doe
 
 Remote expunge marks the message as deleted; its raw MIME is retained for a configurable grace period before PostgreSQL garbage collection. PostgreSQL backups are the authoritative offline-mail backup in the initial deployment.
 
-### 10.1 Planned MinIO migration
-
-All raw-content operations use the application-owned `IMessageContentStore` port with streaming put, open-read, existence, and delete operations. The first implementation stores content in PostgreSQL; neither the application nor domain layer receives a PostgreSQL-specific locator or `bytea` type.
-
-The later MinIO migration is performed online in controlled stages:
-
-1. Add the MinIO adapter and explicit content-backend/locator metadata while PostgreSQL remains authoritative.
-2. Stream existing MIME rows to MinIO in bounded background batches.
-3. Verify every copied object against its stored byte length and SHA-256 hash.
-4. Enable dual-read with PostgreSQL fallback and repair while new content is written to the selected backend.
-5. Switch MinIO to authoritative reads only after coverage and consistency metrics reach the required threshold.
-6. Retain PostgreSQL MIME for a safety interval, then remove migrated `bytea` values in bounded maintenance batches.
-
-No MinIO package, credentials, process, bucket, or deployment volume is included in the first release.
 
 ## 11. IMAP synchronization
 
@@ -570,30 +567,77 @@ Persistent volumes:
 
 One PostgreSQL backup contains metadata, raw MIME, search data, chunks, embeddings, jobs, and outbox state at a consistent logical point. Backup and restore procedures must be tested, and database volumes and backups must use encrypted storage. TLS certificates and the Data Protection key ring are backed up separately through the deployment secret-management process.
 
-## 19. Administration CLI
+## 19. Development orchestration with Aspire
 
-Initial commands:
+Aspire is included from the start as a development-time orchestration and observability layer, not as the production runtime or application framework. `MailMcp.AppHost` models the host process, PostgreSQL with pgvector, local secret/configuration bindings, and developer observability so contributors can run the local distributed environment consistently from one entry point.
 
-- `mailmcp account add`
-- `mailmcp account list`
-- `mailmcp account test`
-- `mailmcp account disable`
-- `mailmcp sync status`
-- `mailmcp sync run`
-- `mailmcp rag profile add`
-- `mailmcp rag profile activate`
-- `mailmcp rag status`
-- `mailmcp rag reindex`
-- `mailmcp client-cert add-ca`
-- `mailmcp client-cert list`
-- `mailmcp client-cert remove`
+The AppHost stays minimal: explicit resource names, explicit dependencies, separate development/test/production configuration, and no business logic. Production deployment continues to use Docker Compose or rootless Podman Compose managed by systemd unless a later deployment decision replaces that path. Aspire-generated service discovery or orchestration concerns must not leak into `Domain`, `Application`, `Mcp`, or mail protocol adapters.
+
+The first AppHost covers local development only. Future integration testing can reuse Aspire orchestration when it improves repeatability, but integration-test infrastructure remains separate from the initial unit-test-only solution.
+
+## 20. Future ideas
+
+These ideas are deliberately outside the first release. They are recorded here so the initial architecture keeps stable seams for later work without adding premature packages, services, test projects, or operational dependencies.
+
+### 20.1 Agent Governance Toolkit (AGT)
+
+Microsoft Agent Governance Toolkit (AGT) may become useful when MailMcp exposes agent-mediated actions beyond read-only retrieval, especially if future MCP tools can send mail, mutate local state, delegate work, or call external systems. AGT is a governance layer for agents and MCP tool calls: it can help make policy checks, input/output inspection, and allow/deny decisions explicit instead of burying those decisions inside prompt text or ad-hoc tool handlers.
+
+AGT is not part of the first release because the public MCP surface is read-only, deterministic tool authorization is enforced at the transport and application boundaries, and MailMcp already treats retrieved mail as untrusted input. Before adopting AGT, the team must verify package maturity, .NET 10 compatibility, license and service-term implications, policy authoring model, telemetry data exposure, and whether AGT decisions can be expressed without leaking provider-specific concepts into `Domain`, `Application`, or `Mcp`.
+
+Potential AGT evaluation scenarios include governing a future `send_email` MCP tool, blocking prompt-injected tool escalation from message content, enforcing per-client tool policies, recording auditable governance decisions, and validating that denied actions fail closed with safe MCP error codes.
+
+### 20.2 MinIO object storage migration
+
+All raw-content operations use the application-owned `IMessageContentStore` port with streaming put, open-read, existence, and delete operations. The first implementation stores content in PostgreSQL; neither the application nor domain layer receives a PostgreSQL-specific locator or `bytea` type. This seam keeps a future MinIO or S3-compatible object-storage migration possible without changing mail use cases.
+
+A later MinIO migration would be performed online in controlled stages:
+
+1. Add the MinIO adapter and explicit content-backend/locator metadata while PostgreSQL remains authoritative.
+2. Stream existing MIME rows to MinIO in bounded background batches.
+3. Verify every copied object against its stored byte length and SHA-256 hash.
+4. Enable dual-read with PostgreSQL fallback and repair while new content is written to the selected backend.
+5. Switch MinIO to authoritative reads only after coverage and consistency metrics reach the required threshold.
+6. Retain PostgreSQL MIME for a safety interval, then remove migrated `bytea` values in bounded maintenance batches.
+
+No MinIO package, credentials, process, bucket, deployment volume, or object-storage test fixture is included in the first release. Any future MinIO SDK, container image, or hosted object-storage dependency must be pinned, license-reviewed, and recorded in `LICENSES.md` before adoption.
+
+### 20.3 Future integration testing with smtp4dev
+
+A future integration-test suite should include smtp4dev as the controlled SMTP target for delivery scenarios. smtp4dev is a fake SMTP server intended for development and testing, is available as Docker/OCI images and a .NET tool, and its NuGet package currently declares the BSD-3-Clause license. Before adding it to the repository, the exact package, container image, or tool version must be pinned and recorded in `LICENSES.md`.
+
+The smtp4dev-based tests should validate SMTP connection policy, STARTTLS behavior where supported by the selected test setup, authentication settings, MIME envelope/content emitted by MailMcp, outbox retry classification, idempotency behavior, and failure handling. smtp4dev does not replace unit tests and does not validate IMAP semantics; any IMAP integration fixture remains a separate future decision.
+
+The first release still does not add integration-test projects, Testcontainers, Docker fixtures, smtp4dev packages, or smtp4dev container references.
+
+### 20.4 Future administration CLI
+
+The dedicated administration CLI is named `mcpmail` and is a future operational interface rather than an initial implementation requirement. The first release can be administered through validated YAML configuration plus deployment secret references, with account-test and migration workflows added only when their application services exist.
+
+When the CLI is introduced, it should use Microsoft's `System.CommandLine` package rather than a custom parser or a non-official command-line framework. `System.CommandLine` provides command parsing, help output, validation, and shell-completion support for .NET command-line applications, and the package must be centrally pinned and entered in `LICENSES.md` before use.
+
+Candidate future commands:
+
+- `mcpmail account add`
+- `mcpmail account list`
+- `mcpmail account test`
+- `mcpmail account disable`
+- `mcpmail sync status`
+- `mcpmail sync run`
+- `mcpmail rag profile add`
+- `mcpmail rag profile activate`
+- `mcpmail rag status`
+- `mcpmail rag reindex`
+- `mcpmail client-cert add-ca`
+- `mcpmail client-cert list`
+- `mcpmail client-cert remove`
 
 The CLI requires local operating-system access and is not exposed through MCP.
 
-## 20. Delivery stages
+## 21. Delivery stages
 
-1. Repository and solution foundation, unit-test projects, Kestrel HTTPS configuration, PostgreSQL, and migrations.
-2. Account administration and MailKit connection validation with mocked IMAP/SMTP boundary tests.
+1. Repository and solution foundation, Aspire AppHost, unit-test projects, Kestrel HTTPS configuration, PostgreSQL, and migrations.
+2. YAML-based configuration binding, typed option validation, secret-reference resolution, and MailKit connection validation with mocked IMAP/SMTP boundary tests.
 3. Read-only initial and continuous IMAP synchronization with offline MIME storage and `\Seen` regression tests.
 4. Deterministic MCP tools `list_emails` and `get_email_content` with unit-tested authorization and mapping.
 5. PostgreSQL full-text indexing and `search_emails`.
@@ -601,9 +645,9 @@ The CLI requires local operating-system access and is not exposed through MCP.
 7. Agent Framework RAG and conditional `ask_mail`.
 8. SMTP outbox and delivery service with unit-tested state transitions and retry behavior.
 9. ChatGPT OAuth/mTLS validation and general OAuth MCP client profile.
-10. Production hardening, backup, metrics, recovery exercises, and design of the future integration suite.
+10. Production hardening, backup, metrics, recovery exercises, and explicit evaluation plans for future ideas: AGT governance, MinIO object storage, `mcpmail`, and smtp4dev-backed SMTP integration tests.
 
-## 21. Acceptance criteria
+## 22. Acceptance criteria
 
 - Synchronizing and retrieving an unread message leaves its remote `\Seen` flag unchanged.
 - Repeated synchronization is idempotent for the same account, folder, UIDVALIDITY, and UID.
@@ -618,8 +662,12 @@ The CLI requires local operating-system access and is not exposed through MCP.
 - Secrets and mail content do not appear in default logs or telemetry.
 - The complete xUnit unit suite passes without network, database, container, or filesystem dependencies.
 - IMAP/SMTP success, failure, disconnect, cancellation, and capability scenarios are reproducible through NSubstitute-based protocol boundaries.
+- First-release configuration can be expressed in YAML without placing secrets or encrypted secret values in Git.
+- Future CLI work is explicitly deferred and uses `mcpmail` with `System.CommandLine` when implemented.
+- Aspire AppHost can start the local development environment for MailMcp and PostgreSQL without introducing production runtime coupling.
+- Future ideas are collected separately from first-release scope, including AGT governance evaluation, MinIO migration, `mcpmail`, and smtp4dev-backed SMTP delivery verification.
 
-## 22. References verified for this draft
+## 23. References verified for this draft
 
 - [.NET releases and support](https://learn.microsoft.com/en-us/dotnet/core/releases-and-support)
 - [Microsoft Agent Framework overview](https://learn.microsoft.com/en-us/agent-framework/overview/)
@@ -642,3 +690,17 @@ The CLI requires local operating-system access and is not exposed through MCP.
 - [.NET unit testing best practices](https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-best-practices)
 - [xUnit.net v3 getting started](https://xunit.net/docs/getting-started/v3/getting-started)
 - [NSubstitute documentation](https://nsubstitute.github.io/)
+- [.NET configuration providers](https://learn.microsoft.com/en-us/dotnet/core/extensions/configuration-providers)
+- [ASP.NET Core configuration](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/configuration/?view=aspnetcore-10.0)
+- [Safe storage of app secrets in development](https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets?view=aspnetcore-10.0)
+- [Aspire overview](https://aspire.dev/get-started/what-is-aspire/)
+- [Aspire AppHost](https://aspire.dev/get-started/app-host/)
+- [System.CommandLine overview](https://learn.microsoft.com/en-us/dotnet/standard/commandline/)
+- [System.CommandLine NuGet package](https://www.nuget.org/packages/System.CommandLine)
+- [System.CommandLine GitHub repository](https://github.com/dotnet/command-line-api)
+- [smtp4dev GitHub repository](https://github.com/rnwood/smtp4dev)
+- [smtp4dev NuGet package](https://www.nuget.org/packages/Rnwood.Smtp4dev)
+- [smtp4dev Docker image](https://hub.docker.com/r/rnwood/smtp4dev)
+- [smtp4dev installation documentation](https://raw.githubusercontent.com/rnwood/smtp4dev/master/docs/Installation.md)
+- [Agent Governance Toolkit documentation](https://microsoft.github.io/agent-governance-toolkit/)
+- [Agent Governance Toolkit GitHub repository](https://github.com/microsoft/agent-governance-toolkit)
