@@ -96,12 +96,27 @@ HTTPS + OpenAI mTLS + OAuth           | HTTPS + OAuth
 
 ### 4.1 Boundary rules
 
-- `Domain` has no dependency on EF Core, MailKit, MCP, Agent Framework, or storage SDKs.
-- `Application` defines use cases and ports; it depends only on `Domain`.
-- `Infrastructure` implements PostgreSQL persistence, IMAP/SMTP, and secret protection.
-- `AI` implements chunking, embedding orchestration, hybrid retrieval, and Agent Framework composition.
-- `Mcp` maps MCP schemas to application requests and contains no persistence or mail protocol logic.
-- `Host` contains only configuration, dependency injection, middleware, endpoint mapping, and process lifetime.
+Dependencies point inward and never flow in the wrong direction. Outer adapters may know about inner contracts, but inner layers must not reference implementation details from their consumers or adapters. A type from EF Core, Npgsql, MailKit, ASP.NET Core, MCP SDKs, Agent Framework, Semantic Kernel, pgvector, container tooling, systemd integration, or a hosted AI provider must not appear in `Domain` or `Application` contracts unless this draft explicitly says otherwise. Cross-layer communication uses application-owned request/response contracts, ports, domain value objects, and explicit mappers.
+
+Allowed project references are intentionally narrow:
+
+```text
+MailMcp.Domain        -> no MailMcp project references
+MailMcp.Application   -> MailMcp.Domain
+MailMcp.Infrastructure-> MailMcp.Application, MailMcp.Domain
+MailMcp.AI            -> MailMcp.Application, MailMcp.Domain
+MailMcp.Mcp           -> MailMcp.Application, MailMcp.Domain
+MailMcp.Host          -> all runtime projects as the composition root
+MailMcp.AppHost       -> MailMcp.Host plus development orchestration resources
+MailMcp.Cli           -> MailMcp.Application plus required adapters when introduced
+```
+
+- `Domain` contains mail business concepts and invariants: account identity, folder identity, IMAP occurrence identity, message metadata, content integrity facts, synchronization checkpoints, delivery/outbox state, embedding-profile value rules that are provider-neutral, and domain validation such as valid UID/UIDVALIDITY combinations or unsafe transport choices. It contains no persistence models, no configuration binding types, no serialization attributes for external protocols, and no infrastructure framework dependencies.
+- `Application` contains one use case per operation, explicit input and output contracts, authorization decisions close to those use cases, result/error types, orchestration of domain objects, and ports for persistence, local MIME content storage, mail sessions/transports, time, cryptography, search, embedding, chat, and background job scheduling. It depends only on `Domain`; it owns abstractions such as `IMessageContentStore` and never exposes EF Core entities, MailKit objects, MCP SDK types, or AI-provider-specific types.
+- `Infrastructure` implements application ports for PostgreSQL persistence, EF Core migrations, Npgsql raw-MIME storage, MailKit IMAP/SMTP sessions, Data Protection persistence, secret loading/protection adapters, and OpenTelemetry/exporter wiring that is not host-specific. It maps infrastructure records to application/domain contracts and keeps database schema, SQL, `bytea`, pgvector, SASL, TLS, and MailKit details inside adapters.
+- `AI` implements application ports for chunking, embedding generation, hybrid retrieval, and Agent Framework composition. It may depend on provider SDKs behind adapters, but provider-specific request/response types never leak into `Application`, `Domain`, `Mcp`, or persistence contracts.
+- `Mcp` maps MCP schemas to application requests and maps safe application results/errors back to MCP responses. It contains no persistence, mail protocol, RAG indexing, or database transaction logic.
+- `Host` contains only configuration loading, options validation, dependency injection, middleware, endpoint mapping, hosted-service registration, startup migration invocation, and process lifetime. Business decisions remain in `Application` or `Domain`; adapter implementations remain in `Infrastructure`, `AI`, or `Mcp`.
 - A future `Cli` project hosts the `mcpmail` administration tool and reuses application services for account setup, connection tests, synchronization status, and RAG profile management. It is not part of the first implementation slice.
 
 ## 5. Proposed project structure
@@ -246,11 +261,13 @@ Clear-text password mechanisms are rejected over an unencrypted channel unless b
 
 ### 7.3 Configuration files and secret handling
 
-The first release should prefer a small YAML configuration file for non-secret operational settings because mail account definitions, folder policies, TLS profiles, OAuth resource metadata, and RAG profiles are naturally hierarchical. .NET does not ship an in-box YAML configuration provider, so the implementation must either add a permissively licensed YAML provider after license review or load YAML through a narrowly owned host-boundary parser that maps into typed options. YAML is an operator-facing source format only; domain, application, infrastructure, AI, and MCP projects consume validated options and never parse YAML directly.
+The first release uses JSON for non-secret operational settings. ASP.NET Core's default configuration model has official Microsoft support for `appsettings.json` and `appsettings.{Environment}.json` through the JSON configuration provider, so MailMcp should not add a YAML parser or YAML configuration provider for first-release application configuration. JSON remains an operator-facing source format only; domain, application, infrastructure, AI, and MCP projects consume validated options and never parse configuration files directly.
 
-Configuration precedence is explicit: built-in defaults, committed example YAML, deployment YAML, environment-specific overrides, environment variables for non-secret automation, and command-line overrides. The host validates all bound options at startup with fail-fast errors for missing TLS material, unsafe mail transport settings, invalid OAuth audience/resource values, unbounded result sizes, missing database settings, or incompatible RAG profiles.
+Configuration precedence is explicit: built-in defaults, committed example JSON, deployment JSON, environment-specific JSON overrides, environment variables for non-secret automation, and command-line overrides. The host validates all bound options at startup with fail-fast errors for missing TLS material, unsafe mail transport settings, invalid OAuth audience/resource values, unbounded result sizes, missing database settings, incompatible RAG profiles, or unresolved secret references.
 
-Secrets are never committed to YAML. YAML may contain secret references such as credential names, file paths under a protected secrets directory, systemd credential names, or container secret names. Development may use .NET Secret Manager for local-only convenience, but because user secrets are not encrypted and are not a production secret store, production deployments must use systemd credentials, container secrets, an approved external secret provider, or protected files provisioned outside Git.
+Secrets are never committed to JSON. JSON may contain secret references such as systemd credential names, protected file paths, container secret names, or external secret-provider keys. Development may use .NET Secret Manager for local-only convenience, but because user secrets are not encrypted and are not a production secret store, production deployments should prefer systemd credentials for native Linux services, container secrets for containerized deployments, an approved external secret provider, or protected files provisioned outside Git.
+
+For native systemd deployments, MailMcp should load sensitive values from systemd's service credential mechanism rather than environment variables. The systemd documentation describes credentials as a service-manager feature for passing sensitive keys, certificates, passwords, identity information, and similar data to services; it also notes that credentials avoid common environment-variable drawbacks such as inheritance through the process tree and provide per-service access checks. Unit files should use `LoadCredential=` or encrypted credentials managed with `systemd-creds` where appropriate, and the host should read the credential files via the runtime credentials directory exposed to the service. JSON configuration stores only the credential name or logical reference, not the secret value itself.
 
 - Account secrets are encrypted before storage in PostgreSQL.
 - ASP.NET Core Data Protection protects ciphertext with a persistent key ring.
@@ -539,7 +556,7 @@ Certificate material and private keys are supplied through protected deployment 
 - Missing or corrupt MIME content is reported explicitly and queued for repair without a synchronous IMAP fetch in the tool request.
 - Poison messages are quarantined after bounded parsing attempts without blocking the folder checkpoint.
 - Background jobs are persisted in PostgreSQL; no separate queue is required initially.
-- Startup applies only backward-compatible migrations automatically. Destructive or long-running migrations use the CLI.
+- At first-release startup, the service applies pending EF Core migrations automatically before accepting work. This arbitrary initial policy keeps a single-owner deployment simple while the schema is young. Migrations must still be reviewed before release, must be idempotent from the application perspective, and must fail startup rather than silently running with an unknown schema. A later operational hardening phase can move destructive or long-running migrations to `mcpmail`.
 
 ## 17. Observability
 
@@ -612,7 +629,7 @@ The first release still does not add integration-test projects, Testcontainers, 
 
 ### 20.4 Future administration CLI
 
-The dedicated administration CLI is named `mcpmail` and is a future operational interface rather than an initial implementation requirement. The first release can be administered through validated YAML configuration plus deployment secret references, with account-test and migration workflows added only when their application services exist.
+The dedicated administration CLI is named `mcpmail` and is a future operational interface rather than an initial implementation requirement. The first release can be administered through validated JSON configuration plus deployment secret references, with account-test and migration workflows added only when their application services exist.
 
 When the CLI is introduced, it should use Microsoft's `System.CommandLine` package rather than a custom parser or a non-official command-line framework. `System.CommandLine` provides command parsing, help output, validation, and shell-completion support for .NET command-line applications, and the package must be centrally pinned and entered in `LICENSES.md` before use.
 
@@ -637,7 +654,7 @@ The CLI requires local operating-system access and is not exposed through MCP.
 ## 21. Delivery stages
 
 1. Repository and solution foundation, Aspire AppHost, unit-test projects, Kestrel HTTPS configuration, PostgreSQL, and migrations.
-2. YAML-based configuration binding, typed option validation, secret-reference resolution, and MailKit connection validation with mocked IMAP/SMTP boundary tests.
+2. JSON-based configuration binding, typed option validation, systemd/container secret-reference resolution, and MailKit connection validation with mocked IMAP/SMTP boundary tests.
 3. Read-only initial and continuous IMAP synchronization with offline MIME storage and `\Seen` regression tests.
 4. Deterministic MCP tools `list_emails` and `get_email_content` with unit-tested authorization and mapping.
 5. PostgreSQL full-text indexing and `search_emails`.
@@ -662,7 +679,7 @@ The CLI requires local operating-system access and is not exposed through MCP.
 - Secrets and mail content do not appear in default logs or telemetry.
 - The complete xUnit unit suite passes without network, database, container, or filesystem dependencies.
 - IMAP/SMTP success, failure, disconnect, cancellation, and capability scenarios are reproducible through NSubstitute-based protocol boundaries.
-- First-release configuration can be expressed in YAML without placing secrets or encrypted secret values in Git.
+- First-release configuration can be expressed in JSON without placing secrets or encrypted secret values in Git.
 - Future CLI work is explicitly deferred and uses `mcpmail` with `System.CommandLine` when implemented.
 - Aspire AppHost can start the local development environment for MailMcp and PostgreSQL without introducing production runtime coupling.
 - Future ideas are collected separately from first-release scope, including AGT governance evaluation, MinIO migration, `mcpmail`, and smtp4dev-backed SMTP delivery verification.
@@ -693,6 +710,8 @@ The CLI requires local operating-system access and is not exposed through MCP.
 - [.NET configuration providers](https://learn.microsoft.com/en-us/dotnet/core/extensions/configuration-providers)
 - [ASP.NET Core configuration](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/configuration/?view=aspnetcore-10.0)
 - [Safe storage of app secrets in development](https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets?view=aspnetcore-10.0)
+- [systemd credentials](https://systemd.io/CREDENTIALS/)
+- [systemd-creds](https://www.freedesktop.org/software/systemd/man/systemd-creds.html)
 - [Aspire overview](https://aspire.dev/get-started/what-is-aspire/)
 - [Aspire AppHost](https://aspire.dev/get-started/app-host/)
 - [System.CommandLine overview](https://learn.microsoft.com/en-us/dotnet/standard/commandline/)
