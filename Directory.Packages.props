@@ -9,6 +9,8 @@
     <PackageVersion Include="MailKit" Version="4.17.0" />
     <PackageVersion Include="Microsoft.Agents.AI" Version="1.15.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.302" />
+    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.14.15" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.1" />
@@ -16,7 +18,11 @@
     <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="1.4.1" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="NSubstitute" Version="6.0.0" />
+    <PackageVersion Include="Roslynator.Analyzers" Version="4.13.1" />
+    <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.13.1" />
+    <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.13.1" />
     <PackageVersion Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
+    <PackageVersion Include="xunit.analyzers" Version="1.27.0" />
     <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
   </ItemGroup>
 </Project>
