@@ -22,3 +22,5 @@ Run the Aspire orchestration host:
 ```bash
 dotnet run --project src/AppHost/AppHost.csproj
 ```
+
+The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.2-pg17` image so local development starts with a PostgreSQL server that can support the `vector` extension required by the RAG and embedding slices.
