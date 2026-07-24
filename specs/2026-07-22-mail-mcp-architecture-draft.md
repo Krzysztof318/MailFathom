@@ -168,7 +168,7 @@ mail-mcp/
 │   │   ├── MessageContent/
 │   │   └── Abstractions/
 │   ├── Infrastructure/
-│   │   ├── Persistence/PostgreSql/
+│   │   ├── Persistence/
 │   │   │   ├── Configurations/
 │   │   │   └── Migrations/
 │   │   ├── Mail/MailKit/
@@ -396,6 +396,7 @@ This is a system invariant, not an option.
 1. Connect, negotiate TLS, and authenticate.
 2. Discover configured folders and capabilities.
 3. Record `UIDVALIDITY`, `UIDNEXT`, and `HIGHESTMODSEQ` when available.
+4. Support a future custom folder mapping layer that lets users work with stable friendly names such as `Inbox` or `Skrzynka odbiorcza` while the adapter maps those names to provider/server folder identifiers such as `server_inbox334`. This mapping belongs at the configuration/application boundary and must preserve auditability: logs and UI may show the friendly name, while synchronization stores the resolved remote folder identity needed for IMAP safety. This is a specification requirement only in the current slice; do not implement runtime mapping until the folder-configuration design is reviewed.
 4. Enumerate UIDs in bounded batches.
 5. Fetch metadata and raw MIME using read-only PEEK operations.
 6. Store raw MIME, metadata, and checkpoint transactionally in PostgreSQL.

@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Buffers;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
@@ -13,10 +14,15 @@ using MailMcp.Domain.Messages;
 namespace MailMcp.Infrastructure.Mail.MailKit;
 
 /// <summary>MailKit-backed factory for authenticated read-only IMAP folder sessions.</summary>
-public sealed class MailKitImapMailboxSessionFactory(Func<ImapClient> clientFactory, IMailKitImapAccountSettingsProvider settingsProvider) : IImapMailboxSessionFactory
+public sealed class MailKitImapMailboxSessionFactory(
+    Func<ImapClient> clientFactory,
+    IMailKitImapAccountSettingsProvider settingsProvider) : IMailboxSessionFactory
 {
     /// <inheritdoc />
-    public async Task<IImapMailboxSession> OpenReadOnlyAsync(MailAccountId accountId, MailFolderName folderName, CancellationToken cancellationToken)
+    public async Task<IMailboxSession> OpenReadOnlyAsync(
+        MailAccountId accountId,
+        MailFolderName folderName,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(clientFactory);
         var settings = settingsProvider.GetSettings(accountId.Value);
@@ -30,7 +36,11 @@ public sealed class MailKitImapMailboxSessionFactory(Func<ImapClient> clientFact
     }
 }
 
-internal sealed class MailKitImapMailboxSession(MailAccountId accountId, MailFolderName folderName, ImapClient client, IMailFolder folder) : IImapMailboxSession
+internal sealed class MailKitImapMailboxSession(
+    MailAccountId accountId,
+    MailFolderName folderName,
+    ImapClient client,
+    IMailFolder folder) : IMailboxSession
 {
     public async ValueTask DisposeAsync()
     {
@@ -44,7 +54,10 @@ internal sealed class MailKitImapMailboxSession(MailAccountId accountId, MailFol
 
     public Task<ImapUidValidity> GetUidValidityAsync(CancellationToken cancellationToken) => Task.FromResult(ImapUidValidity.Create(folder.UidValidity));
 
-    public async Task<RemoteMessageMetadataBatch> GetMessageBatchAfterAsync(ImapUid? lastSeenUid, int maxMessageCount, CancellationToken cancellationToken)
+    public async Task<RemoteMessageMetadataBatch> GetMessageBatchAfterAsync(
+        ImapUid? lastSeenUid,
+        int maxMessageCount,
+        CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxMessageCount);
         if (lastSeenUid is { } checkpointUid && checkpointUid.Value >= UniqueId.MaxValue.Id)
@@ -67,7 +80,10 @@ internal sealed class MailKitImapMailboxSession(MailAccountId accountId, MailFol
         return new RemoteMessageMetadataBatch(messages, ImapUid.Create(maxValue), maxValue < UniqueId.MaxValue.Id);
     }
 
-    public async Task<RemoteMessageContent> FetchMessageContentWithoutSettingSeenAsync(MessageOccurrenceId occurrenceId, long maxRawMimeBytes, CancellationToken cancellationToken)
+    public async Task<RemoteMessageContent> FetchMessageContentWithoutSettingSeenAsync(
+        MessageOccurrenceId occurrenceId,
+        long maxRawMimeBytes,
+        CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxRawMimeBytes);
         // The folder is selected read-only and MailKit's GetStreamAsync issues a content retrieval for the selected UID without requesting flag mutation.
@@ -77,20 +93,33 @@ internal sealed class MailKitImapMailboxSession(MailAccountId accountId, MailFol
         return new RemoteMessageContent(occurrenceId, memory.ToArray());
     }
 
-    private static async Task CopyToMemoryWithLimitAsync(MessageOccurrenceId occurrenceId, Stream source, MemoryStream destination, long maxRawMimeBytes, CancellationToken cancellationToken)
+    private static async Task CopyToMemoryWithLimitAsync(
+        MessageOccurrenceId occurrenceId,
+        Stream source,
+        MemoryStream destination,
+        long maxRawMimeBytes,
+        CancellationToken cancellationToken)
     {
-        var buffer = new byte[81920];
-        long totalBytes = 0;
-        int read;
-        while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
+        var rentedBuffer = ArrayPool<byte>.Shared.Rent(81920);
+        try
         {
-            totalBytes += read;
-            if (totalBytes > maxRawMimeBytes)
+            var buffer = rentedBuffer.AsMemory();
+            long totalBytes = 0;
+            int read;
+            while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
             {
-                throw new MessageContentTooLargeException(occurrenceId, totalBytes, maxRawMimeBytes);
-            }
+                totalBytes += read;
+                if (totalBytes > maxRawMimeBytes)
+                {
+                    throw new MessageContentTooLargeException(occurrenceId, totalBytes, maxRawMimeBytes);
+                }
 
-            await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                await destination.WriteAsync(buffer[..read], cancellationToken);
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(rentedBuffer);
         }
     }
 }
