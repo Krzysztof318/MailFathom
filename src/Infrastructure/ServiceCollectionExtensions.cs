@@ -22,6 +22,7 @@ public static class ServiceCollectionExtensions
         var connectionString = configuration.GetConnectionString("mailmcp");
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         services.AddDbContext<MailMcpDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddScoped<IMailSynchronizationUnitOfWorkFactory, PostgreSqlMailSynchronizationUnitOfWorkFactory>();
         services.AddScoped<ISynchronizationCheckpointStore, PostgreSqlSynchronizationCheckpointStore>();
         services.AddScoped<IMessageMetadataRepository, PostgreSqlMessageMetadataRepository>();
         services.AddScoped<IMessageContentStore, PostgreSqlMessageContentStore>();

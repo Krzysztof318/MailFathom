@@ -1,12 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using System.ComponentModel.DataAnnotations;
-using MailMcp.Infrastructure.Mail.MailKit;
 
 namespace MailMcp.Host.Configuration;
 
 /// <summary>Configures periodic IMAP synchronization.</summary>
-public sealed class MailSynchronizationOptions : IValidatableObject, IMailKitImapAccountSettingsProvider
+public sealed class MailSynchronizationOptions : IValidatableObject
 {
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
@@ -29,14 +28,6 @@ public sealed class MailSynchronizationOptions : IValidatableObject, IMailKitIma
 
     /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
-
-    /// <inheritdoc />
-    public MailKitImapAccountSettings GetSettings(string accountId)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
-        var account = this.Accounts.Single(account => StringComparer.Ordinal.Equals(account.AccountId, accountId));
-        return new MailKitImapAccountSettings(account.AccountId, account.Host, account.Port, account.UseTls, account.UserName, account.Password);
-    }
 
     internal IEnumerable<ValidationResult> ValidateForSynchronization()
     {

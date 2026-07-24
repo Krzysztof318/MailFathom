@@ -2,10 +2,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
-using MailMcp.Host.Configuration;
-using Microsoft.Extensions.Options;
 
 namespace MailMcp.Host.Hosting;
 
@@ -13,15 +9,15 @@ namespace MailMcp.Host.Hosting;
 public sealed class MailSynchronizationWorker : BackgroundService
 {
     private readonly IServiceScopeFactory scopeFactory;
-    private readonly IOptions<MailSynchronizationOptions> options;
+    private readonly ISynchronizationSettingsReader settingsReader;
     private readonly ILogger<MailSynchronizationWorker> logger;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes a new mail synchronization worker.</summary>
-    public MailSynchronizationWorker(IServiceScopeFactory scopeFactory, IOptions<MailSynchronizationOptions> options, ILogger<MailSynchronizationWorker> logger, TimeProvider timeProvider)
+    public MailSynchronizationWorker(IServiceScopeFactory scopeFactory, ISynchronizationSettingsReader settingsReader, ILogger<MailSynchronizationWorker> logger, TimeProvider timeProvider)
     {
         this.scopeFactory = scopeFactory;
-        this.options = options;
+        this.settingsReader = settingsReader;
         this.logger = logger;
         this.timeProvider = timeProvider;
     }
@@ -29,36 +25,36 @@ public sealed class MailSynchronizationWorker : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var currentOptions = this.options.Value;
-        if (!currentOptions.Enabled)
-        {
-            this.logger.LogInformation("IMAP synchronization worker is disabled.");
-            return;
-        }
-
-        using var timer = new PeriodicTimer(currentOptions.Interval, this.timeProvider);
+        var startupSettings = this.settingsReader.GetCurrentSettings();
+        using var timer = new PeriodicTimer(startupSettings.Interval, this.timeProvider);
         do
         {
-            await this.RunOnceAsync(currentOptions, stoppingToken);
+            await this.RunOnceAsync(this.settingsReader.GetCurrentSettings(), stoppingToken);
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The hosted worker isolates unexpected per-folder failures so later folders and intervals can continue.")]
-    private async Task RunOnceAsync(MailSynchronizationOptions currentOptions, CancellationToken cancellationToken)
+    private async Task RunOnceAsync(MailSynchronizationSettings currentSettings, CancellationToken cancellationToken)
     {
-        foreach (var account in currentOptions.Accounts)
+        if (!currentSettings.Enabled)
         {
-            foreach (var folder in account.EffectiveFolders)
+            this.logger.LogDebug("IMAP synchronization worker is disabled for this interval.");
+            return;
+        }
+
+        foreach (var account in currentSettings.Accounts)
+        {
+            foreach (var folder in account.Folders)
             {
                 try
                 {
                     using var scope = this.scopeFactory.CreateScope();
                     var synchronizer = scope.ServiceProvider.GetRequiredService<MailboxSynchronizer>();
-                    var result = await synchronizer.SynchronizeAsync(MailAccountId.Create(account.AccountId), MailFolderName.Create(folder), cancellationToken);
+                    var result = await synchronizer.SynchronizeAsync(account.AccountId, folder, cancellationToken);
                     if (this.logger.IsEnabled(LogLevel.Information))
                     {
-                        this.logger.LogInformation("Synchronized IMAP folder {AccountId}/{FolderName}; stored {StoredMessageCount} messages, skipped {SkippedOversizedMessageCount} oversized messages, and has more work: {HasMoreMessages}.", account.AccountId, folder, result.StoredMessageCount, result.SkippedOversizedMessageCount, result.HasMoreMessages);
+                        this.logger.LogInformation("Synchronized IMAP folder {AccountId}/{FolderName}; stored {StoredMessageCount} messages, skipped {SkippedOversizedMessageCount} oversized messages, and has more work: {HasMoreMessages}.", account.AccountId.Value, folder.Value, result.StoredMessageCount, result.SkippedOversizedMessageCount, result.HasMoreMessages);
                     }
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -67,7 +63,7 @@ public sealed class MailSynchronizationWorker : BackgroundService
                 }
                 catch (Exception exception)
                 {
-                    this.logger.LogWarning(exception, "IMAP synchronization failed for {AccountId}/{FolderName}; the worker will continue with remaining folders and retry on a later interval.", account.AccountId, folder);
+                    this.logger.LogWarning(exception, "IMAP synchronization failed for {AccountId}/{FolderName}; the worker will continue with remaining folders and retry on a later interval.", account.AccountId.Value, folder.Value);
                 }
             }
         }

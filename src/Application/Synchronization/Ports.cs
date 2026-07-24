@@ -15,14 +15,28 @@ public interface ISynchronizationCheckpointStore
     Task<SynchronizationCheckpoint?> GetCheckpointAsync(MailAccountId accountId, MailFolderName folderName, CancellationToken cancellationToken);
 
     /// <summary>Saves the durable checkpoint for a folder.</summary>
-    Task SaveCheckpointAsync(MailAccountId accountId, MailFolderName folderName, SynchronizationCheckpoint checkpoint, CancellationToken cancellationToken);
+    Task SaveCheckpointAsync(IMailSynchronizationUnitOfWorkSession session, MailAccountId accountId, MailFolderName folderName, SynchronizationCheckpoint checkpoint, CancellationToken cancellationToken);
+}
+
+/// <summary>Creates explicit unit-of-work sessions for synchronization writes that span content, metadata, and checkpoints.</summary>
+public interface IMailSynchronizationUnitOfWorkFactory
+{
+    /// <summary>Begins a short-lived provider-neutral transaction session for one local synchronization write batch.</summary>
+    Task<IMailSynchronizationUnitOfWorkSession> BeginSynchronizationWriteAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>Represents an explicit synchronization persistence session shared by repositories participating in one transaction.</summary>
+public interface IMailSynchronizationUnitOfWorkSession : IAsyncDisposable
+{
+    /// <summary>Commits all repository writes joined to this session. The session is invalid for further use after commit.</summary>
+    Task CommitAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Persists message metadata independently from raw MIME content.</summary>
 public interface IMessageMetadataRepository
 {
     /// <summary>Inserts or updates metadata for one remote occurrence idempotently.</summary>
-    Task UpsertMetadataAsync(RemoteMessageMetadata metadata, CancellationToken cancellationToken);
+    Task UpsertMetadataAsync(IMailSynchronizationUnitOfWorkSession session, RemoteMessageMetadata metadata, CancellationToken cancellationToken);
 }
 
 /// <summary>Creates IMAP sessions exposed only through application-owned mail operations.</summary>

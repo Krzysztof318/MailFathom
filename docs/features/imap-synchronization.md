@@ -5,10 +5,10 @@ MailMcp now includes the first vertical slice for read-only IMAP synchronization
 ## Implemented behavior
 
 - `Domain` models stable IMAP message occurrence identity as `(account, folder, UIDVALIDITY, UID)`.
-- `Application` owns IMAP, metadata repository, content store, and checkpoint ports.
-- `MailboxSynchronizer` opens folders through a read-only session port, requests bounded metadata batches, skips messages above the configured raw MIME limit, fetches message content through a seen-preserving method, stores raw MIME before metadata, and advances checkpoints only after each bounded UID window is inspected.
+- `Application` owns IMAP, metadata repository, content store, checkpoint, explicit synchronization unit-of-work, and synchronization settings reader ports.
+- `MailboxSynchronizer` opens folders through a read-only session port, requests bounded metadata batches, skips messages above the configured raw MIME limit, fetches message content through a seen-preserving method, stores raw MIME before metadata, and advances checkpoints only after each bounded UID window is inspected. Content, metadata, and checkpoint writes for a bounded UID window participate in one explicit application-owned unit-of-work session so transaction participation remains visible without exposing EF Core to `Application`.
 - `Infrastructure` provides EF Core PostgreSQL mappings for accounts, folders, message metadata, raw message content, and synchronization checkpoints.
-- `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings, and a periodic scoped background worker that isolates failures per account/folder work unit.
+- `Host` binds provider-shaped `MailSynchronization` options, rejects unknown keys during binding, maps them through `MailSynchronizationSettingsReader` into immutable application settings for new operations, and runs a periodic scoped background worker that isolates failures per account/folder work unit.
 
 ## Configuration
 
@@ -27,7 +27,11 @@ Synchronization is disabled by default:
 }
 ```
 
-When enabled, at least one account must be configured. If an account omits `Folders`, the worker applies the post-binding default `INBOX`; explicit folder lists replace that default. Account secrets and concrete IMAP connection settings are intentionally not committed in ordinary configuration files.
+When enabled, at least one account must be configured. If an account omits `Folders`, the worker applies the post-binding default `INBOX`; explicit folder lists replace that default. Unknown `MailSynchronization` keys are rejected at binding time. Account secrets and concrete IMAP connection settings are intentionally not committed in ordinary configuration files.
+
+## Reload and safety assumptions
+
+The first synchronization configuration group is classified as reloadable for new operations only: each worker execution captures an immutable application settings snapshot before starting scoped account/folder work. Invalid mapped reload candidates are rejected by the host-side reader and the previous validated application snapshot remains active. Programmatic configuration mutation is not implemented.
 
 ## Safety assumptions
 
@@ -38,5 +42,5 @@ The application layer exposes only `FetchMessageContentWithoutSettingSeenAsync` 
 - Deployment-specific secret binding for IMAP passwords and reviewed operational examples for external secret stores.
 - IMAP IDLE and NOTIFY support.
 - Explicit EF Core migrations after schema review.
-- Integration tests with PostgreSQL and a real IMAP server in the later integration-test phase, including EF mapping/constraint verification required by ADR 001.
+- Integration tests with PostgreSQL and a real IMAP server in the later integration-test phase, including EF mapping, transaction, migration, and constraint verification required by ADR 001.
 - MCP read tools, RAG indexing, and SMTP outbox integration.

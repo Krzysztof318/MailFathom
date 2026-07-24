@@ -7,8 +7,43 @@ using MailMcp.Domain.Folders;
 using MailMcp.Domain.Messages;
 using MailMcp.Domain.Synchronization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace MailMcp.Infrastructure.Persistence.PostgreSql;
+
+/// <summary>PostgreSQL implementation for synchronization checkpoints.</summary>
+public sealed class PostgreSqlMailSynchronizationUnitOfWorkFactory(MailMcpDbContext dbContext) : IMailSynchronizationUnitOfWorkFactory
+{
+    /// <inheritdoc />
+    public async Task<IMailSynchronizationUnitOfWorkSession> BeginSynchronizationWriteAsync(CancellationToken cancellationToken)
+    {
+        var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        return new PostgreSqlMailSynchronizationUnitOfWorkSession(dbContext, transaction);
+    }
+}
+
+internal sealed class PostgreSqlMailSynchronizationUnitOfWorkSession(MailMcpDbContext dbContext, IDbContextTransaction transaction) : IMailSynchronizationUnitOfWorkSession
+{
+    private bool completed;
+
+    public async Task CommitAsync(CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(this.completed, this);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        this.completed = true;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!this.completed)
+        {
+            await transaction.RollbackAsync();
+        }
+
+        await transaction.DisposeAsync();
+    }
+}
 
 /// <summary>PostgreSQL implementation for synchronization checkpoints.</summary>
 public sealed class PostgreSqlSynchronizationCheckpointStore(MailMcpDbContext dbContext) : ISynchronizationCheckpointStore
@@ -26,7 +61,7 @@ public sealed class PostgreSqlSynchronizationCheckpointStore(MailMcpDbContext db
     }
 
     /// <inheritdoc />
-    public async Task SaveCheckpointAsync(MailAccountId accountId, MailFolderName folderName, SynchronizationCheckpoint checkpoint, CancellationToken cancellationToken)
+    public async Task SaveCheckpointAsync(IMailSynchronizationUnitOfWorkSession session, MailAccountId accountId, MailFolderName folderName, SynchronizationCheckpoint checkpoint, CancellationToken cancellationToken)
     {
         var record = await dbContext.MailFolders.SingleOrDefaultAsync(x => x.AccountId == accountId.Value && x.FolderName == folderName.Value, cancellationToken);
         if (record is null)
@@ -40,7 +75,6 @@ public sealed class PostgreSqlSynchronizationCheckpointStore(MailMcpDbContext db
             record.SynchronizedAt = checkpoint.SynchronizedAt;
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }
 
@@ -48,7 +82,7 @@ public sealed class PostgreSqlSynchronizationCheckpointStore(MailMcpDbContext db
 public sealed class PostgreSqlMessageMetadataRepository(MailMcpDbContext dbContext) : IMessageMetadataRepository
 {
     /// <inheritdoc />
-    public async Task UpsertMetadataAsync(RemoteMessageMetadata metadata, CancellationToken cancellationToken)
+    public async Task UpsertMetadataAsync(IMailSynchronizationUnitOfWorkSession session, RemoteMessageMetadata metadata, CancellationToken cancellationToken)
     {
         var id = metadata.OccurrenceId;
         var record = await dbContext.MessageMetadata.SingleOrDefaultAsync(x => x.AccountId == id.AccountId.Value && x.FolderName == id.FolderName.Value && x.UidValidity == id.UidValidity.Value && x.Uid == id.Uid.Value, cancellationToken);
@@ -64,7 +98,6 @@ public sealed class PostgreSqlMessageMetadataRepository(MailMcpDbContext dbConte
             record.SizeOctets = metadata.SizeOctets;
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }
 
@@ -72,7 +105,7 @@ public sealed class PostgreSqlMessageMetadataRepository(MailMcpDbContext dbConte
 public sealed class PostgreSqlMessageContentStore(MailMcpDbContext dbContext) : IMessageContentStore
 {
     /// <inheritdoc />
-    public async Task SaveContentAsync(RemoteMessageContent content, CancellationToken cancellationToken)
+    public async Task SaveContentAsync(IMailSynchronizationUnitOfWorkSession session, RemoteMessageContent content, CancellationToken cancellationToken)
     {
         var id = content.OccurrenceId;
         var bytes = content.RawMime as byte[] ?? [.. content.RawMime];
@@ -85,7 +118,5 @@ public sealed class PostgreSqlMessageContentStore(MailMcpDbContext dbContext) : 
         {
             record.RawMime = bytes;
         }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

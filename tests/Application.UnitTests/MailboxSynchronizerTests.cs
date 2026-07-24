@@ -24,12 +24,15 @@ public sealed class MailboxSynchronizerTests
         var occurrence = MessageOccurrenceId.Create(accountId, folderName, uidValidity, uid);
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IMessageMetadataRepository>();
+        var unitOfWorkFactory = Substitute.For<IMailSynchronizationUnitOfWorkFactory>();
+        var unitOfWork = Substitute.For<IMailSynchronizationUnitOfWorkSession>();
+        unitOfWorkFactory.BeginSynchronizationWriteAsync(CancellationToken.None).Returns(unitOfWork);
         var contentStore = Substitute.For<IMessageContentStore>();
         var sessionFactory = Substitute.For<IImapMailboxSessionFactory>();
         var session = Substitute.For<IImapMailboxSession>();
         var clock = Substitute.For<TimeProvider>();
         var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
-        var synchronizer = new MailboxSynchronizer(sessionFactory, checkpointStore, metadataRepository, contentStore, clock, options);
+        var synchronizer = new MailboxSynchronizer(sessionFactory, checkpointStore, unitOfWorkFactory, metadataRepository, contentStore, clock, options);
         var metadata = new RemoteMessageMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 128);
         var content = new RemoteMessageContent(occurrence, new byte[] { 1, 2, 3 });
         clock.GetUtcNow().Returns(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -47,9 +50,10 @@ public sealed class MailboxSynchronizerTests
         Assert.Equal(0, result.SkippedOversizedMessageCount);
         await session.Received(1).GetMessageBatchAfterAsync(null, 25, CancellationToken.None);
         await session.Received(1).FetchMessageContentWithoutSettingSeenAsync(occurrence, 1024, CancellationToken.None);
-        await contentStore.Received(1).SaveContentAsync(content, CancellationToken.None);
-        await metadataRepository.Received(1).UpsertMetadataAsync(metadata, CancellationToken.None);
-        await checkpointStore.Received(1).SaveCheckpointAsync(accountId, folderName, Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == uid), CancellationToken.None);
+        await contentStore.Received(1).SaveContentAsync(unitOfWork, content, CancellationToken.None);
+        await metadataRepository.Received(1).UpsertMetadataAsync(unitOfWork, metadata, CancellationToken.None);
+        await checkpointStore.Received(1).SaveCheckpointAsync(unitOfWork, accountId, folderName, Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == uid), CancellationToken.None);
+        await unitOfWork.Received(1).CommitAsync(CancellationToken.None);
     }
 
     [Fact]
@@ -63,12 +67,15 @@ public sealed class MailboxSynchronizerTests
         var occurrence = MessageOccurrenceId.Create(accountId, folderName, uidValidity, uid);
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IMessageMetadataRepository>();
+        var unitOfWorkFactory = Substitute.For<IMailSynchronizationUnitOfWorkFactory>();
+        var unitOfWork = Substitute.For<IMailSynchronizationUnitOfWorkSession>();
+        unitOfWorkFactory.BeginSynchronizationWriteAsync(CancellationToken.None).Returns(unitOfWork);
         var contentStore = Substitute.For<IMessageContentStore>();
         var sessionFactory = Substitute.For<IImapMailboxSessionFactory>();
         var session = Substitute.For<IImapMailboxSession>();
         var clock = Substitute.For<TimeProvider>();
         var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
-        var synchronizer = new MailboxSynchronizer(sessionFactory, checkpointStore, metadataRepository, contentStore, clock, options);
+        var synchronizer = new MailboxSynchronizer(sessionFactory, checkpointStore, unitOfWorkFactory, metadataRepository, contentStore, clock, options);
         var metadata = new RemoteMessageMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 2048);
         clock.GetUtcNow().Returns(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
         checkpointStore.GetCheckpointAsync(accountId, folderName, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
@@ -83,9 +90,10 @@ public sealed class MailboxSynchronizerTests
         Assert.Equal(0, result.StoredMessageCount);
         Assert.Equal(1, result.SkippedOversizedMessageCount);
         await session.DidNotReceive().FetchMessageContentWithoutSettingSeenAsync(Arg.Any<MessageOccurrenceId>(), Arg.Any<long>(), CancellationToken.None);
-        await contentStore.DidNotReceive().SaveContentAsync(Arg.Any<RemoteMessageContent>(), CancellationToken.None);
-        await metadataRepository.DidNotReceive().UpsertMetadataAsync(Arg.Any<RemoteMessageMetadata>(), CancellationToken.None);
-        await checkpointStore.Received(1).SaveCheckpointAsync(accountId, folderName, Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == uid), CancellationToken.None);
+        await contentStore.DidNotReceive().SaveContentAsync(Arg.Any<IMailSynchronizationUnitOfWorkSession>(), Arg.Any<RemoteMessageContent>(), CancellationToken.None);
+        await metadataRepository.DidNotReceive().UpsertMetadataAsync(Arg.Any<IMailSynchronizationUnitOfWorkSession>(), Arg.Any<RemoteMessageMetadata>(), CancellationToken.None);
+        await checkpointStore.Received(1).SaveCheckpointAsync(unitOfWork, accountId, folderName, Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == uid), CancellationToken.None);
+        await unitOfWork.Received(1).CommitAsync(CancellationToken.None);
     }
 
 
@@ -98,12 +106,15 @@ public sealed class MailboxSynchronizerTests
         var uidValidity = ImapUidValidity.Create(5);
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IMessageMetadataRepository>();
+        var unitOfWorkFactory = Substitute.For<IMailSynchronizationUnitOfWorkFactory>();
+        var unitOfWork = Substitute.For<IMailSynchronizationUnitOfWorkSession>();
+        unitOfWorkFactory.BeginSynchronizationWriteAsync(CancellationToken.None).Returns(unitOfWork);
         var contentStore = Substitute.For<IMessageContentStore>();
         var sessionFactory = Substitute.For<IImapMailboxSessionFactory>();
         var session = Substitute.For<IImapMailboxSession>();
         var clock = Substitute.For<TimeProvider>();
         var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024, MaxUidWindowsPerRun = 2 };
-        var synchronizer = new MailboxSynchronizer(sessionFactory, checkpointStore, metadataRepository, contentStore, clock, options);
+        var synchronizer = new MailboxSynchronizer(sessionFactory, checkpointStore, unitOfWorkFactory, metadataRepository, contentStore, clock, options);
         var firstCursor = ImapUid.Create(25);
         var secondCursor = ImapUid.Create(50);
         clock.GetUtcNow().Returns(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -119,8 +130,9 @@ public sealed class MailboxSynchronizerTests
         // Assert
         Assert.True(result.HasMoreMessages);
         await session.Received(2).GetMessageBatchAfterAsync(Arg.Any<ImapUid?>(), 25, CancellationToken.None);
-        await checkpointStore.Received(1).SaveCheckpointAsync(accountId, folderName, Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == firstCursor), CancellationToken.None);
-        await checkpointStore.Received(1).SaveCheckpointAsync(accountId, folderName, Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == secondCursor), CancellationToken.None);
+        await checkpointStore.Received(1).SaveCheckpointAsync(unitOfWork, accountId, folderName, Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == firstCursor), CancellationToken.None);
+        await checkpointStore.Received(1).SaveCheckpointAsync(unitOfWork, accountId, folderName, Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == secondCursor), CancellationToken.None);
+        await unitOfWork.Received(2).CommitAsync(CancellationToken.None);
     }
 
     [Fact]
@@ -134,12 +146,15 @@ public sealed class MailboxSynchronizerTests
         var occurrence = MessageOccurrenceId.Create(accountId, folderName, uidValidity, uid);
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IMessageMetadataRepository>();
+        var unitOfWorkFactory = Substitute.For<IMailSynchronizationUnitOfWorkFactory>();
+        var unitOfWork = Substitute.For<IMailSynchronizationUnitOfWorkSession>();
+        unitOfWorkFactory.BeginSynchronizationWriteAsync(CancellationToken.None).Returns(unitOfWork);
         var contentStore = Substitute.For<IMessageContentStore>();
         var sessionFactory = Substitute.For<IImapMailboxSessionFactory>();
         var session = Substitute.For<IImapMailboxSession>();
         var clock = Substitute.For<TimeProvider>();
         var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024, MaxUidWindowsPerRun = 1 };
-        var synchronizer = new MailboxSynchronizer(sessionFactory, checkpointStore, metadataRepository, contentStore, clock, options);
+        var synchronizer = new MailboxSynchronizer(sessionFactory, checkpointStore, unitOfWorkFactory, metadataRepository, contentStore, clock, options);
         var metadata = new RemoteMessageMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 0);
         clock.GetUtcNow().Returns(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
         checkpointStore.GetCheckpointAsync(accountId, folderName, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
@@ -154,8 +169,9 @@ public sealed class MailboxSynchronizerTests
         // Assert
         Assert.Equal(0, result.StoredMessageCount);
         Assert.Equal(1, result.SkippedOversizedMessageCount);
-        await contentStore.DidNotReceive().SaveContentAsync(Arg.Any<RemoteMessageContent>(), CancellationToken.None);
-        await checkpointStore.Received(1).SaveCheckpointAsync(accountId, folderName, Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == uid), CancellationToken.None);
+        await contentStore.DidNotReceive().SaveContentAsync(Arg.Any<IMailSynchronizationUnitOfWorkSession>(), Arg.Any<RemoteMessageContent>(), CancellationToken.None);
+        await checkpointStore.Received(1).SaveCheckpointAsync(unitOfWork, accountId, folderName, Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == uid), CancellationToken.None);
+        await unitOfWork.Received(1).CommitAsync(CancellationToken.None);
     }
 
 }

@@ -806,3 +806,7 @@ The CLI requires local operating-system access and is not exposed through MCP.
 - [GDPR Article 17: right to erasure](https://gdpr-info.eu/art-17-gdpr/)
 - [GDPR Article 20: right to data portability](https://gdpr-info.eu/art-20-gdpr/)
 - [Agent Governance Toolkit GitHub repository](https://github.com/microsoft/agent-governance-toolkit)
+
+## Implementation status notes
+
+- 2026-07-24: Implemented first periodic read-only IMAP synchronization slice with application-owned IMAP/persistence/settings ports, an explicit application-owned synchronization unit-of-work session for content/metadata/checkpoint write windows, EF Core PostgreSQL adapters, MailKit read-only adapter, bounded metadata batches, raw MIME size limits, host-side options-to-business-settings mapping, per-folder background-worker failure isolation, unit tests, and feature documentation. Pending: IDLE/NOTIFY, explicit migrations, PostgreSQL/IMAP integration tests, MCP read tools, RAG indexing, SMTP outbox, and deployment secret binding.

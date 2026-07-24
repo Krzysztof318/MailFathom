@@ -12,16 +12,18 @@ public sealed class MailboxSynchronizer
 {
     private readonly IImapMailboxSessionFactory sessionFactory;
     private readonly ISynchronizationCheckpointStore checkpointStore;
+    private readonly IMailSynchronizationUnitOfWorkFactory unitOfWorkFactory;
     private readonly IMessageMetadataRepository metadataRepository;
     private readonly IMessageContentStore contentStore;
     private readonly TimeProvider timeProvider;
     private readonly MailboxSynchronizationOptions options;
 
     /// <summary>Initializes a new mailbox synchronizer.</summary>
-    public MailboxSynchronizer(IImapMailboxSessionFactory sessionFactory, ISynchronizationCheckpointStore checkpointStore, IMessageMetadataRepository metadataRepository, IMessageContentStore contentStore, TimeProvider timeProvider, MailboxSynchronizationOptions options)
+    public MailboxSynchronizer(IImapMailboxSessionFactory sessionFactory, ISynchronizationCheckpointStore checkpointStore, IMailSynchronizationUnitOfWorkFactory unitOfWorkFactory, IMessageMetadataRepository metadataRepository, IMessageContentStore contentStore, TimeProvider timeProvider, MailboxSynchronizationOptions options)
     {
         this.sessionFactory = sessionFactory;
         this.checkpointStore = checkpointStore;
+        this.unitOfWorkFactory = unitOfWorkFactory;
         this.metadataRepository = metadataRepository;
         this.contentStore = contentStore;
         this.timeProvider = timeProvider;
@@ -44,6 +46,7 @@ public sealed class MailboxSynchronizer
         {
             inspectedWindowCount++;
             var batch = await session.GetMessageBatchAfterAsync(checkpoint.LastSeenUid, this.options.MaxMetadataBatchSize, cancellationToken);
+            await using var unitOfWork = await this.unitOfWorkFactory.BeginSynchronizationWriteAsync(cancellationToken);
             foreach (var metadata in batch.Messages.OrderBy(message => message.OccurrenceId.Uid.Value))
             {
                 if (metadata.SizeOctets > this.options.MaxRawMimeBytes)
@@ -55,8 +58,8 @@ public sealed class MailboxSynchronizer
                 try
                 {
                     var content = await session.FetchMessageContentWithoutSettingSeenAsync(metadata.OccurrenceId, this.options.MaxRawMimeBytes, cancellationToken);
-                    await this.contentStore.SaveContentAsync(content, cancellationToken);
-                    await this.metadataRepository.UpsertMetadataAsync(metadata, cancellationToken);
+                    await this.contentStore.SaveContentAsync(unitOfWork, content, cancellationToken);
+                    await this.metadataRepository.UpsertMetadataAsync(unitOfWork, metadata, cancellationToken);
                     storedCount++;
                 }
                 catch (MessageContentTooLargeException)
@@ -66,7 +69,8 @@ public sealed class MailboxSynchronizer
             }
 
             checkpoint = checkpoint.AdvanceTo(batch.InspectedThroughUid, this.timeProvider.GetUtcNow());
-            await this.checkpointStore.SaveCheckpointAsync(accountId, folderName, checkpoint, cancellationToken);
+            await this.checkpointStore.SaveCheckpointAsync(unitOfWork, accountId, folderName, checkpoint, cancellationToken);
+            await unitOfWork.CommitAsync(cancellationToken);
             hasMore = batch.HasMore;
         }
 
