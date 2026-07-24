@@ -18,3 +18,8 @@ For background on ADRs, see <https://adr.github.io/>.
 4. For each option, record meaningful good, neutral, and bad consequences.
 5. Update the status to `accepted` only after the decision is approved.
 6. Supersede old decisions with a new ADR instead of silently rewriting historical rationale.
+
+## Records
+
+- [0001: Use application-owned repository ports for persistence access and keep EF Core behind infrastructure adapters](0001-application-owned-repositories-for-persistence-ports.md)
+- [0002: Use an application-owned configuration access layer for reading, mapping, and reloadable business settings](0002-configuration-reading-mapping-and-reload-boundary.md)

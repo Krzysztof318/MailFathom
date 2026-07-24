@@ -18,7 +18,7 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 ## 2. Confirmed decisions
 
 - One service owner can configure many mailboxes across unrelated domains.
-- PostgreSQL is the system of record for configuration, synchronization state, message metadata, extracted searchable text, RAG chunks, and embeddings.
+- PostgreSQL is the system of record for synchronization state, message metadata, extracted searchable text, RAG chunks, and embeddings. Runtime configuration is read through the .NET configuration pipeline; local first-release deployments use JSON plus secret references, while future write-side/admin configuration storage is deferred to a separate decision.
 - Full RFC 822 messages, including their MIME attachments, are stored in a dedicated PostgreSQL table using `bytea`.
 - Raw content is accessed through `IMessageContentStore`; a later release will migrate that content to MinIO without changing domain or application use cases.
 - MailKit handles IMAP, SMTP, MIME, TLS modes, and standard SASL mechanisms.
@@ -276,7 +276,7 @@ Clear-text password mechanisms are rejected over an unencrypted channel unless b
 
 ### 7.3 Configuration files and secret handling
 
-The first release uses JSON for non-secret operational settings. ASP.NET Core's default configuration model has official Microsoft support for `appsettings.json` and `appsettings.{Environment}.json` through the JSON configuration provider, so MailMcp should not add a YAML parser or YAML configuration provider for first-release application configuration. JSON remains an operator-facing source format only; domain, application, infrastructure, AI, and MCP projects consume validated options and never parse configuration files directly.
+The first release uses .NET configuration for runtime settings and local JSON files for non-secret operational settings. ASP.NET Core's default configuration model has official Microsoft support for `appsettings.json` and `appsettings.{Environment}.json` through the JSON configuration provider, so MailMcp should not add a YAML parser or YAML configuration provider for first-release application configuration. JSON remains an operator-facing local source format only; domain, application, infrastructure, AI, and MCP projects consume validated options or mapped business settings and never parse configuration files directly. Durable write-side/admin configuration storage, including whether a future store is file-backed, database-backed, cloud-backed, or service-backed, is intentionally deferred.
 
 Configuration precedence is explicit: built-in defaults, committed example JSON, deployment JSON, environment-specific JSON overrides, environment variables for non-secret automation, and command-line overrides. The host validates all bound options at startup with fail-fast errors for missing TLS material, unsafe mail transport settings, invalid OAuth audience/resource values, unbounded result sizes, missing database settings, incompatible RAG profiles, or unresolved secret references.
 
@@ -284,8 +284,8 @@ Secrets are never committed to JSON. JSON may contain secret references such as 
 
 For native systemd deployments, MailMcp should load sensitive values from systemd's service credential mechanism rather than environment variables. The systemd documentation describes credentials as a service-manager feature for passing sensitive keys, certificates, passwords, identity information, and similar data to services; it also notes that credentials avoid common environment-variable drawbacks such as inheritance through the process tree and provide per-service access checks. Unit files should use `LoadCredential=` or encrypted credentials managed with `systemd-creds` where appropriate, and the host should read the credential files via the runtime credentials directory exposed to the service. JSON configuration stores only the credential name or logical reference, not the secret value itself.
 
-- Account secrets are encrypted before storage in PostgreSQL.
-- ASP.NET Core Data Protection protects ciphertext with a persistent key ring.
+- Account secrets are not stored as ordinary PostgreSQL configuration rows in the first release. If a later write-side/admin configuration store persists encrypted account secret material, that storage model must be approved by a separate ADR.
+- ASP.NET Core Data Protection protects any MailMcp-owned ciphertext with a persistent key ring.
 - The key-ring protection certificate is injected through a systemd credential or container secret and is never stored in PostgreSQL or Git.
 - PostgreSQL, SMTP, and IMAP secrets never appear in logs, traces, MCP results, or exception messages.
 

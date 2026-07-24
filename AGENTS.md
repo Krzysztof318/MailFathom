@@ -10,6 +10,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Never commit directly on `main` or `master`. Create a branch named `agent/<short-description>` before committing.
 - Preserve unrelated user changes. Stage only files that belong to the current task.
 - Make architectural decisions before implementation. Keep changes small, reviewable, and aligned with the architecture draft in `specs/`.
+- Treat ADRs under `docs/decisions/` as required architectural context for AI agents. Before changing architecture, boundaries, configuration, persistence, provider integration, governance, security-sensitive behavior, or cross-cutting infrastructure, read the relevant ADRs and keep the change consistent with their current status and rationale.
 - Treat MailMcp as an enterprise-grade system even during early scaffolding: preserve seams for governance, auditability, privacy controls, operational hardening, compliance evidence, and future Agent Governance Toolkit (AGT) adoption without prematurely adding runtime dependencies.
 
 ## Third-party licensing
