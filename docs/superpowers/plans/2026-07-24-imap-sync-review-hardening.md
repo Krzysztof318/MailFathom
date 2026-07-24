@@ -28,21 +28,21 @@
 - Consumes: `IMailboxSession.FetchMessageContentWithoutSettingSeenAsync`, `ISessionFactory.BeginSessionAsync`, `IMessageContentStore.SaveContentAsync`, `IMessageMetadataRepository.UpsertMetadataAsync`
 - Produces: unchanged `MailboxSynchronizer.SynchronizeAsync` behavior with per-message persistence sessions and a final checkpoint session
 
-- [ ] **Step 1: Write a failing ordering test**
+- [x] **Step 1: Write a failing ordering test**
 
 Add a two-message test whose second content-fetch callback asserts that the first persistence session has already committed and disposed. Configure a distinct final checkpoint session and assert it starts only after both message sessions commit.
 
-- [ ] **Step 2: Verify the test fails for batch buffering**
+- [x] **Step 2: Verify the test fails for batch buffering**
 
 Run:
 
 ```bash
-/home/krzysztof/.dotnet/dotnet test tests/Application.UnitTests/Application.UnitTests.csproj --no-restore --filter "FullyQualifiedName~SynchronizeAsync_MultipleMessages"
+/home/krzysztof/.dotnet/dotnet test tests/Application.UnitTests/Application.UnitTests.csproj --no-restore --filter-method "MailMcp.Application.UnitTests.MailboxSynchronizerTests.SynchronizeAsync_MultipleMessages_CommitsAndDisposesEachMessageBeforeFetchingTheNext"
 ```
 
 Expected: failure because the current implementation fetches both contents before opening the first persistence session.
 
-- [ ] **Step 3: Implement one-message-at-a-time persistence**
+- [x] **Step 3: Implement one-message-at-a-time persistence**
 
 Replace the `fetchedMessages` batch list with this operation order:
 
@@ -60,7 +60,7 @@ storedCount++;
 
 After the message loop, start a separate persistence session only when `InspectedThroughUid` is present, save the advanced checkpoint, and commit.
 
-- [ ] **Step 4: Verify application tests**
+- [x] **Step 4: Verify application tests**
 
 Run:
 
@@ -80,7 +80,7 @@ Expected: all application tests pass.
 - Consumes: MailKit 4.17.0 `ImapClient.GetFolderAsync`
 - Produces: asynchronous `IMailKitImapClient.GetFolderAsync`, primary-exception-preserving cleanup, and occurrence ownership validation
 
-- [ ] **Step 1: Write failing MailKit regression tests**
+- [x] **Step 1: Write failing MailKit regression tests**
 
 Add focused tests that prove:
 
@@ -93,7 +93,7 @@ Assert.Equal(1, client.DisposeCount);
 
 The setup-failure test configures both disconnect and disposal failures and asserts that the folder-open exception remains the observed exception. Add a session-disposal test that asserts disposal still occurs after disconnect fails. Add a theory for foreign account, folder, and UIDVALIDITY identities and assert `GetStreamAsync` is not called.
 
-- [ ] **Step 2: Verify the tests fail**
+- [x] **Step 2: Verify the tests fail**
 
 Run:
 
@@ -103,7 +103,7 @@ Run:
 
 Expected: failures for synchronous folder lookup, cleanup exception replacement, skipped disposal, and missing occurrence validation.
 
-- [ ] **Step 3: Implement asynchronous folder lookup and deterministic cleanup**
+- [x] **Step 3: Implement asynchronous folder lookup and deterministic cleanup**
 
 Change the client seam to:
 
@@ -115,11 +115,11 @@ Task<IMailFolder> GetFolderAsync(
 
 Await it in `OpenReadOnlyAsync`. Centralize disconnect and disposal so disposal always runs, the first cleanup failure is retained for normal disposal, and the setup failure path suppresses cleanup failures before rethrowing the original exception.
 
-- [ ] **Step 4: Validate occurrence ownership**
+- [x] **Step 4: Validate occurrence ownership**
 
 Before `GetStreamAsync`, compare the occurrence account, folder, and UIDVALIDITY with the session values and current folder UIDVALIDITY. Throw a safe `ArgumentException` before remote I/O when they differ.
 
-- [ ] **Step 5: Verify infrastructure tests**
+- [x] **Step 5: Verify infrastructure tests**
 
 Run:
 
@@ -148,7 +148,7 @@ Expected: all infrastructure tests pass.
 - Consumes: current aggregate coverage policy and deferred PostgreSQL integration-test policy
 - Produces: temporary exclusions with an explicit removal condition
 
-- [ ] **Step 1: Replace ambiguous justifications**
+- [x] **Step 1: Replace ambiguous justifications**
 
 Use the exact provider-bound justification:
 
@@ -159,7 +159,7 @@ Use the exact provider-bound justification:
 
 For the thin MailKit delegation wrapper, use the corresponding planned MailKit integration-suite wording. Do not add exclusions to the tested session factory or session logic.
 
-- [ ] **Step 2: Verify exclusion scope**
+- [x] **Step 2: Verify exclusion scope**
 
 Run:
 
@@ -178,11 +178,11 @@ Expected: every temporary exclusion has a concrete future integration-suite just
 - Consumes: implemented transaction, memory, cleanup, and validation behavior
 - Produces: accurate durable operational documentation
 
-- [ ] **Step 1: Update the feature documentation**
+- [x] **Step 1: Update the feature documentation**
 
 Document that only one MIME payload is retained at a time, content and metadata commit together per occurrence, checkpoint commit happens after the inspected window, retries may re-fetch already persisted occurrences idempotently, and session cleanup preserves the primary setup failure.
 
-- [ ] **Step 2: Run full verification**
+- [x] **Step 2: Run full verification**
 
 Run:
 
@@ -191,6 +191,7 @@ Run:
 /home/krzysztof/.dotnet/dotnet build --no-restore
 /home/krzysztof/.dotnet/dotnet test --no-build
 /home/krzysztof/.dotnet/dotnet format --verify-no-changes
+/home/krzysztof/.dotnet/dotnet build --configuration Release --no-restore
 /home/krzysztof/.dotnet/dotnet msbuild eng/CodeCoverage.proj -t:Collect
 git diff --check
 ```
