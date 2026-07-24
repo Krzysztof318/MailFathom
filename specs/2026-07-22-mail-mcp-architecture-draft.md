@@ -5,7 +5,7 @@
 **Target:** Debian/Ubuntu, .NET 10, single owner, many mail accounts
 **Enterprise posture:** Enterprise-grade architecture, GDPR-ready privacy posture, and future AGT governance seams from the beginning
 
-The product and solution name is `MailMcp`. The repository uses the XML solution format in `MailMcp.slnx`, and all .NET projects use the `MailMcp.*` naming prefix.
+The product and solution name is `MailMcp`. The repository uses the XML solution format in `MailMcp.slnx`; project directory and file names use short boundary names, while `Directory.Build.props` applies the `MailMcp.*` prefix to assembly names and root namespaces.
 
 ## 1. Purpose
 
@@ -32,7 +32,7 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 - Embeddings, chunks, snippets, audit events, and model/tool traces inherit the sensitivity and governance constraints of the source mailbox data unless a reviewed privacy design explicitly proves otherwise.
 - Unit tests are developed from the beginning with xUnit.net v3, Microsoft Testing Platform v2, and NSubstitute.
 - Integration tests are planned for a later phase but are not created in the initial solution.
-- The solution is named `MailMcp`, uses `MailMcp.slnx`, and applies the `MailMcp.*` prefix consistently to projects, assemblies, and root namespaces.
+- The solution is named `MailMcp`, uses `MailMcp.slnx`, uses short project directory and file names, and applies the `MailMcp.*` prefix consistently to assemblies and root namespaces.
 
 ## 3. Scope
 
@@ -116,14 +116,14 @@ Dependencies point inward and never flow in the wrong direction. Outer adapters 
 Allowed project references are intentionally narrow:
 
 ```text
-MailMcp.Domain        -> no MailMcp project references
-MailMcp.Application   -> MailMcp.Domain
-MailMcp.Infrastructure-> MailMcp.Application, MailMcp.Domain
-MailMcp.AI            -> MailMcp.Application, MailMcp.Domain
-MailMcp.Mcp           -> MailMcp.Application, MailMcp.Domain
-MailMcp.Host          -> all runtime projects as the composition root
-MailMcp.AppHost       -> MailMcp.Host plus development orchestration resources
-MailMcp.Cli           -> MailMcp.Application plus required adapters when introduced
+Domain        -> no project references
+Application   -> Domain
+Infrastructure-> Application, Domain
+AI            -> Application, Domain
+Mcp           -> Application, Domain
+Host          -> all runtime projects as the composition root
+AppHost       -> Host plus development orchestration resources
+Cli           -> Application plus required adapters when introduced
 ```
 
 - `Domain` contains the mail business model and business invariants: entities, value objects, domain events, domain errors, domain services that require no I/O, account identity, folder identity, IMAP occurrence identity, message metadata, content integrity facts, synchronization checkpoint concepts, delivery/outbox state, embedding-profile value rules that are provider-neutral, and validation such as valid UID/UIDVALIDITY combinations or unsafe transport choices. `Domain` is not the general home for application ports. It may define an interface only when the abstraction is itself a pure domain policy or strategy with no persistence, network, clock, configuration, logging, or provider concern. It contains no persistence models, no configuration binding types, no serialization attributes for external protocols, and no infrastructure framework dependencies.
@@ -146,13 +146,13 @@ mail-mcp/
 ├── .editorconfig
 ├── .gitignore
 ├── src/
-│   ├── MailMcp.Domain/
+│   ├── Domain/
 │   │   ├── Accounts/
 │   │   ├── Folders/
 │   │   ├── Messages/
 │   │   ├── Synchronization/
 │   │   └── Delivery/
-│   ├── MailMcp.Application/
+│   ├── Application/
 │   │   ├── Accounts/
 │   │   ├── Messages/
 │   │   │   ├── ListEmails/
@@ -163,39 +163,39 @@ mail-mcp/
 │   │   ├── Retrieval/
 │   │   ├── MessageContent/
 │   │   └── Abstractions/
-│   ├── MailMcp.Infrastructure/
+│   ├── Infrastructure/
 │   │   ├── Persistence/PostgreSql/
 │   │   │   ├── Configurations/
 │   │   │   └── Migrations/
 │   │   ├── Mail/MailKit/
 │   │   ├── Security/
 │   │   └── Observability/
-│   ├── MailMcp.AI/
+│   ├── AI/
 │   │   ├── Chunking/
 │   │   ├── Embeddings/
 │   │   ├── Retrieval/
-│   │   ├── AgentFramework/
-│   │   └── SemanticKernel/
-│   ├── MailMcp.Mcp/
+│   │   ├── Orchestration/
+│   │   └── ProviderAdapters/
+│   ├── Mcp/
 │   │   ├── Tools/
 │   │   ├── Authentication/
 │   │   └── Serialization/
-│   ├── MailMcp.Host/
+│   ├── Host/
 │   │   ├── Configuration/
 │   │   ├── Hosting/
 │   │   └── Program.cs
-│   ├── MailMcp.AppHost/
+│   ├── AppHost/
 │   │   └── Program.cs
-│   └── MailMcp.Cli/                  # future `mcpmail` CLI, not initial scaffold
+│   └── Cli/                          # future `mcpmail` CLI, not initial scaffold
 │       ├── Accounts/
 │       ├── Synchronization/
 │       └── Rag/
 ├── tests/
-│   ├── MailMcp.Domain.UnitTests/
-│   ├── MailMcp.Application.UnitTests/
-│   ├── MailMcp.Infrastructure.UnitTests/
-│   ├── MailMcp.AI.UnitTests/
-│   └── MailMcp.Mcp.UnitTests/
+│   ├── Domain.UnitTests/
+│   ├── Application.UnitTests/
+│   ├── Infrastructure.UnitTests/
+│   ├── AI.UnitTests/
+│   └── Mcp.UnitTests/
 ├── deploy/
 │   ├── compose.yaml
 │   ├── postgres/
@@ -456,7 +456,7 @@ Retrieved email is untrusted input. The context formatter clearly separates mail
 
 ### 12.5 Semantic Kernel fallback
 
-Semantic Kernel is not referenced by domain, application, MCP, or persistence projects. If a required connector, embedding implementation, or orchestration capability is absent from Agent Framework, it is added inside `MailMcp.AI/SemanticKernel` behind an existing application interface. MAF remains the public orchestration boundary.
+Semantic Kernel is not referenced by domain, application, MCP, or persistence projects. If a required connector, embedding implementation, or orchestration capability is absent from Agent Framework, it is added inside `AI/ProviderAdapters` behind an existing application interface. MAF remains the public orchestration boundary.
 
 ## 13. MCP tools
 
@@ -652,7 +652,7 @@ One PostgreSQL backup contains metadata, raw MIME, search data, chunks, embeddin
 
 ## 20. Development orchestration with Aspire
 
-Aspire is included from the start as a development-time orchestration and observability layer, not as the production runtime or application framework. `MailMcp.AppHost` models the host process, PostgreSQL with pgvector, local secret/configuration bindings, and developer observability so contributors can run the local distributed environment consistently from one entry point.
+Aspire is included from the start as a development-time orchestration and observability layer, not as the production runtime or application framework. `AppHost` models the host process, PostgreSQL with pgvector, local secret/configuration bindings, and developer observability so contributors can run the local distributed environment consistently from one entry point.
 
 The AppHost stays minimal: explicit resource names, explicit dependencies, separate development/test/production configuration, and no business logic. Production deployment continues to use Docker Compose or rootless Podman Compose managed by systemd unless a later deployment decision replaces that path. Aspire-generated service discovery or orchestration concerns must not leak into `Domain`, `Application`, `Mcp`, or mail protocol adapters.
 
