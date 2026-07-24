@@ -7,7 +7,8 @@ using Microsoft.EntityFrameworkCore;
 namespace MailMcp.Infrastructure.Persistence;
 
 /// <summary>EF Core implementation for message metadata persistence.</summary>
-[ExcludeFromCodeCoverage(Justification = "Provider-boundary adapter behavior requires future integration coverage.")]
+// TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
+[ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
 public sealed class MessageMetadataRepository(MailMcpDbContext dbContext) : IMessageMetadataRepository
 {
     /// <inheritdoc />

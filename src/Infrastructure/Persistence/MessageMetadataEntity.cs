@@ -3,7 +3,8 @@
 using System.Diagnostics.CodeAnalysis;
 namespace MailMcp.Infrastructure.Persistence;
 
-[ExcludeFromCodeCoverage(Justification = "Provider-boundary adapter behavior requires future integration coverage.")]
+// TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
+[ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
 internal sealed class MessageMetadataEntity
 {
     public long Id { get; set; }

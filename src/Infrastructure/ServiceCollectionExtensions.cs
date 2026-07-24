@@ -13,7 +13,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace MailMcp.Infrastructure;
 
 /// <summary>Infrastructure dependency registration.</summary>
-[ExcludeFromCodeCoverage(Justification = "Composition-root DI registration is verified by host/integration coverage.")]
+// TODO: Remove this exclusion when the planned host integration tests are enabled.
+[ExcludeFromCodeCoverage(Justification = "Will be covered later by host integration tests.")]
 public static class ServiceCollectionExtensions
 {
     /// <summary>Registers EF Core persistence, MailKit mailbox access, and application synchronization services.</summary>

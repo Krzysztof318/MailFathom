@@ -39,7 +39,8 @@ internal interface IMailKitImapClient : IAsyncDisposable
         CancellationToken cancellationToken);
 }
 
-[ExcludeFromCodeCoverage(Justification = "Thin MailKit delegation wrapper requires future adapter integration coverage.")]
+// TODO: Remove this exclusion when the planned MailKit integration tests are enabled.
+[ExcludeFromCodeCoverage(Justification = "Will be covered later by MailKit integration tests.")]
 internal sealed class MailKitImapClientAdapter(ImapClient client) : IMailKitImapClient
 {
     public bool IsConnected => client.IsConnected;

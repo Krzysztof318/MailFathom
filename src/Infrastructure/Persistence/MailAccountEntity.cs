@@ -5,7 +5,8 @@ using System.Diagnostics.CodeAnalysis;
 namespace MailMcp.Infrastructure.Persistence;
 
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "EF Core materializes this entity through the DbSet and model metadata.")]
-[ExcludeFromCodeCoverage(Justification = "Provider-boundary adapter behavior requires future integration coverage.")]
+// TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
+[ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
 internal sealed class MailAccountEntity
 {
     public required string AccountId { get; set; }
