@@ -72,11 +72,11 @@ The existing `Build and unit test` pull-request check remains the enforcement po
 7. Enforce aggregate line coverage of at least 85%.
 8. Upload test results and the coverage report even when the threshold fails.
 
-The workflow runs for pull requests targeting `main` that change `src/**` or `tests/**`. Because GitHub leaves a required path-filtered check pending when no matching file changes, non-code pull requests must run the workflow manually against their head branch before merge.
+The workflow runs for pull requests targeting `main` that change production code, tests, the solution or SDK selection, shared build and package configuration, coverage tooling, or the workflow itself. The path filter intentionally excludes ordinary documentation while ensuring that every file capable of changing the coverage calculation or build result triggers the gate.
 
 Coverage enforcement is part of the existing build-and-test job instead of a separate optional status. A below-threshold result therefore fails the same pull-request gate that already owns the solution build and unit-test run.
 
-The `main` branch protection rule requires pull requests and the existing `Build and unit test` status check, requires branches to be current before merge, applies enforcement to administrators, and requires review conversations to be resolved. It does not require an approving review while the repository has a single maintainer. Force-pushes and branch deletion remain disabled.
+The `main` branch protection rule requires pull requests and the existing `Build and unit test` status check, requires branches to be current before merge, applies enforcement to administrators, and requires review conversations to be resolved. It does not require an approving review while the repository has a single maintainer. Force-pushes and branch deletion remain disabled. GitHub's repository coverage minimum is also configured as 85%, while the repository-owned check remains responsible for the whole-scope calculation.
 
 ## Local Developer Flow
 

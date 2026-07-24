@@ -7,6 +7,17 @@ on:
     paths:
       - 'src/**'
       - 'tests/**'
+      - '.config/dotnet-tools.json'
+      - '.editorconfig'
+      - '.github/workflows/build-and-unit-test.yml'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'MailMcp.slnx'
+      - 'NuGet.config'
+      - 'eng/**'
+      - 'global.json'
+      - 'testconfig.json'
   workflow_dispatch:
 
 concurrency:
