@@ -33,6 +33,11 @@ When enabled, at least one account must be configured. If an account omits `Fold
 
 The first synchronization configuration group is classified as reloadable for new operations only: each worker execution captures an immutable application settings snapshot before starting scoped account/folder work. Invalid mapped reload candidates are rejected by the host-side reader and the previous validated application snapshot remains active. Programmatic configuration mutation is not implemented.
 
+## ADR alignment map
+
+- ADR 001: `IMailSynchronizationUnitOfWorkFactory` and `IMailSynchronizationUnitOfWorkSession` are application-owned ports, while EF Core transactions remain inside the PostgreSQL adapter.
+- ADR 002: `ISynchronizationSettingsReader` is the application-owned settings access point. Host-bound options stay in `Host`, where they are validated and mapped to immutable application settings snapshots.
+
 ## Safety assumptions
 
 The application layer exposes only `FetchMessageContentWithoutSettingSeenAsync` for content retrieval during synchronization. This name is part of the contract: implementations must use IMAP read-only selection and BODY.PEEK-equivalent behavior so remote `\\Seen` flags are not changed. Metadata requests are bounded by `MaxMetadataBatchSize`, each run is bounded by `MaxUidWindowsPerRun`, and raw MIME fetches are skipped or rejected above `MaxRawMimeBytes`. Logs record counts and account/folder identifiers only; raw MIME, message bodies, attachments, credentials, and tokens remain sensitive and must not be logged.
