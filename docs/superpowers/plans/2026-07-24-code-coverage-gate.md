@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Enforce at least 85% aggregate line coverage across all testable MailMcp production libraries for every pull request targeting `main`.
+**Goal:** Enforce at least 85% aggregate line coverage across all testable MailMcp production libraries for pull requests targeting `main` that change `src/**` or `tests/**`.
 
 **Architecture:** Coverlet's native Microsoft Testing Platform extension emits one Cobertura report per unit-test project. A repository-local ReportGenerator tool merges those reports, and an MSBuild target reads the merged report and fails the existing build-and-test check when whole-scope line coverage is below 85%.
 
@@ -244,17 +244,20 @@ Expected: unit-test execution succeeds and the target reports that no coverable 
 
 **Interfaces:**
 - Consumes: the `eng/CodeCoverage.proj` command and the existing `Build and unit test` status context.
-- Produces: a status check on every pull request to `main` that fails below 85% and preserves diagnostic artifacts.
+- Produces: a status check on pull requests to `main` that change `src/**` or `tests/**`, fails below 85%, and preserves diagnostic artifacts.
 
-- [ ] **Step 1: Remove the pull-request path filter**
+- [ ] **Step 1: Keep the pull-request path filter**
 
-Change the trigger to:
+Retain the trigger:
 
 ```yaml
 on:
   pull_request:
     branches:
       - main
+    paths:
+      - 'src/**'
+      - 'tests/**'
   workflow_dispatch:
 ```
 
@@ -307,7 +310,7 @@ git diff --check
 rg -n "name: Build and unit test|name: Run unit tests and enforce code coverage|pull_request:|paths:" .github/workflows/build-and-unit-test.yml
 ```
 
-Expected: the workflow and job names remain stable, the coverage step is present, and the workflow has no pull-request `paths` filter.
+Expected: the workflow and job names remain stable, the coverage step is present, and the pull-request `paths` filter contains `src/**` and `tests/**`.
 
 - [ ] **Step 6: Require the coverage-owning check on `main`**
 
@@ -370,7 +373,7 @@ The command merges all unit-test Cobertura reports and requires at least 85% agg
 Raw reports and TRX files are written under `artifacts/coverage/raw/`. The merged Cobertura and HTML reports are written under `artifacts/coverage/report/`.
 ```
 
-Update the pull-request gates section so `Build and unit test` explicitly includes whole-scope coverage enforcement and runs for every PR targeting `main`.
+Update the pull-request checks section so `Build and unit test` explicitly includes whole-scope coverage enforcement and runs for PRs targeting `main` that change `src/**` or `tests/**`.
 
 - [ ] **Step 3: Register third-party licensing**
 
@@ -456,7 +459,7 @@ Title: Enforce 85% whole-code coverage
 Summary:
 - collect coverage through the native Microsoft Testing Platform Coverlet extension
 - merge all boundary reports and enforce 85% aggregate line coverage across the complete testable production scope
-- run the existing build-and-test check for every PR to main and publish coverage diagnostics
+- run the existing build-and-test check for PRs to main that change `src/**` or `tests/**` and publish coverage diagnostics
 - document the narrow ExcludeFromCodeCoverage policy and register development-tool licenses
 
 Verification:

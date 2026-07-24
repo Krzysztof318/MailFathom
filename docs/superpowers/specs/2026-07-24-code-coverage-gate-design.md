@@ -33,7 +33,7 @@ A repository-level Coverlet configuration includes `MailMcp.*` production assemb
 - `MailMcp.Host`
 - `MailMcp.AppHost`
 - `MailMcp.*.UnitTests`
-- generated and compiler-generated code
+- externally generated code marked with `GeneratedCodeAttribute`
 
 Each unit-test project produces a Cobertura report during the existing solution-wide test run.
 
@@ -48,7 +48,7 @@ The generated outputs include:
 
 ### Enforcement
 
-A small repository-owned .NET coverage verifier reads the merged Cobertura document, calculates `covered lines / valid lines`, and exits with a non-zero status when the result is below 85%.
+A small repository-owned MSBuild target reads the merged Cobertura document, calculates `covered lines / valid lines`, and exits with a non-zero status when the result is below 85%.
 
 The verifier:
 
@@ -72,7 +72,7 @@ The existing `Build and unit test` pull-request check remains the enforcement po
 7. Enforce aggregate line coverage of at least 85%.
 8. Upload test results and the coverage report even when the threshold fails.
 
-The workflow runs for every pull request targeting `main`, rather than only when `src/**` or `tests/**` changes. This ensures the required check is always created and cannot disappear because of a path filter.
+The workflow runs for pull requests targeting `main` that change `src/**` or `tests/**`. Because GitHub leaves a required path-filtered check pending when no matching file changes, non-code pull requests must run the workflow manually against their head branch before merge.
 
 Coverage enforcement is part of the existing build-and-test job instead of a separate optional status. A below-threshold result therefore fails the same pull-request gate that already owns the solution build and unit-test run.
 
