@@ -2,6 +2,7 @@
 
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.ExceptionServices;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
@@ -29,7 +30,7 @@ internal interface IMailKitImapClient : IAsyncDisposable
         string password,
         CancellationToken cancellationToken);
 
-    IMailFolder GetFolder(
+    Task<IMailFolder> GetFolderAsync(
         string path,
         CancellationToken cancellationToken);
 
@@ -54,9 +55,9 @@ internal sealed class MailKitImapClientAdapter(ImapClient client) : IMailKitImap
         string password,
         CancellationToken cancellationToken) => client.AuthenticateAsync(userName, password, cancellationToken);
 
-    public IMailFolder GetFolder(
+    public Task<IMailFolder> GetFolderAsync(
         string path,
-        CancellationToken cancellationToken) => client.GetFolder(path, cancellationToken);
+        CancellationToken cancellationToken) => client.GetFolderAsync(path, cancellationToken);
 
     public Task DisconnectAsync(
         bool quit,
@@ -83,28 +84,33 @@ internal sealed class MailKitImapMailboxSessionFactory(
         ArgumentNullException.ThrowIfNull(clientFactory);
         var settings = settingsProvider.GetSettings(accountId.Value);
         var client = clientFactory();
-        var ownershipTransferred = false;
         try
         {
             var socketOptions = settings.UseTls ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
             await client.ConnectAsync(settings.Host, settings.Port, socketOptions, cancellationToken);
             await client.AuthenticateAsync(settings.UserName, settings.Password, cancellationToken);
-            var folder = client.GetFolder(folderName.Value, cancellationToken);
+            var folder = await client.GetFolderAsync(folderName.Value, cancellationToken);
             await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
-            ownershipTransferred = true;
             return new MailKitImapMailboxSession(accountId, folderName, client, folder);
         }
-        finally
+        catch
         {
-            if (!ownershipTransferred)
-            {
-                await CleanupFailedOpenAsync(client);
-            }
+            await CleanupFailedOpenAsync(client);
+            throw;
         }
     }
 
-    private static async Task CleanupFailedOpenAsync(IMailKitImapClient client)
+    private static ValueTask CleanupFailedOpenAsync(IMailKitImapClient client) => DisconnectAndDisposeAsync(client, throwOnFailure: false);
+
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Both cleanup operations must be attempted while the first cleanup failure remains observable.")]
+    internal static ValueTask DisconnectAndDisposeAsync(IMailKitImapClient client) => DisconnectAndDisposeAsync(client, throwOnFailure: true);
+
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Both cleanup operations must be attempted while the first cleanup failure remains observable.")]
+    private static async ValueTask DisconnectAndDisposeAsync(
+        IMailKitImapClient client,
+        bool throwOnFailure)
     {
+        Exception? firstCleanupException = null;
         try
         {
             if (client.IsConnected)
@@ -112,9 +118,23 @@ internal sealed class MailKitImapMailboxSessionFactory(
                 await client.DisconnectAsync(quit: true, CancellationToken.None);
             }
         }
-        finally
+        catch (Exception exception)
+        {
+            firstCleanupException = exception;
+        }
+
+        try
         {
             await client.DisposeAsync();
+        }
+        catch (Exception exception)
+        {
+            firstCleanupException ??= exception;
+        }
+
+        if (throwOnFailure && firstCleanupException is not null)
+        {
+            ExceptionDispatchInfo.Capture(firstCleanupException).Throw();
         }
     }
 }
@@ -125,15 +145,7 @@ internal sealed class MailKitImapMailboxSession(
     IMailKitImapClient client,
     IMailFolder folder) : IMailboxSession
 {
-    public async ValueTask DisposeAsync()
-    {
-        if (client.IsConnected)
-        {
-            await client.DisconnectAsync(quit: true, CancellationToken.None);
-        }
-
-        await client.DisposeAsync();
-    }
+    public ValueTask DisposeAsync() => MailKitImapMailboxSessionFactory.DisconnectAndDisposeAsync(client);
 
     public Task<ImapUidValidity> GetUidValidityAsync(CancellationToken cancellationToken) => Task.FromResult(ImapUidValidity.Create(folder.UidValidity));
 
@@ -180,6 +192,13 @@ internal sealed class MailKitImapMailboxSession(
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxRawMimeBytes);
+        if (occurrenceId.AccountId != accountId ||
+            occurrenceId.FolderName != folderName ||
+            occurrenceId.UidValidity.Value != folder.UidValidity)
+        {
+            throw new ArgumentException("The message occurrence does not belong to the open mailbox session.", nameof(occurrenceId));
+        }
+
         // The folder is selected read-only and MailKit's GetStreamAsync issues a content retrieval for the selected UID without requesting flag mutation.
         await using var stream = await folder.GetStreamAsync(new UniqueId(occurrenceId.Uid.Value), cancellationToken);
         using var memory = new MemoryStream();
