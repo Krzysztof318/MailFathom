@@ -28,9 +28,9 @@ public sealed class MessageContentTooLargeException : Exception
     public MessageContentTooLargeException(MessageOccurrenceId occurrenceId, long sizeOctets, long maxAllowedOctets)
         : base($"Message {occurrenceId.AccountId.Value}/{occurrenceId.FolderName.Value}/{occurrenceId.UidValidity.Value}/{occurrenceId.Uid.Value} is {sizeOctets} octets, which exceeds the configured {maxAllowedOctets} octet raw MIME limit.")
     {
-        OccurrenceId = occurrenceId;
-        SizeOctets = sizeOctets;
-        MaxAllowedOctets = maxAllowedOctets;
+        this.OccurrenceId = occurrenceId;
+        this.SizeOctets = sizeOctets;
+        this.MaxAllowedOctets = maxAllowedOctets;
     }
 
     /// <summary>Gets the oversized occurrence identity, when available.</summary>

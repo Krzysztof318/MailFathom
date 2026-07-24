@@ -5,7 +5,7 @@ namespace MailMcp.Domain.Accounts;
 /// <summary>Identifies a configured mail account inside MailMcp.</summary>
 public readonly record struct MailAccountId
 {
-    private MailAccountId(string value) => Value = value;
+    private MailAccountId(string value) => this.Value = value;
 
     /// <summary>Gets the stable account identifier.</summary>
     public string Value { get; }
@@ -21,5 +21,5 @@ public readonly record struct MailAccountId
     }
 
     /// <inheritdoc />
-    public override string ToString() => Value;
+    public override string ToString() => this.Value;
 }

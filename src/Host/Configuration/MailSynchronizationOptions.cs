@@ -34,20 +34,20 @@ public sealed class MailSynchronizationOptions : IValidatableObject, IMailKitIma
     public MailKitImapAccountSettings GetSettings(string accountId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
-        var account = Accounts.Single(account => StringComparer.Ordinal.Equals(account.AccountId, accountId));
+        var account = this.Accounts.Single(account => StringComparer.Ordinal.Equals(account.AccountId, accountId));
         return new MailKitImapAccountSettings(account.AccountId, account.Host, account.Port, account.UseTls, account.UserName, account.Password);
     }
 
-    internal IEnumerable<ValidationResult> ValidateForSynchronization(bool synchronizationEnabled)
+    internal IEnumerable<ValidationResult> ValidateForSynchronization()
     {
-        if (Enabled && Accounts.Count == 0)
+        if (this.Enabled && this.Accounts.Count == 0)
         {
-            yield return new ValidationResult("At least one account is required when synchronization is enabled.", [nameof(Accounts)]);
+            yield return new ValidationResult("At least one account is required when synchronization is enabled.", [nameof(this.Accounts)]);
         }
 
-        foreach (var account in Accounts)
+        foreach (var account in this.Accounts)
         {
-            foreach (var result in account.ValidateForSynchronization(Enabled))
+            foreach (var result in account.ValidateForSynchronization(this.Enabled))
             {
                 yield return result;
             }
@@ -55,7 +55,7 @@ public sealed class MailSynchronizationOptions : IValidatableObject, IMailKitIma
     }
 
     /// <inheritdoc />
-    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => ValidateForSynchronization(Enabled);
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.ValidateForSynchronization();
 }
 
 /// <summary>Configures one account for periodic IMAP synchronization.</summary>
@@ -85,34 +85,34 @@ public sealed class MailSynchronizationAccountOptions : IValidatableObject
     public List<string> Folders { get; set; } = [];
 
     /// <summary>Gets the configured folders or the post-binding default folder.</summary>
-    public IReadOnlyList<string> EffectiveFolders => Folders.Count == 0 ? ["INBOX"] : Folders;
+    public IReadOnlyList<string> EffectiveFolders => this.Folders.Count == 0 ? ["INBOX"] : this.Folders;
 
     internal IEnumerable<ValidationResult> ValidateForSynchronization(bool synchronizationEnabled)
     {
-        if (Folders.Any(string.IsNullOrWhiteSpace))
+        if (this.Folders.Any(string.IsNullOrWhiteSpace))
         {
-            yield return new ValidationResult("Configured folder names must be non-empty.", [nameof(Folders)]);
+            yield return new ValidationResult("Configured folder names must be non-empty.", [nameof(this.Folders)]);
         }
 
         if (synchronizationEnabled)
         {
-            if (string.IsNullOrWhiteSpace(Host))
+            if (string.IsNullOrWhiteSpace(this.Host))
             {
-                yield return new ValidationResult("IMAP host is required when synchronization is enabled.", [nameof(Host)]);
+                yield return new ValidationResult("IMAP host is required when synchronization is enabled.", [nameof(this.Host)]);
             }
 
-            if (string.IsNullOrWhiteSpace(UserName))
+            if (string.IsNullOrWhiteSpace(this.UserName))
             {
-                yield return new ValidationResult("IMAP user name is required when synchronization is enabled.", [nameof(UserName)]);
+                yield return new ValidationResult("IMAP user name is required when synchronization is enabled.", [nameof(this.UserName)]);
             }
 
-            if (string.IsNullOrWhiteSpace(Password))
+            if (string.IsNullOrWhiteSpace(this.Password))
             {
-                yield return new ValidationResult("IMAP password is required when synchronization is enabled.", [nameof(Password)]);
+                yield return new ValidationResult("IMAP password is required when synchronization is enabled.", [nameof(this.Password)]);
             }
         }
     }
 
     /// <inheritdoc />
-    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => ValidateForSynchronization(synchronizationEnabled: true);
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.ValidateForSynchronization(synchronizationEnabled: true);
 }

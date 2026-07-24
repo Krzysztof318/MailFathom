@@ -31,8 +31,8 @@ public sealed class MailboxSynchronizer
     /// <summary>Synchronizes one account folder without mutating remote IMAP flags.</summary>
     public async Task<MailboxSynchronizationResult> SynchronizeAsync(MailAccountId accountId, MailFolderName folderName, CancellationToken cancellationToken)
     {
-        var checkpoint = await checkpointStore.GetCheckpointAsync(accountId, folderName, cancellationToken);
-        await using var session = await sessionFactory.OpenReadOnlyAsync(accountId, folderName, cancellationToken);
+        var checkpoint = await this.checkpointStore.GetCheckpointAsync(accountId, folderName, cancellationToken);
+        await using var session = await this.sessionFactory.OpenReadOnlyAsync(accountId, folderName, cancellationToken);
         var uidValidity = await session.GetUidValidityAsync(cancellationToken);
         checkpoint = checkpoint?.UidValidity == uidValidity ? checkpoint : SynchronizationCheckpoint.None(uidValidity);
         var storedCount = 0;
@@ -40,13 +40,13 @@ public sealed class MailboxSynchronizer
         var hasMore = true;
         var inspectedWindowCount = 0;
 
-        while (hasMore && inspectedWindowCount < options.MaxUidWindowsPerRun)
+        while (hasMore && inspectedWindowCount < this.options.MaxUidWindowsPerRun)
         {
             inspectedWindowCount++;
-            var batch = await session.GetMessageBatchAfterAsync(checkpoint.LastSeenUid, options.MaxMetadataBatchSize, cancellationToken);
+            var batch = await session.GetMessageBatchAfterAsync(checkpoint.LastSeenUid, this.options.MaxMetadataBatchSize, cancellationToken);
             foreach (var metadata in batch.Messages.OrderBy(message => message.OccurrenceId.Uid.Value))
             {
-                if (metadata.SizeOctets > options.MaxRawMimeBytes)
+                if (metadata.SizeOctets > this.options.MaxRawMimeBytes)
                 {
                     skippedOversizedCount++;
                     continue;
@@ -54,9 +54,9 @@ public sealed class MailboxSynchronizer
 
                 try
                 {
-                    var content = await session.FetchMessageContentWithoutSettingSeenAsync(metadata.OccurrenceId, options.MaxRawMimeBytes, cancellationToken);
-                    await contentStore.SaveContentAsync(content, cancellationToken);
-                    await metadataRepository.UpsertMetadataAsync(metadata, cancellationToken);
+                    var content = await session.FetchMessageContentWithoutSettingSeenAsync(metadata.OccurrenceId, this.options.MaxRawMimeBytes, cancellationToken);
+                    await this.contentStore.SaveContentAsync(content, cancellationToken);
+                    await this.metadataRepository.UpsertMetadataAsync(metadata, cancellationToken);
                     storedCount++;
                 }
                 catch (MessageContentTooLargeException)
@@ -65,8 +65,8 @@ public sealed class MailboxSynchronizer
                 }
             }
 
-            checkpoint = checkpoint.AdvanceTo(batch.InspectedThroughUid, timeProvider.GetUtcNow());
-            await checkpointStore.SaveCheckpointAsync(accountId, folderName, checkpoint, cancellationToken);
+            checkpoint = checkpoint.AdvanceTo(batch.InspectedThroughUid, this.timeProvider.GetUtcNow());
+            await this.checkpointStore.SaveCheckpointAsync(accountId, folderName, checkpoint, cancellationToken);
             hasMore = batch.HasMore;
         }
 

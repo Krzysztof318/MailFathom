@@ -2,6 +2,7 @@
 
 using MailKit;
 using MailKit.Net.Imap;
+using MailKit.Search;
 using MailKit.Security;
 using MailMcp.Application.MessageContent;
 using MailMcp.Application.Synchronization;
@@ -23,7 +24,7 @@ public sealed class MailKitImapMailboxSessionFactory(Func<ImapClient> clientFact
         var socketOptions = settings.UseTls ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
         await client.ConnectAsync(settings.Host, settings.Port, socketOptions, cancellationToken);
         await client.AuthenticateAsync(settings.UserName, settings.Password, cancellationToken);
-        var folder = client.GetFolder(folderName.Value);
+        var folder = client.GetFolder(folderName.Value, cancellationToken);
         await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
         return new MailKitImapMailboxSession(accountId, folderName, client, folder);
     }
@@ -56,7 +57,11 @@ internal sealed class MailKitImapMailboxSession(MailAccountId accountId, MailFol
         var maxValue = requestedMaxValue > UniqueId.MaxValue.Id ? UniqueId.MaxValue.Id : (uint)requestedMaxValue;
         var minUid = new UniqueId(minValue);
         var maxUid = new UniqueId(maxValue);
-        var summaries = await folder.FetchAsync(minUid, maxUid, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size, cancellationToken);
+        var matchingUids = await folder.SearchAsync(SearchQuery.Uids(new UniqueIdRange(minUid, maxUid)), cancellationToken);
+        var boundedUids = matchingUids.Take(maxMessageCount).ToArray();
+        var summaries = boundedUids.Length == 0
+            ? []
+            : await folder.FetchAsync(boundedUids, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size, cancellationToken);
         var uidValidity = ImapUidValidity.Create(folder.UidValidity);
         var messages = summaries.Select(summary => new RemoteMessageMetadata(MessageOccurrenceId.Create(accountId, folderName, uidValidity, ImapUid.Create(summary.UniqueId.Id)), summary.Envelope?.MessageId, summary.Envelope?.Subject, summary.Envelope?.Date, summary.Size ?? 0)).ToArray();
         return new RemoteMessageMetadataBatch(messages, ImapUid.Create(maxValue), maxValue < UniqueId.MaxValue.Id);

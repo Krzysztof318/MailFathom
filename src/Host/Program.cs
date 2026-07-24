@@ -11,7 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddOptions<MailMcp.Host.Configuration.MailSynchronizationOptions>()
+builder.Services.AddOptions<MailSynchronizationOptions>()
     .Bind(builder.Configuration.GetSection("MailSynchronization"))
     .ValidateDataAnnotations()
     .ValidateOnStart();

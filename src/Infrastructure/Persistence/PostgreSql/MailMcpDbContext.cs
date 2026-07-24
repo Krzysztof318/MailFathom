@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailMcp.Infrastructure.Persistence.PostgreSql;
@@ -10,13 +11,13 @@ public sealed class MailMcpDbContext : DbContext
     /// <summary>Initializes a new database context.</summary>
     public MailMcpDbContext(DbContextOptions<MailMcpDbContext> options) : base(options) { }
 
-    internal DbSet<MailAccountRecord> MailAccounts => Set<MailAccountRecord>();
+    internal DbSet<MailAccountRecord> MailAccounts => this.Set<MailAccountRecord>();
 
-    internal DbSet<MailFolderRecord> MailFolders => Set<MailFolderRecord>();
+    internal DbSet<MailFolderRecord> MailFolders => this.Set<MailFolderRecord>();
 
-    internal DbSet<MessageMetadataRecord> MessageMetadata => Set<MessageMetadataRecord>();
+    internal DbSet<MessageMetadataRecord> MessageMetadata => this.Set<MessageMetadataRecord>();
 
-    internal DbSet<MessageContentRecord> MessageContents => Set<MessageContentRecord>();
+    internal DbSet<MessageContentRecord> MessageContents => this.Set<MessageContentRecord>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -59,6 +60,7 @@ public sealed class MailMcpDbContext : DbContext
     }
 }
 
+[SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "EF Core instantiates this record through materialization and model metadata.")]
 internal sealed class MailAccountRecord
 {
     public long Id { get; set; }

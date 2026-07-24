@@ -5,7 +5,7 @@ namespace MailMcp.Domain.Messages;
 /// <summary>Represents a positive IMAP UID within one UIDVALIDITY scope.</summary>
 public readonly record struct ImapUid
 {
-    private ImapUid(uint value) => Value = value;
+    private ImapUid(uint value) => this.Value = value;
 
     /// <summary>Gets the UID value.</summary>
     public uint Value { get; }

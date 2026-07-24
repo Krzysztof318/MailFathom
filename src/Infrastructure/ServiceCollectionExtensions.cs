@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailKit.Net.Imap;
 using MailMcp.Application.MessageContent;
 using MailMcp.Application.Synchronization;
 using MailMcp.Infrastructure.Mail.MailKit;
 using MailMcp.Infrastructure.Persistence.PostgreSql;
-using MailKit.Net.Imap;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

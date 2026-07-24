@@ -4,6 +4,7 @@ using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Messages;
 using MailMcp.Domain.Synchronization;
+using Xunit;
 
 namespace MailMcp.Domain.UnitTests;
 

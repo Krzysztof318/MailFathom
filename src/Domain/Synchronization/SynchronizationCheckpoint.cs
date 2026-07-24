@@ -19,7 +19,7 @@ public sealed record SynchronizationCheckpoint(ImapUidValidity UidValidity, Imap
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="uid" /> is older than the current checkpoint.</exception>
     public SynchronizationCheckpoint AdvanceTo(ImapUid uid, DateTimeOffset synchronizedAt)
     {
-        if (LastSeenUid is { } lastSeenUid && uid.Value < lastSeenUid.Value)
+        if (this.LastSeenUid is { } lastSeenUid && uid.Value < lastSeenUid.Value)
         {
             throw new ArgumentOutOfRangeException(nameof(uid), "Synchronization checkpoints cannot move backwards within the same UIDVALIDITY scope.");
         }
