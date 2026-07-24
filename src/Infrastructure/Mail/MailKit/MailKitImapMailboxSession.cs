@@ -188,7 +188,7 @@ internal sealed class MailKitImapMailboxSession(
             : await folder.FetchAsync(batchedUids, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size, cancellationToken);
         var uidValidity = ImapUidValidity.Create(folder.UidValidity);
         var messages = summaries.Select(summary => new RemoteMessageMetadata(
-            MessageOccurrenceId.Create(accountId, folderName, uidValidity, ImapUid.Create(summary.UniqueId.Id)),
+            new MessageOccurrenceId(accountId, folderName, uidValidity, ImapUid.Create(summary.UniqueId.Id)),
             summary.Envelope?.MessageId,
             summary.Envelope?.Subject,
             summary.Envelope?.Date?.ToUniversalTime(),

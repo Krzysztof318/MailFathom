@@ -22,7 +22,7 @@ public sealed class MailboxSynchronizerTests
         var folderName = MailFolderName.Create("INBOX");
         var uidValidity = ImapUidValidity.Create(5);
         var uid = ImapUid.Create(10);
-        var occurrence = MessageOccurrenceId.Create(accountId, folderName, uidValidity, uid);
+        var occurrence = new MessageOccurrenceId(accountId, folderName, uidValidity, uid);
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IMessageMetadataRepository>();
         var sessionScopeFactory = Substitute.For<ISessionFactory>();
@@ -75,7 +75,7 @@ public sealed class MailboxSynchronizerTests
         var folderName = MailFolderName.Create("INBOX");
         var uidValidity = ImapUidValidity.Create(5);
         var uid = ImapUid.Create(10);
-        var occurrence = MessageOccurrenceId.Create(accountId, folderName, uidValidity, uid);
+        var occurrence = new MessageOccurrenceId(accountId, folderName, uidValidity, uid);
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IMessageMetadataRepository>();
         var sessionScopeFactory = Substitute.For<ISessionFactory>();
@@ -150,7 +150,7 @@ public sealed class MailboxSynchronizerTests
         var folderName = MailFolderName.Create("INBOX");
         var uidValidity = ImapUidValidity.Create(5);
         var uid = ImapUid.Create(10);
-        var occurrence = MessageOccurrenceId.Create(accountId, folderName, uidValidity, uid);
+        var occurrence = new MessageOccurrenceId(accountId, folderName, uidValidity, uid);
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IMessageMetadataRepository>();
         var sessionScopeFactory = Substitute.For<ISessionFactory>();
@@ -187,7 +187,7 @@ public sealed class MailboxSynchronizerTests
         var folderName = MailFolderName.Create("INBOX");
         var uidValidity = ImapUidValidity.Create(5);
         var uid = ImapUid.Create(10);
-        var occurrence = MessageOccurrenceId.Create(accountId, folderName, uidValidity, uid);
+        var occurrence = new MessageOccurrenceId(accountId, folderName, uidValidity, uid);
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IMessageMetadataRepository>();
         var sessionScopeFactory = Substitute.For<ISessionFactory>();
@@ -240,8 +240,8 @@ public sealed class MailboxSynchronizerTests
         var uidValidity = ImapUidValidity.Create(5);
         var firstUid = ImapUid.Create(10);
         var secondUid = ImapUid.Create(11);
-        var firstOccurrence = MessageOccurrenceId.Create(accountId, folderName, uidValidity, firstUid);
-        var secondOccurrence = MessageOccurrenceId.Create(accountId, folderName, uidValidity, secondUid);
+        var firstOccurrence = new MessageOccurrenceId(accountId, folderName, uidValidity, firstUid);
+        var secondOccurrence = new MessageOccurrenceId(accountId, folderName, uidValidity, secondUid);
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IMessageMetadataRepository>();
         var sessionScopeFactory = Substitute.For<ISessionFactory>();
@@ -364,7 +364,7 @@ public sealed class MailboxSynchronizerTests
         // Arrange
         var accountId = MailAccountId.Create("primary");
         var folderName = MailFolderName.Create("INBOX");
-        var occurrence = MessageOccurrenceId.Create(accountId, folderName, ImapUidValidity.Create(5), ImapUid.Create(10));
+        var occurrence = new MessageOccurrenceId(accountId, folderName, ImapUidValidity.Create(5), ImapUid.Create(10));
         var inner = new InvalidOperationException("inner");
 
         // Act

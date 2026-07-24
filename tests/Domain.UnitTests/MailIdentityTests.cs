@@ -11,7 +11,7 @@ namespace MailMcp.Domain.UnitTests;
 public sealed class MailIdentityTests
 {
     [Fact]
-    public void Create_ValidOccurrence_ProducesStableIdentity()
+    public void Constructor_ValidOccurrence_ProducesStableIdentity()
     {
         // Arrange
         var accountId = MailAccountId.Create("primary");
@@ -20,7 +20,7 @@ public sealed class MailIdentityTests
         var uid = ImapUid.Create(100);
 
         // Act
-        var occurrence = MessageOccurrenceId.Create(accountId, folderName, uidValidity, uid);
+        var occurrence = new MessageOccurrenceId(accountId, folderName, uidValidity, uid);
 
         // Assert
         Assert.Equal("primary", occurrence.AccountId.Value);

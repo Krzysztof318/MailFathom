@@ -207,7 +207,7 @@ public sealed class MailKitImapMailboxSessionTests
             MailFolderName.Create("INBOX"),
             client,
             folder);
-        var foreignOccurrence = MessageOccurrenceId.Create(
+        var foreignOccurrence = new MessageOccurrenceId(
             MailAccountId.Create(occurrenceAccountId),
             MailFolderName.Create(occurrenceFolderName),
             ImapUidValidity.Create(occurrenceUidValidity),
@@ -260,7 +260,7 @@ public sealed class MailKitImapMailboxSessionTests
             MailFolderName.Create("INBOX"),
             client,
             folder);
-        var occurrenceId = MessageOccurrenceId.Create(
+        var occurrenceId = new MessageOccurrenceId(
             MailAccountId.Create("primary"),
             MailFolderName.Create("INBOX"),
             ImapUidValidity.Create(7),
@@ -293,7 +293,7 @@ public sealed class MailKitImapMailboxSessionTests
             MailFolderName.Create("INBOX"),
             client,
             folder);
-        var occurrenceId = MessageOccurrenceId.Create(
+        var occurrenceId = new MessageOccurrenceId(
             MailAccountId.Create("primary"),
             MailFolderName.Create("INBOX"),
             ImapUidValidity.Create(7),
