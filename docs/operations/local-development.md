@@ -25,12 +25,26 @@ dotnet run --project src/AppHost/AppHost.csproj
 
 The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.2-pg17` image so local development starts with a PostgreSQL server that can support the `vector` extension required by the RAG and embedding slices.
 
-## Pull request gates
+## Code coverage
 
-Pull requests targeting `main` run two GitHub Actions gates:
+After a Release build, collect and enforce coverage with:
 
-- `Build and unit test` restores `MailMcp.slnx`, builds the solution in Release configuration, and runs the solution unit test projects without rebuilding by using the .NET 10 Microsoft Testing Platform solution syntax and xUnit TRX reporting options.
+```bash
+dotnet tool restore
+dotnet msbuild eng/CodeCoverage.proj -t:Collect
+```
+
+The command produces one Cobertura report per unit-test project, merges the reports, and requires at least 85% aggregate line coverage across `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`. The result always represents the whole configured scope, not only changed lines. `Host` and `AppHost` are excluded as thin executable composition roots.
+
+Raw Cobertura reports and TRX files are written under `artifacts/coverage/raw/`. The merged Cobertura and HTML reports are written under `artifacts/coverage/report/`.
+
+## Pull request checks
+
+Pull requests targeting `main` run two GitHub Actions checks:
+
+- `Build and unit test` runs for every pull request to `main`. It restores `MailMcp.slnx` and repository-local tools, builds the solution in Release configuration, runs all unit-test projects through Microsoft Testing Platform, merges their Cobertura reports, and fails below 85% aggregate line coverage for the complete configured production scope. It uploads the raw and merged coverage reports and the TRX results even when the threshold fails.
 - `dotnet format` restores `MailMcp.slnx` and verifies repository formatting without applying changes.
 
-Both workflows use the SDK pinned in `global.json`, cancel superseded runs for the same pull request, request read-only repository permissions, and avoid credentials or service-specific secrets.
+The `main` branch protection rule requires a pull request and the `Build and unit test` check, requires the branch to be current with `main`, applies to administrators, and requires review conversations to be resolved. It does not require an approving review because the repository currently has one maintainer. Force-pushes and deletion of `main` are disabled.
 
+Both workflows use the SDK pinned in `global.json`, cancel superseded runs for the same pull request, request read-only repository permissions, and avoid credentials or service-specific secrets. The formatting workflow is limited to pull requests that change `src/**` or `tests/**` and is not a required status check.

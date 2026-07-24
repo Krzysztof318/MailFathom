@@ -18,9 +18,9 @@ The production coverage denominator includes all coverable code from these assem
 
 The thin executable composition roots `MailMcp.Host` and `MailMcp.AppHost` are excluded. Their responsibilities are process startup, dependency composition, middleware and endpoint wiring, and development orchestration rather than application or domain behavior.
 
-Test assemblies, generated code, compiler-generated code, and Coverlet infrastructure are excluded. Ordinary production behavior, branches, validation, mapping, policies, and invariants remain in scope.
+Test assemblies, externally generated code marked with `GeneratedCodeAttribute`, and Coverlet infrastructure are excluded. Compiler-generated state machines and members are not broadly excluded because doing so could remove source behavior such as asynchronous methods from the denominator. Ordinary production behavior, branches, validation, mapping, policies, and invariants remain in scope.
 
-`System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverageAttribute` may be applied to a class that contains no executable application, domain, mapping, validation, policy, or infrastructure behavior. It must not be used to make the threshold pass or to hide code that can be meaningfully unit tested. The repository guidance in `AGENTS.md` will state this constraint.
+`[ExcludeFromCodeCoverage]` may be applied to a class that contains no executable application, domain, mapping, validation, policy, or infrastructure behavior. It must not be used to make the threshold pass or to hide code that can be meaningfully unit tested. The repository guidance in `AGENTS.md` will state this constraint.
 
 ## Architecture
 
@@ -75,6 +75,8 @@ The existing `Build and unit test` pull-request check remains the enforcement po
 The workflow runs for every pull request targeting `main`, rather than only when `src/**` or `tests/**` changes. This ensures the required check is always created and cannot disappear because of a path filter.
 
 Coverage enforcement is part of the existing build-and-test job instead of a separate optional status. A below-threshold result therefore fails the same pull-request gate that already owns the solution build and unit-test run.
+
+The `main` branch protection rule requires pull requests and the existing `Build and unit test` status check, requires branches to be current before merge, applies enforcement to administrators, and requires review conversations to be resolved. It does not require an approving review while the repository has a single maintainer. Force-pushes and branch deletion remain disabled.
 
 ## Local Developer Flow
 

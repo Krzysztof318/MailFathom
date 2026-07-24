@@ -65,8 +65,8 @@ Create `testconfig.json` with:
   "platformOptions": {
     "Coverlet": {
       "Include": "[MailMcp.*]*",
-      "Exclude": "[MailMcp.Host]*,[MailMcp.AppHost]*,[MailMcp.*.UnitTests]*,[coverlet.*]*,[xunit.*]*,[Microsoft.Testing.*]*",
-      "ExcludeByAttribute": "ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,GeneratedCodeAttribute,CompilerGeneratedAttribute",
+      "Exclude": "[MailMcp.Host]*,[MailMcp.AppHost]*,[MailMcp.*.UnitTests]*,[coverlet.*]*,[xunit.*]*,[Microsoft.Testing.*]*,[Microsoft.TestPlatform.*]*,[Microsoft.VisualStudio.TestPlatform.*]*,[testhost*]*",
+      "ExcludeByAttribute": "ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,GeneratedCodeAttribute",
       "Format": "cobertura",
       "IncludeTestAssembly": false,
       "DeterministicReport": true,
@@ -89,8 +89,7 @@ Create `.config/dotnet-tools.json` with:
       "version": "5.5.10",
       "commands": [
         "reportgenerator"
-      ],
-      "rollForward": false
+      ]
     }
   }
 }
@@ -134,39 +133,23 @@ Create `eng/CodeCoverage.proj` with:
 ```xml
 <Project DefaultTargets="Collect">
   <PropertyGroup>
-    <RepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))</RepositoryRoot>
-    <SolutionPath>$(RepositoryRoot)/MailMcp.slnx</SolutionPath>
-    <CoverageArtifactsDirectory>$(RepositoryRoot)/artifacts/coverage</CoverageArtifactsDirectory>
+    <RepositoryRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..'))</RepositoryRoot>
+    <SolutionPath>$(RepositoryRoot)MailMcp.slnx</SolutionPath>
+    <CoverageArtifactsDirectory>$(RepositoryRoot)artifacts/coverage</CoverageArtifactsDirectory>
     <RawCoverageDirectory>$(CoverageArtifactsDirectory)/raw</RawCoverageDirectory>
     <CoverageReportDirectory>$(CoverageArtifactsDirectory)/report</CoverageReportDirectory>
-    <MergedCoverageReport>$(CoverageReportDirectory)/Cobertura.xml</MergedCoverageReport>
+    <MergedCoverageReport Condition="'$(MergedCoverageReport)' == ''">$(CoverageReportDirectory)/Cobertura.xml</MergedCoverageReport>
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
     <MinimumLineCoveragePercent>85</MinimumLineCoveragePercent>
-    <MinimumLineCoverageRate>$([MSBuild]::Divide($(MinimumLineCoveragePercent), 100))</MinimumLineCoverageRate>
+    <MinimumLineCoverageRate>$([MSBuild]::Divide($(MinimumLineCoveragePercent), 100.0))</MinimumLineCoverageRate>
   </PropertyGroup>
-
-  <ItemGroup>
-    <ProductionCoverageSource Include="$(RepositoryRoot)/src/Domain/**/*.cs" />
-    <ProductionCoverageSource Include="$(RepositoryRoot)/src/Application/**/*.cs" />
-    <ProductionCoverageSource Include="$(RepositoryRoot)/src/Infrastructure/**/*.cs" />
-    <ProductionCoverageSource Include="$(RepositoryRoot)/src/AI/**/*.cs" />
-    <ProductionCoverageSource Include="$(RepositoryRoot)/src/Mcp/**/*.cs" />
-    <ProductionCoverageSource Remove="$(RepositoryRoot)/**/bin/**/*.cs" />
-    <ProductionCoverageSource Remove="$(RepositoryRoot)/**/obj/**/*.cs" />
-  </ItemGroup>
 
   <Target Name="Collect">
     <RemoveDir Directories="$(CoverageArtifactsDirectory)" />
     <MakeDir Directories="$(RawCoverageDirectory)" />
 
-    <Exec Command="dotnet test --solution &quot;$(SolutionPath)&quot; --configuration $(Configuration) --no-build -- --report-xunit-trx --report-xunit-trx-filename unit-tests.trx --coverlet --results-directory &quot;$(RawCoverageDirectory)&quot;" />
-
-    <CallTarget Targets="GenerateAndEnforceReport"
-                Condition="'@(ProductionCoverageSource)' != ''" />
-
-    <Message Text="No coverable production source exists in the configured boundaries; aggregate line coverage is vacuously complete."
-             Importance="high"
-             Condition="'@(ProductionCoverageSource)' == ''" />
+    <Exec Command="dotnet test --solution &quot;$(SolutionPath)&quot; --configuration $(Configuration) --no-build --results-directory &quot;$(RawCoverageDirectory)&quot; -- --report-xunit-trx --coverlet" />
+    <CallTarget Targets="GenerateAndEnforceReport" />
   </Target>
 
   <Target Name="GenerateAndEnforceReport">
@@ -192,8 +175,12 @@ Create `eng/CodeCoverage.proj` with:
            Text="Merged coverage report does not contain a line-rate value." />
 
     <PropertyGroup>
-      <ActualLineCoveragePercent>$([MSBuild]::Multiply($(ActualLineCoverageRate), 100))</ActualLineCoveragePercent>
+      <ActualLineCoveragePercent>$([MSBuild]::Multiply($(ActualLineCoverageRate), 100.0))</ActualLineCoveragePercent>
     </PropertyGroup>
+
+    <Message Text="No coverable production lines exist in the configured boundaries; aggregate line coverage is vacuously complete."
+             Importance="high"
+             Condition="$(ValidLineCount) == 0" />
 
     <Message Text="Aggregate line coverage: $(ActualLineCoveragePercent)% ($(CoveredLineCount)/$(ValidLineCount)); required: $(MinimumLineCoveragePercent)%."
              Importance="high" />
@@ -322,6 +309,22 @@ rg -n "name: Build and unit test|name: Run unit tests and enforce code coverage|
 
 Expected: the workflow and job names remain stable, the coverage step is present, and the workflow has no pull-request `paths` filter.
 
+- [ ] **Step 6: Require the coverage-owning check on `main`**
+
+Configure GitHub branch protection for `main` to:
+
+- require pull requests;
+- require the existing `Build and unit test` check;
+- require branches to be current before merge;
+- apply enforcement to administrators;
+- require review conversations to be resolved;
+- allow zero approving reviews while the repository has a single maintainer;
+- reject force-pushes and branch deletion.
+
+Read the protection settings back from GitHub after the update.
+
+Expected: `Build and unit test` is the required strict status check and the pull-request rule applies to administrators.
+
 ### Task 4: Document policy, operation, and licensing
 
 **Files:**
@@ -343,7 +346,7 @@ Add a `Code coverage` section under unit testing policy:
 - Maintain at least 85% aggregate line coverage across the complete configured production scope: `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`.
 - Calculate the threshold from the whole configured codebase on every run. Do not substitute patch coverage, changed-line coverage, or per-project thresholds for the aggregate gate.
 - Keep `Host` and `AppHost` excluded as thin executable composition roots. Do not add other assembly, namespace, file, type, or member exclusions merely to make the threshold pass.
-- `System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverageAttribute` may be applied to a class only when it contains no executable application, domain, mapping, validation, policy, or infrastructure logic.
+- Add `using System.Diagnostics.CodeAnalysis;` and apply `[ExcludeFromCodeCoverage]` to a class only when it contains no executable application, domain, mapping, validation, policy, or infrastructure logic. Do not fully qualify the attribute name.
 - Never use `[ExcludeFromCodeCoverage]` to hide behavior that can be meaningfully unit tested. If logic is added to an excluded class, remove the attribute and cover the behavior in the same change.
 - Run `dotnet msbuild eng/CodeCoverage.proj -t:Collect` before committing a change that affects production or test code.
 ```
