@@ -1,10 +1,10 @@
 ---
 status: proposed
-contact: MailMcp maintainers
+contact: Krzysztof Kasprowicz
 date: 2026-07-24
-deciders: MailMcp owner
-consulted: Microsoft Learn EF Core testing guidance, Martin Fowler Repository pattern catalog, repository architecture research requested by the owner
-informed: MailMcp contributors and future persistence implementers
+deciders: Krzysztof Kasprowicz
+consulted:
+informed:
 ---
 
 # Use application-owned repository ports for persistence access and keep EF Core behind infrastructure adapters
