@@ -85,6 +85,11 @@ public sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return new ValidationResult("Configured folder names must be non-empty.", [nameof(this.Folders)]);
         }
 
+        if (string.IsNullOrWhiteSpace(this.AccountId))
+        {
+            yield return new ValidationResult("Account id is required when an account is configured.", [nameof(this.AccountId)]);
+        }
+
         if (synchronizationEnabled)
         {
             if (string.IsNullOrWhiteSpace(this.Host))

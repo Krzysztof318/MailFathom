@@ -68,8 +68,12 @@ public sealed class MailboxSynchronizer
                 }
             }
 
-            checkpoint = checkpoint.AdvanceTo(batch.InspectedThroughUid, this.timeProvider.GetUtcNow());
-            await this.checkpointStore.SaveCheckpointAsync(unitOfWork, accountId, folderName, checkpoint, cancellationToken);
+            if (batch.InspectedThroughUid is { } inspectedThroughUid)
+            {
+                checkpoint = checkpoint.AdvanceTo(inspectedThroughUid, this.timeProvider.GetUtcNow());
+                await this.checkpointStore.SaveCheckpointAsync(unitOfWork, accountId, folderName, checkpoint, cancellationToken);
+            }
+
             await unitOfWork.CommitAsync(cancellationToken);
             hasMore = batch.HasMore;
         }

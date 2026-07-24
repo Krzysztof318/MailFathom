@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Diagnostics.CodeAnalysis;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
@@ -22,11 +23,40 @@ public sealed class MailKitImapMailboxSessionFactory(Func<ImapClient> clientFact
         var settings = settingsProvider.GetSettings(accountId.Value);
         var client = clientFactory();
         var socketOptions = settings.UseTls ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
-        await client.ConnectAsync(settings.Host, settings.Port, socketOptions, cancellationToken);
-        await client.AuthenticateAsync(settings.UserName, settings.Password, cancellationToken);
-        var folder = client.GetFolder(folderName.Value, cancellationToken);
-        await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
-        return new MailKitImapMailboxSession(accountId, folderName, client, folder);
+        try
+        {
+            await client.ConnectAsync(settings.Host, settings.Port, socketOptions, cancellationToken);
+            await client.AuthenticateAsync(settings.UserName, settings.Password, cancellationToken);
+            var folder = client.GetFolder(folderName.Value, cancellationToken);
+            await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+            return new MailKitImapMailboxSession(accountId, folderName, client, folder);
+        }
+        catch
+        {
+            await CleanupClientAfterFailedOpenAsync(client);
+            throw;
+        }
+    }
+
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Cleanup must preserve the original IMAP open failure instead of replacing it with a best-effort disconnect failure.")]
+    private static async Task CleanupClientAfterFailedOpenAsync(ImapClient client)
+    {
+        try
+        {
+            if (client.IsConnected)
+            {
+                await client.DisconnectAsync(quit: false, CancellationToken.None);
+            }
+        }
+        catch (Exception cleanupException)
+        {
+            // Preserve the original connect/authenticate/folder-open failure; cleanup is best-effort.
+            GC.KeepAlive(cleanupException);
+        }
+        finally
+        {
+            client.Dispose();
+        }
     }
 }
 
@@ -53,8 +83,14 @@ internal sealed class MailKitImapMailboxSession(MailAccountId accountId, MailFol
         }
 
         var minValue = lastSeenUid is { } uid ? uid.Value + 1 : 1U;
-        var requestedMaxValue = (ulong)minValue + (uint)maxMessageCount - 1UL;
-        var maxValue = requestedMaxValue > UniqueId.MaxValue.Id ? UniqueId.MaxValue.Id : (uint)requestedMaxValue;
+        var uidNextValue = folder.UidNext?.Id ?? 1U;
+        var maxValue = MailKitUidWindowPlanner.CalculateInclusiveWindowEnd(lastSeenUid, maxMessageCount, uidNextValue);
+        if (maxValue < minValue)
+        {
+            var emptyCursor = MailKitUidWindowPlanner.CreateBatchCursor(lastSeenUid, maxMessageCount, uidNextValue, maxValue, []);
+            return new RemoteMessageMetadataBatch([], emptyCursor.InspectedThroughUid, emptyCursor.HasMore);
+        }
+
         var minUid = new UniqueId(minValue);
         var maxUid = new UniqueId(maxValue);
         var matchingUids = await folder.SearchAsync(SearchQuery.Uids(new UniqueIdRange(minUid, maxUid)), cancellationToken);
@@ -64,7 +100,8 @@ internal sealed class MailKitImapMailboxSession(MailAccountId accountId, MailFol
             : await folder.FetchAsync(boundedUids, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size, cancellationToken);
         var uidValidity = ImapUidValidity.Create(folder.UidValidity);
         var messages = summaries.Select(summary => new RemoteMessageMetadata(MessageOccurrenceId.Create(accountId, folderName, uidValidity, ImapUid.Create(summary.UniqueId.Id)), summary.Envelope?.MessageId, summary.Envelope?.Subject, summary.Envelope?.Date, summary.Size ?? 0)).ToArray();
-        return new RemoteMessageMetadataBatch(messages, ImapUid.Create(maxValue), maxValue < UniqueId.MaxValue.Id);
+        var cursor = MailKitUidWindowPlanner.CreateBatchCursor(lastSeenUid, maxMessageCount, uidNextValue, maxValue, boundedUids.Select(uid => uid.Id).ToArray());
+        return new RemoteMessageMetadataBatch(messages, cursor.InspectedThroughUid, cursor.HasMore);
     }
 
     public async Task<RemoteMessageContent> FetchMessageContentWithoutSettingSeenAsync(MessageOccurrenceId occurrenceId, long maxRawMimeBytes, CancellationToken cancellationToken)

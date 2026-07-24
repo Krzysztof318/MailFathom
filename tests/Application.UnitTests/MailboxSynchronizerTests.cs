@@ -174,4 +174,36 @@ public sealed class MailboxSynchronizerTests
         await unitOfWork.Received(1).CommitAsync(CancellationToken.None);
     }
 
+    [Fact]
+    public async Task SynchronizeAsync_EmptyFolderWithoutCheckpoint_DoesNotAdvanceCheckpointIntoFutureUidSpace()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var folderName = MailFolderName.Create("INBOX");
+        var uidValidity = ImapUidValidity.Create(5);
+        var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
+        var metadataRepository = Substitute.For<IMessageMetadataRepository>();
+        var unitOfWorkFactory = Substitute.For<IMailSynchronizationUnitOfWorkFactory>();
+        var unitOfWork = Substitute.For<IMailSynchronizationUnitOfWorkSession>();
+        unitOfWorkFactory.BeginSynchronizationWriteAsync(CancellationToken.None).Returns(unitOfWork);
+        var contentStore = Substitute.For<IMessageContentStore>();
+        var sessionFactory = Substitute.For<IImapMailboxSessionFactory>();
+        var session = Substitute.For<IImapMailboxSession>();
+        var clock = Substitute.For<TimeProvider>();
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024, MaxUidWindowsPerRun = 1 };
+        var synchronizer = new MailboxSynchronizer(sessionFactory, checkpointStore, unitOfWorkFactory, metadataRepository, contentStore, clock, options);
+        checkpointStore.GetCheckpointAsync(accountId, folderName, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
+        sessionFactory.OpenReadOnlyAsync(accountId, folderName, CancellationToken.None).Returns(session);
+        session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        session.GetMessageBatchAfterAsync(null, 25, CancellationToken.None).Returns(new RemoteMessageMetadataBatch([], null, HasMore: false));
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, folderName, CancellationToken.None);
+
+        // Assert
+        Assert.Null(result.Checkpoint.LastSeenUid);
+        await checkpointStore.DidNotReceive().SaveCheckpointAsync(Arg.Any<IMailSynchronizationUnitOfWorkSession>(), Arg.Any<MailAccountId>(), Arg.Any<MailFolderName>(), Arg.Any<SynchronizationCheckpoint>(), CancellationToken.None);
+        await unitOfWork.Received(1).CommitAsync(CancellationToken.None);
+    }
+
 }
