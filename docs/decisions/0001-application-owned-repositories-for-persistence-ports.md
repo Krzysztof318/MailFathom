@@ -7,13 +7,13 @@ consulted:
 informed:
 ---
 
-# Use application-owned repository ports for persistence access and keep EF Core behind infrastructure adapters
+# Use application-owned repository ports with explicit Unit of Work sessions and keep EF Core behind infrastructure adapters
 
 ## Context and Problem Statement
 
 MailMcp follows clean architecture: `Application` owns use cases and ports, while `Infrastructure` owns EF Core, PostgreSQL, SQL details, and migrations. The initial architecture also requires fast isolated unit tests, future PostgreSQL-backed integration tests, explicit privacy/governance seams, and no leakage of EF Core or provider-specific types into `Application` or `Domain`.
 
-The decision question is: should application use cases depend directly on EF Core objects in unit tests and production code, or should MailMcp introduce a repository-style persistence port; if repositories are used, should they be simple use-case/aggregate-specific contracts, capability-segregated CRUD interfaces, or a generic repository plus specification model?
+The decision question is: should application use cases depend directly on EF Core objects in unit tests and production code, or should MailMcp introduce a repository-style persistence port; if repositories are used, should they be simple use-case/aggregate-specific contracts, capability-segregated CRUD interfaces, or a generic repository plus specification model? A second question is how writes that touch multiple repositories should share a transaction boundary: by passing an explicit session object, by exposing repositories as properties on a Unit of Work object, or by relying on an ambient transient session such as an `AsyncLocal` context.
 
 ## Decision Drivers
 
@@ -23,6 +23,8 @@ The decision question is: should application use cases depend directly on EF Cor
 - Avoid a repository abstraction that becomes either a leaky `IQueryable` façade or a generic CRUD layer that hides important domain and consistency rules.
 - Support provider-specific query verification later through integration tests against PostgreSQL rather than pretending a fake provider proves SQL behavior.
 - Keep query result sizes bounded, deterministic, and shaped as application read models rather than returning mutable EF Core entity graphs.
+- Make write transaction boundaries explicit enough for application review, audit evidence, cancellation, idempotency, retry safety, and future PostgreSQL integration tests.
+- Avoid hidden persistence state that can cross asynchronous flows, background work, retries, or nested use cases without a clearly owned lifetime.
 
 ## Considered Options
 
@@ -31,11 +33,17 @@ The decision question is: should application use cases depend directly on EF Cor
 - Generic repository with broad CRUD interfaces such as `ICanCreate<T>`, `ICanDelete<T>`, `ICanUpdate<T>`, and `ICanQuery<T>`.
 - Generic repository with specification/query objects for complex query composition.
 
+For Unit of Work coordination, this ADR considers these patterns:
+
+- Explicit application-owned Unit of Work session passed to repository methods that must share one transaction.
+- Unit of Work object that exposes participating repositories as properties and owns commit/rollback.
+- Ambient transient Unit of Work session resolved through an `AsyncLocal`-backed context.
+
 ## Decision Outcome
 
-Chosen option: "Simple application-owned repository/query ports implemented with EF Core in `Infrastructure`", because it gives MailMcp reliable application-layer unit-test seams without adopting a broad generic repository framework or exposing EF Core query composition outside the persistence adapter.
+Chosen option: "Simple application-owned repository/query ports implemented with EF Core in `Infrastructure`, coordinated by explicit application-owned Unit of Work sessions for multi-repository writes", because it gives MailMcp reliable application-layer unit-test seams without adopting a broad generic repository framework, exposing EF Core query composition, or hiding transaction lifetime in ambient state.
 
-The decision is proposed, not accepted. The first implementation should introduce the smallest repository/query contracts required by active use cases, then revisit the abstraction shape after the first persistence-backed slices show real query pressure.
+The decision is proposed, not accepted. The first implementation should introduce the smallest repository/query contracts required by active use cases. Single-store operations may remain atomic inside one repository method. Multi-repository writes should use an explicit Unit of Work session contract only when a concrete use case needs one transaction across ports, then revisit the abstraction shape after the first persistence-backed slices show real transaction and query pressure.
 
 ### Consequences
 
@@ -44,6 +52,7 @@ The decision is proposed, not accepted. The first implementation should introduc
 - Good, because persistence contracts can express domain language and bounded result contracts, such as mailbox timelines, synchronization checkpoints, message occurrence lookups, outbox leasing, and derived-index cleanup.
 - Neutral, because every testable query must be represented by an application-owned method or query object rather than composed ad hoc from `IQueryable` in use cases.
 - Bad, because the repository layer adds maintenance cost and can drift into an anemic CRUD wrapper if reviews do not enforce use-case-specific contracts.
+- Bad, because explicit Unit of Work sessions add parameters and lifetime rules that must be documented and tested.
 
 ## Decision Details
 
@@ -86,19 +95,28 @@ Application and domain unit tests must not instantiate production `DbContext`, E
 
 Infrastructure unit tests may cover pure mapping, option validation, SQL-shape helpers, and non-network adapter logic without a real database when behavior is deterministic. Tests that verify EF Core mappings, migrations, LINQ translation, raw SQL, transactions, concurrency, PostgreSQL full-text search, pgvector, `bytea`, or database constraints are integration tests and should be added only when the repository's integration-test phase begins.
 
-### Transactions and unit of work
+### Transactions and Unit of Work
 
-Do not introduce a generic unit-of-work abstraction only because EF Core has `SaveChangesAsync`. Use-case handlers should define transaction boundaries conceptually, while the infrastructure adapter should implement them with EF Core transactions where a persistence operation requires atomicity.
+Do not introduce a generic Unit of Work abstraction only because EF Core has `SaveChangesAsync`. EF Core already treats one `SaveChanges` call as transactional when the provider supports transactions, and infrastructure adapters may use explicit EF Core transactions internally when one repository method owns the consistency boundary. Application contracts should introduce Unit of Work only when a use case must coordinate multiple application-owned repositories in one atomic write.
 
-If multiple repositories must participate in one transaction for a concrete use case, introduce an application-owned transaction coordinator port for that use case or refactor the operation behind a single store method that owns the consistency boundary. Avoid exposing `SaveChangesAsync` as a public application concern unless there is a clear batching contract.
+The preferred application-facing shape is an explicit Unit of Work session. A use case starts a session through a focused port such as `IPersistenceSessionFactory`, `IMailStoreUnitOfWorkFactory`, or a narrower use-case-specific transaction coordinator when that name better communicates intent. The returned session is passed explicitly to repository methods that must participate in the same transaction, and commit is an explicit asynchronous operation on the session or coordinator. Repository calls that are not part of that transaction do not receive the session.
+
+A Unit of Work session contract must remain application-owned and provider-neutral. It must not expose `DbContext`, EF Core transactions, connection objects, `IQueryable`, provider entities, or raw `SaveChangesAsync` as a generic persistence primitive. It may expose a commit method whose name reflects the application contract, such as `CommitAsync`, only when callers are responsible for completing a grouped write. The session must be asynchronously disposable, cancellation-aware, short-lived, non-shareable across concurrent operations, and documented as invalid after commit, rollback, or disposal.
+
+Avoid a Unit of Work object that exposes all repositories as properties by default. That style can be acceptable for a narrow module-specific coordinator when the repository set is stable and all properties participate in the same consistency boundary, but it risks becoming a service locator with broad mutation authority. Prefer injecting the repositories a use case needs and passing the explicit session only to calls that join the transaction.
+
+Do not use an `AsyncLocal` ambient Unit of Work as an application-facing contract. It is attractive because it keeps method signatures small and can let repositories discover the current transient session automatically, but it hides transaction participation from use-case code and tests. It also creates hazards around nested operations, retries, background tasks, asynchronous continuations, parallel fan-out, and cleanup after failures. Infrastructure may use an ambient implementation detail behind an explicit session object only if the public application contract still makes session lifetime and transaction participation visible.
+
+If a transaction spans external I/O such as IMAP, SMTP, object storage, AI providers, or MCP tool calls, the design is probably wrong. Keep database transactions short and do not hold them open across network calls. Use durable state transitions, idempotency keys, outbox/inbox patterns, leases, or compensating operations instead of broad cross-resource transactions.
 
 ## Validation
 
 - Code review verifies that `Application` and `Domain` do not reference EF Core, Npgsql, PostgreSQL, `DbContext`, `DbSet`, `IQueryable`, migrations, provider-specific AI types, or persistence entities.
 - Unit tests for application use cases stub application repository/query ports instead of using EF Core in-memory, SQLite in-memory, or mocked `DbSet` query behavior.
-- Repository contracts document bounds, ordering, cancellation behavior, authorization assumptions, side effects, and privacy-sensitive data returned or persisted.
+- Repository contracts document bounds, ordering, cancellation behavior, authorization assumptions, side effects, transaction participation requirements, and privacy-sensitive data returned or persisted.
+- Unit of Work session contracts document ownership, disposal, commit behavior, cancellation, concurrency restrictions, nested-session behavior, retry safety, and whether a repository call requires a session.
 - Future PostgreSQL integration tests verify EF Core mappings, migrations, query translation, constraints, concurrency, full-text search, pgvector, raw MIME content storage, and any provider-specific SQL.
-- Pull-request review rejects generic CRUD repositories, broad capability interfaces, or specification abstractions unless the change includes concrete repeated use cases and validation evidence.
+- Pull-request review rejects generic CRUD repositories, broad capability interfaces, hidden ambient transaction contracts, or specification abstractions unless the change includes concrete repeated use cases and validation evidence.
 
 ## Pros and Cons of the Options
 
@@ -146,10 +164,47 @@ Expose a generic repository that accepts reusable specifications or query object
 - Bad, because unbounded composition makes privacy filters, authorization predicates, deterministic ordering, and query cost harder to review.
 - Bad, because it introduces a framework-level abstraction before MailMcp has enough real queries to prove the need.
 
+## Pros and Cons of Unit of Work Coordination Options
+
+### Explicit application-owned Unit of Work session passed to repository methods
+
+A use case creates a short-lived session and passes it to only the repository methods that must share the transaction. Commit or rollback belongs to the session/coordinator contract.
+
+- Good, because transaction participation is visible in method signatures, code review, tests, and documentation.
+- Good, because each repository remains focused and can still be injected independently without granting broad repository access through one object.
+- Good, because session lifetime, cancellation, disposal, retry behavior, and concurrency restrictions can be modeled as an application contract without exposing EF Core.
+- Neutral, because method signatures gain an extra parameter for transactional writes.
+- Bad, because callers must pass the session consistently; missing or mixed sessions can create subtle transactional bugs unless tests cover the use case.
+- Bad, because the pattern can become noisy if applied to simple one-repository operations that already have an internal atomic boundary.
+
+### Unit of Work object with repositories as properties
+
+A use case receives or creates a Unit of Work object, accesses repositories through properties, then commits the Unit of Work.
+
+- Good, because all repositories participating in one transaction are discoverable from one object.
+- Good, because it can simplify small modules where every operation naturally uses the same stable repository set.
+- Neutral, because it resembles common repository/UoW examples and may be familiar to contributors.
+- Bad, because it tends to become a service locator that grants more persistence capabilities than a use case needs.
+- Bad, because repository property collections can grow into an anemic persistence façade organized around infrastructure rather than use-case boundaries.
+- Bad, because tests may accidentally exercise repository acquisition mechanics instead of the use-case contract and transaction semantics.
+
+### Ambient transient Unit of Work session backed by `AsyncLocal`
+
+A use case opens an ambient transaction scope, and repositories look up the current session from an async-flow context instead of receiving it explicitly.
+
+- Good, because use-case and repository method signatures stay small.
+- Good, because it can reduce repetitive plumbing when many repository calls participate in one transaction.
+- Good, because it can be a useful infrastructure implementation detail behind an explicit application session.
+- Neutral, because it relies on .NET async-flow behavior that is powerful but easy to misuse.
+- Bad, because transaction participation becomes hidden, making code review, authorization review, privacy review, and unit tests less direct.
+- Bad, because nested sessions, retries, background work, parallel fan-out, asynchronous continuations, and failure cleanup can accidentally reuse or lose the ambient session.
+- Bad, because hidden ambient state conflicts with MailMcp's preference for explicit dependencies and small application contracts.
+
 ## More Information
 
 - Microsoft Learn, "Testing EF Core Applications," states that EF Core in-memory has important behavioral differences from real databases, discourages mocked `DbSet` query testing, and notes that repository layers enable tests without EF Core at the cost of architectural and maintenance overhead: <https://learn.microsoft.com/en-us/ef/core/testing/>.
 - Microsoft Learn, "Choosing a testing strategy," recommends real-database testing for production confidence, discourages the in-memory provider for test doubles, and states that a repository layer is the reliable way to stub database outputs without evaluating production LINQ against a fake provider: <https://learn.microsoft.com/en-us/ef/core/testing/choosing-a-testing-strategy>.
 - Microsoft Learn, "Testing without your production database system," shows repository interfaces returning `IAsyncEnumerable<T>` or `IEnumerable<T>` rather than `IQueryable<T>` so EF Core query translation does not leak into tests: <https://learn.microsoft.com/en-us/ef/core/testing/testing-without-the-database>.
+- Microsoft Learn, "Using Transactions," documents that one `SaveChanges` call is transactional by default when the provider supports transactions and describes explicit EF Core transaction control for multiple operations: <https://learn.microsoft.com/en-us/ef/core/saving/transactions>.
 - Martin Fowler's Repository catalog entry describes Repository as a mediator between domain and data-mapping layers and notes that clients may submit declarative query specifications to repositories: <https://martinfowler.com/eaaCatalog/repository.html>.
 - This ADR refines the MailMcp architecture draft's boundary rule that `Application` owns ports and `Infrastructure` owns persistence, EF Core, PostgreSQL, `bytea`, pgvector, and provider-specific mapping details: `specs/2026-07-22-mail-mcp-architecture-draft.md`.
