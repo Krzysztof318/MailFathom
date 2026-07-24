@@ -13,9 +13,63 @@ using MailMcp.Domain.Messages;
 
 namespace MailMcp.Infrastructure.Mail.MailKit;
 
+internal interface IMailKitImapClient : IAsyncDisposable
+{
+    bool IsConnected { get; }
+
+    Task ConnectAsync(
+        string host,
+        int port,
+        SecureSocketOptions options,
+        CancellationToken cancellationToken);
+
+    Task AuthenticateAsync(
+        string userName,
+        string password,
+        CancellationToken cancellationToken);
+
+    IMailFolder GetFolder(
+        string path,
+        CancellationToken cancellationToken);
+
+    Task DisconnectAsync(
+        bool quit,
+        CancellationToken cancellationToken);
+}
+
+internal sealed class MailKitImapClientAdapter(ImapClient client) : IMailKitImapClient
+{
+    public bool IsConnected => client.IsConnected;
+
+    public Task ConnectAsync(
+        string host,
+        int port,
+        SecureSocketOptions options,
+        CancellationToken cancellationToken) => client.ConnectAsync(host, port, options, cancellationToken);
+
+    public Task AuthenticateAsync(
+        string userName,
+        string password,
+        CancellationToken cancellationToken) => client.AuthenticateAsync(userName, password, cancellationToken);
+
+    public IMailFolder GetFolder(
+        string path,
+        CancellationToken cancellationToken) => client.GetFolder(path, cancellationToken);
+
+    public Task DisconnectAsync(
+        bool quit,
+        CancellationToken cancellationToken) => client.DisconnectAsync(quit, cancellationToken);
+
+    public ValueTask DisposeAsync()
+    {
+        client.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}
+
 /// <summary>MailKit-backed factory for authenticated read-only IMAP folder sessions.</summary>
-public sealed class MailKitImapMailboxSessionFactory(
-    Func<ImapClient> clientFactory,
+internal sealed class MailKitImapMailboxSessionFactory(
+    Func<IMailKitImapClient> clientFactory,
     IMailKitImapAccountSettingsProvider settingsProvider) : IMailboxSessionFactory
 {
     /// <inheritdoc />
@@ -27,19 +81,46 @@ public sealed class MailKitImapMailboxSessionFactory(
         ArgumentNullException.ThrowIfNull(clientFactory);
         var settings = settingsProvider.GetSettings(accountId.Value);
         var client = clientFactory();
-        var socketOptions = settings.UseTls ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
-        await client.ConnectAsync(settings.Host, settings.Port, socketOptions, cancellationToken);
-        await client.AuthenticateAsync(settings.UserName, settings.Password, cancellationToken);
-        var folder = client.GetFolder(folderName.Value, cancellationToken);
-        await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
-        return new MailKitImapMailboxSession(accountId, folderName, client, folder);
+        var ownershipTransferred = false;
+        try
+        {
+            var socketOptions = settings.UseTls ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
+            await client.ConnectAsync(settings.Host, settings.Port, socketOptions, cancellationToken);
+            await client.AuthenticateAsync(settings.UserName, settings.Password, cancellationToken);
+            var folder = client.GetFolder(folderName.Value, cancellationToken);
+            await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+            ownershipTransferred = true;
+            return new MailKitImapMailboxSession(accountId, folderName, client, folder);
+        }
+        finally
+        {
+            if (!ownershipTransferred)
+            {
+                await CleanupFailedOpenAsync(client);
+            }
+        }
+    }
+
+    private static async Task CleanupFailedOpenAsync(IMailKitImapClient client)
+    {
+        try
+        {
+            if (client.IsConnected)
+            {
+                await client.DisconnectAsync(quit: true, CancellationToken.None);
+            }
+        }
+        finally
+        {
+            await client.DisposeAsync();
+        }
     }
 }
 
 internal sealed class MailKitImapMailboxSession(
     MailAccountId accountId,
     MailFolderName folderName,
-    ImapClient client,
+    IMailKitImapClient client,
     IMailFolder folder) : IMailboxSession
 {
     public async ValueTask DisposeAsync()
@@ -49,7 +130,7 @@ internal sealed class MailKitImapMailboxSession(
             await client.DisconnectAsync(quit: true, CancellationToken.None);
         }
 
-        client.Dispose();
+        await client.DisposeAsync();
     }
 
     public Task<ImapUidValidity> GetUidValidityAsync(CancellationToken cancellationToken) => Task.FromResult(ImapUidValidity.Create(folder.UidValidity));
@@ -65,9 +146,15 @@ internal sealed class MailKitImapMailboxSession(
             return new RemoteMessageMetadataBatch([], checkpointUid, HasMore: false);
         }
 
-        var minValue = lastSeenUid is { } uid ? uid.Value + 1 : 1U;
+        var minValue = lastSeenUid is { } uid ? uid.Value + 1U : 1U;
+        var highestAssignedUid = GetHighestAssignedUid(folder.UidNext);
+        if (highestAssignedUid is null || minValue > highestAssignedUid.Value)
+        {
+            return new RemoteMessageMetadataBatch([], lastSeenUid, HasMore: false);
+        }
+
         var requestedMaxValue = (ulong)minValue + (uint)maxMessageCount - 1UL;
-        var maxValue = requestedMaxValue > UniqueId.MaxValue.Id ? UniqueId.MaxValue.Id : (uint)requestedMaxValue;
+        var maxValue = requestedMaxValue > highestAssignedUid.Value ? highestAssignedUid.Value : (uint)requestedMaxValue;
         var minUid = new UniqueId(minValue);
         var maxUid = new UniqueId(maxValue);
         var matchingUids = await folder.SearchAsync(SearchQuery.Uids(new UniqueIdRange(minUid, maxUid)), cancellationToken);
@@ -76,8 +163,13 @@ internal sealed class MailKitImapMailboxSession(
             ? []
             : await folder.FetchAsync(boundedUids, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size, cancellationToken);
         var uidValidity = ImapUidValidity.Create(folder.UidValidity);
-        var messages = summaries.Select(summary => new RemoteMessageMetadata(MessageOccurrenceId.Create(accountId, folderName, uidValidity, ImapUid.Create(summary.UniqueId.Id)), summary.Envelope?.MessageId, summary.Envelope?.Subject, summary.Envelope?.Date, summary.Size ?? 0)).ToArray();
-        return new RemoteMessageMetadataBatch(messages, ImapUid.Create(maxValue), maxValue < UniqueId.MaxValue.Id);
+        var messages = summaries.Select(summary => new RemoteMessageMetadata(
+            MessageOccurrenceId.Create(accountId, folderName, uidValidity, ImapUid.Create(summary.UniqueId.Id)),
+            summary.Envelope?.MessageId,
+            summary.Envelope?.Subject,
+            summary.Envelope?.Date?.ToUniversalTime(),
+            summary.Size ?? 0)).ToArray();
+        return new RemoteMessageMetadataBatch(messages, ImapUid.Create(maxValue), maxValue < highestAssignedUid.Value);
     }
 
     public async Task<RemoteMessageContent> FetchMessageContentWithoutSettingSeenAsync(
@@ -91,6 +183,16 @@ internal sealed class MailKitImapMailboxSession(
         using var memory = new MemoryStream();
         await CopyToMemoryWithLimitAsync(occurrenceId, stream, memory, maxRawMimeBytes, cancellationToken);
         return new RemoteMessageContent(occurrenceId, memory.ToArray());
+    }
+
+    private static uint? GetHighestAssignedUid(UniqueId? uidNext)
+    {
+        if (uidNext is null || uidNext.Value.Id <= 1U)
+        {
+            return null;
+        }
+
+        return uidNext.Value.Id - 1U;
     }
 
     private static async Task CopyToMemoryWithLimitAsync(

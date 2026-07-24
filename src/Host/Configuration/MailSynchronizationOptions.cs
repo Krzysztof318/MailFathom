@@ -96,6 +96,11 @@ public sealed class MailSynchronizationAccountOptions : IValidatableObject
 
         if (synchronizationEnabled)
         {
+            if (string.IsNullOrWhiteSpace(this.AccountId))
+            {
+                yield return new ValidationResult("Account ID is required when synchronization is enabled.", [nameof(this.AccountId)]);
+            }
+
             if (string.IsNullOrWhiteSpace(this.Host))
             {
                 yield return new ValidationResult("IMAP host is required when synchronization is enabled.", [nameof(this.Host)]);
