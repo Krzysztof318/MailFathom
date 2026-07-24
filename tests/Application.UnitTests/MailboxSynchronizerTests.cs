@@ -218,8 +218,99 @@ public sealed class MailboxSynchronizerTests
         await synchronizer.SynchronizeAsync(accountId, folderName, CancellationToken.None);
 
         // Assert
-        await sessionScopeFactory.Received(1).BeginSessionAsync(CancellationToken.None);
+        await sessionScopeFactory.Received(2).BeginSessionAsync(CancellationToken.None);
         await contentStore.Received(1).SaveContentAsync(persistenceSession, content, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_MultipleMessages_CommitsAndDisposesEachMessageBeforeFetchingTheNext()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var folderName = MailFolderName.Create("INBOX");
+        var uidValidity = ImapUidValidity.Create(5);
+        var firstUid = ImapUid.Create(10);
+        var secondUid = ImapUid.Create(11);
+        var firstOccurrence = MessageOccurrenceId.Create(accountId, folderName, uidValidity, firstUid);
+        var secondOccurrence = MessageOccurrenceId.Create(accountId, folderName, uidValidity, secondUid);
+        var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
+        var metadataRepository = Substitute.For<IMessageMetadataRepository>();
+        var sessionScopeFactory = Substitute.For<ISessionFactory>();
+        var contentStore = Substitute.For<IMessageContentStore>();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var mailboxSession = Substitute.For<IMailboxSession>();
+        var clock = Substitute.For<TimeProvider>();
+        await using var firstMessageSession = new TrackingSession();
+        await using var secondMessageSession = new TrackingSession();
+        await using var checkpointSession = new TrackingSession();
+        var persistenceSessions = new Queue<ISession>(
+        [
+            firstMessageSession,
+            secondMessageSession,
+            checkpointSession,
+        ]);
+        sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(_ =>
+        {
+            var persistenceSession = persistenceSessions.Dequeue();
+            if (ReferenceEquals(persistenceSession, checkpointSession))
+            {
+                Assert.True(secondMessageSession.IsCommitted);
+                Assert.True(secondMessageSession.IsDisposed);
+            }
+
+            return persistenceSession;
+        });
+        var options = new MailboxSynchronizationOptions
+        {
+            MaxMetadataBatchSize = 25,
+            MaxRawMimeBytes = 1024,
+            MaxUidWindowsPerRun = 1,
+        };
+        var synchronizer = new MailboxSynchronizer(
+            sessionFactory,
+            checkpointStore,
+            sessionScopeFactory,
+            metadataRepository,
+            contentStore,
+            clock,
+            options);
+        var firstMetadata = new RemoteMessageMetadata(
+            firstOccurrence,
+            "message-1@example.test",
+            "First",
+            new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero),
+            128);
+        var secondMetadata = new RemoteMessageMetadata(
+            secondOccurrence,
+            "message-2@example.test",
+            "Second",
+            new DateTimeOffset(2026, 7, 24, 9, 0, 0, TimeSpan.Zero),
+            128);
+        var firstContent = new RemoteMessageContent(firstOccurrence, new ReadOnlyMemory<byte>([1]));
+        var secondContent = new RemoteMessageContent(secondOccurrence, new ReadOnlyMemory<byte>([2]));
+        clock.GetUtcNow().Returns(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
+        checkpointStore.GetCheckpointAsync(accountId, folderName, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
+        sessionFactory.OpenReadOnlyAsync(accountId, folderName, CancellationToken.None).Returns(mailboxSession);
+        mailboxSession.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        mailboxSession.GetMessageBatchAfterAsync(null, 25, CancellationToken.None).Returns(
+            new RemoteMessageMetadataBatch([firstMetadata, secondMetadata], secondUid, HasMore: false));
+        mailboxSession.FetchMessageContentWithoutSettingSeenAsync(firstOccurrence, 1024, CancellationToken.None).Returns(firstContent);
+        mailboxSession.FetchMessageContentWithoutSettingSeenAsync(secondOccurrence, 1024, CancellationToken.None).Returns(_ =>
+        {
+            Assert.True(firstMessageSession.IsCommitted);
+            Assert.True(firstMessageSession.IsDisposed);
+            return secondContent;
+        });
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, folderName, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, result.StoredMessageCount);
+        Assert.Empty(persistenceSessions);
+        Assert.True(checkpointSession.IsCommitted);
+        Assert.True(checkpointSession.IsDisposed);
+        await sessionScopeFactory.Received(3).BeginSessionAsync(CancellationToken.None);
     }
 
     [Fact]
@@ -282,6 +373,25 @@ public sealed class MailboxSynchronizerTests
         Assert.Equal(2048, withOccurrence.SizeOctets);
         Assert.Equal(1024, withOccurrence.MaxAllowedOctets);
         Assert.Contains("primary/INBOX/5/10", withOccurrence.Message, StringComparison.Ordinal);
+    }
+
+    private sealed class TrackingSession : ISession
+    {
+        public bool IsCommitted { get; private set; }
+
+        public bool IsDisposed { get; private set; }
+
+        public Task CommitAsync(CancellationToken cancellationToken)
+        {
+            this.IsCommitted = true;
+            return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            this.IsDisposed = true;
+            return ValueTask.CompletedTask;
+        }
     }
 
 }

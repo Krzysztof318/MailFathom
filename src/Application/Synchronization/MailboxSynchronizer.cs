@@ -56,7 +56,6 @@ public sealed class MailboxSynchronizer
         {
             inspectedWindowCount++;
             var batch = await session.GetMessageBatchAfterAsync(checkpoint.LastSeenUid, this.options.MaxMetadataBatchSize, cancellationToken);
-            var fetchedMessages = new List<(RemoteMessageMetadata Metadata, RemoteMessageContent Content)>();
             foreach (var metadata in batch.Messages.OrderBy(message => message.OccurrenceId.Uid.Value))
             {
                 if (metadata.SizeOctets > this.options.MaxRawMimeBytes)
@@ -68,7 +67,11 @@ public sealed class MailboxSynchronizer
                 try
                 {
                     var content = await session.FetchMessageContentWithoutSettingSeenAsync(metadata.OccurrenceId, this.options.MaxRawMimeBytes, cancellationToken);
-                    fetchedMessages.Add((metadata, content));
+                    await using var messagePersistenceSession = await this.sessionScopeFactory.BeginSessionAsync(cancellationToken);
+                    await this.contentStore.SaveContentAsync(messagePersistenceSession, content, cancellationToken);
+                    await this.metadataRepository.UpsertMetadataAsync(messagePersistenceSession, metadata, cancellationToken);
+                    await messagePersistenceSession.CommitAsync(cancellationToken);
+                    storedCount++;
                 }
                 catch (MessageContentTooLargeException)
                 {
@@ -78,17 +81,10 @@ public sealed class MailboxSynchronizer
 
             if (batch.InspectedThroughUid is { } inspectedThroughUid)
             {
-                await using var persistenceSession = await this.sessionScopeFactory.BeginSessionAsync(cancellationToken);
-                foreach (var (metadata, content) in fetchedMessages)
-                {
-                    await this.contentStore.SaveContentAsync(persistenceSession, content, cancellationToken);
-                    await this.metadataRepository.UpsertMetadataAsync(persistenceSession, metadata, cancellationToken);
-                    storedCount++;
-                }
-
+                await using var checkpointPersistenceSession = await this.sessionScopeFactory.BeginSessionAsync(cancellationToken);
                 checkpoint = checkpoint.AdvanceTo(inspectedThroughUid, this.timeProvider.GetUtcNow());
-                await this.checkpointStore.SaveCheckpointAsync(persistenceSession, accountId, folderName, checkpoint, cancellationToken);
-                await persistenceSession.CommitAsync(cancellationToken);
+                await this.checkpointStore.SaveCheckpointAsync(checkpointPersistenceSession, accountId, folderName, checkpoint, cancellationToken);
+                await checkpointPersistenceSession.CommitAsync(cancellationToken);
             }
 
             hasMore = batch.HasMore;
