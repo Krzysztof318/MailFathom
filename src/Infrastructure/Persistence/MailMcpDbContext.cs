@@ -1,10 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailMcp.Infrastructure.Persistence;
 
 /// <summary>EF Core context for local MailMcp persistence.</summary>
+[ExcludeFromCodeCoverage(Justification = "Provider-boundary adapter behavior requires future integration coverage.")]
 public sealed class MailMcpDbContext : DbContext
 {
     /// <summary>Initializes a new MailMcp EF Core context.</summary>

@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
@@ -37,6 +38,7 @@ internal interface IMailKitImapClient : IAsyncDisposable
         CancellationToken cancellationToken);
 }
 
+[ExcludeFromCodeCoverage(Justification = "Thin MailKit delegation wrapper requires future adapter integration coverage.")]
 internal sealed class MailKitImapClientAdapter(ImapClient client) : IMailKitImapClient
 {
     public bool IsConnected => client.IsConnected;

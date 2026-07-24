@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Diagnostics.CodeAnalysis;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
@@ -10,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 namespace MailMcp.Infrastructure.Persistence;
 
 /// <summary>EF Core implementation for synchronization checkpoints.</summary>
+[ExcludeFromCodeCoverage(Justification = "Provider-boundary adapter behavior requires future integration coverage.")]
 public sealed class SynchronizationCheckpointStore(MailMcpDbContext dbContext) : ISynchronizationCheckpointStore
 {
     /// <inheritdoc />

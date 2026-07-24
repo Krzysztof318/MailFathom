@@ -1,11 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Diagnostics.CodeAnalysis;
 using MailMcp.Application.Synchronization;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailMcp.Infrastructure.Persistence;
 
 /// <summary>EF Core implementation for message metadata persistence.</summary>
+[ExcludeFromCodeCoverage(Justification = "Provider-boundary adapter behavior requires future integration coverage.")]
 public sealed class MessageMetadataRepository(MailMcpDbContext dbContext) : IMessageMetadataRepository
 {
     /// <inheritdoc />

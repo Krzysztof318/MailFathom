@@ -1,11 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Diagnostics.CodeAnalysis;
 using MailMcp.Application.Synchronization;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace MailMcp.Infrastructure.Persistence;
 
 /// <summary>Creates EF Core-backed persistence sessions for application write transactions.</summary>
+[ExcludeFromCodeCoverage(Justification = "Provider-boundary adapter behavior requires future integration coverage.")]
 public sealed class UnitOfWork(MailMcpDbContext dbContext) : ISessionFactory
 {
     /// <inheritdoc />

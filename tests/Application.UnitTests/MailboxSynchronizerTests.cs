@@ -259,4 +259,29 @@ public sealed class MailboxSynchronizerTests
         await checkpointStore.DidNotReceive().SaveCheckpointAsync(Arg.Any<ISession>(), accountId, folderName, Arg.Any<SynchronizationCheckpoint>(), CancellationToken.None);
     }
 
+    [Fact]
+    public void MessageContentTooLargeException_Constructors_PreserveSafeFailureDetails()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var folderName = MailFolderName.Create("INBOX");
+        var occurrence = MessageOccurrenceId.Create(accountId, folderName, ImapUidValidity.Create(5), ImapUid.Create(10));
+        var inner = new InvalidOperationException("inner");
+
+        // Act
+        var empty = new MessageContentTooLargeException();
+        var withMessage = new MessageContentTooLargeException("safe message");
+        var withInner = new MessageContentTooLargeException("safe wrapper", inner);
+        var withOccurrence = new MessageContentTooLargeException(occurrence, 2048, 1024);
+
+        // Assert
+        Assert.Null(empty.OccurrenceId);
+        Assert.Equal("safe message", withMessage.Message);
+        Assert.Same(inner, withInner.InnerException);
+        Assert.Equal(occurrence, withOccurrence.OccurrenceId);
+        Assert.Equal(2048, withOccurrence.SizeOctets);
+        Assert.Equal(1024, withOccurrence.MaxAllowedOctets);
+        Assert.Contains("primary/INBOX/5/10", withOccurrence.Message, StringComparison.Ordinal);
+    }
+
 }

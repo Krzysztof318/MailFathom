@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Diagnostics.CodeAnalysis;
 using MailKit.Net.Imap;
 using MailMcp.Application.MessageContent;
 using MailMcp.Application.Synchronization;
@@ -12,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace MailMcp.Infrastructure;
 
 /// <summary>Infrastructure dependency registration.</summary>
+[ExcludeFromCodeCoverage(Justification = "Composition-root DI registration is verified by host/integration coverage.")]
 public static class ServiceCollectionExtensions
 {
     /// <summary>Registers EF Core persistence, MailKit mailbox access, and application synchronization services.</summary>

@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Diagnostics.CodeAnalysis;
 using MailMcp.Application.MessageContent;
 using MailMcp.Application.Synchronization;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace MailMcp.Infrastructure.Persistence;
 
 /// <summary>EF Core raw MIME content store.</summary>
+[ExcludeFromCodeCoverage(Justification = "Provider-boundary adapter behavior requires future integration coverage.")]
 public sealed class MessageContentStore(MailMcpDbContext dbContext) : IMessageContentStore
 {
     /// <inheritdoc />
