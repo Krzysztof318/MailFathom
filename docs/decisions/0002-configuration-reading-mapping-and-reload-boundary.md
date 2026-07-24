@@ -33,21 +33,6 @@ The decision question is: should MailMcp read configuration directly from `IConf
 - Introduce an application-owned configuration access layer backed by host options and reload notifications.
 - Build a full configuration management subsystem with persistence, APIs, versioning, and audit workflow now.
 
-## Decision Outcome
-
-Chosen option: "Introduce an application-owned configuration access layer backed by host options and reload notifications", because it keeps .NET configuration infrastructure at the host/infrastructure boundary while giving application code stable, validated, domain-meaningful configuration objects with explicit reload semantics.
-
-The decision is proposed, not accepted. The first implementation should cover only source validation, reading, mapping, and automatic reload for runtime settings that are safe to update in-process. Programmatic modification is a target capability for a later phase, but configuration storage itself remains undecided: files, a database-backed provider, a cloud configuration store, another managed configuration service, administrative editing, approval workflow, configuration history, and multi-tenant configuration lifecycle are deferred decisions.
-
-### Consequences
-
-- Good, because use cases consume business settings such as synchronization limits, retrieval safety policy, or provider capability flags rather than raw keys or binder DTOs.
-- Good, because framework-specific details such as provider precedence, `reloadOnChange`, options validation, options caches, and change tokens stay behind adapter code.
-- Good, because source validation and reload handling can centralize allowed-key checks, precedence expectations, last-known-good behavior, structured audit events, and privacy-safe logging instead of duplicating those concerns in every service.
-- Neutral, because configuration DTOs and business settings will both exist and require explicit mapping tests.
-- Bad, because the layer adds code and design discipline before MailMcp has many configurable behaviors.
-- Bad, because reloadable or later writable configuration can create operational surprises unless every setting is classified by source, mutability, reload scope, and consistency requirements.
-
 ## Decision Details
 
 ### Boundary placement
@@ -130,53 +115,6 @@ This ADR also does not permit adding new third-party packages. Any future provid
 - Documentation for each setting group states its source shape, required keys, safe diagnostics, mutability classification, and whether it is restart-required, reloadable for new operations, or reloadable during running operations.
 - Pull-request review rejects reloadable settings without an explicit consistency, security, privacy, and operational rationale, and rejects programmatic configuration mutation until the write-side ADR is accepted.
 
-## Pros and Cons of the Options
-
-### Read raw `IConfiguration` at every consumer
-
-Consumers read configuration values by key from Microsoft configuration abstractions whenever they need a setting.
-
-- Good, because it is simple for prototypes and avoids extra mapping classes.
-- Good, because it can access provider precedence and current raw values directly.
-- Neutral, because it can remain acceptable inside host composition code and narrowly scoped infrastructure adapters.
-- Bad, because string keys, section layout, null/default handling, provider precedence, and reload behavior leak across the codebase.
-- Bad, because it is hard to document which settings are sensitive, reloadable, bounded, or safe to change during an operation.
-- Bad, because use cases can accidentally bypass source validation and interpret unknown, missing, malformed, or precedence-overridden values differently.
-
-### Inject framework options directly into use cases and adapters
-
-Consumers inject `IOptions<T>`, `IOptionsSnapshot<T>`, or `IOptionsMonitor<T>` and use bound option DTOs as their configuration model.
-
-- Good, because this uses standard .NET dependency injection and options validation mechanisms.
-- Good, because `IOptionsMonitor<T>` supports singleton consumers and change notifications, while `IOptionsSnapshot<T>` can provide scoped recomputation.
-- Neutral, because framework options are appropriate for host and adapter internals that already depend on Microsoft extensions.
-- Bad, because options DTOs are often shaped for binding rather than business meaning, especially where the binder needs mutable properties or provider-friendly keys.
-- Bad, because consumers must understand the semantic differences between singleton options, scoped snapshots, monitor current values, monitor caches, and change callbacks.
-- Bad, because direct monitor use can let different parts of one operation observe different values unless the operation captures a business snapshot deliberately.
-- Bad, because future programmatic writes would be tempted to manipulate option caches or provider-specific data structures instead of using audited intent-specific commands.
-
-### Introduce an application-owned configuration access layer backed by host options and reload notifications
-
-Host/infrastructure code binds and validates provider-shaped options, maps them into immutable business settings, and exposes focused application-facing readers or snapshots. Reloadable groups are updated through validated atomic snapshots.
-
-- Good, because it preserves clean architecture and keeps Microsoft configuration mechanisms outside the domain model and ordinary use-case logic.
-- Good, because mapping creates one place to translate provider strings, defaults, units, ranges, sensitive-value handling, source-validation results, and reload classification into business semantics.
-- Good, because last-known-good reload behavior and safe operational diagnostics can be implemented once per setting group.
-- Neutral, because it duplicates some shape between options DTOs and business settings.
-- Bad, because incorrect classification of reloadability can still cause inconsistent runtime behavior.
-- Bad, because this layer must stay narrow; a generic settings service or premature writer API would recreate raw configuration coupling under a different name.
-
-### Build a full configuration management subsystem now
-
-MailMcp would immediately add durable storage, administrative APIs, versioning, audit history, tenant overrides, approval workflows, and possibly an external configuration service.
-
-- Good, because future enterprise governance, auditability, and multi-tenant operations will likely need some of these capabilities.
-- Good, because explicit versioning and approvals can make configuration changes safer than ad hoc file edits.
-- Neutral, because this may become necessary after core mail, MCP, AI, and operational requirements are better known.
-- Bad, because it exceeds the current decision scope, which is validating, reading, and mapping configuration safely.
-- Bad, because it would force premature choices about storage, tenancy, authorization, write concurrency, rollback, secret handling, audit retention, and service dependencies.
-- Bad, because adding provider packages or hosted services now would trigger licensing, terms, telemetry, and data-processing review before there is a proven need.
-
 ## More Information
 
 - Microsoft Learn, ".NET configuration," describes hierarchical keys, provider ordering where later providers override earlier providers, binder limitations for read-only collection interfaces, support for constructor binding, and notes that custom mapping can translate safe keys into desired business keys: <https://learn.microsoft.com/en-us/dotnet/core/extensions/configuration>.
@@ -187,3 +125,24 @@ MailMcp would immediately add durable storage, administrative APIs, versioning, 
 - Microsoft Learn, "Detect changes with change tokens in ASP.NET Core," describes configuration reload change tokens and file-provider reload behavior: <https://learn.microsoft.com/en-us/aspnet/core/fundamentals/change-tokens?view=aspnetcore-10.0>.
 - Microsoft Learn, "Implement a custom configuration provider in .NET," documents custom providers backed by a database, which is relevant background for a future storage-backed read/write provider but is not adopted by this ADR: <https://learn.microsoft.com/en-us/dotnet/core/extensions/custom-configuration-provider>.
 - This ADR refines the MailMcp architecture rule that `Host` owns configuration and dependency injection, while `Application` and `Domain` remain independent of infrastructure frameworks: `specs/2026-07-22-mail-mcp-architecture-draft.md`.
+
+## Decision Outcome
+
+Chosen option: "Introduce an application-owned configuration access layer backed by host options and reload notifications", because it keeps .NET configuration infrastructure at the host/infrastructure boundary while giving application code stable, validated, domain-meaningful configuration objects with explicit reload semantics.
+
+The decision is proposed, not accepted. The first implementation should cover only source validation, reading, mapping, and automatic reload for runtime settings that are safe to update in-process. Programmatic modification is a target capability for a later phase, but configuration storage itself remains undecided: files, a database-backed provider, a cloud configuration store, another managed configuration service, administrative editing, approval workflow, configuration history, and multi-tenant configuration lifecycle are deferred decisions.
+
+### Pros and Cons of the Selected Option
+
+#### Introduce an application-owned configuration access layer backed by host options and reload notifications
+
+Host/infrastructure code binds and validates provider-shaped options, maps them into immutable business settings, and exposes focused application-facing readers or snapshots. Reloadable groups are updated through validated atomic snapshots.
+
+- Good, because it preserves clean architecture and keeps Microsoft configuration mechanisms outside the domain model and ordinary use-case logic.
+- Good, because use cases consume business settings such as synchronization limits, retrieval safety policy, or provider capability flags rather than raw keys or binder DTOs.
+- Good, because mapping creates one place to translate provider strings, defaults, units, ranges, sensitive-value handling, source-validation results, and reload classification into business semantics.
+- Good, because last-known-good reload behavior and safe operational diagnostics can be implemented once per setting group.
+- Neutral, because configuration DTOs and business settings will both exist and require explicit mapping tests.
+- Bad, because the layer adds code and design discipline before MailMcp has many configurable behaviors.
+- Bad, because incorrect classification of reloadability can still cause inconsistent runtime behavior.
+- Bad, because this layer must stay narrow; a generic settings service or premature writer API would recreate raw configuration coupling under a different name.
