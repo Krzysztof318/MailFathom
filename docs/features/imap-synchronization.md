@@ -42,6 +42,8 @@ The first synchronization configuration group is classified as reloadable for ne
 
 The application layer exposes only `FetchMessageContentWithoutSettingSeenAsync` for content retrieval during synchronization. This name is part of the contract: implementations must use IMAP read-only selection and BODY.PEEK-equivalent behavior so remote `\\Seen` flags are not changed. Metadata requests are bounded by `MaxMetadataBatchSize`, UID cursors advance only to existing UIDs known from the opened folder's UIDNEXT state, each run is bounded by `MaxUidWindowsPerRun`, and raw MIME fetches are skipped or rejected above `MaxRawMimeBytes`. Logs record counts and account/folder identifiers only; raw MIME, message bodies, attachments, credentials, and tokens remain sensitive and must not be logged.
 
+Raw MIME content crosses application and infrastructure boundaries as `ReadOnlyMemory<byte>` instead of general-purpose byte collections. Infrastructure converts to provider-required `byte[]` only inside the PostgreSQL `bytea` adapter.
+
 ## Pending work
 
 - Deployment-specific secret binding for IMAP passwords and reviewed operational examples for external secret stores.

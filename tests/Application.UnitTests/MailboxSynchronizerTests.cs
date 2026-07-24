@@ -34,7 +34,7 @@ public sealed class MailboxSynchronizerTests
         var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
         var synchronizer = new MailboxSynchronizer(sessionFactory, checkpointStore, unitOfWorkFactory, metadataRepository, contentStore, clock, options);
         var metadata = new RemoteMessageMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 128);
-        var content = new RemoteMessageContent(occurrence, new byte[] { 1, 2, 3 });
+        var content = new RemoteMessageContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
         clock.GetUtcNow().Returns(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
         checkpointStore.GetCheckpointAsync(accountId, folderName, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
         sessionFactory.OpenReadOnlyAsync(accountId, folderName, CancellationToken.None).Returns(session);

@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using MailKit;
 using MailKit.Net.Imap;
@@ -116,18 +117,26 @@ internal sealed class MailKitImapMailboxSession(MailAccountId accountId, MailFol
 
     private static async Task CopyToMemoryWithLimitAsync(MessageOccurrenceId occurrenceId, Stream source, MemoryStream destination, long maxRawMimeBytes, CancellationToken cancellationToken)
     {
-        var buffer = new byte[81920];
-        long totalBytes = 0;
-        int read;
-        while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
+        var rentedBuffer = ArrayPool<byte>.Shared.Rent(81920);
+        try
         {
-            totalBytes += read;
-            if (totalBytes > maxRawMimeBytes)
+            var buffer = rentedBuffer.AsMemory();
+            long totalBytes = 0;
+            int read;
+            while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
             {
-                throw new MessageContentTooLargeException(occurrenceId, totalBytes, maxRawMimeBytes);
-            }
+                totalBytes += read;
+                if (totalBytes > maxRawMimeBytes)
+                {
+                    throw new MessageContentTooLargeException(occurrenceId, totalBytes, maxRawMimeBytes);
+                }
 
-            await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                await destination.WriteAsync(buffer[..read], cancellationToken);
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(rentedBuffer);
         }
     }
 }

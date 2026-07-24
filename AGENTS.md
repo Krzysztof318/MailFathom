@@ -73,6 +73,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Prefer guard clauses over deep nesting. Validate public boundary arguments with the appropriate BCL guard methods or explicit domain validation.
 - Do not use `null` to encode several states. Model optionality and failure explicitly when absence has domain meaning.
 - Expose read-only collection abstractions when callers must not mutate state. Avoid returning mutable internal collections.
+- For byte-oriented data, do not model payloads as `byte[]`, `List<byte>`, `IReadOnlyList<byte>`, or other general-purpose byte collections at application/domain boundaries. Prefer `Span<byte>` or `ReadOnlySpan<byte>` for synchronous stack-only operations, and `Memory<byte>` or `ReadOnlyMemory<byte>` when data must cross async, object, or DI boundaries. Keep `byte[]` only where a framework/provider contract requires it, such as EF Core `bytea` persistence models, and convert at that adapter boundary.
 - Prefer pattern matching, switch expressions, collection expressions, and other modern syntax only when they make the intent clearer.
 - Avoid reflection, `dynamic`, source-code generation, and unsafe code unless a measured requirement justifies them.
 - Use constructor injection. Avoid service locators, global mutable state, and static dependencies that hide collaborators.

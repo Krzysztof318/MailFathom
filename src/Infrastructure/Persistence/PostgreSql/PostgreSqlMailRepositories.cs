@@ -108,7 +108,7 @@ public sealed class PostgreSqlMessageContentStore(MailMcpDbContext dbContext) : 
     public async Task SaveContentAsync(IMailSynchronizationUnitOfWorkSession session, RemoteMessageContent content, CancellationToken cancellationToken)
     {
         var id = content.OccurrenceId;
-        var bytes = content.RawMime as byte[] ?? [.. content.RawMime];
+        var bytes = content.RawMime.ToArray();
         var record = await dbContext.MessageContents.SingleOrDefaultAsync(x => x.AccountId == id.AccountId.Value && x.FolderName == id.FolderName.Value && x.UidValidity == id.UidValidity.Value && x.Uid == id.Uid.Value, cancellationToken);
         if (record is null)
         {
