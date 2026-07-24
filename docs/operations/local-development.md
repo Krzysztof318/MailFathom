@@ -14,11 +14,11 @@ dotnet format --verify-no-changes
 Run the web host directly:
 
 ```bash
-dotnet run --project src/MailMcp.Host/MailMcp.Host.csproj
+dotnet run --project src/Host/Host.csproj
 ```
 
 Run the Aspire orchestration host:
 
 ```bash
-dotnet run --project src/MailMcp.AppHost/MailMcp.AppHost.csproj
+dotnet run --project src/AppHost/AppHost.csproj
 ```

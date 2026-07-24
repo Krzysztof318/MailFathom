@@ -5,6 +5,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\MailMcp.Mcp\MailMcp.Mcp.csproj" />
+    <ProjectReference Include="..\..\src\Mcp\Mcp.csproj" />
   </ItemGroup>
 </Project>

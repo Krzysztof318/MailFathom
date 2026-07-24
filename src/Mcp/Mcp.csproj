@@ -4,7 +4,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\MailMcp.Application\MailMcp.Application.csproj" />
-    <ProjectReference Include="..\MailMcp.Domain\MailMcp.Domain.csproj" />
+    <ProjectReference Include="..\Application\Application.csproj" />
+    <ProjectReference Include="..\Domain\Domain.csproj" />
   </ItemGroup>
 </Project>

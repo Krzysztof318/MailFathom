@@ -2,7 +2,7 @@
 
 These instructions apply to the entire repository.
 
-The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`; project names, assembly names, and root namespaces use the `MailMcp.*` prefix.
+The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`; project directory and file names use short boundary names such as `Domain`, `Application`, and `Host`, while `Directory.Build.props` applies the `MailMcp.*` prefix to assembly names and root namespaces.
 
 ## Critical repository rules
 
@@ -149,11 +149,11 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Unit tests are part of every behavior change, feature, and bug fix. Write or update the failing test before production code when practical.
 - Use xUnit.net v3 on Microsoft Testing Platform v2 as the test framework and NSubstitute for test doubles.
 - Keep unit tests in separate projects under `tests/`, named after the production boundary they cover:
-  - `MailMcp.Domain.UnitTests`
-  - `MailMcp.Application.UnitTests`
-  - `MailMcp.Infrastructure.UnitTests`
-  - `MailMcp.AI.UnitTests`
-  - `MailMcp.Mcp.UnitTests`
+  - `Domain.UnitTests`
+  - `Application.UnitTests`
+  - `Infrastructure.UnitTests`
+  - `AI.UnitTests`
+  - `Mcp.UnitTests`
 - Follow Arrange, Act, Assert. Add explicit `// Arrange`, `// Act`, and `// Assert` comments in unit tests so test phases are visually consistent across the repository.
 - Name tests `Member_Scenario_ExpectedBehavior`. Use `[Fact]` for one scenario and `[Theory]` for the same behavior over multiple inputs.
 - Test observable behavior and domain invariants, not private implementation details. One test should describe one behavior even if several assertions are needed to prove it.

@@ -10,6 +10,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\MailMcp.Host\MailMcp.Host.csproj" />
+    <ProjectReference Include="..\Host\Host.csproj" />
   </ItemGroup>
 </Project>

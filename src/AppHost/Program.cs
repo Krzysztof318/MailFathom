@@ -5,7 +5,7 @@ var builder = DistributedApplication.CreateBuilder(args);
 var postgres = builder.AddPostgres("postgres");
 var database = postgres.AddDatabase("mailmcp");
 
-builder.AddProject<Projects.MailMcp_Host>("mailmcp-host")
+builder.AddProject<Projects.Host>("mailmcp-host")
     .WithReference(database)
     .WaitFor(database);
 
