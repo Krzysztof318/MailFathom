@@ -4,7 +4,7 @@
 
 **Goal:** Correct the merge-blocking resource, memory, asynchronous I/O, ownership-validation, and coverage-documentation issues in pull request 13 without removing its PostgreSQL persistence or hosted-worker scope.
 
-**Architecture:** Process one MIME payload at a time, commit content and metadata in one short local session, and commit the checkpoint only after the inspected window finishes. Keep MailKit setup and cleanup fully asynchronous, preserve primary failures, validate occurrence ownership, and retain only explicitly temporary provider-bound coverage exclusions.
+**Architecture:** Process one MIME payload at a time, commit metadata and content in one short local session, and commit the checkpoint only after the inspected window finishes. Align the pre-migration EF Core model with the architecture draft: local UUIDv7 stored-email identity, a PK/FK one-to-one MIME row with integrity metadata, and a separate folder checkpoint. Keep MailKit setup and cleanup fully asynchronous, preserve primary failures, validate occurrence ownership, and retain only explicitly temporary provider-bound coverage exclusions.
 
 **Tech Stack:** .NET 10, C# preview, MailKit 4.17.0, EF Core 10.0.10, Npgsql EF Core 10.0.3, xUnit.net v3, NSubstitute, Microsoft Testing Platform v2.
 
@@ -169,7 +169,50 @@ git grep -n -B1 -A1 "ExcludeFromCodeCoverage" -- src
 
 Expected: every temporary exclusion has a concrete future integration-suite justification and adjacent removal TODO.
 
-### Task 4: Update durable behavior documentation and verify
+### Task 4: Align the pre-migration persistence model
+
+**Files:**
+- Add: `src/Domain/Messages/StoredEmailId.cs`
+- Modify: `tests/Domain.UnitTests/MailIdentityTests.cs`
+- Modify: `tests/Application.UnitTests/MailboxSynchronizerTests.cs`
+- Modify: `src/Application/Synchronization/IMessageMetadataRepository.cs`
+- Modify: `src/Application/MessageContent/IMessageContentStore.cs`
+- Modify: `src/Application/Synchronization/MailboxSynchronizer.cs`
+- Rename and modify persistence entities and repositories under `src/Infrastructure/Persistence/`
+
+**Interfaces:**
+- Produces: `StoredEmailId` from metadata upsert
+- Consumes: `StoredEmailId` when persisting raw MIME
+- Maps: `mailbox_accounts`, `mail_folders`, `stored_emails`, `email_message_contents`, and `synchronization_checkpoints`
+
+- [ ] **Step 1: Write failing domain and application tests**
+
+Add domain tests for non-empty stored-email UUID identity. Update the application synchronization test to require the metadata upsert result to be passed to the content store.
+
+- [ ] **Step 2: Implement application identity flow**
+
+Add `StoredEmailId`, return it from `IMessageMetadataRepository.UpsertMetadataAsync`, and pass it to `IMessageContentStore.SaveContentAsync` after metadata is upserted in the same session.
+
+- [ ] **Step 3: Align EF Core entities and mappings**
+
+Use UUIDv7 for new stored-email rows. Model raw MIME as a required one-to-one PK/FK dependent with byte length, SHA-256, and storage time. Separate checkpoints from folder identity and add explicit account-folder, folder-email, folder-checkpoint, and email-content relationships. Do not add a migration before schema review.
+
+- [ ] **Step 4: Clear tracked state after each persistence session**
+
+Ensure session disposal clears the shared scoped context after transaction cleanup so raw MIME and tracked entities do not accumulate between short per-message sessions.
+
+- [ ] **Step 5: Verify domain and application tests**
+
+Run:
+
+```bash
+/home/krzysztof/.dotnet/dotnet test tests/Domain.UnitTests/Domain.UnitTests.csproj --no-restore
+/home/krzysztof/.dotnet/dotnet test tests/Application.UnitTests/Application.UnitTests.csproj --no-restore
+```
+
+Expected: all domain and application tests pass.
+
+### Task 5: Update durable behavior documentation and verify
 
 **Files:**
 - Modify: `docs/features/imap-synchronization.md`

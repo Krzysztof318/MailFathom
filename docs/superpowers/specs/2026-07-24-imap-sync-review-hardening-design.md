@@ -7,9 +7,23 @@ Keep the complete IMAP synchronization and PostgreSQL persistence scope of pull 
 ## Approved scope
 
 - Keep the PostgreSQL repositories, EF Core model, Unit of Work, hosted worker, and existing application ports.
+- Align the pre-migration EF Core model with the repository architecture draft instead of preserving the provisional table layout.
 - Keep temporary coverage exclusions for provider-bound persistence code that cannot be exercised by the current unit-test-only policy.
 - State on each temporary exclusion that PostgreSQL integration tests will cover the behavior later, and place a concrete TODO beside the exclusion so removal remains visible.
 - Do not add an integration-test project or a fake EF Core provider in this change.
+
+## Persistence model
+
+The pre-migration schema uses the architecture draft's core table names and ownership:
+
+- `mailbox_accounts` owns `mail_folders`;
+- `stored_emails` gives each remote occurrence a local UUIDv7 and enforces uniqueness on `(mail_folder_id, uid_validity, uid)`;
+- `email_message_contents` uses the stored-email UUID as both primary key and foreign key and records raw MIME, byte length, SHA-256, and storage time;
+- `synchronization_checkpoints` is separate from folder identity and uses the folder key as its primary key and foreign key.
+
+The application metadata port returns the stable local `StoredEmailId` from its idempotent upsert. The content port accepts that identifier, allowing metadata and raw MIME to share one transaction without exposing EF Core entities outside Infrastructure. The metadata write occurs before the content write so the required principal is present in the same unit of work.
+
+EF Core sessions clear tracked state when disposed. This is required because one scoped `DbContext` can create several short transactions during a synchronization run and must not retain raw MIME arrays or stale tracked entities between them.
 
 ## Synchronization transaction and memory model
 
@@ -35,7 +49,10 @@ Application unit tests prove that:
 
 - the next remote content fetch starts only after the previous message's persistence session has committed and been disposed;
 - the checkpoint session starts only after all accepted messages have committed;
+- the metadata upsert supplies the local stored-email identifier used for the raw MIME write;
 - retry-safe checkpoint ordering remains unchanged.
+
+Domain unit tests prove that `StoredEmailId` rejects an empty UUID and preserves valid UUIDv7 values.
 
 Infrastructure unit tests prove that:
 
