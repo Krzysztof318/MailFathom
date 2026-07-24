@@ -18,6 +18,7 @@ public sealed class StoredEmailMetadataRepository(
     public async Task<StoredEmailId> UpsertMetadataAsync(
         ISession session,
         RemoteMessageMetadata metadata,
+        StoredEmailContentAvailability contentAvailability,
         CancellationToken cancellationToken)
     {
         var occurrenceId = metadata.OccurrenceId;
@@ -51,6 +52,7 @@ public sealed class StoredEmailMetadataRepository(
                 Subject = metadata.Subject,
                 SentAt = metadata.SentAt,
                 SizeOctets = metadata.SizeOctets,
+                ContentAvailability = contentAvailability,
             };
             dbContext.StoredEmails.Add(entity);
         }
@@ -60,6 +62,7 @@ public sealed class StoredEmailMetadataRepository(
             entity.Subject = metadata.Subject;
             entity.SentAt = metadata.SentAt;
             entity.SizeOctets = metadata.SizeOctets;
+            entity.ContentAvailability = contentAvailability;
         }
 
         return StoredEmailId.Create(entity.Id);

@@ -55,6 +55,9 @@ public sealed class MailMcpDbContext : DbContext
             entity.HasKey(email => email.Id);
             entity.Property(email => email.Id).ValueGeneratedNever();
             entity.Property(email => email.InternetMessageId).HasMaxLength(998);
+
+            // Stored as text so the availability reason stays readable in ad-hoc audit queries and survives enum reordering.
+            entity.Property(email => email.ContentAvailability).HasConversion<string>().HasMaxLength(64).IsRequired();
             entity.HasIndex(email => new { email.MailFolderId, email.UidValidity, email.Uid }).IsUnique();
             entity.HasOne(email => email.MailFolder)
                 .WithMany(folder => folder.StoredEmails)

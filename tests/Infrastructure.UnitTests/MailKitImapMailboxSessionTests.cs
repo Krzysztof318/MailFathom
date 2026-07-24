@@ -3,6 +3,7 @@
 using MailKit;
 using MailKit.Search;
 using MailKit.Security;
+using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Messages;
@@ -221,6 +222,209 @@ public sealed class MailKitImapMailboxSessionTests
         // Assert
         Assert.Equal("occurrenceId", exception.ParamName);
         await folder.DidNotReceive().GetStreamAsync(Arg.Any<UniqueId>(), CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task OpenReadOnlyAsync_Always_SelectsFolderWithReadOnlyAccess()
+    {
+        // Arrange
+        await using var client = new FakeImapClient();
+        var folder = Substitute.For<IMailFolder>();
+        var settingsProvider = Substitute.For<IMailKitImapAccountSettingsProvider>();
+        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, UseSslOnConnect: true, "user", "password"));
+        client.Folder = folder;
+        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
+
+        // Act
+        await using var session = await factory.OpenReadOnlyAsync(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            CancellationToken.None);
+
+        // Assert
+        await folder.Received(1).OpenAsync(FolderAccess.ReadOnly, CancellationToken.None);
+        await folder.DidNotReceive().OpenAsync(FolderAccess.ReadWrite, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task FetchMessageContentWithoutSettingSeenAsync_ValidOccurrence_ReturnsContentWithoutRequestingAnySeenSettingOperation()
+    {
+        // Arrange
+        await using var client = new FakeImapClient();
+        var folder = Substitute.For<IMailFolder>();
+        var rawMime = "From: sender@example.test\r\nSubject: Subject\r\n\r\nBody"u8.ToArray();
+        folder.UidValidity.Returns(7U);
+        folder.GetStreamAsync(new UniqueId(10), CancellationToken.None).Returns(_ => new MemoryStream(rawMime));
+        await using var session = new MailKitImapMailboxSession(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            client,
+            folder);
+        var occurrenceId = MessageOccurrenceId.Create(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            ImapUidValidity.Create(7),
+            ImapUid.Create(10));
+
+        // Act
+        var content = await session.FetchMessageContentWithoutSettingSeenAsync(occurrenceId, 1024, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(occurrenceId, content.OccurrenceId);
+        Assert.Equal(rawMime, content.RawMime.ToArray());
+
+        // GetStreamAsync(uid) is MailKit's BODY.PEEK[] retrieval; StoreAsync is the only IMailFolder member able to change
+        // flags, and a read-write reselection would let the server set \Seen implicitly.
+        await folder.Received(1).GetStreamAsync(new UniqueId(10), CancellationToken.None);
+        await folder.DidNotReceive().StoreAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IStoreFlagsRequest>(), Arg.Any<CancellationToken>());
+        await folder.DidNotReceive().OpenAsync(FolderAccess.ReadWrite, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task FetchMessageContentWithoutSettingSeenAsync_ContentStreamExceedsLimit_ThrowsMessageContentTooLarge()
+    {
+        // Arrange
+        await using var client = new FakeImapClient();
+        var folder = Substitute.For<IMailFolder>();
+        folder.UidValidity.Returns(7U);
+        folder.GetStreamAsync(new UniqueId(10), CancellationToken.None).Returns(_ => new MemoryStream(new byte[2048]));
+        await using var session = new MailKitImapMailboxSession(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            client,
+            folder);
+        var occurrenceId = MessageOccurrenceId.Create(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            ImapUidValidity.Create(7),
+            ImapUid.Create(10));
+
+        // Act
+        var exception = await Assert.ThrowsAsync<MessageContentTooLargeException>(() => session.FetchMessageContentWithoutSettingSeenAsync(
+            occurrenceId,
+            1024,
+            CancellationToken.None));
+
+        // Assert
+        Assert.Equal(occurrenceId, exception.OccurrenceId);
+        Assert.Equal(1024, exception.MaxAllowedOctets);
+        await folder.DidNotReceive().StoreAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IStoreFlagsRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetMessageBatchAfterAsync_CheckpointAtHighestPossibleUid_StopsWithoutSearchingBeyondTheUidSpace()
+    {
+        // Arrange
+        await using var client = new FakeImapClient();
+        var folder = Substitute.For<IMailFolder>();
+        folder.UidValidity.Returns(7U);
+        folder.UidNext.Returns(new UniqueId(uint.MaxValue));
+        await using var session = new MailKitImapMailboxSession(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            client,
+            folder);
+        var exhaustedUid = ImapUid.Create(uint.MaxValue);
+
+        // Act
+        var batch = await session.GetMessageBatchAfterAsync(exhaustedUid, 100, CancellationToken.None);
+
+        // Assert
+        Assert.Empty(batch.Messages);
+        Assert.False(batch.HasMore);
+        Assert.Equal(exhaustedUid, batch.InspectedThroughUid);
+        await folder.DidNotReceive().SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetUidValidityAsync_OpenFolder_ReturnsSelectedFolderUidValidity()
+    {
+        // Arrange
+        await using var client = new FakeImapClient();
+        var folder = Substitute.For<IMailFolder>();
+        folder.UidValidity.Returns(7U);
+        await using var session = new MailKitImapMailboxSession(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            client,
+            folder);
+
+        // Act
+        var uidValidity = await session.GetUidValidityAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(ImapUidValidity.Create(7), uidValidity);
+    }
+
+    [Fact]
+    public async Task GetMessageBatchAfterAsync_SparseUidsExceedingBatchSize_BoundsBatchByMessageCountAndCheckpointsLastFetchedUid()
+    {
+        // Arrange
+        await using var client = new FakeImapClient();
+        var folder = Substitute.For<IMailFolder>();
+        folder.UidValidity.Returns(7U);
+        folder.UidNext.Returns(new UniqueId(1001));
+        folder.SearchAsync(Arg.Any<SearchQuery>(), CancellationToken.None).Returns([new UniqueId(100), new UniqueId(400), new UniqueId(900)]);
+        folder.FetchAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IFetchRequest>(),
+            CancellationToken.None).Returns(callInfo => CreateSummaries(callInfo.Arg<IList<UniqueId>>() ?? []));
+        await using var session = new MailKitImapMailboxSession(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            client,
+            folder);
+
+        // Act
+        var batch = await session.GetMessageBatchAfterAsync(null, 2, CancellationToken.None);
+
+        // Assert
+        Assert.Equal([100U, 400U], batch.Messages.Select(message => message.OccurrenceId.Uid.Value));
+        Assert.True(batch.HasMore);
+        Assert.Equal(400U, batch.InspectedThroughUid!.Value.Value);
+    }
+
+    [Fact]
+    public async Task GetMessageBatchAfterAsync_FewerMatchesThanBatchSize_CheckpointsThroughHighestAssignedUid()
+    {
+        // Arrange
+        await using var client = new FakeImapClient();
+        var folder = Substitute.For<IMailFolder>();
+        folder.UidValidity.Returns(7U);
+        folder.UidNext.Returns(new UniqueId(1001));
+        folder.SearchAsync(Arg.Any<SearchQuery>(), CancellationToken.None).Returns([new UniqueId(900)]);
+        folder.FetchAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IFetchRequest>(),
+            CancellationToken.None).Returns(callInfo => CreateSummaries(callInfo.Arg<IList<UniqueId>>() ?? []));
+        await using var session = new MailKitImapMailboxSession(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            client,
+            folder);
+
+        // Act
+        var batch = await session.GetMessageBatchAfterAsync(ImapUid.Create(400), 2, CancellationToken.None);
+
+        // Assert
+        Assert.Equal([900U], batch.Messages.Select(message => message.OccurrenceId.Uid.Value));
+        Assert.False(batch.HasMore);
+        Assert.Equal(1000U, batch.InspectedThroughUid!.Value.Value);
+    }
+
+    private static List<IMessageSummary> CreateSummaries(IList<UniqueId> uids)
+    {
+        var summaries = new List<IMessageSummary>(uids.Count);
+        foreach (var uid in uids)
+        {
+            var summary = Substitute.For<IMessageSummary>();
+            summary.UniqueId.Returns(uid);
+            summary.Envelope.Returns(new Envelope { Subject = $"Subject {uid.Id}" });
+            summary.Size.Returns(128U);
+            summaries.Add(summary);
+        }
+
+        return summaries;
     }
 
     private sealed class FakeImapClient : IMailKitImapClient

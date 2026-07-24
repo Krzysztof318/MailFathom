@@ -30,29 +30,41 @@ public sealed class MessageContentStore(MailMcpDbContext dbContext, TimeProvider
         EnsureOccurrenceMatches(storedEmail, content);
 
         var bytes = GetCompleteArray(content.RawMime);
+        var byteLength = bytes.LongLength;
         var hash = SHA256.HashData(content.RawMime.Span);
-        var entity = dbContext.EmailMessageContents.Local.SingleOrDefault(candidate => candidate.StoredEmailId == storedEmailId.Value)
-            ?? await dbContext.EmailMessageContents.SingleOrDefaultAsync(
-                candidate => candidate.StoredEmailId == storedEmailId.Value,
+        var storedAt = timeProvider.GetUtcNow();
+        var trackedEntity = dbContext.EmailMessageContents.Local.SingleOrDefault(candidate => candidate.StoredEmailId == storedEmailId.Value);
+        if (trackedEntity is not null)
+        {
+            trackedEntity.RawMime = bytes;
+            trackedEntity.MimeByteLength = byteLength;
+            trackedEntity.Sha256Hash = hash;
+            trackedEntity.StoredAt = storedAt;
+            return;
+        }
+
+        // Re-synchronizing an occurrence that is already stored must not read its existing bytea payload back into memory or
+        // into the change tracker, so the overwrite is issued as a set-based update inside the caller's open transaction.
+        var updatedRowCount = await dbContext.EmailMessageContents
+            .Where(candidate => candidate.StoredEmailId == storedEmailId.Value)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(candidate => candidate.RawMime, bytes)
+                    .SetProperty(candidate => candidate.MimeByteLength, byteLength)
+                    .SetProperty(candidate => candidate.Sha256Hash, hash)
+                    .SetProperty(candidate => candidate.StoredAt, storedAt),
                 cancellationToken);
-        if (entity is null)
+        if (updatedRowCount == 0)
         {
             dbContext.EmailMessageContents.Add(new EmailMessageContentEntity
             {
                 StoredEmailId = storedEmailId.Value,
                 StoredEmail = storedEmail,
                 RawMime = bytes,
-                MimeByteLength = bytes.LongLength,
+                MimeByteLength = byteLength,
                 Sha256Hash = hash,
-                StoredAt = timeProvider.GetUtcNow(),
+                StoredAt = storedAt,
             });
-        }
-        else
-        {
-            entity.RawMime = bytes;
-            entity.MimeByteLength = bytes.LongLength;
-            entity.Sha256Hash = hash;
-            entity.StoredAt = timeProvider.GetUtcNow();
         }
     }
 

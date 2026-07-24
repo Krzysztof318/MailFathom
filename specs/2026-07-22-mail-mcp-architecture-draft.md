@@ -36,7 +36,7 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 
 ## 2.1 Implementation status
 
-The first implemented vertical slice covers periodic read-only IMAP reconciliation, bounded IMAP metadata batches, bounded UID windows per run, raw MIME size limits, per-folder worker failure isolation, domain identities for `(account, folder, UIDVALIDITY, UID)`, application-owned synchronization and persistence ports, EF Core PostgreSQL mappings for metadata/content/checkpoints, and a disabled-by-default background worker. The following draft capabilities remain pending: deployment-specific secret binding, reviewed migrations, IMAP IDLE, IMAP NOTIFY, MCP read tools, RAG indexing, SMTP outbox processing, integration tests including ADR 001 PostgreSQL mapping/constraint verification, and production migration operations.
+The first implemented vertical slice covers periodic read-only IMAP reconciliation, message-count-bounded IMAP metadata batches, a bounded number of batches per run, raw MIME size limits, per-folder worker failure isolation, domain identities for `(account, folder, UIDVALIDITY, UID)`, application-owned synchronization and persistence ports, EF Core PostgreSQL mappings for metadata/content/checkpoints, and a disabled-by-default background worker. The following draft capabilities remain pending: deployment-specific secret binding, reviewed migrations, IMAP IDLE, IMAP NOTIFY, MCP read tools, RAG indexing, SMTP outbox processing, integration tests including ADR 001 PostgreSQL mapping/constraint verification, and production migration operations.
 
 ## 3. Scope
 

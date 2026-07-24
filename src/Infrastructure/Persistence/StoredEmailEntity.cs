@@ -1,6 +1,8 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using System.Diagnostics.CodeAnalysis;
+using MailMcp.Domain.Messages;
+
 namespace MailMcp.Infrastructure.Persistence;
 
 // TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
@@ -24,6 +26,8 @@ internal sealed class StoredEmailEntity
     public DateTimeOffset? SentAt { get; set; }
 
     public long SizeOctets { get; set; }
+
+    public StoredEmailContentAvailability ContentAvailability { get; set; }
 
     public EmailMessageContentEntity? Content { get; set; }
 }

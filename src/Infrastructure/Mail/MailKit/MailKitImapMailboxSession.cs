@@ -168,15 +168,24 @@ internal sealed class MailKitImapMailboxSession(
             return new RemoteMessageMetadataBatch([], lastSeenUid, HasMore: false);
         }
 
-        var requestedMaxValue = (ulong)minValue + (uint)maxMessageCount - 1UL;
-        var maxValue = requestedMaxValue > highestAssignedUid.Value ? highestAssignedUid.Value : (uint)requestedMaxValue;
-        var minUid = new UniqueId(minValue);
-        var maxUid = new UniqueId(maxValue);
-        var matchingUids = await folder.SearchAsync(SearchQuery.Uids(new UniqueIdRange(minUid, maxUid)), cancellationToken);
-        var boundedUids = matchingUids.Take(maxMessageCount).ToArray();
-        var summaries = boundedUids.Length == 0
+        // UID SEARCH returns identifiers only, so scanning the whole remaining assigned range stays cheap and lets the batch
+        // be bounded by message count rather than by UID-space width. Bounding by UID-space width would advance a sparse
+        // folder by at most maxMessageCount UIDs per batch and make an initial backfill take an impractical number of runs.
+        var searchRange = new UniqueIdRange(new UniqueId(minValue), new UniqueId(highestAssignedUid.Value));
+        var matchingUids = await folder.SearchAsync(SearchQuery.Uids(searchRange), cancellationToken);
+        var assignedUids = matchingUids
+            .Where(candidate => candidate.Id >= minValue && candidate.Id <= highestAssignedUid.Value)
+            .OrderBy(candidate => candidate.Id)
+            .ToArray();
+        var batchedUids = assignedUids.Take(maxMessageCount).ToArray();
+        var hasMore = assignedUids.Length > batchedUids.Length;
+
+        // Everything the search covered has been inspected, so an exhausted range checkpoints to the highest assigned UID
+        // even when it matched nothing. A truncated batch may only checkpoint through the last UID actually fetched.
+        var inspectedThroughUid = hasMore ? batchedUids[^1].Id : highestAssignedUid.Value;
+        var summaries = batchedUids.Length == 0
             ? []
-            : await folder.FetchAsync(boundedUids, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size, cancellationToken);
+            : await folder.FetchAsync(batchedUids, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size, cancellationToken);
         var uidValidity = ImapUidValidity.Create(folder.UidValidity);
         var messages = summaries.Select(summary => new RemoteMessageMetadata(
             MessageOccurrenceId.Create(accountId, folderName, uidValidity, ImapUid.Create(summary.UniqueId.Id)),
@@ -184,7 +193,7 @@ internal sealed class MailKitImapMailboxSession(
             summary.Envelope?.Subject,
             summary.Envelope?.Date?.ToUniversalTime(),
             summary.Size ?? 0)).ToArray();
-        return new RemoteMessageMetadataBatch(messages, ImapUid.Create(maxValue), maxValue < highestAssignedUid.Value);
+        return new RemoteMessageMetadataBatch(messages, ImapUid.Create(inspectedThroughUid), hasMore);
     }
 
     public async Task<RemoteMessageContent> FetchMessageContentWithoutSettingSeenAsync(
@@ -200,7 +209,9 @@ internal sealed class MailKitImapMailboxSession(
             throw new ArgumentException("The message occurrence does not belong to the open mailbox session.", nameof(occurrenceId));
         }
 
-        // The folder is selected read-only and MailKit's GetStreamAsync issues a content retrieval for the selected UID without requesting flag mutation.
+        // The folder is selected read-only and MailKit's GetStreamAsync(uid) issues "UID FETCH <uid> (BODY.PEEK[])", so neither
+        // the selection mode nor the fetch item is capable of setting the remote \Seen flag. Changing this call to any
+        // non-PEEK retrieval or to a StoreAsync-based flag update would break the read-only synchronization invariant.
         await using var stream = await folder.GetStreamAsync(new UniqueId(occurrenceId.Uid.Value), cancellationToken);
         using var memory = new MemoryStream();
         await CopyToMemoryWithLimitAsync(occurrenceId, stream, memory, maxRawMimeBytes, cancellationToken);

@@ -17,7 +17,7 @@ public sealed class MailSynchronizationOptions : IValidatableObject, IMailKitIma
     [Range(typeof(TimeSpan), "00:00:10", "1.00:00:00")]
     public TimeSpan Interval { get; set; } = TimeSpan.FromMinutes(5);
 
-    /// <summary>Gets or sets the maximum metadata records requested from one IMAP batch.</summary>
+    /// <summary>Gets or sets the maximum number of messages requested from one IMAP metadata batch.</summary>
     [Range(1, 1000)]
     public int MaxMetadataBatchSize { get; set; } = 100;
 
@@ -25,9 +25,9 @@ public sealed class MailSynchronizationOptions : IValidatableObject, IMailKitIma
     [Range(1024, 104857600)]
     public long MaxRawMimeBytes { get; set; } = 25L * 1024L * 1024L;
 
-    /// <summary>Gets or sets the maximum bounded UID windows inspected by one synchronization run.</summary>
+    /// <summary>Gets or sets the maximum number of bounded metadata batches processed by one synchronization run.</summary>
     [Range(1, 1000)]
-    public int MaxUidWindowsPerRun { get; set; } = 10;
+    public int MaxMetadataBatchesPerRun { get; set; } = 10;
 
     /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];

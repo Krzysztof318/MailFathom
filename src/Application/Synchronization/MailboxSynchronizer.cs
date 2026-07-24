@@ -3,6 +3,7 @@
 using MailMcp.Application.MessageContent;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
+using MailMcp.Domain.Messages;
 using MailMcp.Domain.Synchronization;
 
 namespace MailMcp.Application.Synchronization;
@@ -50,33 +51,40 @@ public sealed class MailboxSynchronizer
         var storedCount = 0;
         var skippedOversizedCount = 0;
         var hasMore = true;
-        var inspectedWindowCount = 0;
+        var inspectedBatchCount = 0;
 
-        while (hasMore && inspectedWindowCount < this.options.MaxUidWindowsPerRun)
+        while (hasMore && inspectedBatchCount < this.options.MaxMetadataBatchesPerRun)
         {
-            inspectedWindowCount++;
+            inspectedBatchCount++;
             var batch = await session.GetMessageBatchAfterAsync(checkpoint.LastSeenUid, this.options.MaxMetadataBatchSize, cancellationToken);
             foreach (var metadata in batch.Messages.OrderBy(message => message.OccurrenceId.Uid.Value))
             {
                 if (metadata.SizeOctets > this.options.MaxRawMimeBytes)
                 {
+                    await this.RecordOversizedOccurrenceAsync(metadata, cancellationToken);
                     skippedOversizedCount++;
                     continue;
                 }
 
+                RemoteMessageContent content;
                 try
                 {
-                    var content = await session.FetchMessageContentWithoutSettingSeenAsync(metadata.OccurrenceId, this.options.MaxRawMimeBytes, cancellationToken);
-                    await using var messagePersistenceSession = await this.sessionScopeFactory.BeginSessionAsync(cancellationToken);
-                    var storedEmailId = await this.metadataRepository.UpsertMetadataAsync(messagePersistenceSession, metadata, cancellationToken);
-                    await this.contentStore.SaveContentAsync(messagePersistenceSession, storedEmailId, content, cancellationToken);
-                    await messagePersistenceSession.CommitAsync(cancellationToken);
-                    storedCount++;
+                    content = await session.FetchMessageContentWithoutSettingSeenAsync(metadata.OccurrenceId, this.options.MaxRawMimeBytes, cancellationToken);
                 }
                 catch (MessageContentTooLargeException)
                 {
+                    // The advertised size understated the payload, so the occurrence is recorded without content instead of
+                    // being silently skipped past by the checkpoint.
+                    await this.RecordOversizedOccurrenceAsync(metadata, cancellationToken);
                     skippedOversizedCount++;
+                    continue;
                 }
+
+                await using var messagePersistenceSession = await this.sessionScopeFactory.BeginSessionAsync(cancellationToken);
+                var storedEmailId = await this.metadataRepository.UpsertMetadataAsync(messagePersistenceSession, metadata, StoredEmailContentAvailability.Available, cancellationToken);
+                await this.contentStore.SaveContentAsync(messagePersistenceSession, storedEmailId, content, cancellationToken);
+                await messagePersistenceSession.CommitAsync(cancellationToken);
+                storedCount++;
             }
 
             if (batch.InspectedThroughUid is { } inspectedThroughUid)
@@ -91,6 +99,15 @@ public sealed class MailboxSynchronizer
         }
 
         return new MailboxSynchronizationResult(storedCount, skippedOversizedCount, hasMore, checkpoint);
+    }
+
+    private async Task RecordOversizedOccurrenceAsync(
+        RemoteMessageMetadata metadata,
+        CancellationToken cancellationToken)
+    {
+        await using var persistenceSession = await this.sessionScopeFactory.BeginSessionAsync(cancellationToken);
+        await this.metadataRepository.UpsertMetadataAsync(persistenceSession, metadata, StoredEmailContentAvailability.ExceededSizeLimit, cancellationToken);
+        await persistenceSession.CommitAsync(cancellationToken);
     }
 }
 
