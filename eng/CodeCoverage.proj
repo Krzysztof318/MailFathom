@@ -6,6 +6,8 @@
     <CoverageReportDirectory>$(CoverageArtifactsDirectory)/report</CoverageReportDirectory>
     <MergedCoverageReport Condition="'$(MergedCoverageReport)' == ''">$(CoverageReportDirectory)/Cobertura.xml</MergedCoverageReport>
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <MinimumLineCoveragePercent>85</MinimumLineCoveragePercent>
+    <MinimumLineCoverageRate>$([MSBuild]::Divide($(MinimumLineCoveragePercent), 100.0))</MinimumLineCoverageRate>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,15 +22,15 @@
            Text="No unit-test projects were found under $(RepositoryRoot)tests." />
 
     <Exec Command="dotnet test --project &quot;%(UnitTestProject.Identity)&quot; --configuration $(Configuration) --no-build --results-directory &quot;$(RawCoverageDirectory)&quot; -- --report-xunit-trx --coverlet --coverlet-file-prefix &quot;%(UnitTestProject.Filename)&quot;" />
-    <CallTarget Targets="GenerateAndValidateReport" />
+    <CallTarget Targets="GenerateAndEnforceReport" />
   </Target>
 
-  <Target Name="GenerateAndValidateReport">
+  <Target Name="GenerateAndEnforceReport">
     <Exec Command="dotnet tool run reportgenerator &quot;-reports:$(RawCoverageDirectory)/**/*.cobertura.*.xml&quot; &quot;-targetdir:$(CoverageReportDirectory)&quot; &quot;-reporttypes:Cobertura;HtmlInline&quot; &quot;-assemblyfilters:+MailMcp.*;-MailMcp.Host;-MailMcp.AppHost;-MailMcp.*.UnitTests&quot;" />
-    <CallTarget Targets="ValidateReport" />
+    <CallTarget Targets="Enforce" />
   </Target>
 
-  <Target Name="ValidateReport">
+  <Target Name="Enforce">
     <Error Condition="!Exists('$(MergedCoverageReport)')"
            Text="Merged coverage report was not found at $(MergedCoverageReport)." />
 
@@ -53,7 +55,10 @@
              Importance="high"
              Condition="$(ValidLineCount) == 0" />
 
-    <Message Text="Aggregate line coverage: $(ActualLineCoveragePercent)% ($(CoveredLineCount)/$(ValidLineCount))."
+    <Message Text="Aggregate line coverage: $(ActualLineCoveragePercent)% ($(CoveredLineCount)/$(ValidLineCount)); required: $(MinimumLineCoveragePercent)%."
              Importance="high" />
+
+    <Error Condition="$(ActualLineCoverageRate) &lt; $(MinimumLineCoverageRate)"
+           Text="Aggregate line coverage $(ActualLineCoveragePercent)% is below the required $(MinimumLineCoveragePercent)%." />
   </Target>
 </Project>
