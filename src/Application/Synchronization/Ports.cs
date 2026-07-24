@@ -1,0 +1,46 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+
+using MailMcp.Application.MessageContent;
+using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Folders;
+using MailMcp.Domain.Messages;
+using MailMcp.Domain.Synchronization;
+
+namespace MailMcp.Application.Synchronization;
+
+/// <summary>Persists synchronization checkpoints for mailbox folders.</summary>
+public interface ISynchronizationCheckpointStore
+{
+    /// <summary>Gets the last durable checkpoint for a folder.</summary>
+    Task<SynchronizationCheckpoint?> GetCheckpointAsync(MailAccountId accountId, MailFolderName folderName, CancellationToken cancellationToken);
+
+    /// <summary>Saves the durable checkpoint for a folder.</summary>
+    Task SaveCheckpointAsync(MailAccountId accountId, MailFolderName folderName, SynchronizationCheckpoint checkpoint, CancellationToken cancellationToken);
+}
+
+/// <summary>Persists message metadata independently from raw MIME content.</summary>
+public interface IMessageMetadataRepository
+{
+    /// <summary>Inserts or updates metadata for one remote occurrence idempotently.</summary>
+    Task UpsertMetadataAsync(RemoteMessageMetadata metadata, CancellationToken cancellationToken);
+}
+
+/// <summary>Creates IMAP sessions exposed only through application-owned mail operations.</summary>
+public interface IImapMailboxSessionFactory
+{
+    /// <summary>Opens a folder read-only so synchronization cannot mutate remote mailbox state.</summary>
+    Task<IImapMailboxSession> OpenReadOnlyAsync(MailAccountId accountId, MailFolderName folderName, CancellationToken cancellationToken);
+}
+
+/// <summary>Represents a read-only IMAP folder session.</summary>
+public interface IImapMailboxSession : IAsyncDisposable
+{
+    /// <summary>Gets the selected folder UIDVALIDITY value.</summary>
+    Task<ImapUidValidity> GetUidValidityAsync(CancellationToken cancellationToken);
+
+    /// <summary>Gets remote message metadata after the supplied checkpoint UID.</summary>
+    Task<IReadOnlyList<RemoteMessageMetadata>> GetMessagesAfterAsync(ImapUid? lastSeenUid, CancellationToken cancellationToken);
+
+    /// <summary>Fetches raw MIME content with a BODY.PEEK-style operation that preserves the remote Seen flag.</summary>
+    Task<RemoteMessageContent> FetchMessageContentWithoutSettingSeenAsync(MessageOccurrenceId occurrenceId, CancellationToken cancellationToken);
+}
