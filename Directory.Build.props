@@ -52,6 +52,7 @@
     <IsTestProject>true</IsTestProject>
     <OutputType>Exe</OutputType>
     <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- Test names use underscores to encode the member, scenario, and expected behavior. -->
     <NoWarn>$(NoWarn);CS1591;CA1707</NoWarn>
     <!-- Empty scaffold test projects are allowed until the first behavior slice adds real unit tests. -->

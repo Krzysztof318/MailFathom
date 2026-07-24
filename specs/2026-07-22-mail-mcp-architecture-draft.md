@@ -34,6 +34,10 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 - Integration tests are planned for a later phase but are not created in the initial solution.
 - The solution is named `MailMcp`, uses `MailMcp.slnx`, uses short project directory and file names, and applies the `MailMcp.*` prefix consistently to assemblies and root namespaces.
 
+## 2.1 Implementation status
+
+The first implemented vertical slice covers periodic read-only IMAP reconciliation, message-count-bounded IMAP metadata batches, a bounded number of batches per run, raw MIME size limits, per-folder worker failure isolation, domain identities for `(account, folder, UIDVALIDITY, UID)`, application-owned synchronization and persistence ports, EF Core PostgreSQL mappings for metadata/content/checkpoints, and a disabled-by-default background worker. The following draft capabilities remain pending: deployment-specific secret binding, reviewed migrations, IMAP IDLE, IMAP NOTIFY, MCP read tools, RAG indexing, SMTP outbox processing, integration tests including ADR 001 PostgreSQL mapping/constraint verification, and production migration operations.
+
 ## 3. Scope
 
 ### 3.1 Included
@@ -164,7 +168,7 @@ mail-mcp/
 │   │   ├── MessageContent/
 │   │   └── Abstractions/
 │   ├── Infrastructure/
-│   │   ├── Persistence/PostgreSql/
+│   │   ├── Persistence/
 │   │   │   ├── Configurations/
 │   │   │   └── Migrations/
 │   │   ├── Mail/MailKit/
@@ -392,6 +396,7 @@ This is a system invariant, not an option.
 1. Connect, negotiate TLS, and authenticate.
 2. Discover configured folders and capabilities.
 3. Record `UIDVALIDITY`, `UIDNEXT`, and `HIGHESTMODSEQ` when available.
+4. Support a future custom folder mapping layer that lets users work with stable friendly names such as `Inbox` or `Skrzynka odbiorcza` while the adapter maps those names to provider/server folder identifiers such as `server_inbox334`. This mapping belongs at the configuration/application boundary and must preserve auditability: logs and UI may show the friendly name, while synchronization stores the resolved remote folder identity needed for IMAP safety. This is a specification requirement only in the current slice; do not implement runtime mapping until the folder-configuration design is reviewed.
 4. Enumerate UIDs in bounded batches.
 5. Fetch metadata and raw MIME using read-only PEEK operations.
 6. Store raw MIME, metadata, and checkpoint transactionally in PostgreSQL.
