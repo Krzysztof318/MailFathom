@@ -15,8 +15,20 @@ public sealed class MailSynchronizationOptions : IValidatableObject, IMailKitIma
     [Range(typeof(TimeSpan), "00:00:10", "1.00:00:00")]
     public TimeSpan Interval { get; set; } = TimeSpan.FromMinutes(5);
 
-    /// <summary>Gets configured accounts and folders to synchronize.</summary>
-    public List<MailSynchronizationAccountOptions> Accounts { get; } = [];
+    /// <summary>Gets or sets the maximum metadata records requested from one IMAP batch.</summary>
+    [Range(1, 1000)]
+    public int MaxMetadataBatchSize { get; set; } = 100;
+
+    /// <summary>Gets or sets the maximum raw MIME content accepted for local storage.</summary>
+    [Range(1024, 104857600)]
+    public long MaxRawMimeBytes { get; set; } = 25L * 1024L * 1024L;
+
+    /// <summary>Gets or sets the maximum bounded UID windows inspected by one synchronization run.</summary>
+    [Range(1, 1000)]
+    public int MaxUidWindowsPerRun { get; set; } = 10;
+
+    /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
+    public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
 
     /// <inheritdoc />
     public MailKitImapAccountSettings GetSettings(string accountId)
@@ -69,14 +81,17 @@ public sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <summary>Gets or sets the IMAP password or app password. Store secret values outside ordinary configuration files.</summary>
     public string Password { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets configured folder names.</summary>
-    public List<string> Folders { get; } = ["INBOX"];
+    /// <summary>Gets or sets configured folder names. When omitted, the worker synchronizes INBOX only.</summary>
+    public List<string> Folders { get; set; } = [];
+
+    /// <summary>Gets the configured folders or the post-binding default folder.</summary>
+    public IReadOnlyList<string> EffectiveFolders => Folders.Count == 0 ? ["INBOX"] : Folders;
 
     internal IEnumerable<ValidationResult> ValidateForSynchronization(bool synchronizationEnabled)
     {
-        if (Folders.Count == 0 || Folders.Any(string.IsNullOrWhiteSpace))
+        if (Folders.Any(string.IsNullOrWhiteSpace))
         {
-            yield return new ValidationResult("Each synchronization account must define at least one non-empty folder.", [nameof(Folders)]);
+            yield return new ValidationResult("Configured folder names must be non-empty.", [nameof(Folders)]);
         }
 
         if (synchronizationEnabled)

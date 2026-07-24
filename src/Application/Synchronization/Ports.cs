@@ -38,9 +38,9 @@ public interface IImapMailboxSession : IAsyncDisposable
     /// <summary>Gets the selected folder UIDVALIDITY value.</summary>
     Task<ImapUidValidity> GetUidValidityAsync(CancellationToken cancellationToken);
 
-    /// <summary>Gets remote message metadata after the supplied checkpoint UID.</summary>
-    Task<IReadOnlyList<RemoteMessageMetadata>> GetMessagesAfterAsync(ImapUid? lastSeenUid, CancellationToken cancellationToken);
+    /// <summary>Gets a bounded remote message metadata page after the supplied checkpoint UID.</summary>
+    Task<RemoteMessageMetadataBatch> GetMessageBatchAfterAsync(ImapUid? lastSeenUid, int maxMessageCount, CancellationToken cancellationToken);
 
     /// <summary>Fetches raw MIME content with a BODY.PEEK-style operation that preserves the remote Seen flag.</summary>
-    Task<RemoteMessageContent> FetchMessageContentWithoutSettingSeenAsync(MessageOccurrenceId occurrenceId, CancellationToken cancellationToken);
+    Task<RemoteMessageContent> FetchMessageContentWithoutSettingSeenAsync(MessageOccurrenceId occurrenceId, long maxRawMimeBytes, CancellationToken cancellationToken);
 }

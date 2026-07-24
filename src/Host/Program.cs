@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailMcp.Application.Synchronization;
 using MailMcp.Host.Configuration;
 using MailMcp.Infrastructure;
 using MailMcp.Infrastructure.Mail.MailKit;
@@ -15,6 +16,16 @@ builder.Services.AddOptions<MailMcp.Host.Configuration.MailSynchronizationOption
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddScoped<IMailKitImapAccountSettingsProvider>(provider => provider.GetRequiredService<IOptions<MailSynchronizationOptions>>().Value);
+builder.Services.AddScoped(provider =>
+{
+    var synchronizationOptions = provider.GetRequiredService<IOptions<MailSynchronizationOptions>>().Value;
+    return new MailboxSynchronizationOptions
+    {
+        MaxMetadataBatchSize = synchronizationOptions.MaxMetadataBatchSize,
+        MaxRawMimeBytes = synchronizationOptions.MaxRawMimeBytes,
+        MaxUidWindowsPerRun = synchronizationOptions.MaxUidWindowsPerRun,
+    };
+});
 builder.Services.AddMailMcpInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<MailMcp.Host.Hosting.MailSynchronizationWorker>();
 
