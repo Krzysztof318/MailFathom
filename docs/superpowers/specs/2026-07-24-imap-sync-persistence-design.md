@@ -6,7 +6,7 @@ Implement the first vertical slice for read-only IMAP synchronization with local
 
 ## Approved scope
 
-This slice implements periodic reconciliation only. It records account, folder, remote occurrence identity, metadata, raw MIME content, and synchronization checkpoints. It does not implement IMAP IDLE, NOTIFY, SMTP outbox, RAG indexing, MCP tools, integration tests, or production startup migrations.
+This slice implements periodic reconciliation only. It records account, folder, remote occurrence identity, metadata, raw MIME content, and synchronization checkpoints while bounding metadata batches and raw MIME size. It does not implement IMAP IDLE, NOTIFY, SMTP outbox, RAG indexing, MCP tools, integration tests, or production startup migrations.
 
 ## Architecture
 
@@ -14,7 +14,7 @@ This slice implements periodic reconciliation only. It records account, folder, 
 
 ## Data flow
 
-The hosted worker wakes on a configured interval, creates a scope per run, resolves the application synchronizer, and runs one account/folder synchronization operation at a time. The synchronizer opens an IMAP folder read-only through the application-owned session port, asks for messages after the stored checkpoint, persists metadata and raw MIME idempotently, then advances the checkpoint only after storage succeeds.
+The hosted worker wakes on a configured interval, creates a scope per account/folder work unit, resolves the application synchronizer, isolates failures per work unit, and runs one account/folder synchronization operation at a time. The synchronizer opens an IMAP folder read-only through the application-owned session port, asks for messages after the stored checkpoint, persists metadata and raw MIME idempotently, then advances the checkpoint only after storage succeeds.
 
 ## Safety and privacy
 
@@ -22,4 +22,4 @@ All content-fetch APIs are named around preserving the remote `\\Seen` flag, and
 
 ## Testing
 
-Unit tests cover domain invariants, application idempotency/checkpoint behavior, use of seen-preserving IMAP fetches, option validation, and EF model uniqueness/index shape without connecting to a real database. Real IMAP/PostgreSQL integration remains out of scope for this slice.
+Unit tests cover domain invariants, application idempotency/checkpoint behavior, bounded batches, oversized-message skipping, and use of seen-preserving IMAP fetches. ADR 001 leaves EF mapping/constraint verification to future PostgreSQL integration tests. Real IMAP/PostgreSQL integration remains out of scope for this slice.
