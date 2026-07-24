@@ -34,6 +34,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Keep a discoverable documentation structure such as `docs/architecture/`, `docs/features/`, `docs/operations/`, and `docs/decisions/`. Add an index when more than a few pages exist.
 - Create or modify ADRs under `docs/decisions/` only with explicit owner approval for that ADR work.
 - Update examples, configuration snippets, command names, and diagrams whenever the corresponding code changes. Stale documentation is a defect.
+- Treat `AGENTS.md` files like durable repository guidance: verify whether they need updates when workflows, structure, tooling, or documentation rules change.
 - Do not create documentation that merely repeats type names or folder structure. Explain purpose, contracts, invariants, data flow, operational impact, and the reason behind important decisions.
 
 ## Architecture

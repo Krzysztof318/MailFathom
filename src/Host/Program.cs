@@ -2,14 +2,14 @@
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.AddServiceDefaults();
 builder.Services.AddProblemDetails();
-builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
 app.UseExceptionHandler();
 
-app.MapHealthChecks("/health");
+app.MapDefaultEndpoints();
 app.MapGet("/", () => Results.Ok(new { service = "MailMcp", status = "ready" }));
 
 await app.RunAsync();

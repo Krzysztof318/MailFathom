@@ -159,8 +159,8 @@ mail-mcp/
 │   │   ├── Chunking/
 │   │   ├── Embeddings/
 │   │   ├── Retrieval/
-│   │   ├── AgentFramework/
-│   │   └── SemanticKernel/
+│   │   ├── Orchestration/
+│   │   └── ProviderAdapters/
 │   ├── Mcp/
 │   │   ├── Tools/
 │   │   ├── Authentication/
@@ -441,7 +441,7 @@ Retrieved email is untrusted input. The context formatter clearly separates mail
 
 ### 12.5 Semantic Kernel fallback
 
-Semantic Kernel is not referenced by domain, application, MCP, or persistence projects. If a required connector, embedding implementation, or orchestration capability is absent from Agent Framework, it is added inside `AI/SemanticKernel` behind an existing application interface. MAF remains the public orchestration boundary.
+Semantic Kernel is not referenced by domain, application, MCP, or persistence projects. If a required connector, embedding implementation, or orchestration capability is absent from Agent Framework, it is added inside `AI/ProviderAdapters` behind an existing application interface. MAF remains the public orchestration boundary.
 
 ## 13. MCP tools
 
