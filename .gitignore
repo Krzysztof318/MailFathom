@@ -2,6 +2,7 @@
 [Oo]bj/
 .vs/
 .idea/
+.worktrees/
 *.user
 *.suo
 TestResults/
