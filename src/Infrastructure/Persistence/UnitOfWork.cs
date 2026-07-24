@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.ExceptionServices;
 using MailMcp.Application.Synchronization;
 using Microsoft.EntityFrameworkCore.Storage;
 
@@ -30,14 +31,40 @@ public sealed class UnitOfWork(MailMcpDbContext dbContext) : ISessionFactory
             this.completed = true;
         }
 
+        [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Transaction rollback and disposal must both be attempted while the first cleanup failure remains observable.")]
         public async ValueTask DisposeAsync()
         {
-            if (!this.completed)
+            Exception? firstCleanupException = null;
+            try
             {
-                await transaction.RollbackAsync();
+                if (!this.completed)
+                {
+                    await transaction.RollbackAsync();
+                }
+            }
+            catch (Exception exception)
+            {
+                firstCleanupException = exception;
             }
 
-            await transaction.DisposeAsync();
+            try
+            {
+                await transaction.DisposeAsync();
+            }
+            catch (Exception exception)
+            {
+                firstCleanupException ??= exception;
+            }
+            finally
+            {
+                dbContext.ChangeTracker.Clear();
+                this.completed = true;
+            }
+
+            if (firstCleanupException is not null)
+            {
+                ExceptionDispatchInfo.Capture(firstCleanupException).Throw();
+            }
         }
     }
 }

@@ -87,7 +87,7 @@ internal sealed class MailKitImapMailboxSessionFactory(
         var client = clientFactory();
         try
         {
-            var socketOptions = settings.UseTls ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
+            var socketOptions = settings.UseSslOnConnect ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
             await client.ConnectAsync(settings.Host, settings.Port, socketOptions, cancellationToken);
             await client.AuthenticateAsync(settings.UserName, settings.Password, cancellationToken);
             var folder = await client.GetFolderAsync(folderName.Value, cancellationToken);

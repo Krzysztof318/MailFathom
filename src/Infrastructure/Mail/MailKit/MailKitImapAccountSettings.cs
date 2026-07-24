@@ -3,7 +3,7 @@
 namespace MailMcp.Infrastructure.Mail.MailKit;
 
 /// <summary>Contains validated IMAP connection settings for one configured account.</summary>
-public sealed record MailKitImapAccountSettings(string AccountId, string Host, int Port, bool UseTls, string UserName, string Password);
+public sealed record MailKitImapAccountSettings(string AccountId, string Host, int Port, bool UseSslOnConnect, string UserName, string Password);
 
 /// <summary>Resolves IMAP connection settings for configured accounts.</summary>
 public interface IMailKitImapAccountSettingsProvider

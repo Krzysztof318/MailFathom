@@ -38,6 +38,26 @@ public sealed class MailIdentityTests
     }
 
     [Fact]
+    public void Create_ValidStoredEmailId_PreservesValue()
+    {
+        // Arrange
+        var value = Guid.CreateVersion7();
+
+        // Act
+        var storedEmailId = StoredEmailId.Create(value);
+
+        // Assert
+        Assert.Equal(value, storedEmailId.Value);
+    }
+
+    [Fact]
+    public void Create_EmptyStoredEmailId_ThrowsArgumentException()
+    {
+        // Arrange, Act, Assert
+        Assert.Throws<ArgumentException>(() => StoredEmailId.Create(Guid.Empty));
+    }
+
+    [Fact]
     public void AdvanceTo_NewerUid_ReturnsAdvancedCheckpoint()
     {
         // Arrange

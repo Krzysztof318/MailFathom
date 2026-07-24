@@ -9,13 +9,13 @@ internal sealed class MailFolderEntity
 {
     public long Id { get; set; }
 
-    public required string AccountId { get; set; }
+    public required string MailboxAccountId { get; set; }
 
-    public required string FolderName { get; set; }
+    public required string RemoteName { get; set; }
 
-    public uint UidValidity { get; set; }
+    public required MailboxAccountEntity MailboxAccount { get; set; }
 
-    public uint? LastSeenUid { get; set; }
+    public ICollection<StoredEmailEntity> StoredEmails { get; } = [];
 
-    public DateTimeOffset? SynchronizedAt { get; set; }
+    public SynchronizationCheckpointEntity? SynchronizationCheckpoint { get; set; }
 }

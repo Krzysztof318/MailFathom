@@ -29,7 +29,7 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<MailMcpDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<ISessionFactory, UnitOfWork>();
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();
-        services.AddScoped<IMessageMetadataRepository, MessageMetadataRepository>();
+        services.AddScoped<IMessageMetadataRepository, StoredEmailMetadataRepository>();
         services.AddScoped<IMessageContentStore, MessageContentStore>();
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(static () => new MailKitImapClientAdapter(new ImapClient()), provider.GetRequiredService<IMailKitImapAccountSettingsProvider>()));

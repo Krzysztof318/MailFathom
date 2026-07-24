@@ -25,9 +25,11 @@ The application metadata port returns the stable local `StoredEmailId` from its 
 
 EF Core sessions clear tracked state when disposed. This is required because one scoped `DbContext` can create several short transactions during a synchronization run and must not retain raw MIME arrays or stale tracked entities between them.
 
+New stored-email UUIDv7 values use the injected `TimeProvider`, keeping time-dependent identity generation predictable. The PostgreSQL content adapter reuses a complete array-backed `ReadOnlyMemory<byte>` buffer and copies only sliced or non-array memory, avoiding a second full-size MIME allocation in the normal MailKit path.
+
 ## Synchronization transaction and memory model
 
-`MailboxSynchronizer` fetches at most one raw MIME payload at a time. After a seen-preserving IMAP fetch completes, it opens a short persistence session, saves that message's content and metadata atomically, commits, and releases the payload before fetching the next message.
+`MailboxSynchronizer` fetches at most one raw MIME payload at a time. After a seen-preserving IMAP fetch completes, it opens a short persistence session, saves that message's metadata and content atomically, commits, and releases the payload before fetching the next message.
 
 After every message in the inspected UID window has either been durably stored or deliberately skipped because it exceeds the configured limit, the synchronizer opens a separate short persistence session and advances the checkpoint. A process failure before checkpoint commit may cause already stored messages to be fetched again, but the existing idempotent occurrence-key writes make the retry safe. No database transaction spans IMAP network I/O.
 
@@ -41,7 +43,11 @@ Failed session setup always attempts both disconnect and disposal. Cleanup failu
 
 ## Configuration and operational behavior
 
-The existing configuration and worker scope remain unchanged. The branch incorporates the current `main` rules for draft pull requests and ignored local worktrees. The PR must be returned to draft state before the final push because the owner has not requested that it be marked ready for review.
+The worker scope remains unchanged. Startup validation rejects duplicate normalized account identifiers, duplicate normalized folders, and ports outside the IMAP range before a worker can run. Account lookup uses the same normalized identifier as the domain value object. The TLS mode is named `UseSslOnConnect`: `true` selects implicit TLS and `false` selects mandatory STARTTLS, so neither mode permits clear-text authentication.
+
+The direct EF Core Relational package reference belongs to `Infrastructure`, which owns relational persistence, rather than to the Host and infrastructure test project.
+
+The branch incorporates the current `main` rules for draft pull requests and ignored local worktrees. The PR must be returned to draft state before the final push because the owner has not requested that it be marked ready for review.
 
 ## Tests
 

@@ -133,13 +133,13 @@ Expected: all infrastructure tests pass.
 
 **Files:**
 - Modify: `src/Infrastructure/Mail/MailKit/MailKitImapMailboxSession.cs`
-- Modify: `src/Infrastructure/Persistence/MailAccountEntity.cs`
+- Modify: `src/Infrastructure/Persistence/MailboxAccountEntity.cs`
 - Modify: `src/Infrastructure/Persistence/MailFolderEntity.cs`
 - Modify: `src/Infrastructure/Persistence/MailMcpDbContext.cs`
-- Modify: `src/Infrastructure/Persistence/MessageContentEntity.cs`
+- Modify: `src/Infrastructure/Persistence/EmailMessageContentEntity.cs`
 - Modify: `src/Infrastructure/Persistence/MessageContentStore.cs`
-- Modify: `src/Infrastructure/Persistence/MessageMetadataEntity.cs`
-- Modify: `src/Infrastructure/Persistence/MessageMetadataRepository.cs`
+- Modify: `src/Infrastructure/Persistence/StoredEmailEntity.cs`
+- Modify: `src/Infrastructure/Persistence/StoredEmailMetadataRepository.cs`
 - Modify: `src/Infrastructure/Persistence/SynchronizationCheckpointStore.cs`
 - Modify: `src/Infrastructure/Persistence/UnitOfWork.cs`
 - Modify: `src/Infrastructure/ServiceCollectionExtensions.cs`
@@ -185,23 +185,23 @@ Expected: every temporary exclusion has a concrete future integration-suite just
 - Consumes: `StoredEmailId` when persisting raw MIME
 - Maps: `mailbox_accounts`, `mail_folders`, `stored_emails`, `email_message_contents`, and `synchronization_checkpoints`
 
-- [ ] **Step 1: Write failing domain and application tests**
+- [x] **Step 1: Write failing domain and application tests**
 
 Add domain tests for non-empty stored-email UUID identity. Update the application synchronization test to require the metadata upsert result to be passed to the content store.
 
-- [ ] **Step 2: Implement application identity flow**
+- [x] **Step 2: Implement application identity flow**
 
 Add `StoredEmailId`, return it from `IMessageMetadataRepository.UpsertMetadataAsync`, and pass it to `IMessageContentStore.SaveContentAsync` after metadata is upserted in the same session.
 
-- [ ] **Step 3: Align EF Core entities and mappings**
+- [x] **Step 3: Align EF Core entities and mappings**
 
 Use UUIDv7 for new stored-email rows. Model raw MIME as a required one-to-one PK/FK dependent with byte length, SHA-256, and storage time. Separate checkpoints from folder identity and add explicit account-folder, folder-email, folder-checkpoint, and email-content relationships. Do not add a migration before schema review.
 
-- [ ] **Step 4: Clear tracked state after each persistence session**
+- [x] **Step 4: Clear tracked state after each persistence session**
 
 Ensure session disposal clears the shared scoped context after transaction cleanup so raw MIME and tracked entities do not accumulate between short per-message sessions.
 
-- [ ] **Step 5: Verify domain and application tests**
+- [x] **Step 5: Verify domain and application tests**
 
 Run:
 
@@ -212,7 +212,31 @@ Run:
 
 Expected: all domain and application tests pass.
 
-### Task 5: Update durable behavior documentation and verify
+### Task 5: Resolve final full-scope review findings
+
+**Files:**
+- Modify: `src/Host/Configuration/MailSynchronizationOptions.cs`
+- Modify: `src/Infrastructure/Mail/MailKit/MailKitImapAccountSettings.cs`
+- Modify: `src/Infrastructure/Mail/MailKit/MailKitImapMailboxSession.cs`
+- Modify: `src/Infrastructure/Persistence/StoredEmailMetadataRepository.cs`
+- Modify: `src/Infrastructure/Persistence/MessageContentStore.cs`
+- Modify: `src/Host/Host.csproj`
+- Modify: `src/Infrastructure/Infrastructure.csproj`
+- Modify: `tests/Infrastructure.UnitTests/Infrastructure.UnitTests.csproj`
+
+- [x] **Step 1: Harden configuration identity, nested validation, and TLS naming**
+
+Normalize account lookup consistently, reject duplicate normalized account/folder identities and invalid nested port values at startup, and rename `UseTls` to `UseSslOnConnect` so false unambiguously means mandatory STARTTLS rather than clear text.
+
+- [x] **Step 2: Remove hidden clock and MIME-copy costs**
+
+Generate UUIDv7 from the injected `TimeProvider`. Reuse a full array-backed MIME buffer when safe and copy only when the read-only memory is a slice or has a non-array backing store.
+
+- [x] **Step 3: Move relational dependency ownership**
+
+Reference `Microsoft.EntityFrameworkCore.Relational` directly from `Infrastructure` and remove the unnecessary direct Host and test-project references.
+
+### Task 6: Update durable behavior documentation and verify
 
 **Files:**
 - Modify: `docs/features/imap-synchronization.md`

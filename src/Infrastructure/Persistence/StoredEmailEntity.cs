@@ -5,13 +5,13 @@ namespace MailMcp.Infrastructure.Persistence;
 
 // TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
 [ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
-internal sealed class MessageMetadataEntity
+internal sealed class StoredEmailEntity
 {
-    public long Id { get; set; }
+    public Guid Id { get; set; }
 
-    public required string AccountId { get; set; }
+    public long MailFolderId { get; set; }
 
-    public required string FolderName { get; set; }
+    public required MailFolderEntity MailFolder { get; set; }
 
     public uint UidValidity { get; set; }
 
@@ -24,4 +24,6 @@ internal sealed class MessageMetadataEntity
     public DateTimeOffset? SentAt { get; set; }
 
     public long SizeOctets { get; set; }
+
+    public EmailMessageContentEntity? Content { get; set; }
 }

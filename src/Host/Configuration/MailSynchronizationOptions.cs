@@ -1,6 +1,8 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using System.ComponentModel.DataAnnotations;
+using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Folders;
 using MailMcp.Infrastructure.Mail.MailKit;
 
 namespace MailMcp.Host.Configuration;
@@ -33,16 +35,40 @@ public sealed class MailSynchronizationOptions : IValidatableObject, IMailKitIma
     /// <inheritdoc />
     public MailKitImapAccountSettings GetSettings(string accountId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
-        var account = this.Accounts.Single(account => StringComparer.Ordinal.Equals(account.AccountId, accountId));
-        return new MailKitImapAccountSettings(account.AccountId, account.Host, account.Port, account.UseTls, account.UserName, account.Password);
+        var normalizedAccountId = MailAccountId.Create(accountId).Value;
+        var account = this.Accounts.Single(
+            candidate => !string.IsNullOrWhiteSpace(candidate.AccountId)
+                && StringComparer.Ordinal.Equals(
+                    MailAccountId.Create(candidate.AccountId).Value,
+                    normalizedAccountId));
+        return new MailKitImapAccountSettings(
+            normalizedAccountId,
+            account.Host.Trim(),
+            account.Port,
+            account.UseSslOnConnect,
+            account.UserName,
+            account.Password);
     }
 
     internal IEnumerable<ValidationResult> ValidateForSynchronization()
     {
+        if (this.Accounts is null)
+        {
+            yield return new ValidationResult("Account configuration must be a list.", [nameof(this.Accounts)]);
+            yield break;
+        }
+
         if (this.Enabled && this.Accounts.Count == 0)
         {
             yield return new ValidationResult("At least one account is required when synchronization is enabled.", [nameof(this.Accounts)]);
+        }
+
+        if (this.Accounts
+            .Where(account => !string.IsNullOrWhiteSpace(account.AccountId))
+            .GroupBy(account => MailAccountId.Create(account.AccountId).Value, StringComparer.Ordinal)
+            .Any(group => group.Count() > 1))
+        {
+            yield return new ValidationResult("Account IDs must be unique after normalization.", [nameof(this.Accounts)]);
         }
 
         foreach (var account in this.Accounts)
@@ -72,8 +98,8 @@ public sealed class MailSynchronizationAccountOptions : IValidatableObject
     [Range(1, 65535)]
     public int Port { get; set; } = 993;
 
-    /// <summary>Gets or sets whether TLS is required from connection start.</summary>
-    public bool UseTls { get; set; } = true;
+    /// <summary>Gets or sets whether implicit TLS is used from connection start; otherwise mandatory STARTTLS is used.</summary>
+    public bool UseSslOnConnect { get; set; } = true;
 
     /// <summary>Gets or sets the IMAP user name. Store secret values outside ordinary configuration files.</summary>
     public string UserName { get; set; } = string.Empty;
@@ -85,13 +111,32 @@ public sealed class MailSynchronizationAccountOptions : IValidatableObject
     public List<string> Folders { get; set; } = [];
 
     /// <summary>Gets the configured folders or the post-binding default folder.</summary>
-    public IReadOnlyList<string> EffectiveFolders => this.Folders.Count == 0 ? ["INBOX"] : this.Folders;
+    public IReadOnlyList<string> EffectiveFolders => this.Folders is not { Count: > 0 } ? ["INBOX"] : this.Folders;
 
     internal IEnumerable<ValidationResult> ValidateForSynchronization(bool synchronizationEnabled)
     {
+        if (this.Port is < 1 or > 65535)
+        {
+            yield return new ValidationResult("IMAP port must be between 1 and 65535.", [nameof(this.Port)]);
+        }
+
+        if (this.Folders is null)
+        {
+            yield return new ValidationResult("Folder configuration must be a list.", [nameof(this.Folders)]);
+            yield break;
+        }
+
         if (this.Folders.Any(string.IsNullOrWhiteSpace))
         {
             yield return new ValidationResult("Configured folder names must be non-empty.", [nameof(this.Folders)]);
+        }
+
+        if (this.Folders
+            .Where(folder => !string.IsNullOrWhiteSpace(folder))
+            .GroupBy(folder => MailFolderName.Create(folder).Value, StringComparer.Ordinal)
+            .Any(group => group.Count() > 1))
+        {
+            yield return new ValidationResult("Configured folder names must be unique after normalization.", [nameof(this.Folders)]);
         }
 
         if (synchronizationEnabled)

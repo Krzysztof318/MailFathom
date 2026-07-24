@@ -21,8 +21,13 @@ public sealed class SynchronizationCheckpointStore(MailMcpDbContext dbContext) :
         MailFolderName folderName,
         CancellationToken cancellationToken)
     {
-        var entity = await dbContext.MailFolders.AsNoTracking().SingleOrDefaultAsync(x => x.AccountId == accountId.Value && x.FolderName == folderName.Value, cancellationToken);
-        if (entity is null || entity.UidValidity == 0)
+        var entity = await dbContext.SynchronizationCheckpoints
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                checkpoint => checkpoint.MailFolder.MailboxAccountId == accountId.Value
+                    && checkpoint.MailFolder.RemoteName == folderName.Value,
+                cancellationToken);
+        if (entity is null)
         {
             return null;
         }
@@ -38,10 +43,30 @@ public sealed class SynchronizationCheckpointStore(MailMcpDbContext dbContext) :
         SynchronizationCheckpoint checkpoint,
         CancellationToken cancellationToken)
     {
-        var entity = await dbContext.MailFolders.SingleOrDefaultAsync(x => x.AccountId == accountId.Value && x.FolderName == folderName.Value, cancellationToken);
+        var folder = await MailFolderEntityResolver.GetOrAddAsync(
+            dbContext,
+            accountId,
+            folderName,
+            cancellationToken);
+        var entity = dbContext.SynchronizationCheckpoints.Local.SingleOrDefault(
+            candidate => ReferenceEquals(candidate.MailFolder, folder)
+                || (folder.Id != 0 && candidate.MailFolderId == folder.Id));
+        if (entity is null && folder.Id != 0)
+        {
+            entity = await dbContext.SynchronizationCheckpoints.SingleOrDefaultAsync(
+                candidate => candidate.MailFolderId == folder.Id,
+                cancellationToken);
+        }
+
         if (entity is null)
         {
-            dbContext.MailFolders.Add(new MailFolderEntity { AccountId = accountId.Value, FolderName = folderName.Value, UidValidity = checkpoint.UidValidity.Value, LastSeenUid = checkpoint.LastSeenUid?.Value, SynchronizedAt = checkpoint.SynchronizedAt });
+            dbContext.SynchronizationCheckpoints.Add(new SynchronizationCheckpointEntity
+            {
+                MailFolder = folder,
+                UidValidity = checkpoint.UidValidity.Value,
+                LastSeenUid = checkpoint.LastSeenUid?.Value,
+                SynchronizedAt = checkpoint.SynchronizedAt,
+            });
         }
         else
         {

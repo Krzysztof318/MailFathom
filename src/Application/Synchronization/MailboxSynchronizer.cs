@@ -68,8 +68,8 @@ public sealed class MailboxSynchronizer
                 {
                     var content = await session.FetchMessageContentWithoutSettingSeenAsync(metadata.OccurrenceId, this.options.MaxRawMimeBytes, cancellationToken);
                     await using var messagePersistenceSession = await this.sessionScopeFactory.BeginSessionAsync(cancellationToken);
-                    await this.contentStore.SaveContentAsync(messagePersistenceSession, content, cancellationToken);
-                    await this.metadataRepository.UpsertMetadataAsync(messagePersistenceSession, metadata, cancellationToken);
+                    var storedEmailId = await this.metadataRepository.UpsertMetadataAsync(messagePersistenceSession, metadata, cancellationToken);
+                    await this.contentStore.SaveContentAsync(messagePersistenceSession, storedEmailId, content, cancellationToken);
                     await messagePersistenceSession.CommitAsync(cancellationToken);
                     storedCount++;
                 }

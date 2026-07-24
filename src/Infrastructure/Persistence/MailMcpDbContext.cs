@@ -16,52 +16,74 @@ public sealed class MailMcpDbContext : DbContext
     {
     }
 
-    internal DbSet<MailAccountEntity> MailAccounts => this.Set<MailAccountEntity>();
+    internal DbSet<MailboxAccountEntity> MailboxAccounts => this.Set<MailboxAccountEntity>();
 
     internal DbSet<MailFolderEntity> MailFolders => this.Set<MailFolderEntity>();
 
-    internal DbSet<MessageMetadataEntity> MessageMetadata => this.Set<MessageMetadataEntity>();
+    internal DbSet<StoredEmailEntity> StoredEmails => this.Set<StoredEmailEntity>();
 
-    internal DbSet<MessageContentEntity> MessageContents => this.Set<MessageContentEntity>();
+    internal DbSet<EmailMessageContentEntity> EmailMessageContents => this.Set<EmailMessageContentEntity>();
+
+    internal DbSet<SynchronizationCheckpointEntity> SynchronizationCheckpoints => this.Set<SynchronizationCheckpointEntity>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<MailAccountEntity>(entity =>
+        modelBuilder.Entity<MailboxAccountEntity>(entity =>
         {
-            entity.ToTable("mail_accounts");
-            entity.HasKey(x => x.AccountId);
-            entity.Property(x => x.AccountId).HasMaxLength(128);
+            entity.ToTable("mailbox_accounts");
+            entity.HasKey(account => account.Id);
+            entity.Property(account => account.Id).HasMaxLength(128);
         });
 
         modelBuilder.Entity<MailFolderEntity>(entity =>
         {
             entity.ToTable("mail_folders");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.AccountId).HasMaxLength(128);
-            entity.Property(x => x.FolderName).HasMaxLength(512);
-            entity.HasIndex(x => new { x.AccountId, x.FolderName }).IsUnique();
+            entity.HasKey(folder => folder.Id);
+            entity.Property(folder => folder.MailboxAccountId).HasMaxLength(128);
+            entity.Property(folder => folder.RemoteName).HasMaxLength(512);
+            entity.HasIndex(folder => new { folder.MailboxAccountId, folder.RemoteName }).IsUnique();
+            entity.HasOne(folder => folder.MailboxAccount)
+                .WithMany(account => account.MailFolders)
+                .HasForeignKey(folder => folder.MailboxAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<MessageMetadataEntity>(entity =>
+        modelBuilder.Entity<StoredEmailEntity>(entity =>
         {
-            entity.ToTable("message_metadata");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.AccountId).HasMaxLength(128);
-            entity.Property(x => x.FolderName).HasMaxLength(512);
-            entity.Property(x => x.InternetMessageId).HasMaxLength(998);
-            entity.Property(x => x.Subject).HasMaxLength(998);
-            entity.HasIndex(x => new { x.AccountId, x.FolderName, x.UidValidity, x.Uid }).IsUnique();
+            entity.ToTable("stored_emails");
+            entity.HasKey(email => email.Id);
+            entity.Property(email => email.Id).ValueGeneratedNever();
+            entity.Property(email => email.InternetMessageId).HasMaxLength(998);
+            entity.HasIndex(email => new { email.MailFolderId, email.UidValidity, email.Uid }).IsUnique();
+            entity.HasOne(email => email.MailFolder)
+                .WithMany(folder => folder.StoredEmails)
+                .HasForeignKey(email => email.MailFolderId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<MessageContentEntity>(entity =>
+        modelBuilder.Entity<EmailMessageContentEntity>(entity =>
         {
-            entity.ToTable("message_contents");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.AccountId).HasMaxLength(128);
-            entity.Property(x => x.FolderName).HasMaxLength(512);
-            entity.Property(x => x.RawMime).IsRequired();
-            entity.HasIndex(x => new { x.AccountId, x.FolderName, x.UidValidity, x.Uid }).IsUnique();
+            entity.ToTable("email_message_contents");
+            entity.HasKey(content => content.StoredEmailId);
+            entity.Property(content => content.StoredEmailId).ValueGeneratedNever();
+            entity.Property(content => content.RawMime).HasColumnType("bytea").IsRequired();
+            entity.Property(content => content.Sha256Hash).HasColumnType("bytea").IsRequired();
+            entity.HasOne(content => content.StoredEmail)
+                .WithOne(email => email.Content)
+                .HasForeignKey<EmailMessageContentEntity>(content => content.StoredEmailId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SynchronizationCheckpointEntity>(entity =>
+        {
+            entity.ToTable("synchronization_checkpoints");
+            entity.HasKey(checkpoint => checkpoint.MailFolderId);
+            entity.Property(checkpoint => checkpoint.MailFolderId).ValueGeneratedNever();
+            entity.HasOne(checkpoint => checkpoint.MailFolder)
+                .WithOne(folder => folder.SynchronizationCheckpoint)
+                .HasForeignKey<SynchronizationCheckpointEntity>(checkpoint => checkpoint.MailFolderId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

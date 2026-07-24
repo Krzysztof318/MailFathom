@@ -2,6 +2,7 @@
 
 using MailKit;
 using MailKit.Search;
+using MailKit.Security;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Messages;
@@ -13,6 +14,38 @@ namespace MailMcp.Infrastructure.UnitTests;
 
 public sealed class MailKitImapMailboxSessionTests
 {
+    [Theory]
+    [InlineData(true, SecureSocketOptions.SslOnConnect)]
+    [InlineData(false, SecureSocketOptions.StartTls)]
+    public async Task OpenReadOnlyAsync_TlsMode_UsesEncryptedConnectionMode(
+        bool useSslOnConnect,
+        SecureSocketOptions expectedSocketOptions)
+    {
+        // Arrange
+        await using var client = new FakeImapClient();
+        var folder = Substitute.For<IMailFolder>();
+        var settingsProvider = Substitute.For<IMailKitImapAccountSettingsProvider>();
+        settingsProvider.GetSettings("primary").Returns(
+            new MailKitImapAccountSettings(
+                "primary",
+                "imap.example.test",
+                993,
+                useSslOnConnect,
+                "user",
+                "password"));
+        client.Folder = folder;
+        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
+
+        // Act
+        await using var session = await factory.OpenReadOnlyAsync(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(expectedSocketOptions, client.ConnectSocketOptions);
+    }
+
     [Fact]
     public async Task GetMessageBatchAfterAsync_EmptyFolder_DoesNotCheckpointFutureUid()
     {
@@ -81,7 +114,7 @@ public sealed class MailKitImapMailboxSessionTests
         await using var client = new FakeImapClient();
         var folder = Substitute.For<IMailFolder>();
         var settingsProvider = Substitute.For<IMailKitImapAccountSettingsProvider>();
-        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, UseTls: true, "user", "password"));
+        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, UseSslOnConnect: true, "user", "password"));
         client.IsConnected = true;
         client.Folder = folder;
         folder.OpenAsync(FolderAccess.ReadOnly, CancellationToken.None).Returns<Task>(_ => throw new InvalidOperationException("missing folder"));
@@ -108,7 +141,7 @@ public sealed class MailKitImapMailboxSessionTests
         var folder = Substitute.For<IMailFolder>();
         var settingsProvider = Substitute.For<IMailKitImapAccountSettingsProvider>();
         var folderOpenException = new InvalidOperationException("folder open failed");
-        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, UseTls: true, "user", "password"));
+        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, UseSslOnConnect: true, "user", "password"));
         client.IsConnected = true;
         client.Folder = folder;
         client.DisconnectException = new IOException("disconnect failed");
@@ -206,11 +239,17 @@ public sealed class MailKitImapMailboxSessionTests
 
         public Exception? DisposeException { get; set; }
 
+        public SecureSocketOptions? ConnectSocketOptions { get; private set; }
+
         public Task ConnectAsync(
             string host,
             int port,
-            MailKit.Security.SecureSocketOptions options,
-            CancellationToken cancellationToken) => Task.CompletedTask;
+            SecureSocketOptions options,
+            CancellationToken cancellationToken)
+        {
+            this.ConnectSocketOptions = options;
+            return Task.CompletedTask;
+        }
 
         public Task AuthenticateAsync(
             string userName,
