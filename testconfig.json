@@ -1,0 +1,13 @@
+{
+  "platformOptions": {
+    "Coverlet": {
+      "Include": "[MailMcp.*]*",
+      "Exclude": "[MailMcp.Host]*,[MailMcp.AppHost]*,[MailMcp.*.UnitTests]*,[coverlet.*]*,[xunit.*]*,[Microsoft.Testing.*]*,[Microsoft.TestPlatform.*]*,[Microsoft.VisualStudio.TestPlatform.*]*,[testhost*]*",
+      "ExcludeByAttribute": "ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,GeneratedCodeAttribute",
+      "Format": "cobertura",
+      "IncludeTestAssembly": false,
+      "DeterministicReport": true,
+      "ExcludeAssembliesWithoutSources": "MissingAll"
+    }
+  }
+}
