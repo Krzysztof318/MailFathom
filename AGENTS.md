@@ -8,6 +8,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 
 - Never add `Co-authored-by:` or any other co-author trailer to commits or pull requests.
 - Never commit directly on `main` or `master`. Create a branch named `agent/<short-description>` before committing.
+- Always create pull requests as drafts. Mark a pull request as ready for review only when the owner explicitly requests it.
 - Preserve unrelated user changes. Stage only files that belong to the current task.
 - Make architectural decisions before implementation. Keep changes small, reviewable, and aligned with the architecture draft in `specs/`.
 - Treat ADRs under `docs/decisions/` as required architectural context for AI agents. Before changing architecture, boundaries, configuration, persistence, provider integration, governance, security-sensitive behavior, or cross-cutting infrastructure, read the relevant ADRs and keep the change consistent with their current status and rationale.
