@@ -39,7 +39,7 @@ jobs:
         run: dotnet build MailMcp.slnx --configuration Release --no-restore
 
       - name: Run unit tests
-        run: dotnet test MailMcp.slnx --configuration Release --no-build --logger "trx;LogFilePrefix=unit-tests"
+        run: dotnet test --solution MailMcp.slnx --configuration Release --no-build -- --report-xunit-trx --report-xunit-trx-filename unit-tests.trx
 
       - name: Upload test results
         if: always()
