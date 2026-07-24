@@ -4,7 +4,7 @@
 
 **Goal:** Enforce at least 85% aggregate line coverage across all testable MailMcp production libraries for pull requests targeting `main` that change code, tests, or files capable of changing the build or coverage result.
 
-**Architecture:** Coverlet's native Microsoft Testing Platform extension emits one Cobertura report per unit-test project. A repository-local ReportGenerator tool merges those reports, and an MSBuild target reads the merged report and fails the existing build-and-test check when whole-scope line coverage is below 85%.
+**Architecture:** Coverlet's native Microsoft Testing Platform extension emits one uniquely prefixed Cobertura report per unit-test project. A repository-local ReportGenerator tool merges those reports, the workflow uploads the merged whole-scope report to GitHub Code Quality, and the active GitHub `main` ruleset is the single source of the 85% threshold.
 
 **Tech Stack:** .NET 10, Microsoft Testing Platform 2, xUnit.net v3, coverlet.MTP 10.0.1, ReportGenerator 5.5.10, GitHub Actions.
 
@@ -124,7 +124,7 @@ Expected: every unit-test project contains the pinned Coverlet package and the l
 
 **Interfaces:**
 - Consumes: `MailMcp.slnx`, the local `reportgenerator` tool, raw Coverlet Cobertura reports, and the five configured source boundaries.
-- Produces: `artifacts/coverage/report/Cobertura.xml`, `artifacts/coverage/report/index.html`, TRX results, and a failing process exit code below 85%.
+- Produces: uniquely prefixed raw reports, `artifacts/coverage/report/Cobertura.xml`, `artifacts/coverage/report/index.html`, TRX results, and a structurally validated aggregate report.
 
 - [ ] **Step 1: Create the coverage orchestration project**
 
@@ -134,30 +134,34 @@ Create `eng/CodeCoverage.proj` with:
 <Project DefaultTargets="Collect">
   <PropertyGroup>
     <RepositoryRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..'))</RepositoryRoot>
-    <SolutionPath>$(RepositoryRoot)MailMcp.slnx</SolutionPath>
     <CoverageArtifactsDirectory>$(RepositoryRoot)artifacts/coverage</CoverageArtifactsDirectory>
     <RawCoverageDirectory>$(CoverageArtifactsDirectory)/raw</RawCoverageDirectory>
     <CoverageReportDirectory>$(CoverageArtifactsDirectory)/report</CoverageReportDirectory>
     <MergedCoverageReport Condition="'$(MergedCoverageReport)' == ''">$(CoverageReportDirectory)/Cobertura.xml</MergedCoverageReport>
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
-    <MinimumLineCoveragePercent>85</MinimumLineCoveragePercent>
-    <MinimumLineCoverageRate>$([MSBuild]::Divide($(MinimumLineCoveragePercent), 100.0))</MinimumLineCoverageRate>
   </PropertyGroup>
+
+  <ItemGroup>
+    <UnitTestProject Include="$(RepositoryRoot)tests/**/*.csproj" />
+  </ItemGroup>
 
   <Target Name="Collect">
     <RemoveDir Directories="$(CoverageArtifactsDirectory)" />
     <MakeDir Directories="$(RawCoverageDirectory)" />
 
-    <Exec Command="dotnet test --solution &quot;$(SolutionPath)&quot; --configuration $(Configuration) --no-build --results-directory &quot;$(RawCoverageDirectory)&quot; -- --report-xunit-trx --coverlet" />
-    <CallTarget Targets="GenerateAndEnforceReport" />
+    <Error Condition="'@(UnitTestProject)' == ''"
+           Text="No unit-test projects were found under $(RepositoryRoot)tests." />
+
+    <Exec Command="dotnet test --project &quot;%(UnitTestProject.Identity)&quot; --configuration $(Configuration) --no-build --results-directory &quot;$(RawCoverageDirectory)&quot; -- --report-xunit-trx --coverlet --coverlet-file-prefix &quot;%(UnitTestProject.Filename)&quot;" />
+    <CallTarget Targets="GenerateAndValidateReport" />
   </Target>
 
-  <Target Name="GenerateAndEnforceReport">
+  <Target Name="GenerateAndValidateReport">
     <Exec Command="dotnet tool run reportgenerator &quot;-reports:$(RawCoverageDirectory)/**/*.cobertura.*.xml&quot; &quot;-targetdir:$(CoverageReportDirectory)&quot; &quot;-reporttypes:Cobertura;HtmlInline&quot; &quot;-assemblyfilters:+MailMcp.*;-MailMcp.Host;-MailMcp.AppHost;-MailMcp.*.UnitTests&quot;" />
-    <CallTarget Targets="Enforce" />
+    <CallTarget Targets="ValidateReport" />
   </Target>
 
-  <Target Name="Enforce">
+  <Target Name="ValidateReport">
     <Error Condition="!Exists('$(MergedCoverageReport)')"
            Text="Merged coverage report was not found at $(MergedCoverageReport)." />
 
@@ -182,51 +186,37 @@ Create `eng/CodeCoverage.proj` with:
              Importance="high"
              Condition="$(ValidLineCount) == 0" />
 
-    <Message Text="Aggregate line coverage: $(ActualLineCoveragePercent)% ($(CoveredLineCount)/$(ValidLineCount)); required: $(MinimumLineCoveragePercent)%."
+    <Message Text="Aggregate line coverage: $(ActualLineCoveragePercent)% ($(CoveredLineCount)/$(ValidLineCount))."
              Importance="high" />
-
-    <Error Condition="$(ActualLineCoverageRate) &lt; $(MinimumLineCoverageRate)"
-           Text="Aggregate line coverage $(ActualLineCoveragePercent)% is below the required $(MinimumLineCoveragePercent)%." />
   </Target>
 </Project>
 ```
 
-- [ ] **Step 2: Verify the exact-threshold pass behavior**
+- [ ] **Step 2: Verify unique project prefixes**
 
-Create a temporary Cobertura file outside the repository:
+Run:
+
+```bash
+dotnet msbuild eng/CodeCoverage.proj -t:Collect
+find artifacts/coverage/raw -maxdepth 1 -type f -name '*.cobertura.*.xml' -printf '%f\n' | sort
+```
+
+Expected: one report for every unit-test project, each beginning with its project name.
+
+- [ ] **Step 3: Verify malformed and missing report failures**
+
+Run:
 
 ```bash
 mkdir -p /tmp/mailmcp-coverage-test
-printf '%s\n' '<?xml version="1.0" ?><coverage line-rate="0.85" lines-covered="85" lines-valid="100" />' > /tmp/mailmcp-coverage-test/Cobertura.xml
-dotnet msbuild eng/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/Cobertura.xml
-```
-
-Expected: exit 0 and a diagnostic showing `85% (85/100); required: 85%`.
-
-- [ ] **Step 3: Verify the below-threshold failure behavior**
-
-Run:
-
-```bash
-printf '%s\n' '<?xml version="1.0" ?><coverage line-rate="0.8499" lines-covered="8499" lines-valid="10000" />' > /tmp/mailmcp-coverage-test/Cobertura.xml
-dotnet msbuild eng/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/Cobertura.xml
-```
-
-Expected: non-zero exit and an error stating that `84.99%` is below the required `85%`.
-
-- [ ] **Step 4: Verify malformed and missing report failures**
-
-Run:
-
-```bash
 printf '%s\n' '<?xml version="1.0" ?><coverage />' > /tmp/mailmcp-coverage-test/Cobertura.xml
-dotnet msbuild eng/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/Cobertura.xml
-dotnet msbuild eng/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/missing.xml
+dotnet msbuild eng/CodeCoverage.proj -t:ValidateReport -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/Cobertura.xml
+dotnet msbuild eng/CodeCoverage.proj -t:ValidateReport -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/missing.xml
 ```
 
 Expected: both invocations fail, respectively for a missing `line-rate` and a missing report.
 
-- [ ] **Step 5: Verify the current empty scaffold path**
+- [ ] **Step 4: Verify the current empty scaffold path**
 
 Run:
 
@@ -244,7 +234,7 @@ Expected: unit-test execution succeeds and the target reports that no coverable 
 
 **Interfaces:**
 - Consumes: the `eng/CodeCoverage.proj` command and the existing `Build and unit test` status context.
-- Produces: a status check on pull requests to `main` that change code, tests, or build and coverage inputs, fails below 85%, and preserves diagnostic artifacts.
+- Produces: a build-and-test status check, a merged whole-scope report uploaded to GitHub Code Quality, and diagnostic artifacts. The active GitHub ruleset owns the 85% decision.
 
 - [ ] **Step 1: Keep the pull-request path filter**
 
@@ -252,6 +242,23 @@ Retain the trigger:
 
 ```yaml
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - '.config/dotnet-tools.json'
+      - '.editorconfig'
+      - '.github/workflows/build-and-unit-test.yml'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'MailMcp.slnx'
+      - 'NuGet.config'
+      - 'eng/**'
+      - 'global.json'
+      - 'testconfig.json'
   pull_request:
     branches:
       - main
@@ -281,16 +288,40 @@ Add after package restore:
         run: dotnet tool restore
 ```
 
-- [ ] **Step 3: Replace the direct unit-test step with the coverage gate**
+- [ ] **Step 3: Replace the direct unit-test step with whole-scope collection**
 
 Replace the existing test step with:
 
 ```yaml
-      - name: Run unit tests and enforce code coverage
+      - name: Run unit tests and collect code coverage
         run: dotnet msbuild eng/CodeCoverage.proj -t:Collect
 ```
 
-- [ ] **Step 4: Preserve diagnostics on success or failure**
+- [ ] **Step 4: Upload the merged report to GitHub Code Quality**
+
+Grant the required workflow permission:
+
+```yaml
+permissions:
+  contents: read
+  code-quality: write
+```
+
+Check out the PR head revision and add the official upload action after coverage collection:
+
+```yaml
+      - name: Upload coverage to GitHub Code Quality
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-code-coverage@v1
+        with:
+          file: artifacts/coverage/report/Cobertura.xml
+          language: 'C#'
+          label: MailMcp
+```
+
+Expected: pushes to `main` establish the baseline, while pull requests upload their branch report for the active 85% GitHub rule.
+
+- [ ] **Step 5: Preserve diagnostics on success or failure**
 
 Keep the TRX upload and point it at:
 
@@ -312,18 +343,18 @@ Add:
           if-no-files-found: ignore
 ```
 
-- [ ] **Step 5: Validate workflow syntax and final job identity**
+- [ ] **Step 6: Validate workflow syntax and final job identity**
 
 Run:
 
 ```bash
 git diff --check
-rg -n "name: Build and unit test|name: Run unit tests and enforce code coverage|pull_request:|paths:" .github/workflows/build-and-unit-test.yml
+rg -n "name: Build and unit test|name: Run unit tests and collect code coverage|actions/upload-code-coverage@v1|push:|pull_request:|paths:" .github/workflows/build-and-unit-test.yml
 ```
 
 Expected: the workflow and job names remain stable, the coverage step is present, and the pull-request `paths` filter covers production code, tests, solution and SDK selection, shared build and package configuration, coverage tooling, and the workflow itself.
 
-- [ ] **Step 6: Require the coverage-owning check on `main`**
+- [ ] **Step 7: Require the build check and GitHub coverage rule on `main`**
 
 Configure GitHub branch protection for `main` to:
 
@@ -334,10 +365,11 @@ Configure GitHub branch protection for `main` to:
 - require review conversations to be resolved;
 - allow zero approving reviews while the repository has a single maintainer;
 - reject force-pushes and branch deletion.
+- configure the active ruleset with `minimum_coverage: 85`.
 
 Read the protection settings back from GitHub after the update.
 
-Expected: `Build and unit test` is the required strict status check and the pull-request rule applies to administrators.
+Expected: `Build and unit test` is the required strict status check, the pull-request rule applies to administrators, and the GitHub ruleset is the only numeric threshold source.
 
 ### Task 4: Document policy, operation, and licensing
 
@@ -358,11 +390,11 @@ Add a `Code coverage` section under unit testing policy:
 ## Code coverage
 
 - Maintain at least 85% aggregate line coverage across the complete configured production scope: `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`.
-- Calculate the threshold from the whole configured codebase on every run. Do not substitute patch coverage, changed-line coverage, or per-project thresholds for the aggregate gate.
+- Calculate coverage from the whole configured codebase on every run. Do not substitute patch coverage, changed-line coverage, or per-project thresholds for the aggregate GitHub gate.
 - Keep `Host` and `AppHost` excluded as thin executable composition roots. Do not add other assembly, namespace, file, type, or member exclusions merely to make the threshold pass.
 - Add `using System.Diagnostics.CodeAnalysis;` and apply `[ExcludeFromCodeCoverage]` to a class only when it contains no executable application, domain, mapping, validation, policy, or infrastructure logic. Do not fully qualify the attribute name.
 - Never use `[ExcludeFromCodeCoverage]` to hide behavior that can be meaningfully unit tested. If logic is added to an excluded class, remove the attribute and cover the behavior in the same change.
-- Run `dotnet msbuild eng/CodeCoverage.proj -t:Collect` before committing a change that affects production or test code.
+- Run `dotnet msbuild eng/CodeCoverage.proj -t:Collect` before committing a change that affects production or test code. The command generates and validates the whole-scope report; the active GitHub `main` ruleset is the single source of the 85% threshold.
 ```
 
 - [ ] **Step 2: Document local and CI operation**
@@ -372,19 +404,19 @@ Update `docs/operations/local-development.md` with:
 ```markdown
 ## Code coverage
 
-After a Release build, collect and enforce coverage with:
+After a Release build, collect and validate the whole-scope coverage report with:
 
 ```bash
 dotnet tool restore
 dotnet msbuild eng/CodeCoverage.proj -t:Collect
 ```
 
-The command merges all unit-test Cobertura reports and requires at least 85% aggregate line coverage across `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`. The result always represents the whole configured scope, not only changed lines. `Host` and `AppHost` are excluded as composition roots.
+The command merges uniquely prefixed unit-test Cobertura reports across `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`. The result always represents the whole configured scope, not only changed lines. `Host` and `AppHost` are excluded as composition roots. GitHub Code Quality receives the merged report, and the active `main` ruleset is the single source of the 85% minimum.
 
 Raw reports and TRX files are written under `artifacts/coverage/raw/`. The merged Cobertura and HTML reports are written under `artifacts/coverage/report/`.
 ```
 
-Update the pull-request checks section so `Build and unit test` explicitly includes whole-scope coverage enforcement and runs for PRs targeting `main` that change code, tests, or build and coverage inputs.
+Update the pull-request checks section so `Build and unit test` explicitly uploads whole-scope coverage to GitHub Code Quality and runs for matching pushes to `main` and pull requests targeting `main`.
 
 - [ ] **Step 3: Register third-party licensing**
 
@@ -393,6 +425,8 @@ Add a development-tooling row to `LICENSES.md` recording:
 ```markdown
 | coverlet.MTP 10.0.1 and dotnet-reportgenerator-globaltool 5.5.10 | Microsoft Testing Platform coverage collection and deterministic aggregation/report generation for the 85% whole-code pull-request gate | MIT for Coverlet; Apache-2.0 for ReportGenerator in upstream repository and NuGet metadata | Allowed as development-only tooling. Preserve the MIT and Apache-2.0 notices when redistributing the tools or their source. | <https://www.nuget.org/packages/coverlet.MTP/10.0.1>, <https://github.com/coverlet-coverage/coverlet>, <https://www.nuget.org/packages/dotnet-reportgenerator-globaltool/5.5.10>, <https://github.com/danielpalme/ReportGenerator> |
 ```
+
+Also record the owner-approved `actions/upload-code-coverage@v1` and GitHub Code Quality API integration, including the absence of a standalone action license and the restriction against vendoring or redistributing its source.
 
 - [ ] **Step 4: Verify documentation matches the implementation**
 
@@ -403,7 +437,7 @@ rg -n "85%|ExcludeFromCodeCoverage|CodeCoverage.proj|Domain.*Application.*Infras
 rg -n "coverlet.MTP 10.0.1|dotnet-reportgenerator-globaltool 5.5.10|MIT|Apache-2.0" LICENSES.md
 ```
 
-Expected: the exact threshold, scope, command, exclusion constraint, versions, and licenses are discoverable.
+Expected: the GitHub-owned threshold, scope, command, exclusion constraint, versions, and licenses are discoverable.
 
 ### Task 5: Complete verification and publish the change
 
@@ -469,8 +503,9 @@ Title: Enforce 85% whole-code coverage
 
 Summary:
 - collect coverage through the native Microsoft Testing Platform Coverlet extension
-- merge all boundary reports and enforce 85% aggregate line coverage across the complete testable production scope
-- run the existing build-and-test check for PRs to main that change code, tests, or build and coverage inputs and publish coverage diagnostics
+- merge all uniquely prefixed boundary reports across the complete testable production scope
+- upload the merged Cobertura report to GitHub Code Quality, where the active ruleset enforces 85%
+- run the existing build-and-test check for matching PRs to main and publish coverage diagnostics
 - document the narrow ExcludeFromCodeCoverage policy and register development-tool licenses
 
 Verification:

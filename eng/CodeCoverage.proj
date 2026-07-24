@@ -1,30 +1,34 @@
 <Project DefaultTargets="Collect">
   <PropertyGroup>
     <RepositoryRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..'))</RepositoryRoot>
-    <SolutionPath>$(RepositoryRoot)MailMcp.slnx</SolutionPath>
     <CoverageArtifactsDirectory>$(RepositoryRoot)artifacts/coverage</CoverageArtifactsDirectory>
     <RawCoverageDirectory>$(CoverageArtifactsDirectory)/raw</RawCoverageDirectory>
     <CoverageReportDirectory>$(CoverageArtifactsDirectory)/report</CoverageReportDirectory>
     <MergedCoverageReport Condition="'$(MergedCoverageReport)' == ''">$(CoverageReportDirectory)/Cobertura.xml</MergedCoverageReport>
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
-    <MinimumLineCoveragePercent>85</MinimumLineCoveragePercent>
-    <MinimumLineCoverageRate>$([MSBuild]::Divide($(MinimumLineCoveragePercent), 100.0))</MinimumLineCoverageRate>
   </PropertyGroup>
+
+  <ItemGroup>
+    <UnitTestProject Include="$(RepositoryRoot)tests/**/*.csproj" />
+  </ItemGroup>
 
   <Target Name="Collect">
     <RemoveDir Directories="$(CoverageArtifactsDirectory)" />
     <MakeDir Directories="$(RawCoverageDirectory)" />
 
-    <Exec Command="dotnet test --solution &quot;$(SolutionPath)&quot; --configuration $(Configuration) --no-build --results-directory &quot;$(RawCoverageDirectory)&quot; -- --report-xunit-trx --coverlet" />
-    <CallTarget Targets="GenerateAndEnforceReport" />
+    <Error Condition="'@(UnitTestProject)' == ''"
+           Text="No unit-test projects were found under $(RepositoryRoot)tests." />
+
+    <Exec Command="dotnet test --project &quot;%(UnitTestProject.Identity)&quot; --configuration $(Configuration) --no-build --results-directory &quot;$(RawCoverageDirectory)&quot; -- --report-xunit-trx --coverlet --coverlet-file-prefix &quot;%(UnitTestProject.Filename)&quot;" />
+    <CallTarget Targets="GenerateAndValidateReport" />
   </Target>
 
-  <Target Name="GenerateAndEnforceReport">
+  <Target Name="GenerateAndValidateReport">
     <Exec Command="dotnet tool run reportgenerator &quot;-reports:$(RawCoverageDirectory)/**/*.cobertura.*.xml&quot; &quot;-targetdir:$(CoverageReportDirectory)&quot; &quot;-reporttypes:Cobertura;HtmlInline&quot; &quot;-assemblyfilters:+MailMcp.*;-MailMcp.Host;-MailMcp.AppHost;-MailMcp.*.UnitTests&quot;" />
-    <CallTarget Targets="Enforce" />
+    <CallTarget Targets="ValidateReport" />
   </Target>
 
-  <Target Name="Enforce">
+  <Target Name="ValidateReport">
     <Error Condition="!Exists('$(MergedCoverageReport)')"
            Text="Merged coverage report was not found at $(MergedCoverageReport)." />
 
@@ -49,10 +53,7 @@
              Importance="high"
              Condition="$(ValidLineCount) == 0" />
 
-    <Message Text="Aggregate line coverage: $(ActualLineCoveragePercent)% ($(CoveredLineCount)/$(ValidLineCount)); required: $(MinimumLineCoveragePercent)%."
+    <Message Text="Aggregate line coverage: $(ActualLineCoveragePercent)% ($(CoveredLineCount)/$(ValidLineCount))."
              Importance="high" />
-
-    <Error Condition="$(ActualLineCoverageRate) &lt; $(MinimumLineCoverageRate)"
-           Text="Aggregate line coverage $(ActualLineCoveragePercent)% is below the required $(MinimumLineCoveragePercent)%." />
   </Target>
 </Project>
