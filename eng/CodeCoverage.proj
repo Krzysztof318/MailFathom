@@ -1,0 +1,64 @@
+<Project DefaultTargets="Collect">
+  <PropertyGroup>
+    <RepositoryRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..'))</RepositoryRoot>
+    <CoverageArtifactsDirectory>$(RepositoryRoot)artifacts/coverage</CoverageArtifactsDirectory>
+    <RawCoverageDirectory>$(CoverageArtifactsDirectory)/raw</RawCoverageDirectory>
+    <CoverageReportDirectory>$(CoverageArtifactsDirectory)/report</CoverageReportDirectory>
+    <MergedCoverageReport Condition="'$(MergedCoverageReport)' == ''">$(CoverageReportDirectory)/Cobertura.xml</MergedCoverageReport>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <MinimumLineCoveragePercent>85</MinimumLineCoveragePercent>
+    <MinimumLineCoverageRate>$([MSBuild]::Divide($(MinimumLineCoveragePercent), 100.0))</MinimumLineCoverageRate>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <UnitTestProject Include="$(RepositoryRoot)tests/**/*.csproj" />
+  </ItemGroup>
+
+  <Target Name="Collect">
+    <RemoveDir Directories="$(CoverageArtifactsDirectory)" />
+    <MakeDir Directories="$(RawCoverageDirectory)" />
+
+    <Error Condition="'@(UnitTestProject)' == ''"
+           Text="No unit-test projects were found under $(RepositoryRoot)tests." />
+
+    <Exec Command="dotnet test --project &quot;%(UnitTestProject.Identity)&quot; --configuration $(Configuration) --no-build --results-directory &quot;$(RawCoverageDirectory)&quot; -- --report-xunit-trx --coverlet --coverlet-file-prefix &quot;%(UnitTestProject.Filename)&quot;" />
+    <CallTarget Targets="GenerateAndEnforceReport" />
+  </Target>
+
+  <Target Name="GenerateAndEnforceReport">
+    <Exec Command="dotnet tool run reportgenerator &quot;-reports:$(RawCoverageDirectory)/**/*.cobertura.*.xml&quot; &quot;-targetdir:$(CoverageReportDirectory)&quot; &quot;-reporttypes:Cobertura;HtmlInline&quot; &quot;-assemblyfilters:+MailMcp.*;-MailMcp.Host;-MailMcp.AppHost;-MailMcp.*.UnitTests&quot;" />
+    <CallTarget Targets="Enforce" />
+  </Target>
+
+  <Target Name="Enforce">
+    <Error Condition="!Exists('$(MergedCoverageReport)')"
+           Text="Merged coverage report was not found at $(MergedCoverageReport)." />
+
+    <XmlPeek XmlInputPath="$(MergedCoverageReport)" Query="/coverage/@line-rate">
+      <Output TaskParameter="Result" PropertyName="ActualLineCoverageRate" />
+    </XmlPeek>
+    <XmlPeek XmlInputPath="$(MergedCoverageReport)" Query="/coverage/@lines-covered">
+      <Output TaskParameter="Result" PropertyName="CoveredLineCount" />
+    </XmlPeek>
+    <XmlPeek XmlInputPath="$(MergedCoverageReport)" Query="/coverage/@lines-valid">
+      <Output TaskParameter="Result" PropertyName="ValidLineCount" />
+    </XmlPeek>
+
+    <Error Condition="'$(ActualLineCoverageRate)' == ''"
+           Text="Merged coverage report does not contain a line-rate value." />
+
+    <PropertyGroup>
+      <ActualLineCoveragePercent>$([MSBuild]::Multiply($(ActualLineCoverageRate), 100.0))</ActualLineCoveragePercent>
+    </PropertyGroup>
+
+    <Message Text="No coverable production lines exist in the configured boundaries; aggregate line coverage is vacuously complete."
+             Importance="high"
+             Condition="$(ValidLineCount) == 0" />
+
+    <Message Text="Aggregate line coverage: $(ActualLineCoveragePercent)% ($(CoveredLineCount)/$(ValidLineCount)); required: $(MinimumLineCoveragePercent)%."
+             Importance="high" />
+
+    <Error Condition="$(ActualLineCoverageRate) &lt; $(MinimumLineCoverageRate)"
+           Text="Aggregate line coverage $(ActualLineCoveragePercent)% is below the required $(MinimumLineCoveragePercent)%." />
+  </Target>
+</Project>

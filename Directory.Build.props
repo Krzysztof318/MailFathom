@@ -42,7 +42,9 @@
   </ItemGroup>
 
   <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.UnitTests'))">
+    <PackageReference Include="coverlet.MTP" PrivateAssets="all" />
     <PackageReference Include="xunit.analyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+    <None Include="$(MSBuildThisFileDirectory)testconfig.json" Link="testconfig.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.UnitTests'))">
@@ -50,8 +52,8 @@
     <IsTestProject>true</IsTestProject>
     <OutputType>Exe</OutputType>
     <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
-    <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Test names use underscores to encode the member, scenario, and expected behavior. -->
+    <NoWarn>$(NoWarn);CS1591;CA1707</NoWarn>
     <!-- Empty scaffold test projects are allowed until the first behavior slice adds real unit tests. -->
     <TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --ignore-exit-code 8</TestingPlatformCommandLineArguments>
   </PropertyGroup>

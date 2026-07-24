@@ -178,6 +178,15 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Cover cancellation, retry boundaries, idempotency, duplicate events, UIDVALIDITY changes, partial failures, and unsafe TLS/authentication configuration where relevant.
 - Run the complete unit test suite with `dotnet test` before committing.
 
+## Code coverage
+
+- Maintain at least 85% aggregate line coverage across the complete configured production scope: `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`.
+- Calculate the threshold from the whole configured codebase on every run. Do not substitute patch coverage, changed-line coverage, or per-project thresholds for the aggregate gate.
+- Keep `Host` and `AppHost` excluded as thin executable composition roots. Do not add other assembly, namespace, file, type, or member exclusions merely to make the threshold pass.
+- Add `using System.Diagnostics.CodeAnalysis;` and apply `[ExcludeFromCodeCoverage]` to a class only when it contains no executable application, domain, mapping, validation, policy, or infrastructure logic. Do not fully qualify the attribute name.
+- Never use `[ExcludeFromCodeCoverage]` to hide behavior that can be meaningfully unit tested. If logic is added to an excluded class, remove the attribute and cover the behavior in the same change.
+- Run `dotnet msbuild eng/CodeCoverage.proj -t:Collect` before committing a change that affects production or test code. The command enforces the 85% whole-scope threshold locally and in CI.
+
 ## Integration tests
 
 - Integration tests are planned for a later phase and are documented only in the architecture draft for now.
