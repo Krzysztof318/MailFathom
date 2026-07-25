@@ -156,7 +156,7 @@ Run:
 /home/krzysiek/.dotnet/dotnet build --no-restore
 /home/krzysiek/.dotnet/dotnet test --no-build
 /home/krzysiek/.dotnet/dotnet format --verify-no-changes --no-restore
-/home/krzysiek/.dotnet/dotnet msbuild eng/CodeCoverage.proj -t:Collect
+/home/krzysiek/.dotnet/dotnet msbuild .config/CodeCoverage.proj -t:Collect
 git diff --check
 ```
 
