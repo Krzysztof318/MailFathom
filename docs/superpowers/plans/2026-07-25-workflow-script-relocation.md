@@ -137,7 +137,7 @@ git add -A scripts eng/agent-workflow
 git commit -m "refactor: flatten workflow scripts"
 ```
 
-### Task 2: Update consumers, documentation, and the draft PR
+### Task 2: Update consumers and documentation
 
 **Files:**
 - Modify: `.agents/skills/start-task/SKILL.md`
@@ -205,6 +205,8 @@ git add .agents AGENTS.md docs scripts
 git commit -m "docs: point workflow to root scripts"
 ```
 
-- [ ] **Step 7: Review, push, and update draft PR**
+- [ ] **Step 7: Inspect the final task diff**
 
-Inspect `origin/main...HEAD`, verify no secrets, generated files, unrelated edits, or co-author trailers, push `agent/optimize-agent-workflow`, and update draft pull request #27 with the flat script layout and seven-test result.
+Inspect `origin/main...HEAD` and verify no secrets, generated files, unrelated
+edits, stale paths, or co-author trailers. Defer push and draft pull request
+#27 updates until the required whole-branch review is clean.
