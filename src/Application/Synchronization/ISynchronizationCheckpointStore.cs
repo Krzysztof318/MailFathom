@@ -16,11 +16,22 @@ public interface ISynchronizationCheckpointStore
         MailFolderName folderName,
         CancellationToken cancellationToken);
 
-    /// <summary>Saves the durable checkpoint for a folder within the supplied persistence session.</summary>
-    Task SaveCheckpointAsync(
+    /// <summary>Stages a checkpoint update only when the durable state still matches the state previously read.</summary>
+    Task<SynchronizationCheckpointSaveResult> SaveCheckpointAsync(
         IPersistenceSession session,
         MailAccountId accountId,
         MailFolderName folderName,
+        SynchronizationCheckpoint? expectedCheckpoint,
         SynchronizationCheckpoint checkpoint,
         CancellationToken cancellationToken);
+}
+
+/// <summary>Describes whether a synchronization checkpoint update was staged.</summary>
+public enum SynchronizationCheckpointSaveResult
+{
+    /// <summary>The durable state matched the expected state and the update was staged.</summary>
+    Staged,
+
+    /// <summary>The durable state changed after it was read, so no update was staged.</summary>
+    ConcurrencyConflict,
 }

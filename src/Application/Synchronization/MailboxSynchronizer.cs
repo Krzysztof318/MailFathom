@@ -40,7 +40,8 @@ public sealed class MailboxSynchronizer
         this.options = options;
         this.concurrencyRetryPolicy = new OptimisticConcurrencyRetryPolicy(
             persistenceSessionFactory,
-            options.MaxPersistenceConcurrencyAttempts);
+            options.MaxPersistenceConcurrencyAttempts,
+            timeProvider);
     }
 
     /// <summary>Synchronizes one account folder without mutating remote mailbox flags.</summary>
@@ -49,12 +50,15 @@ public sealed class MailboxSynchronizer
         MailFolderName folderName,
         CancellationToken cancellationToken)
     {
-        var checkpoint = await this.checkpointStore.GetCheckpointAsync(accountId, folderName, cancellationToken);
+        var persistedCheckpoint =
+            await this.checkpointStore.GetCheckpointAsync(accountId, folderName, cancellationToken);
 
         await using var mailboxSession = await this.mailboxSessionFactory.OpenReadOnlyAsync(accountId, folderName, cancellationToken);
 
         var uidValidity = await mailboxSession.GetUidValidityAsync(cancellationToken);
-        checkpoint = checkpoint?.UidValidity == uidValidity ? checkpoint : SynchronizationCheckpoint.None(uidValidity);
+        var checkpoint = persistedCheckpoint?.UidValidity == uidValidity
+            ? persistedCheckpoint
+            : SynchronizationCheckpoint.None(uidValidity);
 
         var storedCount = 0;
         var skippedOversizedCount = 0;
@@ -94,6 +98,7 @@ public sealed class MailboxSynchronizer
                 var checkpointCommitResult = await this.SaveCheckpointAsync(
                     accountId,
                     folderName,
+                    persistedCheckpoint,
                     advancedCheckpoint,
                     cancellationToken);
 
@@ -108,6 +113,7 @@ public sealed class MailboxSynchronizer
                 }
 
                 checkpoint = advancedCheckpoint;
+                persistedCheckpoint = advancedCheckpoint;
             }
 
             hasMore = batch.HasMore;
@@ -191,18 +197,25 @@ public sealed class MailboxSynchronizer
     private async Task<PersistenceCommitResult> SaveCheckpointAsync(
         MailAccountId accountId,
         MailFolderName folderName,
+        SynchronizationCheckpoint? expectedCheckpoint,
         SynchronizationCheckpoint checkpoint,
         CancellationToken cancellationToken)
     {
         await using var persistenceSession =
             await this.persistenceSessionFactory.BeginSessionAsync(cancellationToken);
 
-        await this.checkpointStore.SaveCheckpointAsync(
+        var saveResult = await this.checkpointStore.SaveCheckpointAsync(
             persistenceSession,
             accountId,
             folderName,
+            expectedCheckpoint,
             checkpoint,
             cancellationToken);
+
+        if (saveResult == SynchronizationCheckpointSaveResult.ConcurrencyConflict)
+        {
+            return PersistenceCommitResult.ConcurrencyConflict;
+        }
 
         return await persistenceSession.CommitAsync(cancellationToken);
     }

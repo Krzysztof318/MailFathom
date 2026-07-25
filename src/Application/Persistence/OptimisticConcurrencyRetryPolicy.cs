@@ -1,5 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Security.Cryptography;
+
 namespace MailMcp.Application.Persistence;
 
 /// <summary>Retries a safe local write after optimistic concurrency conflicts.</summary>
@@ -7,17 +9,32 @@ internal sealed class OptimisticConcurrencyRetryPolicy
 {
     private readonly IPersistenceSessionFactory sessionFactory;
     private readonly int maximumAttempts;
+    private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes a retry policy with a bounded total attempt count.</summary>
     public OptimisticConcurrencyRetryPolicy(
         IPersistenceSessionFactory sessionFactory,
         int maximumAttempts)
+        : this(
+            sessionFactory,
+            maximumAttempts,
+            TimeProvider.System)
+    {
+    }
+
+    /// <summary>Initializes a retry policy with a bounded total attempt count and testable time source.</summary>
+    public OptimisticConcurrencyRetryPolicy(
+        IPersistenceSessionFactory sessionFactory,
+        int maximumAttempts,
+        TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(sessionFactory);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumAttempts, 1);
 
         this.sessionFactory = sessionFactory;
         this.maximumAttempts = maximumAttempts;
+        this.timeProvider = timeProvider;
     }
 
     /// <summary>Stages and commits a complete local write in a fresh session for every attempt.</summary>
@@ -42,8 +59,29 @@ internal sealed class OptimisticConcurrencyRetryPolicy
             {
                 return result;
             }
+
+            if (attemptNumber < this.maximumAttempts)
+            {
+                await Task.Delay(
+                    CreateJitteredRetryDelay(attemptNumber),
+                    this.timeProvider,
+                    cancellationToken);
+            }
         }
 
         return PersistenceCommitResult.ConcurrencyConflict;
+    }
+
+    private static TimeSpan CreateJitteredRetryDelay(int completedAttemptCount)
+    {
+        var exponentialCeilingMilliseconds = Math.Min(
+            1000,
+            50 * (1 << Math.Min(completedAttemptCount - 1, 5)));
+        var minimumMilliseconds = exponentialCeilingMilliseconds / 2;
+        var jitteredMilliseconds = RandomNumberGenerator.GetInt32(
+            minimumMilliseconds,
+            exponentialCeilingMilliseconds + 1);
+
+        return TimeSpan.FromMilliseconds(jitteredMilliseconds);
     }
 }

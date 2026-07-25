@@ -10,6 +10,8 @@ namespace MailMcp.Infrastructure.Persistence;
 [ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
 internal sealed class MailMcpDbContext : DbContext
 {
+    internal const string SynchronizationCheckpointPrimaryKeyConstraintName = "pk_synchronization_checkpoints";
+
     /// <summary>Initializes a new MailMcp EF Core context.</summary>
     public MailMcpDbContext(DbContextOptions<MailMcpDbContext> options)
         : base(options)
@@ -87,7 +89,8 @@ internal sealed class MailMcpDbContext : DbContext
         modelBuilder.Entity<SynchronizationCheckpointEntity>(entity =>
         {
             entity.ToTable("synchronization_checkpoints");
-            entity.HasKey(checkpoint => checkpoint.MailFolderId);
+            entity.HasKey(checkpoint => checkpoint.MailFolderId)
+                .HasName(SynchronizationCheckpointPrimaryKeyConstraintName);
             entity.Property(checkpoint => checkpoint.MailFolderId).ValueGeneratedNever();
             entity.Property(checkpoint => checkpoint.ConcurrencyVersion).IsRowVersion();
             entity.HasOne(checkpoint => checkpoint.MailFolder)

@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Application.Persistence;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -90,13 +91,58 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
         var policy = new OptimisticConcurrencyRetryPolicy(sessionFactory, maximumAttempts: 3);
 
         // Act
-        await Assert.ThrowsAsync<OperationCanceledException>(() => policy.CommitAsync(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => policy.CommitAsync(
             static (_, _) => Task.CompletedTask,
             cancellation.Token));
 
         // Assert
         await sessionFactory.Received(1).BeginSessionAsync(cancellation.Token);
         await session.Received(1).DisposeAsync();
+    }
+
+    [Fact]
+    public async Task CommitAsync_ConflictBeforeAnotherAttempt_WaitsForJitteredBackoffWithinBounds()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider();
+        var firstCommitObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        var firstSession = Substitute.For<IPersistenceSession>();
+        var secondSession = Substitute.For<IPersistenceSession>();
+        sessionFactory.BeginSessionAsync(CancellationToken.None).Returns(firstSession, secondSession);
+        firstSession.CommitAsync(CancellationToken.None).Returns(_ =>
+        {
+            firstCommitObserved.SetResult();
+            return PersistenceCommitResult.ConcurrencyConflict;
+        });
+        secondSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.Committed);
+        var policy = new OptimisticConcurrencyRetryPolicy(
+            sessionFactory,
+            maximumAttempts: 3,
+            clock);
+
+        // Act
+        var commitTask = policy.CommitAsync(
+            static (_, _) => Task.CompletedTask,
+            CancellationToken.None);
+        await firstCommitObserved.Task;
+
+        // Assert
+        Assert.False(commitTask.IsCompleted);
+        await sessionFactory.Received(1).BeginSessionAsync(CancellationToken.None);
+
+        // Act
+        clock.Advance(TimeSpan.FromMilliseconds(24));
+        Assert.False(commitTask.IsCompleted);
+        await sessionFactory.Received(1).BeginSessionAsync(CancellationToken.None);
+
+        // Act
+        clock.Advance(TimeSpan.FromMilliseconds(26));
+        var result = await commitTask;
+
+        // Assert
+        Assert.Equal(PersistenceCommitResult.Committed, result);
+        await sessionFactory.Received(2).BeginSessionAsync(CancellationToken.None);
     }
 
     [Fact]

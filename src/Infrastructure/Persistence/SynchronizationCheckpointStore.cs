@@ -45,10 +45,11 @@ internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContex
     }
 
     /// <inheritdoc />
-    public async Task SaveCheckpointAsync(
+    public async Task<SynchronizationCheckpointSaveResult> SaveCheckpointAsync(
         IPersistenceSession session,
         MailAccountId accountId,
         MailFolderName folderName,
+        SynchronizationCheckpoint? expectedCheckpoint,
         SynchronizationCheckpoint checkpoint,
         CancellationToken cancellationToken)
     {
@@ -64,6 +65,11 @@ internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContex
         var entity = await FindCheckpointForAsync(writeContext, folder, cancellationToken);
         if (entity is null)
         {
+            if (expectedCheckpoint is not null)
+            {
+                return SynchronizationCheckpointSaveResult.ConcurrencyConflict;
+            }
+
             writeContext.SynchronizationCheckpoints.Add(new SynchronizationCheckpointEntity
             {
                 MailFolder = folder,
@@ -72,13 +78,29 @@ internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContex
                 SynchronizedAt = checkpoint.SynchronizedAt,
             });
 
-            return;
+            return SynchronizationCheckpointSaveResult.Staged;
+        }
+
+        var currentCheckpoint = new SynchronizationCheckpoint(
+            ImapUidValidity.Create(entity.UidValidity),
+            entity.LastSeenUid is { } uid ? ImapUid.Create(uid) : null,
+            entity.SynchronizedAt);
+        if (!currentCheckpoint.RepresentsSameProgressAs(expectedCheckpoint))
+        {
+            return SynchronizationCheckpointSaveResult.ConcurrencyConflict;
         }
 
         entity.UidValidity = checkpoint.UidValidity.Value;
         entity.LastSeenUid = checkpoint.LastSeenUid?.Value;
-        entity.SynchronizedAt = checkpoint.SynchronizedAt;
+        entity.SynchronizedAt = LaterOf(entity.SynchronizedAt, checkpoint.SynchronizedAt);
+
+        return SynchronizationCheckpointSaveResult.Staged;
     }
+
+    private static DateTimeOffset? LaterOf(DateTimeOffset? current, DateTimeOffset? proposed) =>
+        current is not null && (proposed is null || current > proposed)
+            ? current
+            : proposed;
 
     private static async Task<SynchronizationCheckpointEntity?> FindCheckpointForAsync(
         MailMcpDbContext writeContext,
