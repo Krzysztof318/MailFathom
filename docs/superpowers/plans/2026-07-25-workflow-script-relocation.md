@@ -20,49 +20,7 @@
 
 ---
 
-### Task 1: Define the flat-layout contract
-
-**Files:**
-- Modify: `eng/agent-workflow/tests/run.sh`
-
-**Interfaces:**
-- Consumes: the current repository root and existing workflow contract runner.
-- Produces: `workflow_scripts_use_flat_manual_layout`, which requires the four executable root scripts and rejects the legacy directory.
-
-- [ ] **Step 1: Add the failing layout test**
-
-Add:
-
-```bash
-workflow_scripts_use_flat_manual_layout() {
-  [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
-  [[ -x "$source_repository_root/scripts/verify-fast.sh" ]]
-  [[ -x "$source_repository_root/scripts/verify-full.sh" ]]
-  [[ -x "$source_repository_root/scripts/test-agent-workflow.sh" ]]
-  [[ ! -e "$source_repository_root/eng/agent-workflow" ]]
-}
-```
-
-Resolve `source_repository_root` independently from the temporary fixture and invoke the test through `run_test`.
-
-- [ ] **Step 2: Run the contract suite and verify RED**
-
-Run:
-
-```bash
-bash eng/agent-workflow/tests/run.sh
-```
-
-Expected: six existing tests pass and `workflow_scripts_use_flat_manual_layout` fails because root `scripts/` does not exist.
-
-- [ ] **Step 3: Commit the failing contract**
-
-```bash
-git add eng/agent-workflow/tests/run.sh
-git commit -m "test: require flat workflow script layout"
-```
-
-### Task 2: Move and consolidate the scripts
+### Task 1: Define and implement the flat script layout
 
 **Files:**
 - Create from move: `scripts/inspect-workspace.sh`
@@ -76,7 +34,52 @@ git commit -m "test: require flat workflow script layout"
 - Consumes: zero-argument operational entrypoints and environment variables `FAKE_DOTNET_LOG` and `FAKE_DOTNET_FAIL_MATCH` in test mode.
 - Produces: four executable root scripts with unchanged operational behavior.
 
-- [ ] **Step 1: Move the three operational entrypoints**
+- [ ] **Step 1: Correct the existing fixture-directory regression**
+
+In `verify_full_checks_committed_staged_and_unstaged_changes`, execute every
+`verify-full.sh` call from `$repository_root`:
+
+```bash
+if (
+  cd "$repository_root"
+  "$workflow_directory/verify-full.sh"
+) > "$committed_output" 2>&1; then
+  printf 'verify-full.sh ignored committed whitespace errors\n' >&2
+  return 1
+fi
+```
+
+Apply the same subshell shape to the staged and unstaged cases.
+
+- [ ] **Step 2: Run the contract suite and verify the corrected baseline**
+
+Run:
+
+```bash
+bash eng/agent-workflow/tests/run.sh
+```
+
+Expected: six tests pass and zero fail.
+
+- [ ] **Step 3: Add and verify the failing layout contract**
+
+Resolve `source_repository_root` independently from the temporary fixture,
+invoke this test through `run_test`, and rerun the suite:
+
+```bash
+workflow_scripts_use_flat_manual_layout() {
+  [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
+  [[ -x "$source_repository_root/scripts/verify-fast.sh" ]]
+  [[ -x "$source_repository_root/scripts/verify-full.sh" ]]
+  [[ -x "$source_repository_root/scripts/test-agent-workflow.sh" ]]
+  [[ ! -e "$source_repository_root/eng/agent-workflow" ]]
+}
+```
+
+Expected: six existing tests pass and the layout test fails because root
+`scripts/` does not exist.
+
+- [ ] **Step 4: Move the three operational entrypoints**
 
 Move the files without changing their executable modes:
 
@@ -87,7 +90,7 @@ git mv eng/agent-workflow/verify-fast.sh scripts/verify-fast.sh
 git mv eng/agent-workflow/verify-full.sh scripts/verify-full.sh
 ```
 
-- [ ] **Step 2: Move the runner and embed fake-dotnet mode**
+- [ ] **Step 5: Move the runner and embed fake-dotnet mode**
 
 Move the runner to `scripts/test-agent-workflow.sh`. At the beginning, before test setup, detect invocation through a temporary `dotnet` symlink:
 
@@ -116,7 +119,7 @@ ln -s "$scripts_directory/test-agent-workflow.sh" "$fake_bin_directory/dotnet"
 
 Delete `eng/agent-workflow/tests/fake-dotnet.sh`.
 
-- [ ] **Step 3: Run the suite and verify GREEN**
+- [ ] **Step 6: Run the suite and verify GREEN**
 
 Run:
 
@@ -127,14 +130,14 @@ bash -n scripts/*.sh
 
 Expected: seven tests pass, zero fail, and all four scripts pass syntax validation.
 
-- [ ] **Step 4: Commit the move**
+- [ ] **Step 7: Commit the move**
 
 ```bash
 git add -A scripts eng/agent-workflow
 git commit -m "refactor: flatten workflow scripts"
 ```
 
-### Task 3: Update consumers, documentation, and the draft PR
+### Task 2: Update consumers, documentation, and the draft PR
 
 **Files:**
 - Modify: `.agents/skills/start-task/SKILL.md`
