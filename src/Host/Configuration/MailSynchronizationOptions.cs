@@ -41,6 +41,7 @@ public sealed class MailSynchronizationOptions : IValidatableObject, IMailKitIma
                 && StringComparer.Ordinal.Equals(
                     MailAccountId.Create(candidate.AccountId).Value,
                     normalizedAccountId));
+
         return new MailKitImapAccountSettings(
             normalizedAccountId,
             account.Host.Trim(),

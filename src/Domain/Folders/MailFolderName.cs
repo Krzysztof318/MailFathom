@@ -17,6 +17,7 @@ public readonly record struct MailFolderName
     public static MailFolderName Create(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
+
         return new MailFolderName(value.Trim());
     }
 

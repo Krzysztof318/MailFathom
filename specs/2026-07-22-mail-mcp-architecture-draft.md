@@ -20,7 +20,7 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 - One service owner can configure many mailboxes across unrelated domains.
 - PostgreSQL is the system of record for synchronization state, message metadata, extracted searchable text, RAG chunks, and embeddings. Runtime configuration is read through the .NET configuration pipeline; local first-release deployments use JSON plus secret references, while future write-side/admin configuration storage is deferred to a separate decision.
 - Full RFC 822 messages, including their MIME attachments, are stored in a dedicated PostgreSQL table using `bytea`.
-- Raw content is accessed through `IMessageContentStore`; a later release will migrate that content to MinIO without changing domain or application use cases.
+- Raw content is accessed through `IEmailContentStore`; a later release will migrate that content to MinIO without changing domain or application use cases.
 - MailKit handles IMAP, SMTP, MIME, TLS modes, and standard SASL mechanisms.
 - Synchronization must never mark a remote message as read.
 - MCP reads from local storage and never performs a blocking IMAP fetch while serving a tool request.
@@ -133,7 +133,7 @@ Cli           -> Application plus required adapters when introduced
 ```
 
 - `Domain` contains the mail business model and business invariants: entities, value objects, domain events, domain errors, domain services that require no I/O, account identity, folder identity, IMAP occurrence identity, message metadata, content integrity facts, synchronization checkpoint concepts, delivery/outbox state, embedding-profile value rules that are provider-neutral, and validation such as valid UID/UIDVALIDITY combinations or unsafe transport choices. `Domain` is not the general home for application ports. It may define an interface only when the abstraction is itself a pure domain policy or strategy with no persistence, network, clock, configuration, logging, or provider concern. It contains no persistence models, no configuration binding types, no serialization attributes for external protocols, and no infrastructure framework dependencies.
-- `Application` contains the use-case implementations. Each use case coordinates domain objects, enforces authorization close to the operation, defines explicit input/output contracts, returns application result/error types, and owns ports for effects that must be supplied by outer layers: persistence, local MIME content storage, mail sessions/transports, time, cryptography, search, embedding, chat, and background job scheduling. It depends only on `Domain`; it owns abstractions such as `IMessageContentStore` and never exposes EF Core entities, MailKit objects, MCP SDK types, or AI-provider-specific types.
+- `Application` contains the use-case implementations. Each use case coordinates domain objects, enforces authorization close to the operation, defines explicit input/output contracts, returns application result/error types, and owns ports for effects that must be supplied by outer layers: persistence, local MIME content storage, mail sessions/transports, time, cryptography, search, embedding, chat, and background job scheduling. It depends only on `Domain`; it owns abstractions such as `IEmailContentStore` and never exposes EF Core entities, MailKit objects, MCP SDK types, or AI-provider-specific types.
 - `Infrastructure` contains implementations of application ports for PostgreSQL persistence, EF Core migrations, Npgsql raw-MIME storage, MailKit IMAP/SMTP sessions, Data Protection persistence, secret loading/protection adapters, and OpenTelemetry/exporter wiring that is not host-specific. It maps infrastructure records to application/domain contracts and keeps database schema, SQL, `bytea`, pgvector, SASL, TLS, and MailKit details inside adapters.
 - `AI` contains implementations of application ports for chunking, embedding generation, hybrid retrieval, and Agent Framework composition. It may depend on provider SDKs behind adapters, but provider-specific request/response types never leak into `Application`, `Domain`, `Mcp`, or persistence contracts.
 - `Mcp` maps MCP schemas to application requests and maps safe application results/errors back to MCP responses. It contains no persistence, mail protocol, RAG indexing, or database transaction logic.
@@ -307,7 +307,7 @@ For native systemd deployments, MailMcp should load sensitive values from system
 
 - `MailboxAccount`: one configured mail identity and its IMAP/SMTP settings.
 - `MailFolder`: remote folder identity, sync policy, UID validity, and synchronization cursor.
-- `StoredEmail`: local representation of one IMAP message occurrence in one folder.
+- `StoredEmail`: local representation of one IMAP email occurrence in one folder, identified by `EmailOccurrenceId`.
 - `EmailMessageContent`: locally stored raw RFC 822 content and its integrity metadata.
 - `SynchronizationCheckpoint`: last successful UID and modification sequence per folder.
 - `EmailChunk`: deterministic searchable fragment linked to a message.
@@ -375,7 +375,7 @@ The SQL above is an illustrative profile with ID `1` and 1536 dimensions; it doe
 
 ## 10. PostgreSQL MIME storage
 
-- One `email_message_contents` row stores the complete raw RFC 822 message for each synchronized message occurrence.
+- One `email_message_contents` row stores the complete raw RFC 822 message for each synchronized email occurrence.
 - Raw MIME is written and read through a focused Npgsql repository rather than ordinary tracked EF Core mailbox entities.
 - Content insertion is idempotent and occurs in the same local transaction as the corresponding message metadata and synchronization state update.
 - The repository verifies the recorded byte length and SHA-256 hash when consistency repair is required.
@@ -695,7 +695,7 @@ Potential AGT evaluation scenarios include governing a future `send_email` MCP t
 
 ### 21.2 MinIO object storage migration
 
-All raw-content operations use the application-owned `IMessageContentStore` port with streaming put, open-read, existence, and delete operations. The first implementation stores content in PostgreSQL; neither the application nor domain layer receives a PostgreSQL-specific locator or `bytea` type. This seam keeps a future MinIO or S3-compatible object-storage migration possible without changing mail use cases.
+All raw-content operations use the application-owned `IEmailContentStore` port with streaming put, open-read, existence, and delete operations. The first implementation stores content in PostgreSQL; neither the application nor domain layer receives a PostgreSQL-specific locator or `bytea` type. This seam keeps a future MinIO or S3-compatible object-storage migration possible without changing mail use cases.
 
 A later MinIO migration would be performed online in controlled stages:
 

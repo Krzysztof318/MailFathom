@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 namespace MailMcp.Host.Hosting;
 
 /// <summary>Runs periodic IMAP reconciliation in scoped work units.</summary>
-public sealed class MailSynchronizationWorker : BackgroundService
+public sealed partial class MailSynchronizationWorker : BackgroundService
 {
     private readonly IServiceScopeFactory scopeFactory;
     private readonly IOptions<MailSynchronizationOptions> options;
@@ -18,7 +18,11 @@ public sealed class MailSynchronizationWorker : BackgroundService
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes a new mail synchronization worker.</summary>
-    public MailSynchronizationWorker(IServiceScopeFactory scopeFactory, IOptions<MailSynchronizationOptions> options, ILogger<MailSynchronizationWorker> logger, TimeProvider timeProvider)
+    public MailSynchronizationWorker(
+        IServiceScopeFactory scopeFactory,
+        IOptions<MailSynchronizationOptions> options,
+        ILogger<MailSynchronizationWorker> logger,
+        TimeProvider timeProvider)
     {
         this.scopeFactory = scopeFactory;
         this.options = options;
@@ -32,11 +36,13 @@ public sealed class MailSynchronizationWorker : BackgroundService
         var currentOptions = this.options.Value;
         if (!currentOptions.Enabled)
         {
-            this.logger.LogInformation("IMAP synchronization worker is disabled.");
+            this.LogSynchronizationDisabled();
+
             return;
         }
 
         using var timer = new PeriodicTimer(currentOptions.Interval, this.timeProvider);
+
         do
         {
             await this.RunOnceAsync(currentOptions, stoppingToken);
@@ -54,12 +60,16 @@ public sealed class MailSynchronizationWorker : BackgroundService
                 try
                 {
                     using var scope = this.scopeFactory.CreateScope();
+
                     var synchronizer = scope.ServiceProvider.GetRequiredService<MailboxSynchronizer>();
                     var result = await synchronizer.SynchronizeAsync(MailAccountId.Create(account.AccountId), MailFolderName.Create(folder), cancellationToken);
-                    if (this.logger.IsEnabled(LogLevel.Information))
-                    {
-                        this.logger.LogInformation("Synchronized IMAP folder {AccountId}/{FolderName}; stored {StoredMessageCount} messages, skipped {SkippedOversizedMessageCount} oversized messages, and has more work: {HasMoreMessages}.", account.AccountId, folder, result.StoredMessageCount, result.SkippedOversizedMessageCount, result.HasMoreMessages);
-                    }
+
+                    this.LogFolderSynchronized(
+                        account.AccountId,
+                        folder,
+                        result.StoredEmailCount,
+                        result.SkippedOversizedEmailCount,
+                        result.HasMoreEmails);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -67,9 +77,30 @@ public sealed class MailSynchronizationWorker : BackgroundService
                 }
                 catch (Exception exception)
                 {
-                    this.logger.LogWarning(exception, "IMAP synchronization failed for {AccountId}/{FolderName}; the worker will continue with remaining folders and retry on a later interval.", account.AccountId, folder);
+                    this.LogFolderSynchronizationFailed(exception, account.AccountId, folder);
                 }
             }
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "IMAP synchronization worker is disabled.")]
+    private partial void LogSynchronizationDisabled();
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Synchronized IMAP folder {AccountId}/{FolderName}; stored {StoredEmailCount} messages, skipped {SkippedOversizedEmailCount} oversized messages, and has more work: {HasMoreEmails}.")]
+    private partial void LogFolderSynchronized(
+        string accountId,
+        string folderName,
+        int storedEmailCount,
+        int skippedOversizedEmailCount,
+        bool hasMoreEmails);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "IMAP synchronization failed for {AccountId}/{FolderName}; the worker will continue with remaining folders and retry on a later interval.")]
+    private partial void LogFolderSynchronizationFailed(
+        Exception exception,
+        string accountId,
+        string folderName);
 }

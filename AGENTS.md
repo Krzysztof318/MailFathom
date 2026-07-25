@@ -69,7 +69,10 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Keep names proportionate and avoid redundant context already supplied by the containing type or namespace. Do not produce sentence-like names when a smaller precise name communicates the same contract.
 - Name methods after observable behavior or the result they produce. Avoid vague verbs such as `Handle`, `Process`, `Manage`, `Do`, or `Execute` unless the surrounding application pattern gives them a precise established meaning.
 - Rename unclear identifiers as part of the code change that exposes them. Do not rely on comments to compensate for misleading or abbreviated names.
+- Use `Email` for the mail artifact throughout `Domain`, `Application`, and `Infrastructure`: `EmailOccurrenceId`, `RemoteEmailMetadata`, `IEmailContentStore`, `StoredEmailEntity`. Do not name a mail type `Message` or `MailMessage`; the first is ambiguous once AI conversations exist and the second shadows `System.Net.Mail.MailMessage`. Name an AI conversation turn `ChatMessage` or `AgentMessage` after the domain concept, never after the layer.
+- Do not rely on a namespace to disambiguate a type whose name is ambiguous on its own. A reader sees the name at the point of use, not the namespace. `Session` in particular must always be qualified: `IMailboxSession` for an open IMAP folder, `IPersistenceSession` for a local write transaction.
 - Keep public APIs small and predictable. Make types and members `internal` unless they are intentionally part of a cross-project contract.
+- Declare `InternalsVisibleTo` as an MSBuild `<InternalsVisibleTo Include="..." />` item in the project file that grants the access. Do not add hand-written assembly-attribute source files for it, so the granted friend assemblies stay visible where the project's build contract is defined.
 - Prefer one primary type per file and align namespaces with folders. File names match their primary type.
 - Use `sealed` for concrete classes not designed for inheritance. Prefer composition over inheritance and do not use inheritance only to share implementation.
 - Prefer guard clauses over deep nesting. Validate public boundary arguments with the appropriate BCL guard methods or explicit domain validation.
@@ -77,7 +80,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Expose read-only collection abstractions when callers must not mutate state. Avoid returning mutable internal collections.
 - For byte-oriented data, do not model payloads as `byte[]`, `List<byte>`, `IReadOnlyList<byte>`, or other general-purpose byte collections at application/domain boundaries. Prefer `Span<byte>` or `ReadOnlySpan<byte>` for synchronous stack-only operations, and `Memory<byte>` or `ReadOnlyMemory<byte>` when data must cross async, object, or DI boundaries. Keep `byte[]` only where a framework/provider contract requires it, such as EF Core `bytea` persistence models, and convert at that adapter boundary.
 - Prefer pattern matching, switch expressions, collection expressions, and other modern syntax only when they make the intent clearer.
-- Avoid reflection, `dynamic`, source-code generation, and unsafe code unless a measured requirement justifies them.
+- Avoid reflection, `dynamic`, source-code generation, and unsafe code unless a measured requirement justifies them. This restricts authoring custom generators and generator-driven designs, not first-party framework generators such as `[LoggerMessage]`, `[GeneratedRegex]`, or `System.Text.Json` source generation, which are the recommended shape of those APIs.
 - Use constructor injection. Avoid service locators, global mutable state, and static dependencies that hide collaborators.
 - When a method, constructor, or primary-constructor parameter list has three or more parameters, put each parameter on its own line. If all involved type and parameter names are genuinely short, this may be deferred until four parameters. Keep the closing parenthesis and base/initializer on their own readable line when wrapping.
 - Make I/O asynchronous end-to-end. Never block on tasks with `.Result`, `.Wait()`, or `GetAwaiter().GetResult()`.
@@ -91,9 +94,12 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Use `DateTimeOffset` for timestamps and inject `TimeProvider` wherever current time affects behavior.
 - Validate options at startup. Fail fast on invalid or unsafe configuration.
 - Use structured logging with named properties. Never log credentials, tokens, message bodies, attachment content, or raw MIME.
+- Do not wrap ordinary log calls in `ILogger.IsEnabled(...)`. The logging infrastructure already skips disabled levels, so the guard only adds noise. Use it exclusively when producing the log arguments themselves is expensive, for example serialization, formatting, LINQ materialization, large allocations, or an extra query. Prefer removing the cost or using compile-time `LoggerMessage` source-generated methods over adding a guard.
 - Catch exceptions only when adding useful context, translating at a boundary, applying a defined retry policy, or completing cleanup. Preserve the original exception as `InnerException`.
 - Use explicit result types for expected application failures; reserve exceptions for exceptional or infrastructure failures.
 - Keep methods focused and classes cohesive. Prefer readable control flow over clever expressions or premature generic abstractions.
+- Keep methods small enough to read as a single sequence of decisions. When a method mixes several responsibilities, nests loops around multi-step work, or needs a comment to announce its next stage, extract a named private method instead. Prefer extraction over longer bodies, and prefer a well-named method over an explanatory comment.
+- Use blank lines to separate the logical blocks inside a method body so structure is visible before the code is read. Separate at minimum: the argument-guard block, each distinct step or stage, a block that builds state from the block that consumes it, and the final `return` from the work that produced it. Do not separate lines that belong to one step, and do not leave a blank line as the first or last line of a block.
 - Use English XML documentation comments to make code contracts useful to developers, IDE tooling, and future agents.
 - Generate XML documentation files for production projects and keep missing public API documentation visible through compiler or analyzer diagnostics.
 - Document every public type and public member. Also document internal interfaces, extension points, domain invariants, protocol boundaries, concurrency rules, security-sensitive behavior, and non-obvious lifecycle or ownership requirements.
@@ -131,6 +137,8 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Avoid lazy loading and hidden N+1 queries. Make related data loading explicit.
 - Express uniqueness, concurrency, and idempotency guarantees in PostgreSQL constraints as well as in application logic.
 - Keep transactions short and define their boundary in the application operation. Do not hold a database transaction open across IMAP, SMTP, or AI network calls.
+- A write repository obtains its `DbContext` from the `IPersistenceSession` it is given and does not inject one. A read method joins no transaction, so it takes no session and uses the scoped context. Never accept a contract parameter the implementation ignores: a session that is not written through guarantees nothing and only appears to.
+- Reach for the change tracker only when a pending insert must be visible before commit, and say so in a comment. Prefer `FindAsync` for primary-key lookups, which already resolves from the tracker. For alternate-key lookups use the shared two-pass helper with a single predicate expression rather than repeating the predicate for the in-memory and database passes.
 - Review generated migrations and SQL. Add indexes from demonstrated query shapes and inspect query plans for performance-critical paths.
 - Use provider-supported parameterization. Never construct SQL from untrusted strings; any dynamic identifier must come from validated application-owned metadata.
 
@@ -206,7 +214,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Keep third-party types inside their owning adapter wherever practical.
 - Prefer platform capabilities before adding packages. Every new package must have a clear owner and purpose.
 - Do not expose EF Core entities, MailKit objects, MCP SDK types, or provider-specific AI types across application boundaries.
-- Access raw RFC 822 content only through the application-owned `IMessageContentStore` port. Its initial implementation uses a dedicated PostgreSQL table, separate from message metadata.
+- Access raw RFC 822 content only through the application-owned `IEmailContentStore` port. Its initial implementation uses a dedicated PostgreSQL table, separate from email metadata.
 - Keep PostgreSQL, Npgsql, and `bytea` details inside the initial content-store adapter so a future MinIO/S3 implementation does not change application use cases or domain types.
 - Do not load raw MIME in ordinary mailbox queries or track large `bytea` values in EF Core unnecessarily.
 - Apply database migrations explicitly. Do not run destructive or automatic production migrations during ordinary host startup.

@@ -5,8 +5,8 @@ using MailKit.Search;
 using MailKit.Security;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
-using MailMcp.Domain.Messages;
 using MailMcp.Infrastructure.Mail.MailKit;
 using NSubstitute;
 using Xunit;
@@ -48,7 +48,7 @@ public sealed class MailKitImapMailboxSessionTests
     }
 
     [Fact]
-    public async Task GetMessageBatchAfterAsync_EmptyFolder_DoesNotCheckpointFutureUid()
+    public async Task GetEmailBatchAfterAsync_EmptyFolder_DoesNotCheckpointFutureUid()
     {
         // Arrange
         await using var client = new FakeImapClient();
@@ -62,7 +62,7 @@ public sealed class MailKitImapMailboxSessionTests
             folder);
 
         // Act
-        var batch = await session.GetMessageBatchAfterAsync(null, 100, CancellationToken.None);
+        var batch = await session.GetEmailBatchAfterAsync(null, 100, CancellationToken.None);
 
         // Assert
         Assert.Null(batch.InspectedThroughUid);
@@ -71,7 +71,7 @@ public sealed class MailKitImapMailboxSessionTests
     }
 
     [Fact]
-    public async Task GetMessageBatchAfterAsync_NonUtcEnvelopeDate_NormalizesSentAtToUtc()
+    public async Task GetEmailBatchAfterAsync_NonUtcEnvelopeDate_NormalizesSentAtToUtc()
     {
         // Arrange
         await using var client = new FakeImapClient();
@@ -100,10 +100,10 @@ public sealed class MailKitImapMailboxSessionTests
             folder);
 
         // Act
-        var batch = await session.GetMessageBatchAfterAsync(null, 100, CancellationToken.None);
+        var batch = await session.GetEmailBatchAfterAsync(null, 100, CancellationToken.None);
 
         // Assert
-        var metadata = Assert.Single(batch.Messages);
+        var metadata = Assert.Single(batch.Emails);
         Assert.Equal(TimeSpan.Zero, metadata.SentAt!.Value.Offset);
         Assert.Equal(new DateTimeOffset(2026, 7, 24, 6, 30, 0, TimeSpan.Zero), metadata.SentAt);
     }
@@ -193,7 +193,7 @@ public sealed class MailKitImapMailboxSessionTests
     [InlineData("secondary", "INBOX", 7U)]
     [InlineData("primary", "Archive", 7U)]
     [InlineData("primary", "INBOX", 8U)]
-    public async Task FetchMessageContentWithoutSettingSeenAsync_ForeignOccurrence_RejectsBeforeRemoteFetch(
+    public async Task FetchEmailContentWithoutSettingSeenAsync_ForeignOccurrence_RejectsBeforeRemoteFetch(
         string occurrenceAccountId,
         string occurrenceFolderName,
         uint occurrenceUidValidity)
@@ -207,14 +207,14 @@ public sealed class MailKitImapMailboxSessionTests
             MailFolderName.Create("INBOX"),
             client,
             folder);
-        var foreignOccurrence = MessageOccurrenceId.Create(
+        var foreignOccurrence = EmailOccurrenceId.Create(
             MailAccountId.Create(occurrenceAccountId),
             MailFolderName.Create(occurrenceFolderName),
             ImapUidValidity.Create(occurrenceUidValidity),
             ImapUid.Create(10));
 
         // Act
-        var exception = await Assert.ThrowsAsync<ArgumentException>(() => session.FetchMessageContentWithoutSettingSeenAsync(
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => session.FetchEmailContentWithoutSettingSeenAsync(
             foreignOccurrence,
             1024,
             CancellationToken.None));
@@ -247,7 +247,7 @@ public sealed class MailKitImapMailboxSessionTests
     }
 
     [Fact]
-    public async Task FetchMessageContentWithoutSettingSeenAsync_ValidOccurrence_ReturnsContentWithoutRequestingAnySeenSettingOperation()
+    public async Task FetchEmailContentWithoutSettingSeenAsync_ValidOccurrence_ReturnsContentWithoutRequestingAnySeenSettingOperation()
     {
         // Arrange
         await using var client = new FakeImapClient();
@@ -260,14 +260,14 @@ public sealed class MailKitImapMailboxSessionTests
             MailFolderName.Create("INBOX"),
             client,
             folder);
-        var occurrenceId = MessageOccurrenceId.Create(
+        var occurrenceId = EmailOccurrenceId.Create(
             MailAccountId.Create("primary"),
             MailFolderName.Create("INBOX"),
             ImapUidValidity.Create(7),
             ImapUid.Create(10));
 
         // Act
-        var content = await session.FetchMessageContentWithoutSettingSeenAsync(occurrenceId, 1024, CancellationToken.None);
+        var content = await session.FetchEmailContentWithoutSettingSeenAsync(occurrenceId, 1024, CancellationToken.None);
 
         // Assert
         Assert.Equal(occurrenceId, content.OccurrenceId);
@@ -281,7 +281,7 @@ public sealed class MailKitImapMailboxSessionTests
     }
 
     [Fact]
-    public async Task FetchMessageContentWithoutSettingSeenAsync_ContentStreamExceedsLimit_ThrowsMessageContentTooLarge()
+    public async Task FetchEmailContentWithoutSettingSeenAsync_ContentStreamExceedsLimit_ThrowsMessageContentTooLarge()
     {
         // Arrange
         await using var client = new FakeImapClient();
@@ -293,14 +293,14 @@ public sealed class MailKitImapMailboxSessionTests
             MailFolderName.Create("INBOX"),
             client,
             folder);
-        var occurrenceId = MessageOccurrenceId.Create(
+        var occurrenceId = EmailOccurrenceId.Create(
             MailAccountId.Create("primary"),
             MailFolderName.Create("INBOX"),
             ImapUidValidity.Create(7),
             ImapUid.Create(10));
 
         // Act
-        var exception = await Assert.ThrowsAsync<MessageContentTooLargeException>(() => session.FetchMessageContentWithoutSettingSeenAsync(
+        var exception = await Assert.ThrowsAsync<EmailContentTooLargeException>(() => session.FetchEmailContentWithoutSettingSeenAsync(
             occurrenceId,
             1024,
             CancellationToken.None));
@@ -312,7 +312,7 @@ public sealed class MailKitImapMailboxSessionTests
     }
 
     [Fact]
-    public async Task GetMessageBatchAfterAsync_CheckpointAtHighestPossibleUid_StopsWithoutSearchingBeyondTheUidSpace()
+    public async Task GetEmailBatchAfterAsync_CheckpointAtHighestPossibleUid_StopsWithoutSearchingBeyondTheUidSpace()
     {
         // Arrange
         await using var client = new FakeImapClient();
@@ -327,10 +327,10 @@ public sealed class MailKitImapMailboxSessionTests
         var exhaustedUid = ImapUid.Create(uint.MaxValue);
 
         // Act
-        var batch = await session.GetMessageBatchAfterAsync(exhaustedUid, 100, CancellationToken.None);
+        var batch = await session.GetEmailBatchAfterAsync(exhaustedUid, 100, CancellationToken.None);
 
         // Assert
-        Assert.Empty(batch.Messages);
+        Assert.Empty(batch.Emails);
         Assert.False(batch.HasMore);
         Assert.Equal(exhaustedUid, batch.InspectedThroughUid);
         await folder.DidNotReceive().SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>());
@@ -357,7 +357,7 @@ public sealed class MailKitImapMailboxSessionTests
     }
 
     [Fact]
-    public async Task GetMessageBatchAfterAsync_SparseUidsExceedingBatchSize_BoundsBatchByMessageCountAndCheckpointsLastFetchedUid()
+    public async Task GetEmailBatchAfterAsync_SparseUidsExceedingBatchSize_BoundsBatchByMessageCountAndCheckpointsLastFetchedUid()
     {
         // Arrange
         await using var client = new FakeImapClient();
@@ -376,16 +376,16 @@ public sealed class MailKitImapMailboxSessionTests
             folder);
 
         // Act
-        var batch = await session.GetMessageBatchAfterAsync(null, 2, CancellationToken.None);
+        var batch = await session.GetEmailBatchAfterAsync(null, 2, CancellationToken.None);
 
         // Assert
-        Assert.Equal([100U, 400U], batch.Messages.Select(message => message.OccurrenceId.Uid.Value));
+        Assert.Equal([100U, 400U], batch.Emails.Select(message => message.OccurrenceId.Uid.Value));
         Assert.True(batch.HasMore);
         Assert.Equal(400U, batch.InspectedThroughUid!.Value.Value);
     }
 
     [Fact]
-    public async Task GetMessageBatchAfterAsync_FewerMatchesThanBatchSize_CheckpointsThroughHighestAssignedUid()
+    public async Task GetEmailBatchAfterAsync_FewerMatchesThanBatchSize_CheckpointsThroughHighestAssignedUid()
     {
         // Arrange
         await using var client = new FakeImapClient();
@@ -404,10 +404,10 @@ public sealed class MailKitImapMailboxSessionTests
             folder);
 
         // Act
-        var batch = await session.GetMessageBatchAfterAsync(ImapUid.Create(400), 2, CancellationToken.None);
+        var batch = await session.GetEmailBatchAfterAsync(ImapUid.Create(400), 2, CancellationToken.None);
 
         // Assert
-        Assert.Equal([900U], batch.Messages.Select(message => message.OccurrenceId.Uid.Value));
+        Assert.Equal([900U], batch.Emails.Select(message => message.OccurrenceId.Uid.Value));
         Assert.False(batch.HasMore);
         Assert.Equal(1000U, batch.InspectedThroughUid!.Value.Value);
     }

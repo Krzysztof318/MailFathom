@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-namespace MailMcp.Domain.Messages;
+namespace MailMcp.Domain.Emails;
 
 /// <summary>Represents an IMAP UIDVALIDITY value for a folder.</summary>
 public readonly record struct ImapUidValidity
@@ -17,6 +17,7 @@ public readonly record struct ImapUidValidity
     public static ImapUidValidity Create(uint value)
     {
         ArgumentOutOfRangeException.ThrowIfZero(value);
+
         return new ImapUidValidity(value);
     }
 }

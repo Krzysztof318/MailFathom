@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailMcp.Application.Persistence;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Synchronization;
@@ -17,7 +18,7 @@ public interface ISynchronizationCheckpointStore
 
     /// <summary>Saves the durable checkpoint for a folder within the supplied persistence session.</summary>
     Task SaveCheckpointAsync(
-        ISession session,
+        IPersistenceSession session,
         MailAccountId accountId,
         MailFolderName folderName,
         SynchronizationCheckpoint checkpoint,

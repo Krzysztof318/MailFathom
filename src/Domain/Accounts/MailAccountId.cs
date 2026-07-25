@@ -17,6 +17,7 @@ public readonly record struct MailAccountId
     public static MailAccountId Create(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
+
         return new MailAccountId(value.Trim());
     }
 
