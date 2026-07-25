@@ -17,7 +17,9 @@ Raw MIME is stored and, after specification 06, parsed for metadata. No body tex
 
 ## Approved scope
 
-Text extraction follows draft section 12.1 steps 1 through 3. The reader prefers a genuine `text/plain` part; when only HTML exists it derives text by stripping markup, and that derivation is treated as lossy and marked as such on the record so a future chunking design can decide whether to trust it. Quoted history and signatures are removed conservatively, and the original extracted text is retained alongside the trimmed form rather than replaced, because an over-aggressive trim would otherwise destroy content permanently.
+Text extraction follows draft section 12.1 steps 1 through 3. The reader prefers a genuine `text/plain` part; when only HTML exists it derives text from the markup, and that derivation is treated as lossy and marked as such on the record so a future chunking design can decide whether to trust it. Quoted history and signatures are removed conservatively, and the original extracted text is retained alongside the trimmed form rather than replaced, because an over-aggressive trim would otherwise destroy content permanently.
+
+The HTML-to-text derivation uses `MimeKit.Text.HtmlTokenizer`, which is already available through the pinned MailKit package, so this specification adds no dependency. That matters beyond convenience: specification 14 selects `HtmlSanitizer`, which pins AngleSharp to an exact old version and therefore forecloses referencing AngleSharp 1.x directly. Deriving text with MimeKit keeps a second HTML stack out of the solution entirely rather than trading one version conflict for another.
 
 Persistence adds the extracted text column, a lossy-derivation marker, and a generated `tsvector` column covering subject, normalized participant addresses, and the trimmed body text, with the GIN index draft section 9.2 requires. The text search configuration is an explicit, validated setting rather than a database default, because changing it silently invalidates the index contents.
 

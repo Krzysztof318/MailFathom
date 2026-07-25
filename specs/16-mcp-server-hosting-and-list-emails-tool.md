@@ -25,9 +25,11 @@ Error mapping is defined once here and reused by every later tool. Expected appl
 
 ## Interim security posture
 
-OAuth 2.1 and mTLS are stage 9 of the draft and are not in this roadmap segment. Shipping an unauthenticated mailbox endpoint on a public interface is not acceptable even temporarily, so this specification gates it: the MCP endpoint is disabled by default, and when enabled it binds to loopback only. Enabling it on any non-loopback address fails startup with an explicit message referring to the pending OAuth specification. The gate is removed by the stage 9 work, not by this one.
+OAuth 2.1 and mTLS are stage 9 of the draft and are not in this roadmap segment. The owner has decided that this stage may bind the MCP endpoint on a non-loopback address so real MCP clients can be exercised during development, on the basis that release is still far off. This specification therefore imposes no address restriction.
 
-Authorization checks are still written here rather than deferred, per the rule that authorization lives close to the use case: the tool handler resolves the configured owner and the requested accounts and rejects anything outside them, so the later transport-level work adds identity rather than adding authorization for the first time.
+What it does impose is that the posture is explicit rather than accidental. The endpoint is disabled by default and requires a deliberate opt-in. When it is enabled while transport authentication is absent, startup logs a single unambiguous warning naming the missing controls and the specification that adds them, so nobody discovers months later that a mailbox was reachable without a token. The documented consequence, stated in the operations page rather than enforced in code, is that an endpoint enabled before stage 9 is unauthenticated and should be pointed at development mailboxes only.
+
+Authorization checks are written here rather than deferred, per the rule that authorization lives close to the use case: the tool handler resolves the configured owner and the requested accounts and rejects anything outside them. Stage 9 then adds transport identity to an existing authorization decision instead of introducing authorization for the first time.
 
 ## Safety and privacy
 
@@ -35,7 +37,7 @@ Tool inputs are untrusted and are validated at the protocol boundary before reac
 
 ## Testing
 
-`Mcp.UnitTests` cover: advertised `tools/list` metadata including every annotation, request mapping for each filter, page-size enforcement at the boundary, mapping of each expected application failure to its stable code, an unexpected exception producing the generic code with no leaked detail, and rejection of an account the owner does not control. A host-level unit test asserts that enabling the endpoint on a non-loopback address fails startup.
+`Mcp.UnitTests` cover: advertised `tools/list` metadata including every annotation, request mapping for each filter, page-size enforcement at the boundary, mapping of each expected application failure to its stable code, an unexpected exception producing the generic code with no leaked detail, and rejection of an account the owner does not control. A host-level unit test asserts that the endpoint is off by default and that enabling it without transport authentication emits the warning.
 
 ## Out of scope
 
@@ -43,9 +45,9 @@ Tool inputs are untrusted and are validated at the protocol boundary before reac
 
 ## Definition of done
 
-- An MCP client can call `list_emails` over Streamable HTTP against a loopback endpoint and receive bounded, paginated summaries.
+- An MCP client can call `list_emails` over Streamable HTTP and receive bounded, paginated summaries.
 - Advertised tool metadata matches the draft's annotation requirements, proven by test.
 - No error response contains an exception type, stack trace, or internal identifier.
-- Enabling the endpoint on a non-loopback address fails startup.
-- `docs/features/` documents the tool contract, annotation conventions, error codes, and the interim security gate.
+- The endpoint is off by default, and enabling it without transport authentication warns explicitly at startup.
+- `docs/features/` documents the tool contract, annotation conventions, and error codes; `docs/operations/` records the interim unauthenticated posture and its expiry at stage 9.
 - `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

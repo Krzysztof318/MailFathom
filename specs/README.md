@@ -72,4 +72,16 @@ The first vertical slice is already merged: periodic read-only IMAP reconciliati
 
 Stages 6 through 10 of the draft: pgvector ingestion and embedding profiles, Agent Framework RAG and `ask_mail`, the SMTP outbox, OAuth 2.1 and the ChatGPT mTLS profile, and production hardening. Those are decomposed into specifications when this segment nears completion, so they are written against the code that actually exists by then.
 
-Until the OAuth work lands, specification 16 keeps the MCP endpoint disabled by default and bound to loopback, failing startup on any non-loopback address.
+Until the OAuth work lands, the MCP endpoint has no transport authentication. The owner has accepted that for this development segment, so specification 16 imposes no address restriction; it keeps the endpoint disabled by default and warns explicitly at startup when it is enabled without authentication.
+
+## Dependencies these specifications add
+
+| Specification | Package | License | Note |
+|---|---|---|---|
+| 03 | `Polly.Core`, `Polly.Extensions` | MIT | Named resilience pipelines; `Microsoft.Extensions.Resilience` evaluated for telemetry enrichment |
+| 08 | none | — | HTML-to-text uses `MimeKit.Text.HtmlTokenizer`, already pinned via MailKit |
+| 14 | `HtmlSanitizer` 9.0.967, transitively `AngleSharp` 0.17.1 and `AngleSharp.Css` 0.17.0 | MIT | Exact AngleSharp pin forecloses referencing AngleSharp 1.x directly; see specification 14 |
+| 20 | `Aspire.Hosting.Testing` | MIT | Pinned to the Aspire version already in use |
+| 21 | a containerized IMAP server image | to be verified | Selected and license-reviewed as part of that work |
+
+Every entry is recorded in `LICENSES.md` in the same change set that adds the dependency.
