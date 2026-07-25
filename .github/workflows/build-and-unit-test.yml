@@ -2,6 +2,11 @@ name: Build and unit test
 
 on:
   pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
     branches:
       - main
     paths:
@@ -29,6 +34,7 @@ permissions:
 
 jobs:
   build-and-unit-test:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     name: Build and unit test
     runs-on: ubuntu-latest
     env:
