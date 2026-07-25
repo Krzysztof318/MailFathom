@@ -177,6 +177,10 @@ Pessimistic concurrency is not the repository default. It may be used for a narr
 
 EF Core reports a failed optimistic update or delete as `DbUpdateConcurrencyException`. Infrastructure must catch that exception only at the repository or Unit of Work commit boundary and translate it into an application-owned `ConcurrencyConflict` result. Provider exception details, tracked entries, SQL, and database values must not cross into `Application`, `Domain`, MCP responses, or administrative endpoints.
 
+MailMcp deliberately represents that application-level outcome with `PersistenceCommitResult` rather than an application-owned concurrency exception. A conflict is an expected result of competing valid writers, and the caller is required to decide whether the complete operation is safe to retry, must be reread, or should be reported to its own boundary. Keeping the result in the `CommitAsync` signature makes that decision visible without using exception unwinding as ordinary control flow. Infrastructure and provider failures that are not recognized optimistic conflicts continue to propagate as exceptions.
+
+This is a hybrid signaling model rather than a rule that concurrency can never involve exceptions: EF Core and Npgsql exceptions remain appropriate inside `Infrastructure`, where they originate, but they are translated before crossing the application port. An application-owned concurrency exception may be reconsidered for a future boundary that cannot return a result or must unwind through several layers that cannot make a concurrency decision. Such an exception must contain no provider details and must be caught at a named application boundary. If commit outcomes later require structured conflict context, replace the two-value enum with an application-owned result type rather than using an exception only to carry expected data.
+
 The application-owned `OptimisticConcurrencyRetryPolicy` coordinates retries for the current automated synchronization use case. It receives the persistence-session factory and a validated maximum attempt count, then executes an entire staged write supplied as a cancellation-aware delegate with these semantics:
 
 - Retry is opt-in for an operation that is explicitly safe and idempotent to repeat.
@@ -314,6 +318,29 @@ Select and lock records before deciding and writing, using the weakest suitable 
 - Neutral, because PostgreSQL already locks rows during updates; the decision here is whether to acquire a lock earlier and hold it while application logic runs.
 - Bad, because blocking, deadlocks, lock timeouts, and longer transactions reduce throughput and increase operational complexity.
 - Bad, because a lock cannot safely remain held across user interaction or external IMAP, SMTP, storage, AI, or MCP calls.
+
+## Pros and Cons of Concurrency Conflict Signaling Options
+
+### Application-owned commit result
+
+Translate recognized provider conflicts at the commit boundary and return `PersistenceCommitResult.ConcurrencyConflict`.
+
+- Good, because the application port makes the expected outcome visible and provider-neutral.
+- Good, because retry, reread, and conflict-reporting paths remain explicit ordinary control flow.
+- Good, because repeated contention does not require constructing and unwinding application exception stacks.
+- Neutral, because every caller must inspect the result and decide at the use-case boundary what the conflict means.
+- Bad, because the current enum carries no structured conflict context; a richer result type would be required if callers later need safe application-owned details.
+
+### Application-owned custom concurrency exception
+
+Translate recognized provider conflicts into a custom exception and require application handlers or retry policies to catch it.
+
+- Good, because exception unwinding can cross intermediate layers that cannot usefully handle the conflict.
+- Good, because it can preserve an existing return contract that cannot be changed.
+- Neutral, because it resembles EF Core's provider-facing API but still requires a separate application-owned exception to preserve boundaries.
+- Bad, because an expected contention outcome becomes less visible in the method signature and easier to handle accidentally with broad exception policies.
+- Bad, because using exceptions for the normal retry branch obscures the distinction between a valid competing write and an infrastructure failure.
+- Bad, because exception allocation and stack unwinding add avoidable work precisely when contention produces repeated conflicts.
 
 ## More Information
 
