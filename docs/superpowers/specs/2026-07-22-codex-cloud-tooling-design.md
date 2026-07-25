@@ -1,5 +1,7 @@
 # Codex Cloud Tooling Design
 
+> **Historical record. Reverted on 2026-07-25.** Development moved to local Codex, so the design below is no longer implemented in this repository.
+
 ## Goal
 
 Make the Superpowers workflows and the Microsoft Learn MCP server available to developers working with this repository in Codex Cloud, without relying on files from an individual developer's home directory.

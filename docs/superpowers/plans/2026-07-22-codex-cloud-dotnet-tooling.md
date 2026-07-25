@@ -1,5 +1,7 @@
 # Codex Cloud .NET Tooling Implementation Plan
 
+> **Historical record. Reverted on 2026-07-25.** Development moved to local Codex, so `.codex/setup.sh` was removed and command-line tooling is installed on the developer machine as described in `docs/operations/local-development.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Configure Codex Cloud repository setup so agents have .NET SDK 10, Aspire CLI, and the EF Core `dotnet ef` CLI tool available.
