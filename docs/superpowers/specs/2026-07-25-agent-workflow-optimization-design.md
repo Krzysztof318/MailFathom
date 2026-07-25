@@ -53,13 +53,15 @@ create worktrees, or remove stale worktrees.
 
 `scripts/verify-full.sh` is the final gate:
 
-1. restore repository-local tools;
-2. restore the solution;
-3. build `MailMcp.slnx` in `Release`;
-4. run the existing coverage target, which executes the complete unit-test
+1. reject untracked files that focused staging has not placed in the index;
+2. run `scripts/test-agent-workflow.sh`;
+3. restore repository-local tools;
+4. restore the solution;
+5. build `MailMcp.slnx` in `Release`;
+6. run the existing coverage target, which executes the complete unit-test
    suite and enforces 85% aggregate line coverage;
-5. verify formatting without another restore;
-6. check the branch range, staged diff, and unstaged diff for whitespace
+7. verify formatting without another restore;
+8. check the branch range, staged diff, and unstaged diff for whitespace
    errors.
 
 All scripts resolve the repository root through Git, use `set -euo pipefail`,
@@ -70,9 +72,10 @@ restore/build/test artifacts already ignored by Git.
 
 Each skill remains concise and delegates deterministic work to the scripts:
 
-- `start-task` inspects the workspace and routes the agent to the
-  applicable specification, implemented-behavior documentation, and ADRs before
-  file changes.
+- `start-task` requires a clean workspace or a complete
+  `git status --short --untracked-files=all` inventory with a user-approved
+  preservation plan, then routes the agent to the applicable specification,
+  implemented-behavior documentation, and ADRs before file changes.
 - `review-change` reviews the current diff against architectural
   boundaries, naming, privacy, IMAP safety, test policy, and change scope.
 - `check-docs-licenses` is a required completion check. It classifies
@@ -81,9 +84,10 @@ Each skill remains concise and delegates deterministic work to the scripts:
   service, protocol SDK, container image, generated asset, and externally
   sourced code changes require current official license verification and a
   matching `LICENSES.md` entry.
-- `finish-change` requires `check-docs-licenses`, runs the full
-  verification script, inspects the final diff, and prepares a focused commit,
-  push, and draft pull request without co-author trailers.
+- `finish-change` stages and inspects only the task files, requires
+  `check-docs-licenses`, runs the full verification script, inspects the final
+  diff, and prepares a focused commit, push, and draft pull request without
+  co-author trailers.
 
 Skills contain judgment and routing. Scripts contain deterministic command
 sequences. `AGENTS.md` contains only rules that apply whenever its directory is
@@ -127,10 +131,11 @@ more specific instruction file exists.
 `scripts/test-agent-workflow.sh` uses a temporary Git repository and its
 embedded fake `dotnet` mode to prove command order, `Release` configuration,
 no duplicate test execution in
-the full gate, fail-fast behavior, committed/staged/unstaged diff coverage, and
-read-only workspace inspection across HEAD, refs, index, and working-tree
-state. It also proves that a failing SDK query remains an informational
-inspection result.
+the full gate, required workflow-contract execution and failure propagation,
+fail-fast behavior, committed/staged/unstaged diff coverage, untracked-file
+rejection, and read-only workspace inspection across HEAD, refs, index, and
+working-tree state. It also proves that a failing SDK query remains an
+informational inspection result.
 
 Every skill receives a baseline scenario without the skill, a forward test with
 the skill, structural validation through the official skill validator, and

@@ -43,6 +43,9 @@ Create a test runner that:
   `--no-restore`, and tests with `--no-build`;
 - expects full verification to call tool restore, solution restore, Release
   build, the coverage target, and format verification with `--no-restore`;
+- expects full verification to invoke the workflow contract runner;
+- expects a workflow contract failure to stop full verification before .NET;
+- expects full verification to reject untracked files before the .NET gate;
 - asserts the full path does not also call plain `dotnet test`;
 - configures the fake to fail on a selected invocation and asserts no later
   command runs;
@@ -120,9 +123,11 @@ dotnet test --solution MailMcp.slnx --configuration Release --no-build
 
 - [ ] **Step 4: Implement full verification**
 
-Run exactly:
+Reject untracked files with a concise path inventory, run the workflow contract
+suite, then run exactly:
 
 ```bash
+bash scripts/test-agent-workflow.sh
 dotnet tool restore
 dotnet restore MailMcp.slnx
 dotnet build MailMcp.slnx --configuration Release --no-restore
@@ -334,10 +339,10 @@ Record skipped gates and rationalizations.
 
 - [ ] **Step 2: Initialize and write the completion skill**
 
-Make `check-docs-licenses` an explicit required sub-skill. Require the
-full verification script after docs and license gaps are fixed, final diff
-inspection, focused staging, no co-author trailers, push of an `agent/*`
-branch, and creation of a draft PR only.
+Make `check-docs-licenses` an explicit required sub-skill. Require focused
+staging and staged-diff inspection before the full verification script, then
+docs and license gates, final diff inspection, no co-author trailers, push of
+an `agent/*` branch, and creation of a draft PR only.
 
 - [ ] **Step 3: Validate and forward-test**
 
@@ -437,6 +442,8 @@ Document:
 
 - when to run workspace inspection, fast verification, and full verification;
 - that full verification uses the coverage target as its test run;
+- that focused staging precedes full verification, which rejects remaining
+  untracked files and runs the workflow contract suite;
 - skill names and trigger situations;
 - canonical `.agents/skills` ownership and the Claude symlink;
 - read-only and fail-fast behavior;
@@ -466,9 +473,10 @@ Run:
 bash scripts/verify-full.sh
 ```
 
-Expected: tool restore, solution restore, Release build, all unit tests,
-aggregate coverage of at least 85%, formatting verification, and
-branch-range, staged, and unstaged whitespace checks all pass.
+Expected: no untracked files, workflow contracts, tool restore, solution
+restore, Release build, all unit tests, aggregate coverage of at least 85%,
+formatting verification, and branch-range, staged, and unstaged whitespace
+checks all pass.
 
 - [ ] **Step 4: Inspect the final diff**
 

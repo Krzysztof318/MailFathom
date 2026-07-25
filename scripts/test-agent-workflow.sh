@@ -22,6 +22,7 @@ test_directory="$(mktemp -d)"
 repository_root="$test_directory/repository"
 fake_bin_directory="$test_directory/bin"
 invocation_log="$test_directory/dotnet-invocations.log"
+workflow_invocation_log="$test_directory/workflow-invocations.log"
 passed_count=0
 failed_count=0
 
@@ -34,6 +35,7 @@ trap cleanup EXIT
 mkdir -p \
   "$fake_bin_directory" \
   "$repository_root/docs" \
+  "$repository_root/scripts" \
   "$repository_root/src" \
   "$repository_root/tests"
 ln -s "$scripts_directory/test-agent-workflow.sh" "$fake_bin_directory/dotnet"
@@ -43,11 +45,20 @@ git -C "$repository_root" config user.email agent-workflow@example.invalid
 git -C "$repository_root" config user.name 'Agent Workflow Tests'
 printf '<Solution />\n' > "$repository_root/MailMcp.slnx"
 printf 'clean\n' > "$repository_root/tracked.txt"
-git -C "$repository_root" add MailMcp.slnx tracked.txt
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  ': "${FAKE_WORKFLOW_LOG:?FAKE_WORKFLOW_LOG must identify the invocation log}"' \
+  "printf 'workflow-contracts\\n' >> \"\$FAKE_WORKFLOW_LOG\"" \
+  'if [[ -n "${FAKE_WORKFLOW_FAIL:-}" ]]; then exit 23; fi' \
+  > "$repository_root/scripts/test-agent-workflow.sh"
+chmod +x "$repository_root/scripts/test-agent-workflow.sh"
+git -C "$repository_root" add MailMcp.slnx scripts/test-agent-workflow.sh tracked.txt
 git -C "$repository_root" commit --quiet -m 'test fixture'
 git -C "$repository_root" update-ref refs/remotes/origin/main HEAD
 
 export FAKE_DOTNET_LOG="$invocation_log"
+export FAKE_WORKFLOW_LOG="$workflow_invocation_log"
 export PATH="$fake_bin_directory:$PATH"
 
 assert_file_content() {
@@ -117,6 +128,34 @@ verify_full_runs_tests_once_through_coverage() {
     "$invocation_log"
 }
 
+verify_full_runs_workflow_contracts() {
+  : > "$workflow_invocation_log"
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  assert_file_content 'workflow-contracts' "$workflow_invocation_log"
+}
+
+verify_full_stops_when_workflow_contracts_fail() {
+  : > "$invocation_log"
+  : > "$workflow_invocation_log"
+
+  if (
+    export FAKE_WORKFLOW_FAIL=1
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  ); then
+    printf 'verify-full.sh succeeded despite failing workflow contracts\n' >&2
+    return 1
+  fi
+
+  assert_file_content 'workflow-contracts' "$workflow_invocation_log"
+  assert_file_content '' "$invocation_log"
+}
+
 verify_full_checks_committed_staged_and_unstaged_changes() {
   local committed_output="$test_directory/committed-diff-output"
   local staged_output="$test_directory/staged-diff-output"
@@ -166,6 +205,25 @@ verify_full_checks_committed_staged_and_unstaged_changes() {
   assert_contains 'new blank line at EOF.' "$unstaged_output"
 
   git -C "$repository_root" restore tracked.txt
+}
+
+verify_full_rejects_untracked_files() {
+  local untracked_output="$test_directory/untracked-output"
+
+  printf 'untracked\n\n' > "$repository_root/untracked.txt"
+
+  if (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  ) > "$untracked_output" 2>&1; then
+    rm -f "$repository_root/untracked.txt"
+    printf 'verify-full.sh ignored an untracked file\n' >&2
+    return 1
+  fi
+
+  rm -f "$repository_root/untracked.txt"
+  assert_contains 'Untracked files must be staged or removed before full verification:' "$untracked_output"
+  assert_contains 'untracked.txt' "$untracked_output"
 }
 
 verification_stops_after_first_failure() {
@@ -247,7 +305,10 @@ workflow_scripts_use_flat_manual_layout() {
 
 run_test verify_fast_runs_restore_build_and_tests
 run_test verify_full_runs_tests_once_through_coverage
+run_test verify_full_runs_workflow_contracts
+run_test verify_full_stops_when_workflow_contracts_fail
 run_test verify_full_checks_committed_staged_and_unstaged_changes
+run_test verify_full_rejects_untracked_files
 run_test verification_stops_after_first_failure
 run_test workspace_inspection_is_read_only_and_labeled
 run_test workspace_inspection_reports_unavailable_sdk

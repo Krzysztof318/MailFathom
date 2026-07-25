@@ -8,6 +8,14 @@ fi
 
 cd "$repository_root"
 
+mapfile -t untracked_files < <(git ls-files --others --exclude-standard)
+if ((${#untracked_files[@]} > 0)); then
+  printf 'Untracked files must be staged or removed before full verification:\n' >&2
+  printf '  %s\n' "${untracked_files[@]}" >&2
+  exit 1
+fi
+
+bash scripts/test-agent-workflow.sh
 dotnet tool restore
 dotnet restore MailMcp.slnx
 dotnet build MailMcp.slnx --configuration Release --no-restore

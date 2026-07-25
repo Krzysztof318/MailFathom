@@ -13,14 +13,17 @@ bash scripts/verify-fast.sh
 Before committing, run the complete local gate:
 
 ```bash
+git add <task-files>
 bash scripts/verify-full.sh
 ```
 
 The fast script restores the solution, builds it in Release configuration, and
 runs all unit tests without rebuilding. The full script additionally restores
-repository tools, executes the aggregate coverage gate, verifies formatting,
-and checks the Git diff. See [Agent workflow](agent-workflow.md) for the
-workspace inspection command and shared skills.
+repository tools, runs the workflow contract suite, executes the aggregate
+coverage gate, verifies formatting, and checks the Git diff. It rejects
+remaining untracked files, so inspect the staged diff before running it. See
+[Agent workflow](agent-workflow.md) for the workspace inspection command and
+shared skills.
 
 Run the web host directly:
 

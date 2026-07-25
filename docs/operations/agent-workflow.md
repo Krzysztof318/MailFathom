@@ -21,28 +21,31 @@ bash scripts/verify-fast.sh
 Run the complete gate before committing:
 
 ```bash
+git add <task-files>
 bash scripts/verify-full.sh
 ```
 
-The full gate restores repository tools and the solution, builds Release,
-executes all unit tests through the aggregate 85% coverage target, verifies
-formatting, and checks committed branch changes, staged changes, and unstaged
-changes for whitespace errors. It stops at the first failure. Restore, build,
-test, coverage, and formatting can create ignored local artifacts but the
-scripts do not commit, push, or change branches.
+The full gate rejects remaining untracked files, runs the workflow contract
+suite, restores repository tools and the solution, builds Release, executes all
+unit tests through the aggregate 85% coverage target, verifies formatting, and
+checks committed branch changes, staged changes, and unstaged changes for
+whitespace errors. It stops at the first failure. Restore, build, test,
+coverage, and formatting can create ignored local artifacts but the scripts do
+not commit, push, or change branches.
 
 ## Skills
 
 The canonical skills are:
 
-- `start-task` checks the workspace and loads the applicable specification,
+- `start-task` requires a clean workspace or an explicitly approved inventory
+  and preservation plan, then loads the applicable specification,
   documentation, and ADR context before edits;
 - `review-change` performs a findings-first diff review and records verification
   status and residual risks;
 - `check-docs-licenses` is the mandatory documentation and licensing gate;
-- `finish-change` requires the documentation and licensing gate, runs full
-  verification, checks the final diff, creates a focused commit, pushes the
-  branch, and opens a draft pull request.
+- `finish-change` stages only the task files, requires the documentation and
+  licensing gate, runs full verification, checks the final diff, creates a
+  focused commit, pushes the branch, and opens a draft pull request.
 
 Skills live under `.agents/skills/`. Claude Code consumes the same directory
 through the relative symlink `.claude/skills -> ../.agents/skills`; do not copy
@@ -67,6 +70,13 @@ to test code. Each nested `CLAUDE.md` imports its sibling `AGENTS.md`.
   does not contain the freshly fetched `origin/main` blocks file changes.
   Create the required linked worktree and branch from current `origin/main`,
   then rerun `start-task`.
+- A dirty workspace blocks new edits until
+  `git status --short --untracked-files=all` has identified every existing path
+  and the user has approved a preservation plan. Never assume pre-existing
+  changes are unrelated.
+- `Untracked files must be staged or removed before full verification` means
+  the focused task files have not all entered the index. Stage only those task
+  files, inspect the staged diff, and rerun the complete gate.
 - `.NET SDK: unavailable` means the `global.json` SDK selection failed. Install
   the pinned SDK and confirm `dotnet --version` before verification.
 - A coverage failure leaves detailed reports under

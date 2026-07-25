@@ -148,5 +148,6 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - To finish, use `$finish-change`; it requires `$check-docs-licenses`, full verification, focused staging, and a draft pull request.
 - Use `scripts/inspect-workspace.sh` for a read-only workspace preflight.
 - Use `scripts/verify-fast.sh` during implementation.
-- Use `scripts/verify-full.sh` before committing. It restores tools and packages, builds, runs the complete test and coverage gate, verifies formatting, and checks the diff.
+- Stage the task files before running `scripts/verify-full.sh`; the gate rejects remaining untracked files so newly added files cannot bypass diff validation.
+- Use `scripts/verify-full.sh` before committing. It runs the workflow contract suite, restores tools and packages, builds, runs the complete unit-test and coverage gate, verifies formatting, and checks the diff.
 - Inspect the final diff for accidental secrets, unrelated edits, generated files, and dependency-boundary violations.
