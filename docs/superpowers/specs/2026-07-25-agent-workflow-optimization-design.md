@@ -83,8 +83,9 @@ third-party licensing rules, and pointers to the workflow commands.
 
 Detailed rules move to the closest applicable directories:
 
-- `src/AGENTS.md` for .NET, C#, application design, dependency injection, and
-  general implementation discipline;
+- root `AGENTS.md` for .NET and C# conventions shared by production and test
+  code;
+- `src/AGENTS.md` for application design and dependency injection;
 - `src/Infrastructure/AGENTS.md` for EF Core, persistence, MailKit, and email
   protocol safety;
 - `tests/AGENTS.md` for unit tests, coverage, and the deferred integration-test
