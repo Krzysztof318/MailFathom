@@ -1,8 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-tests_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-workflow_directory="$(cd "$tests_directory/.." && pwd -P)"
+if [[ "$(basename "$0")" == 'dotnet' ]]; then
+  : "${FAKE_DOTNET_LOG:?FAKE_DOTNET_LOG must identify the invocation log}"
+  printf '%s\n' "$*" >> "$FAKE_DOTNET_LOG"
+
+  if [[ -n "${FAKE_DOTNET_FAIL_MATCH:-}" && "$*" == *"$FAKE_DOTNET_FAIL_MATCH"* ]]; then
+    exit 19
+  fi
+
+  if [[ "$*" == '--version' ]]; then
+    printf '10.0.110\n'
+  fi
+
+  exit 0
+fi
+
+scripts_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+source_repository_root="$(cd "$scripts_directory/.." && pwd -P)"
 test_directory="$(mktemp -d)"
 repository_root="$test_directory/repository"
 fake_bin_directory="$test_directory/bin"
@@ -21,8 +36,7 @@ mkdir -p \
   "$repository_root/docs" \
   "$repository_root/src" \
   "$repository_root/tests"
-cp "$tests_directory/fake-dotnet.sh" "$fake_bin_directory/dotnet"
-chmod +x "$fake_bin_directory/dotnet"
+ln -s "$scripts_directory/test-agent-workflow.sh" "$fake_bin_directory/dotnet"
 
 git -C "$repository_root" init --initial-branch=main --quiet
 git -C "$repository_root" config user.email agent-workflow@example.invalid
@@ -82,7 +96,7 @@ verify_fast_runs_restore_build_and_tests() {
 
   (
     cd "$repository_root/tests"
-    "$workflow_directory/verify-fast.sh"
+    "$scripts_directory/verify-fast.sh"
   )
 
   assert_file_content \
@@ -95,7 +109,7 @@ verify_full_runs_tests_once_through_coverage() {
 
   (
     cd "$repository_root/src"
-    "$workflow_directory/verify-full.sh"
+    "$scripts_directory/verify-full.sh"
   )
 
   assert_file_content \
@@ -112,7 +126,10 @@ verify_full_checks_committed_staged_and_unstaged_changes() {
   git -C "$repository_root" add tracked.txt
   git -C "$repository_root" commit --quiet -m 'introduce committed whitespace'
 
-  if "$workflow_directory/verify-full.sh" > "$committed_output" 2>&1; then
+  if (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  ) > "$committed_output" 2>&1; then
     printf 'verify-full.sh ignored committed whitespace errors\n' >&2
     return 1
   fi
@@ -126,7 +143,10 @@ verify_full_checks_committed_staged_and_unstaged_changes() {
   printf 'clean\n\n' > "$repository_root/tracked.txt"
   git -C "$repository_root" add tracked.txt
 
-  if "$workflow_directory/verify-full.sh" > "$staged_output" 2>&1; then
+  if (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  ) > "$staged_output" 2>&1; then
     printf 'verify-full.sh ignored staged whitespace errors\n' >&2
     return 1
   fi
@@ -135,7 +155,10 @@ verify_full_checks_committed_staged_and_unstaged_changes() {
 
   git -C "$repository_root" restore --staged tracked.txt
 
-  if "$workflow_directory/verify-full.sh" > "$unstaged_output" 2>&1; then
+  if (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  ) > "$unstaged_output" 2>&1; then
     printf 'verify-full.sh ignored unstaged whitespace errors\n' >&2
     return 1
   fi
@@ -151,7 +174,7 @@ verification_stops_after_first_failure() {
   if (
     export FAKE_DOTNET_FAIL_MATCH='build MailMcp.slnx'
     cd "$repository_root"
-    "$workflow_directory/verify-fast.sh"
+    "$scripts_directory/verify-fast.sh"
   ); then
     printf 'verify-fast.sh succeeded despite the configured build failure\n' >&2
     return 1
@@ -180,7 +203,7 @@ workspace_inspection_is_read_only_and_labeled() {
 
   (
     cd "$repository_root/docs"
-    "$workflow_directory/inspect-workspace.sh"
+    "$scripts_directory/inspect-workspace.sh"
   ) > "$output_file"
 
   after_head="$(git -C "$repository_root" rev-parse HEAD)"
@@ -208,10 +231,18 @@ workspace_inspection_reports_unavailable_sdk() {
   (
     export FAKE_DOTNET_FAIL_MATCH='--version'
     cd "$repository_root"
-    "$workflow_directory/inspect-workspace.sh"
+    "$scripts_directory/inspect-workspace.sh"
   ) > "$output_file"
 
   assert_contains '.NET SDK: unavailable' "$output_file"
+}
+
+workflow_scripts_use_flat_manual_layout() {
+  [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
+  [[ -x "$source_repository_root/scripts/verify-fast.sh" ]]
+  [[ -x "$source_repository_root/scripts/verify-full.sh" ]]
+  [[ -x "$source_repository_root/scripts/test-agent-workflow.sh" ]]
+  [[ ! -e "$source_repository_root/eng/agent-workflow" ]]
 }
 
 run_test verify_fast_runs_restore_build_and_tests
@@ -220,6 +251,7 @@ run_test verify_full_checks_committed_staged_and_unstaged_changes
 run_test verification_stops_after_first_failure
 run_test workspace_inspection_is_read_only_and_labeled
 run_test workspace_inspection_reports_unavailable_sdk
+run_test workflow_scripts_use_flat_manual_layout
 
 printf '%s passed, %s failed\n' "$passed_count" "$failed_count"
 
