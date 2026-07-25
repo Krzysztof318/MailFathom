@@ -1,0 +1,4 @@
+interface:
+  display_name: "Check docs and licenses"
+  short_description: "Gate completion on documentation and licensing"
+  default_prompt: "Use $check-docs-licenses to verify documentation and licensing evidence before completion."

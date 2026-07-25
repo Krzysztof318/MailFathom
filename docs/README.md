@@ -7,6 +7,7 @@ This documentation set explains the durable design and operating model for MailM
 - [Architecture](architecture/solution-structure.md) describes the clean-architecture boundaries and project layout.
 - [Features](features/initial-scope.md) summarizes the first scaffolded capability scope.
 - [Operations](operations/local-development.md) covers local .NET and Aspire development commands.
+- [Agent workflow](operations/agent-workflow.md) documents the shared Codex and Claude Code workflow.
 - [Decisions](decisions/README.md) describes the ADR workflow and templates.
 
 - [IMAP synchronization](features/imap-synchronization.md)

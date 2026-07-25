@@ -1,0 +1,4 @@
+interface:
+  display_name: "Start Task"
+  short_description: "Start repository work from a safe baseline"
+  default_prompt: "Use $start-task to prepare a safe brief for this repository task."
