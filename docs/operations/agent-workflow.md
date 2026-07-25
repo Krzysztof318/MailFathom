@@ -26,9 +26,10 @@ bash eng/agent-workflow/verify-full.sh
 
 The full gate restores repository tools and the solution, builds Release,
 executes all unit tests through the aggregate 85% coverage target, verifies
-formatting, and runs `git diff --check`. It stops at the first failure. Restore,
-build, test, coverage, and formatting can create ignored local artifacts but
-the scripts do not commit, push, or change branches.
+formatting, and checks committed branch changes, staged changes, and unstaged
+changes for whitespace errors. It stops at the first failure. Restore, build,
+test, coverage, and formatting can create ignored local artifacts but the
+scripts do not commit, push, or change branches.
 
 ## Skills
 
@@ -59,6 +60,22 @@ instructions are next to the affected content:
 
 The shared .NET and C# conventions remain at the root because they also apply
 to test code. Each nested `CLAUDE.md` imports its sibling `AGENTS.md`.
+
+## Failure recovery
+
+- Detached HEAD, a primary checkout, a non-`agent/*` branch, or a branch that
+  does not contain the freshly fetched `origin/main` blocks file changes.
+  Create the required linked worktree and branch from current `origin/main`,
+  then rerun `start-task`.
+- `.NET SDK: unavailable` means the `global.json` SDK selection failed. Install
+  the pinned SDK and confirm `dotnet --version` before verification.
+- A coverage failure leaves detailed reports under
+  `artifacts/coverage/report/`. Add meaningful tests, rerun the complete gate,
+  and do not weaken the 85% scope or exclusions.
+- If Claude Code cannot discover the skills, confirm that `.claude/skills` is
+  the relative symlink `../.agents/skills`, that its target contains all four
+  `SKILL.md` files, and that the installed Claude Code version supports
+  directory symlinks. Stop instead of creating a duplicate skill tree.
 
 ## Completion evidence
 

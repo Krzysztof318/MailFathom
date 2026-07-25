@@ -9,3 +9,6 @@ if [[ -n "${FAKE_DOTNET_FAIL_MATCH:-}" && "$*" == *"$FAKE_DOTNET_FAIL_MATCH"* ]]
   exit 19
 fi
 
+if [[ "$*" == '--version' ]]; then
+  printf '10.0.110\n'
+fi

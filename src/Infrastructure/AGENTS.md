@@ -18,9 +18,6 @@ These instructions apply under `src/Infrastructure/` in addition to parent instr
 
 ## Email protocol safety
 
-- Treat `(account, folder, UIDVALIDITY, UID)` as the stable remote occurrence identity.
 - Fetch message bodies with mechanisms that preserve the remote `\Seen` state. Add a regression test for every code path that fetches content.
-- Keep MCP reads local; an MCP request must not trigger a synchronous IMAP fetch.
-- Make synchronization, object writes, indexing, and SMTP outbox processing idempotent.
 - Require explicit opt-in for unencrypted IMAP/SMTP transport and clear-text authentication over an unencrypted connection.
 - Do not disable TLS certificate validation. Support private servers through explicit trusted CA configuration.

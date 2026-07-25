@@ -31,7 +31,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 ## Documentation and test obligations
 
 - Before using or changing a library, framework, protocol, CLI, or external API, consult its latest official documentation. Prefer Microsoft Learn, official project documentation, specifications, and upstream repositories.
-- Confirm .NET 10 compatibility and pin package versions centrally in `Directory.Packages.props`.
+- Confirm .NET 10 compatibility and pin package versions centrally in `Directory.Packages.props`. Do not use floating versions.
 - Unit tests are part of every behavior change, feature, and bug fix. Read `tests/AGENTS.md` before adding or changing tests.
 - Develop and verify tests and production code before documenting the implemented behavior. Update affected durable documentation in the same reviewable change set; stale guidance is a defect.
 - Read `docs/AGENTS.md` before changing documentation. Create or modify ADRs only with explicit owner approval.
@@ -122,6 +122,12 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Use least privilege for PostgreSQL, OAuth scopes, filesystem access, certificates, and operating-system service accounts.
 - Optimize only after measurement. Prefer appropriate algorithms, bounded allocations, streaming, and database projections before low-level micro-optimizations.
 - Stream large MIME content and attachments rather than buffering them repeatedly. Set explicit size and count limits at every public or remote boundary.
+
+## Cross-boundary email invariants
+
+- Treat `(account, folder, UIDVALIDITY, UID)` as the stable remote occurrence identity.
+- Keep MCP reads local; an MCP request must not trigger a synchronous IMAP fetch.
+- Make synchronization, object writes, indexing, and SMTP outbox processing idempotent.
 
 ## Dependency and implementation discipline
 

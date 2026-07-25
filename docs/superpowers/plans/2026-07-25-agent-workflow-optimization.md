@@ -127,6 +127,8 @@ dotnet restore MailMcp.slnx
 dotnet build MailMcp.slnx --configuration Release --no-restore
 dotnet msbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release
 dotnet format MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic
+git diff --check origin/main...HEAD
+git diff --cached --check
 git diff --check
 ```
 
@@ -192,12 +194,14 @@ resource directories.
 Require:
 
 1. run workspace inspection;
-2. stop before edits on detached, stale, or wrong-base state;
-3. select the applicable numbered specification or state that the task is
+2. fetch `origin/main` and rerun workspace inspection;
+3. stop before edits unless the branch is `agent/*`, the worktree is linked,
+   and the branch contains the freshly fetched base;
+4. select the applicable numbered specification or state that the task is
    maintenance outside the roadmap;
-4. read relevant ADRs before architectural changes;
-5. identify implemented-behavior documentation that may need updates;
-6. produce the fixed brief shape defined in the interface block.
+5. read relevant ADRs before architectural changes;
+6. identify implemented-behavior documentation that may need updates;
+7. produce the fixed brief shape defined in the interface block.
 
 - [ ] **Step 4: Validate and forward-test**
 
@@ -463,13 +467,15 @@ bash eng/agent-workflow/verify-full.sh
 
 Expected: tool restore, solution restore, Release build, all unit tests,
 aggregate coverage of at least 85%, formatting verification, and
-`git diff --check` all pass.
+branch-range, staged, and unstaged whitespace checks all pass.
 
 - [ ] **Step 4: Inspect the final diff**
 
 Run:
 
 ```bash
+git diff --check origin/main...HEAD
+git diff --cached --check
 git diff --check
 git status --short
 git diff --stat origin/main...HEAD

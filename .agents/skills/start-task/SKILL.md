@@ -8,10 +8,11 @@ description: Use when beginning repository work that may edit files, change depe
 ## Workflow
 
 1. Resolve the repository root and run `eng/agent-workflow/inspect-workspace.sh`.
-2. Stop before edits when `Branch` is detached or `Contains origin/main` is not `yes`. Correct the workspace according to root instructions.
-3. Classify the task as a numbered roadmap specification, maintenance outside the roadmap, or documentation-only work.
-4. Read the selected specification, affected implemented-behavior documentation, and relevant ADRs.
-5. For dependency, CLI, protocol, service, or external API changes, consult current official documentation and flag licensing review.
+2. Fetch the current remote base with `git fetch origin main`, then run workspace inspection again.
+3. Stop before edits unless `Branch` matches `agent/*`, `Worktree` is `linked worktree`, and `Contains origin/main` is `yes`. Correct the workspace according to root instructions.
+4. Classify the task as a numbered roadmap specification, maintenance outside the roadmap, or documentation-only work.
+5. Read the selected specification, affected implemented-behavior documentation, and relevant ADRs.
+6. For dependency, CLI, protocol, service, or external API changes, consult current official documentation and flag licensing review.
 
 Return:
 

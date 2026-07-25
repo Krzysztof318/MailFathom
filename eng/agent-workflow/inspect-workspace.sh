@@ -51,9 +51,10 @@ registered_worktree_count="$(
 )"
 
 if command -v dotnet >/dev/null 2>&1; then
-  dotnet_sdk_version="$(dotnet --version)"
-  if [[ -z "$dotnet_sdk_version" ]]; then
-    dotnet_sdk_version='unavailable'
+  if dotnet_sdk_version="$(dotnet --version 2>/dev/null)" && [[ -n "$dotnet_sdk_version" ]]; then
+    :
+  else
+    dotnet_sdk_version='unavailable (dotnet --version failed)'
   fi
 else
   dotnet_sdk_version='unavailable'
@@ -67,4 +68,3 @@ printf 'Contains origin/main: %s\n' "$contains_origin_main"
 printf 'Working tree: %s\n' "$working_tree_state"
 printf 'Registered worktrees: %s\n' "$registered_worktree_count"
 printf '.NET SDK: %s\n' "$dotnet_sdk_version"
-

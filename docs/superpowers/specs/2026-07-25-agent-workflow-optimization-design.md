@@ -46,7 +46,8 @@ create worktrees, or remove stale worktrees.
 4. run the existing coverage target, which executes the complete unit-test
    suite and enforces 85% aggregate line coverage;
 5. verify formatting without another restore;
-6. run `git diff --check`.
+6. check the branch range, staged diff, and unstaged diff for whitespace
+   errors.
 
 All scripts resolve the repository root through Git, use `set -euo pipefail`,
 stop on the first failure, and add no hidden mutation beyond ordinary .NET
@@ -110,9 +111,12 @@ more specific instruction file exists.
 
 ## Testing
 
-Shell tests use temporary Git repositories and a fake `dotnet` executable to
+Shell tests use a temporary Git repository and a fake `dotnet` executable to
 prove command order, `Release` configuration, no duplicate test execution in
-the full gate, fail-fast behavior, and read-only workspace inspection.
+the full gate, fail-fast behavior, committed/staged/unstaged diff coverage, and
+read-only workspace inspection across HEAD, refs, index, and working-tree
+state. They also prove that a failing SDK query remains an informational
+inspection result.
 
 Every skill receives a baseline scenario without the skill, a forward test with
 the skill, structural validation through the official skill validator, and
