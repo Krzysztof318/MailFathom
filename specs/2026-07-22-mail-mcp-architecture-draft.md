@@ -740,6 +740,82 @@ Candidate future commands:
 
 The CLI requires local operating-system access and is not exposed through MCP.
 
+### 21.5 Policy-driven mail processing and automation jobs
+
+MailMcp could evolve from passive synchronization and retrieval into an asynchronous mail-processing platform. A future automation subsystem would evaluate configured rules after a message and its required local content have been committed, then enqueue durable actions without extending the IMAP synchronization transaction or delaying MCP reads. It should support useful non-AI automation first and make AI an optional condition or transformation rather than the workflow authority.
+
+Potential triggers include:
+
+- a message occurrence being stored or materially updated by synchronization;
+- a scheduled scan over a bounded local query, such as messages received since the last successful run;
+- an explicit operator request to re-evaluate selected messages after a rule changes;
+- a repaired or newly extracted message becoming eligible for a rule that previously lacked required content.
+
+Provider notifications such as IMAP IDLE or future Microsoft Graph webhooks would only wake the appropriate synchronization path. Automation would consume committed local state, not an incomplete provider payload, so retries and provider outages cannot produce a different processing boundary.
+
+Deterministic conditions could match account, folder, sender or recipient domains, selected headers, received time, size, MIME type, attachment metadata, lexical search terms, prior local labels, or the presence of extracted content. Candidate AI-assisted conditions and transformations include intent or topic classification, priority estimation, structured field extraction, summarization, entity detection, and routing recommendations. AI output must use a bounded schema and carry the model profile, prompt or policy version, confidence or validation result, and provenance needed to explain why a later action was proposed.
+
+Candidate actions should be introduced in increasing order of risk:
+
+1. Local-only actions: add a MailMcp label, record a classification, produce a private summary, enqueue embedding or extraction work, or route the message into a local review queue.
+2. Controlled integrations: emit a minimized webhook or create an application-owned work item after destination-specific authorization, payload filtering, timeout, and idempotency review.
+3. Remote mailbox mutations: apply a provider category, move or copy a message, or change a remote flag. These actions conflict with the initial read-only posture and require a separate design for authorization, synchronization feedback loops, and provider-specific semantics.
+4. External side effects: forward, reply, send, delete, or invoke another business system. These require explicit opt-in, approval and governance policy, durable idempotency, audit evidence, and safe compensation or operator recovery.
+
+`Application` would own provider-neutral rule, trigger, action, approval, and execution-result contracts. `Infrastructure` would lease and persist jobs in PostgreSQL, implement deterministic provider actions, and enforce bounded concurrency, timeout, retry, and dead-letter behavior. `AI` would implement only AI evaluations and transformations behind application-owned ports. The host would remain responsible only for worker registration and validated settings. A generic workflow engine, message broker, or separate scheduler is not justified until PostgreSQL-backed jobs demonstrate a concrete limitation.
+
+Each execution needs an idempotency identity derived from the message occurrence, rule version, trigger generation, and action. Rule definitions should be versioned so an in-flight job continues against the policy that created it; reprocessing under a newer rule must be an explicit operation. Rule ordering, stop-or-continue behavior, mutually exclusive actions, and conflict resolution must be deterministic and reviewable without invoking a model.
+
+The main problems to resolve before implementation are:
+
+- **Duplicate and out-of-order work:** synchronization retries, provider redelivery, worker crashes, and manual reprocessing can schedule the same action more than once.
+- **Rule conflicts and loops:** one automation can make a change that triggers another rule or is synchronized back as a new provider update.
+- **Stale decisions:** message state, configuration, authorization, or a model profile can change between evaluation, approval, and execution.
+- **Prompt injection and nondeterminism:** message content is untrusted input. A model may recommend an action but must never grant itself capabilities, bypass deterministic policy, or construct unrestricted tool calls.
+- **Privacy and purpose limitation:** classification, summaries, extracted fields, prompts, model traces, and webhook payloads create additional derived personal data with their own access, retention, export, and erasure obligations.
+- **Cost and capacity:** attachment extraction, model calls, and bulk rule changes can create an unbounded backlog. Per-rule concurrency, content-size, token, cost, retry, and execution-time limits are required.
+- **Failure recovery:** poison content and permanently failing destinations must move to a visible quarantine or dead-letter state without blocking unrelated mail.
+- **Explainability and audit:** operators need to know which rule version matched, which deterministic facts were used, whether AI contributed, which action was attempted, and why it succeeded, failed, or awaited approval without storing unnecessary message content in ordinary logs.
+
+A future spike should select a minimal declarative rule representation, define the first local-only action set, prove idempotent execution and explicit reprocessing, and compare deterministic-only and AI-assisted evaluation on representative mail. Remote mutations or external side effects should remain a later slice after the local job model, approval boundary, and audit evidence are verified.
+
+### 21.6 Microsoft 365 and Outlook interoperability
+
+There are several materially different interpretations of making externally hosted mail behave like a normal mailbox in Microsoft 365. They must not be collapsed into a promise that MailMcp can expose arbitrary endpoints and become an Exchange server. Outlook clients, Exchange Online, Microsoft Graph, Outlook add-ins, and Microsoft 365 Copilot connectors solve different problems and provide different user experiences.
+
+| Option | User-visible result | Where mail data lives | Main limitation |
+| --- | --- | --- | --- |
+| Add the external account to Outlook through IMAP/POP | A separate account and folder tree in supported Outlook clients | The external provider remains authoritative; some Outlook clients or providers can also synchronize a copy to Microsoft Cloud | It is not an Exchange Online mailbox and feature, policy, add-in, and client support differ |
+| Add a Microsoft Graph mailbox provider to MailMcp | MailMcp can synchronize real Exchange Online primary or shared mailboxes | Exchange Online and MailMcp local storage | It does not make an external IMAP mailbox appear in Outlook |
+| Replicate external mail into an Exchange Online mailbox | A native Exchange Online mailbox in Outlook and Microsoft 365 | Both the external host and Exchange Online | Duplicate data, source-of-truth conflicts, licensing, compliance, and difficult bidirectional semantics |
+| Build an Outlook web add-in backed by MailMcp | MailMcp search, AI, and workflow commands appear in Outlook UI | The mailbox remains with its provider; requested data is processed by MailMcp | An add-in is a task pane or command surface, not a mailbox provider or folder tree |
+| Publish through a Microsoft 365 Copilot connector | External mail can be discoverable to supported Copilot or Microsoft Search experiences | Synced connectors copy indexed content to Microsoft Graph; federated MCP connectors retrieve at query time | It provides search and reasoning, not Outlook mailbox semantics |
+| Emulate Exchange protocols and Autodiscover | In theory, Outlook could treat MailMcp as an Exchange-like service | Depends on the implementation | Unsupported, security-sensitive, operationally disproportionate, and outside MailMcp's product boundary |
+
+Microsoft documents other IMAP and POP accounts as supported account types in new Outlook for Windows, so the first feasibility check should be whether the existing externally hosted account can simply be added alongside the Microsoft 365 work account. This route needs no MailMcp endpoint and does not require moving the domain. It also does not create an Exchange Online mailbox. Microsoft separately documents that supported non-Microsoft account modes can synchronize a copy of mail, calendar, or contact data into Microsoft data centers; exact behavior varies by Outlook client and provider. A deployment that requires mail to remain exclusively outside Microsoft must therefore validate the target Outlook client, SKU, tenant policy, authentication method, and data-flow disclosure rather than assuming that configuring IMAP means direct client-to-provider traffic.
+
+Microsoft Graph is valuable for the opposite direction: it gives MailMcp authorized access to mail already stored in Exchange Online. A future `MicrosoftGraph` infrastructure adapter could implement the same application-level synchronization purpose as the MailKit adapter while preserving provider-specific contracts at the edge. Graph change notifications can reduce polling, while per-folder delta queries provide initial and incremental reconciliation. Notifications must remain hints rather than durable truth: subscriptions expire and require renewal, delivery can be delayed or missed, delta tokens can become invalid, and throttling requires bounded backoff and resynchronization.
+
+The Graph adapter introduces identity and authorization problems that cannot be hidden by reusing IMAP values. Graph message IDs and folder IDs do not have IMAP UIDVALIDITY/UID semantics, and default message IDs can change when an item is moved unless immutable IDs are requested. Delta state is scoped to provider collections rather than to an IMAP checkpoint. Supporting both providers would therefore require an explicit provider-neutral account boundary plus provider-owned occurrence and checkpoint records; it should not weaken the existing stable IMAP identity. Application permissions must be scoped to the required mailboxes and operations through least-privilege Microsoft Graph permissions and Exchange Online Application RBAC, without retaining an overlapping organization-wide Entra grant that defeats mailbox scoping.
+
+Microsoft Graph cannot act as a transparent bridge from an arbitrary external IMAP server into Outlook. Its mail APIs operate on primary and shared mailboxes stored in Exchange Online. If a native Exchange Online experience across Outlook clients and Microsoft 365 is mandatory, some mailbox data must exist in Exchange Online. The conventional Microsoft IMAP migration flow creates and licenses target mailboxes, copies supported mail folders, and ultimately changes mail routing; it is a migration path, not a permanent virtual mailbox backed by the source IMAP server.
+
+A MailMcp-managed replication bridge could be explored, but only as a separate product slice. A one-way mirror from the external authoritative mailbox into a dedicated Exchange Online mailbox is substantially safer than bidirectional synchronization. Even a one-way design must define duplicate detection, folder mapping, deletion and retention behavior, message fidelity, backfill limits, lag, failure repair, legal holds, and whether users may act on mirrored messages. Bidirectional synchronization additionally needs conflict resolution for moves, read and flag state, drafts, sent items, deletes, concurrent edits, and loops. Outbound mail raises accepted-domain, sender authorization, SPF, DKIM, DMARC, Sent Items, and idempotency questions. Calling this arrangement "hosted elsewhere" would be misleading because Exchange Online contains a second copy.
+
+An Outlook add-in is useful when the desired outcome is access to MailMcp features inside Outlook rather than a mailbox replacement. It could expose local search, cited answers, classifications, approval queues, and automation commands through a task pane or contextual command. Current Microsoft documentation shows that add-in support for non-Microsoft accounts is limited across Outlook clients, so the add-in cannot be assumed to operate on the external IMAP account itself. It may still operate in the user's Microsoft 365 mailbox context and call an owner-authorized MailMcp API, but that provides a sidecar experience rather than native folders.
+
+Microsoft 365 Copilot connectors create another future path. A synced connector could publish minimized, access-controlled external items for Microsoft Search and Copilot, at the cost of copying and semantically indexing data in Microsoft Graph. A federated connector can retrieve data from an MCP server at query time without indexing it in Graph, which aligns more closely with MailMcp's existing protocol boundary and data-residency goal, but availability, licensing, identity propagation, citation behavior, tenant administration, and privacy terms require a dedicated evaluation. Neither connector type creates an Outlook mailbox.
+
+The recommended evaluation order is:
+
+1. Validate direct IMAP account support and actual data flow for the required Outlook clients, Microsoft 365 Business license, tenant policies, and external provider.
+2. Add a Microsoft Graph provider only for mailboxes genuinely hosted in Exchange Online, using change notifications plus delta reconciliation and mailbox-scoped application authorization.
+3. Evaluate an Outlook add-in or federated Microsoft 365 Copilot connector when the goal is to surface MailMcp capabilities inside the Microsoft ecosystem without copying a mailbox.
+4. Prototype a one-way Exchange Online mirror only if a native mailbox is mandatory and the owner accepts a second copy in Microsoft 365.
+5. Do not pursue an Exchange protocol façade or general bidirectional bridge without a separate architecture decision, threat model, data-protection review, and narrowly proven business requirement.
+
+No Microsoft Graph SDK, Outlook add-in package, Entra application, Exchange Online mailbox, connector registration, tenant permission, or Microsoft-hosted data flow is introduced by recording this idea. Any implementation must re-check official API support, .NET 10 compatibility, licensing and service terms, tenant requirements, telemetry, and data-processing implications at that time.
+
 ## 22. Delivery stages
 
 Stages describe the shape of the release. The PR-sized units of work that deliver them live in `specs/`, indexed by [`specs/README.md`](README.md); the specification numbers below are the current decomposition, and the referenced files are authoritative for scope.
@@ -753,7 +829,7 @@ Stages describe the shape of the release. The PR-sized units of work that delive
 7. Agent Framework RAG hardening, prompt-injection isolation, citations, and provider-health gating.
 8. Deferred SMTP outbox and delivery service with unit-tested state transitions and retry behavior after the IMAP/RAG/MCP slice.
 9. ChatGPT OAuth/mTLS validation and general OAuth MCP client profile.
-10. Production hardening, backup, metrics, recovery exercises, GDPR workflow design, enterprise audit evidence, and explicit evaluation plans for future ideas: AGT governance, MinIO object storage, `mcpmail`, and smtp4dev-backed SMTP integration tests.
+10. Production hardening, backup, metrics, recovery exercises, GDPR workflow design, enterprise audit evidence, and explicit evaluation plans for future ideas: AGT governance, MinIO object storage, `mcpmail`, smtp4dev-backed SMTP integration tests, policy-driven mail automation, and Microsoft 365 interoperability.
 
 Two pieces of work cut across the numbered stages. Resilience pipelines (section 17.1) are established once in specification 03 and consumed by every later adapter, starting with specification 04. Infrastructure verification through Aspire test mode (section 6.2) lands in specifications 20 and 21 once the schema is settled, and pays off the PostgreSQL checks that ADR 001 defers together with the `\Seen` invariant that no substitute-based unit test can prove.
 
@@ -777,7 +853,7 @@ Stages 6 through 10 are decomposed into specifications when the current segment 
 - First-release configuration can be expressed in JSON without placing secrets or encrypted secret values in Git.
 - Future CLI work is explicitly deferred and uses `mcpmail` with `System.CommandLine` when implemented.
 - Aspire AppHost can start the local development environment for MailMcp and PostgreSQL without introducing production runtime coupling.
-- Future ideas are collected separately from first-release scope, including AGT governance evaluation, MinIO migration, `mcpmail`, and smtp4dev-backed SMTP delivery verification.
+- Future ideas are collected separately from first-release scope, including AGT governance evaluation, MinIO migration, `mcpmail`, smtp4dev-backed SMTP delivery verification, policy-driven mail automation, and Microsoft 365 interoperability.
 - The draft identifies personal-data classes, derived-data sensitivity, first-release privacy controls, and deferred GDPR workflows so later compliance implementation has explicit seams.
 - Enterprise-grade posture is visible in boundaries for auditability, governance, privacy, operational hardening, deterministic policy enforcement, and safe failure modes without prematurely adding first-release dependencies.
 - Shared repository settings are centralized in `global.json`, `Directory.Build.props`, and `Directory.Packages.props` whenever possible instead of being repeated in individual projects.
@@ -821,6 +897,15 @@ Stages 6 through 10 are decomposed into specifications when the current segment 
 - [System.CommandLine overview](https://learn.microsoft.com/en-us/dotnet/standard/commandline/)
 - [System.CommandLine NuGet package](https://www.nuget.org/packages/System.CommandLine)
 - [System.CommandLine GitHub repository](https://github.com/dotnet/command-line-api)
+- [Supported accounts in new Outlook for Windows](https://learn.microsoft.com/en-us/microsoft-365-apps/outlook/get-started/supported-account-types)
+- [Sync a non-Microsoft account in Outlook to Microsoft Cloud](https://support.microsoft.com/en-us/outlook/getstarted/sync-your-account-in-outlook-to-the-microsoft-cloud)
+- [Microsoft Graph Outlook mail API](https://learn.microsoft.com/en-us/graph/api/resources/mail-api-overview?view=graph-rest-1.0)
+- [Organize and synchronize Outlook messages with Microsoft Graph](https://learn.microsoft.com/en-us/graph/outlook-organize-messages)
+- [Microsoft Graph delta query](https://learn.microsoft.com/en-us/graph/delta-query-overview)
+- [Exchange Online RBAC for applications](https://learn.microsoft.com/en-us/exchange/permissions-exo/application-rbac)
+- [IMAP mailbox migration to Microsoft 365](https://learn.microsoft.com/en-us/exchange/mailbox-migration/migrating-imap-mailboxes/migrating-imap-mailboxes)
+- [Outlook add-ins overview](https://learn.microsoft.com/en-us/office/dev/add-ins/outlook/outlook-add-ins-overview)
+- [Microsoft 365 Copilot connectors overview](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/overview-copilot-connector)
 - [smtp4dev GitHub repository](https://github.com/rnwood/smtp4dev)
 - [smtp4dev NuGet package](https://www.nuget.org/packages/Rnwood.Smtp4dev)
 - [smtp4dev Docker image](https://hub.docker.com/r/rnwood/smtp4dev)
