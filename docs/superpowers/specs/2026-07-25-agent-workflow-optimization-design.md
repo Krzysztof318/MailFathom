@@ -11,8 +11,8 @@ generic Superpowers snapshot.
 The change adds:
 
 - three repository-owned Bash entrypoints for workspace inspection, iterative
-  verification, and final verification;
-- four focused MailMcp skills for starting, reviewing, checking documentation
+  verification, and final verification, plus one contract-test runner;
+- four focused repository skills for starting, reviewing, checking documentation
   and licensing, and finishing a change;
 - one canonical `.agents/skills/` directory exposed to Claude Code through the
   repository symlink `.claude/skills -> ../.agents/skills`;
@@ -26,19 +26,32 @@ dependency.
 
 ### Deterministic scripts
 
-`eng/agent-workflow/inspect-workspace.sh` is read-only. It reports repository
+Scripts follow a placement rule based on their consumers:
+
+- a script used by one skill only belongs in that skill's `scripts/`;
+- a script shared only by skills belongs in `.agents/scripts/`;
+- a script intended for manual use belongs directly in root `scripts/`.
+
+The current entrypoints are documented for manual use, so the repository keeps
+the flat files `scripts/inspect-workspace.sh`, `scripts/verify-fast.sh`,
+`scripts/verify-full.sh`, and `scripts/test-agent-workflow.sh`. No deeper
+workflow or test subdirectories are introduced. The test runner exposes its
+fake `dotnet` behavior internally when invoked through the temporary test
+fixture, avoiding a separate helper file.
+
+`scripts/inspect-workspace.sh` is read-only. It reports repository
 root, branch or detached state, linked-worktree state, upstream, whether the
 current commit contains the locally known `origin/main`, dirty paths, registered
 worktree count, and installed .NET SDK. It does not fetch, switch branches,
 create worktrees, or remove stale worktrees.
 
-`eng/agent-workflow/verify-fast.sh` provides the repeatable inner loop:
+`scripts/verify-fast.sh` provides the repeatable inner loop:
 
 1. restore the solution;
 2. build `MailMcp.slnx` in `Release`;
 3. run the complete unit-test suite without rebuilding.
 
-`eng/agent-workflow/verify-full.sh` is the final gate:
+`scripts/verify-full.sh` is the final gate:
 
 1. restore repository-local tools;
 2. restore the solution;
@@ -111,17 +124,18 @@ more specific instruction file exists.
 
 ## Testing
 
-Shell tests use a temporary Git repository and a fake `dotnet` executable to
-prove command order, `Release` configuration, no duplicate test execution in
+`scripts/test-agent-workflow.sh` uses a temporary Git repository and its
+embedded fake `dotnet` mode to prove command order, `Release` configuration,
+no duplicate test execution in
 the full gate, fail-fast behavior, committed/staged/unstaged diff coverage, and
 read-only workspace inspection across HEAD, refs, index, and working-tree
-state. They also prove that a failing SDK query remains an informational
+state. It also proves that a failing SDK query remains an informational
 inspection result.
 
 Every skill receives a baseline scenario without the skill, a forward test with
 the skill, structural validation through the official skill validator, and
 discovery checks through both `.agents/skills` and `.claude/skills`.
 
-The final repository check runs `verify-full.sh` against the real solution and
-inspects the complete diff for secrets, generated files, unrelated changes,
-instruction gaps, and licensing drift.
+The final repository check runs `scripts/verify-full.sh` against the real
+solution and inspects the complete diff for secrets, generated files, unrelated
+changes, instruction gaps, and licensing drift.
