@@ -13,7 +13,4 @@ public sealed class MailboxSynchronizationOptions
 
     /// <summary>Gets or sets the maximum number of bounded metadata batches processed by one synchronization run.</summary>
     public int MaxMetadataBatchesPerRun { get; set; } = 10;
-
-    /// <summary>Gets or sets the maximum number of complete local write attempts after concurrency conflicts.</summary>
-    public int MaxPersistenceConcurrencyAttempts { get; set; } = 3;
 }

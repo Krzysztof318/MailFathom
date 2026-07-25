@@ -17,9 +17,9 @@ public sealed class MailboxSynchronizer
     private readonly IPersistenceSessionFactory persistenceSessionFactory;
     private readonly IEmailMetadataRepository metadataRepository;
     private readonly IEmailContentStore contentStore;
+    private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly TimeProvider timeProvider;
     private readonly MailboxSynchronizationOptions options;
-    private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
 
     /// <summary>Initializes a new mailbox synchronizer.</summary>
     public MailboxSynchronizer(
@@ -28,6 +28,7 @@ public sealed class MailboxSynchronizer
         IPersistenceSessionFactory persistenceSessionFactory,
         IEmailMetadataRepository metadataRepository,
         IEmailContentStore contentStore,
+        OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options)
     {
@@ -36,15 +37,20 @@ public sealed class MailboxSynchronizer
         this.persistenceSessionFactory = persistenceSessionFactory;
         this.metadataRepository = metadataRepository;
         this.contentStore = contentStore;
+        this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.timeProvider = timeProvider;
         this.options = options;
-        this.concurrencyRetryPolicy = new OptimisticConcurrencyRetryPolicy(
-            persistenceSessionFactory,
-            options.MaxPersistenceConcurrencyAttempts,
-            timeProvider);
     }
 
     /// <summary>Synchronizes one account folder without mutating remote mailbox flags.</summary>
+    /// <param name="accountId">The account to synchronize.</param>
+    /// <param name="folderName">The folder to synchronize.</param>
+    /// <param name="cancellationToken">Cancels the run between remote reads and local writes.</param>
+    /// <returns>The bounded progress this run committed.</returns>
+    /// <exception cref="PersistenceConcurrencyConflictException">
+    /// Thrown when a competing writer wins a race that the bounded local retries could not resolve. Progress already
+    /// committed by this run stays durable, and the next run rereads the committed checkpoint before deciding again.
+    /// </exception>
     public async Task<MailboxSynchronizationResult> SynchronizeAsync(
         MailAccountId accountId,
         MailFolderName folderName,
@@ -72,45 +78,26 @@ public sealed class MailboxSynchronizer
             var batch = await mailboxSession.GetEmailBatchAfterAsync(checkpoint.LastSeenUid, this.options.MaxMetadataBatchSize, cancellationToken);
             foreach (var metadata in batch.Emails.OrderBy(email => email.OccurrenceId.Uid.Value))
             {
-                var outcome = await this.StoreOccurrenceAsync(mailboxSession, metadata, cancellationToken);
-                if (outcome == OccurrenceOutcome.Stored)
+                var availability = await this.StoreOccurrenceAsync(mailboxSession, metadata, cancellationToken);
+                if (availability == StoredEmailContentAvailability.Available)
                 {
                     storedCount++;
                 }
-                else if (outcome == OccurrenceOutcome.SkippedOversized)
-                {
-                    skippedOversizedCount++;
-                }
                 else
                 {
-                    return new MailboxSynchronizationResult(
-                        storedCount,
-                        skippedOversizedCount,
-                        HasMoreEmails: true,
-                        checkpoint,
-                        MailboxSynchronizationOutcome.ConcurrencyConflict);
+                    skippedOversizedCount++;
                 }
             }
 
             if (batch.InspectedThroughUid is { } inspectedThroughUid)
             {
                 var advancedCheckpoint = checkpoint.AdvanceTo(inspectedThroughUid, this.timeProvider.GetUtcNow());
-                var checkpointCommitResult = await this.SaveCheckpointAsync(
+                await this.CommitCheckpointAsync(
                     accountId,
                     folderName,
                     persistedCheckpoint,
                     advancedCheckpoint,
                     cancellationToken);
-
-                if (checkpointCommitResult == PersistenceCommitResult.ConcurrencyConflict)
-                {
-                    return new MailboxSynchronizationResult(
-                        storedCount,
-                        skippedOversizedCount,
-                        HasMoreEmails: true,
-                        checkpoint,
-                        MailboxSynchronizationOutcome.ConcurrencyConflict);
-                }
 
                 checkpoint = advancedCheckpoint;
                 persistedCheckpoint = advancedCheckpoint;
@@ -123,22 +110,17 @@ public sealed class MailboxSynchronizer
             storedCount,
             skippedOversizedCount,
             hasMore,
-            checkpoint,
-            MailboxSynchronizationOutcome.Completed);
+            checkpoint);
     }
 
-    private async Task<OccurrenceOutcome> StoreOccurrenceAsync(
+    private async Task<StoredEmailContentAvailability> StoreOccurrenceAsync(
         IMailboxSession mailboxSession,
         RemoteEmailMetadata metadata,
         CancellationToken cancellationToken)
     {
         if (metadata.SizeOctets > this.options.MaxRawMimeBytes)
         {
-            var result = await this.RecordOversizedOccurrenceAsync(metadata, cancellationToken);
-
-            return result == PersistenceCommitResult.Committed
-                ? OccurrenceOutcome.SkippedOversized
-                : OccurrenceOutcome.ConcurrencyConflict;
+            return await this.RecordOversizedOccurrenceAsync(metadata, cancellationToken);
         }
 
         RemoteEmailContent content;
@@ -150,14 +132,10 @@ public sealed class MailboxSynchronizer
         {
             // The advertised size understated the payload, so the occurrence is recorded without content instead of
             // being silently skipped past by the checkpoint.
-            var result = await this.RecordOversizedOccurrenceAsync(metadata, cancellationToken);
-
-            return result == PersistenceCommitResult.Committed
-                ? OccurrenceOutcome.SkippedOversized
-                : OccurrenceOutcome.ConcurrencyConflict;
+            return await this.RecordOversizedOccurrenceAsync(metadata, cancellationToken);
         }
 
-        var commitResult = await this.concurrencyRetryPolicy.CommitAsync(
+        await this.concurrencyRetryPolicy.CommitAsync(
             async (persistenceSession, attemptCancellationToken) =>
             {
                 var storedEmailId = await this.metadataRepository.UpsertMetadataAsync(
@@ -173,16 +151,14 @@ public sealed class MailboxSynchronizer
             },
             cancellationToken);
 
-        return commitResult == PersistenceCommitResult.Committed
-            ? OccurrenceOutcome.Stored
-            : OccurrenceOutcome.ConcurrencyConflict;
+        return StoredEmailContentAvailability.Available;
     }
 
-    private Task<PersistenceCommitResult> RecordOversizedOccurrenceAsync(
+    private async Task<StoredEmailContentAvailability> RecordOversizedOccurrenceAsync(
         RemoteEmailMetadata metadata,
         CancellationToken cancellationToken)
     {
-        return this.concurrencyRetryPolicy.CommitAsync(
+        await this.concurrencyRetryPolicy.CommitAsync(
             async (persistenceSession, attemptCancellationToken) =>
             {
                 await this.metadataRepository.UpsertMetadataAsync(
@@ -192,9 +168,13 @@ public sealed class MailboxSynchronizer
                     attemptCancellationToken);
             },
             cancellationToken);
+
+        return StoredEmailContentAvailability.ExceededSizeLimit;
     }
 
-    private async Task<PersistenceCommitResult> SaveCheckpointAsync(
+    // A checkpoint advance is attempted once rather than retried: the intended progress was derived from the state read
+    // at the start of the run, so a competing advance invalidates the decision itself instead of only the write.
+    private async Task CommitCheckpointAsync(
         MailAccountId accountId,
         MailFolderName folderName,
         SynchronizationCheckpoint? expectedCheckpoint,
@@ -204,7 +184,7 @@ public sealed class MailboxSynchronizer
         await using var persistenceSession =
             await this.persistenceSessionFactory.BeginSessionAsync(cancellationToken);
 
-        var saveResult = await this.checkpointStore.SaveCheckpointAsync(
+        await this.checkpointStore.SaveCheckpointAsync(
             persistenceSession,
             accountId,
             folderName,
@@ -212,30 +192,12 @@ public sealed class MailboxSynchronizer
             checkpoint,
             cancellationToken);
 
-        if (saveResult == SynchronizationCheckpointSaveResult.ConcurrencyConflict)
+        if (await persistenceSession.CommitAsync(cancellationToken) == PersistenceCommitResult.ConcurrencyConflict)
         {
-            return PersistenceCommitResult.ConcurrencyConflict;
+            throw new PersistenceConcurrencyConflictException(
+                $"Synchronization progress for folder {folderName.Value} was changed by another writer before this run committed its advance.");
         }
-
-        return await persistenceSession.CommitAsync(cancellationToken);
     }
-
-    private enum OccurrenceOutcome
-    {
-        Stored = 0,
-        SkippedOversized = 1,
-        ConcurrencyConflict = 2,
-    }
-}
-
-/// <summary>Describes whether a mailbox synchronization run completed or stopped after persistence conflicts.</summary>
-public enum MailboxSynchronizationOutcome
-{
-    /// <summary>The run completed its bounded amount of work without an unresolved persistence conflict.</summary>
-    Completed = 0,
-
-    /// <summary>The run stopped after an optimistic concurrency conflict remained unresolved.</summary>
-    ConcurrencyConflict = 1,
 }
 
 /// <summary>Summarizes one mailbox synchronization run.</summary>
@@ -243,5 +205,4 @@ public sealed record MailboxSynchronizationResult(
     int StoredEmailCount,
     int SkippedOversizedEmailCount,
     bool HasMoreEmails,
-    SynchronizationCheckpoint Checkpoint,
-    MailboxSynchronizationOutcome Outcome);
+    SynchronizationCheckpoint Checkpoint);

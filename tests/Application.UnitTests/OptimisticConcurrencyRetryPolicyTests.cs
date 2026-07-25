@@ -20,10 +20,10 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
         firstSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.ConcurrencyConflict);
         secondSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.Committed);
         var stagedSessions = new List<IPersistenceSession>();
-        var policy = new OptimisticConcurrencyRetryPolicy(sessionFactory, maximumAttempts: 3);
+        var policy = CreatePolicy(sessionFactory);
 
         // Act
-        var result = await policy.CommitAsync(
+        await policy.CommitAsync(
             (session, _) =>
             {
                 stagedSessions.Add(session);
@@ -32,7 +32,6 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
             CancellationToken.None);
 
         // Assert
-        Assert.Equal(PersistenceCommitResult.Committed, result);
         Assert.Equal([firstSession, secondSession], stagedSessions);
         await firstSession.Received(1).DisposeAsync();
         await secondSession.Received(1).DisposeAsync();
@@ -40,7 +39,7 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
     }
 
     [Fact]
-    public async Task CommitAsync_AllAttemptsConflict_ReturnsConflictAfterConfiguredMaximum()
+    public async Task CommitAsync_DefaultOptions_StopsAfterTwoConflictingAttempts()
     {
         // Arrange
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -54,19 +53,53 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
         }
 
         var stagedAttemptCount = 0;
-        var policy = new OptimisticConcurrencyRetryPolicy(sessionFactory, maximumAttempts: 3);
+        var policy = CreatePolicy(sessionFactory);
 
         // Act
-        var result = await policy.CommitAsync(
+        await Assert.ThrowsAsync<PersistenceConcurrencyConflictException>(() => policy.CommitAsync(
             (_, _) =>
             {
                 stagedAttemptCount++;
                 return Task.CompletedTask;
             },
-            CancellationToken.None);
+            CancellationToken.None));
 
         // Assert
-        Assert.Equal(PersistenceCommitResult.ConcurrencyConflict, result);
+        Assert.Equal(2, stagedAttemptCount);
+        await sessionFactory.Received(2).BeginSessionAsync(CancellationToken.None);
+        await sessions[0].Received(1).DisposeAsync();
+        await sessions[1].Received(1).DisposeAsync();
+        await sessions[2].DidNotReceive().CommitAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CommitAsync_AllAttemptsConflict_ThrowsAfterConfiguredMaximum()
+    {
+        // Arrange
+        var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        var sessions = Enumerable.Range(0, 3)
+            .Select(_ => Substitute.For<IPersistenceSession>())
+            .ToArray();
+        sessionFactory.BeginSessionAsync(CancellationToken.None).Returns(sessions[0], sessions[1], sessions[2]);
+        foreach (var session in sessions)
+        {
+            session.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.ConcurrencyConflict);
+        }
+
+        var stagedAttemptCount = 0;
+        var policy = CreatePolicy(sessionFactory, maximumCommitAttempts: 3);
+
+        // Act
+        var thrown = await Assert.ThrowsAsync<PersistenceConcurrencyConflictException>(() => policy.CommitAsync(
+            (_, _) =>
+            {
+                stagedAttemptCount++;
+                return Task.CompletedTask;
+            },
+            CancellationToken.None));
+
+        // Assert
+        Assert.Contains("3", thrown.Message, StringComparison.Ordinal);
         Assert.Equal(3, stagedAttemptCount);
         await sessionFactory.Received(3).BeginSessionAsync(CancellationToken.None);
         foreach (var session in sessions)
@@ -88,7 +121,7 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
             cancellation.Cancel();
             return PersistenceCommitResult.ConcurrencyConflict;
         });
-        var policy = new OptimisticConcurrencyRetryPolicy(sessionFactory, maximumAttempts: 3);
+        var policy = CreatePolicy(sessionFactory, maximumCommitAttempts: 3);
 
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => policy.CommitAsync(
@@ -116,10 +149,7 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
             return PersistenceCommitResult.ConcurrencyConflict;
         });
         secondSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.Committed);
-        var policy = new OptimisticConcurrencyRetryPolicy(
-            sessionFactory,
-            maximumAttempts: 3,
-            clock);
+        var policy = CreatePolicy(sessionFactory, timeProvider: clock);
 
         // Act
         var commitTask = policy.CommitAsync(
@@ -138,10 +168,9 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
 
         // Act
         clock.Advance(TimeSpan.FromMilliseconds(26));
-        var result = await commitTask;
+        await commitTask;
 
         // Assert
-        Assert.Equal(PersistenceCommitResult.Committed, result);
         await sessionFactory.Received(2).BeginSessionAsync(CancellationToken.None);
     }
 
@@ -153,7 +182,7 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         var session = Substitute.For<IPersistenceSession>();
         sessionFactory.BeginSessionAsync(CancellationToken.None).Returns(session);
-        var policy = new OptimisticConcurrencyRetryPolicy(sessionFactory, maximumAttempts: 3);
+        var policy = CreatePolicy(sessionFactory, maximumCommitAttempts: 3);
 
         // Act
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => policy.CommitAsync(
@@ -175,9 +204,26 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
 
         // Act
         var thrown = Assert.Throws<ArgumentOutOfRangeException>(
-            () => new OptimisticConcurrencyRetryPolicy(sessionFactory, maximumAttempts: 0));
+            () => CreatePolicy(sessionFactory, maximumCommitAttempts: 0));
 
         // Assert
-        Assert.Equal("maximumAttempts", thrown.ParamName);
+        Assert.Equal("options", thrown.ParamName);
+    }
+
+    private static OptimisticConcurrencyRetryPolicy CreatePolicy(
+        IPersistenceSessionFactory sessionFactory,
+        int? maximumCommitAttempts = null,
+        TimeProvider? timeProvider = null)
+    {
+        var options = new PersistenceConcurrencyOptions();
+        if (maximumCommitAttempts is { } configuredAttempts)
+        {
+            options.MaximumCommitAttempts = configuredAttempts;
+        }
+
+        return new OptimisticConcurrencyRetryPolicy(
+            sessionFactory,
+            options,
+            timeProvider ?? TimeProvider.System);
     }
 }

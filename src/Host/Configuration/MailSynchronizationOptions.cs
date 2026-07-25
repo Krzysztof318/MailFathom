@@ -31,10 +31,6 @@ internal sealed class MailSynchronizationOptions : IValidatableObject, IMailKitI
     [Range(1, 1000)]
     public int MaxMetadataBatchesPerRun { get; set; } = 10;
 
-    /// <summary>Gets or sets the maximum number of complete local write attempts after concurrency conflicts.</summary>
-    [Range(1, 10)]
-    public int MaxPersistenceConcurrencyAttempts { get; set; } = 3;
-
     /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
 

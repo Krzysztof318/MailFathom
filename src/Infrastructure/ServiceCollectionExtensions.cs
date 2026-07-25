@@ -34,6 +34,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();
+        services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(
             static () => new MailKitImapClientAdapter(new ImapClient()),

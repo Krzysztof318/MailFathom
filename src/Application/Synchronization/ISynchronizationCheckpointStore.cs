@@ -17,21 +17,22 @@ public interface ISynchronizationCheckpointStore
         CancellationToken cancellationToken);
 
     /// <summary>Stages a checkpoint update only when the durable state still matches the state previously read.</summary>
-    Task<SynchronizationCheckpointSaveResult> SaveCheckpointAsync(
+    /// <param name="session">The open session whose transaction the staged update joins.</param>
+    /// <param name="accountId">The account owning the folder.</param>
+    /// <param name="folderName">The folder whose progress advances.</param>
+    /// <param name="expectedCheckpoint">The durable progress the caller decided from, or <see langword="null" /> when it expects no checkpoint yet.</param>
+    /// <param name="checkpoint">The progress to stage.</param>
+    /// <param name="cancellationToken">Cancels the lookup before anything is staged.</param>
+    /// <returns>A task that completes once the update is staged in the caller's session.</returns>
+    /// <exception cref="PersistenceConcurrencyConflictException">
+    /// Thrown when durable progress no longer matches <paramref name="expectedCheckpoint" />. Nothing is staged, because
+    /// progress that moved must be reread before a new advance is decided rather than overwritten from stale state.
+    /// </exception>
+    Task SaveCheckpointAsync(
         IPersistenceSession session,
         MailAccountId accountId,
         MailFolderName folderName,
         SynchronizationCheckpoint? expectedCheckpoint,
         SynchronizationCheckpoint checkpoint,
         CancellationToken cancellationToken);
-}
-
-/// <summary>Describes whether a synchronization checkpoint update was staged.</summary>
-public enum SynchronizationCheckpointSaveResult
-{
-    /// <summary>The durable state matched the expected state and the update was staged.</summary>
-    Staged = 0,
-
-    /// <summary>The durable state changed after it was read, so no update was staged.</summary>
-    ConcurrencyConflict = 1,
 }

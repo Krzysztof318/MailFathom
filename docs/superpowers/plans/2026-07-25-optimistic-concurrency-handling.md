@@ -1,5 +1,7 @@
 # Optimistic Concurrency Handling Implementation Plan
 
+> **Completed and partly superseded.** This plan is kept as the record of how the slice was executed. Its conflict-signaling and configuration decisions were later revised: the per-boundary conflict enums (`MailboxSynchronizationOutcome`, `SynchronizationCheckpointSaveResult`, and the private occurrence outcome) were replaced by `PersistenceConcurrencyConflictException` above the retry, and `MailSynchronization:MaxPersistenceConcurrencyAttempts` was replaced by the deployment-wide `Persistence:MaximumConcurrencyCommitAttempts`, default `2`. ADR 0001 and `docs/features/imap-synchronization.md` describe the current behavior.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:test-driven-development and execute the tasks inline in order. Subagent execution is disabled for this workspace.
 
 **Goal:** Implement PostgreSQL `xmin` optimistic concurrency for mutable tracked persistence records, translate EF Core conflicts into an application-owned commit result, and retry safe synchronization writes with a fresh persistence session.

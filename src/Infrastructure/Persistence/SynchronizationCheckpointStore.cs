@@ -45,7 +45,7 @@ internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContex
     }
 
     /// <inheritdoc />
-    public async Task<SynchronizationCheckpointSaveResult> SaveCheckpointAsync(
+    public async Task SaveCheckpointAsync(
         IPersistenceSession session,
         MailAccountId accountId,
         MailFolderName folderName,
@@ -67,7 +67,8 @@ internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContex
         {
             if (expectedCheckpoint is not null)
             {
-                return SynchronizationCheckpointSaveResult.ConcurrencyConflict;
+                throw new PersistenceConcurrencyConflictException(
+                    $"Synchronization progress expected for folder {folderName.Value} no longer exists.");
             }
 
             writeContext.SynchronizationCheckpoints.Add(new SynchronizationCheckpointEntity
@@ -78,7 +79,7 @@ internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContex
                 SynchronizedAt = checkpoint.SynchronizedAt,
             });
 
-            return SynchronizationCheckpointSaveResult.Staged;
+            return;
         }
 
         var currentCheckpoint = new SynchronizationCheckpoint(
@@ -87,14 +88,13 @@ internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContex
             entity.SynchronizedAt);
         if (!currentCheckpoint.RepresentsSameProgressAs(expectedCheckpoint))
         {
-            return SynchronizationCheckpointSaveResult.ConcurrencyConflict;
+            throw new PersistenceConcurrencyConflictException(
+                $"Durable synchronization progress for folder {folderName.Value} no longer matches the progress this write was based on.");
         }
 
         entity.UidValidity = checkpoint.UidValidity.Value;
         entity.LastSeenUid = checkpoint.LastSeenUid?.Value;
         entity.SynchronizedAt = LaterOf(entity.SynchronizedAt, checkpoint.SynchronizedAt);
-
-        return SynchronizationCheckpointSaveResult.Staged;
     }
 
     private static DateTimeOffset? LaterOf(DateTimeOffset? current, DateTimeOffset? proposed) =>

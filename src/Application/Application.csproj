@@ -2,8 +2,4 @@
   <ItemGroup>
     <ProjectReference Include="..\Domain\Domain.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    <InternalsVisibleTo Include="MailMcp.Application.UnitTests" />
-  </ItemGroup>
 </Project>

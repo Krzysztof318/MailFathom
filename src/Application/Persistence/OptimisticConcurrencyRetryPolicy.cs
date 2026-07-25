@@ -5,43 +5,45 @@ using System.Security.Cryptography;
 namespace MailMcp.Application.Persistence;
 
 /// <summary>Retries a safe local write after optimistic concurrency conflicts.</summary>
-internal sealed class OptimisticConcurrencyRetryPolicy
+/// <remarks>
+/// This policy is the only place where a conflict is an expected control-flow branch rather than a failure. Callers
+/// opt in by supplying a write that is idempotent and safe to repeat from a fresh read; once the configured attempts
+/// are exhausted the conflict leaves the policy as <see cref="PersistenceConcurrencyConflictException" /> so no
+/// intermediate use-case code has to restate it.
+/// </remarks>
+public sealed class OptimisticConcurrencyRetryPolicy
 {
     private readonly IPersistenceSessionFactory sessionFactory;
-    private readonly int maximumAttempts;
     private readonly TimeProvider timeProvider;
+    private readonly int maximumAttempts;
 
-    /// <summary>Initializes a retry policy with a bounded total attempt count.</summary>
+    /// <summary>Initializes a retry policy from the deployment-wide concurrency bound.</summary>
+    /// <param name="sessionFactory">Creates a fresh persistence session for every attempt.</param>
+    /// <param name="options">Supplies the maximum attempt count.</param>
+    /// <param name="timeProvider">Measures the backoff between attempts.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the configured attempt count is below one.</exception>
     public OptimisticConcurrencyRetryPolicy(
         IPersistenceSessionFactory sessionFactory,
-        int maximumAttempts)
-        : this(
-            sessionFactory,
-            maximumAttempts,
-            TimeProvider.System)
-    {
-    }
-
-    /// <summary>Initializes a retry policy with a bounded total attempt count and testable time source.</summary>
-    public OptimisticConcurrencyRetryPolicy(
-        IPersistenceSessionFactory sessionFactory,
-        int maximumAttempts,
+        PersistenceConcurrencyOptions options,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(sessionFactory);
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(timeProvider);
-        ArgumentOutOfRangeException.ThrowIfLessThan(maximumAttempts, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(options.MaximumCommitAttempts, 1, nameof(options));
 
         this.sessionFactory = sessionFactory;
-        this.maximumAttempts = maximumAttempts;
         this.timeProvider = timeProvider;
+        this.maximumAttempts = options.MaximumCommitAttempts;
     }
 
     /// <summary>Stages and commits a complete local write in a fresh session for every attempt.</summary>
     /// <param name="stageChangesAsync">Stages the complete idempotent local write in the supplied session.</param>
     /// <param name="cancellationToken">Cancels session creation, staging, commit, or a subsequent retry.</param>
-    /// <returns>The successful commit result, or a concurrency conflict after all attempts are exhausted.</returns>
-    public async Task<PersistenceCommitResult> CommitAsync(
+    /// <returns>A task that completes once one attempt has committed.</returns>
+    /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed attempt conflicted.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the caller cancels before or between attempts.</exception>
+    public async Task CommitAsync(
         Func<IPersistenceSession, CancellationToken, Task> stageChangesAsync,
         CancellationToken cancellationToken)
     {
@@ -54,10 +56,9 @@ internal sealed class OptimisticConcurrencyRetryPolicy
             await using var session = await this.sessionFactory.BeginSessionAsync(cancellationToken);
             await stageChangesAsync(session, cancellationToken);
 
-            var result = await session.CommitAsync(cancellationToken);
-            if (result == PersistenceCommitResult.Committed)
+            if (await session.CommitAsync(cancellationToken) == PersistenceCommitResult.Committed)
             {
-                return result;
+                return;
             }
 
             if (attemptNumber < this.maximumAttempts)
@@ -69,7 +70,8 @@ internal sealed class OptimisticConcurrencyRetryPolicy
             }
         }
 
-        return PersistenceCommitResult.ConcurrencyConflict;
+        throw new PersistenceConcurrencyConflictException(
+            $"A local write did not commit within the configured {this.maximumAttempts} optimistic concurrency attempts.");
     }
 
     private static TimeSpan CreateJitteredRetryDelay(int completedAttemptCount)

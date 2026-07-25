@@ -62,6 +62,10 @@ internal sealed class MailMcpDbContext : DbContext
             entity.HasKey(email => email.Id);
             entity.Property(email => email.Id).ValueGeneratedNever();
             entity.Property(email => email.InternetMessageId).HasMaxLength(998);
+
+            // A `uint` row version is Npgsql's mapping onto the PostgreSQL `xmin` system column, so no concurrency column
+            // is created in the table and PostgreSQL updates the token itself. Changing the CLR type or the row-version
+            // configuration would silently turn this into an ordinary column that nothing ever updates.
             entity.Property(email => email.ConcurrencyVersion).IsRowVersion();
 
             // Stored as text so the availability reason stays readable in ad-hoc audit queries and survives enum reordering.
@@ -92,6 +96,8 @@ internal sealed class MailMcpDbContext : DbContext
             entity.HasKey(checkpoint => checkpoint.MailFolderId)
                 .HasName(SynchronizationCheckpointPrimaryKeyConstraintName);
             entity.Property(checkpoint => checkpoint.MailFolderId).ValueGeneratedNever();
+
+            // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
             entity.Property(checkpoint => checkpoint.ConcurrencyVersion).IsRowVersion();
             entity.HasOne(checkpoint => checkpoint.MailFolder)
                 .WithOne(folder => folder.SynchronizationCheckpoint)
