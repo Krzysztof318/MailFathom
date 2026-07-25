@@ -38,6 +38,8 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 
 The first implemented vertical slice covers periodic read-only IMAP reconciliation, message-count-bounded IMAP metadata batches, a bounded number of batches per run, raw MIME size limits, per-folder worker failure isolation, domain identities for `(account, folder, UIDVALIDITY, UID)`, application-owned synchronization and persistence ports, EF Core PostgreSQL mappings for metadata/content/checkpoints, and a disabled-by-default background worker. The following draft capabilities remain pending: deployment-specific secret binding, reviewed migrations, IMAP IDLE, IMAP NOTIFY, MCP read tools, RAG indexing, SMTP outbox processing, integration tests including ADR 001 PostgreSQL mapping/constraint verification, and production migration operations.
 
+The gap between this draft and the implemented code is decomposed into individually reviewable specifications under `specs/`, indexed by [`specs/README.md`](README.md). Specifications 01 through 21 cover delivery stages 1 through 4 plus the deferred schema and integration-verification work; stages 5 through 10 are decomposed when that segment nears completion. This draft remains the durable description of the target architecture, and a specification that departs from it must say so explicitly, as specifications 08, 19, and 03 do for stage ordering and for the resilience mechanism this draft did not name.
+
 ## 3. Scope
 
 ### 3.1 Included
@@ -206,7 +208,9 @@ mail-mcp/
 │   ├── certificates/
 │   └── systemd/
 └── specs/
-    └── 2026-07-22-mail-mcp-architecture-draft.md
+    ├── README.md                     # roadmap index over the numbered specifications
+    ├── 2026-07-22-mail-mcp-architecture-draft.md
+    └── NN-<topic>.md                 # one PR-sized specification per unit of work
 ```
 
 Each unit-test project references only the production boundary it verifies and the minimum required upstream contracts. No integration-test project is added in the initial scaffold.
@@ -226,8 +230,10 @@ Each unit-test project references only the production boundary it verifies and t
 | AI abstractions | `Microsoft.Extensions.AI` | Provider-neutral `IChatClient` and embedding abstractions |
 | Optional compatibility | Semantic Kernel | Added behind adapters only when justified by a missing MAF capability |
 | Authentication | ASP.NET Core JWT bearer + external OAuth 2.1 IdP | Auth0 is the default deployment choice |
+| Resilience | Polly v8 resilience pipelines | Named pipelines per outbound dependency class, resolved through `ResiliencePipelineProvider`; see section 17.1 |
 | Observability | Aspire ServiceDefaults + OpenTelemetry + JSON console logging | Logs, metrics, traces, health checks, and OTLP export are scaffolded through shared extensions |
 | Unit testing | xUnit.net v3 + Microsoft Testing Platform v2 + NSubstitute | Isolated behavior tests and mocked protocol boundaries |
+| Integration testing | Aspire test mode via `Aspire.Hosting.Testing` | Deferred phase; drives the real `AppHost` app model rather than a parallel container definition |
 | Local orchestration | Aspire AppHost | First-release development-time orchestration and observability for MailMcp and PostgreSQL |
 | Future CLI parser | `System.CommandLine` | Official Microsoft command-line parser for the later `mcpmail` administration CLI |
 
@@ -251,7 +257,9 @@ The initial unit suite prioritizes:
 
 ### 6.2 Future integration testing
 
-A separate integration-test suite is planned after the unit-tested application and protocol boundaries stabilize. It will validate MailKit against controlled IMAP/SMTP servers, PostgreSQL with pgvector, OAuth discovery, TLS, and mTLS. It may use containers and disposable infrastructure, but no integration-test project or dependency is added during the initial phase.
+A separate integration-test suite is planned after the unit-tested application and protocol boundaries stabilize. It will validate MailKit against controlled IMAP/SMTP servers, PostgreSQL with pgvector, OAuth discovery, TLS, and mTLS. No integration-test project or dependency is added during the initial phase.
+
+When that phase begins, the suite drives the existing `AppHost` app model through Aspire test mode using `DistributedApplicationTestingBuilder` from the `Aspire.Hosting.Testing` package, rather than defining a second, parallel container topology. Reusing the app model keeps the orchestration under test identical to the orchestration developers run, and lets a containerized dependency such as an IMAP server be added as an ordinary resource. Specification 20 establishes the harness and pays off the PostgreSQL verification that ADR 001 defers; specification 21 adds the IMAP wire-behavior coverage, including the `\Seen` invariant that a substituted port cannot prove.
 
 ## 7. Mail account configuration
 
@@ -625,7 +633,17 @@ A future AGT adapter can subscribe to the same governance seam before higher-ris
 - Poison messages are quarantined after bounded parsing attempts without blocking the folder checkpoint.
 - Background jobs are persisted in PostgreSQL; no separate queue is required initially.
 - Expected application failures are represented with explicit result/error types and stable safe error codes. Domain invariant violations use domain-specific exceptions only for exceptional states; adapters may wrap lower-level failures as inner exceptions for diagnostics, but MCP serialization never includes exception types, stack traces, internal identifiers, provider payloads, or `InnerException` details.
-- At first-release startup, the service applies pending EF Core migrations automatically before accepting work. This arbitrary initial policy keeps a single-owner deployment simple while the schema is young. Migrations must still be reviewed before release, must be idempotent from the application perspective, and must fail startup rather than silently running with an unknown schema. A later operational hardening phase can move destructive or long-running migrations to `mcpmail`.
+- Migrations are applied explicitly, not by a starting application instance. In Development the host may apply pending EF Core migrations at startup for local convenience. In every other environment the host verifies that the schema matches the expected migration set and fails startup when migrations are pending, so an instance either serves traffic against a known schema or does not serve traffic at all; applying them is a deliberate deployment step. An earlier revision of this draft accepted automatic startup migration as an arbitrary simplification for a single-owner release. That is superseded: an instance that mutates schema while starting can race a second instance, can apply an unreviewed destructive change, and leaves the operator no point at which to take a backup. Migrations must still be reviewed before release and must be idempotent from the application perspective. Specification 19 implements this policy and the `aspire exec` workflow that supports it; a later operational hardening phase can move long-running migrations to `mcpmail`.
+
+### 17.1 Resilience pipelines
+
+Retry, timeout, and circuit-breaking are one deliberate mechanism rather than a habit repeated per adapter. MailMcp uses Polly v8 resilience pipelines registered by key and resolved through `ResiliencePipelineProvider`, with one named pipeline per outbound dependency class: mailbox session establishment, mailbox data retrieval, message delivery, database command execution, and AI provider invocation. Each class has typed, startup-validated options for attempt count, backoff bounds, per-attempt and total timeout, circuit-breaker thresholds, and concurrency limits.
+
+Polly types stay inside `Infrastructure`. `Application` expresses the question it actually has — whether a failure is worth retrying — through its own transient-failure classification port, so use cases and adapters never reference a resilience framework type.
+
+Two rules keep the mechanism from becoming its own failure mode. A pipeline is applied at exactly one layer per logical operation, so an adapter-level retry is never wrapped by a supervisor-level retry of the same call; the supervisor decides only when to attempt the next whole run. And EF Core's `EnableRetryOnFailure` execution strategy is either used or replaced by the database pipeline, never both, because combining them breaks explicit transaction boundaries.
+
+Retry is restricted to operations that are safe to repeat. Authentication, permission, and malformed-request failures are terminal, because repeating them can lock a mailbox account. Where a retried IMAP operation re-establishes its session, the folder is always reopened read-only, so the invariant in section 11.1 survives retry. Resilience telemetry records dependency class, outcome, attempt, and duration, never credentials, addresses, or provider payloads.
 
 ## 18. Observability
 
@@ -724,16 +742,22 @@ The CLI requires local operating-system access and is not exposed through MCP.
 
 ## 22. Delivery stages
 
-1. Repository and solution foundation, Aspire AppHost, unit-test projects, Kestrel HTTPS configuration, PostgreSQL, and migrations.
-2. JSON-based configuration binding, typed option validation, systemd/container secret-reference resolution, and MailKit connection validation with mocked IMAP/SMTP boundary tests.
-3. Read-only initial and continuous IMAP synchronization with configurable push-style IDLE/NOTIFY or time-based sync, offline MIME storage, and `\Seen` regression tests.
-4. Deterministic MCP tools `list_emails`, `get_email_content`, `search_emails`, and `ask_mail`, with RAG enabled when configured, rich MCP annotations, safe error mapping, unit-tested authorization, and mapping.
-5. PostgreSQL full-text indexing plus automatic embedding generation for new mail when embeddings are enabled.
+Stages describe the shape of the release. The PR-sized units of work that deliver them live in `specs/`, indexed by [`specs/README.md`](README.md); the specification numbers below are the current decomposition, and the referenced files are authoritative for scope.
+
+1. Repository and solution foundation, Aspire AppHost, unit-test projects, Kestrel HTTPS configuration, PostgreSQL, and migrations. *Foundation and AppHost are implemented. Migrations are deliberately rescheduled to the end of the current segment; see specification 19 and its rationale.*
+2. JSON-based configuration binding, typed option validation, systemd/container secret-reference resolution, and MailKit connection validation with mocked IMAP/SMTP boundary tests. *Specifications 01 and 02.*
+3. Read-only initial and continuous IMAP synchronization with configurable push-style IDLE/NOTIFY or time-based sync, offline MIME storage, and `\Seen` regression tests. *Periodic reconciliation is implemented; specifications 04 through 12 complete the stage.*
+4. Deterministic MCP tools `list_emails`, `get_email_content`, `search_emails`, and `ask_mail`, with RAG enabled when configured, rich MCP annotations, safe error mapping, unit-tested authorization, and mapping. *Specifications 13 through 18 deliver the three read-only tools; `ask_mail` belongs to stage 7.*
+5. PostgreSQL full-text indexing plus automatic embedding generation for new mail when embeddings are enabled. *Full-text indexing is pulled forward to specification 08 because the stage 4 search tool depends on it; embedding generation stays here.*
 6. pgvector ingestion with configurable embedding profile and first-release defaults for OpenAI `text-embedding-3-small` plus configurable chat model.
 7. Agent Framework RAG hardening, prompt-injection isolation, citations, and provider-health gating.
 8. Deferred SMTP outbox and delivery service with unit-tested state transitions and retry behavior after the IMAP/RAG/MCP slice.
 9. ChatGPT OAuth/mTLS validation and general OAuth MCP client profile.
 10. Production hardening, backup, metrics, recovery exercises, GDPR workflow design, enterprise audit evidence, and explicit evaluation plans for future ideas: AGT governance, MinIO object storage, `mcpmail`, and smtp4dev-backed SMTP integration tests.
+
+Two pieces of work cut across the numbered stages. Resilience pipelines (section 17.1) are established once in specification 03 and consumed by every later adapter, starting with specification 04. Infrastructure verification through Aspire test mode (section 6.2) lands in specifications 20 and 21 once the schema is settled, and pays off the PostgreSQL checks that ADR 001 defers together with the `\Seen` invariant that no substitute-based unit test can prove.
+
+Stages 6 through 10 are decomposed into specifications when the current segment nears completion, so they are written against the code that exists by then rather than against a prediction of it.
 
 ## 23. Acceptance criteria
 
