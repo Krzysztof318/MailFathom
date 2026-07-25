@@ -27,14 +27,14 @@
 - Create from move: `scripts/verify-fast.sh`
 - Create from move: `scripts/verify-full.sh`
 - Create from move and modification: `scripts/test-agent-workflow.sh`
-- Delete: `eng/agent-workflow/tests/fake-dotnet.sh`
-- Delete after moves: `eng/agent-workflow/`
+- Delete: the separate fake `dotnet` helper
+- Delete: the retired nested workflow directory
 
 **Interfaces:**
 - Consumes: zero-argument operational entrypoints and environment variables `FAKE_DOTNET_LOG` and `FAKE_DOTNET_FAIL_MATCH` in test mode.
 - Produces: four executable root scripts with unchanged operational behavior.
 
-- [ ] **Step 1: Correct the existing fixture-directory regression**
+- [x] **Step 1: Correct the existing fixture-directory regression**
 
 In `verify_full_checks_committed_staged_and_unstaged_changes`, execute every
 `verify-full.sh` call from `$repository_root`:
@@ -51,48 +51,36 @@ fi
 
 Apply the same subshell shape to the staged and unstaged cases.
 
-- [ ] **Step 2: Run the contract suite and verify the corrected baseline**
+- [x] **Step 2: Run the contract suite and verify the corrected baseline**
 
 Run:
 
 ```bash
-bash eng/agent-workflow/tests/run.sh
+bash scripts/test-agent-workflow.sh
 ```
 
 Expected: six tests pass and zero fail.
 
-- [ ] **Step 3: Add and verify the failing layout contract**
+- [x] **Step 3: Add and verify the failing layout contract**
 
 Resolve `source_repository_root` independently from the temporary fixture,
-invoke this test through `run_test`, and rerun the suite:
-
-```bash
-workflow_scripts_use_flat_manual_layout() {
-  [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
-  [[ -x "$source_repository_root/scripts/verify-fast.sh" ]]
-  [[ -x "$source_repository_root/scripts/verify-full.sh" ]]
-  [[ -x "$source_repository_root/scripts/test-agent-workflow.sh" ]]
-  [[ ! -e "$source_repository_root/eng/agent-workflow" ]]
-}
-```
+invoke the layout test through `run_test`, and assert all four root scripts are
+executable while the retired nested layout is absent.
 
 Expected: six existing tests pass and the layout test fails because root
 `scripts/` does not exist.
 
-- [ ] **Step 4: Move the three operational entrypoints**
+- [x] **Step 4: Place the three operational entrypoints**
 
-Move the files without changing their executable modes:
+Keep the executable modes while placing the files directly under `scripts/`:
 
-```bash
-mkdir scripts
-git mv eng/agent-workflow/inspect-workspace.sh scripts/inspect-workspace.sh
-git mv eng/agent-workflow/verify-fast.sh scripts/verify-fast.sh
-git mv eng/agent-workflow/verify-full.sh scripts/verify-full.sh
-```
+- `scripts/inspect-workspace.sh`
+- `scripts/verify-fast.sh`
+- `scripts/verify-full.sh`
 
-- [ ] **Step 5: Move the runner and embed fake-dotnet mode**
+- [x] **Step 5: Place the runner and embed fake-dotnet mode**
 
-Move the runner to `scripts/test-agent-workflow.sh`. At the beginning, before test setup, detect invocation through a temporary `dotnet` symlink:
+Place the runner at `scripts/test-agent-workflow.sh`. At the beginning, before test setup, detect invocation through a temporary `dotnet` symlink:
 
 ```bash
 if [[ "$(basename "$0")" == 'dotnet' ]]; then
@@ -111,15 +99,15 @@ if [[ "$(basename "$0")" == 'dotnet' ]]; then
 fi
 ```
 
-Resolve `scripts_directory` and `source_repository_root`, and replace the fake-file copy with:
+Resolve `scripts_directory` and `source_repository_root`, and use the runner itself as the fixture's fake CLI:
 
 ```bash
 ln -s "$scripts_directory/test-agent-workflow.sh" "$fake_bin_directory/dotnet"
 ```
 
-Delete `eng/agent-workflow/tests/fake-dotnet.sh`.
+Remove the separate fake helper.
 
-- [ ] **Step 6: Run the suite and verify GREEN**
+- [x] **Step 6: Run the suite and verify GREEN**
 
 Run:
 
@@ -130,10 +118,10 @@ bash -n scripts/*.sh
 
 Expected: seven tests pass, zero fail, and all four scripts pass syntax validation.
 
-- [ ] **Step 7: Commit the move**
+- [x] **Step 7: Commit the move**
 
 ```bash
-git add -A scripts eng/agent-workflow
+git add -A scripts
 git commit -m "refactor: flatten workflow scripts"
 ```
 
@@ -152,30 +140,30 @@ git commit -m "refactor: flatten workflow scripts"
 
 **Interfaces:**
 - Consumes: the four paths under `scripts/`.
-- Produces: no remaining `eng/agent-workflow` references and current manual/agent instructions.
+- Produces: current manual and agent instructions using the four root scripts.
 
-- [ ] **Step 1: Baseline-test skill path retrieval**
+- [x] **Step 1: Baseline-test skill path retrieval**
 
 Use fresh read-only contexts without the edited skills for task start, change review, and change finish. Record whether they consistently discover the new root paths.
 
-- [ ] **Step 2: Replace all operational references**
+- [x] **Step 2: Replace all operational references**
 
-Use these exact mappings:
+Use only these root paths:
 
 ```text
-eng/agent-workflow/inspect-workspace.sh -> scripts/inspect-workspace.sh
-eng/agent-workflow/verify-fast.sh -> scripts/verify-fast.sh
-eng/agent-workflow/verify-full.sh -> scripts/verify-full.sh
-eng/agent-workflow/tests/run.sh -> scripts/test-agent-workflow.sh
+scripts/inspect-workspace.sh
+scripts/verify-fast.sh
+scripts/verify-full.sh
+scripts/test-agent-workflow.sh
 ```
 
-Update static syntax commands to `bash -n scripts/*.sh`. Remove references to the deleted fake helper.
+Use `bash -n scripts/*.sh` for static syntax checks. Remove references to the separate fake helper.
 
-- [ ] **Step 3: Validate skills and forward-test retrieval**
+- [x] **Step 3: Validate skills and forward-test retrieval**
 
 Run the official validator against all four skills and repeat the three path-retrieval scenarios. Expected: every applicable skill selects the matching `scripts/*.sh` path.
 
-- [ ] **Step 4: Run required gates**
+- [x] **Step 4: Run required gates**
 
 Run:
 
@@ -187,7 +175,7 @@ bash scripts/verify-full.sh
 
 Expected: seven script contracts pass; tool and solution restore, Release build, all unit tests, at least 85% aggregate coverage, formatting, and all diff checks pass.
 
-- [ ] **Step 5: Run documentation and license gate**
+- [x] **Step 5: Run documentation and license gate**
 
 Expected:
 
@@ -198,14 +186,14 @@ Licenses: n/a
 
 No dependency, service, container image, model, asset, copied code, or tool version changes.
 
-- [ ] **Step 6: Commit final references**
+- [x] **Step 6: Commit final references**
 
 ```bash
 git add .agents AGENTS.md docs scripts
 git commit -m "docs: point workflow to root scripts"
 ```
 
-- [ ] **Step 7: Inspect the final task diff**
+- [x] **Step 7: Inspect the final task diff**
 
 Inspect `origin/main...HEAD` and verify no secrets, generated files, unrelated
 edits, stale paths, or co-author trailers. Defer push and draft pull request

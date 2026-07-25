@@ -16,7 +16,7 @@ description: Use when reviewing a working-tree diff, pull-request patch, or comp
    - IMAP content retrieval preserving `\Seen`;
    - unit-test, documentation, and third-party license impact;
    - unrelated edits, generated files, and secrets.
-4. Run `eng/agent-workflow/verify-fast.sh` when executable or test code changed. If it cannot run, state why.
+4. Run `scripts/verify-fast.sh` when executable or test code changed. If it cannot run, state why.
 
 Report findings first, ordered by severity. Every finding names the file and line, explains impact, and proposes the smallest correction.
 

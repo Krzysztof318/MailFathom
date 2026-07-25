@@ -9,19 +9,19 @@ skills.
 Inspect the current workspace without changing Git state:
 
 ```bash
-bash eng/agent-workflow/inspect-workspace.sh
+bash scripts/inspect-workspace.sh
 ```
 
 Use the fast loop while implementing:
 
 ```bash
-bash eng/agent-workflow/verify-fast.sh
+bash scripts/verify-fast.sh
 ```
 
 Run the complete gate before committing:
 
 ```bash
-bash eng/agent-workflow/verify-full.sh
+bash scripts/verify-full.sh
 ```
 
 The full gate restores repository tools and the solution, builds Release,

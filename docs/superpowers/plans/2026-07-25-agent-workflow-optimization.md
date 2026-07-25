@@ -4,7 +4,7 @@
 
 **Goal:** Add a fast, deterministic, cross-agent MailMcp development workflow with layered instructions, shared repository skills, and one complete local verification command.
 
-**Architecture:** Keep deterministic Git and .NET command sequences in small Bash scripts under `eng/agent-workflow/`. Keep task routing and review judgment in four concise skills under `.agents/skills/`, expose the entire directory to Claude Code through one relative symlink, and move conditional guidance from the root instruction file to path-scoped instruction files.
+**Architecture:** Keep deterministic Git and .NET command sequences in four small Bash scripts under root `scripts/`. Keep task routing and review judgment in four concise skills under `.agents/skills/`, expose the entire directory to Claude Code through one relative symlink, and move conditional guidance from the root instruction file to path-scoped instruction files.
 
 **Tech Stack:** Bash 5, Git, .NET SDK 10, Microsoft Testing Platform v2, Agent Skills `SKILL.md`, Codex CLI, Claude Code 2.1.219.
 
@@ -24,8 +24,7 @@
 ### Task 1: Specify and test the deterministic script contracts
 
 **Files:**
-- Create: `eng/agent-workflow/tests/run.sh`
-- Create: `eng/agent-workflow/tests/fake-dotnet.sh`
+- Create: `scripts/test-agent-workflow.sh`
 
 **Interfaces:**
 - Consumes: Bash, Git, a temporary directory, and `PATH`.
@@ -53,7 +52,7 @@ Create a test runner that:
 Run:
 
 ```bash
-bash eng/agent-workflow/tests/run.sh
+bash scripts/test-agent-workflow.sh
 ```
 
 Expected: nonzero exit because the three production scripts do not exist.
@@ -61,17 +60,17 @@ Expected: nonzero exit because the three production scripts do not exist.
 - [ ] **Step 3: Commit the failing tests**
 
 ```bash
-git add eng/agent-workflow/tests
+git add scripts/test-agent-workflow.sh
 git commit -m "test: define agent workflow script contracts"
 ```
 
 ### Task 2: Implement the workspace and verification scripts
 
 **Files:**
-- Create: `eng/agent-workflow/inspect-workspace.sh`
-- Create: `eng/agent-workflow/verify-fast.sh`
-- Create: `eng/agent-workflow/verify-full.sh`
-- Modify: `eng/agent-workflow/tests/run.sh`
+- Create: `scripts/inspect-workspace.sh`
+- Create: `scripts/verify-fast.sh`
+- Create: `scripts/verify-full.sh`
+- Modify: `scripts/test-agent-workflow.sh`
 
 **Interfaces:**
 - Consumes: a Git worktree containing `MailMcp.slnx`, `origin/main` when available, and .NET SDK 10.
@@ -140,7 +139,7 @@ second plain `dotnet test`.
 Run:
 
 ```bash
-bash eng/agent-workflow/tests/run.sh
+bash scripts/test-agent-workflow.sh
 ```
 
 Expected: all script-contract tests pass.
@@ -150,7 +149,7 @@ Expected: all script-contract tests pass.
 Run:
 
 ```bash
-bash -n eng/agent-workflow/*.sh eng/agent-workflow/tests/*.sh
+bash -n scripts/*.sh
 ```
 
 Expected: zero exit.
@@ -158,7 +157,7 @@ Expected: zero exit.
 - [ ] **Step 7: Commit the scripts**
 
 ```bash
-git add eng/agent-workflow
+git add scripts
 git commit -m "build: add agent workflow verification scripts"
 ```
 
@@ -170,7 +169,7 @@ git commit -m "build: add agent workflow verification scripts"
 - Test: `/home/krzysiek/.codex/skills/.system/skill-creator/scripts/quick_validate.py`
 
 **Interfaces:**
-- Consumes: `eng/agent-workflow/inspect-workspace.sh`, `specs/README.md`, `docs/README.md`, and `docs/decisions/README.md`.
+- Consumes: `scripts/inspect-workspace.sh`, `specs/README.md`, `docs/README.md`, and `docs/decisions/README.md`.
 - Produces: a task-start brief containing workspace state, selected specification, applicable ADRs, implemented-behavior documentation, assumptions, and next verification command.
 
 - [ ] **Step 1: Run baseline scenarios without the skill**
@@ -222,7 +221,7 @@ git commit -m "feat: add task-start skill"
 - Create: `.agents/skills/review-change/agents/openai.yaml`
 
 **Interfaces:**
-- Consumes: the current Git diff, path-scoped instructions, applicable ADRs, and `eng/agent-workflow/verify-fast.sh`.
+- Consumes: the current Git diff, path-scoped instructions, applicable ADRs, and `scripts/verify-fast.sh`.
 - Produces: findings ordered by severity with file evidence, followed by verification status and residual risks.
 
 - [ ] **Step 1: Run baseline review scenarios without the skill**
@@ -316,7 +315,7 @@ git commit -m "feat: add documentation and license check skill"
 - Create: `.agents/skills/finish-change/agents/openai.yaml`
 
 **Interfaces:**
-- Consumes: `check-docs-licenses`, `eng/agent-workflow/verify-full.sh`, the final diff, and GitHub draft pull-request capability.
+- Consumes: `check-docs-licenses`, `scripts/verify-full.sh`, the final diff, and GitHub draft pull-request capability.
 - Produces: a completion report containing docs verdict, licenses verdict, full verification evidence, diff review, commit, push, and draft PR URL.
 
 - [ ] **Step 1: Run baseline pressure scenarios without the skill**
@@ -448,8 +447,8 @@ Document:
 Run:
 
 ```bash
-bash eng/agent-workflow/tests/run.sh
-bash -n eng/agent-workflow/*.sh eng/agent-workflow/tests/*.sh
+bash scripts/test-agent-workflow.sh
+bash -n scripts/*.sh
 for skill in .agents/skills/*; do
   python3 /home/krzysiek/.codex/skills/.system/skill-creator/scripts/quick_validate.py "$skill"
 done
@@ -462,7 +461,7 @@ Expected: all checks pass.
 Run:
 
 ```bash
-bash eng/agent-workflow/verify-full.sh
+bash scripts/verify-full.sh
 ```
 
 Expected: tool restore, solution restore, Release build, all unit tests,

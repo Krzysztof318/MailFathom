@@ -7,13 +7,13 @@ Use the .NET SDK pinned in `global.json`. Test execution is configured for Micro
 For the normal implementation loop, run:
 
 ```bash
-bash eng/agent-workflow/verify-fast.sh
+bash scripts/verify-fast.sh
 ```
 
 Before committing, run the complete local gate:
 
 ```bash
-bash eng/agent-workflow/verify-full.sh
+bash scripts/verify-full.sh
 ```
 
 The fast script restores the solution, builds it in Release configuration, and
