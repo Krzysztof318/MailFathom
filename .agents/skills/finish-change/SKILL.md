@@ -21,7 +21,10 @@ Do not proceed while a gate fails.
 2. Commit with a focused message and no co-author trailers.
 3. Fetch the remote and confirm the branch remains safely based on current `origin/main`. Integrate remote movement without discarding work, then repeat affected gates.
 4. Push the `agent/*` branch.
-5. Create a draft pull request. Never mark it ready unless the owner explicitly asks.
+5. Create a draft pull request whose body contains `Closes #<issue>` for the issue the change completes. Never mark it ready unless the owner explicitly asks.
+6. Confirm the reference is present in the published body. `gh pr edit` fails against this repository with a Projects-classic GraphQL error and silently drops the edit, so correct a missing reference through `gh api repos/<owner>/<repo>/pulls/<number> -X PATCH -f body=...`.
+
+Leave the board's `Status` field to the project automation. Set a status by hand only for an issue created already closed, which the automation does not add.
 
 Report:
 
@@ -33,6 +36,7 @@ Diff review: <scope and exclusions>
 Commit: <hash and subject>
 Push: <remote branch>
 Draft PR: <URL>
+Issue link: <Closes #N confirmed in the published body>
 ```
 
 Never claim completion without fresh evidence for every line.

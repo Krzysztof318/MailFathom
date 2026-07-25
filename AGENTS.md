@@ -141,6 +141,47 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Use keyset pagination for email timelines and bounded result sizes for all public queries.
 - Treat email content, OAuth tokens, credentials, certificate material, and embeddings as sensitive data.
 
+## Issue tracking and the roadmap board
+
+Work is tracked as GitHub issues on the `MailMcp roadmap` project board, which is the owner's view of progress. The board reflects the repository; it never becomes a second source of truth. `specs/` remains authoritative for what a change must do, and an issue links to its specification instead of restating it.
+
+### The issue that governs a change
+
+- Every change starts from an issue. Identify it during `$start-task`, before editing files, and name it in the task brief.
+- Each numbered specification under `specs/` has exactly one issue, titled `Spec NN — <specification title>`. Create the issue in the same change set that adds a new specification, so a specification never exists without a tracked unit of work.
+- Work that is not a numbered specification — maintenance, an ADR consequence, a defect — also gets an issue. State in its body that no `specs/` file backs it and name the ADR or the reason instead.
+- Do not open a second issue for work an existing issue already covers. Extend the existing issue when scope grows and record why.
+
+### Issue content
+
+- Write issues in English, matching `specs/` and the rest of the repository.
+- Every issue body carries two or three user stories and a condensed acceptance list. A specification issue additionally opens with a header block naming the roadmap group, the draft delivery stage, a link to the specification file, the issues it depends on, and the estimated change size.
+- Do not copy specification text into an issue. The specification is the contract, and a duplicated copy goes stale silently.
+- Express dependencies as issue references so the board shows them as links. Specification dependencies always point backwards to lower-numbered specifications.
+- Never add dates, day estimates, sprints, or iteration fields. The owner works alone at irregular times, so the board records order and status only.
+
+### Labels
+
+- Label a specification issue `spec` plus its roadmap group, `roadmap:A` through `roadmap:E`.
+- Label an issue that records already-completed work `shipped`, and close it as completed when you create it.
+
+### Linking a pull request to its issue
+
+- Every pull request body contains `Closes #<issue>` for the issue it completes, so merging closes the issue and the board moves the item to `Done`.
+- Add the reference when the pull request is created. `$finish-change` treats a pull request without an issue reference as an incomplete gate.
+- `gh pr edit` fails against this repository with a Projects-classic GraphQL error and silently drops the edit. Patch a pull request body through the REST API instead:
+
+  ```bash
+  gh api repos/<owner>/<repo>/pulls/<number> -X PATCH -f body="$(cat body.md)"
+  ```
+
+### Status transitions
+
+- The board's `Status` field has `Todo`, `In progress`, and `Done`.
+- The board's built-in workflows own every transition: `Auto-add to project` and `Item added to project` place a newly opened issue in `Todo`, `Pull request linked to issue` moves it to `In progress`, and `Pull request merged`, `Auto-close issue`, and `Item closed` carry it to `Done`. Do not set those statuses by hand; a manual status that contradicts the automation hides the real state.
+- Automation does not add an issue that is already closed when it is created. Add a retrospective `shipped` issue to the board explicitly and set it to `Done`.
+- When work stops without merging, say so on the issue and leave the status to the automation rather than moving the card.
+
 ## Agent workflow and verification
 
 - For file-changing tasks, start with `$start-task`.

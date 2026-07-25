@@ -52,6 +52,14 @@ dotnet tool install --global Aspire.Cli --version 13.4.6
 
 `dotnet ef` runs EF Core migrations and design-time commands. `aspire` is only required for Aspire CLI workflows against the AppHost. Both versions are recorded in `LICENSES.md`; keep the register aligned when you move to a newer one.
 
+The GitHub CLI (`gh`) is installed separately through the operating system package manager and is required for the issue and pull-request workflow in root `AGENTS.md`. Authenticate it with the `project` scope so it can read and update the roadmap board:
+
+```bash
+gh auth refresh -s project
+```
+
+Its reviewed version is recorded in `LICENSES.md` alongside the other developer tooling.
+
 ## Code coverage
 
 The full verification script collects and enforces coverage. To run only the
