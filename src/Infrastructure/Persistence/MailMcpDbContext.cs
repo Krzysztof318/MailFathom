@@ -8,7 +8,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// <summary>EF Core context for local MailMcp persistence.</summary>
 // TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
 [ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
-public sealed class MailMcpDbContext : DbContext
+internal sealed class MailMcpDbContext : DbContext
 {
     /// <summary>Initializes a new MailMcp EF Core context.</summary>
     public MailMcpDbContext(DbContextOptions<MailMcpDbContext> options)
