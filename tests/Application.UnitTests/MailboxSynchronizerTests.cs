@@ -811,6 +811,9 @@ public sealed class MailboxSynchronizerTests
 
     private sealed class TrackingSession : IPersistenceSession
     {
+        private static readonly Task<PersistenceCommitResult> committedResultTask =
+            Task.FromResult(PersistenceCommitResult.Committed);
+
         public bool IsCommitted { get; private set; }
 
         public bool IsDisposed { get; private set; }
@@ -818,7 +821,7 @@ public sealed class MailboxSynchronizerTests
         public Task<PersistenceCommitResult> CommitAsync(CancellationToken cancellationToken)
         {
             this.IsCommitted = true;
-            return Task.FromResult(PersistenceCommitResult.Committed);
+            return committedResultTask;
         }
 
         public ValueTask DisposeAsync()

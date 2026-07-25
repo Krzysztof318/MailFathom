@@ -1,5 +1,7 @@
 # Codex Cloud Tooling Implementation Plan
 
+> **Historical record. Reverted on 2026-07-25.** Development moved to local Codex, so the vendored skills, the repository marketplace, and the Microsoft Learn plugin were removed. Do not re-create the files described below.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make pinned Superpowers skills automatically discoverable from this repository and package the Microsoft Learn MCP endpoint as a repository plugin for Codex Cloud distribution.

@@ -222,9 +222,9 @@ public sealed class MailboxSynchronizer
 
     private enum OccurrenceOutcome
     {
-        Stored,
-        SkippedOversized,
-        ConcurrencyConflict,
+        Stored = 0,
+        SkippedOversized = 1,
+        ConcurrencyConflict = 2,
     }
 }
 
@@ -232,10 +232,10 @@ public sealed class MailboxSynchronizer
 public enum MailboxSynchronizationOutcome
 {
     /// <summary>The run completed its bounded amount of work without an unresolved persistence conflict.</summary>
-    Completed,
+    Completed = 0,
 
     /// <summary>The run stopped after an optimistic concurrency conflict remained unresolved.</summary>
-    ConcurrencyConflict,
+    ConcurrencyConflict = 1,
 }
 
 /// <summary>Summarizes one mailbox synchronization run.</summary>

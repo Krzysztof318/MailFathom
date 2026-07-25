@@ -4,9 +4,9 @@ These instructions apply to the entire repository.
 
 The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`; project directory and file names use short boundary names such as `Domain`, `Application`, and `Host`, while `Directory.Build.props` applies the `MailMcp.*` prefix to assembly names and root namespaces.
 
-## Codex Cloud startup
+## Development environment
 
-- At the start of every Codex Cloud session, run `bash .codex/setup.sh` from the repository root before invoking any `dotnet`, `dotnet-ef`, or `aspire` command. The script installs and exposes the pinned .NET SDK and CLI tools for the session.
+- Development runs locally. The repository does not provision agent environments, so install the SDK pinned in `global.json` and any command-line tooling such as `dotnet-ef` or the Aspire CLI on the developer machine. `docs/operations/local-development.md` lists the commands that must work.
 
 ## Critical repository rules
 
@@ -63,6 +63,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Enable nullable reference types, implicit usings, deterministic builds, .NET analyzers, and code-style enforcement during builds.
 - Treat compiler and analyzer warnings as errors in repository code. Suppress a diagnostic only at the narrowest scope and document the concrete reason.
 - Maintain one repository `.editorconfig` and let automated formatting define whitespace and layout. Do not hand-format against configured rules.
+- Give every enum member an explicit, unique integral value starting at `0` and increasing contiguously in declaration order. Never reorder, renumber, or reuse an existing value; append new members with the next value. Apply this to every enum, including private and currently non-persisted types, so a future numeric persistence representation cannot silently change meaning after refactoring.
 - Prefer immutable records or value objects for data that represents values; use entities only when identity and lifecycle matter.
 - Use domain-correct, descriptive names for types, methods, parameters, variables, fields, and files. Avoid abbreviations except established terms such as IMAP, SMTP, MIME, MCP, UID, TLS, and RAG.
 - Prefer a longer name that communicates intent, constraints, or result over a short ambiguous name. Long method names are acceptable when every word adds useful domain meaning.
@@ -187,6 +188,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Test observable behavior and domain invariants, not private implementation details. One test should describe one behavior even if several assertions are needed to prove it.
 - Tests must be fast, isolated, repeatable, order-independent, and safe to run in parallel. Do not use real clocks, random nondeterministic values, shared mutable fixtures, sleeps, network calls, databases, containers, or the filesystem in unit tests.
 - Prefer real domain values and simple in-memory fakes for state. Use NSubstitute at external or architectural boundaries where interaction is part of the contract.
+- Never use the EF Core InMemory provider, SQLite in-memory, any other in-memory SQL database, or mocked `DbSet` query behavior as a substitute for PostgreSQL persistence semantics. Unit-test application behavior through application-owned ports and hand-written state fakes; verify provider-specific persistence behavior only against real PostgreSQL integration tests when that phase is enabled.
 - Do not substitute concrete MailKit clients. Define narrow application-facing session or transport ports and use NSubstitute to model IMAP/SMTP server capabilities, responses, disconnects, and failures.
 - Use `Received()` and `DidNotReceive()` only when the interaction itself is a required side effect or safety invariant. Prefer state or result assertions otherwise.
 - Use argument matchers only while configuring substitutes or verifying received calls.

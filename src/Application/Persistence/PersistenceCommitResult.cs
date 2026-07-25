@@ -6,8 +6,8 @@ namespace MailMcp.Application.Persistence;
 public enum PersistenceCommitResult
 {
     /// <summary>The transaction committed successfully.</summary>
-    Committed,
+    Committed = 0,
 
     /// <summary>The transaction did not commit because persisted state changed after it was read.</summary>
-    ConcurrencyConflict,
+    ConcurrencyConflict = 1,
 }

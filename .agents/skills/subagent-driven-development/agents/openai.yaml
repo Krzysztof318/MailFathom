@@ -1,3 +1,0 @@
-interface:
-  display_name: "Subagent-Driven Development"
-  short_description: "Execute implementation plans with staged subagent reviews"

@@ -30,8 +30,8 @@ public interface ISynchronizationCheckpointStore
 public enum SynchronizationCheckpointSaveResult
 {
     /// <summary>The durable state matched the expected state and the update was staged.</summary>
-    Staged,
+    Staged = 0,
 
     /// <summary>The durable state changed after it was read, so no update was staged.</summary>
-    ConcurrencyConflict,
+    ConcurrencyConflict = 1,
 }

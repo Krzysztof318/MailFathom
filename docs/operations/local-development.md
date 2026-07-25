@@ -25,6 +25,19 @@ dotnet run --project src/AppHost/AppHost.csproj
 
 The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.2-pg17` image so local development starts with a PostgreSQL server that can support the `vector` extension required by the RAG and embedding slices.
 
+## Command-line tooling
+
+The repository provisions no development environment, so install the SDK and any command-line tools on the developer machine. Repository-local tools declared in `.config/dotnet-tools.json` come from `dotnet tool restore` and are limited to what the coverage gate needs.
+
+Two tools are installed globally when their workflows are needed:
+
+```bash
+dotnet tool install --global dotnet-ef --version 10.0.10
+dotnet tool install --global Aspire.Cli --version 13.4.6
+```
+
+`dotnet ef` runs EF Core migrations and design-time commands. `aspire` is only required for Aspire CLI workflows against the AppHost. Both versions are recorded in `LICENSES.md`; keep the register aligned when you move to a newer one.
+
 ## Code coverage
 
 After a Release build, collect and enforce coverage with:
