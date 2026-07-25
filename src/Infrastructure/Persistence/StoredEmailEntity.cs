@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Domain.Messages;
+using MailMcp.Domain.Emails;
 
 namespace MailMcp.Infrastructure.Persistence;
 

@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-using MailMcp.Application.MessageContent;
-using MailMcp.Domain.Messages;
+using MailMcp.Application.EmailContent;
+using MailMcp.Domain.Emails;
 
 namespace MailMcp.Application.Synchronization;
 
@@ -11,15 +11,15 @@ public interface IMailboxSession : IAsyncDisposable
     /// <summary>Gets the selected folder UIDVALIDITY value.</summary>
     Task<ImapUidValidity> GetUidValidityAsync(CancellationToken cancellationToken);
 
-    /// <summary>Gets a bounded remote message metadata page after the supplied checkpoint UID.</summary>
-    Task<RemoteMessageMetadataBatch> GetMessageBatchAfterAsync(
+    /// <summary>Gets a bounded remote email metadata page after the supplied checkpoint UID.</summary>
+    Task<RemoteEmailMetadataBatch> GetEmailBatchAfterAsync(
         ImapUid? lastSeenUid,
-        int maxMessageCount,
+        int maxEmailCount,
         CancellationToken cancellationToken);
 
     /// <summary>Fetches raw MIME content with a BODY.PEEK-style operation that preserves the remote Seen flag.</summary>
-    Task<RemoteMessageContent> FetchMessageContentWithoutSettingSeenAsync(
-        MessageOccurrenceId occurrenceId,
+    Task<RemoteEmailContent> FetchEmailContentWithoutSettingSeenAsync(
+        EmailOccurrenceId occurrenceId,
         long maxRawMimeBytes,
         CancellationToken cancellationToken);
 }

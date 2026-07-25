@@ -7,11 +7,11 @@ using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
 using MailKit.Security;
-using MailMcp.Application.MessageContent;
+using MailMcp.Application.EmailContent;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
-using MailMcp.Domain.Messages;
 
 namespace MailMcp.Infrastructure.Mail.MailKit;
 
@@ -153,28 +153,28 @@ internal sealed class MailKitImapMailboxSession(
 
     public Task<ImapUidValidity> GetUidValidityAsync(CancellationToken cancellationToken) => Task.FromResult(ImapUidValidity.Create(folder.UidValidity));
 
-    public async Task<RemoteMessageMetadataBatch> GetMessageBatchAfterAsync(
+    public async Task<RemoteEmailMetadataBatch> GetEmailBatchAfterAsync(
         ImapUid? lastSeenUid,
-        int maxMessageCount,
+        int maxEmailCount,
         CancellationToken cancellationToken)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxMessageCount);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxEmailCount);
 
         if (lastSeenUid is { } checkpointUid && checkpointUid.Value >= UniqueId.MaxValue.Id)
         {
-            return new RemoteMessageMetadataBatch([], checkpointUid, HasMore: false);
+            return new RemoteEmailMetadataBatch([], checkpointUid, HasMore: false);
         }
 
         var minValue = lastSeenUid is { } uid ? uid.Value + 1U : 1U;
         var highestAssignedUid = GetHighestAssignedUid(folder.UidNext);
         if (highestAssignedUid is null || minValue > highestAssignedUid.Value)
         {
-            return new RemoteMessageMetadataBatch([], lastSeenUid, HasMore: false);
+            return new RemoteEmailMetadataBatch([], lastSeenUid, HasMore: false);
         }
 
         // UID SEARCH returns identifiers only, so scanning the whole remaining assigned range stays cheap and lets the batch
-        // be bounded by message count rather than by UID-space width. Bounding by UID-space width would advance a sparse
-        // folder by at most maxMessageCount UIDs per batch and make an initial backfill take an impractical number of runs.
+        // be bounded by email count rather than by UID-space width. Bounding by UID-space width would advance a sparse
+        // folder by at most maxEmailCount UIDs per batch and make an initial backfill take an impractical number of runs.
         var searchRange = new UniqueIdRange(new UniqueId(minValue), new UniqueId(highestAssignedUid.Value));
         var matchingUids = await folder.SearchAsync(SearchQuery.Uids(searchRange), cancellationToken);
         var assignedUids = matchingUids
@@ -182,7 +182,7 @@ internal sealed class MailKitImapMailboxSession(
             .OrderBy(candidate => candidate.Id)
             .ToArray();
 
-        var batchedUids = assignedUids.Take(maxMessageCount).ToArray();
+        var batchedUids = assignedUids.Take(maxEmailCount).ToArray();
         var hasMore = assignedUids.Length > batchedUids.Length;
 
         // Everything the search covered has been inspected, so an exhausted range checkpoints to the highest assigned UID
@@ -193,18 +193,18 @@ internal sealed class MailKitImapMailboxSession(
             : await folder.FetchAsync(batchedUids, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size, cancellationToken);
 
         var uidValidity = ImapUidValidity.Create(folder.UidValidity);
-        var messages = summaries.Select(summary => new RemoteMessageMetadata(
-            MessageOccurrenceId.Create(accountId, folderName, uidValidity, ImapUid.Create(summary.UniqueId.Id)),
+        var messages = summaries.Select(summary => new RemoteEmailMetadata(
+            EmailOccurrenceId.Create(accountId, folderName, uidValidity, ImapUid.Create(summary.UniqueId.Id)),
             summary.Envelope?.MessageId,
             summary.Envelope?.Subject,
             summary.Envelope?.Date?.ToUniversalTime(),
             summary.Size ?? 0)).ToArray();
 
-        return new RemoteMessageMetadataBatch(messages, ImapUid.Create(inspectedThroughUid), hasMore);
+        return new RemoteEmailMetadataBatch(messages, ImapUid.Create(inspectedThroughUid), hasMore);
     }
 
-    public async Task<RemoteMessageContent> FetchMessageContentWithoutSettingSeenAsync(
-        MessageOccurrenceId occurrenceId,
+    public async Task<RemoteEmailContent> FetchEmailContentWithoutSettingSeenAsync(
+        EmailOccurrenceId occurrenceId,
         long maxRawMimeBytes,
         CancellationToken cancellationToken)
     {
@@ -225,7 +225,7 @@ internal sealed class MailKitImapMailboxSession(
 
         await CopyToMemoryWithLimitAsync(occurrenceId, stream, memory, maxRawMimeBytes, cancellationToken);
 
-        return new RemoteMessageContent(occurrenceId, memory.ToArray());
+        return new RemoteEmailContent(occurrenceId, memory.ToArray());
     }
 
     private static uint? GetHighestAssignedUid(UniqueId? uidNext)
@@ -239,7 +239,7 @@ internal sealed class MailKitImapMailboxSession(
     }
 
     private static async Task CopyToMemoryWithLimitAsync(
-        MessageOccurrenceId occurrenceId,
+        EmailOccurrenceId occurrenceId,
         Stream source,
         MemoryStream destination,
         long maxRawMimeBytes,
@@ -257,7 +257,7 @@ internal sealed class MailKitImapMailboxSession(
                 totalBytes += read;
                 if (totalBytes > maxRawMimeBytes)
                 {
-                    throw new MessageContentTooLargeException(occurrenceId, totalBytes, maxRawMimeBytes);
+                    throw new EmailContentTooLargeException(occurrenceId, totalBytes, maxRawMimeBytes);
                 }
 
                 await destination.WriteAsync(buffer[..read], cancellationToken);

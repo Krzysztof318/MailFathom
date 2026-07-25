@@ -64,7 +64,7 @@ Repository contracts are application ports. They belong in `src/Application` nea
 
 ### Contract style
 
-Use explicit, behavior-oriented repository or query-port names. Prefer contracts such as `IMessageTimelineReader`, `ISynchronizationCheckpointStore`, `IMessageOccurrenceRepository`, `IMessageContentStore`, or `IOutboxLeaseStore` over `IRepository<T>`.
+Use explicit, behavior-oriented repository or query-port names. Prefer contracts such as `IEmailTimelineReader`, `ISynchronizationCheckpointStore`, `IEmailOccurrenceRepository`, `IEmailContentStore`, or `IOutboxLeaseStore` over `IRepository<T>`.
 
 Repositories must not expose EF Core types, provider types, entity framework attributes, `DbContext`, `DbSet`, `EntityEntry`, `IQueryable<T>`, unbounded `IEnumerable<T>` query composition, or raw SQL fragments. Return domain objects, application read models, result types, bounded collections, or `IAsyncEnumerable<T>` only when streaming is part of the contract and cancellation/backpressure behavior is documented.
 
@@ -101,6 +101,34 @@ Do not introduce a generic Unit of Work abstraction only because EF Core has `Sa
 
 The preferred application-facing shape is an explicit Unit of Work session. A use case starts a session through a focused port such as `IPersistenceSessionFactory`, `IMailStoreUnitOfWorkFactory`, or a narrower use-case-specific transaction coordinator when that name better communicates intent. The returned session is passed explicitly to repository methods that must participate in the same transaction, and commit is an explicit asynchronous operation on the session or coordinator. Repository calls that are not part of that transaction do not receive the session.
 
+MailMcp implements this as `IPersistenceSession` and `IPersistenceSessionFactory` in `MailMcp.Application.Persistence`. The names deliberately avoid the bare word `Session`, which in this system also means an open IMAP mailbox session (`IMailboxSession`); an unqualified `ISession` in a signature does not tell a reader which of the two it is.
+
+### The session must be the write handle, not a marker parameter
+
+A session parameter that the implementation ignores provides no guarantee at all. If a repository injects its own `DbContext` and merely accepts an `IPersistenceSession` it never reads, the write happens to join the caller's transaction only because dependency injection handed both objects the same scoped context. A session obtained from a different scope would be accepted silently and the write would land outside the caller's transaction.
+
+Therefore a write repository must obtain its persistence context *through* the supplied session, and must fail loudly when handed a session it cannot write through. In MailMcp, `EfCorePersistenceSessionAccessor.DbContextOf` performs that resolution and throws `ArgumentException` for a foreign session. Write repositories consequently do not inject `DbContext` at all.
+
+The corresponding rule for reads is the inverse: a read joins no transaction, so a read method uses the scoped context directly and does not take a session. A store that exposes both, such as `ISynchronizationCheckpointStore`, may hold an injected context used only by its read path.
+
+### Change-tracker lookups
+
+Entities added earlier in the same uncommitted session exist only in the change tracker. EF Core does not flush pending changes before a query and a LINQ query always reaches the database, so such an entity is invisible to a query and a change-tracker pass is genuinely required before falling back to the database.
+
+That justification is narrow, and the pattern must not be copied by default:
+
+- When the lookup is by primary key, use `FindAsync`. It already resolves from the change tracker without a database round-trip and needs no hand-written first pass.
+- When the lookup is by an alternate key, use one shared helper that takes a single predicate expression and runs both passes, so the predicate is never written twice. `TrackedEntityLookup.SinglePendingOrPersistedAsync` is that helper.
+- Do not use `FindAsync` when materializing the row is itself the cost being avoided, such as an `email_message_contents` row whose `bytea` payload must not enter memory or the change tracker. Take only the change-tracker pass and fall through to a set-based `ExecuteUpdate`.
+
+Every remaining hand-written change-tracker pass carries a comment stating which of these cases applies.
+
+### Persistence model types
+
+EF Core entities model persistence, not the domain, so they use primitive column types and their own surrogate keys rather than domain value objects with value converters. `MailFolderEntity.Id` has no domain meaning at all, and converters reduce the transparency of migrations, generated SQL, and set-based operations such as `ExecuteUpdate`. Domain value objects are unwrapped at the adapter boundary, in one place per store.
+
+This is a deliberate trade-off, not an omission: it accepts weaker type safety inside the adapter in exchange for a persistence model that stays readable against the database. Revisit it if adapter-level identifier mix-ups actually occur.
+
 A Unit of Work session contract must remain application-owned and provider-neutral. It must not expose `DbContext`, EF Core transactions, connection objects, `IQueryable`, provider entities, or raw `SaveChangesAsync` as a generic persistence primitive. It may expose a commit method whose name reflects the application contract, such as `CommitAsync`, only when callers are responsible for completing a grouped write. The session must be asynchronously disposable, cancellation-aware, short-lived, non-shareable across concurrent operations, and documented as invalid after commit, rollback, or disposal.
 
 Avoid a Unit of Work object that exposes all repositories as properties by default. That style can be acceptable for a narrow module-specific coordinator when the repository set is stable and all properties participate in the same consistency boundary, but it risks becoming a service locator with broad mutation authority. Prefer injecting the repositories a use case needs and passing the explicit session only to calls that join the transaction.
@@ -115,6 +143,7 @@ If a transaction spans external I/O such as IMAP, SMTP, object storage, AI provi
 - Unit tests for application use cases stub application repository/query ports instead of using EF Core in-memory, SQLite in-memory, or mocked `DbSet` query behavior.
 - Repository contracts document bounds, ordering, cancellation behavior, authorization assumptions, side effects, transaction participation requirements, and privacy-sensitive data returned or persisted.
 - Unit of Work session contracts document ownership, disposal, commit behavior, cancellation, concurrency restrictions, nested-session behavior, retry safety, and whether a repository call requires a session.
+- Code review rejects a write repository that accepts a session parameter without writing through it, and rejects a hand-written change-tracker pass where `FindAsync` would do or where no comment states why the pattern is required.
 - Future PostgreSQL integration tests verify EF Core mappings, migrations, query translation, constraints, concurrency, full-text search, pgvector, raw MIME content storage, and any provider-specific SQL.
 - Pull-request review rejects generic CRUD repositories, broad capability interfaces, hidden ambient transaction contracts, or specification abstractions unless the change includes concrete repeated use cases and validation evidence.
 

@@ -69,6 +69,8 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Keep names proportionate and avoid redundant context already supplied by the containing type or namespace. Do not produce sentence-like names when a smaller precise name communicates the same contract.
 - Name methods after observable behavior or the result they produce. Avoid vague verbs such as `Handle`, `Process`, `Manage`, `Do`, or `Execute` unless the surrounding application pattern gives them a precise established meaning.
 - Rename unclear identifiers as part of the code change that exposes them. Do not rely on comments to compensate for misleading or abbreviated names.
+- Use `Email` for the mail artifact throughout `Domain`, `Application`, and `Infrastructure`: `EmailOccurrenceId`, `RemoteEmailMetadata`, `IEmailContentStore`, `StoredEmailEntity`. Do not name a mail type `Message` or `MailMessage`; the first is ambiguous once AI conversations exist and the second shadows `System.Net.Mail.MailMessage`. Name an AI conversation turn `ChatMessage` or `AgentMessage` after the domain concept, never after the layer.
+- Do not rely on a namespace to disambiguate a type whose name is ambiguous on its own. A reader sees the name at the point of use, not the namespace. `Session` in particular must always be qualified: `IMailboxSession` for an open IMAP folder, `IPersistenceSession` for a local write transaction.
 - Keep public APIs small and predictable. Make types and members `internal` unless they are intentionally part of a cross-project contract.
 - Declare `InternalsVisibleTo` as an MSBuild `<InternalsVisibleTo Include="..." />` item in the project file that grants the access. Do not add hand-written assembly-attribute source files for it, so the granted friend assemblies stay visible where the project's build contract is defined.
 - Prefer one primary type per file and align namespaces with folders. File names match their primary type.
@@ -135,6 +137,8 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Avoid lazy loading and hidden N+1 queries. Make related data loading explicit.
 - Express uniqueness, concurrency, and idempotency guarantees in PostgreSQL constraints as well as in application logic.
 - Keep transactions short and define their boundary in the application operation. Do not hold a database transaction open across IMAP, SMTP, or AI network calls.
+- A write repository obtains its `DbContext` from the `IPersistenceSession` it is given and does not inject one. A read method joins no transaction, so it takes no session and uses the scoped context. Never accept a contract parameter the implementation ignores: a session that is not written through guarantees nothing and only appears to.
+- Reach for the change tracker only when a pending insert must be visible before commit, and say so in a comment. Prefer `FindAsync` for primary-key lookups, which already resolves from the tracker. For alternate-key lookups use the shared two-pass helper with a single predicate expression rather than repeating the predicate for the in-memory and database passes.
 - Review generated migrations and SQL. Add indexes from demonstrated query shapes and inspect query plans for performance-critical paths.
 - Use provider-supported parameterization. Never construct SQL from untrusted strings; any dynamic identifier must come from validated application-owned metadata.
 
@@ -210,7 +214,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Keep third-party types inside their owning adapter wherever practical.
 - Prefer platform capabilities before adding packages. Every new package must have a clear owner and purpose.
 - Do not expose EF Core entities, MailKit objects, MCP SDK types, or provider-specific AI types across application boundaries.
-- Access raw RFC 822 content only through the application-owned `IMessageContentStore` port. Its initial implementation uses a dedicated PostgreSQL table, separate from message metadata.
+- Access raw RFC 822 content only through the application-owned `IEmailContentStore` port. Its initial implementation uses a dedicated PostgreSQL table, separate from email metadata.
 - Keep PostgreSQL, Npgsql, and `bytea` details inside the initial content-store adapter so a future MinIO/S3 implementation does not change application use cases or domain types.
 - Do not load raw MIME in ordinary mailbox queries or track large `bytea` values in EF Core unnecessarily.
 - Apply database migrations explicitly. Do not run destructive or automatic production migrations during ordinary host startup.

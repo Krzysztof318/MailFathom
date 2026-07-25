@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-using MailMcp.Domain.Messages;
+using MailMcp.Domain.Emails;
 
 namespace MailMcp.Domain.Synchronization;
 
@@ -12,7 +12,7 @@ public sealed record SynchronizationCheckpoint(ImapUidValidity UidValidity, Imap
     /// <returns>An empty checkpoint.</returns>
     public static SynchronizationCheckpoint None(ImapUidValidity uidValidity) => new(uidValidity, null, null);
 
-    /// <summary>Advances the checkpoint after a message has been durably stored.</summary>
+    /// <summary>Advances the checkpoint after an email has been durably stored.</summary>
     /// <param name="uid">The latest stored UID.</param>
     /// <param name="synchronizedAt">The timestamp for the durable synchronization progress.</param>
     /// <returns>An advanced checkpoint.</returns>

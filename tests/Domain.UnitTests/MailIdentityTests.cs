@@ -1,8 +1,8 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
-using MailMcp.Domain.Messages;
 using MailMcp.Domain.Synchronization;
 using Xunit;
 
@@ -20,7 +20,7 @@ public sealed class MailIdentityTests
         var uid = ImapUid.Create(100);
 
         // Act
-        var occurrence = MessageOccurrenceId.Create(accountId, folderName, uidValidity, uid);
+        var occurrence = EmailOccurrenceId.Create(accountId, folderName, uidValidity, uid);
 
         // Assert
         Assert.Equal("primary", occurrence.AccountId.Value);

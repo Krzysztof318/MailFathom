@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Messages;
+using MailMcp.Application.Persistence;
+using MailMcp.Domain.Emails;
 
-namespace MailMcp.Application.MessageContent;
+namespace MailMcp.Application.EmailContent;
 
-/// <summary>Stores raw message content outside ordinary message metadata queries.</summary>
-public interface IMessageContentStore
+/// <summary>Stores raw email content outside ordinary email metadata queries.</summary>
+public interface IEmailContentStore
 {
     /// <summary>Saves raw MIME content idempotently for one locally stored email.</summary>
     /// <param name="session">The explicit persistence session this content write participates in.</param>
@@ -15,8 +15,8 @@ public interface IMessageContentStore
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes after durable storage.</returns>
     Task SaveContentAsync(
-        ISession session,
+        IPersistenceSession session,
         StoredEmailId storedEmailId,
-        RemoteMessageContent content,
+        RemoteEmailContent content,
         CancellationToken cancellationToken);
 }

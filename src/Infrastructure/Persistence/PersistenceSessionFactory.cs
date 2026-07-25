@@ -2,7 +2,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
-using MailMcp.Application.Synchronization;
+using MailMcp.Application.Persistence;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace MailMcp.Infrastructure.Persistence;
@@ -10,19 +10,22 @@ namespace MailMcp.Infrastructure.Persistence;
 /// <summary>Creates EF Core-backed persistence sessions for application write transactions.</summary>
 // TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
 [ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
-public sealed class UnitOfWork(MailMcpDbContext dbContext) : ISessionFactory
+public sealed class PersistenceSessionFactory(MailMcpDbContext dbContext) : IPersistenceSessionFactory
 {
     /// <inheritdoc />
-    public async Task<ISession> BeginSessionAsync(CancellationToken cancellationToken)
+    public async Task<IPersistenceSession> BeginSessionAsync(CancellationToken cancellationToken)
     {
         var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        return new EfCoreSession(dbContext, transaction);
+        return new EfCorePersistenceSession(dbContext, transaction);
     }
 
-    private sealed class EfCoreSession(MailMcpDbContext dbContext, IDbContextTransaction transaction) : ISession
+    private sealed class EfCorePersistenceSession(MailMcpDbContext dbContext, IDbContextTransaction transaction)
+        : IPersistenceSession, IEfCorePersistenceSession
     {
         private bool completed;
+
+        public MailMcpDbContext DbContext => dbContext;
 
         public async Task CommitAsync(CancellationToken cancellationToken)
         {

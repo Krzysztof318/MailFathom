@@ -67,9 +67,9 @@ public sealed partial class MailSynchronizationWorker : BackgroundService
                     this.LogFolderSynchronized(
                         account.AccountId,
                         folder,
-                        result.StoredMessageCount,
-                        result.SkippedOversizedMessageCount,
-                        result.HasMoreMessages);
+                        result.StoredEmailCount,
+                        result.SkippedOversizedEmailCount,
+                        result.HasMoreEmails);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -88,13 +88,13 @@ public sealed partial class MailSynchronizationWorker : BackgroundService
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Synchronized IMAP folder {AccountId}/{FolderName}; stored {StoredMessageCount} messages, skipped {SkippedOversizedMessageCount} oversized messages, and has more work: {HasMoreMessages}.")]
+        Message = "Synchronized IMAP folder {AccountId}/{FolderName}; stored {StoredEmailCount} messages, skipped {SkippedOversizedEmailCount} oversized messages, and has more work: {HasMoreEmails}.")]
     private partial void LogFolderSynchronized(
         string accountId,
         string folderName,
-        int storedMessageCount,
-        int skippedOversizedMessageCount,
-        bool hasMoreMessages);
+        int storedEmailCount,
+        int skippedOversizedEmailCount,
+        bool hasMoreEmails);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

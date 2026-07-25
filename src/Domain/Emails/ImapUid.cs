@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-namespace MailMcp.Domain.Messages;
+namespace MailMcp.Domain.Emails;
 
 /// <summary>Represents a positive IMAP UID within one UIDVALIDITY scope.</summary>
 public readonly record struct ImapUid

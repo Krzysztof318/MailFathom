@@ -27,6 +27,11 @@ public sealed class MailMcpDbContext : DbContext
     internal DbSet<SynchronizationCheckpointEntity> SynchronizationCheckpoints => this.Set<SynchronizationCheckpointEntity>();
 
     /// <inheritdoc />
+    // TODO: UIDVALIDITY and UID are modelled as CLR `uint` because that is the IMAP wire type, but PostgreSQL has no
+    // native unsigned 32-bit integer. No migration exists yet, so this mapping has never been validated against a real
+    // database. Verify it when the first migration is generated and map both columns to `bigint` if Npgsql does not
+    // provide a lossless mapping. The same review must confirm that the unique index on (folder, UIDVALIDITY, UID) and
+    // the checkpoint comparisons still order correctly under whichever column type is chosen.
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<MailboxAccountEntity>(entity =>

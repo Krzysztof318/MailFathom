@@ -1,9 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-using MailMcp.Application.MessageContent;
+using MailMcp.Application.EmailContent;
+using MailMcp.Application.Persistence;
 using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
-using MailMcp.Domain.Messages;
 using MailMcp.Domain.Synchronization;
 
 namespace MailMcp.Application.Synchronization;
@@ -11,27 +12,27 @@ namespace MailMcp.Application.Synchronization;
 /// <summary>Coordinates read-only mailbox folder synchronization into local persistence.</summary>
 public sealed class MailboxSynchronizer
 {
-    private readonly IMailboxSessionFactory sessionFactory;
+    private readonly IMailboxSessionFactory mailboxSessionFactory;
     private readonly ISynchronizationCheckpointStore checkpointStore;
-    private readonly ISessionFactory sessionScopeFactory;
-    private readonly IMessageMetadataRepository metadataRepository;
-    private readonly IMessageContentStore contentStore;
+    private readonly IPersistenceSessionFactory persistenceSessionFactory;
+    private readonly IEmailMetadataRepository metadataRepository;
+    private readonly IEmailContentStore contentStore;
     private readonly TimeProvider timeProvider;
     private readonly MailboxSynchronizationOptions options;
 
     /// <summary>Initializes a new mailbox synchronizer.</summary>
     public MailboxSynchronizer(
-        IMailboxSessionFactory sessionFactory,
+        IMailboxSessionFactory mailboxSessionFactory,
         ISynchronizationCheckpointStore checkpointStore,
-        ISessionFactory sessionScopeFactory,
-        IMessageMetadataRepository metadataRepository,
-        IMessageContentStore contentStore,
+        IPersistenceSessionFactory persistenceSessionFactory,
+        IEmailMetadataRepository metadataRepository,
+        IEmailContentStore contentStore,
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options)
     {
-        this.sessionFactory = sessionFactory;
+        this.mailboxSessionFactory = mailboxSessionFactory;
         this.checkpointStore = checkpointStore;
-        this.sessionScopeFactory = sessionScopeFactory;
+        this.persistenceSessionFactory = persistenceSessionFactory;
         this.metadataRepository = metadataRepository;
         this.contentStore = contentStore;
         this.timeProvider = timeProvider;
@@ -46,9 +47,9 @@ public sealed class MailboxSynchronizer
     {
         var checkpoint = await this.checkpointStore.GetCheckpointAsync(accountId, folderName, cancellationToken);
 
-        await using var session = await this.sessionFactory.OpenReadOnlyAsync(accountId, folderName, cancellationToken);
+        await using var mailboxSession = await this.mailboxSessionFactory.OpenReadOnlyAsync(accountId, folderName, cancellationToken);
 
-        var uidValidity = await session.GetUidValidityAsync(cancellationToken);
+        var uidValidity = await mailboxSession.GetUidValidityAsync(cancellationToken);
         checkpoint = checkpoint?.UidValidity == uidValidity ? checkpoint : SynchronizationCheckpoint.None(uidValidity);
 
         var storedCount = 0;
@@ -60,10 +61,10 @@ public sealed class MailboxSynchronizer
         {
             inspectedBatchCount++;
 
-            var batch = await session.GetMessageBatchAfterAsync(checkpoint.LastSeenUid, this.options.MaxMetadataBatchSize, cancellationToken);
-            foreach (var metadata in batch.Messages.OrderBy(message => message.OccurrenceId.Uid.Value))
+            var batch = await mailboxSession.GetEmailBatchAfterAsync(checkpoint.LastSeenUid, this.options.MaxMetadataBatchSize, cancellationToken);
+            foreach (var metadata in batch.Emails.OrderBy(email => email.OccurrenceId.Uid.Value))
             {
-                var outcome = await this.StoreOccurrenceAsync(session, metadata, cancellationToken);
+                var outcome = await this.StoreOccurrenceAsync(mailboxSession, metadata, cancellationToken);
                 if (outcome == OccurrenceOutcome.Stored)
                 {
                     storedCount++;
@@ -88,8 +89,8 @@ public sealed class MailboxSynchronizer
     }
 
     private async Task<OccurrenceOutcome> StoreOccurrenceAsync(
-        IMailboxSession session,
-        RemoteMessageMetadata metadata,
+        IMailboxSession mailboxSession,
+        RemoteEmailMetadata metadata,
         CancellationToken cancellationToken)
     {
         if (metadata.SizeOctets > this.options.MaxRawMimeBytes)
@@ -99,12 +100,12 @@ public sealed class MailboxSynchronizer
             return OccurrenceOutcome.SkippedOversized;
         }
 
-        RemoteMessageContent content;
+        RemoteEmailContent content;
         try
         {
-            content = await session.FetchMessageContentWithoutSettingSeenAsync(metadata.OccurrenceId, this.options.MaxRawMimeBytes, cancellationToken);
+            content = await mailboxSession.FetchEmailContentWithoutSettingSeenAsync(metadata.OccurrenceId, this.options.MaxRawMimeBytes, cancellationToken);
         }
-        catch (MessageContentTooLargeException)
+        catch (EmailContentTooLargeException)
         {
             // The advertised size understated the payload, so the occurrence is recorded without content instead of
             // being silently skipped past by the checkpoint.
@@ -113,7 +114,7 @@ public sealed class MailboxSynchronizer
             return OccurrenceOutcome.SkippedOversized;
         }
 
-        await using var persistenceSession = await this.sessionScopeFactory.BeginSessionAsync(cancellationToken);
+        await using var persistenceSession = await this.persistenceSessionFactory.BeginSessionAsync(cancellationToken);
 
         var storedEmailId = await this.metadataRepository.UpsertMetadataAsync(persistenceSession, metadata, StoredEmailContentAvailability.Available, cancellationToken);
         await this.contentStore.SaveContentAsync(persistenceSession, storedEmailId, content, cancellationToken);
@@ -123,10 +124,10 @@ public sealed class MailboxSynchronizer
     }
 
     private async Task RecordOversizedOccurrenceAsync(
-        RemoteMessageMetadata metadata,
+        RemoteEmailMetadata metadata,
         CancellationToken cancellationToken)
     {
-        await using var persistenceSession = await this.sessionScopeFactory.BeginSessionAsync(cancellationToken);
+        await using var persistenceSession = await this.persistenceSessionFactory.BeginSessionAsync(cancellationToken);
 
         await this.metadataRepository.UpsertMetadataAsync(persistenceSession, metadata, StoredEmailContentAvailability.ExceededSizeLimit, cancellationToken);
         await persistenceSession.CommitAsync(cancellationToken);
@@ -138,7 +139,7 @@ public sealed class MailboxSynchronizer
         SynchronizationCheckpoint checkpoint,
         CancellationToken cancellationToken)
     {
-        await using var persistenceSession = await this.sessionScopeFactory.BeginSessionAsync(cancellationToken);
+        await using var persistenceSession = await this.persistenceSessionFactory.BeginSessionAsync(cancellationToken);
 
         await this.checkpointStore.SaveCheckpointAsync(persistenceSession, accountId, folderName, checkpoint, cancellationToken);
         await persistenceSession.CommitAsync(cancellationToken);
@@ -153,7 +154,7 @@ public sealed class MailboxSynchronizer
 
 /// <summary>Summarizes one mailbox synchronization run.</summary>
 public sealed record MailboxSynchronizationResult(
-    int StoredMessageCount,
-    int SkippedOversizedMessageCount,
-    bool HasMoreMessages,
+    int StoredEmailCount,
+    int SkippedOversizedEmailCount,
+    bool HasMoreEmails,
     SynchronizationCheckpoint Checkpoint);
