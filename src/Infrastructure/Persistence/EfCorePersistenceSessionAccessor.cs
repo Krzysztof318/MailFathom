@@ -25,8 +25,10 @@ internal static class EfCorePersistenceSessionAccessor
     /// <returns>The context whose pending changes commit with the session.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">
-    /// Thrown when <paramref name="session" /> was not created by the EF Core persistence session factory. Writing
-    /// through a foreign session would commit outside the caller's transaction, so this fails loudly instead.
+    /// Thrown when <paramref name="session" /> is backed by a different persistence provider and therefore cannot
+    /// supply an EF Core context. A session created by <see cref="PersistenceSessionFactory" /> in another scope is
+    /// valid: writing through its context is exactly the intended behavior, because that is the transaction its
+    /// caller opened.
     /// </exception>
     public static MailMcpDbContext DbContextOf(IPersistenceSession session)
     {

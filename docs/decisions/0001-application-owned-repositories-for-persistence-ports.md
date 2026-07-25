@@ -107,7 +107,9 @@ MailMcp implements this as `IPersistenceSession` and `IPersistenceSessionFactory
 
 A session parameter that the implementation ignores provides no guarantee at all. If a repository injects its own `DbContext` and merely accepts an `IPersistenceSession` it never reads, the write happens to join the caller's transaction only because dependency injection handed both objects the same scoped context. A session obtained from a different scope would be accepted silently and the write would land outside the caller's transaction.
 
-Therefore a write repository must obtain its persistence context *through* the supplied session, and must fail loudly when handed a session it cannot write through. In MailMcp, `EfCorePersistenceSessionAccessor.DbContextOf` performs that resolution and throws `ArgumentException` for a foreign session. Write repositories consequently do not inject `DbContext` at all.
+Therefore a write repository must obtain its persistence context *through* the supplied session, and must fail loudly when handed a session it cannot write through. In MailMcp, `EfCorePersistenceSessionAccessor.DbContextOf` performs that resolution and write repositories consequently do not inject `DbContext` at all.
+
+The guarantee this buys is that the write is issued on the session's own context, so it cannot land outside the transaction the caller opened. It is not a scope check: a session created by the same factory in a different scope is accepted, and writing through its context is the correct outcome. The rejection path, an `ArgumentException`, covers only a session backed by a different persistence provider, which cannot supply an EF Core context at all.
 
 The corresponding rule for reads is the inverse: a read joins no transaction, so a read method uses the scoped context directly and does not take a session. A store that exposes both, such as `ISynchronizationCheckpointStore`, may hold an injected context used only by its read path.
 

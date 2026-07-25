@@ -10,7 +10,7 @@ namespace MailMcp.Infrastructure.UnitTests;
 public sealed class EfCorePersistenceSessionAccessorTests
 {
     [Fact]
-    public void DbContextOf_SessionFromAnotherProvider_ThrowsInsteadOfWritingOutsideTheTransaction()
+    public void DbContextOf_SessionBackedByAnotherPersistenceProvider_Throws()
     {
         // Arrange
         var foreignSession = Substitute.For<IPersistenceSession>();
