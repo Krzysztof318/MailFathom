@@ -4,12 +4,26 @@ Use the .NET SDK pinned in `global.json`. Test execution is configured for Micro
 
 ## Commands
 
+For the normal implementation loop, run:
+
 ```bash
-dotnet restore
-dotnet build --no-restore
-dotnet test --no-build
-dotnet format --verify-no-changes
+bash scripts/verify-fast.sh
 ```
+
+Before committing, run the complete local gate:
+
+```bash
+git add <task-files>
+bash scripts/verify-full.sh
+```
+
+The fast script restores the solution, builds it in Release configuration, and
+runs all unit tests without rebuilding. The full script additionally restores
+repository tools, runs the workflow contract suite, executes the aggregate
+coverage gate, verifies formatting, and checks the Git diff. It rejects
+remaining untracked files, so inspect the staged diff before running it. See
+[Agent workflow](agent-workflow.md) for the workspace inspection command and
+shared skills.
 
 Run the web host directly:
 
@@ -40,7 +54,8 @@ dotnet tool install --global Aspire.Cli --version 13.4.6
 
 ## Code coverage
 
-After a Release build, collect and enforce coverage with:
+The full verification script collects and enforces coverage. To run only the
+underlying coverage target after a Release build:
 
 ```bash
 dotnet tool restore

@@ -28,21 +28,14 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Keep the root `LICENSES.md` third-party license register current. Add or update its entries in the same change set as any dependency, service, protocol SDK, container image, generated asset, or externally sourced code sample change.
 - When a dependency is pinned in `Directory.Packages.props`, record the exact package name, version, license expression, upstream URL, and any required attribution or NOTICE handling in `LICENSES.md`.
 
-## Documentation workflow
+## Documentation and test obligations
 
-- Before using or changing a library, framework, protocol, CLI, or external API, consult its latest official documentation.
-- Prefer Microsoft Learn, official project documentation, specifications, and upstream repositories over blog posts or secondary examples.
-- Confirm package compatibility with .NET 10 before adding or updating a dependency.
-- Pin package versions centrally in `Directory.Packages.props`. Do not use floating versions.
-- Write repository documentation in English and keep durable documentation under `docs/`.
-- Develop and verify tests and production code before writing the corresponding repository documentation. Documentation must describe the behavior that actually exists, not an intended implementation.
-- After the code is implemented and verified, create or update the relevant `docs/` page before completing the task. Code and its documentation normally belong in the same commit or reviewable change set.
-- Document architecture, feature behavior, configuration, security assumptions, operational procedures, failure modes, and important implementation trade-offs when they are introduced or changed.
-- Keep a discoverable documentation structure such as `docs/architecture/`, `docs/features/`, `docs/operations/`, and `docs/decisions/`. Add an index when more than a few pages exist.
-- Create or modify ADRs under `docs/decisions/` only with explicit owner approval for that ADR work.
-- Update examples, configuration snippets, command names, and diagrams whenever the corresponding code changes. Stale documentation is a defect.
-- Treat `AGENTS.md` files like durable repository guidance: verify whether they need updates when workflows, structure, tooling, or documentation rules change.
-- Do not create documentation that merely repeats type names or folder structure. Explain purpose, contracts, invariants, data flow, operational impact, and the reason behind important decisions.
+- Before using or changing a library, framework, protocol, CLI, or external API, consult its latest official documentation. Prefer Microsoft Learn, official project documentation, specifications, and upstream repositories.
+- Confirm .NET 10 compatibility and pin package versions centrally in `Directory.Packages.props`. Do not use floating versions.
+- Unit tests are part of every behavior change, feature, and bug fix. Read `tests/AGENTS.md` before adding or changing tests.
+- Develop and verify tests and production code before documenting the implemented behavior. Update affected durable documentation in the same reviewable change set; stale guidance is a defect.
+- Read `docs/AGENTS.md` before changing documentation. Create or modify ADRs only with explicit owner approval.
+- `$check-docs-licenses` is a mandatory completion gate, including when its verdict is `n/a`.
 
 ## Architecture
 
@@ -109,40 +102,6 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Add inline comments for non-obvious reasoning, protocol hazards, algorithms, workarounds, security constraints, or decisions that cannot be expressed through naming and types.
 - Explain why the code must behave a certain way; do not narrate what an immediately readable statement already does. Prefer better naming or extraction over explanatory comments for ordinary control flow.
 
-## API and application design
-
-- Model one application use case per handler or service operation with explicit input and output contracts.
-- Validate untrusted input at the outer boundary and enforce business invariants again in the domain object that owns them.
-- Keep transport contracts, application contracts, domain models, and persistence models distinct. Map explicitly at boundaries.
-- Do not return exceptions, stack traces, internal identifiers, inner-exception details, or provider responses through MCP or administrative endpoints.
-- Use stable machine-readable error codes with safe human-readable messages for expected failures. Model domain invariant failures with domain-specific exceptions only for exceptional states, and translate them at MCP boundaries into safe serialized errors without leaking inner exceptions.
-- Keep query result sizes bounded. Use keyset pagination and stable deterministic ordering.
-- Make retryable commands idempotent and carry an idempotency identity where duplicate execution could cause an external side effect.
-- Keep authorization close to the use case as well as at the transport boundary so alternate entrypoints cannot bypass it.
-
-## Dependency injection and configuration
-
-- Register dependencies in focused extension methods owned by the project that implements them; keep `Program.cs` as a readable composition root.
-- Choose DI lifetimes deliberately. Never inject a scoped service into a singleton or capture scoped services in background workers.
-- Background services create an explicit scope per independent work unit and honor host cancellation.
-- Use typed options for related configuration. Apply `ValidateDataAnnotations`, custom validators where necessary, and `ValidateOnStart` for required settings.
-- Keep secrets out of source control and ordinary configuration files. Load them from deployment secrets, systemd credentials, or an approved secret provider.
-- Do not read environment variables throughout domain or application code. Bind configuration once at the host boundary.
-
-## Persistence and EF Core
-
-- Keep `DbContext` scoped and short-lived. It is not thread-safe and must never be shared across concurrent operations.
-- Use asynchronous EF Core APIs and propagate cancellation tokens.
-- Project queries directly into application read models. Do not load full entity graphs when a bounded projection is sufficient.
-- Use `AsNoTracking` for read-only queries unless identity resolution or change tracking is explicitly required.
-- Avoid lazy loading and hidden N+1 queries. Make related data loading explicit.
-- Express uniqueness, concurrency, and idempotency guarantees in PostgreSQL constraints as well as in application logic.
-- Keep transactions short and define their boundary in the application operation. Do not hold a database transaction open across IMAP, SMTP, or AI network calls.
-- A write repository obtains its `DbContext` from the `IPersistenceSession` it is given and does not inject one. A read method joins no transaction, so it takes no session and uses the scoped context. Never accept a contract parameter the implementation ignores: a session that is not written through guarantees nothing and only appears to.
-- Reach for the change tracker only when a pending insert must be visible before commit, and say so in a comment. Prefer `FindAsync` for primary-key lookups, which already resolves from the tracker. For alternate-key lookups use the shared two-pass helper with a single predicate expression rather than repeating the predicate for the in-memory and database passes.
-- Review generated migrations and SQL. Add indexes from demonstrated query shapes and inspect query plans for performance-critical paths.
-- Use provider-supported parameterization. Never construct SQL from untrusted strings; any dynamic identifier must come from validated application-owned metadata.
-
 ## Enterprise governance, privacy, and GDPR readiness
 
 - Design every feature with GDPR-aligned privacy by design and by default: data minimization, purpose limitation, storage limitation, confidentiality, integrity, availability, and accountable processing must be visible in the architecture, tests, and documentation.
@@ -164,52 +123,11 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Optimize only after measurement. Prefer appropriate algorithms, bounded allocations, streaming, and database projections before low-level micro-optimizations.
 - Stream large MIME content and attachments rather than buffering them repeatedly. Set explicit size and count limits at every public or remote boundary.
 
-## Email protocol safety
+## Cross-boundary email invariants
 
 - Treat `(account, folder, UIDVALIDITY, UID)` as the stable remote occurrence identity.
-- Fetch message bodies with mechanisms that preserve the remote `\Seen` state. Add a regression test for every code path that fetches content.
 - Keep MCP reads local; an MCP request must not trigger a synchronous IMAP fetch.
 - Make synchronization, object writes, indexing, and SMTP outbox processing idempotent.
-- Require explicit opt-in for unencrypted IMAP/SMTP transport and clear-text authentication over an unencrypted connection.
-- Do not disable TLS certificate validation. Support private servers through explicit trusted CA configuration.
-
-## Unit testing policy
-
-- Unit tests are part of every behavior change, feature, and bug fix. Write or update the failing test before production code when practical.
-- Use xUnit.net v3 on Microsoft Testing Platform v2 as the test framework and NSubstitute for test doubles.
-- Keep unit tests in separate projects under `tests/`, named after the production boundary they cover:
-  - `Domain.UnitTests`
-  - `Application.UnitTests`
-  - `Infrastructure.UnitTests`
-  - `AI.UnitTests`
-  - `Mcp.UnitTests`
-- Follow Arrange, Act, Assert. Add explicit `// Arrange`, `// Act`, and `// Assert` comments in unit tests so test phases are visually consistent across the repository.
-- Name tests `Member_Scenario_ExpectedBehavior`. Use `[Fact]` for one scenario and `[Theory]` for the same behavior over multiple inputs.
-- Test observable behavior and domain invariants, not private implementation details. One test should describe one behavior even if several assertions are needed to prove it.
-- Tests must be fast, isolated, repeatable, order-independent, and safe to run in parallel. Do not use real clocks, random nondeterministic values, shared mutable fixtures, sleeps, network calls, databases, containers, or the filesystem in unit tests.
-- Prefer real domain values and simple in-memory fakes for state. Use NSubstitute at external or architectural boundaries where interaction is part of the contract.
-- Never use the EF Core InMemory provider, SQLite in-memory, any other in-memory SQL database, or mocked `DbSet` query behavior as a substitute for PostgreSQL persistence semantics. Unit-test application behavior through application-owned ports and hand-written state fakes; verify provider-specific persistence behavior only against real PostgreSQL integration tests when that phase is enabled.
-- Do not substitute concrete MailKit clients. Define narrow application-facing session or transport ports and use NSubstitute to model IMAP/SMTP server capabilities, responses, disconnects, and failures.
-- Use `Received()` and `DidNotReceive()` only when the interaction itself is a required side effect or safety invariant. Prefer state or result assertions otherwise.
-- Use argument matchers only while configuring substitutes or verifying received calls.
-- Every IMAP content-fetch path must prove that no operation capable of setting `\Seen` was requested.
-- Cover cancellation, retry boundaries, idempotency, duplicate events, UIDVALIDITY changes, partial failures, and unsafe TLS/authentication configuration where relevant.
-- Run the complete unit test suite with `dotnet test` before committing.
-
-## Code coverage
-
-- Maintain at least 85% aggregate line coverage across the complete configured production scope: `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`.
-- Calculate the threshold from the whole configured codebase on every run. Do not substitute patch coverage, changed-line coverage, or per-project thresholds for the aggregate gate.
-- Keep `Host` and `AppHost` excluded as thin executable composition roots. Do not add other assembly, namespace, file, type, or member exclusions merely to make the threshold pass.
-- Add `using System.Diagnostics.CodeAnalysis;` and apply `[ExcludeFromCodeCoverage]` to a class only when it contains no executable application, domain, mapping, validation, policy, or infrastructure logic. Do not fully qualify the attribute name.
-- Never use `[ExcludeFromCodeCoverage]` to hide behavior that can be meaningfully unit tested. If logic is added to an excluded class, remove the attribute and cover the behavior in the same change.
-- Run `dotnet msbuild .config/CodeCoverage.proj -t:Collect` before committing a change that affects production or test code. The command enforces the 85% whole-scope threshold locally and in CI.
-
-## Integration tests
-
-- Integration tests are planned for a later phase and are documented only in the architecture draft for now.
-- Do not add integration-test projects, Testcontainers, Docker-based fixtures, real PostgreSQL dependencies, or real/mock network mail servers yet.
-- Cases that require validating MailKit wire behavior against an actual IMAP/SMTP server belong to the future integration suite. Do not mislabel them as unit tests.
 
 ## Dependency and implementation discipline
 
@@ -223,15 +141,13 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Use keyset pagination for email timelines and bounded result sizes for all public queries.
 - Treat email content, OAuth tokens, credentials, certificate material, and embeddings as sensitive data.
 
-## Verification
+## Agent workflow and verification
 
-Run checks appropriate to the change before reporting completion:
-
-```bash
-dotnet restore
-dotnet build --no-restore
-dotnet test --no-build
-dotnet format --verify-no-changes
-```
-
-Also inspect the final diff for accidental secrets, unrelated edits, generated files, and dependency-boundary violations.
+- For file-changing tasks, start with `$start-task`.
+- Before final verification, use `$review-change`.
+- To finish, use `$finish-change`; it requires `$check-docs-licenses`, full verification, focused staging, and a draft pull request.
+- Use `scripts/inspect-workspace.sh` for a read-only workspace preflight.
+- Use `scripts/verify-fast.sh` during implementation.
+- Stage the task files before running `scripts/verify-full.sh`; the gate rejects remaining untracked files so newly added files cannot bypass diff validation.
+- Use `scripts/verify-full.sh` before committing. It runs the workflow contract suite, restores tools and packages, builds, runs the complete unit-test and coverage gate, verifies formatting, and checks the diff.
+- Inspect the final diff for accidental secrets, unrelated edits, generated files, and dependency-boundary violations.
