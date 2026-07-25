@@ -6,12 +6,12 @@ Avoid consuming GitHub Actions runners for draft pull requests while preserving 
 
 ## Workflow behavior
 
-Both pull request workflows will explicitly listen for `opened`, `reopened`, `synchronize`, and `ready_for_review` activity. Each job will run when either:
+Both pull request workflows will explicitly listen for `opened`, `reopened`, `synchronize`, `ready_for_review`, and `converted_to_draft` activity. Each job will run when either:
 
 - the workflow was started manually with `workflow_dispatch`; or
 - the pull request is not a draft.
 
-Opening or updating a draft pull request may create a skipped workflow result, but no runner or build, test, coverage, or formatting step will execute. Marking the pull request ready for review will trigger the workflows immediately. Later commits to a ready pull request will continue to trigger them through `synchronize`.
+Opening or updating a draft pull request may create a skipped workflow result, but no runner or build, test, coverage, or formatting step will execute. Marking the pull request ready for review will trigger the workflows immediately. Later commits to a ready pull request will continue to trigger them through `synchronize`. Converting a ready pull request back to draft creates a skipped replacement run that cancels the superseded active run through the existing concurrency group.
 
 The existing target-branch filters, path filters, concurrency behavior, permissions, and manual dispatch support remain unchanged.
 
@@ -28,7 +28,7 @@ Update `docs/operations/local-development.md` so the documented pull request beh
 
 Verify that both workflow files:
 
-- include `ready_for_review` alongside the standard pull request activity types;
+- include `ready_for_review` and `converted_to_draft` alongside the standard pull request activity types;
 - guard the complete job rather than individual steps;
 - allow `workflow_dispatch` regardless of pull request state;
 - retain the existing branch and path filters.

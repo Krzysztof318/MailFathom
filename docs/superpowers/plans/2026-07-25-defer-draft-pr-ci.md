@@ -4,7 +4,7 @@
 
 **Goal:** Prevent build, unit-test, coverage, and formatting jobs from running for draft pull requests while running them immediately when a pull request becomes ready for review.
 
-**Architecture:** Keep the existing workflows and filters, add explicit pull request activity types including `ready_for_review`, and gate each complete job on manual dispatch or a non-draft pull request. Update the operational documentation in the same change so it describes the implemented behavior.
+**Architecture:** Keep the existing workflows and filters, add explicit pull request activity types including `ready_for_review` and `converted_to_draft`, and gate each complete job on manual dispatch or a non-draft pull request. Update the operational documentation in the same change so it describes the implemented behavior.
 
 **Tech Stack:** GitHub Actions workflow YAML, Markdown, .NET 10 repository verification commands
 
@@ -12,7 +12,7 @@
 
 - `workflow_dispatch` must remain available regardless of pull request state.
 - Draft pull requests may produce a skipped workflow result, but must not allocate a runner or execute build, test, coverage, or formatting steps.
-- Ready pull requests must run on `opened`, `reopened`, `synchronize`, and `ready_for_review`.
+- Ready pull requests must run on `opened`, `reopened`, `synchronize`, and `ready_for_review`; `converted_to_draft` must cancel the superseded active run through a skipped replacement run.
 - Existing target-branch filters, path filters, concurrency behavior, permissions, and job steps must remain unchanged.
 - Pull requests must be created as drafts.
 
@@ -53,6 +53,7 @@ In both workflow files, change the start of the `pull_request` configuration to:
       - reopened
       - synchronize
       - ready_for_review
+      - converted_to_draft
     branches:
       - main
 ```
@@ -74,7 +75,7 @@ Apply it to `build-and-unit-test` and `dotnet-format`. Do not add conditions to 
 Update the start of `docs/operations/local-development.md` section `Pull request checks` to say:
 
 ```markdown
-Pull requests targeting `main` run two GitHub Actions checks after they are marked ready for review. Draft pull requests skip both jobs without allocating a runner. Marking a draft ready for review starts the applicable checks immediately, and later commits continue to start them. Both workflows remain available through manual dispatch regardless of pull request state:
+Pull requests targeting `main` run two GitHub Actions checks after they are marked ready for review. Draft pull requests skip both jobs without allocating a runner. Marking a draft ready for review starts the applicable checks immediately, and later commits continue to start them. Converting a ready pull request back to draft cancels the superseded active run and skips the replacement job. Both workflows remain available through manual dispatch regardless of pull request state:
 ```
 
 Retain the existing descriptions of both checks and their path filters. Update the final shared-behavior paragraph to include the job-level draft guard.
@@ -84,12 +85,12 @@ Retain the existing descriptions of both checks and their path filters. Update t
 Run:
 
 ```bash
-rg -n "ready_for_review|github\.event_name == 'workflow_dispatch' \|\| github\.event\.pull_request\.draft == false" \
+rg -n "ready_for_review|converted_to_draft|github\.event_name == 'workflow_dispatch' \|\| github\.event\.pull_request\.draft == false" \
   .github/workflows/build-and-unit-test.yml \
   .github/workflows/dotnet-format.yml
 ```
 
-Expected: two `ready_for_review` matches and two identical job-guard matches.
+Expected: two `ready_for_review` matches, two `converted_to_draft` matches, and two identical job-guard matches.
 
 - [ ] **Step 6: Run repository verification**
 

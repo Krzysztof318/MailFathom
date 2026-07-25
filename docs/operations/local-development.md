@@ -40,7 +40,7 @@ Raw Cobertura reports and TRX files are written under `artifacts/coverage/raw/`.
 
 ## Pull request checks
 
-Pull requests targeting `main` run two GitHub Actions checks after they are marked ready for review. Draft pull requests skip both jobs without allocating a runner. Marking a draft ready for review starts the applicable checks immediately, and later commits continue to start them. Both workflows remain available through manual dispatch regardless of pull request state:
+Pull requests targeting `main` run two GitHub Actions checks after they are marked ready for review. Draft pull requests skip both jobs without allocating a runner. Marking a draft ready for review starts the applicable checks immediately, and later commits continue to start them. Converting a ready pull request back to draft through the `converted_to_draft` activity cancels the superseded active run and skips the replacement job. Both workflows remain available through manual dispatch regardless of pull request state:
 
 - `Build and unit test` runs for pull requests to `main` that change production code, tests, the solution or SDK selection, shared build and package configuration, coverage tooling, or the workflow itself. It restores `MailMcp.slnx` and repository-local tools, builds the solution in Release configuration, runs all unit-test projects through Microsoft Testing Platform with unique coverage prefixes, merges their Cobertura reports, and fails below 85% aggregate line coverage for the complete configured production scope. It uploads raw and merged coverage artifacts and TRX results even when the threshold fails.
 - `dotnet format` restores `MailMcp.slnx` and verifies repository formatting without applying changes.
