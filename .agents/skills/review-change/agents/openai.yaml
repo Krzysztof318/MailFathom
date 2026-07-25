@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review change"
+  short_description: "Review a MailMcp change before final verification"
+  default_prompt: "Use $review-change to inspect this change for correctness, architecture, tests, documentation, and licensing impact."
