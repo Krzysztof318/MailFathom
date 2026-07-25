@@ -10,3 +10,7 @@ This documentation set explains the durable design and operating model for MailM
 - [Decisions](decisions/README.md) describes the ADR workflow and templates.
 
 - [IMAP synchronization](features/imap-synchronization.md)
+
+## Planned work
+
+This documentation set describes behavior that exists. The architecture draft and the PR-sized specifications that decompose the gap between it and the code live in [`specs/`](../specs/README.md). A specification is a statement of intent; a page here is a statement of fact.
