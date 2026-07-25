@@ -100,7 +100,7 @@ verify_fast_runs_restore_build_and_tests() {
   )
 
   assert_file_content \
-    $'restore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore\ntest MailMcp.slnx --configuration Release --no-build' \
+    $'restore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build' \
     "$invocation_log"
 }
 

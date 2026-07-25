@@ -1,5 +1,7 @@
 # Agent Workflow Optimization Implementation Plan
 
+> **Status:** Completed on 2026-07-25. This document is a historical implementation record; its unchecked task steps are not outstanding work.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a fast, deterministic, cross-agent MailMcp development workflow with layered instructions, shared repository skills, and one complete local verification command.
@@ -113,7 +115,7 @@ Run exactly:
 ```bash
 dotnet restore MailMcp.slnx
 dotnet build MailMcp.slnx --configuration Release --no-restore
-dotnet test MailMcp.slnx --configuration Release --no-build
+dotnet test --solution MailMcp.slnx --configuration Release --no-build
 ```
 
 - [ ] **Step 4: Implement full verification**

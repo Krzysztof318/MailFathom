@@ -10,4 +10,4 @@ cd "$repository_root"
 
 dotnet restore MailMcp.slnx
 dotnet build MailMcp.slnx --configuration Release --no-restore
-dotnet test MailMcp.slnx --configuration Release --no-build
+dotnet test --solution MailMcp.slnx --configuration Release --no-build
