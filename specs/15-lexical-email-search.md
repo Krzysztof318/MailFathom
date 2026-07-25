@@ -43,4 +43,4 @@ Semantic search, hybrid ranking, and reciprocal rank fusion, which belong to the
 - Query text reaches PostgreSQL only through parameterization, proven at the infrastructure level where the command is observable rather than against an in-memory repository.
 - Ordering is reproducible under tied relevance ranks.
 - `docs/features/` documents the query contract, snippet bounds, and the bounded-window rationale.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

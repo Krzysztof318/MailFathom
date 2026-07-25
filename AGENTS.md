@@ -201,7 +201,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Keep `Host` and `AppHost` excluded as thin executable composition roots. Do not add other assembly, namespace, file, type, or member exclusions merely to make the threshold pass.
 - Add `using System.Diagnostics.CodeAnalysis;` and apply `[ExcludeFromCodeCoverage]` to a class only when it contains no executable application, domain, mapping, validation, policy, or infrastructure logic. Do not fully qualify the attribute name.
 - Never use `[ExcludeFromCodeCoverage]` to hide behavior that can be meaningfully unit tested. If logic is added to an excluded class, remove the attribute and cover the behavior in the same change.
-- Run `dotnet msbuild eng/CodeCoverage.proj -t:Collect` before committing a change that affects production or test code. The command enforces the 85% whole-scope threshold locally and in CI.
+- Run `dotnet msbuild .config/CodeCoverage.proj -t:Collect` before committing a change that affects production or test code. The command enforces the 85% whole-scope threshold locally and in CI.
 
 ## Integration tests
 

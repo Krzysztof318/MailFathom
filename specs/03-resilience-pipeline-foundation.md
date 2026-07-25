@@ -11,7 +11,7 @@ Give MailMcp one deliberate, configurable, and testable resilience model for out
 
 ## Current state
 
-`Microsoft.Extensions.Http.Resilience` 10.6.0 is already pinned and `Shared/Extensions.cs` calls `AddStandardResilienceHandler` for `HttpClient` defaults. That covers HTTP only. IMAP, SMTP, PostgreSQL, and future embedding and chat calls have no timeout, retry, or circuit-breaker policy at all. The architecture draft asks for bounded jittered backoff and isolated retry state but never names a mechanism.
+`Microsoft.Extensions.Http.Resilience` 10.6.0 is already pinned and `shared/Extensions.cs` calls `AddStandardResilienceHandler` for `HttpClient` defaults. That covers HTTP only. IMAP, SMTP, PostgreSQL, and future embedding and chat calls have no timeout, retry, or circuit-breaker policy at all. The architecture draft asks for bounded jittered backoff and isolated retry state but never names a mechanism.
 
 ## Approved scope
 
@@ -41,4 +41,4 @@ Applying the pipelines to any specific adapter. Specification 04 wires IMAP; lat
 - Every dependency class resolves a configured pipeline, and an unknown key cannot be constructed.
 - No Polly type is reachable from `Domain` or `Application`.
 - `docs/architecture/` gains a page describing the pipeline model, the single-layer rule, and the EF Core execution-strategy interaction.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

@@ -31,7 +31,7 @@ After a Release build, collect and enforce coverage with:
 
 ```bash
 dotnet tool restore
-dotnet msbuild eng/CodeCoverage.proj -t:Collect
+dotnet msbuild .config/CodeCoverage.proj -t:Collect
 ```
 
 The command produces one uniquely prefixed Cobertura report per unit-test project, merges the reports, and requires at least 85% aggregate line coverage across `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`. The result always represents the whole configured scope, not only changed lines. `Host` and `AppHost` are excluded as thin executable composition roots.

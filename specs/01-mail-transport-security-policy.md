@@ -41,4 +41,4 @@ Secret reference resolution and trusted certificate authority loading, both of w
 - An account configured with `None` and no `AllowInsecureConnection` fails startup.
 - An account configured for a clear-text mechanism on an unencrypted channel fails startup unless both opt-ins are set.
 - `docs/features/imap-synchronization.md` documents the modes, the allow-list, and the opt-in semantics.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

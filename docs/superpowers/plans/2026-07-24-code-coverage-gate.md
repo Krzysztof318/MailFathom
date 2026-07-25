@@ -120,7 +120,7 @@ Expected: every unit-test project contains the pinned Coverlet package and the l
 ### Task 2: Add one cross-platform aggregate coverage command
 
 **Files:**
-- Create: `eng/CodeCoverage.proj`
+- Create: `.config/CodeCoverage.proj`
 
 **Interfaces:**
 - Consumes: `MailMcp.slnx`, the local `reportgenerator` tool, raw Coverlet Cobertura reports, and the five configured source boundaries.
@@ -128,7 +128,7 @@ Expected: every unit-test project contains the pinned Coverlet package and the l
 
 - [ ] **Step 1: Create the coverage orchestration project**
 
-Create `eng/CodeCoverage.proj` with:
+Create `.config/CodeCoverage.proj` with:
 
 ```xml
 <Project DefaultTargets="Collect">
@@ -204,7 +204,7 @@ Create a temporary Cobertura file outside the repository:
 ```bash
 mkdir -p /tmp/mailmcp-coverage-test
 printf '%s\n' '<?xml version="1.0" ?><coverage line-rate="0.85" lines-covered="85" lines-valid="100" />' > /tmp/mailmcp-coverage-test/Cobertura.xml
-dotnet msbuild eng/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/Cobertura.xml
+dotnet msbuild .config/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/Cobertura.xml
 ```
 
 Expected: exit 0 and a diagnostic showing `85% (85/100); required: 85%`.
@@ -215,7 +215,7 @@ Run:
 
 ```bash
 printf '%s\n' '<?xml version="1.0" ?><coverage line-rate="0.8499" lines-covered="8499" lines-valid="10000" />' > /tmp/mailmcp-coverage-test/Cobertura.xml
-dotnet msbuild eng/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/Cobertura.xml
+dotnet msbuild .config/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/Cobertura.xml
 ```
 
 Expected: non-zero exit and an error stating that `84.99%` is below the required `85%`.
@@ -225,7 +225,7 @@ Expected: non-zero exit and an error stating that `84.99%` is below the required
 Run:
 
 ```bash
-dotnet msbuild eng/CodeCoverage.proj -t:Collect
+dotnet msbuild .config/CodeCoverage.proj -t:Collect
 find artifacts/coverage/raw -maxdepth 1 -type f -name '*.cobertura.*.xml' -printf '%f\n' | sort
 ```
 
@@ -238,8 +238,8 @@ Run:
 ```bash
 mkdir -p /tmp/mailmcp-coverage-test
 printf '%s\n' '<?xml version="1.0" ?><coverage />' > /tmp/mailmcp-coverage-test/Cobertura.xml
-dotnet msbuild eng/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/Cobertura.xml
-dotnet msbuild eng/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/missing.xml
+dotnet msbuild .config/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/Cobertura.xml
+dotnet msbuild .config/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/missing.xml
 ```
 
 Expected: both invocations fail, respectively for a missing `line-rate` and a missing report.
@@ -250,7 +250,7 @@ Run:
 
 ```bash
 dotnet build MailMcp.slnx --configuration Release --no-restore
-dotnet msbuild eng/CodeCoverage.proj -t:Collect
+dotnet msbuild .config/CodeCoverage.proj -t:Collect
 ```
 
 Expected: unit-test execution succeeds and the target reports that no coverable production source currently exists in the five configured boundaries.
@@ -261,7 +261,7 @@ Expected: unit-test execution succeeds and the target reports that no coverable 
 - Modify: `.github/workflows/build-and-unit-test.yml`
 
 **Interfaces:**
-- Consumes: the `eng/CodeCoverage.proj` command and the existing `Build and unit test` status context.
+- Consumes: the `.config/CodeCoverage.proj` command and the existing `Build and unit test` status context.
 - Produces: a status check on pull requests to `main` that change code, tests, or build and coverage inputs, fails below 85%, and preserves diagnostic artifacts.
 
 - [ ] **Step 1: Keep the pull-request path filter**
@@ -284,7 +284,7 @@ on:
       - 'Directory.Packages.props'
       - 'MailMcp.slnx'
       - 'NuGet.config'
-      - 'eng/**'
+      - '.config/**'
       - 'global.json'
       - 'testconfig.json'
   workflow_dispatch:
@@ -305,7 +305,7 @@ Replace the existing test step with:
 
 ```yaml
       - name: Run unit tests and enforce code coverage
-        run: dotnet msbuild eng/CodeCoverage.proj -t:Collect
+        run: dotnet msbuild .config/CodeCoverage.proj -t:Collect
 ```
 
 - [ ] **Step 4: Preserve diagnostics on success or failure**
@@ -380,7 +380,7 @@ Add a `Code coverage` section under unit testing policy:
 - Keep `Host` and `AppHost` excluded as thin executable composition roots. Do not add other assembly, namespace, file, type, or member exclusions merely to make the threshold pass.
 - Add `using System.Diagnostics.CodeAnalysis;` and apply `[ExcludeFromCodeCoverage]` to a class only when it contains no executable application, domain, mapping, validation, policy, or infrastructure logic. Do not fully qualify the attribute name.
 - Never use `[ExcludeFromCodeCoverage]` to hide behavior that can be meaningfully unit tested. If logic is added to an excluded class, remove the attribute and cover the behavior in the same change.
-- Run `dotnet msbuild eng/CodeCoverage.proj -t:Collect` before committing a change that affects production or test code. The command enforces the 85% whole-scope threshold locally and in CI.
+- Run `dotnet msbuild .config/CodeCoverage.proj -t:Collect` before committing a change that affects production or test code. The command enforces the 85% whole-scope threshold locally and in CI.
 ```
 
 - [ ] **Step 2: Document local and CI operation**
@@ -394,7 +394,7 @@ After a Release build, collect and enforce coverage with:
 
 ```bash
 dotnet tool restore
-dotnet msbuild eng/CodeCoverage.proj -t:Collect
+dotnet msbuild .config/CodeCoverage.proj -t:Collect
 ```
 
 The command merges uniquely prefixed unit-test Cobertura reports and requires at least 85% aggregate line coverage across `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`. The result always represents the whole configured scope, not only changed lines. `Host` and `AppHost` are excluded as composition roots.
@@ -440,7 +440,7 @@ Run:
 dotnet restore MailMcp.slnx
 dotnet build MailMcp.slnx --configuration Release --no-restore
 dotnet test --solution MailMcp.slnx --configuration Release --no-build
-dotnet msbuild eng/CodeCoverage.proj -t:Collect
+dotnet msbuild .config/CodeCoverage.proj -t:Collect
 dotnet format MailMcp.slnx --verify-no-changes --verbosity diagnostic
 ```
 
@@ -464,7 +464,7 @@ Expected: no secrets, unrelated edits, generated artifacts, or dependency-bounda
 Stage only the task files and commit without co-author trailers:
 
 ```bash
-git add .config/dotnet-tools.json testconfig.json Directory.Packages.props Directory.Build.props eng/CodeCoverage.proj .github/workflows/build-and-unit-test.yml AGENTS.md docs/operations/local-development.md LICENSES.md
+git add .config/dotnet-tools.json testconfig.json Directory.Packages.props Directory.Build.props .config/CodeCoverage.proj .github/workflows/build-and-unit-test.yml AGENTS.md docs/operations/local-development.md LICENSES.md
 git commit -m "ci: enforce whole-code coverage"
 ```
 
@@ -495,7 +495,7 @@ Verification:
 - dotnet restore MailMcp.slnx
 - dotnet build MailMcp.slnx --configuration Release --no-restore
 - dotnet test --solution MailMcp.slnx --configuration Release --no-build
-- dotnet msbuild eng/CodeCoverage.proj -t:Collect
+- dotnet msbuild .config/CodeCoverage.proj -t:Collect
 - dotnet format MailMcp.slnx --verify-no-changes --verbosity diagnostic
 ```
 

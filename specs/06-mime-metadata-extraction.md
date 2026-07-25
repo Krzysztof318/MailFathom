@@ -39,4 +39,4 @@ Persisting the extracted values, which specification 07 owns. Body text extracti
 - A malformed message produces an explicit parse failure that is recorded and does not stop the batch or the checkpoint.
 - No attachment content is read into memory during extraction.
 - `docs/features/imap-synchronization.md` documents the extracted fields and the malformed-message behavior.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

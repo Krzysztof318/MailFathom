@@ -43,4 +43,4 @@ Chunking, embeddings, hybrid ranking, and snippet generation, which belong to th
 - Backfill completes for pre-existing messages and is safe to interrupt and resume.
 - No extracted text appears in any log or error message.
 - `docs/features/` documents the extraction rules, the lossy-HTML marker, and the text search configuration setting.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

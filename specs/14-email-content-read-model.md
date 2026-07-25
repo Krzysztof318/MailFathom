@@ -62,4 +62,4 @@ Returning attachment bytes, which draft section 3.2 excludes from the first rele
 - Truncation is always explicit in the result.
 - `HtmlSanitizer`, `AngleSharp`, and `AngleSharp.Css` are pinned in `Directory.Packages.props` and recorded in `LICENSES.md`, and the sanitizer type does not escape the adapter that owns it.
 - `docs/features/` documents the representations, the sanitization policy, and the consistency-error behavior.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

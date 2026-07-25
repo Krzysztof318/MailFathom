@@ -54,4 +54,4 @@ Zero-downtime migration strategy, migration squashing after release, and moving 
 - No configuration setting exists that lets a non-Development host apply migrations at startup; pending migrations there fail startup instead.
 - Draft section 17 is updated to match this policy.
 - `docs/operations/` documents the workflow and the per-environment policy.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

@@ -35,4 +35,4 @@ Semantic and hybrid retrieval, `ask_mail`, and any chat-model invocation.
 - No chat model is reachable from this tool, proven by the absence of any AI dependency in the `Mcp` project.
 - Advertised metadata matches the read-only annotation conventions.
 - `docs/features/` documents the tool contract and the retrieval-mode field.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

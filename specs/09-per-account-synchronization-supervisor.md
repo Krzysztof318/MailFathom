@@ -41,4 +41,4 @@ Push-style synchronization, which specifications 11 and 12 own. Durable work lea
 - Both concurrency bounds are configurable, validated at startup, and enforced.
 - Shutdown does not interrupt a work unit between content persistence and checkpoint advance.
 - `docs/features/imap-synchronization.md` documents the supervisor model, bounds, and backoff layering.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
