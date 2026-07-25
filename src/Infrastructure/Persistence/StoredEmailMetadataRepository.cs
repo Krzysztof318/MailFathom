@@ -11,7 +11,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// <summary>EF Core implementation for email metadata persistence.</summary>
 // TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
 [ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
-public sealed class StoredEmailMetadataRepository(TimeProvider timeProvider) : IEmailMetadataRepository
+internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider) : IEmailMetadataRepository
 {
     /// <inheritdoc />
     public async Task<StoredEmailId> UpsertMetadataAsync(

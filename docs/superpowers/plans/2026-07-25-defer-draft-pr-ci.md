@@ -100,7 +100,7 @@ Run:
 dotnet restore
 dotnet build --no-restore
 dotnet test --no-build
-dotnet msbuild eng/CodeCoverage.proj -t:Collect
+dotnet msbuild .config/CodeCoverage.proj -t:Collect
 dotnet format --verify-no-changes
 git diff --check
 ```

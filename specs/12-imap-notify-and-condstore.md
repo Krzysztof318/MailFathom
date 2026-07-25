@@ -39,4 +39,4 @@ Server-side search, mailbox quota reporting, and any IMAP extension not needed f
 - CONDSTORE and QRESYNC reduce reconciliation work while producing the same end state as the fallback path.
 - A checkpoint written before this change is readable without migration.
 - `docs/features/imap-synchronization.md` documents capability negotiation and the fallback matrix.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

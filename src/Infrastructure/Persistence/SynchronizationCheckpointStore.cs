@@ -18,7 +18,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// </remarks>
 // TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
 [ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
-public sealed class SynchronizationCheckpointStore(MailMcpDbContext readContext) : ISynchronizationCheckpointStore
+internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContext) : ISynchronizationCheckpointStore
 {
     /// <inheritdoc />
     public async Task<SynchronizationCheckpoint?> GetCheckpointAsync(

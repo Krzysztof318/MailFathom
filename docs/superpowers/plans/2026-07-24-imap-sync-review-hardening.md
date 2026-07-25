@@ -259,7 +259,7 @@ Run:
 /home/krzysztof/.dotnet/dotnet test --no-build
 /home/krzysztof/.dotnet/dotnet format --verify-no-changes
 /home/krzysztof/.dotnet/dotnet build --configuration Release --no-restore
-/home/krzysztof/.dotnet/dotnet msbuild eng/CodeCoverage.proj -t:Collect
+/home/krzysztof/.dotnet/dotnet msbuild .config/CodeCoverage.proj -t:Collect
 git diff --check
 ```
 

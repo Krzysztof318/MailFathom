@@ -41,4 +41,4 @@ Restoring a message that reappears on the server after tombstoning, backup-side 
 - Content is removed after the grace period together with all derived data; the tombstone survives per its own setting.
 - A UIDVALIDITY change never causes mass local deletion.
 - `docs/features/imap-synchronization.md` documents reconciliation windows, retention settings, and the audit events.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

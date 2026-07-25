@@ -41,4 +41,4 @@ NOTIFY for multiple folders and CONDSTORE/QRESYNC, which specification 12 owns.
 - A notification triggers one synchronization pass through the existing synchronizer, not a separate fetch path.
 - Repeated IDLE failures degrade to bounded polling and later retry push, and the degradation is recorded.
 - `docs/features/imap-synchronization.md` documents mode selection, renewal, degradation, and observability.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

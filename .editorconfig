@@ -69,6 +69,7 @@ dotnet_diagnostic.CA1064.severity = warning # Exceptions should be public.
 dotnet_diagnostic.CA1416.severity = warning # Validate platform compatibility.
 dotnet_diagnostic.CA1508.severity = none # Avoid dead conditional code; disabled because false positives are common.
 dotnet_diagnostic.CA1852.severity = warning # Seal internal types when possible.
+dotnet_code_quality.CA1852.ignore_internalsvisibleto = true # Analyze internals even when exposed to friend assemblies.
 dotnet_diagnostic.CA1859.severity = warning # Prefer concrete types when it improves performance.
 dotnet_diagnostic.CA1860.severity = warning # Prefer Count comparisons over Any when appropriate.
 dotnet_diagnostic.CA2000.severity = warning # Dispose objects before all references go out of scope.

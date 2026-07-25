@@ -14,7 +14,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// <summary>EF Core raw MIME content store.</summary>
 // TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
 [ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
-public sealed class EmailContentStore(TimeProvider timeProvider) : IEmailContentStore
+internal sealed class EmailContentStore(TimeProvider timeProvider) : IEmailContentStore
 {
     /// <inheritdoc />
     public async Task SaveContentAsync(

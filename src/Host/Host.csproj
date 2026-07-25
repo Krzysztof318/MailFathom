@@ -18,6 +18,6 @@
     <ProjectReference Include="..\Mcp\Mcp.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="..\..\Shared\Extensions.cs" Link="Shared\Extensions.cs" />
+    <Compile Include="..\..\shared\Extensions.cs" Link="shared\Extensions.cs" />
   </ItemGroup>
 </Project>

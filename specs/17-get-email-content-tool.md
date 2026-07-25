@@ -35,4 +35,4 @@ Attachment download, message export, and any mutation of remote state.
 - Missing local content produces a distinct stable code and never an IMAP fetch.
 - Advertised metadata matches the read-only annotation conventions.
 - `docs/features/` documents the tool contract and its error codes.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

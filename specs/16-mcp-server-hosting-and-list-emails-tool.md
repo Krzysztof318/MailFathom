@@ -50,4 +50,4 @@ Tool inputs are untrusted and are validated at the protocol boundary before reac
 - No error response contains an exception type, stack trace, or internal identifier.
 - The endpoint is off by default, and enabling it without transport authentication warns explicitly at startup.
 - `docs/features/` documents the tool contract, annotation conventions, and error codes; `docs/operations/` records the interim unauthenticated posture and its expiry at stage 9.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

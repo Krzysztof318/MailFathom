@@ -10,7 +10,8 @@ using Microsoft.Extensions.Options;
 namespace MailMcp.Host.Hosting;
 
 /// <summary>Runs periodic IMAP reconciliation in scoped work units.</summary>
-public sealed partial class MailSynchronizationWorker : BackgroundService
+[SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
+internal sealed partial class MailSynchronizationWorker : BackgroundService
 {
     private readonly IServiceScopeFactory scopeFactory;
     private readonly IOptions<MailSynchronizationOptions> options;
