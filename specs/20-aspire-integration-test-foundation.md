@@ -24,6 +24,7 @@ The suite verifies what unit tests structurally cannot:
 - Raw MIME round-trips through the `bytea` content store with its recorded length and hash intact, including a value large enough to be stored out of line.
 - Keyset pagination from specification 13 visits every row exactly once across pages, including equal and null timestamps, against real data volume.
 - The full-text query from specification 15 uses the GIN index rather than a sequential scan, asserted from the query plan.
+- Search query text containing SQL metacharacters and full-text operators is treated as data end to end, confirming against real PostgreSQL what specification 15 asserts at the infrastructure level.
 - The host starts, reports healthy, and applies the migration policy from specification 19 correctly.
 
 The lifetime of the distributed application is shared across the suite rather than per test, with each test isolating itself through its own data rather than its own container, because starting the application per test would make the suite unusably slow.

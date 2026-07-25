@@ -29,7 +29,9 @@ Snippets are the data-minimization boundary for search: they are bounded in leng
 
 ## Testing
 
-`Application.UnitTests` cover: query parameterization including inputs containing SQL metacharacters and full-text operators, structured filters combined with text, deterministic ordering under tied ranks, snippet bounds, result-count bounds, the empty-result case, and rejection of an unbounded requested result count. Verification that the GIN index is actually used belongs to specification 20.
+`Application.UnitTests` run against an in-memory repository and cover what that can prove: structured filters combined with text, deterministic ordering under tied ranks, snippet bounds, result-count bounds, the empty-result case, and rejection of an unbounded requested result count.
+
+Parameterization cannot be proven there. An in-memory repository generates no SQL, so a test feeding it SQL metacharacters would pass against a vulnerable adapter and prove nothing. That assertion belongs to `Infrastructure.UnitTests`, which observe the command the adapter actually generates and verify that query text arrives as a parameter rather than as concatenated SQL, with the full-text operator cases included. Specification 20 confirms the same behavior end to end against real PostgreSQL, along with GIN index usage.
 
 ## Out of scope
 
@@ -38,7 +40,7 @@ Semantic search, hybrid ranking, and reciprocal rank fusion, which belong to the
 ## Definition of done
 
 - A search combining text and structured filters returns bounded ranked snippets with stable identifiers.
-- Query text reaches PostgreSQL only through parameterization, proven by test.
+- Query text reaches PostgreSQL only through parameterization, proven at the infrastructure level where the command is observable rather than against an in-memory repository.
 - Ordering is reproducible under tied relevance ranks.
 - `docs/features/` documents the query contract, snippet bounds, and the bounded-window rationale.
 - `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

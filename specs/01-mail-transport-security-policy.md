@@ -17,7 +17,9 @@ Replace the current boolean `UseSslOnConnect` switch with the connection-securit
 
 `Domain` gains a provider-neutral `MailConnectionSecurity` value with the five draft modes (`Auto`, `TlsOnConnect`, `StartTlsRequired`, `StartTlsWhenAvailable`, `None`) and a `MailAuthenticationPolicy` value carrying an ordered allow-list of permitted SASL mechanism names plus the two explicit opt-in flags for insecure transport and for clear-text authentication over an unencrypted channel. The domain owns the rule that rejects a clear-text mechanism on an unencrypted channel unless both opt-ins are present; that rule is pure policy with no I/O, so it belongs in `Domain` rather than in options validation.
 
-`Application` extends the mailbox session port inputs with the resolved connection policy. `Infrastructure` maps the domain policy onto MailKit's `SecureSocketOptions` and its authentication mechanism set, and removes mechanisms the policy does not permit from the client's advertised mechanism collection before authenticating. Certificate validation stays enabled unconditionally; there is no configuration path that disables it. Private servers are supported by pointing the policy at additional trusted certificate authority material, which this specification models as configuration only and wires in specification 02.
+`Application` extends the mailbox session port inputs with the resolved connection policy. `Infrastructure` maps the domain policy onto MailKit's `SecureSocketOptions` and its authentication mechanism set, and removes mechanisms the policy does not permit from the client's advertised mechanism collection before authenticating. Certificate validation stays enabled unconditionally; there is no configuration path that disables it.
+
+Private servers are supported through explicit trusted certificate authority configuration. This specification defines the configuration shape — the policy carries a reference to trust anchor material — and validates that the reference is present when required. Loading that material and installing it into the certificate validation path is assigned to specification 02, which owns deployment-provisioned material and builds the reference-resolution mechanism it arrives through.
 
 `Host` binds the new options, validates them with `ValidateOnStart`, and fails startup with a specific message naming the offending account when a policy is unsafe.
 
@@ -31,7 +33,7 @@ The rejection rule is enforced in the domain object that owns it and again at op
 
 ## Out of scope
 
-Secret reference resolution, trusted certificate authority loading from deployment credentials, SMTP transport policy, and OAuth-based mailbox authentication mechanisms. GSSAPI/Kerberos remains unsupported per draft section 7.2.
+Secret reference resolution and trusted certificate authority loading, both of which specification 02 owns; SMTP transport policy; and OAuth-based mailbox authentication mechanisms. GSSAPI/Kerberos remains unsupported per draft section 7.2.
 
 ## Definition of done
 
