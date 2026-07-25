@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
 using MailMcp.Infrastructure.Mail.MailKit;
@@ -8,7 +9,8 @@ using MailMcp.Infrastructure.Mail.MailKit;
 namespace MailMcp.Host.Configuration;
 
 /// <summary>Configures periodic IMAP synchronization.</summary>
-public sealed class MailSynchronizationOptions : IValidatableObject, IMailKitImapAccountSettingsProvider
+[SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
+internal sealed class MailSynchronizationOptions : IValidatableObject, IMailKitImapAccountSettingsProvider
 {
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
@@ -90,7 +92,8 @@ public sealed class MailSynchronizationOptions : IValidatableObject, IMailKitIma
 }
 
 /// <summary>Configures one account for periodic IMAP synchronization.</summary>
-public sealed class MailSynchronizationAccountOptions : IValidatableObject
+[SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
+internal sealed class MailSynchronizationAccountOptions : IValidatableObject
 {
     /// <summary>Gets or sets the local account identifier.</summary>
     [Required]

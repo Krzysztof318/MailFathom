@@ -53,4 +53,4 @@ Data Protection key-ring provisioning, encrypted secret storage in PostgreSQL, e
 - No secret-resolution contract is reachable from `Application` or `Domain`.
 - A private server with a configured trust anchor connects with certificate validation fully enabled.
 - `docs/operations/local-development.md` documents the Development workflow and `docs/operations/` gains a page describing the systemd credential deployment path.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

@@ -39,4 +39,4 @@ The supervisor-level scheduling and backoff between whole synchronization runs, 
 - A transient disconnect during a metadata batch is retried and the run completes; an authentication failure is not retried.
 - A test proves a retried content fetch preserves the remote `\Seen` flag path.
 - `docs/features/imap-synchronization.md` documents the applied pipelines and the failure classification.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

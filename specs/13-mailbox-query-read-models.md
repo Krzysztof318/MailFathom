@@ -41,4 +41,4 @@ The MCP tool mapping, which specification 16 owns. Full-text and semantic rankin
 - A cursor reused with different filters is rejected with a stable error code.
 - No query path loads raw MIME or tracks entities.
 - `docs/features/` documents the request contract, cursor semantics, and freshness reporting.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

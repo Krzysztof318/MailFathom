@@ -11,7 +11,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// <summary>Creates EF Core-backed persistence sessions for application write transactions.</summary>
 // TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
 [ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
-public sealed class PersistenceSessionFactory(MailMcpDbContext dbContext) : IPersistenceSessionFactory
+internal sealed class PersistenceSessionFactory(MailMcpDbContext dbContext) : IPersistenceSessionFactory
 {
     /// <inheritdoc />
     public async Task<IPersistenceSession> BeginSessionAsync(CancellationToken cancellationToken)

@@ -41,4 +41,4 @@ Full-text columns and indexes, embedding storage, and the migration files themse
 - The ordering contract is documented and expressed in both the index definition and the entity configuration.
 - The Development-only bootstrap fails startup outside Development and carries an explicit removal reference to specification 19.
 - `docs/architecture/` documents the table shape, index list, and ordering contract.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

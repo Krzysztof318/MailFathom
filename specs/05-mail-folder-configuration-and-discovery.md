@@ -46,4 +46,4 @@ Per-folder synchronization policies such as choosing push versus polling, which 
 - Repointing an alias starts a new resolution generation with its own checkpoint, and a colliding UIDVALIDITY between the old and new remote folder cannot cause messages to be skipped.
 - A mapping change emits an auditable event naming both remote paths and the new generation.
 - `docs/features/imap-synchronization.md` documents aliases, discovery, special-use mapping, and the mapping-change behavior.
-- `dotnet msbuild eng/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
+- `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
