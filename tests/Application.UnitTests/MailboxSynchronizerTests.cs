@@ -323,6 +323,239 @@ public sealed class MailboxSynchronizerTests
     }
 
     [Fact]
+    public async Task SynchronizeAsync_PersistenceConflictThenCommitted_RetriesLocalWriteWithoutRefetchingContent()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var folderName = MailFolderName.Create("INBOX");
+        var uidValidity = ImapUidValidity.Create(5);
+        var uid = ImapUid.Create(10);
+        var occurrence = EmailOccurrenceId.Create(accountId, folderName, uidValidity, uid);
+        var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
+        var metadataRepository = Substitute.For<IEmailMetadataRepository>();
+        var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+        var firstAttemptSession = Substitute.For<IPersistenceSession>();
+        var secondAttemptSession = Substitute.For<IPersistenceSession>();
+        var checkpointSession = Substitute.For<IPersistenceSession>();
+        sessionScopeFactory.BeginSessionAsync(CancellationToken.None)
+            .Returns(firstAttemptSession, secondAttemptSession, checkpointSession);
+        firstAttemptSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.ConcurrencyConflict);
+        secondAttemptSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.Committed);
+        checkpointSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.Committed);
+        var contentStore = Substitute.For<IEmailContentStore>();
+        var mailboxSessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var mailboxSession = Substitute.For<IMailboxSession>();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
+        var options = new MailboxSynchronizationOptions
+        {
+            MaxMetadataBatchSize = 25,
+            MaxRawMimeBytes = 1024,
+            MaxPersistenceConcurrencyAttempts = 3,
+        };
+        var synchronizer = new MailboxSynchronizer(
+            mailboxSessionFactory,
+            checkpointStore,
+            sessionScopeFactory,
+            metadataRepository,
+            contentStore,
+            clock,
+            options);
+        var metadata = new RemoteEmailMetadata(
+            occurrence,
+            "message-1@example.test",
+            "Subject",
+            new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero),
+            128);
+        var content = new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
+        var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
+        checkpointStore.GetCheckpointAsync(accountId, folderName, CancellationToken.None)
+            .Returns(SynchronizationCheckpoint.None(uidValidity));
+        mailboxSessionFactory.OpenReadOnlyAsync(accountId, folderName, CancellationToken.None).Returns(mailboxSession);
+        mailboxSession.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        mailboxSession.GetEmailBatchAfterAsync(null, 25, CancellationToken.None)
+            .Returns(new RemoteEmailMetadataBatch([metadata], uid, HasMore: false));
+        mailboxSession.FetchEmailContentWithoutSettingSeenAsync(occurrence, 1024, CancellationToken.None).Returns(content);
+        metadataRepository.UpsertMetadataAsync(
+                Arg.Any<IPersistenceSession>(),
+                metadata,
+                StoredEmailContentAvailability.Available,
+                CancellationToken.None)
+            .Returns(storedEmailId);
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, folderName, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(MailboxSynchronizationOutcome.Completed, result.Outcome);
+        Assert.Equal(1, result.StoredEmailCount);
+        await mailboxSession.Received(1)
+            .FetchEmailContentWithoutSettingSeenAsync(occurrence, 1024, CancellationToken.None);
+        await metadataRepository.Received(1).UpsertMetadataAsync(
+            firstAttemptSession,
+            metadata,
+            StoredEmailContentAvailability.Available,
+            CancellationToken.None);
+        await metadataRepository.Received(1).UpsertMetadataAsync(
+            secondAttemptSession,
+            metadata,
+            StoredEmailContentAvailability.Available,
+            CancellationToken.None);
+        await contentStore.Received(1)
+            .SaveContentAsync(firstAttemptSession, storedEmailId, content, CancellationToken.None);
+        await contentStore.Received(1)
+            .SaveContentAsync(secondAttemptSession, storedEmailId, content, CancellationToken.None);
+        await sessionScopeFactory.Received(3).BeginSessionAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_PersistenceConflictsExhausted_ReturnsConflictWithoutAdvancingCheckpoint()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var folderName = MailFolderName.Create("INBOX");
+        var uidValidity = ImapUidValidity.Create(5);
+        var uid = ImapUid.Create(10);
+        var occurrence = EmailOccurrenceId.Create(accountId, folderName, uidValidity, uid);
+        var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
+        var metadataRepository = Substitute.For<IEmailMetadataRepository>();
+        var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+        var attemptSessions = Enumerable.Range(0, 3)
+            .Select(_ => Substitute.For<IPersistenceSession>())
+            .ToArray();
+        sessionScopeFactory.BeginSessionAsync(CancellationToken.None)
+            .Returns(attemptSessions[0], attemptSessions[1], attemptSessions[2]);
+        foreach (var attemptSession in attemptSessions)
+        {
+            attemptSession.CommitAsync(CancellationToken.None)
+                .Returns(PersistenceCommitResult.ConcurrencyConflict);
+        }
+
+        var contentStore = Substitute.For<IEmailContentStore>();
+        var mailboxSessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var mailboxSession = Substitute.For<IMailboxSession>();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
+        var options = new MailboxSynchronizationOptions
+        {
+            MaxMetadataBatchSize = 25,
+            MaxRawMimeBytes = 1024,
+            MaxPersistenceConcurrencyAttempts = 3,
+        };
+        var synchronizer = new MailboxSynchronizer(
+            mailboxSessionFactory,
+            checkpointStore,
+            sessionScopeFactory,
+            metadataRepository,
+            contentStore,
+            clock,
+            options);
+        var metadata = new RemoteEmailMetadata(
+            occurrence,
+            "message-1@example.test",
+            "Subject",
+            new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero),
+            128);
+        var content = new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
+        var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
+        var initialCheckpoint = SynchronizationCheckpoint.None(uidValidity);
+        checkpointStore.GetCheckpointAsync(accountId, folderName, CancellationToken.None)
+            .Returns(initialCheckpoint);
+        mailboxSessionFactory.OpenReadOnlyAsync(accountId, folderName, CancellationToken.None).Returns(mailboxSession);
+        mailboxSession.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        mailboxSession.GetEmailBatchAfterAsync(null, 25, CancellationToken.None)
+            .Returns(new RemoteEmailMetadataBatch([metadata], uid, HasMore: false));
+        mailboxSession.FetchEmailContentWithoutSettingSeenAsync(occurrence, 1024, CancellationToken.None).Returns(content);
+        metadataRepository.UpsertMetadataAsync(
+                Arg.Any<IPersistenceSession>(),
+                metadata,
+                StoredEmailContentAvailability.Available,
+                CancellationToken.None)
+            .Returns(storedEmailId);
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, folderName, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(MailboxSynchronizationOutcome.ConcurrencyConflict, result.Outcome);
+        Assert.Equal(0, result.StoredEmailCount);
+        Assert.True(result.HasMoreEmails);
+        Assert.Same(initialCheckpoint, result.Checkpoint);
+        await mailboxSession.Received(1)
+            .FetchEmailContentWithoutSettingSeenAsync(occurrence, 1024, CancellationToken.None);
+        await sessionScopeFactory.Received(3).BeginSessionAsync(CancellationToken.None);
+        await checkpointStore.DidNotReceive().SaveCheckpointAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailAccountId>(),
+            Arg.Any<MailFolderName>(),
+            Arg.Any<SynchronizationCheckpoint>(),
+            Arg.Any<CancellationToken>());
+        foreach (var attemptSession in attemptSessions)
+        {
+            await contentStore.Received(1)
+                .SaveContentAsync(attemptSession, storedEmailId, content, CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_CheckpointCommitConflict_DoesNotRetryStaleCheckpoint()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var folderName = MailFolderName.Create("INBOX");
+        var uidValidity = ImapUidValidity.Create(5);
+        var inspectedThroughUid = ImapUid.Create(10);
+        var initialCheckpoint = SynchronizationCheckpoint.None(uidValidity);
+        var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
+        var metadataRepository = Substitute.For<IEmailMetadataRepository>();
+        var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
+        persistenceSession.CommitAsync(CancellationToken.None)
+            .Returns(PersistenceCommitResult.ConcurrencyConflict);
+        var contentStore = Substitute.For<IEmailContentStore>();
+        var mailboxSessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var mailboxSession = Substitute.For<IMailboxSession>();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
+        var options = new MailboxSynchronizationOptions
+        {
+            MaxMetadataBatchSize = 25,
+            MaxRawMimeBytes = 1024,
+            MaxPersistenceConcurrencyAttempts = 3,
+        };
+        var synchronizer = new MailboxSynchronizer(
+            mailboxSessionFactory,
+            checkpointStore,
+            sessionScopeFactory,
+            metadataRepository,
+            contentStore,
+            clock,
+            options);
+        checkpointStore.GetCheckpointAsync(accountId, folderName, CancellationToken.None)
+            .Returns(initialCheckpoint);
+        mailboxSessionFactory.OpenReadOnlyAsync(accountId, folderName, CancellationToken.None)
+            .Returns(mailboxSession);
+        mailboxSession.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        mailboxSession.GetEmailBatchAfterAsync(null, 25, CancellationToken.None)
+            .Returns(new RemoteEmailMetadataBatch([], inspectedThroughUid, HasMore: false));
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, folderName, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(MailboxSynchronizationOutcome.ConcurrencyConflict, result.Outcome);
+        Assert.True(result.HasMoreEmails);
+        Assert.Same(initialCheckpoint, result.Checkpoint);
+        await sessionScopeFactory.Received(1).BeginSessionAsync(CancellationToken.None);
+        await checkpointStore.Received(1).SaveCheckpointAsync(
+            persistenceSession,
+            accountId,
+            folderName,
+            Arg.Is<SynchronizationCheckpoint>(
+                checkpoint => checkpoint!.LastSeenUid == inspectedThroughUid),
+            CancellationToken.None);
+        await persistenceSession.Received(1).CommitAsync(CancellationToken.None);
+    }
+
+    [Fact]
     public async Task SynchronizeAsync_EmptyUnassignedMailboxWindow_DoesNotPersistSpeculativeCheckpoint()
     {
         // Arrange
@@ -488,10 +721,10 @@ public sealed class MailboxSynchronizerTests
 
         public bool IsDisposed { get; private set; }
 
-        public Task CommitAsync(CancellationToken cancellationToken)
+        public Task<PersistenceCommitResult> CommitAsync(CancellationToken cancellationToken)
         {
             this.IsCommitted = true;
-            return Task.CompletedTask;
+            return Task.FromResult(PersistenceCommitResult.Committed);
         }
 
         public ValueTask DisposeAsync()

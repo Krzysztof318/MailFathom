@@ -64,6 +64,13 @@ public sealed partial class MailSynchronizationWorker : BackgroundService
                     var synchronizer = scope.ServiceProvider.GetRequiredService<MailboxSynchronizer>();
                     var result = await synchronizer.SynchronizeAsync(MailAccountId.Create(account.AccountId), MailFolderName.Create(folder), cancellationToken);
 
+                    if (result.Outcome == MailboxSynchronizationOutcome.ConcurrencyConflict)
+                    {
+                        this.LogFolderSynchronizationDeferredAfterConcurrencyConflict(account.AccountId, folder);
+
+                        continue;
+                    }
+
                     this.LogFolderSynchronized(
                         account.AccountId,
                         folder,
@@ -101,6 +108,13 @@ public sealed partial class MailSynchronizationWorker : BackgroundService
         Message = "IMAP synchronization failed for {AccountId}/{FolderName}; the worker will continue with remaining folders and retry on a later interval.")]
     private partial void LogFolderSynchronizationFailed(
         Exception exception,
+        string accountId,
+        string folderName);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Deferred IMAP folder synchronization for {AccountId}/{FolderName} after an unresolved optimistic concurrency conflict; the next interval will retry from the persisted checkpoint.")]
+    private partial void LogFolderSynchronizationDeferredAfterConcurrencyConflict(
         string accountId,
         string folderName);
 }

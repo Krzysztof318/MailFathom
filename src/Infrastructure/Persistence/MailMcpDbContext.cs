@@ -60,6 +60,7 @@ public sealed class MailMcpDbContext : DbContext
             entity.HasKey(email => email.Id);
             entity.Property(email => email.Id).ValueGeneratedNever();
             entity.Property(email => email.InternetMessageId).HasMaxLength(998);
+            entity.Property(email => email.ConcurrencyVersion).IsRowVersion();
 
             // Stored as text so the availability reason stays readable in ad-hoc audit queries and survives enum reordering.
             entity.Property(email => email.ContentAvailability).HasConversion<string>().HasMaxLength(64).IsRequired();
@@ -88,6 +89,7 @@ public sealed class MailMcpDbContext : DbContext
             entity.ToTable("synchronization_checkpoints");
             entity.HasKey(checkpoint => checkpoint.MailFolderId);
             entity.Property(checkpoint => checkpoint.MailFolderId).ValueGeneratedNever();
+            entity.Property(checkpoint => checkpoint.ConcurrencyVersion).IsRowVersion();
             entity.HasOne(checkpoint => checkpoint.MailFolder)
                 .WithOne(folder => folder.SynchronizationCheckpoint)
                 .HasForeignKey<SynchronizationCheckpointEntity>(checkpoint => checkpoint.MailFolderId)

@@ -29,5 +29,7 @@ internal sealed class StoredEmailEntity
 
     public StoredEmailContentAvailability ContentAvailability { get; set; }
 
+    public uint ConcurrencyVersion { get; set; }
+
     public EmailMessageContentEntity? Content { get; set; }
 }

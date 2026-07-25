@@ -3,6 +3,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using MailMcp.Application.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace MailMcp.Infrastructure.Persistence;
@@ -27,14 +28,27 @@ public sealed class PersistenceSessionFactory(MailMcpDbContext dbContext) : IPer
 
         public MailMcpDbContext DbContext => dbContext;
 
-        public async Task CommitAsync(CancellationToken cancellationToken)
+        public async Task<PersistenceCommitResult> CommitAsync(CancellationToken cancellationToken)
         {
             ObjectDisposedException.ThrowIf(this.completed, this);
 
-            await dbContext.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                this.completed = true;
+
+                return PersistenceCommitResult.ConcurrencyConflict;
+            }
+
             await transaction.CommitAsync(cancellationToken);
 
             this.completed = true;
+
+            return PersistenceCommitResult.Committed;
         }
 
         [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Transaction rollback and disposal must both be attempted while the first cleanup failure remains observable.")]

@@ -62,7 +62,7 @@ The decision is proposed, not accepted. The first implementation should introduc
 - Good, because application unit tests can stub repository outputs directly and focus on use-case behavior, authorization, pagination, idempotency, and privacy rules.
 - Good, because EF Core LINQ, SQL translation, migrations, concurrency tokens, indexes, PostgreSQL full-text search, pgvector behavior, and raw MIME `bytea` access remain implementation concerns verified by future integration tests.
 - Good, because persistence contracts can express domain language and bounded result contracts, such as mailbox timelines, synchronization checkpoints, message occurrence lookups, outbox leasing, and derived-index cleanup.
-- Good, because `xmin` changes automatically when PostgreSQL creates a new row version and requires no application-managed timestamp, trigger, or additional user-defined column.
+- Good, because PostgreSQL supplies `xmin` for every row version and EF Core can reject a stale write after another transaction updates the row without an application-managed timestamp, trigger, or additional user-defined column.
 - Neutral, because every testable query must be represented by an application-owned method or query object rather than composed ad hoc from `IQueryable` in use cases.
 - Neutral, because `ConcurrencyVersion` is a PostgreSQL-specific persistence detail and cannot serve as a business revision, audit time, external ETag, or durable version identifier.
 - Bad, because the repository layer adds maintenance cost and can drift into an anemic CRUD wrapper if reviews do not enforce use-case-specific contracts.
@@ -156,7 +156,7 @@ If a transaction spans external I/O such as IMAP, SMTP, object storage, AI provi
 
 ### Concurrency control
 
-Use optimistic concurrency by default for mutable records written through tracked EF Core operations. Each applicable infrastructure persistence model has a `uint ConcurrencyVersion` property configured with `IsRowVersion()`. Npgsql maps that property to PostgreSQL's implicit `xmin` system column, so the database creates the value and changes it whenever an update produces a new row version. The mapping belongs only in `Infrastructure`; `Application` and `Domain` must not reference `xmin`, PostgreSQL transaction IDs, Npgsql metadata, or the provider-specific CLR representation.
+Use optimistic concurrency by default for mutable records written through tracked EF Core operations. Each applicable infrastructure persistence model has a `uint ConcurrencyVersion` property configured with `IsRowVersion()`. Npgsql maps that property to PostgreSQL's implicit `xmin` system column, which identifies the transaction that created the current row version. A write based on a token from an older row version therefore fails after another transaction updates or deletes the row. Multiple updates to the same row inside one explicit transaction can retain the same `xmin`, so it is not a per-write sequence. The mapping belongs only in `Infrastructure`; `Application` and `Domain` must not reference `xmin`, PostgreSQL transaction IDs, Npgsql metadata, or the provider-specific CLR representation.
 
 `ConcurrencyVersion` is deliberately not named `Timestamp`, `UpdatedAt`, or `RowVersion`. It is not a wall-clock value, audit fact, domain event sequence, or portable SQL `rowversion` column. If a use case needs a last-modified timestamp, durable business revision, external ETag, or version that survives storage migration, backup/restore, or provider replacement, model that requirement separately rather than reusing `xmin`.
 
@@ -167,23 +167,25 @@ Apply the token to mutable EF Core-managed tables unless one of these exceptions
 - The data is disposable derived state whose update conflicts have no correctness impact and measurements show that conflict checking is materially harmful.
 - The adapter does not use tracked EF Core writes, in which case it must implement an equivalent explicit concurrency predicate when lost-update protection is required.
 
+The current persistence slice maps `ConcurrencyVersion` on `StoredEmailEntity` and `SynchronizationCheckpointEntity`, the two tracked records that are updated after insertion. `EmailMessageContentEntity` remains exempt because an existing raw MIME row is replaced by one atomic set-based `ExecuteUpdate` whose affected-row count already determines whether an insert is required. Mailbox account and folder records are created as reference identities and are not updated by the implemented slice.
+
 Do not add a separate `timestamptz` column only to implement optimistic concurrency. PostgreSQL does not automatically update ordinary timestamp columns on every row change, so doing this consistently would require application-managed values or triggers. A time value also mixes conflict detection with audit semantics. An ordinary explicit version column may replace `xmin` for a specific table only when that table needs a durable or externally visible version identity; the migration, server-side generation mechanism, and performance cost must then be justified and tested.
 
 Pessimistic concurrency is not the repository default. It may be used for a narrow operation when correctness requires exclusive access before a decision is made, when atomic work claiming benefits from `FOR UPDATE SKIP LOCKED`, or when measured conflict rates make optimistic retries more expensive than short blocking. Such code remains inside the PostgreSQL adapter, acquires the weakest sufficient lock, uses deterministic lock ordering, applies a lock timeout, never spans external I/O, and documents deadlock and cancellation behavior.
 
-### Optimistic concurrency helper draft
+### Optimistic concurrency handling
 
 EF Core reports a failed optimistic update or delete as `DbUpdateConcurrencyException`. Infrastructure must catch that exception only at the repository or Unit of Work commit boundary and translate it into an application-owned `ConcurrencyConflict` result. Provider exception details, tracked entries, SQL, and database values must not cross into `Application`, `Domain`, MCP responses, or administrative endpoints.
 
-An internal application helper named `OptimisticConcurrencyRetryPolicy` may coordinate retries when the first concrete use case needs them. Its contract should execute an entire attempt supplied as a cancellation-aware delegate and should have these semantics:
+The application-owned `OptimisticConcurrencyRetryPolicy` coordinates retries for the current automated synchronization use case. It receives the persistence-session factory and a validated maximum attempt count, then executes an entire staged write supplied as a cancellation-aware delegate with these semantics:
 
 - Retry is opt-in for an operation that is explicitly safe and idempotent to repeat.
 - Each attempt creates a fresh persistence session, rereads current state, reevaluates authorization and domain invariants, reapplies the intended change, and commits once.
 - The attempt count is bounded and supplied through validated options; exhaustion returns `ConcurrencyConflict` rather than converting the operation to last-writer-wins.
 - Cancellation, shutdown, or a non-concurrency failure stops the loop immediately.
-- Conflict, retry, exhaustion, and duration metrics contain operation and entity categories but no message content, addresses, tokens, tracked values, or other personal data.
+- When conflict and retry metrics are added to the observability adapter, they may contain operation and entity categories but no email content, addresses, tokens, tracked values, or other personal data.
 
-The helper must not retry `SaveChangesAsync` on the same `DbContext`, mutate EF Core original values to force a write, automatically merge fields, or hide a retry inside a repository method after the application has made a decision from stale state. Interactive or security-sensitive changes should normally return the conflict to the caller for an explicit reread and new decision. Automated synchronization, indexing, retention, and outbox operations may opt into bounded retries only after their idempotency and external side effects are reviewed.
+The helper does not retry `SaveChangesAsync` on the same `DbContext`, mutate EF Core original values to force a write, automatically merge fields, or hide a retry inside a repository method after the application has made a decision from stale state. Mailbox synchronization supplies complete local metadata/content writes only after any IMAP read has completed. Each such retry therefore opens a fresh persistence session and reevaluates current local state without repeating the external read. A checkpoint update is attempted once because retrying a previously calculated checkpoint could overwrite progress committed by another worker. Its conflict stops the run so the next worker interval can reread the committed checkpoint before deciding how to advance it. Exhaustion or a checkpoint conflict returns an explicit `MailboxSynchronizationOutcome.ConcurrencyConflict` and leaves the run's reported checkpoint at its last successfully committed value. Interactive or security-sensitive changes should normally return the conflict to the caller for an explicit reread and new decision. Future automated indexing, retention, and outbox operations may opt into bounded retries only after their idempotency and external side effects are reviewed.
 
 ## Validation
 
@@ -193,7 +195,7 @@ The helper must not retry `SaveChangesAsync` on the same `DbContext`, mutate EF 
 - Unit of Work session contracts document ownership, disposal, commit behavior, cancellation, concurrency restrictions, nested-session behavior, retry safety, and whether a repository call requires a session.
 - Code review rejects a write repository that accepts a session parameter without writing through it, and rejects a hand-written change-tracker pass where `FindAsync` would do or where no comment states why the pattern is required.
 - Future PostgreSQL integration tests verify EF Core mappings, migrations, query translation, constraints, concurrency, full-text search, pgvector, raw MIME content storage, and any provider-specific SQL.
-- PostgreSQL integration tests verify that every mapped `ConcurrencyVersion` uses `xmin`, successful writes receive a new token, stale updates and deletes produce `ConcurrencyConflict`, and exempt write paths preserve their documented atomicity.
+- PostgreSQL integration tests verify that every mapped `ConcurrencyVersion` uses `xmin`, an update or delete based on a token made stale by another transaction produces `ConcurrencyConflict`, repeated writes inside one transaction do not assume a new token, and exempt write paths preserve their documented atomicity.
 - Unit tests for an operation using `OptimisticConcurrencyRetryPolicy` verify fresh-state reevaluation, bounded attempts, cancellation, conflict exhaustion, no retry for unrelated failures, and no duplicate external side effects.
 - Pull-request review requires a written justification for mutable EF Core-managed tables without a concurrency token and for every pessimistic lock, explicit version column, automatic merge, or retryable non-idempotent operation.
 - Pull-request review rejects generic CRUD repositories, broad capability interfaces, hidden ambient transaction contracts, or specification abstractions unless the change includes concrete repeated use cases and validation evidence.
@@ -286,7 +288,7 @@ A use case opens an ambient transaction scope, and repositories look up the curr
 
 Map an infrastructure `uint ConcurrencyVersion` property through `IsRowVersion()` so Npgsql uses PostgreSQL's implicit `xmin` system column.
 
-- Good, because PostgreSQL generates and changes the token for every row version without a trigger or user-defined column.
+- Good, because PostgreSQL supplies the transaction identity for each current row version without a trigger or user-defined column, allowing stale writes from other transactions to be detected.
 - Good, because EF Core automatically includes the original token in update and delete predicates and reports zero affected rows as a concurrency conflict.
 - Neutral, because every PostgreSQL table already has `xmin`, but each selected and tracked token still adds a small amount of query, change-tracking, and comparison work.
 - Bad, because `xmin` is provider-specific and unsuitable as an audit timestamp, durable business revision, or public contract.

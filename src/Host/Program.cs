@@ -24,6 +24,7 @@ builder.Services.AddScoped(provider =>
         MaxMetadataBatchSize = synchronizationOptions.MaxMetadataBatchSize,
         MaxRawMimeBytes = synchronizationOptions.MaxRawMimeBytes,
         MaxMetadataBatchesPerRun = synchronizationOptions.MaxMetadataBatchesPerRun,
+        MaxPersistenceConcurrencyAttempts = synchronizationOptions.MaxPersistenceConcurrencyAttempts,
     };
 });
 builder.Services.AddMailMcpInfrastructure(builder.Configuration);
