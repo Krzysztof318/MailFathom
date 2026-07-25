@@ -4,9 +4,9 @@ These instructions apply to the entire repository.
 
 The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`; project directory and file names use short boundary names such as `Domain`, `Application`, and `Host`, while `Directory.Build.props` applies the `MailMcp.*` prefix to assembly names and root namespaces.
 
-## Codex Cloud startup
+## Development environment
 
-- At the start of every Codex Cloud session, run `bash .codex/setup.sh` from the repository root before invoking any `dotnet`, `dotnet-ef`, or `aspire` command. The script installs and exposes the pinned .NET SDK and CLI tools for the session.
+- Development runs locally. The repository does not provision agent environments, so install the SDK pinned in `global.json` and any command-line tooling such as `dotnet-ef` or the Aspire CLI on the developer machine. `docs/operations/local-development.md` lists the commands that must work.
 
 ## Critical repository rules
 

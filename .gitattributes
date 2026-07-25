@@ -10,5 +10,3 @@
 *.gif binary
 *.ico binary
 *.pdf binary
-
-.agents/skills/** -whitespace
