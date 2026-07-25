@@ -147,8 +147,8 @@ public sealed class MailboxSynchronizer
 
     private enum OccurrenceOutcome
     {
-        Stored,
-        SkippedOversized,
+        Stored = 0,
+        SkippedOversized = 1,
     }
 }
 

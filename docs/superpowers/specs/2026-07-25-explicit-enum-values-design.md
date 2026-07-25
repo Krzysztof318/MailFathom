@@ -18,6 +18,10 @@ Keep every C# enum safe for a future numeric persistence representation by assig
 
 The existing EF Core string conversion for `StoredEmailContentAvailability` remains unchanged. This change does not modify the database schema or runtime behavior.
 
+## Persistence Testing Rule
+
+`AGENTS.md` will explicitly prohibit using the EF Core InMemory provider, SQLite in-memory, any other in-memory SQL database, or mocked `DbSet` query behavior as a substitute for PostgreSQL persistence semantics. Application behavior remains unit-tested through application-owned ports and hand-written state fakes. Provider-specific persistence behavior must be verified against real PostgreSQL when the integration-test phase is enabled.
+
 ## Verification
 
-Search all production C# sources for enum declarations and confirm each member has the expected explicit value. Run the repository restore, build, unit-test, formatting, and aggregate coverage checks.
+Search all production C# sources for enum declarations and confirm each member has the expected explicit value. Confirm that `AGENTS.md` names every prohibited in-memory persistence-testing mechanism. Run the repository restore, build, unit-test, formatting, and aggregate coverage checks.
