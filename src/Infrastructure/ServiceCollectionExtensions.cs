@@ -2,7 +2,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailKit.Net.Imap;
-using MailMcp.Application.MessageContent;
+using MailMcp.Application.EmailContent;
+using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
 using MailMcp.Infrastructure.Mail.MailKit;
 using MailMcp.Infrastructure.Persistence;
@@ -24,15 +25,20 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
+
         var connectionString = configuration.GetConnectionString("mailmcp");
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+
         services.AddDbContext<MailMcpDbContext>(options => options.UseNpgsql(connectionString));
-        services.AddScoped<ISessionFactory, UnitOfWork>();
+        services.AddScoped<IPersistenceSessionFactory, PersistenceSessionFactory>();
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();
-        services.AddScoped<IMessageMetadataRepository, StoredEmailMetadataRepository>();
-        services.AddScoped<IMessageContentStore, MessageContentStore>();
+        services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
+        services.AddScoped<IEmailContentStore, EmailContentStore>();
         services.AddScoped<MailboxSynchronizer>();
-        services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(static () => new MailKitImapClientAdapter(new ImapClient()), provider.GetRequiredService<IMailKitImapAccountSettingsProvider>()));
+        services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(
+            static () => new MailKitImapClientAdapter(new ImapClient()),
+            provider.GetRequiredService<IMailKitImapAccountSettingsProvider>()));
+
         return services;
     }
 }

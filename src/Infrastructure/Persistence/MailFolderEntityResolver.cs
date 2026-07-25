@@ -3,7 +3,6 @@
 using System.Diagnostics.CodeAnalysis;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
-using Microsoft.EntityFrameworkCore;
 
 namespace MailMcp.Infrastructure.Persistence;
 
@@ -17,21 +16,24 @@ internal static class MailFolderEntityResolver
         MailFolderName folderName,
         CancellationToken cancellationToken)
     {
-        var folder = dbContext.MailFolders.Local.SingleOrDefault(
-            candidate => candidate.MailboxAccountId == accountId.Value && candidate.RemoteName == folderName.Value)
-            ?? await dbContext.MailFolders.SingleOrDefaultAsync(
-                candidate => candidate.MailboxAccountId == accountId.Value && candidate.RemoteName == folderName.Value,
-                cancellationToken);
+        // Looked up by its alternate key, so the change-tracker pass is explicit rather than handled by FindAsync.
+        var folder = await TrackedEntityLookup.SinglePendingOrPersistedAsync(
+            dbContext.MailFolders,
+            dbContext.MailFolders,
+            candidate => candidate.MailboxAccountId == accountId.Value && candidate.RemoteName == folderName.Value,
+            cancellationToken);
+
         if (folder is not null)
         {
             return folder;
         }
 
-        var account = dbContext.MailboxAccounts.Local.SingleOrDefault(candidate => candidate.Id == accountId.Value)
-            ?? await dbContext.MailboxAccounts.SingleOrDefaultAsync(candidate => candidate.Id == accountId.Value, cancellationToken);
+        // The account is keyed by the identifier itself, so FindAsync already resolves a pending insert without a query.
+        var account = await dbContext.MailboxAccounts.FindAsync([accountId.Value], cancellationToken);
         if (account is null)
         {
             account = new MailboxAccountEntity { Id = accountId.Value };
+
             dbContext.MailboxAccounts.Add(account);
         }
 
@@ -41,7 +43,9 @@ internal static class MailFolderEntityResolver
             RemoteName = folderName.Value,
             MailboxAccount = account,
         };
+
         dbContext.MailFolders.Add(folder);
+
         return folder;
     }
 }

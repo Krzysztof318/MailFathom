@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-namespace MailMcp.Domain.Messages;
+namespace MailMcp.Domain.Emails;
 
 /// <summary>Identifies one locally stored email independently from its remote occurrence identity.</summary>
 public readonly record struct StoredEmailId

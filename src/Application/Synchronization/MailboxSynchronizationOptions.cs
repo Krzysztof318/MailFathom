@@ -5,7 +5,7 @@ namespace MailMcp.Application.Synchronization;
 /// <summary>Controls bounded mailbox synchronization behavior.</summary>
 public sealed class MailboxSynchronizationOptions
 {
-    /// <summary>Gets or sets the maximum number of messages requested from one IMAP metadata batch.</summary>
+    /// <summary>Gets or sets the maximum number of emails requested from one IMAP metadata batch.</summary>
     public int MaxMetadataBatchSize { get; set; } = 100;
 
     /// <summary>Gets or sets the maximum raw MIME size accepted for local storage.</summary>
