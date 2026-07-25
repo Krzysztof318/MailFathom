@@ -35,6 +35,7 @@ public sealed class StoredEmailMetadataRepository(
                         && candidate.UidValidity == occurrenceId.UidValidity.Value
                         && candidate.Uid == occurrenceId.Uid.Value,
                     cancellationToken);
+
         if (entity is null)
         {
             var folder = await MailFolderEntityResolver.GetOrAddAsync(
@@ -42,6 +43,7 @@ public sealed class StoredEmailMetadataRepository(
                 occurrenceId.AccountId,
                 occurrenceId.FolderName,
                 cancellationToken);
+
             entity = new StoredEmailEntity
             {
                 Id = Guid.CreateVersion7(timeProvider.GetUtcNow()),
@@ -54,6 +56,7 @@ public sealed class StoredEmailMetadataRepository(
                 SizeOctets = metadata.SizeOctets,
                 ContentAvailability = contentAvailability,
             };
+
             dbContext.StoredEmails.Add(entity);
         }
         else

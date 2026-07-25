@@ -27,12 +27,14 @@ public sealed class MessageContentStore(MailMcpDbContext dbContext, TimeProvider
                 .Include(email => email.MailFolder)
                 .SingleOrDefaultAsync(email => email.Id == storedEmailId.Value, cancellationToken)
             ?? throw new InvalidOperationException("Raw MIME cannot be stored without its corresponding stored email metadata.");
+
         EnsureOccurrenceMatches(storedEmail, content);
 
         var bytes = GetCompleteArray(content.RawMime);
         var byteLength = bytes.LongLength;
         var hash = SHA256.HashData(content.RawMime.Span);
         var storedAt = timeProvider.GetUtcNow();
+
         var trackedEntity = dbContext.EmailMessageContents.Local.SingleOrDefault(candidate => candidate.StoredEmailId == storedEmailId.Value);
         if (trackedEntity is not null)
         {
@@ -40,6 +42,7 @@ public sealed class MessageContentStore(MailMcpDbContext dbContext, TimeProvider
             trackedEntity.MimeByteLength = byteLength;
             trackedEntity.Sha256Hash = hash;
             trackedEntity.StoredAt = storedAt;
+
             return;
         }
 
@@ -54,6 +57,7 @@ public sealed class MessageContentStore(MailMcpDbContext dbContext, TimeProvider
                     .SetProperty(candidate => candidate.Sha256Hash, hash)
                     .SetProperty(candidate => candidate.StoredAt, storedAt),
                 cancellationToken);
+
         if (updatedRowCount == 0)
         {
             dbContext.EmailMessageContents.Add(new EmailMessageContentEntity

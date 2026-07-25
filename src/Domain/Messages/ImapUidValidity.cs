@@ -17,6 +17,7 @@ public readonly record struct ImapUidValidity
     public static ImapUidValidity Create(uint value)
     {
         ArgumentOutOfRangeException.ThrowIfZero(value);
+
         return new ImapUidValidity(value);
     }
 }

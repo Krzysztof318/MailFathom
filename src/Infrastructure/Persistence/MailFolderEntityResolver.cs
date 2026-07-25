@@ -22,6 +22,7 @@ internal static class MailFolderEntityResolver
             ?? await dbContext.MailFolders.SingleOrDefaultAsync(
                 candidate => candidate.MailboxAccountId == accountId.Value && candidate.RemoteName == folderName.Value,
                 cancellationToken);
+
         if (folder is not null)
         {
             return folder;
@@ -29,6 +30,7 @@ internal static class MailFolderEntityResolver
 
         var account = dbContext.MailboxAccounts.Local.SingleOrDefault(candidate => candidate.Id == accountId.Value)
             ?? await dbContext.MailboxAccounts.SingleOrDefaultAsync(candidate => candidate.Id == accountId.Value, cancellationToken);
+
         if (account is null)
         {
             account = new MailboxAccountEntity { Id = accountId.Value };
@@ -41,7 +43,9 @@ internal static class MailFolderEntityResolver
             RemoteName = folderName.Value,
             MailboxAccount = account,
         };
+
         dbContext.MailFolders.Add(folder);
+
         return folder;
     }
 }

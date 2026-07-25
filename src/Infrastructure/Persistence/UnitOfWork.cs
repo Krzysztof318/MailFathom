@@ -16,6 +16,7 @@ public sealed class UnitOfWork(MailMcpDbContext dbContext) : ISessionFactory
     public async Task<ISession> BeginSessionAsync(CancellationToken cancellationToken)
     {
         var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
         return new EfCoreSession(dbContext, transaction);
     }
 
@@ -26,8 +27,10 @@ public sealed class UnitOfWork(MailMcpDbContext dbContext) : ISessionFactory
         public async Task CommitAsync(CancellationToken cancellationToken)
         {
             ObjectDisposedException.ThrowIf(this.completed, this);
+
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+
             this.completed = true;
         }
 

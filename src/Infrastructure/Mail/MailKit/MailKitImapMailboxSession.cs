@@ -83,6 +83,7 @@ internal sealed class MailKitImapMailboxSessionFactory(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(clientFactory);
+
         var settings = settingsProvider.GetSettings(accountId.Value);
         var client = clientFactory();
         try
@@ -90,8 +91,10 @@ internal sealed class MailKitImapMailboxSessionFactory(
             var socketOptions = settings.UseSslOnConnect ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
             await client.ConnectAsync(settings.Host, settings.Port, socketOptions, cancellationToken);
             await client.AuthenticateAsync(settings.UserName, settings.Password, cancellationToken);
+
             var folder = await client.GetFolderAsync(folderName.Value, cancellationToken);
             await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+
             return new MailKitImapMailboxSession(accountId, folderName, client, folder);
         }
         catch
@@ -156,6 +159,7 @@ internal sealed class MailKitImapMailboxSession(
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxMessageCount);
+
         if (lastSeenUid is { } checkpointUid && checkpointUid.Value >= UniqueId.MaxValue.Id)
         {
             return new RemoteMessageMetadataBatch([], checkpointUid, HasMore: false);
@@ -177,6 +181,7 @@ internal sealed class MailKitImapMailboxSession(
             .Where(candidate => candidate.Id >= minValue && candidate.Id <= highestAssignedUid.Value)
             .OrderBy(candidate => candidate.Id)
             .ToArray();
+
         var batchedUids = assignedUids.Take(maxMessageCount).ToArray();
         var hasMore = assignedUids.Length > batchedUids.Length;
 
@@ -186,6 +191,7 @@ internal sealed class MailKitImapMailboxSession(
         var summaries = batchedUids.Length == 0
             ? []
             : await folder.FetchAsync(batchedUids, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size, cancellationToken);
+
         var uidValidity = ImapUidValidity.Create(folder.UidValidity);
         var messages = summaries.Select(summary => new RemoteMessageMetadata(
             MessageOccurrenceId.Create(accountId, folderName, uidValidity, ImapUid.Create(summary.UniqueId.Id)),
@@ -193,6 +199,7 @@ internal sealed class MailKitImapMailboxSession(
             summary.Envelope?.Subject,
             summary.Envelope?.Date?.ToUniversalTime(),
             summary.Size ?? 0)).ToArray();
+
         return new RemoteMessageMetadataBatch(messages, ImapUid.Create(inspectedThroughUid), hasMore);
     }
 
@@ -202,6 +209,7 @@ internal sealed class MailKitImapMailboxSession(
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxRawMimeBytes);
+
         if (occurrenceId.AccountId != accountId ||
             occurrenceId.FolderName != folderName ||
             occurrenceId.UidValidity.Value != folder.UidValidity)
@@ -214,7 +222,9 @@ internal sealed class MailKitImapMailboxSession(
         // non-PEEK retrieval or to a StoreAsync-based flag update would break the read-only synchronization invariant.
         await using var stream = await folder.GetStreamAsync(new UniqueId(occurrenceId.Uid.Value), cancellationToken);
         using var memory = new MemoryStream();
+
         await CopyToMemoryWithLimitAsync(occurrenceId, stream, memory, maxRawMimeBytes, cancellationToken);
+
         return new RemoteMessageContent(occurrenceId, memory.ToArray());
     }
 
@@ -241,6 +251,7 @@ internal sealed class MailKitImapMailboxSession(
             var buffer = rentedBuffer.AsMemory();
             long totalBytes = 0;
             int read;
+
             while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
             {
                 totalBytes += read;

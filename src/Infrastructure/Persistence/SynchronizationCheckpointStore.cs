@@ -27,6 +27,7 @@ public sealed class SynchronizationCheckpointStore(MailMcpDbContext dbContext) :
                 checkpoint => checkpoint.MailFolder.MailboxAccountId == accountId.Value
                     && checkpoint.MailFolder.RemoteName == folderName.Value,
                 cancellationToken);
+
         if (entity is null)
         {
             return null;
@@ -48,6 +49,7 @@ public sealed class SynchronizationCheckpointStore(MailMcpDbContext dbContext) :
             accountId,
             folderName,
             cancellationToken);
+
         var entity = dbContext.SynchronizationCheckpoints.Local.SingleOrDefault(
             candidate => ReferenceEquals(candidate.MailFolder, folder)
                 || (folder.Id != 0 && candidate.MailFolderId == folder.Id));

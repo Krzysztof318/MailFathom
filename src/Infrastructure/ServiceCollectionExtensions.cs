@@ -24,15 +24,20 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
+
         var connectionString = configuration.GetConnectionString("mailmcp");
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+
         services.AddDbContext<MailMcpDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<ISessionFactory, UnitOfWork>();
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();
         services.AddScoped<IMessageMetadataRepository, StoredEmailMetadataRepository>();
         services.AddScoped<IMessageContentStore, MessageContentStore>();
         services.AddScoped<MailboxSynchronizer>();
-        services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(static () => new MailKitImapClientAdapter(new ImapClient()), provider.GetRequiredService<IMailKitImapAccountSettingsProvider>()));
+        services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(
+            static () => new MailKitImapClientAdapter(new ImapClient()),
+            provider.GetRequiredService<IMailKitImapAccountSettingsProvider>()));
+
         return services;
     }
 }
