@@ -3,7 +3,7 @@
 **Roadmap group:** A — configuration, transport security, resilience
 **Draft delivery stage:** 2
 **Depends on:** 01
-**Estimated change size:** ~1450 lines including tests and documentation — above the ~1000-line ceiling `specs/README.md` sets per specification, so this specification is a candidate for splitting; see "Delivery size" below
+**Estimated change size:** ~1600 lines including tests and documentation — above the ~1000-line ceiling `specs/README.md` sets per specification, so this specification is a candidate for splitting; see "Delivery size" below
 
 ## Goal
 
@@ -20,7 +20,7 @@ Configuration values that carry secrets become secret references rather than sec
 - `systemd-credential:<name>` reads from the runtime credentials directory that systemd exposes to the service.
 - `file:<path>` reads a deployment-provisioned protected file.
 - `env:<variable>` reads an environment variable, permitted for non-production automation.
-- `plaintext:<value>` exists only for local development and is rejected outside the Development environment.
+- `plaintext:<value>` names a literal value inline. It is not restricted to Development; see "Inline values and pre-resolving configuration providers" for the mode that governs it.
 
 The scheme set is open by design; see "Extensibility to external secret providers" below. The grammar is fixed, the set of schemes that satisfy it is not.
 
@@ -47,6 +47,27 @@ Configuration carries the reference and nothing else. Every secret-bearing setti
 ```
 
 A setting that names a reference is inert on its own: nothing in the file discloses a secret, and a file leaked from a backup or a repository yields only credential names and paths.
+
+## Inline values and pre-resolving configuration providers
+
+A secret-bearing setting does not always carry a reference. Two legitimate cases require the value itself to be accepted, and neither is a mistake to be prevented:
+
+- **The operator chooses to write the secret into configuration.** It is less safe and the documentation says so, but it is the operator's deployment and their call. Refusing it outright pushes people toward worse workarounds.
+- **A configuration provider already resolved the secret before binding.** Azure App Configuration with Key Vault references is the concrete example: App Configuration stores a URI rather than a value, but "because the client provider recognizes the key as a Key Vault reference, it uses Key Vault to retrieve its value", and application code then "access[es] the values of Key Vault references the same way [it] access[es] the values of regular App Configuration keys". By the time MailMcp binds the setting, the value *is* the secret, and it carries no scheme prefix that MailMcp could recognize. A resolver that insists on a scheme would break this integration outright.
+
+Interpretation of a secret-bearing setting is therefore an explicit deployment choice, not an inference:
+
+- `ReferenceOnly` — the value must be `<scheme>:<target>`; anything else fails startup. This is the default, and it is what keeps a mistyped `fil:/run/secrets/imap` a startup failure instead of a password.
+- `ReferenceOrInline` — a recognized scheme resolves through its adapter; any other value is taken as the secret itself. For an operator who wants some secrets inline, and for mixed deployments.
+- `InlineOnly` — every value is already the secret and no scheme is parsed at all. This is the mode for Azure App Configuration with Key Vault references, and for any future provider that pre-resolves. It removes the ambiguity entirely rather than guessing.
+
+`plaintext:<value>` remains available in the two reference-accepting modes as the unambiguous spelling for a literal that would otherwise look like a scheme — a password whose value genuinely begins with `file:`. In `InlineOnly` no such escape hatch is needed, because nothing is parsed.
+
+Modes make the earlier `plaintext:`-outside-Development rule unnecessary as a hard gate. `plaintext:` and inline values are permitted in any environment when the mode allows them; what protects a production deployment is that `ReferenceOnly` is the default and any other mode is a deliberate, visible setting. Startup logs which mode is active and, when it is not `ReferenceOnly`, which settings resolved to an inline value — naming the settings, never the values — so an unintended inline secret is discoverable rather than silent.
+
+One consequence must be stated rather than hidden: an inline value arrives from the configuration system as a `string`, and a `string` cannot be erased from memory (see "Secret material in memory"). The inline modes therefore forfeit part of the in-memory protection that reference resolution provides. That is a real cost of the convenience, it is documented for the operator, and it is another reason `ReferenceOnly` is the default.
+
+Note that this also settles where a pre-resolving provider belongs architecturally. Azure App Configuration is **not** a scheme adapter: its Key Vault mapping happens below MailMcp in the configuration pipeline, so MailMcp needs no code for it beyond accepting the bound value. A provider MailMcp queries itself — direct Key Vault access, HashiCorp Vault — is a scheme adapter. The two integration shapes are different and should not be conflated.
 
 ## Secret material kinds
 
@@ -117,11 +138,11 @@ Two exposures are accepted and must be documented rather than hidden. Some frame
 
 ## Safety and privacy
 
-A resolution failure message names the account identifier, the logical secret name, and the scheme, and never the reference target path, the environment variable value, or any part of the resolved secret. Resolved secrets are excluded from structured logging by construction: the options type exposes them through a dedicated accessor rather than an ordinary public property, so a future serializer or diagnostic dump cannot pick them up incidentally. `plaintext:` outside Development is a startup failure, not a warning.
+A resolution failure message names the account identifier, the logical secret name, and the scheme, and never the reference target path, the environment variable value, or any part of the resolved secret. Resolved secrets are excluded from structured logging by construction: the options type exposes them through a dedicated accessor rather than an ordinary public property, so a future serializer or diagnostic dump cannot pick them up incidentally. An inline or `plaintext:` value outside the default `ReferenceOnly` mode is logged at startup by setting name so it cannot pass unnoticed.
 
 ## Testing
 
-`Infrastructure.UnitTests` cover each scheme adapter against an in-memory abstraction over the credential directory and file system, since unit tests must not touch the real file system. Tests assert the unknown-scheme failure, the missing-reference failure, the Development-only `plaintext:` rule, the composite dispatch, and that failure results carry no secret material. A test registers a scheme adapter that exists only in the test project and asserts it resolves through the same dispatch, which is what proves a future provider is an adapter rather than a refactor. Material-kind tests cover the UTF-8 text view with its newline trim, binary material surviving resolution byte-for-byte, and a PEM and a DER certificate both loading. Memory-hygiene tests cover a disposed secret no longer yielding its material, disposal being idempotent, and no accessor returning a `string` except the documented framework-boundary one. Reload tests cover a rotated reference being adopted, a candidate snapshot with an unresolvable reference being rejected while the previous secrets stay active, and rotated material behind an unchanged reference being observed by the next operation but not mid-operation. Trust-anchor tests cover a valid certificate being installed into the validation path, a malformed one failing startup, and the absence of any configuration path that disables validation. An architecture test asserts that no secret-resolution type is reachable from `Application` or `Domain`.
+`Infrastructure.UnitTests` cover each scheme adapter against an in-memory abstraction over the credential directory and file system, since unit tests must not touch the real file system. Tests assert the unknown-scheme failure, the missing-reference failure, each of the three interpretation modes including a bare value failing under `ReferenceOnly` and resolving under `ReferenceOrInline`, an unparsed value under `InlineOnly`, the composite dispatch, and that failure results carry no secret material. A test registers a scheme adapter that exists only in the test project and asserts it resolves through the same dispatch, which is what proves a future provider is an adapter rather than a refactor. Material-kind tests cover the UTF-8 text view with its newline trim, binary material surviving resolution byte-for-byte, and a PEM and a DER certificate both loading. Memory-hygiene tests cover a disposed secret no longer yielding its material, disposal being idempotent, and no accessor returning a `string` except the documented framework-boundary one. Reload tests cover a rotated reference being adopted, a candidate snapshot with an unresolvable reference being rejected while the previous secrets stay active, and rotated material behind an unchanged reference being observed by the next operation but not mid-operation. Trust-anchor tests cover a valid certificate being installed into the validation path, a malformed one failing startup, and the absence of any configuration path that disables validation. An architecture test asserts that no secret-resolution type is reachable from `Application` or `Domain`.
 
 ## Delivery size
 
@@ -145,7 +166,8 @@ Adapters for external managed secret stores — Kubernetes, Azure Key Vault, Has
 - No options type in the repository exposes a raw password bound directly from configuration.
 - A missing or malformed reference fails startup with a message that identifies the account without disclosing the secret.
 - No secret-resolution contract is reachable from `Application` or `Domain`.
-- Every secret-bearing setting in `appsettings.json` is a `*Reference` string; no committed configuration file contains a secret value.
+- Under the default `ReferenceOnly` mode every secret-bearing setting is a `*Reference` string and a bare value fails startup; the inline modes are reachable only by an explicit, logged configuration choice.
+- A configuration provider that pre-resolves secrets, such as Azure App Configuration with Key Vault references, works without a scheme adapter and without code changes.
 - Resolution yields bytes, so a PKCS#12 bundle or DER certificate is representable without encoding damage, and text secrets are decoded and newline-trimmed only in the text view.
 - A new scheme can be added by registering one adapter, without editing the dispatch, an existing adapter, or any consumer.
 - The resolution contract is asynchronous and cancellable, so a network-backed provider needs no breaking change.
