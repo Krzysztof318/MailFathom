@@ -1,0 +1,276 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+
+using MailMcp.Domain.Transport;
+using Xunit;
+
+namespace MailMcp.Domain.UnitTests;
+
+public sealed class MailTransportSecurityPolicyTests
+{
+    [Theory]
+    [InlineData(MailConnectionSecurity.TlsOnConnect, true)]
+    [InlineData(MailConnectionSecurity.StartTlsRequired, true)]
+    [InlineData(MailConnectionSecurity.Auto, false)]
+    [InlineData(MailConnectionSecurity.StartTlsWhenAvailable, false)]
+    [InlineData(MailConnectionSecurity.None, false)]
+    public void GuaranteesEncryptedChannel_ConnectionSecurityMode_ReportsWhetherEncryptionIsMandatory(
+        MailConnectionSecurity connectionSecurity,
+        bool expectedGuarantee)
+    {
+        // Arrange, Act
+        var guaranteesEncryptedChannel = MailTransportSecurityPolicy.GuaranteesEncryptedChannel(connectionSecurity);
+
+        // Assert
+        Assert.Equal(expectedGuarantee, guaranteesEncryptedChannel);
+    }
+
+    [Fact]
+    public void FindViolations_UnencryptedConnectionWithoutOptIn_RequiresExplicitOptIn()
+    {
+        // Arrange, Act
+        var violations = FindViolations(
+            MailConnectionSecurity.None,
+            [MailAuthenticationMechanism.ScramSha256],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Assert
+        Assert.Equal([MailTransportSecurityViolation.UnencryptedConnectionRequiresExplicitOptIn], violations);
+    }
+
+    [Theory]
+    [InlineData(MailConnectionSecurity.Auto)]
+    [InlineData(MailConnectionSecurity.StartTlsWhenAvailable)]
+    public void FindViolations_OpportunisticEncryptionWithoutOptIn_RequiresExplicitOptIn(MailConnectionSecurity connectionSecurity)
+    {
+        // Arrange, Act
+        var violations = FindViolations(
+            connectionSecurity,
+            [MailAuthenticationMechanism.ScramSha256],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Assert
+        Assert.Equal([MailTransportSecurityViolation.OpportunisticEncryptionRequiresExplicitOptIn], violations);
+    }
+
+    [Theory]
+    [InlineData(MailAuthenticationMechanism.Plain)]
+    [InlineData(MailAuthenticationMechanism.Login)]
+    public void FindViolations_ClearTextMechanismOnUnencryptedChannelWithOnlyInsecureOptIn_RequiresClearTextOptIn(
+        MailAuthenticationMechanism clearTextMechanism)
+    {
+        // Arrange, Act
+        var violations = FindViolations(
+            MailConnectionSecurity.None,
+            [clearTextMechanism],
+            allowInsecureConnection: true,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Assert
+        Assert.Equal([MailTransportSecurityViolation.ClearTextAuthenticationRequiresEncryptedConnection], violations);
+    }
+
+    [Fact]
+    public void FindViolations_ClearTextMechanismOnUnencryptedChannelWithBothOptIns_ReportsNoViolation()
+    {
+        // Arrange, Act
+        var violations = FindViolations(
+            MailConnectionSecurity.None,
+            [MailAuthenticationMechanism.Plain],
+            allowInsecureConnection: true,
+            allowClearTextAuthenticationOverUnencryptedConnection: true);
+
+        // Assert
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void FindViolations_ClearTextMechanismWithOnlyClearTextOptIn_StillRequiresInsecureConnectionOptIn()
+    {
+        // Arrange, Act
+        var violations = FindViolations(
+            MailConnectionSecurity.None,
+            [MailAuthenticationMechanism.Plain],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: true);
+
+        // Assert
+        Assert.Equal(
+            [
+                MailTransportSecurityViolation.UnencryptedConnectionRequiresExplicitOptIn,
+                MailTransportSecurityViolation.ClearTextAuthenticationRequiresEncryptedConnection,
+            ],
+            violations);
+    }
+
+    [Theory]
+    [InlineData(MailAuthenticationMechanism.CramMd5)]
+    [InlineData(MailAuthenticationMechanism.DigestMd5)]
+    [InlineData(MailAuthenticationMechanism.ScramSha1)]
+    [InlineData(MailAuthenticationMechanism.ScramSha256)]
+    [InlineData(MailAuthenticationMechanism.ScramSha512)]
+    [InlineData(MailAuthenticationMechanism.Ntlm)]
+    public void FindViolations_ChallengeResponseMechanismOnAcceptedUnencryptedChannel_ReportsNoViolation(
+        MailAuthenticationMechanism challengeResponseMechanism)
+    {
+        // Arrange, Act
+        var violations = FindViolations(
+            MailConnectionSecurity.None,
+            [challengeResponseMechanism],
+            allowInsecureConnection: true,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Assert
+        Assert.Empty(violations);
+    }
+
+    [Theory]
+    [InlineData(MailConnectionSecurity.TlsOnConnect)]
+    [InlineData(MailConnectionSecurity.StartTlsRequired)]
+    public void FindViolations_ClearTextMechanismOnGuaranteedEncryptedChannel_ReportsNoViolation(MailConnectionSecurity connectionSecurity)
+    {
+        // Arrange, Act
+        var violations = FindViolations(
+            connectionSecurity,
+            [MailAuthenticationMechanism.Plain, MailAuthenticationMechanism.Login],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Assert
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void FindViolations_NoPermittedMechanism_RequiresPermittedMechanism()
+    {
+        // Arrange, Act
+        var violations = FindViolations(
+            MailConnectionSecurity.TlsOnConnect,
+            [],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Assert
+        Assert.Equal([MailTransportSecurityViolation.PermittedAuthenticationMechanismRequired], violations);
+    }
+
+    [Fact]
+    public void FindViolations_AdditionalTrustedAuthorityWithoutReference_RequiresReference()
+    {
+        // Arrange, Act
+        var violations = MailTransportSecurityPolicy.FindViolations(
+            MailConnectionSecurity.TlsOnConnect,
+            [MailAuthenticationMechanism.Plain],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false,
+            MailServerCertificateTrust.AdditionalTrustedAuthority,
+            trustedCertificateAuthorityReference: "   ");
+
+        // Assert
+        Assert.Equal([MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceRequired], violations);
+    }
+
+    [Fact]
+    public void FindViolations_SystemTrustStoreWithReference_ReportsReferenceNotApplicable()
+    {
+        // Arrange, Act
+        var violations = MailTransportSecurityPolicy.FindViolations(
+            MailConnectionSecurity.TlsOnConnect,
+            [MailAuthenticationMechanism.Plain],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false,
+            MailServerCertificateTrust.SystemTrustStore,
+            trustedCertificateAuthorityReference: "mailmcp-imap-ca");
+
+        // Assert
+        Assert.Equal([MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceNotApplicable], violations);
+    }
+
+    [Fact]
+    public void Create_UnsafePolicy_ThrowsWithTheViolatedRules()
+    {
+        // Arrange
+        var authentication = MailAuthenticationPolicy.Create(
+            [MailAuthenticationMechanism.Plain],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Act
+        var exception = Assert.Throws<MailTransportSecurityPolicyViolationException>(() => MailTransportSecurityPolicy.Create(
+            MailConnectionSecurity.None,
+            authentication,
+            MailServerCertificateTrust.SystemTrustStore,
+            trustedCertificateAuthorityReference: null));
+
+        // Assert
+        Assert.Equal(
+            [
+                MailTransportSecurityViolation.UnencryptedConnectionRequiresExplicitOptIn,
+                MailTransportSecurityViolation.ClearTextAuthenticationRequiresEncryptedConnection,
+            ],
+            exception.Violations);
+    }
+
+    [Fact]
+    public void Create_SafePolicy_TrimsTheTrustedCertificateAuthorityReference()
+    {
+        // Arrange
+        var authentication = MailAuthenticationPolicy.Create(
+            [MailAuthenticationMechanism.ScramSha256],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Act
+        var policy = MailTransportSecurityPolicy.Create(
+            MailConnectionSecurity.StartTlsRequired,
+            authentication,
+            MailServerCertificateTrust.AdditionalTrustedAuthority,
+            trustedCertificateAuthorityReference: "  mailmcp-imap-ca  ");
+
+        // Assert
+        Assert.Equal("mailmcp-imap-ca", policy.TrustedCertificateAuthorityReference);
+    }
+
+    [Fact]
+    public void Create_SystemTrustStoreWithBlankReference_KeepsTheReferenceAbsent()
+    {
+        // Arrange
+        var authentication = MailAuthenticationPolicy.Create(
+            [MailAuthenticationMechanism.ScramSha256],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Act
+        var policy = MailTransportSecurityPolicy.Create(
+            MailConnectionSecurity.TlsOnConnect,
+            authentication,
+            MailServerCertificateTrust.SystemTrustStore,
+            trustedCertificateAuthorityReference: "   ");
+
+        // Assert
+        Assert.Null(policy.TrustedCertificateAuthorityReference);
+    }
+
+    [Fact]
+    public void GuaranteesEncryptedChannel_UndefinedConnectionSecurityMode_Throws()
+    {
+        // Arrange
+        const MailConnectionSecurity undefinedMode = (MailConnectionSecurity)99;
+
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => MailTransportSecurityPolicy.GuaranteesEncryptedChannel(undefinedMode));
+    }
+
+    private static IReadOnlyList<MailTransportSecurityViolation> FindViolations(
+        MailConnectionSecurity connectionSecurity,
+        IReadOnlyList<MailAuthenticationMechanism> permittedMechanisms,
+        bool allowInsecureConnection,
+        bool allowClearTextAuthenticationOverUnencryptedConnection) => MailTransportSecurityPolicy.FindViolations(
+            connectionSecurity,
+            permittedMechanisms,
+            allowInsecureConnection,
+            allowClearTextAuthenticationOverUnencryptedConnection,
+            MailServerCertificateTrust.SystemTrustStore,
+            trustedCertificateAuthorityReference: null);
+}
