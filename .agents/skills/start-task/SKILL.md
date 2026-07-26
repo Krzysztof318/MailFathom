@@ -14,13 +14,15 @@ description: Use when beginning repository work that may edit files, change depe
    - Return `blocked` until every path is inventoried and the user explicitly approves its preservation plan, or the changes are moved to a separate worktree. Never assume existing changes are unrelated.
 4. Classify the task as a numbered roadmap specification, maintenance outside the roadmap, or documentation-only work.
 5. Read the selected specification, affected implemented-behavior documentation, and relevant ADRs.
-6. For dependency, CLI, protocol, service, or external API changes, consult current official documentation and flag licensing review.
+6. Identify the GitHub issue that governs the task. Create it when none exists, following the issue rules in root `AGENTS.md`; its body draws on the specification read in the previous step. A change set that adds a numbered specification also creates that specification's issue.
+7. For dependency, CLI, protocol, service, or external API changes, consult current official documentation and flag licensing review.
 
 Return:
 
 ```text
 Workspace: <safe or blocked, branch, base>
 Scope: <specification or maintenance classification>
+Issue: <number and title, or created with reason>
 Required context: <files read>
 Assumptions or blockers: <none or explicit list>
 Verification: <fast loop and final gate>
