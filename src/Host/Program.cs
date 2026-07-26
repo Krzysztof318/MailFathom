@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailMcp.Application.Mail;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
 using MailMcp.Host.Configuration;
@@ -21,6 +22,7 @@ builder.Services.AddOptions<PersistenceOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddScoped<IMailKitImapAccountSettingsProvider>(provider => provider.GetRequiredService<IOptions<MailSynchronizationOptions>>().Value);
+builder.Services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<IOptions<MailSynchronizationOptions>>().Value);
 builder.Services.AddScoped(provider =>
 {
     var synchronizationOptions = provider.GetRequiredService<IOptions<MailSynchronizationOptions>>().Value;

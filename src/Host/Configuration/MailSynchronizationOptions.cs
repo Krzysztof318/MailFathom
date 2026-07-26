@@ -2,15 +2,17 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using MailMcp.Application.Mail;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
+using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail.MailKit;
 
 namespace MailMcp.Host.Configuration;
 
 /// <summary>Configures periodic IMAP synchronization.</summary>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
-internal sealed class MailSynchronizationOptions : IValidatableObject, IMailKitImapAccountSettingsProvider
+internal sealed class MailSynchronizationOptions : IValidatableObject, IMailKitImapAccountSettingsProvider, IMailTransportSecurityPolicyReader
 {
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
@@ -38,19 +40,22 @@ internal sealed class MailSynchronizationOptions : IValidatableObject, IMailKitI
     public MailKitImapAccountSettings GetSettings(string accountId)
     {
         var normalizedAccountId = MailAccountId.Create(accountId).Value;
-        var account = this.Accounts.Single(
-            candidate => !string.IsNullOrWhiteSpace(candidate.AccountId)
-                && StringComparer.Ordinal.Equals(
-                    MailAccountId.Create(candidate.AccountId).Value,
-                    normalizedAccountId));
+        var account = this.FindAccount(normalizedAccountId);
 
         return new MailKitImapAccountSettings(
             normalizedAccountId,
             account.Host.Trim(),
             account.Port,
-            account.UseSslOnConnect,
             account.UserName,
             account.Password);
+    }
+
+    /// <inheritdoc />
+    public MailTransportSecurityPolicy GetPolicy(MailAccountId accountId)
+    {
+        var account = this.FindAccount(accountId.Value);
+
+        return account.CreateTransportSecurityPolicy();
     }
 
     internal IEnumerable<ValidationResult> ValidateForSynchronization()
@@ -85,6 +90,12 @@ internal sealed class MailSynchronizationOptions : IValidatableObject, IMailKitI
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.ValidateForSynchronization();
+
+    private MailSynchronizationAccountOptions FindAccount(string normalizedAccountId) => this.Accounts.Single(
+        candidate => !string.IsNullOrWhiteSpace(candidate.AccountId)
+            && StringComparer.Ordinal.Equals(
+                MailAccountId.Create(candidate.AccountId).Value,
+                normalizedAccountId));
 }
 
 /// <summary>Configures one account for periodic IMAP synchronization.</summary>
@@ -102,8 +113,30 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     [Range(1, 65535)]
     public int Port { get; set; } = 993;
 
-    /// <summary>Gets or sets whether implicit TLS is used from connection start; otherwise mandatory STARTTLS is used.</summary>
-    public bool UseSslOnConnect { get; set; } = true;
+    /// <summary>Gets or sets how the IMAP connection is encrypted.</summary>
+    /// <remarks>Only <c>TlsOnConnect</c> and <c>StartTlsRequired</c> guarantee encryption; every other mode requires <see cref="AllowInsecureConnection" />.</remarks>
+    public MailConnectionSecurity ConnectionSecurity { get; set; } = MailConnectionSecurity.TlsOnConnect;
+
+    /// <summary>Gets or sets the SASL mechanisms the account may authenticate with, in preference order.</summary>
+    /// <remarks>
+    /// The list is an allow-list and has no implicit default: the adapter removes every other mechanism from the
+    /// server's advertised set, so an unset list fails validation rather than letting the client choose freely.
+    /// </remarks>
+    public List<string> PermittedAuthenticationMechanisms { get; set; } = [];
+
+    /// <summary>Gets or sets whether a connection mode that can leave the channel unencrypted is accepted.</summary>
+    public bool AllowInsecureConnection { get; set; }
+
+    /// <summary>Gets or sets whether sending a reusable password over an unencrypted channel is accepted.</summary>
+    public bool AllowClearTextAuthenticationOverUnencryptedConnection { get; set; }
+
+    /// <summary>Gets or sets which certificate authorities validate the server certificate.</summary>
+    /// <remarks>Certificate validation itself cannot be disabled; a private server is supported by trusting an additional authority.</remarks>
+    public MailServerCertificateTrust CertificateTrust { get; set; } = MailServerCertificateTrust.SystemTrustStore;
+
+    /// <summary>Gets or sets the reference to deployment-provisioned trust anchor material.</summary>
+    /// <remarks>The value is a reference such as a credential name, never certificate material and never a secret value.</remarks>
+    public string? TrustedCertificateAuthorityReference { get; set; }
 
     /// <summary>Gets or sets the IMAP user name. Store secret values outside ordinary configuration files.</summary>
     public string UserName { get; set; } = string.Empty;
@@ -164,8 +197,98 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             {
                 yield return new ValidationResult("IMAP password is required when synchronization is enabled.", [nameof(this.Password)]);
             }
+
+            foreach (var result in this.ValidateTransportSecurity())
+            {
+                yield return result;
+            }
         }
     }
+
+    /// <summary>Builds the account's validated transport security policy.</summary>
+    /// <returns>The policy the mailbox adapter must obey.</returns>
+    /// <exception cref="MailTransportSecurityPolicyViolationException">Thrown when the configured combination is unsafe.</exception>
+    /// <exception cref="ArgumentException">Thrown when no supported SASL mechanism is configured.</exception>
+    internal MailTransportSecurityPolicy CreateTransportSecurityPolicy() => MailTransportSecurityPolicy.Create(
+        this.ConnectionSecurity,
+        MailAuthenticationPolicy.Create(
+            this.ParsePermittedMechanisms(out _),
+            this.AllowInsecureConnection,
+            this.AllowClearTextAuthenticationOverUnencryptedConnection),
+        this.CertificateTrust,
+        this.TrustedCertificateAuthorityReference);
+
+    /// <summary>Re-checks the domain transport security rules so an unsafe account fails startup.</summary>
+    /// <returns>One result per unsupported mechanism name and per violated rule.</returns>
+    /// <remarks>
+    /// Messages name the account and the rule only. The user name, password, and trust anchor reference stay out of
+    /// them, because startup validation output reaches operator consoles and logs.
+    /// </remarks>
+    private IEnumerable<ValidationResult> ValidateTransportSecurity()
+    {
+        var permittedMechanisms = this.ParsePermittedMechanisms(out var unsupportedMechanismNames);
+
+        foreach (var unsupportedMechanismName in unsupportedMechanismNames)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}' lists SASL mechanism '{unsupportedMechanismName}', which MailMcp does not support.",
+                [nameof(this.PermittedAuthenticationMechanisms)]);
+        }
+
+        var violations = MailTransportSecurityPolicy.FindViolations(
+            this.ConnectionSecurity,
+            permittedMechanisms,
+            this.AllowInsecureConnection,
+            this.AllowClearTextAuthenticationOverUnencryptedConnection,
+            this.CertificateTrust,
+            this.TrustedCertificateAuthorityReference);
+
+        foreach (var violation in violations)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}' is unsafe: {DescribeViolation(violation)}",
+                [nameof(this.ConnectionSecurity)]);
+        }
+    }
+
+    private IReadOnlyList<MailAuthenticationMechanism> ParsePermittedMechanisms(out IReadOnlyList<string> unsupportedMechanismNames)
+    {
+        var parsedMechanisms = new List<MailAuthenticationMechanism>();
+        var unsupportedNames = new List<string>();
+
+        foreach (var configuredName in this.PermittedAuthenticationMechanisms ?? [])
+        {
+            if (MailAuthenticationMechanisms.TryParseSaslName(configuredName, out var mechanism))
+            {
+                parsedMechanisms.Add(mechanism);
+            }
+            else
+            {
+                unsupportedNames.Add(configuredName ?? string.Empty);
+            }
+        }
+
+        unsupportedMechanismNames = unsupportedNames;
+
+        return MailAuthenticationPolicy.NormalizeMechanisms(parsedMechanisms);
+    }
+
+    private static string DescribeViolation(MailTransportSecurityViolation violation) => violation switch
+    {
+        MailTransportSecurityViolation.PermittedAuthenticationMechanismRequired =>
+            "at least one supported SASL mechanism must be permitted.",
+        MailTransportSecurityViolation.UnencryptedConnectionRequiresExplicitOptIn =>
+            "an unencrypted connection requires AllowInsecureConnection.",
+        MailTransportSecurityViolation.OpportunisticEncryptionRequiresExplicitOptIn =>
+            "a connection mode that continues unencrypted when the server offers no encryption requires AllowInsecureConnection.",
+        MailTransportSecurityViolation.ClearTextAuthenticationRequiresEncryptedConnection =>
+            "a clear-text SASL mechanism on a channel that can stay unencrypted requires both AllowInsecureConnection and AllowClearTextAuthenticationOverUnencryptedConnection.",
+        MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceRequired =>
+            "trusting an additional certificate authority requires TrustedCertificateAuthorityReference.",
+        MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceNotApplicable =>
+            "TrustedCertificateAuthorityReference applies only when CertificateTrust is AdditionalTrustedAuthority.",
+        _ => "the transport security policy is not supported.",
+    };
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.ValidateForSynchronization(synchronizationEnabled: true);

@@ -7,6 +7,7 @@ using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
+using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail.MailKit;
 using NSubstitute;
 using Xunit;
@@ -15,36 +16,81 @@ namespace MailMcp.Infrastructure.UnitTests;
 
 public sealed class MailKitImapMailboxSessionTests
 {
+    private static readonly MailTransportSecurityPolicy TlsOnConnectWithPlainPolicy =
+        CreatePolicy(MailConnectionSecurity.TlsOnConnect, MailAuthenticationMechanism.Plain);
+
     [Theory]
-    [InlineData(true, SecureSocketOptions.SslOnConnect)]
-    [InlineData(false, SecureSocketOptions.StartTls)]
-    public async Task OpenReadOnlyAsync_TlsMode_UsesEncryptedConnectionMode(
-        bool useSslOnConnect,
+    [InlineData(MailConnectionSecurity.Auto, SecureSocketOptions.Auto)]
+    [InlineData(MailConnectionSecurity.TlsOnConnect, SecureSocketOptions.SslOnConnect)]
+    [InlineData(MailConnectionSecurity.StartTlsRequired, SecureSocketOptions.StartTls)]
+    [InlineData(MailConnectionSecurity.StartTlsWhenAvailable, SecureSocketOptions.StartTlsWhenAvailable)]
+    [InlineData(MailConnectionSecurity.None, SecureSocketOptions.None)]
+    public async Task OpenReadOnlyAsync_ConnectionSecurityMode_ConnectsWithTheMappedSocketOptions(
+        MailConnectionSecurity connectionSecurity,
         SecureSocketOptions expectedSocketOptions)
     {
         // Arrange
         await using var client = new FakeImapClient();
         var folder = Substitute.For<IMailFolder>();
-        var settingsProvider = Substitute.For<IMailKitImapAccountSettingsProvider>();
-        settingsProvider.GetSettings("primary").Returns(
-            new MailKitImapAccountSettings(
-                "primary",
-                "imap.example.test",
-                993,
-                useSslOnConnect,
-                "user",
-                "password"));
-        client.Folder = folder;
-        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
+        var factory = CreateFactory(client, folder);
+        client.AuthenticationMechanisms.Add("SCRAM-SHA-256");
 
         // Act
         await using var session = await factory.OpenReadOnlyAsync(
             MailAccountId.Create("primary"),
             MailFolderName.Create("INBOX"),
+            CreatePolicy(connectionSecurity, MailAuthenticationMechanism.ScramSha256),
             CancellationToken.None);
 
         // Assert
         Assert.Equal(expectedSocketOptions, client.ConnectSocketOptions);
+    }
+
+    [Fact]
+    public async Task OpenReadOnlyAsync_ServerAdvertisesMechanismsOutsideThePolicy_RemovesThemBeforeAuthenticating()
+    {
+        // Arrange
+        await using var client = new FakeImapClient();
+        var folder = Substitute.For<IMailFolder>();
+        var factory = CreateFactory(client, folder);
+        client.AuthenticationMechanisms.Add("PLAIN");
+        client.AuthenticationMechanisms.Add("LOGIN");
+        client.AuthenticationMechanisms.Add("SCRAM-SHA-256");
+
+        // Act
+        await using var session = await factory.OpenReadOnlyAsync(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            CreatePolicy(MailConnectionSecurity.TlsOnConnect, MailAuthenticationMechanism.ScramSha256),
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(["SCRAM-SHA-256"], client.MechanismsWhenAuthenticated);
+    }
+
+    [Fact]
+    public async Task OpenReadOnlyAsync_ServerAdvertisesNoPermittedMechanism_FailsWithoutAuthenticatingOrWideningTheSet()
+    {
+        // Arrange
+        await using var client = new FakeImapClient();
+        var folder = Substitute.For<IMailFolder>();
+        var factory = CreateFactory(client, folder);
+        client.IsConnected = true;
+        client.AuthenticationMechanisms.Add("LOGIN");
+
+        // Act
+        var exception = await Assert.ThrowsAsync<MailAuthenticationMechanismUnavailableException>(() => factory.OpenReadOnlyAsync(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            CreatePolicy(MailConnectionSecurity.TlsOnConnect, MailAuthenticationMechanism.ScramSha256),
+            CancellationToken.None));
+
+        // Assert
+        Assert.Equal("primary", exception.AccountId);
+        Assert.Equal(["SCRAM-SHA-256"], exception.PermittedMechanismNames);
+        Assert.False(client.AuthenticateCalled);
+        Assert.Empty(client.AuthenticationMechanisms);
+        Assert.Equal(1, client.DisposeCount);
     }
 
     [Fact]
@@ -115,8 +161,9 @@ public sealed class MailKitImapMailboxSessionTests
         await using var client = new FakeImapClient();
         var folder = Substitute.For<IMailFolder>();
         var settingsProvider = Substitute.For<IMailKitImapAccountSettingsProvider>();
-        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, UseSslOnConnect: true, "user", "password"));
+        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
         client.IsConnected = true;
+        client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = folder;
         folder.OpenAsync(FolderAccess.ReadOnly, CancellationToken.None).Returns<Task>(_ => throw new InvalidOperationException("missing folder"));
         var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
@@ -125,6 +172,7 @@ public sealed class MailKitImapMailboxSessionTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => factory.OpenReadOnlyAsync(
             MailAccountId.Create("primary"),
             MailFolderName.Create("INBOX"),
+            TlsOnConnectWithPlainPolicy,
             CancellationToken.None));
 
         // Assert
@@ -142,8 +190,9 @@ public sealed class MailKitImapMailboxSessionTests
         var folder = Substitute.For<IMailFolder>();
         var settingsProvider = Substitute.For<IMailKitImapAccountSettingsProvider>();
         var folderOpenException = new InvalidOperationException("folder open failed");
-        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, UseSslOnConnect: true, "user", "password"));
+        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
         client.IsConnected = true;
+        client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = folder;
         client.DisconnectException = new IOException("disconnect failed");
         client.DisposeException = new IOException("dispose failed");
@@ -154,6 +203,7 @@ public sealed class MailKitImapMailboxSessionTests
         var observedException = await Assert.ThrowsAsync<InvalidOperationException>(() => factory.OpenReadOnlyAsync(
             MailAccountId.Create("primary"),
             MailFolderName.Create("INBOX"),
+            TlsOnConnectWithPlainPolicy,
             CancellationToken.None));
 
         // Assert
@@ -231,7 +281,8 @@ public sealed class MailKitImapMailboxSessionTests
         await using var client = new FakeImapClient();
         var folder = Substitute.For<IMailFolder>();
         var settingsProvider = Substitute.For<IMailKitImapAccountSettingsProvider>();
-        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, UseSslOnConnect: true, "user", "password"));
+        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
+        client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = folder;
         var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
 
@@ -239,6 +290,7 @@ public sealed class MailKitImapMailboxSessionTests
         await using var session = await factory.OpenReadOnlyAsync(
             MailAccountId.Create("primary"),
             MailFolderName.Create("INBOX"),
+            TlsOnConnectWithPlainPolicy,
             CancellationToken.None);
 
         // Assert
@@ -427,9 +479,35 @@ public sealed class MailKitImapMailboxSessionTests
         return summaries;
     }
 
+    private static MailTransportSecurityPolicy CreatePolicy(
+        MailConnectionSecurity connectionSecurity,
+        MailAuthenticationMechanism permittedMechanism) => MailTransportSecurityPolicy.Create(
+            connectionSecurity,
+            MailAuthenticationPolicy.Create(
+                [permittedMechanism],
+                allowInsecureConnection: !MailTransportSecurityPolicy.GuaranteesEncryptedChannel(connectionSecurity),
+                allowClearTextAuthenticationOverUnencryptedConnection: permittedMechanism.TransmitsCredentialsInClearText()),
+            MailServerCertificateTrust.SystemTrustStore,
+            trustedCertificateAuthorityReference: null);
+
+    private static MailKitImapMailboxSessionFactory CreateFactory(FakeImapClient client, IMailFolder folder)
+    {
+        var settingsProvider = Substitute.For<IMailKitImapAccountSettingsProvider>();
+        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
+        client.Folder = folder;
+
+        return new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
+    }
+
     private sealed class FakeImapClient : IMailKitImapClient
     {
         public bool IsConnected { get; set; }
+
+        public ISet<string> AuthenticationMechanisms { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        public IReadOnlyList<string> MechanismsWhenAuthenticated { get; private set; } = [];
+
+        public bool AuthenticateCalled { get; private set; }
 
         public IMailFolder? Folder { get; set; }
 
@@ -458,7 +536,13 @@ public sealed class MailKitImapMailboxSessionTests
         public Task AuthenticateAsync(
             string userName,
             string password,
-            CancellationToken cancellationToken) => Task.CompletedTask;
+            CancellationToken cancellationToken)
+        {
+            this.AuthenticateCalled = true;
+            this.MechanismsWhenAuthenticated = [.. this.AuthenticationMechanisms.Order(StringComparer.Ordinal)];
+
+            return Task.CompletedTask;
+        }
 
         public Task<IMailFolder> GetFolderAsync(
             string path,

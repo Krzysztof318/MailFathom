@@ -17,7 +17,9 @@ MailMcp now includes the first vertical slice for read-only IMAP synchronization
 - Once bounded attempts are spent, or a checkpoint moved under the run, the conflict leaves `SynchronizeAsync` as `PersistenceConcurrencyConflictException` instead of being restated as a result value by each layer it passes. Progress the run already committed stays durable. The worker catches it per folder, logs a deferral with the reason, and continues with the remaining folders; the next interval rereads the last committed checkpoint. The attempt bound is one deployment-wide setting, not a synchronization option, because writers compete for shared rows rather than for anything a single service owns.
 - The MailKit adapter resolves folders asynchronously, caps UID progress with the opened folder UIDNEXT value, normalizes email sent dates to UTC before persistence, and rejects occurrence identities that do not belong to the open account, folder, and UIDVALIDITY scope.
 - Failed MailKit session setup attempts both disconnect and disposal without replacing the primary setup failure. Normal session disposal also attempts both operations and reports the first cleanup failure.
-- `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings, and a periodic scoped background worker that isolates failures per account/folder work unit.
+- `Domain` owns the mail transport security policy: the five connection-security modes, the ordered SASL allow-list, the two opt-ins that permit weakening transport protection, and the trust-anchor selection. The rules that reject an unsafe combination live in `MailTransportSecurityPolicy` rather than in a configuration validator, so a future command-line or MCP entry point cannot reach a transport adapter with a policy that host startup would have refused.
+- The policy is an input to `IMailboxSessionFactory.OpenReadOnlyAsync`, not something the adapter resolves. `MailboxSynchronizer` reads it per run through `IMailTransportSecurityPolicyReader`, which is why an adapter can only narrow what it is handed.
+- `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, and a periodic scoped background worker that isolates failures per account/folder work unit.
 
 ## Configuration
 
@@ -31,7 +33,19 @@ Synchronization is disabled by default:
     "MaxMetadataBatchSize": 100,
     "MaxRawMimeBytes": 26214400,
     "MaxMetadataBatchesPerRun": 10,
-    "Accounts": []
+    "Accounts": [
+      {
+        "AccountId": "primary",
+        "Host": "imap.example.test",
+        "Port": 993,
+        "ConnectionSecurity": "TlsOnConnect",
+        "PermittedAuthenticationMechanisms": [ "SCRAM-SHA-256", "PLAIN" ],
+        "AllowInsecureConnection": false,
+        "AllowClearTextAuthenticationOverUnencryptedConnection": false,
+        "CertificateTrust": "SystemTrustStore",
+        "Folders": [ "INBOX" ]
+      }
+    ]
   }
 }
 ```
@@ -48,7 +62,29 @@ Optimistic concurrency is configured once for the whole deployment, outside the 
 
 When enabled, at least one account with a non-blank `AccountId`, host, user name, and password must be configured. If an account omits `Folders`, the worker applies the post-binding default `INBOX`; explicit folder lists replace that default. Account secrets and concrete IMAP connection settings are intentionally not committed in ordinary configuration files.
 
-Account identifiers and folder names must be unique after domain normalization, IMAP ports must be between 1 and 65535, and `MaximumConcurrencyCommitAttempts` must be between 1 and 10. The default of two attempts covers the single lost race that a rare conflict represents; a folder deferred after that is retried by the next interval anyway. `UseSslOnConnect` defaults to `true` for implicit TLS; setting it to `false` selects mandatory STARTTLS, not clear-text transport.
+Account identifiers and folder names must be unique after domain normalization, IMAP ports must be between 1 and 65535, and `MaximumConcurrencyCommitAttempts` must be between 1 and 10. The default of two attempts covers the single lost race that a rare conflict represents; a folder deferred after that is retried by the next interval anyway.
+
+### Transport security
+
+`ConnectionSecurity` selects one of five modes and defaults to `TlsOnConnect`:
+
+| Mode | Behavior |
+| --- | --- |
+| `TlsOnConnect` | Encrypts immediately with implicit TLS. |
+| `StartTlsRequired` | Requires STARTTLS and fails when the server does not advertise it. |
+| `StartTlsWhenAvailable` | Uses STARTTLS when advertised and otherwise continues unencrypted. |
+| `Auto` | Lets the client negotiate and continues unencrypted when the server offers no encryption. |
+| `None` | Uses no encryption. |
+
+Only the first two guarantee that nothing travels unencrypted. The other three require `AllowInsecureConnection: true`, including `Auto` and `StartTlsWhenAvailable`: an opportunistic mode completes the connection in clear text whenever the server declines encryption, which is the same exposure as `None`.
+
+`PermittedAuthenticationMechanisms` is an explicit allow-list with no implicit default, so a configuration that enables synchronization without naming at least one supported mechanism fails startup. Supported names are `PLAIN`, `LOGIN`, `CRAM-MD5`, `DIGEST-MD5`, `SCRAM-SHA-1`, `SCRAM-SHA-1-PLUS`, `SCRAM-SHA-256`, `SCRAM-SHA-256-PLUS`, `SCRAM-SHA-512`, `SCRAM-SHA-512-PLUS`, and `NTLM`; names are matched ignoring case and duplicates collapse while keeping the configured order. Permitting `PLAIN` or `LOGIN` on a mode that can stay unencrypted additionally requires `AllowClearTextAuthenticationOverUnencryptedConnection: true` on top of `AllowInsecureConnection: true`, because those two mechanisms hand over the reusable password itself.
+
+The MailKit adapter removes every non-permitted mechanism from the set the server advertised before it authenticates, and fails with `MailAuthenticationMechanismUnavailableException` when nothing permitted remains. It never restores a removed mechanism after a failed authentication, so a server cannot negotiate its way to a mechanism the operator refused.
+
+Certificate validation is always enabled and no configuration path disables it. A private or self-signed server is supported by setting `CertificateTrust` to `AdditionalTrustedAuthority` and naming the deployment-provisioned material in `TrustedCertificateAuthorityReference`; the reference is a credential name, never certificate material or a secret value. `SystemTrustStore` rejects a reference, and `AdditionalTrustedAuthority` requires one.
+
+Every rule above is enforced twice: in the domain policy object and again during `ValidateOnStart` options validation, which names the offending account and the violated rule and never includes the user name, password, or the trust anchor reference.
 
 ## Safety assumptions
 
@@ -57,6 +93,8 @@ The application layer exposes only `FetchEmailContentWithoutSettingSeenAsync` fo
 ## Pending work
 
 - Deployment-specific secret binding for IMAP passwords and reviewed operational examples for external secret stores.
+- Loading trust anchor material and installing it into the certificate validation path. `CertificateTrust` and `TrustedCertificateAuthorityReference` are validated configuration shape only until the secret-reference resolution work lands, so an account pointing at a private authority still fails its TLS handshake today.
+- OAuth mailbox authentication. `XOAUTH2` and `OAUTHBEARER` are deliberately absent from the allow-list because no token source exists yet.
 - IMAP IDLE and NOTIFY support.
 - Explicit EF Core migrations after schema review.
 - Integration tests with PostgreSQL and a real IMAP server in the later integration-test phase, including EF mapping, `xmin` conflict detection across transactions, same-transaction token semantics, PK/FK, integrity-metadata, and uniqueness-constraint verification required by ADR 001. Temporary provider-bound coverage exclusions carry adjacent TODOs for removal at that point.
