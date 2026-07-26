@@ -47,7 +47,7 @@ internal static class MailKitTransportSecurityMapping
         ArgumentNullException.ThrowIfNull(authentication);
 
         var permittedNames = authentication.PermittedMechanisms
-            .Select(mechanism => mechanism.ToSaslName())
+            .Select(mechanism => mechanism.SaslName)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var rejectedNames = advertisedMechanisms

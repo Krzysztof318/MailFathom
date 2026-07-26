@@ -139,7 +139,7 @@ public sealed record MailTransportSecurityPolicy
             yield return MailTransportSecurityViolation.OpportunisticEncryptionRequiresExplicitOptIn;
         }
 
-        var permitsClearTextCredentials = permittedMechanisms?.Any(mechanism => mechanism.TransmitsCredentialsInClearText()) == true;
+        var permitsClearTextCredentials = permittedMechanisms?.Any(mechanism => mechanism.TransmitsCredentialsInClearText) == true;
         var acceptedClearTextExposure = allowInsecureConnection && allowClearTextAuthenticationOverUnencryptedConnection;
         if (!GuaranteesEncryptedChannel(connectionSecurity) && permitsClearTextCredentials && !acceptedClearTextExposure)
         {

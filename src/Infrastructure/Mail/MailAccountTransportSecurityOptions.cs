@@ -114,7 +114,7 @@ public sealed class MailAccountTransportSecurityOptions
 
         foreach (var configuredName in this.EffectivePermittedAuthenticationMechanisms)
         {
-            if (MailAuthenticationMechanisms.TryParseSaslName(configuredName, out var mechanism))
+            if (MailAuthenticationMechanism.TryParseSaslName(configuredName, out var mechanism))
             {
                 parsedMechanisms.Add(mechanism);
             }

@@ -486,7 +486,7 @@ public sealed class MailKitImapMailboxSessionTests
             MailAuthenticationPolicy.Create(
                 [permittedMechanism],
                 allowInsecureConnection: !MailTransportSecurityPolicy.GuaranteesEncryptedChannel(connectionSecurity),
-                allowClearTextAuthenticationOverUnencryptedConnection: permittedMechanism.TransmitsCredentialsInClearText()),
+                allowClearTextAuthenticationOverUnencryptedConnection: permittedMechanism.TransmitsCredentialsInClearText),
             MailServerCertificateTrust.SystemTrustStore,
             trustedCertificateAuthorityReference: null);
 

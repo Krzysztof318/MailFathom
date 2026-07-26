@@ -29,7 +29,7 @@ public sealed record MailAuthenticationPolicy
     public bool AllowClearTextAuthenticationOverUnencryptedConnection { get; }
 
     /// <summary>Gets whether any permitted mechanism sends the password in clear text.</summary>
-    public bool PermitsClearTextCredentials => this.PermittedMechanisms.Any(mechanism => mechanism.TransmitsCredentialsInClearText());
+    public bool PermitsClearTextCredentials => this.PermittedMechanisms.Any(mechanism => mechanism.TransmitsCredentialsInClearText);
 
     /// <summary>Creates an authentication policy from configured mechanisms and opt-ins.</summary>
     /// <param name="permittedMechanisms">The permitted mechanisms in preference order.</param>
@@ -37,7 +37,7 @@ public sealed record MailAuthenticationPolicy
     /// <param name="allowClearTextAuthenticationOverUnencryptedConnection">Whether clear-text credentials on an unencrypted channel are accepted.</param>
     /// <returns>A policy whose mechanism list is deduplicated and keeps first-occurrence order.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="permittedMechanisms" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when no mechanism remains after normalization.</exception>
+    /// <exception cref="ArgumentException">Thrown when a value is the unspecified struct default or when no mechanism remains after normalization.</exception>
     public static MailAuthenticationPolicy Create(
         IEnumerable<MailAuthenticationMechanism> permittedMechanisms,
         bool allowInsecureConnection,
@@ -46,6 +46,11 @@ public sealed record MailAuthenticationPolicy
         ArgumentNullException.ThrowIfNull(permittedMechanisms);
 
         var normalizedMechanisms = NormalizeMechanisms(permittedMechanisms);
+        if (normalizedMechanisms.Any(mechanism => !mechanism.IsSpecified))
+        {
+            throw new ArgumentException("A permitted SASL mechanism must be one of the supported values.", nameof(permittedMechanisms));
+        }
+
         if (normalizedMechanisms.Count == 0)
         {
             throw new ArgumentException("At least one permitted SASL mechanism is required.", nameof(permittedMechanisms));

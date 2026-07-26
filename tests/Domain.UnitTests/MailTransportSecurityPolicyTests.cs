@@ -7,6 +7,19 @@ namespace MailMcp.Domain.UnitTests;
 
 public sealed class MailTransportSecurityPolicyTests
 {
+    public static TheoryData<MailAuthenticationMechanism> ClearTextMechanisms =>
+        [MailAuthenticationMechanism.Plain, MailAuthenticationMechanism.Login];
+
+    public static TheoryData<MailAuthenticationMechanism> ChallengeResponseMechanisms =>
+        [
+            MailAuthenticationMechanism.CramMd5,
+            MailAuthenticationMechanism.DigestMd5,
+            MailAuthenticationMechanism.ScramSha1,
+            MailAuthenticationMechanism.ScramSha256,
+            MailAuthenticationMechanism.ScramSha512,
+            MailAuthenticationMechanism.Ntlm,
+        ];
+
     [Theory]
     [InlineData(MailConnectionSecurity.TlsOnConnect, true)]
     [InlineData(MailConnectionSecurity.StartTlsRequired, true)]
@@ -55,8 +68,7 @@ public sealed class MailTransportSecurityPolicyTests
     }
 
     [Theory]
-    [InlineData(MailAuthenticationMechanism.Plain)]
-    [InlineData(MailAuthenticationMechanism.Login)]
+    [MemberData(nameof(ClearTextMechanisms))]
     public void FindViolations_ClearTextMechanismOnUnencryptedChannelWithOnlyInsecureOptIn_RequiresClearTextOptIn(
         MailAuthenticationMechanism clearTextMechanism)
     {
@@ -105,12 +117,7 @@ public sealed class MailTransportSecurityPolicyTests
     }
 
     [Theory]
-    [InlineData(MailAuthenticationMechanism.CramMd5)]
-    [InlineData(MailAuthenticationMechanism.DigestMd5)]
-    [InlineData(MailAuthenticationMechanism.ScramSha1)]
-    [InlineData(MailAuthenticationMechanism.ScramSha256)]
-    [InlineData(MailAuthenticationMechanism.ScramSha512)]
-    [InlineData(MailAuthenticationMechanism.Ntlm)]
+    [MemberData(nameof(ChallengeResponseMechanisms))]
     public void FindViolations_ChallengeResponseMechanismOnAcceptedUnencryptedChannel_ReportsNoViolation(
         MailAuthenticationMechanism challengeResponseMechanism)
     {

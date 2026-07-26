@@ -7,6 +7,30 @@ namespace MailMcp.Domain.UnitTests;
 
 public sealed class MailAuthenticationPolicyTests
 {
+    public static TheoryData<MailAuthenticationMechanism, string> SupportedMechanismNames =>
+        new()
+        {
+            { MailAuthenticationMechanism.Plain, "PLAIN" },
+            { MailAuthenticationMechanism.Login, "LOGIN" },
+            { MailAuthenticationMechanism.CramMd5, "CRAM-MD5" },
+            { MailAuthenticationMechanism.DigestMd5, "DIGEST-MD5" },
+            { MailAuthenticationMechanism.ScramSha1, "SCRAM-SHA-1" },
+            { MailAuthenticationMechanism.ScramSha1Plus, "SCRAM-SHA-1-PLUS" },
+            { MailAuthenticationMechanism.ScramSha256, "SCRAM-SHA-256" },
+            { MailAuthenticationMechanism.ScramSha256Plus, "SCRAM-SHA-256-PLUS" },
+            { MailAuthenticationMechanism.ScramSha512, "SCRAM-SHA-512" },
+            { MailAuthenticationMechanism.ScramSha512Plus, "SCRAM-SHA-512-PLUS" },
+            { MailAuthenticationMechanism.Ntlm, "NTLM" },
+        };
+
+    public static TheoryData<string, MailAuthenticationMechanism> ParsableMechanismNames =>
+        new()
+        {
+            { " scram-sha-256 ", MailAuthenticationMechanism.ScramSha256 },
+            { "Plain", MailAuthenticationMechanism.Plain },
+            { "SCRAM-SHA-1-PLUS", MailAuthenticationMechanism.ScramSha1Plus },
+        };
+
     [Fact]
     public void Create_DuplicateMechanisms_KeepsFirstOccurrenceOrder()
     {
@@ -61,38 +85,26 @@ public sealed class MailAuthenticationPolicyTests
     }
 
     [Theory]
-    [InlineData(MailAuthenticationMechanism.Plain, "PLAIN")]
-    [InlineData(MailAuthenticationMechanism.Login, "LOGIN")]
-    [InlineData(MailAuthenticationMechanism.CramMd5, "CRAM-MD5")]
-    [InlineData(MailAuthenticationMechanism.DigestMd5, "DIGEST-MD5")]
-    [InlineData(MailAuthenticationMechanism.ScramSha1, "SCRAM-SHA-1")]
-    [InlineData(MailAuthenticationMechanism.ScramSha1Plus, "SCRAM-SHA-1-PLUS")]
-    [InlineData(MailAuthenticationMechanism.ScramSha256, "SCRAM-SHA-256")]
-    [InlineData(MailAuthenticationMechanism.ScramSha256Plus, "SCRAM-SHA-256-PLUS")]
-    [InlineData(MailAuthenticationMechanism.ScramSha512, "SCRAM-SHA-512")]
-    [InlineData(MailAuthenticationMechanism.ScramSha512Plus, "SCRAM-SHA-512-PLUS")]
-    [InlineData(MailAuthenticationMechanism.Ntlm, "NTLM")]
-    public void ToSaslName_SupportedMechanism_ReturnsTheRegisteredWireName(
+    [MemberData(nameof(SupportedMechanismNames))]
+    public void SaslName_SupportedMechanism_ReturnsTheRegisteredWireName(
         MailAuthenticationMechanism mechanism,
         string expectedSaslName)
     {
         // Arrange, Act
-        var saslName = mechanism.ToSaslName();
+        var saslName = mechanism.SaslName;
 
         // Assert
         Assert.Equal(expectedSaslName, saslName);
     }
 
     [Theory]
-    [InlineData(" scram-sha-256 ", MailAuthenticationMechanism.ScramSha256)]
-    [InlineData("Plain", MailAuthenticationMechanism.Plain)]
-    [InlineData("SCRAM-SHA-1-PLUS", MailAuthenticationMechanism.ScramSha1Plus)]
+    [MemberData(nameof(ParsableMechanismNames))]
     public void TryParseSaslName_MixedCaseOrPaddedName_ParsesTheMechanism(
         string configuredName,
         MailAuthenticationMechanism expectedMechanism)
     {
         // Arrange, Act
-        var parsed = MailAuthenticationMechanisms.TryParseSaslName(configuredName, out var mechanism);
+        var parsed = MailAuthenticationMechanism.TryParseSaslName(configuredName, out var mechanism);
 
         // Assert
         Assert.True(parsed);
@@ -107,29 +119,44 @@ public sealed class MailAuthenticationPolicyTests
     public void TryParseSaslName_UnsupportedName_ReturnsFalse(string? configuredName)
     {
         // Arrange, Act
-        var parsed = MailAuthenticationMechanisms.TryParseSaslName(configuredName, out _);
+        var parsed = MailAuthenticationMechanism.TryParseSaslName(configuredName, out _);
 
         // Assert
         Assert.False(parsed);
     }
 
     [Fact]
-    public void ToSaslName_UndefinedMechanism_Throws()
+    public void SaslName_StructDefault_ThrowsInsteadOfReportingAMechanism()
     {
         // Arrange
-        const MailAuthenticationMechanism undefinedMechanism = (MailAuthenticationMechanism)99;
+        MailAuthenticationMechanism unspecifiedMechanism = default;
 
         // Act, Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() => undefinedMechanism.ToSaslName());
+        Assert.False(unspecifiedMechanism.IsSpecified);
+        Assert.Throws<InvalidOperationException>(() => unspecifiedMechanism.SaslName);
     }
 
     [Fact]
-    public void TransmitsCredentialsInClearText_UndefinedMechanism_Throws()
+    public void Create_StructDefaultMechanism_Throws()
     {
         // Arrange
-        const MailAuthenticationMechanism undefinedMechanism = (MailAuthenticationMechanism)99;
+        MailAuthenticationMechanism unspecifiedMechanism = default;
 
         // Act, Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() => undefinedMechanism.TransmitsCredentialsInClearText());
+        Assert.Throws<ArgumentException>(() => MailAuthenticationPolicy.Create(
+            [unspecifiedMechanism],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false));
+    }
+
+    [Fact]
+    public void All_SupportedMechanisms_ExposesEveryMechanismExactlyOnce()
+    {
+        // Arrange, Act
+        var saslNames = MailAuthenticationMechanism.All.Select(mechanism => mechanism.SaslName).ToArray();
+
+        // Assert
+        Assert.Equal(saslNames.Length, saslNames.Distinct(StringComparer.Ordinal).Count());
+        Assert.All(MailAuthenticationMechanism.All, mechanism => Assert.True(mechanism.IsSpecified));
     }
 }
