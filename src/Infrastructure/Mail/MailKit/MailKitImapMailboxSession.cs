@@ -12,12 +12,16 @@ using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
+using MailMcp.Domain.Transport;
 
 namespace MailMcp.Infrastructure.Mail.MailKit;
 
 internal interface IMailKitImapClient : IAsyncDisposable
 {
     bool IsConnected { get; }
+
+    /// <summary>Gets the mechanism set the server advertised while connecting, which the caller narrows before authenticating.</summary>
+    ISet<string> AuthenticationMechanisms { get; }
 
     Task ConnectAsync(
         string host,
@@ -44,6 +48,8 @@ internal interface IMailKitImapClient : IAsyncDisposable
 internal sealed class MailKitImapClientAdapter(ImapClient client) : IMailKitImapClient
 {
     public bool IsConnected => client.IsConnected;
+
+    public ISet<string> AuthenticationMechanisms => client.AuthenticationMechanisms;
 
     public Task ConnectAsync(
         string host,
@@ -74,22 +80,36 @@ internal sealed class MailKitImapClientAdapter(ImapClient client) : IMailKitImap
 /// <summary>MailKit-backed factory for authenticated read-only IMAP folder sessions.</summary>
 internal sealed class MailKitImapMailboxSessionFactory(
     Func<IMailKitImapClient> clientFactory,
-    IMailKitImapAccountSettingsProvider settingsProvider) : IMailboxSessionFactory
+    IImapAccountSettingsProvider settingsProvider) : IMailboxSessionFactory
 {
     /// <inheritdoc />
     public async Task<IMailboxSession> OpenReadOnlyAsync(
         MailAccountId accountId,
         MailFolderName folderName,
+        MailTransportSecurityPolicy transportSecurityPolicy,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(clientFactory);
+        ArgumentNullException.ThrowIfNull(transportSecurityPolicy);
 
         var settings = settingsProvider.GetSettings(accountId.Value);
         var client = clientFactory();
         try
         {
-            var socketOptions = settings.UseSslOnConnect ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
-            await client.ConnectAsync(settings.Host, settings.Port, socketOptions, cancellationToken);
+            await client.ConnectAsync(
+                settings.Host,
+                settings.Port,
+                transportSecurityPolicy.ConnectionSecurity.ToSecureSocketOptions(),
+                cancellationToken);
+
+            // The advertised set is narrowed before authenticating, because MailKit selects a mechanism from whatever
+            // remains in it. Authentication is then attempted once: retrying with a wider set would let the server
+            // negotiate a mechanism the operator's allow-list refused.
+            MailKitTransportSecurityMapping.RestrictAdvertisedMechanisms(
+                client.AuthenticationMechanisms,
+                transportSecurityPolicy.Authentication,
+                settings.AccountId);
+
             await client.AuthenticateAsync(settings.UserName, settings.Password, cancellationToken);
 
             var folder = await client.GetFolderAsync(folderName.Value, cancellationToken);

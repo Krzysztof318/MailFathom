@@ -1,11 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Application.EmailContent;
+using MailMcp.Application.Mail;
 using MailMcp.Application.Persistence;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Synchronization;
+using MailMcp.Domain.Transport;
 
 namespace MailMcp.Application.Synchronization;
 
@@ -13,6 +15,7 @@ namespace MailMcp.Application.Synchronization;
 public sealed class MailboxSynchronizer
 {
     private readonly IMailboxSessionFactory mailboxSessionFactory;
+    private readonly IMailTransportSecurityPolicyReader transportSecurityPolicyReader;
     private readonly ISynchronizationCheckpointStore checkpointStore;
     private readonly IPersistenceSessionFactory persistenceSessionFactory;
     private readonly IEmailMetadataRepository metadataRepository;
@@ -24,6 +27,7 @@ public sealed class MailboxSynchronizer
     /// <summary>Initializes a new mailbox synchronizer.</summary>
     public MailboxSynchronizer(
         IMailboxSessionFactory mailboxSessionFactory,
+        IMailTransportSecurityPolicyReader transportSecurityPolicyReader,
         ISynchronizationCheckpointStore checkpointStore,
         IPersistenceSessionFactory persistenceSessionFactory,
         IEmailMetadataRepository metadataRepository,
@@ -33,6 +37,7 @@ public sealed class MailboxSynchronizer
         MailboxSynchronizationOptions options)
     {
         this.mailboxSessionFactory = mailboxSessionFactory;
+        this.transportSecurityPolicyReader = transportSecurityPolicyReader;
         this.checkpointStore = checkpointStore;
         this.persistenceSessionFactory = persistenceSessionFactory;
         this.metadataRepository = metadataRepository;
@@ -47,6 +52,9 @@ public sealed class MailboxSynchronizer
     /// <param name="folderName">The folder to synchronize.</param>
     /// <param name="cancellationToken">Cancels the run between remote reads and local writes.</param>
     /// <returns>The bounded progress this run committed.</returns>
+    /// <exception cref="MailTransportSecurityPolicyViolationException">
+    /// Thrown when the account's configured transport security policy is unsafe, before any connection is attempted.
+    /// </exception>
     /// <exception cref="PersistenceConcurrencyConflictException">
     /// Thrown when a competing writer wins a race that the bounded local retries could not resolve. Progress already
     /// committed by this run stays durable, and the next run rereads the committed checkpoint before deciding again.
@@ -59,7 +67,13 @@ public sealed class MailboxSynchronizer
         var persistedCheckpoint =
             await this.checkpointStore.GetCheckpointAsync(accountId, folderName, cancellationToken);
 
-        await using var mailboxSession = await this.mailboxSessionFactory.OpenReadOnlyAsync(accountId, folderName, cancellationToken);
+        var transportSecurityPolicy = this.transportSecurityPolicyReader.GetPolicy(accountId);
+
+        await using var mailboxSession = await this.mailboxSessionFactory.OpenReadOnlyAsync(
+            accountId,
+            folderName,
+            transportSecurityPolicy,
+            cancellationToken);
 
         var uidValidity = await mailboxSession.GetUidValidityAsync(cancellationToken);
         var checkpoint = persistedCheckpoint?.UidValidity == uidValidity

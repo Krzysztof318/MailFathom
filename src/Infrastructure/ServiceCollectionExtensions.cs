@@ -5,6 +5,7 @@ using MailKit.Net.Imap;
 using MailMcp.Application.EmailContent;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
+using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Mail.MailKit;
 using MailMcp.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -38,7 +39,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(
             static () => new MailKitImapClientAdapter(new ImapClient()),
-            provider.GetRequiredService<IMailKitImapAccountSettingsProvider>()));
+            provider.GetRequiredService<IImapAccountSettingsProvider>()));
 
         return services;
     }

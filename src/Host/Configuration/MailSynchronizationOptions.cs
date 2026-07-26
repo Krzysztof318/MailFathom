@@ -2,15 +2,17 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using MailMcp.Application.Mail;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
-using MailMcp.Infrastructure.Mail.MailKit;
+using MailMcp.Domain.Transport;
+using MailMcp.Infrastructure.Mail;
 
 namespace MailMcp.Host.Configuration;
 
 /// <summary>Configures periodic IMAP synchronization.</summary>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
-internal sealed class MailSynchronizationOptions : IValidatableObject, IMailKitImapAccountSettingsProvider
+internal sealed class MailSynchronizationOptions : IValidatableObject, IImapAccountSettingsProvider, IMailTransportSecurityPolicyReader
 {
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
@@ -35,22 +37,25 @@ internal sealed class MailSynchronizationOptions : IValidatableObject, IMailKitI
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
 
     /// <inheritdoc />
-    public MailKitImapAccountSettings GetSettings(string accountId)
+    public ImapAccountSettings GetSettings(string accountId)
     {
         var normalizedAccountId = MailAccountId.Create(accountId).Value;
-        var account = this.Accounts.Single(
-            candidate => !string.IsNullOrWhiteSpace(candidate.AccountId)
-                && StringComparer.Ordinal.Equals(
-                    MailAccountId.Create(candidate.AccountId).Value,
-                    normalizedAccountId));
+        var account = this.FindAccount(normalizedAccountId);
 
-        return new MailKitImapAccountSettings(
+        return new ImapAccountSettings(
             normalizedAccountId,
             account.Host.Trim(),
             account.Port,
-            account.UseSslOnConnect,
             account.UserName,
             account.Password);
+    }
+
+    /// <inheritdoc />
+    public MailTransportSecurityPolicy GetPolicy(MailAccountId accountId)
+    {
+        var account = this.FindAccount(accountId.Value);
+
+        return account.CreateTransportSecurityPolicy();
     }
 
     internal IEnumerable<ValidationResult> ValidateForSynchronization()
@@ -85,6 +90,12 @@ internal sealed class MailSynchronizationOptions : IValidatableObject, IMailKitI
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.ValidateForSynchronization();
+
+    private MailSynchronizationAccountOptions FindAccount(string normalizedAccountId) => this.Accounts.Single(
+        candidate => !string.IsNullOrWhiteSpace(candidate.AccountId)
+            && StringComparer.Ordinal.Equals(
+                MailAccountId.Create(candidate.AccountId).Value,
+                normalizedAccountId));
 }
 
 /// <summary>Configures one account for periodic IMAP synchronization.</summary>
@@ -102,8 +113,8 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     [Range(1, 65535)]
     public int Port { get; set; } = 993;
 
-    /// <summary>Gets or sets whether implicit TLS is used from connection start; otherwise mandatory STARTTLS is used.</summary>
-    public bool UseSslOnConnect { get; set; } = true;
+    /// <summary>Gets or sets the account's transport security settings.</summary>
+    public MailAccountTransportSecurityOptions TransportSecurity { get; set; } = new();
 
     /// <summary>Gets or sets the IMAP user name. Store secret values outside ordinary configuration files.</summary>
     public string UserName { get; set; } = string.Empty;
@@ -164,8 +175,37 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             {
                 yield return new ValidationResult("IMAP password is required when synchronization is enabled.", [nameof(this.Password)]);
             }
+
+            foreach (var result in this.ValidateTransportSecurity())
+            {
+                yield return result;
+            }
         }
     }
+
+    /// <summary>Builds the account's validated transport security policy.</summary>
+    /// <returns>The policy the mailbox adapter must obey.</returns>
+    /// <exception cref="MailTransportSecurityPolicyViolationException">Thrown when the configured combination is unsafe.</exception>
+    internal MailTransportSecurityPolicy CreateTransportSecurityPolicy() => this.TransportSecurity.CreatePolicy();
+
+    /// <summary>Re-checks the transport security rules so an unsafe account fails startup.</summary>
+    /// <returns>One result per unsupported mechanism name and per violated rule, each naming the account.</returns>
+    private IEnumerable<ValidationResult> ValidateTransportSecurity() => this.TransportSecurity
+        .FindConfigurationErrors()
+        .Select(error => new ValidationResult(
+            DescribeConfigurationError(this.AccountId, error),
+            [$"{nameof(this.TransportSecurity)}.{error.PropertyName}"]));
+
+    /// <summary>Builds the startup message for one transport security configuration error.</summary>
+    /// <remarks>
+    /// The violation name is appended so the message carries a stable identity an operator or log query can match on,
+    /// while the prose stays free to change. A mechanism-name parse failure has no violation and is reported without
+    /// one. Neither part may name the user name, password, or trust anchor reference.
+    /// </remarks>
+    private static string DescribeConfigurationError(string accountId, MailAccountTransportSecurityConfigurationError error) =>
+        error.Violation is { } violation
+            ? $"Account '{accountId}': {error.Description} [{violation}]"
+            : $"Account '{accountId}': {error.Description}";
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.ValidateForSynchronization(synchronizationEnabled: true);
