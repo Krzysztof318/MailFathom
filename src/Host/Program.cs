@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
 using MailMcp.Host.Configuration;
 using MailMcp.Infrastructure;
@@ -15,6 +16,10 @@ builder.Services.AddOptions<MailSynchronizationOptions>()
     .Bind(builder.Configuration.GetSection("MailSynchronization"))
     .ValidateDataAnnotations()
     .ValidateOnStart();
+builder.Services.AddOptions<PersistenceOptions>()
+    .Bind(builder.Configuration.GetSection("Persistence"))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 builder.Services.AddScoped<IMailKitImapAccountSettingsProvider>(provider => provider.GetRequiredService<IOptions<MailSynchronizationOptions>>().Value);
 builder.Services.AddScoped(provider =>
 {
@@ -25,6 +30,10 @@ builder.Services.AddScoped(provider =>
         MaxRawMimeBytes = synchronizationOptions.MaxRawMimeBytes,
         MaxMetadataBatchesPerRun = synchronizationOptions.MaxMetadataBatchesPerRun,
     };
+});
+builder.Services.AddSingleton(provider => new PersistenceConcurrencyOptions
+{
+    MaximumCommitAttempts = provider.GetRequiredService<IOptions<PersistenceOptions>>().Value.MaximumConcurrencyCommitAttempts,
 });
 builder.Services.AddMailMcpInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<MailMcp.Host.Hosting.MailSynchronizationWorker>();

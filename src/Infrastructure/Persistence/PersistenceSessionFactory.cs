@@ -1,9 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.ExceptionServices;
 using MailMcp.Application.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
 
 namespace MailMcp.Infrastructure.Persistence;
 
@@ -13,64 +14,45 @@ namespace MailMcp.Infrastructure.Persistence;
 internal sealed class PersistenceSessionFactory(MailMcpDbContext dbContext) : IPersistenceSessionFactory
 {
     /// <inheritdoc />
+    [SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the resource adapter and its transaction is transferred to the returned persistence session.")]
     public async Task<IPersistenceSession> BeginSessionAsync(CancellationToken cancellationToken)
     {
         var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        return new EfCorePersistenceSession(dbContext, transaction);
+        return new EfCorePersistenceSession(
+            new EfCorePersistenceSessionResources(dbContext, transaction));
     }
 
-    private sealed class EfCorePersistenceSession(MailMcpDbContext dbContext, IDbContextTransaction transaction)
-        : IPersistenceSession, IEfCorePersistenceSession
+    private sealed class EfCorePersistenceSessionResources(
+        MailMcpDbContext dbContext,
+        IDbContextTransaction transaction)
+        : IEfCorePersistenceSessionResources
     {
-        private bool completed;
-
         public MailMcpDbContext DbContext => dbContext;
 
-        public async Task CommitAsync(CancellationToken cancellationToken)
+        public async Task SaveChangesAsync(CancellationToken cancellationToken)
         {
-            ObjectDisposedException.ThrowIf(this.completed, this);
-
             await dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-
-            this.completed = true;
         }
 
-        [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Transaction rollback and disposal must both be attempted while the first cleanup failure remains observable.")]
-        public async ValueTask DisposeAsync()
-        {
-            Exception? firstCleanupException = null;
-            try
-            {
-                if (!this.completed)
-                {
-                    await transaction.RollbackAsync();
-                }
-            }
-            catch (Exception exception)
-            {
-                firstCleanupException = exception;
-            }
+        public Task CommitTransactionAsync(CancellationToken cancellationToken) =>
+            transaction.CommitAsync(cancellationToken);
 
-            try
-            {
-                await transaction.DisposeAsync();
-            }
-            catch (Exception exception)
-            {
-                firstCleanupException ??= exception;
-            }
-            finally
-            {
-                dbContext.ChangeTracker.Clear();
-                this.completed = true;
-            }
+        public Task RollbackTransactionAsync(CancellationToken cancellationToken) =>
+            transaction.RollbackAsync(cancellationToken);
 
-            if (firstCleanupException is not null)
+        public bool IsConcurrencyConflict(DbUpdateException exception) =>
+            exception.InnerException is PostgresException
             {
-                ExceptionDispatchInfo.Capture(firstCleanupException).Throw();
-            }
-        }
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: MailMcpDbContext.SynchronizationCheckpointPrimaryKeyConstraintName,
+            };
+
+        public void ClearTrackedState() => dbContext.ChangeTracker.Clear();
+
+        public ValueTask DisposeAsync() => transaction.DisposeAsync();
     }
 }

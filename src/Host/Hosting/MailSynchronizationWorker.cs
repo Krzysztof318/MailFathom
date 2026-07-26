@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using System.Diagnostics.CodeAnalysis;
+using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
@@ -76,6 +77,10 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
                 {
                     throw;
                 }
+                catch (PersistenceConcurrencyConflictException exception)
+                {
+                    this.LogFolderSynchronizationDeferredAfterConcurrencyConflict(exception, account.AccountId, folder);
+                }
                 catch (Exception exception)
                 {
                     this.LogFolderSynchronizationFailed(exception, account.AccountId, folder);
@@ -101,6 +106,14 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "IMAP synchronization failed for {AccountId}/{FolderName}; the worker will continue with remaining folders and retry on a later interval.")]
     private partial void LogFolderSynchronizationFailed(
+        Exception exception,
+        string accountId,
+        string folderName);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Deferred IMAP folder synchronization for {AccountId}/{FolderName} after an unresolved optimistic concurrency conflict; the next interval will retry from the persisted checkpoint.")]
+    private partial void LogFolderSynchronizationDeferredAfterConcurrencyConflict(
         Exception exception,
         string accountId,
         string folderName);

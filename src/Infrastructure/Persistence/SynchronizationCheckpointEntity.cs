@@ -17,4 +17,6 @@ internal sealed class SynchronizationCheckpointEntity
     public uint? LastSeenUid { get; set; }
 
     public DateTimeOffset? SynchronizedAt { get; set; }
+
+    public uint ConcurrencyVersion { get; set; }
 }

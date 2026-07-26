@@ -12,6 +12,17 @@ public sealed record SynchronizationCheckpoint(ImapUidValidity UidValidity, Imap
     /// <returns>An empty checkpoint.</returns>
     public static SynchronizationCheckpoint None(ImapUidValidity uidValidity) => new(uidValidity, null, null);
 
+    /// <summary>Determines whether another checkpoint identifies the same durable mailbox progress.</summary>
+    /// <param name="other">The checkpoint to compare.</param>
+    /// <returns>
+    /// <see langword="true" /> when both checkpoints have the same UIDVALIDITY and last-seen UID; otherwise,
+    /// <see langword="false" />.
+    /// </returns>
+    public bool RepresentsSameProgressAs(SynchronizationCheckpoint? other) =>
+        other is not null
+        && this.UidValidity == other.UidValidity
+        && this.LastSeenUid == other.LastSeenUid;
+
     /// <summary>Advances the checkpoint after an email has been durably stored.</summary>
     /// <param name="uid">The latest stored UID.</param>
     /// <param name="synchronizedAt">The timestamp for the durable synchronization progress.</param>

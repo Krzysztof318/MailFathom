@@ -1,7 +1,7 @@
 ---
 status: proposed
 contact: Krzysztof Kasprowicz
-date: 2026-07-24
+date: 2026-07-25
 deciders: Krzysztof Kasprowicz
 consulted:
 informed:
@@ -13,7 +13,7 @@ informed:
 
 MailMcp follows clean architecture: `Application` owns use cases and ports, while `Infrastructure` owns EF Core, PostgreSQL, SQL details, and migrations. The initial architecture also requires fast isolated unit tests, future PostgreSQL-backed integration tests, explicit privacy/governance seams, and no leakage of EF Core or provider-specific types into `Application` or `Domain`.
 
-The decision question is: should application use cases depend directly on EF Core objects in unit tests and production code, or should MailMcp introduce a repository-style persistence port; if repositories are used, should they be simple use-case/aggregate-specific contracts, capability-segregated CRUD interfaces, or a generic repository plus specification model? A second question is how writes that touch multiple repositories should share a transaction boundary: by passing an explicit session object, by exposing repositories as properties on a Unit of Work object, or by relying on an ambient transient session such as an `AsyncLocal` context.
+The decision question is: should application use cases depend directly on EF Core objects in unit tests and production code, or should MailMcp introduce a repository-style persistence port; if repositories are used, should they be simple use-case/aggregate-specific contracts, capability-segregated CRUD interfaces, or a generic repository plus specification model? A second question is how writes that touch multiple repositories should share a transaction boundary: by passing an explicit session object, by exposing repositories as properties on a Unit of Work object, or by relying on an ambient transient session such as an `AsyncLocal` context. A third question is whether concurrent writes should normally use optimistic version checks or pessimistic database locks, how PostgreSQL should generate the concurrency token, and where conflict translation and bounded retries belong.
 
 ## Decision Drivers
 
@@ -25,6 +25,10 @@ The decision question is: should application use cases depend directly on EF Cor
 - Keep query result sizes bounded, deterministic, and shaped as application read models rather than returning mutable EF Core entity graphs.
 - Make write transaction boundaries explicit enough for application review, audit evidence, cancellation, idempotency, retry safety, and future PostgreSQL integration tests.
 - Avoid hidden persistence state that can cross asynchronous flows, background work, retries, or nested use cases without a clearly owned lifetime.
+- Prevent lost updates without holding database locks while application or external work is in progress.
+- Prefer a low-overhead, server-generated concurrency token that integrates with EF Core and is not mistaken for an audit timestamp or domain version.
+- Make retries explicit, bounded, observable, cancellation-aware, and safe only for operations that can be repeated from a fresh read.
+- Reserve pessimistic locking for measured contention or atomic work-claiming requirements that optimistic retries cannot handle efficiently or correctly.
 
 ## Considered Options
 
@@ -39,9 +43,25 @@ For Unit of Work coordination, this ADR considers these patterns:
 - Unit of Work object that exposes participating repositories as properties and owns commit/rollback.
 - Ambient transient Unit of Work session resolved through an `AsyncLocal`-backed context.
 
+For concurrent writes, this ADR considers these patterns:
+
+- Optimistic concurrency using PostgreSQL's server-generated `xmin` system column as an EF Core row-version token.
+- Optimistic concurrency using an ordinary application column, updated by application code or a PostgreSQL trigger.
+- Pessimistic concurrency using explicit row locks such as `SELECT ... FOR UPDATE`.
+
+For signaling a detected conflict to application code, this ADR considers these patterns:
+
+- An application-owned result value returned by every boundary that observes a conflict.
+- An application-owned exception raised by every boundary, including the session commit itself.
+- A result at the session port and an exception above the bounded retry.
+
 ## Decision Outcome
 
 Chosen option: "Simple application-owned repository/query ports implemented with EF Core in `Infrastructure`, coordinated by explicit application-owned Unit of Work sessions for multi-repository writes", because it gives MailMcp reliable application-layer unit-test seams without adopting a broad generic repository framework, exposing EF Core query composition, or hiding transaction lifetime in ambient state.
+
+Optimistic concurrency is the default for mutable EF Core-managed PostgreSQL records. Infrastructure persistence models use a `uint` property named `ConcurrencyVersion`, configured with EF Core's `IsRowVersion()`, which the Npgsql provider maps to PostgreSQL's implicit, server-generated `xmin` system column. Pessimistic row locking is an explicit exception that requires a concrete consistency or contention reason, a short transaction, and provider-level integration tests.
+
+Conflicts are signaled at two altitudes and nowhere between them: `IPersistenceSession.CommitAsync` returns `PersistenceCommitResult`, because its only caller treats a conflict as a loop condition, and everything above the bounded retry raises `PersistenceConcurrencyConflictException`, because no layer in between can decide what a conflict means. The attempt bound is one deployment-wide setting rather than a per-service option.
 
 The decision is proposed, not accepted. The first implementation should introduce the smallest repository/query contracts required by active use cases. Single-store operations may remain atomic inside one repository method. Multi-repository writes should use an explicit Unit of Work session contract only when a concrete use case needs one transaction across ports, then revisit the abstraction shape after the first persistence-backed slices show real transaction and query pressure.
 
@@ -50,9 +70,14 @@ The decision is proposed, not accepted. The first implementation should introduc
 - Good, because application unit tests can stub repository outputs directly and focus on use-case behavior, authorization, pagination, idempotency, and privacy rules.
 - Good, because EF Core LINQ, SQL translation, migrations, concurrency tokens, indexes, PostgreSQL full-text search, pgvector behavior, and raw MIME `bytea` access remain implementation concerns verified by future integration tests.
 - Good, because persistence contracts can express domain language and bounded result contracts, such as mailbox timelines, synchronization checkpoints, message occurrence lookups, outbox leasing, and derived-index cleanup.
+- Good, because PostgreSQL supplies `xmin` for every row version and EF Core can reject a stale write after another transaction updates the row without an application-managed timestamp, trigger, or additional user-defined column.
 - Neutral, because every testable query must be represented by an application-owned method or query object rather than composed ad hoc from `IQueryable` in use cases.
+- Neutral, because `ConcurrencyVersion` is a PostgreSQL-specific persistence detail and cannot serve as a business revision, audit time, external ETag, or durable version identifier.
+- Neutral, because callers must know whether they sit at the session port or above the retry, since the two altitudes signal a conflict differently.
 - Bad, because the repository layer adds maintenance cost and can drift into an anemic CRUD wrapper if reviews do not enforce use-case-specific contracts.
 - Bad, because explicit Unit of Work sessions add parameters and lifetime rules that must be documented and tested.
+- Bad, because optimistic conflicts require explicit application behavior and may repeat work when multiple writers frequently contend for the same row.
+- Bad, because an unresolved conflict unwinds without the partial progress counters the run had accumulated, so operational visibility into a deferred run depends on metrics rather than on a returned result.
 
 ## Decision Details
 
@@ -139,6 +164,50 @@ Do not use an `AsyncLocal` ambient Unit of Work as an application-facing contrac
 
 If a transaction spans external I/O such as IMAP, SMTP, object storage, AI providers, or MCP tool calls, the design is probably wrong. Keep database transactions short and do not hold them open across network calls. Use durable state transitions, idempotency keys, outbox/inbox patterns, leases, or compensating operations instead of broad cross-resource transactions.
 
+### Concurrency control
+
+Use optimistic concurrency by default for mutable records written through tracked EF Core operations. Each applicable infrastructure persistence model has a `uint ConcurrencyVersion` property configured with `IsRowVersion()`. Npgsql maps that property to PostgreSQL's implicit `xmin` system column, which identifies the transaction that created the current row version. A write based on a token from an older row version therefore fails after another transaction updates or deletes the row. Multiple updates to the same row inside one explicit transaction can retain the same `xmin`, so it is not a per-write sequence. The mapping belongs only in `Infrastructure`; `Application` and `Domain` must not reference `xmin`, PostgreSQL transaction IDs, Npgsql metadata, or the provider-specific CLR representation.
+
+`ConcurrencyVersion` is deliberately not named `Timestamp`, `UpdatedAt`, or `RowVersion`. It is not a wall-clock value, audit fact, domain event sequence, or portable SQL `rowversion` column. If a use case needs a last-modified timestamp, durable business revision, external ETag, or version that survives storage migration, backup/restore, or provider replacement, model that requirement separately rather than reusing `xmin`.
+
+Apply the token to mutable EF Core-managed tables unless one of these exceptions is documented in the mapping:
+
+- The table is append-only or immutable after insertion, so there is no update race to detect.
+- The operation already uses one atomic conditional SQL statement and treats its affected-row count as the concurrency result, such as a lease acquisition or compare-and-set state transition.
+- The data is disposable derived state whose update conflicts have no correctness impact and measurements show that conflict checking is materially harmful.
+- The adapter does not use tracked EF Core writes, in which case it must implement an equivalent explicit concurrency predicate when lost-update protection is required.
+
+The current persistence slice maps `ConcurrencyVersion` on `StoredEmailEntity` and `SynchronizationCheckpointEntity`, the two tracked records that are updated after insertion. `EmailMessageContentEntity` remains exempt because an existing raw MIME row is replaced by one atomic set-based `ExecuteUpdate` whose affected-row count already determines whether an insert is required. Mailbox account and folder records are created as reference identities and are not updated by the implemented slice.
+
+Do not add a separate `timestamptz` column only to implement optimistic concurrency. PostgreSQL does not automatically update ordinary timestamp columns on every row change, so doing this consistently would require application-managed values or triggers. A time value also mixes conflict detection with audit semantics. An ordinary explicit version column may replace `xmin` for a specific table only when that table needs a durable or externally visible version identity; the migration, server-side generation mechanism, and performance cost must then be justified and tested.
+
+Pessimistic concurrency is not the repository default. It may be used for a narrow operation when correctness requires exclusive access before a decision is made, when atomic work claiming benefits from `FOR UPDATE SKIP LOCKED`, or when measured conflict rates make optimistic retries more expensive than short blocking. Such code remains inside the PostgreSQL adapter, acquires the weakest sufficient lock, uses deterministic lock ordering, applies a lock timeout, never spans external I/O, and documents deadlock and cancellation behavior.
+
+### Optimistic concurrency handling
+
+EF Core reports a failed optimistic update or delete as `DbUpdateConcurrencyException`. Infrastructure must catch that exception only at the repository or Unit of Work commit boundary and translate it into an application-owned `ConcurrencyConflict` result. Provider exception details, tracked entries, SQL, and database values must not cross into `Application`, `Domain`, MCP responses, or administrative endpoints.
+
+MailMcp signals that outcome at exactly two altitudes, and nowhere in between.
+
+`IPersistenceSession.CommitAsync` returns `PersistenceCommitResult`. At that one port a conflict is not a failure but a loop condition: its only caller is the retry policy, which consumes the value immediately and decides whether another attempt is allowed. Keeping it in the signature makes the decision visible where it is actually made, and costs nothing because no code between the session and the policy has to carry it.
+
+Everywhere above that port the conflict is raised as `PersistenceConcurrencyConflictException`. Once the bounded attempts are spent, the fact has to reach a caller that can decide what a conflict means, and every use-case layer in between is by construction unable to decide anything: it can only restate the outcome in a result type of its own. An earlier revision of this decision did exactly that and produced four near-identical conflict enums plus five hand-written propagation sites carrying one bit of information. Those enums encoded no fact that the exception does not, so they were removed. The exception carries no provider details, SQL, tracked values, or personal data.
+
+This remains a hybrid model rather than a rule that conflicts are always exceptional. EF Core and Npgsql exceptions stay inside `Infrastructure`, where they originate, and are translated at the commit boundary before crossing the application port. The rejected symmetric options are both worse: returning a result all the way up multiplies types without adding information, while throwing from `CommitAsync` itself would make the retry policy catch an exception once per ordinary iteration of its own loop. If a caller later needs structured conflict context, add it as data on an application-owned result at a boundary that can use it, not as a payload on the exception.
+
+The application-owned `OptimisticConcurrencyRetryPolicy` coordinates retries. It is registered in dependency injection and injected rather than constructed inside a use case, so it can be substituted in tests and shared by future writers without each of them owning a copy of the policy. It receives the persistence-session factory, `PersistenceConcurrencyOptions`, and `TimeProvider`, then executes an entire staged write supplied as a cancellation-aware delegate with these semantics:
+
+- Retry is opt-in for an operation that is explicitly safe and idempotent to repeat.
+- Each attempt creates a fresh persistence session, rereads current state, reevaluates authorization and domain invariants, reapplies the intended change, and commits once.
+- The attempt count is bounded; exhaustion throws `PersistenceConcurrencyConflictException` rather than converting the operation to last-writer-wins.
+- Conflicts wait through a cancellation-aware exponential backoff with cryptographic jitter before another attempt, capped at one second so competing writers do not immediately collide again.
+- Cancellation, shutdown, or a non-concurrency failure stops the loop immediately.
+- When conflict and retry metrics are added to the observability adapter, they may contain operation and entity categories but no email content, addresses, tokens, tracked values, or other personal data.
+
+The attempt bound is deployment-wide rather than per use case. An optimistic conflict is a property of the shared row version that competing writers contend for, not of the operation that observed it, so a per-service attempt count would multiply configuration keys without describing anything a deployment can tune independently. `PersistenceConcurrencyOptions.MaximumCommitAttempts` defaults to two: conflicts are rare, so the second attempt covers the single lost race that a conflict actually represents, and further attempts mostly add latency before the caller has to reread current state anyway. Backoff shape stays inside the policy because it is collision-avoidance detail rather than an operational limit. A future writer that genuinely needs a different bound gets a named options instance, not a second configuration key.
+
+The helper does not retry `SaveChangesAsync` on the same `DbContext`, mutate EF Core original values to force a write, automatically merge fields, or hide a retry inside a repository method after the application has made a decision from stale state. Mailbox synchronization supplies complete local metadata/content writes only after any IMAP read has completed. Each such retry therefore opens a fresh persistence session and reevaluates current local state without repeating the external read. A checkpoint update is attempted once and is staged only when the durable UIDVALIDITY and last-seen UID still equal the progress read at the start of the run; `SynchronizedAt` is excluded from that identity because PostgreSQL timestamp precision may differ after a round trip, and an accepted write retains the later timestamp. The tracked `xmin` token then detects a race occurring after that comparison. A concurrent first-checkpoint primary-key collision is translated narrowly into the same conflict. A mismatch stops the run so the next worker interval can reread the committed checkpoint before deciding how to advance it — a checkpoint advance is deliberately not retried, because a competing advance invalidates the decision the run made, not merely its write. Exhaustion or a checkpoint conflict therefore leaves `SynchronizeAsync` through the exception, and progress the run already committed stays durable. The synchronization worker catches it per folder, logs a deferral, and continues with the remaining folders. Interactive or security-sensitive changes should normally return the conflict to the caller for an explicit reread and new decision. Future automated indexing, retention, and outbox operations may opt into bounded retries only after their idempotency and external side effects are reviewed.
+
 ## Validation
 
 - Code review verifies that `Application` and `Domain` do not reference EF Core, Npgsql, PostgreSQL, `DbContext`, `DbSet`, `IQueryable`, migrations, provider-specific AI types, or persistence entities.
@@ -147,6 +216,10 @@ If a transaction spans external I/O such as IMAP, SMTP, object storage, AI provi
 - Unit of Work session contracts document ownership, disposal, commit behavior, cancellation, concurrency restrictions, nested-session behavior, retry safety, and whether a repository call requires a session.
 - Code review rejects a write repository that accepts a session parameter without writing through it, and rejects a hand-written change-tracker pass where `FindAsync` would do or where no comment states why the pattern is required.
 - Future PostgreSQL integration tests verify EF Core mappings, migrations, query translation, constraints, concurrency, full-text search, pgvector, raw MIME content storage, and any provider-specific SQL.
+- PostgreSQL integration tests verify that every mapped `ConcurrencyVersion` uses `xmin`, an update or delete based on a token made stale by another transaction produces `ConcurrencyConflict`, repeated writes inside one transaction do not assume a new token, and exempt write paths preserve their documented atomicity.
+- Unit tests for an operation using `OptimisticConcurrencyRetryPolicy` verify fresh-state reevaluation, bounded attempts, cancellation, conflict exhaustion, no retry for unrelated failures, and no duplicate external side effects.
+- Pull-request review rejects a new conflict result type introduced at a boundary that cannot decide what the conflict means, and rejects a `catch` for `PersistenceConcurrencyConflictException` that neither rereads state nor reports a deferral.
+- Pull-request review requires a written justification for mutable EF Core-managed tables without a concurrency token and for every pessimistic lock, explicit version column, automatic merge, or retryable non-idempotent operation.
 - Pull-request review rejects generic CRUD repositories, broad capability interfaces, hidden ambient transaction contracts, or specification abstractions unless the change includes concrete repeated use cases and validation evidence.
 
 ## Pros and Cons of the Options
@@ -231,8 +304,76 @@ A use case opens an ambient transaction scope, and repositories look up the curr
 - Bad, because nested sessions, retries, background work, parallel fan-out, asynchronous continuations, and failure cleanup can accidentally reuse or lose the ambient session.
 - Bad, because hidden ambient state conflicts with MailMcp's preference for explicit dependencies and small application contracts.
 
+## Pros and Cons of Concurrency Options
+
+### Optimistic concurrency using PostgreSQL `xmin`
+
+Map an infrastructure `uint ConcurrencyVersion` property through `IsRowVersion()` so Npgsql uses PostgreSQL's implicit `xmin` system column.
+
+- Good, because PostgreSQL supplies the transaction identity for each current row version without a trigger or user-defined column, allowing stale writes from other transactions to be detected.
+- Good, because EF Core automatically includes the original token in update and delete predicates and reports zero affected rows as a concurrency conflict.
+- Neutral, because every PostgreSQL table already has `xmin`, but each selected and tracked token still adds a small amount of query, change-tracking, and comparison work.
+- Bad, because `xmin` is provider-specific and unsuitable as an audit timestamp, durable business revision, or public contract.
+- Bad, because the whole row shares one token, so unrelated changes to the same record can cause a conflict.
+
+### Optimistic concurrency using an ordinary version or timestamp column
+
+Add a user-defined column and ensure every writer changes it through application logic or a PostgreSQL trigger.
+
+- Good, because an explicit version can have durable, externally visible, or provider-neutral semantics when the use case requires them.
+- Good, because application-managed generation can choose which property changes invalidate the token.
+- Neutral, because a trigger centralizes generation for all writers but adds schema behavior that must be migrated, reviewed, and tested.
+- Bad, because PostgreSQL has no ordinary auto-updating timestamp equivalent to SQL Server `rowversion`; a missed writer or trigger creates silent lost-update risk.
+- Bad, because using wall-clock time as a version conflates audit and concurrency semantics and adds a column without improving the default internal EF Core case.
+
+### Pessimistic concurrency using explicit row locks
+
+Select and lock records before deciding and writing, using the weakest suitable PostgreSQL row-lock mode.
+
+- Good, because exclusive access can simplify a narrow invariant or prevent duplicate work under heavy contention.
+- Good, because `SKIP LOCKED` can support multiple workers claiming independent rows without waiting for one another.
+- Neutral, because PostgreSQL already locks rows during updates; the decision here is whether to acquire a lock earlier and hold it while application logic runs.
+- Bad, because blocking, deadlocks, lock timeouts, and longer transactions reduce throughput and increase operational complexity.
+- Bad, because a lock cannot safely remain held across user interaction or external IMAP, SMTP, storage, AI, or MCP calls.
+
+## Pros and Cons of Concurrency Conflict Signaling Options
+
+### Application-owned commit result at every boundary
+
+Translate recognized provider conflicts at the commit boundary and return a conflict value from each layer that observes one.
+
+- Good, because the expected outcome stays visible and provider-neutral in every signature.
+- Good, because no path depends on exception filters to reach its handler.
+- Neutral, because every caller must inspect the result and decide at its own boundary what the conflict means.
+- Bad, because layers that cannot decide anything still have to declare, map, and propagate a conflict value, which produced one enum per boundary carrying the same single bit.
+- Bad, because each restatement is a place where a caller can silently ignore the value and continue on stale state.
+
+### Application-owned exception at every boundary
+
+Throw a custom exception from the session commit itself and let every consumer, including the retry policy, catch it.
+
+- Good, because exactly one type expresses the conflict.
+- Good, because no intermediate layer can ignore it by forgetting to inspect a return value.
+- Neutral, because it resembles EF Core's own provider-facing shape.
+- Bad, because the retry policy would catch an exception on ordinary iterations of its own loop, which is the one place where a conflict is genuinely expected control flow.
+- Bad, because the commit signature stops advertising the outcome that its only direct caller exists to handle.
+
+### Result at the session port, exception above it
+
+Return `PersistenceCommitResult` from `IPersistenceSession.CommitAsync`, and raise `PersistenceConcurrencyConflictException` once the bounded attempts are exhausted or a decision is invalidated.
+
+- Good, because each altitude uses the mechanism that matches how the conflict is actually consumed there: a branch where it is a loop condition, an unwind where nothing in between can decide.
+- Good, because it removes every intermediate conflict type and hand-written propagation site without hiding the outcome from the retry policy.
+- Good, because a use case cannot accidentally continue on stale state after an unresolved conflict.
+- Neutral, because callers must know which of the two boundaries they sit above; the port signature and the exception documentation both state it.
+- Bad, because partial progress a run had accumulated is not reported alongside the conflict; counts that matter operationally belong in metrics rather than on the exception.
+
 ## More Information
 
+- Microsoft Learn, "Handling Concurrency Conflicts," documents EF Core optimistic concurrency tokens, `DbUpdateConcurrencyException`, conflict resolution, retries, and the trade-offs of higher isolation levels: <https://learn.microsoft.com/en-us/ef/core/saving/concurrency>.
+- Npgsql, "Concurrency Tokens," documents mapping a `uint` property configured with `IsRowVersion()` to PostgreSQL's automatically changing `xmin` system column: <https://www.npgsql.org/efcore/modeling/concurrency.html>.
+- PostgreSQL, "System Columns," defines `xmin` as the identity of the inserting transaction for the current row version: <https://www.postgresql.org/docs/current/ddl-system-columns.html>.
+- PostgreSQL, "Explicit Locking," documents row-lock modes, blocking, deadlocks, and `SELECT ... FOR UPDATE`: <https://www.postgresql.org/docs/current/explicit-locking.html>.
 - Microsoft Learn, "Testing EF Core Applications," states that EF Core in-memory has important behavioral differences from real databases, discourages mocked `DbSet` query testing, and notes that repository layers enable tests without EF Core at the cost of architectural and maintenance overhead: <https://learn.microsoft.com/en-us/ef/core/testing/>.
 - Microsoft Learn, "Choosing a testing strategy," recommends real-database testing for production confidence, discourages the in-memory provider for test doubles, and states that a repository layer is the reliable way to stub database outputs without evaluating production LINQ against a fake provider: <https://learn.microsoft.com/en-us/ef/core/testing/choosing-a-testing-strategy>.
 - Microsoft Learn, "Testing without your production database system," shows repository interfaces returning `IAsyncEnumerable<T>` or `IEnumerable<T>` rather than `IQueryable<T>` so EF Core query translation does not leak into tests: <https://learn.microsoft.com/en-us/ef/core/testing/testing-without-the-database>.

@@ -17,6 +17,7 @@ public sealed class MailboxSynchronizer
     private readonly IPersistenceSessionFactory persistenceSessionFactory;
     private readonly IEmailMetadataRepository metadataRepository;
     private readonly IEmailContentStore contentStore;
+    private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly TimeProvider timeProvider;
     private readonly MailboxSynchronizationOptions options;
 
@@ -27,6 +28,7 @@ public sealed class MailboxSynchronizer
         IPersistenceSessionFactory persistenceSessionFactory,
         IEmailMetadataRepository metadataRepository,
         IEmailContentStore contentStore,
+        OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options)
     {
@@ -35,22 +37,34 @@ public sealed class MailboxSynchronizer
         this.persistenceSessionFactory = persistenceSessionFactory;
         this.metadataRepository = metadataRepository;
         this.contentStore = contentStore;
+        this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.timeProvider = timeProvider;
         this.options = options;
     }
 
     /// <summary>Synchronizes one account folder without mutating remote mailbox flags.</summary>
+    /// <param name="accountId">The account to synchronize.</param>
+    /// <param name="folderName">The folder to synchronize.</param>
+    /// <param name="cancellationToken">Cancels the run between remote reads and local writes.</param>
+    /// <returns>The bounded progress this run committed.</returns>
+    /// <exception cref="PersistenceConcurrencyConflictException">
+    /// Thrown when a competing writer wins a race that the bounded local retries could not resolve. Progress already
+    /// committed by this run stays durable, and the next run rereads the committed checkpoint before deciding again.
+    /// </exception>
     public async Task<MailboxSynchronizationResult> SynchronizeAsync(
         MailAccountId accountId,
         MailFolderName folderName,
         CancellationToken cancellationToken)
     {
-        var checkpoint = await this.checkpointStore.GetCheckpointAsync(accountId, folderName, cancellationToken);
+        var persistedCheckpoint =
+            await this.checkpointStore.GetCheckpointAsync(accountId, folderName, cancellationToken);
 
         await using var mailboxSession = await this.mailboxSessionFactory.OpenReadOnlyAsync(accountId, folderName, cancellationToken);
 
         var uidValidity = await mailboxSession.GetUidValidityAsync(cancellationToken);
-        checkpoint = checkpoint?.UidValidity == uidValidity ? checkpoint : SynchronizationCheckpoint.None(uidValidity);
+        var checkpoint = persistedCheckpoint?.UidValidity == uidValidity
+            ? persistedCheckpoint
+            : SynchronizationCheckpoint.None(uidValidity);
 
         var storedCount = 0;
         var skippedOversizedCount = 0;
@@ -64,8 +78,8 @@ public sealed class MailboxSynchronizer
             var batch = await mailboxSession.GetEmailBatchAfterAsync(checkpoint.LastSeenUid, this.options.MaxMetadataBatchSize, cancellationToken);
             foreach (var metadata in batch.Emails.OrderBy(email => email.OccurrenceId.Uid.Value))
             {
-                var outcome = await this.StoreOccurrenceAsync(mailboxSession, metadata, cancellationToken);
-                if (outcome == OccurrenceOutcome.Stored)
+                var availability = await this.StoreOccurrenceAsync(mailboxSession, metadata, cancellationToken);
+                if (availability == StoredEmailContentAvailability.Available)
                 {
                     storedCount++;
                 }
@@ -77,27 +91,36 @@ public sealed class MailboxSynchronizer
 
             if (batch.InspectedThroughUid is { } inspectedThroughUid)
             {
-                checkpoint = checkpoint.AdvanceTo(inspectedThroughUid, this.timeProvider.GetUtcNow());
+                var advancedCheckpoint = checkpoint.AdvanceTo(inspectedThroughUid, this.timeProvider.GetUtcNow());
+                await this.CommitCheckpointAsync(
+                    accountId,
+                    folderName,
+                    persistedCheckpoint,
+                    advancedCheckpoint,
+                    cancellationToken);
 
-                await this.SaveCheckpointAsync(accountId, folderName, checkpoint, cancellationToken);
+                checkpoint = advancedCheckpoint;
+                persistedCheckpoint = advancedCheckpoint;
             }
 
             hasMore = batch.HasMore;
         }
 
-        return new MailboxSynchronizationResult(storedCount, skippedOversizedCount, hasMore, checkpoint);
+        return new MailboxSynchronizationResult(
+            storedCount,
+            skippedOversizedCount,
+            hasMore,
+            checkpoint);
     }
 
-    private async Task<OccurrenceOutcome> StoreOccurrenceAsync(
+    private async Task<StoredEmailContentAvailability> StoreOccurrenceAsync(
         IMailboxSession mailboxSession,
         RemoteEmailMetadata metadata,
         CancellationToken cancellationToken)
     {
         if (metadata.SizeOctets > this.options.MaxRawMimeBytes)
         {
-            await this.RecordOversizedOccurrenceAsync(metadata, cancellationToken);
-
-            return OccurrenceOutcome.SkippedOversized;
+            return await this.RecordOversizedOccurrenceAsync(metadata, cancellationToken);
         }
 
         RemoteEmailContent content;
@@ -109,46 +132,71 @@ public sealed class MailboxSynchronizer
         {
             // The advertised size understated the payload, so the occurrence is recorded without content instead of
             // being silently skipped past by the checkpoint.
-            await this.RecordOversizedOccurrenceAsync(metadata, cancellationToken);
-
-            return OccurrenceOutcome.SkippedOversized;
+            return await this.RecordOversizedOccurrenceAsync(metadata, cancellationToken);
         }
 
-        await using var persistenceSession = await this.persistenceSessionFactory.BeginSessionAsync(cancellationToken);
+        await this.concurrencyRetryPolicy.CommitAsync(
+            async (persistenceSession, attemptCancellationToken) =>
+            {
+                var storedEmailId = await this.metadataRepository.UpsertMetadataAsync(
+                    persistenceSession,
+                    metadata,
+                    StoredEmailContentAvailability.Available,
+                    attemptCancellationToken);
+                await this.contentStore.SaveContentAsync(
+                    persistenceSession,
+                    storedEmailId,
+                    content,
+                    attemptCancellationToken);
+            },
+            cancellationToken);
 
-        var storedEmailId = await this.metadataRepository.UpsertMetadataAsync(persistenceSession, metadata, StoredEmailContentAvailability.Available, cancellationToken);
-        await this.contentStore.SaveContentAsync(persistenceSession, storedEmailId, content, cancellationToken);
-        await persistenceSession.CommitAsync(cancellationToken);
-
-        return OccurrenceOutcome.Stored;
+        return StoredEmailContentAvailability.Available;
     }
 
-    private async Task RecordOversizedOccurrenceAsync(
+    private async Task<StoredEmailContentAvailability> RecordOversizedOccurrenceAsync(
         RemoteEmailMetadata metadata,
         CancellationToken cancellationToken)
     {
-        await using var persistenceSession = await this.persistenceSessionFactory.BeginSessionAsync(cancellationToken);
+        await this.concurrencyRetryPolicy.CommitAsync(
+            async (persistenceSession, attemptCancellationToken) =>
+            {
+                await this.metadataRepository.UpsertMetadataAsync(
+                    persistenceSession,
+                    metadata,
+                    StoredEmailContentAvailability.ExceededSizeLimit,
+                    attemptCancellationToken);
+            },
+            cancellationToken);
 
-        await this.metadataRepository.UpsertMetadataAsync(persistenceSession, metadata, StoredEmailContentAvailability.ExceededSizeLimit, cancellationToken);
-        await persistenceSession.CommitAsync(cancellationToken);
+        return StoredEmailContentAvailability.ExceededSizeLimit;
     }
 
-    private async Task SaveCheckpointAsync(
+    // A checkpoint advance is attempted once rather than retried: the intended progress was derived from the state read
+    // at the start of the run, so a competing advance invalidates the decision itself instead of only the write.
+    private async Task CommitCheckpointAsync(
         MailAccountId accountId,
         MailFolderName folderName,
+        SynchronizationCheckpoint? expectedCheckpoint,
         SynchronizationCheckpoint checkpoint,
         CancellationToken cancellationToken)
     {
-        await using var persistenceSession = await this.persistenceSessionFactory.BeginSessionAsync(cancellationToken);
+        await using var persistenceSession =
+            await this.persistenceSessionFactory.BeginSessionAsync(cancellationToken);
 
-        await this.checkpointStore.SaveCheckpointAsync(persistenceSession, accountId, folderName, checkpoint, cancellationToken);
-        await persistenceSession.CommitAsync(cancellationToken);
-    }
+        await this.checkpointStore.SaveCheckpointAsync(
+            persistenceSession,
+            accountId,
+            folderName,
+            expectedCheckpoint,
+            checkpoint,
+            cancellationToken);
 
-    private enum OccurrenceOutcome
-    {
-        Stored = 0,
-        SkippedOversized = 1,
+        if (await persistenceSession.CommitAsync(cancellationToken) == PersistenceCommitResult.ConcurrencyConflict)
+        {
+            throw new PersistenceConcurrencyConflictException(
+                $"Synchronization progress for folder {folderName.Value} was changed by another writer before this run committed its advance.");
+        }
     }
 }
 
