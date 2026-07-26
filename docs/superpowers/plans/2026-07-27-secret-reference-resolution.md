@@ -40,7 +40,7 @@ MailMcp runs both as a container (Docker Compose or rootless Podman Compose unde
 
 Adding `docker-secret:` or `kubernetes-secret:` schemes was rejected: each would resolve to exactly the file read that `file:` already performs, and a scheme whose only distinction is documentation is configuration surface with no behavior behind it. A Kubernetes Secret projected into the environment block is `env:` for the same reason.
 
-A managed store reached over the network — Azure Key Vault, HashiCorp Vault, AWS Secrets Manager — is the case that does earn a scheme, because retrieval behavior genuinely differs: authentication, endpoint, timeout, retry, and caching. Nothing here implements one, but decisions 1, 2, and 14 exist so that adding one later registers an adapter and edits nothing else.
+A managed store reached over the network — Azure Key Vault, HashiCorp Vault, AWS Secrets Manager — is the case that does earn a scheme, because retrieval behavior genuinely differs: authentication, endpoint, timeout, retry, and caching. Nothing here implements one, but decisions 1, 2, and 18 exist so that adding one later registers an adapter and edits nothing else.
 
 ## Design decisions locked before implementation
 
@@ -49,20 +49,24 @@ A managed store reached over the network — Azure Key Vault, HashiCorp Vault, A
 3. **Resolution returns a result; it does not throw.** An unresolved reference is an expected configuration failure with a named cause, per the specification. The failure enum is justified here because `Host` acts on it by rendering a startup message; nothing above `Host` branches on it. `SchemeNotSupported` is reported by the dispatch, which is also how an operator learns a provider adapter was not registered.
 4. **The contract is asynchronous and cancellable from the first commit.** Every scheme implemented here reads a local file or an environment variable and would be happy synchronously. A managed-store adapter is a network call, and the root rules forbid blocking on it; retrofitting `ResolveAsync` later would break `IImapAccountSettingsProvider`, the session factory, and startup validation at once. Paying one `Task` allocation per resolution now is cheaper than that change, and resolutions happen once per synchronization run.
 5. **Startup validation runs in `IHostedLifecycleService.StartingAsync`, not in `IValidateOptions`.** Options validation is synchronous, so an async resolver cannot run inside it without blocking — which decision 4 exists to avoid. `StartingAsync` is documented to run before any hosted service's `StartAsync`, so a throw there fails the host before the synchronization worker or any endpoint starts, which is the fail-fast behavior the specification requires. Structural options validation stays in `ValidateOnStart` where it belongs; only secret resolution moves.
-6. **The resolver returns bytes; text is a view over them.** A secret is not always a password: a trust anchor may be PEM or DER, and a private key arrives as a PKCS#12 bundle that is binary and may carry its own password reference. A `string`-returning resolver would make PKCS#12 unrepresentable and would corrupt DER through encoding round-trips. `ResolvedSecret` therefore stores `ReadOnlyMemory<byte>`, which is also what the root rules prescribe for byte payloads crossing async and object boundaries. `Reveal()` returns the UTF-8 text view with one trailing newline stripped; `RevealBytes()` returns the material untouched. The trim belongs to the text view only — trimming a PFX would corrupt it. `plaintext:` and `env:` UTF-8-encode on the way in, which costs nothing and keeps one result shape.
-7. **Typed material is loaded above the resolver, not inside it.** `X509CertificateMaterialLoader` in `Infrastructure` turns resolved bytes into an `X509Certificate2`, accepting PEM and DER and, for key material, PKCS#12 with an optional separately-referenced password. The resolver stays ignorant of X.509 so that adding a future material kind — an SSH key, a JWT signing key — adds a loader rather than touching every scheme adapter.
-8. **`ResolvedSecret` hides its material behind a method, not a property.** `System.Text.Json`, `record` synthesized `ToString()`, and most diagnostic dumps enumerate properties, so a property named `Value` would eventually be serialized by something. `ImapAccountSettings` is a `record`, which makes this concrete: its synthesized `ToString()` prints every member today. `ResolvedSecret.Reveal()` is the single intentional disclosure point and `ToString()` is overridden to return `***`.
-9. **`plaintext:` is gated by a constructor flag, not by `IHostEnvironment`.** `Infrastructure` does not reference `Microsoft.Extensions.Hosting.Abstractions` and gains nothing by starting to. `Host` passes `builder.Environment.IsDevelopment()` at registration, which also makes the rule trivially testable in both directions.
-10. **`env:` resolves in every environment.** The specification gates exactly one scheme on the environment, and the definition of done names only the `plaintext:` rule. `env:` stays permitted with a documented recommendation against production use, rather than inventing a second environment gate the specification did not ask for. *Flagged for the owner: if `env:` should also fail outside Development, it is a one-line change to the same flag.*
-11. **Resolution runs at startup validation and again per use, which is what makes rotation work.** Startup validation resolves every reference and discards the material, so an unresolvable reference fails the host. Each actual use resolves again, so no long-lived copy exists and material rotated behind an unchanged reference — a replaced credential file, a re-issued vault entry — is observed by the next operation with no cache to invalidate and no restart. The material is a few hundred bytes from a tmpfs or an environment block; per-run re-reading is not a measured cost. A network-backed adapter for which per-use retrieval is too expensive caches inside itself under decision 14, without changing this.
-12. **Secrets are reloadable for new operations, not during running operations.** Both halves reload: a changed *reference* arrives through `IOptionsMonitor` and is validated by resolving the whole candidate snapshot before publishing it, with the last known good snapshot retained on failure; changed *material* is picked up by decision 10. Neither is applied mid-operation — a synchronization run that has authenticated finishes with the credential it authenticated with, because swapping a credential or trust anchor underneath an open IMAP session has no coherent meaning. This is ADR 0002's middle classification, chosen deliberately over the strictest one.
-13. **ADR 0002 must be amended before this is implemented.** The ADR currently classifies credentials and certificate trust anchors as restart-required, and decision 12 departs from that. The departure is defensible — the reference indirection means rotation re-resolves a validated reference rather than mutating a bound secret in place — but `docs/AGENTS.md` forbids modifying an ADR without explicit owner approval, so no ADR is touched here. **This is a blocking prerequisite, not a follow-up.**
-14. **Provider-specific concerns stay inside the provider's adapter.** Timeouts, retry, backoff, endpoint and region configuration, SDK client lifetime, platform identity, and caching policy belong to the adapter that needs them, never to `ISecretReferenceResolver`. The contract carries a reference and a cancellation token and returns a result; that is the whole surface. This is what lets a store that must cache aggressively and a local file that must never cache coexist without the contract taking a position, and it keeps SDK types out of everything above the adapter exactly as the root dependency rules require.
-15. **A managed-store adapter authenticates through platform identity, not through a MailMcp secret.** An Azure managed identity, a Kubernetes ServiceAccount token, or a Vault role is issued by the platform the process already runs on. Requiring MailMcp to hold a credential in order to fetch its credentials would be circular and would put the most sensitive value back into the configuration this specification removes it from. Recorded now so a future adapter does not quietly reintroduce the problem; nothing implements it here.
-16. **A custom trust anchor is validated by rebuilding the chain, never by accepting errors.** `RemoteCertificateNotAvailable` and `RemoteCertificateNameMismatch` are rejected outright. Only `RemoteCertificateChainErrors` is re-examined, by building an `X509Chain` with `TrustMode = X509ChainTrustMode.CustomRootTrust` and the anchor in `CustomTrustStore` — which Microsoft documents as respected only under that trust mode — and requiring a clean rebuild. MailKit's own `SslCertificateValidation.cs` example stops at describing errors and does not implement custom-CA trust, so this logic is ours to write and ours to test.
-17. **The database password becomes a reference too.** The specification's goal names it explicitly. `ConnectionStrings:mailmcp` keeps host, database, and user name; an optional `Persistence:PasswordReference` is resolved at startup and applied through `NpgsqlConnectionStringBuilder.Password`, so the connection string in `appsettings.json` never carries the password and the composed string never reaches a log.
-18. **Two resolver names, two scopes.** `ISecretReferenceResolver` resolves one reference. `MailAccountSecretOptions` resolves one account's set of secrets and reports per-account configuration errors. Naming them both "secret resolver" would make the call sites ambiguous, which the root naming rules forbid.
-19. **`UserName` stays a plain configuration value.** The definition of done names raw *passwords*. A mailbox user name is an identifier the operator already writes next to the host, and turning it into a reference would double the provisioning burden for no confidentiality gain. It remains excluded from logs as personal data.
+6. **The resolver returns bytes; text is a view over them.** A secret is not always a password: a trust anchor may be PEM or DER, and a private key arrives as a PKCS#12 bundle that is binary and may carry its own password reference. A `string`-returning resolver would make PKCS#12 unrepresentable and would corrupt DER through encoding round-trips. `ResolvedSecret` therefore stores a pinned `byte[]` (decision 7) and exposes it as `ReadOnlySpan<byte>`, which is what the root rules prescribe for byte payloads. `RevealBytes()` returns the material untouched; `RevealAsString()` returns the UTF-8 text view with one trailing newline stripped. The trim belongs to the text view only — trimming a PFX would corrupt it. `plaintext:` and `env:` UTF-8-encode on the way in, which costs nothing and keeps one result shape.
+7. **Secret material is a pinned byte buffer that is zeroed on dispose; it is never a `string` and never a `SecureString`.** Microsoft's guidance is explicit on all three points. `SecureString` is not recommended for new development on .NET, and it "does not encrypt the internal storage on non-Windows platform" — every MailMcp deployment target. A `string` is immutable, cannot be scheduled for deletion, and because its memory is not pinned "the garbage collector will make additional copies of `String` values when moving and compacting memory", so erasing one is not even well defined. The buffer is therefore allocated with `GC.AllocateArray<byte>(length, pinned: true)`, which the collector cannot relocate, and erased with `CryptographicOperations.ZeroMemory`, documented as existing "to future-proof against potential optimizations in the .NET runtime that could eliminate memory writes that aren't followed by memory reads" — a hand-written zeroing loop carries no such guarantee. `ArrayPool` is not used for secret material at all: a buffer returned uncleared hands the material to the next unrelated caller.
+8. **`RevealAsString()` exists, is the exception, and is named to look like one.** MailKit's `AuthenticateAsync(string, string)` and Npgsql's connection-string password are framework contracts that take a `string`, so a copy that cannot be erased is unavoidable at exactly those two call sites. `RevealBytes()` is the primary accessor and everything else uses it. `RevealAsString()` is called at the boundary itself, as late as possible, and its result is never stored, logged, or passed on. Its XML documentation states that the returned string cannot be erased and will persist until the collector reclaims it.
+9. **A resolved secret is owned by the operation that resolved it and disposed when that operation ends.** Combined with per-use resolution this bounds the exposure window to one synchronization run or one connection attempt rather than to process uptime. It also removes a lifetime hazard from dynamic reload: because every operation owns its own instance, publishing a new configuration snapshot never disposes material that an in-flight operation is still reading. `MailAccountSecrets` therefore implements `IDisposable` and disposes the secrets it owns, and `X509Certificate2` — itself disposable — is disposed on the same path.
+10. **The residual exposures are documented, not papered over.** Managed memory is still readable through a process dump, a debugger, or swap, and no code-level measure changes that. The mitigations are operational and belong in the operations documentation: `LimitCORE=0` on the systemd unit and `Storage=none` / `ProcessSizeMax=0` for `systemd-coredump`, plus keeping the service's memory out of swap in both the systemd and container shapes. `mlock` is deliberately rejected — it needs P/Invoke plus `CAP_IPC_LOCK` and a raised `RLIMIT_MEMLOCK` in every deployment shape, against the repository rule restricting unsafe and platform-invoke code to measured need, and it does not address dumps or debuggers anyway.
+11. **Typed material is loaded above the resolver, not inside it.** `X509CertificateMaterialLoader` in `Infrastructure` turns resolved bytes into an `X509Certificate2`, accepting PEM and DER and, for key material, PKCS#12 with an optional separately-referenced password. The resolver stays ignorant of X.509 so that adding a future material kind — an SSH key, a JWT signing key — adds a loader rather than touching every scheme adapter.
+12. **`ResolvedSecret` hides its material behind a method, not a property.** `System.Text.Json`, `record` synthesized `ToString()`, and most diagnostic dumps enumerate properties, so a property named `Value` would eventually be serialized by something. `ImapAccountSettings` is a `record`, which makes this concrete: its synthesized `ToString()` prints every member today. `RevealBytes()` and `RevealAsString()` are methods for that reason, and `ToString()` is overridden to return `***`.
+13. **`plaintext:` is gated by a constructor flag, not by `IHostEnvironment`.** `Infrastructure` does not reference `Microsoft.Extensions.Hosting.Abstractions` and gains nothing by starting to. `Host` passes `builder.Environment.IsDevelopment()` at registration, which also makes the rule trivially testable in both directions.
+14. **`env:` resolves in every environment.** The specification gates exactly one scheme on the environment, and the definition of done names only the `plaintext:` rule. `env:` stays permitted with a documented recommendation against production use, rather than inventing a second environment gate the specification did not ask for. *Flagged for the owner: if `env:` should also fail outside Development, it is a one-line change to the same flag.*
+15. **Resolution runs at startup validation and again per use, which is what makes rotation work.** Startup validation resolves every reference and discards the material, so an unresolvable reference fails the host. Each actual use resolves again, so no long-lived copy exists and material rotated behind an unchanged reference — a replaced credential file, a re-issued vault entry — is observed by the next operation with no cache to invalidate and no restart. The material is a few hundred bytes from a tmpfs or an environment block; per-run re-reading is not a measured cost. A network-backed adapter for which per-use retrieval is too expensive caches inside itself under decision 18, without changing this.
+16. **Secrets are reloadable for new operations, not during running operations.** Both halves reload: a changed *reference* arrives through `IOptionsMonitor` and is validated by resolving the whole candidate snapshot before publishing it, with the last known good snapshot retained on failure; changed *material* is picked up by decision 10. Neither is applied mid-operation — a synchronization run that has authenticated finishes with the credential it authenticated with, because swapping a credential or trust anchor underneath an open IMAP session has no coherent meaning. This is ADR 0002's middle classification, chosen deliberately over the strictest one.
+17. **ADR 0002 must be amended before this is implemented.** The ADR currently classifies credentials and certificate trust anchors as restart-required, and decision 16 departs from that. The departure is defensible — the reference indirection means rotation re-resolves a validated reference rather than mutating a bound secret in place — but `docs/AGENTS.md` forbids modifying an ADR without explicit owner approval, so no ADR is touched here. **This is a blocking prerequisite, not a follow-up.**
+18. **Provider-specific concerns stay inside the provider's adapter.** Timeouts, retry, backoff, endpoint and region configuration, SDK client lifetime, platform identity, and caching policy belong to the adapter that needs them, never to `ISecretReferenceResolver`. The contract carries a reference and a cancellation token and returns a result; that is the whole surface. This is what lets a store that must cache aggressively and a local file that must never cache coexist without the contract taking a position, and it keeps SDK types out of everything above the adapter exactly as the root dependency rules require.
+19. **A managed-store adapter authenticates through platform identity, not through a MailMcp secret.** An Azure managed identity, a Kubernetes ServiceAccount token, or a Vault role is issued by the platform the process already runs on. Requiring MailMcp to hold a credential in order to fetch its credentials would be circular and would put the most sensitive value back into the configuration this specification removes it from. Recorded now so a future adapter does not quietly reintroduce the problem; nothing implements it here.
+20. **A custom trust anchor is validated by rebuilding the chain, never by accepting errors.** `RemoteCertificateNotAvailable` and `RemoteCertificateNameMismatch` are rejected outright. Only `RemoteCertificateChainErrors` is re-examined, by building an `X509Chain` with `TrustMode = X509ChainTrustMode.CustomRootTrust` and the anchor in `CustomTrustStore` — which Microsoft documents as respected only under that trust mode — and requiring a clean rebuild. MailKit's own `SslCertificateValidation.cs` example stops at describing errors and does not implement custom-CA trust, so this logic is ours to write and ours to test.
+21. **The database password becomes a reference too.** The specification's goal names it explicitly. `ConnectionStrings:mailmcp` keeps host, database, and user name; an optional `Persistence:PasswordReference` is resolved at startup and applied through `NpgsqlConnectionStringBuilder.Password`, so the connection string in `appsettings.json` never carries the password and the composed string never reaches a log.
+22. **Two resolver names, two scopes.** `ISecretReferenceResolver` resolves one reference. `MailAccountSecretOptions` resolves one account's set of secrets and reports per-account configuration errors. Naming them both "secret resolver" would make the call sites ambiguous, which the root naming rules forbid.
+23. **`UserName` stays a plain configuration value.** The definition of done names raw *passwords*. A mailbox user name is an identifier the operator already writes next to the host, and turning it into a reference would double the provisioning burden for no confidentiality gain. It remains excluded from logs as personal data.
 
 ## File structure
 
@@ -72,7 +76,7 @@ A managed store reached over the network — Azure Key Vault, HashiCorp Vault, A
 - `src/Infrastructure/Secrets/SecretReference.cs` — parsed scheme and target, with the parse rules of decision 1.
 - `src/Infrastructure/Secrets/SecretResolutionFailure.cs` — machine-readable failure identities.
 - `src/Infrastructure/Secrets/SecretResolutionResult.cs` — success carrying `ResolvedSecret`, or a failure identity.
-- `src/Infrastructure/Secrets/ResolvedSecret.cs` — material behind `Reveal()`, redacted `ToString()`.
+- `src/Infrastructure/Secrets/ResolvedSecret.cs` — pinned buffer, `RevealBytes()`/`RevealAsString()`, zeroing `Dispose`, redacted `ToString()`.
 - `src/Infrastructure/Secrets/ISecretReferenceResolver.cs`, `ISecretSchemeResolver.cs` — the one-reference contract and the public per-scheme extension point.
 - `src/Infrastructure/Secrets/ISecretFileReader.cs`, `IEnvironmentVariableReader.cs` — the two in-memory-testable ports.
 - `src/Infrastructure/Secrets/FileSystemSecretFileReader.cs`, `ProcessEnvironmentVariableReader.cs` — the real adapters.
@@ -150,14 +154,14 @@ public sealed record SecretReference
 
 ```csharp
 
-public sealed class ResolvedSecret
+public sealed class ResolvedSecret : IDisposable
 {
-    public ResolvedSecret(ReadOnlyMemory<byte> material);
-
+    public static ResolvedSecret FromBytes(ReadOnlySpan<byte> material);
     public static ResolvedSecret FromText(string material);   // UTF-8 encodes; for plaintext: and env:
 
-    public string Reveal();                       // UTF-8 text view, one trailing newline stripped
-    public ReadOnlyMemory<byte> RevealBytes();    // untouched material, for PKCS#12 and DER
+    public ReadOnlySpan<byte> RevealBytes();      // primary accessor: material, untouched
+    public string RevealAsString();               // framework-contract escape hatch; see decision 8
+    public void Dispose();                        // CryptographicOperations.ZeroMemory over the pinned buffer
     public override string ToString();            // "***"
 }
 
@@ -188,10 +192,13 @@ TryParse_SupportedScheme_ParsesSchemeAndTarget
 [Fact]    TryParse_EmptyTarget_FailsWithTargetMissing                           // "file:"
 [Fact]    TryParse_UrlTarget_KeepsTheWholeUrl                                   // "azure-key-vault:https://v.example/s/imap"
 [Fact]    ToString_ResolvedSecret_DoesNotContainTheMaterial
-[Fact]    Reveal_ResolvedSecret_ReturnsTheUtf8TextView
-[Fact]    Reveal_MaterialEndsWithNewline_StripsOneTrailingNewline
+[Fact]    RevealAsString_ResolvedSecret_ReturnsTheUtf8TextView
+[Fact]    RevealAsString_MaterialEndsWithNewline_StripsOneTrailingNewline
 [Fact]    RevealBytes_BinaryMaterial_ReturnsEveryByteUnchanged      // a PKCS#12 bundle must survive
 [Fact]    RevealBytes_MaterialEndsWithNewline_DoesNotStripIt        // trimming a PFX would corrupt it
+[Fact]    Dispose_ResolvedSecret_ZeroesTheMaterial
+[Fact]    Dispose_CalledTwice_DoesNotThrow
+[Fact]    RevealBytes_AfterDispose_Throws                           // a use-after-erase is a bug, not a silent empty
 [Fact]    ToString_SecretResolutionResult_DoesNotContainTheMaterial             // the record's synthesized ToString
 ```
 
@@ -206,7 +213,24 @@ Expected: FAIL — `SecretReference` does not exist.
 
 `TryParse` trims, rejects blank, splits on `IndexOf(':')`, normalizes the scheme name to lower case with `ToLowerInvariant`, and rejects an empty remainder. It does not check the name against a list: an unknown scheme is a well-formed reference to a provider that is not registered, and decision 3 puts that answer in the dispatch. `SecretReferenceScheme` compares by normalized name with `StringComparer.Ordinal`, and its well-known members are the four wire names. The member name `EnvironmentVariable` and the wire name `env` deliberately differ, because the configuration prefix should stay short while the member name stays explicit.
 
-`ResolvedSecret` stores the material in a private field, exposes `Reveal()`, and overrides `ToString()` to return `"***"`. XML documentation states that `Reveal()` is the single intentional disclosure point and that callers must not store, log, or re-wrap the returned string.
+`ResolvedSecret` allocates its buffer with `GC.AllocateArray<byte>(length, pinned: true)` so the collector cannot relocate it and leave an un-erased copy, copies the material in, and erases it in `Dispose` with `CryptographicOperations.ZeroMemory`. `Dispose` is idempotent, and every accessor throws `ObjectDisposedException` afterwards rather than returning empty — a use-after-erase is a defect and must present as one. `ToString()` returns `"***"`.
+
+XML documentation states that `RevealBytes` is the primary accessor, that `RevealAsString` produces a copy which cannot be erased and exists only for framework contracts that take a `string`, and that the instance is owned by the operation that resolved it.
+
+```csharp
+public void Dispose()
+{
+    if (this.disposed)
+    {
+        return;
+    }
+
+    CryptographicOperations.ZeroMemory(this.material);
+    this.disposed = true;
+}
+```
+
+The zeroing must go through `CryptographicOperations.ZeroMemory` rather than `Array.Clear` or a loop: it is documented as existing "to future-proof against potential optimizations in the .NET runtime that could eliminate memory writes that aren't followed by memory reads", which is exactly this write.
 
 - [ ] **Step 4: Run the tests**
 
@@ -286,7 +310,7 @@ Expected: FAIL — the resolvers do not exist.
 
 - [ ] **Step 3: Implement**
 
-`SystemdCredentialSecretReferenceResolver` reads `CREDENTIALS_DIRECTORY` through `IEnvironmentVariableReader` — systemd documents that "the path to access them is derived from the environment variable `$CREDENTIALS_DIRECTORY`" and that access is restricted to the service's user — rejects a target containing `/`, `\`, or `..`, joins, and reads. `FileSecretReferenceResolver` reads the target directly, which is also the container path: Compose mounts secrets at `/run/secrets/<secret_name>`. Both read bytes and neither modifies them; the newline trim lives in `ResolvedSecret.Reveal()` so binary material is never touched, and both report `MaterialEmpty` when the material has zero length.
+`SystemdCredentialSecretReferenceResolver` reads `CREDENTIALS_DIRECTORY` through `IEnvironmentVariableReader` — systemd documents that "the path to access them is derived from the environment variable `$CREDENTIALS_DIRECTORY`" and that access is restricted to the service's user — rejects a target containing `/`, `\`, or `..`, joins, and reads. `FileSecretReferenceResolver` reads the target directly, which is also the container path: Compose mounts secrets at `/run/secrets/<secret_name>`. Both read bytes and neither modifies them; the newline trim lives in `ResolvedSecret.RevealAsString()` so binary material is never touched, and both report `MaterialEmpty` when the material has zero length.
 
 `DevelopmentPlaintextSecretReferenceResolver(bool developmentEnvironment)` returns the target verbatim in Development and `PlaintextPermittedOnlyInDevelopment` otherwise, per decision 5.
 
@@ -334,7 +358,7 @@ public sealed class MailAccountSecretOptions
         CancellationToken cancellationToken);
 }
 
-public sealed record MailAccountSecrets(ResolvedSecret Password, X509Certificate2? TrustedCertificateAuthority);
+public sealed record MailAccountSecrets(ResolvedSecret Password, X509Certificate2? TrustedCertificateAuthority) : IDisposable;
 
 public sealed record ImapAccountSettings(
     string AccountId,
@@ -369,11 +393,13 @@ Expected: FAIL — `MailAccountSecretOptions` does not exist and `ImapAccountSet
 
 - [ ] **Step 3: Implement**
 
-`FindConfigurationErrorsAsync` resolves the password reference and, when a trust anchor reference is present, resolves and parses it, then discards both — decision 11's startup half. Trust anchor parsing uses `X509Certificate2.CreateFromPem` inside a `try`/`catch (CryptographicException)` that becomes a configuration error, so malformed material fails startup instead of failing the first TLS handshake hours later.
+`FindConfigurationErrorsAsync` resolves the password reference and, when a trust anchor reference is present, resolves and parses it, then discards both — decision 15's startup half. Trust anchor parsing uses `X509Certificate2.CreateFromPem` inside a `try`/`catch (CryptographicException)` that becomes a configuration error, so malformed material fails startup instead of failing the first TLS handshake hours later.
 
 `Resolve` performs the same work and returns the values, and throws `InvalidOperationException` if a reference that validated at startup no longer resolves — a fail-closed path, not an ordinary branch.
 
 `ImapAccountSettings` carries `ResolvedSecret` and the optional anchor. Its XML documentation gains a remark that the record's synthesized `ToString()` is safe only because `ResolvedSecret` redacts itself.
+
+`MailAccountSecrets` implements `IDisposable` and disposes both the password and the `X509Certificate2`, which is itself disposable. Per decision 9 the instance is owned by the operation that resolved it: `MailKitImapMailboxSessionFactory.OpenReadOnlyAsync` disposes it once the client is authenticated and the folder is open, and the startup validator disposes everything it resolved before returning. `ImapAccountSettings` does *not* own the secrets — it is a carrier — so the ownership rule is stated in its XML documentation to stop a future caller from disposing it twice or not at all.
 
 - [ ] **Step 4: Run the tests**
 
@@ -476,7 +502,7 @@ client.ServerCertificateValidationCallback =
 
 await client.ConnectAsync(...);
 ...
-await client.AuthenticateAsync(settings.UserName, settings.Password.Reveal(), cancellationToken);
+await client.AuthenticateAsync(settings.UserName, settings.Password.RevealAsString(), cancellationToken);
 ```
 
 - [ ] **Step 4: Run the tests**
@@ -509,7 +535,7 @@ git commit -m "Validate a private mail server against its configured trust ancho
 var connectionStringBuilder = new NpgsqlConnectionStringBuilder(connectionString);
 if (databasePassword is { } password)
 {
-    connectionStringBuilder.Password = password.Reveal();
+    connectionStringBuilder.Password = password.RevealAsString();
 }
 ```
 
@@ -640,7 +666,7 @@ git commit -m "Assert secret resolution stays out of Domain and Application"
 - Create: `src/Host/Configuration/MailSecretSnapshotPublisher.cs`
 - Test: `tests/Infrastructure.UnitTests/MailAccountSecretReloadTests.cs`
 
-Decision 12 makes this a blocking prerequisite: **do not start this task until ADR 0002 has been amended with owner approval.** The ADR classifies credentials and trust anchors as restart-required, and this task deliberately reclassifies them as reloadable for new operations.
+Decision 17 makes this a blocking prerequisite: **do not start this task until ADR 0002 has been amended with owner approval.** The ADR classifies credentials and trust anchors as restart-required, and this task deliberately reclassifies them as reloadable for new operations.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -652,7 +678,7 @@ Decision 12 makes this a blocking prerequisite: **do not start this task until A
 [Fact] ResolveAsync_MaterialRotatedMidOperation_DoesNotAffectTheOperationInFlight
 ```
 
-The last two are the pair that distinguishes the two reload halves, and the last one is what keeps decision 11's "not during running operations" honest.
+The last two are the pair that distinguishes the two reload halves, and the last one is what keeps decision 16's "not during running operations" honest.
 
 - [ ] **Step 2: Bind for reload**
 
@@ -666,7 +692,7 @@ Reload validation must not crash the process: ADR 0002 is explicit that a reject
 
 - [ ] **Step 4: Resolve material per operation**
 
-No change is needed for the material half — decision 11 already resolves per use, which is what makes rotation behind an unchanged reference work. The test in Step 1 is what proves it, and it exists to catch a future "optimization" that caches the resolved value on the options instance.
+No change is needed for the material half — decision 15 already resolves per use, which is what makes rotation behind an unchanged reference work. The test in Step 1 is what proves it, and it exists to catch a future "optimization" that caches the resolved value on the options instance.
 
 - [ ] **Step 5: Run the tests and commit**
 
@@ -686,7 +712,7 @@ git commit -m "Reload secret references and material without restarting the host
 
 - [ ] **Step 1: Write the provisioning page**
 
-`docs/operations/secret-provisioning.md` documents the reference grammar, the four schemes, and — because MailMcp is deployed several ways — a section per deployment shape: the native systemd path with `LoadCredential=`, `LoadCredentialEncrypted=`, `systemd-creds`, and `$CREDENTIALS_DIRECTORY`; the container path with Compose `secrets:` mounted at `/run/secrets/<name>`; and the Kubernetes path with a Secret mounted as a read-only tmpfs volume — the last two both addressed as `file:`, with an explicit note that no container- or Kubernetes-specific scheme exists or is needed. It states the trailing-newline trimming and that it applies to text secrets only, the accepted certificate encodings, the `plaintext:` Development gate, the recommendation against `env:` in production, and the ADR 0002 classification from decision 12.
+`docs/operations/secret-provisioning.md` documents the reference grammar, the four schemes, and — because MailMcp is deployed several ways — a section per deployment shape: the native systemd path with `LoadCredential=`, `LoadCredentialEncrypted=`, `systemd-creds`, and `$CREDENTIALS_DIRECTORY`; the container path with Compose `secrets:` mounted at `/run/secrets/<name>`; and the Kubernetes path with a Secret mounted as a read-only tmpfs volume — the last two both addressed as `file:`, with an explicit note that no container- or Kubernetes-specific scheme exists or is needed. It states the trailing-newline trimming and that it applies to text secrets only, the accepted certificate encodings, the operational hardening that bounds in-memory exposure — `LimitCORE=0` on the systemd unit, `Storage=none` and `ProcessSizeMax=0` for `systemd-coredump`, and keeping the service out of swap in both the systemd and container shapes, with the honest statement that a dump or debugger can still read managed memory and that no code-level measure changes that — the `plaintext:` Development gate, the recommendation against `env:` in production, and the ADR 0002 classification from decision 16.
 
 A closing section states what a future managed-store provider would add — one `ISecretSchemeResolver`, one registration extension, its own timeouts and caching, platform identity rather than a MailMcp-held credential, and a `LICENSES.md` entry — so an operator reading the page can tell which schemes exist today from which are anticipated. It documents anticipated extension, not unimplemented behavior, and says so plainly; `docs/AGENTS.md` requires documentation to describe verified implemented behavior, and this section is explicitly labelled as the extension contract rather than as a feature.
 
@@ -729,17 +755,21 @@ Run `$finish-change`: commit, push, and open a draft pull request whose body con
 | Resolution returns a result rather than throwing | 1, 2 |
 | Composite dispatch over per-scheme adapters | 2 |
 | Unknown-scheme and missing-reference failures | 1, 2 |
-| A new scheme is one adapter registration, no core edit | decisions 2 and 14, proved by the Task 2 extensibility test |
+| A new scheme is one adapter registration, no core edit | decisions 2 and 18, proved by the Task 2 extensibility test |
 | Contract asynchronous and cancellable for a network provider | decision 4, Tasks 1–3, 6 |
-| Provider concerns confined to the provider's adapter | decisions 14 and 15 |
+| Provider concerns confined to the provider's adapter | decisions 18 and 19 |
 | Resolver contract and adapters live in `Infrastructure` | 1–4 |
 | `Host` invokes resolution once before hosted services start | 6 |
 | No options type binds a raw password | 3, 5, 6 (verified by `grep` in Task 6 Step 6) |
 | Failure message names account, logical secret, and scheme only | 3, 6 |
 | Secrets exposed through an accessor, not an ordinary property | 1, 3 |
-| Rotated material observed without restart | decision 11, Tasks 3 and 9 |
+| Rotated material observed without restart | decision 15, Tasks 3 and 8 |
 | Every secret-bearing setting is a `*Reference` string in JSON | 3, 5, 6 |
 | Bytes-first resolution; PKCS#12 and DER representable | 1, 2 |
+| No `string`, pooled buffer, or `SecureString` holds material | decisions 7 and 8, Task 1 |
+| Pinned buffer zeroed with `CryptographicOperations.ZeroMemory` | 1 |
+| Material owned by its operation and disposed at its end | decision 9, Tasks 3 and 6 |
+| Core-dump and swap exposure documented for both shapes | 9 |
 | Text view decodes UTF-8 and trims one trailing newline | 1 |
 | Rotated material observed by the next operation, no restart | 8 |
 | Reload with an unresolvable reference keeps previous secrets | 8 |
@@ -755,12 +785,12 @@ Run `$finish-change`: commit, push, and open a draft pull request whose body con
 
 **Deliberately out of scope:** Data Protection key-ring provisioning, encrypted secret storage in PostgreSQL, secret rotation without restart, and MCP client certificates (stage 9).
 
-Managed secret stores — Kubernetes-native APIs, Azure Key Vault, HashiCorp Vault, AWS Secrets Manager — are out of scope as implementations but not as constraints. Decisions 2, 4, 14, and 15 exist for them, and the Task 2 extensibility test is what keeps the promise honest. Note that Kubernetes and container deployments need nothing added at all: their secrets are files, so `file:` already serves them today.
+Managed secret stores — Kubernetes-native APIs, Azure Key Vault, HashiCorp Vault, AWS Secrets Manager — are out of scope as implementations but not as constraints. Decisions 2, 4, 18, and 19 exist for them, and the Task 2 extensibility test is what keeps the promise honest. Note that Kubernetes and container deployments need nothing added at all: their secrets are files, so `file:` already serves them today.
 
 **Flagged for the owner**
 
-- **Blocking:** ADR 0002 must be amended before Task 8 begins (decision 12). The dynamic-reload requirement contradicts the ADR's current restart-required classification for credentials and trust anchors, and `docs/AGENTS.md` forbids amending an ADR without explicit owner approval. Tasks 1–7 and 9 are unaffected.
+- **Blocking:** ADR 0002 must be amended before Task 8 begins (decision 17). The dynamic-reload requirement contradicts the ADR's current restart-required classification for credentials and trust anchors, and `docs/AGENTS.md` forbids amending an ADR without explicit owner approval. Tasks 1–7 and 9 are unaffected.
 - **Blocking:** the specification is now estimated at ~1300 lines against `specs/README.md`'s ~1000-line ceiling, and `specs/02` records a proposed 02a/02b split. Whether to split — and therefore whether this plan stays one plan — is the owner's call, because renumbering touches the roadmap board and the dependency chain from specification 03 onward.
 - The specification originally estimated ~500 lines. Loading and validating the trust anchor (Task 4), the database password reference (Task 5), and the asynchronous contract that ripples through `IImapAccountSettingsProvider` and startup validation (decisions 4 and 5) realistically bring this to roughly 850 lines including tests and documentation. Nothing is proposed for deferral; the estimate is what is optimistic. Issue #36's `Size` line should be updated when this plan is accepted.
-- Decision 10 reads "permitted for non-production automation" as guidance rather than an enforced environment gate for `env:`. If it should be enforced, say so and it moves onto the same Development flag as `plaintext:`.
+- Decision 14 reads "permitted for non-production automation" as guidance rather than an enforced environment gate for `env:`. If it should be enforced, say so and it moves onto the same Development flag as `plaintext:`.
 - Decision 4 makes the contract asynchronous before any asynchronous provider exists. The cost is real and visible: `GetSettings` becomes `GetSettingsAsync`, and startup validation moves out of `IValidateOptions` into `IHostedLifecycleService`. It is proposed because retrofitting it alongside a first Key Vault adapter would touch the same files while also introducing SDK, identity, and licensing questions, and doing one of those at a time is cheaper. If managed stores are further off than this assumes, the synchronous contract is defensible and this is the decision to revisit.

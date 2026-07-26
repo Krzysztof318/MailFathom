@@ -3,7 +3,7 @@
 **Roadmap group:** A — configuration, transport security, resilience
 **Draft delivery stage:** 2
 **Depends on:** 01
-**Estimated change size:** ~1300 lines including tests and documentation — above the ~1000-line ceiling `specs/README.md` sets per specification, so this specification is a candidate for splitting; see "Delivery size" below
+**Estimated change size:** ~1450 lines including tests and documentation — above the ~1000-line ceiling `specs/README.md` sets per specification, so this specification is a candidate for splitting; see "Delivery size" below
 
 ## Goal
 
@@ -101,13 +101,27 @@ Specification 01 requires that certificate validation is never disabled and that
 
 A trusted certificate authority is configured as a reference in the same form as any other deployment-provisioned material. `Infrastructure` loads it, validates that it parses as a certificate and is usable as a trust anchor, and supplies it to the MailKit adapter's certificate validation path so a private server chains to it while ordinary validation stays enabled for everything else. A malformed or unreadable trust anchor fails startup, since silently continuing would either reject a working server or, worse, invite an operator to disable validation to work around it.
 
+## Secret material in memory
+
+Resolved material must live as briefly as possible and be erased when it stops being needed. Four rules follow from current .NET guidance, and one common approach is explicitly rejected.
+
+**`SecureString` is not used.** Microsoft's own documentation says "We recommend that you don't use the `SecureString` class for new development on .NET (Core)", and states that because of platform dependencies "`SecureString` does not encrypt the internal storage on non-Windows platform" — which is every environment MailMcp targets. The same documentation names the recommended alternative: "use an opaque handle to credentials that are stored outside of the process." That is precisely what a secret reference already is, so this specification's core design *is* the sanctioned approach and `SecureString` would add ceremony without protection.
+
+**Secret material is never held in a `string`.** A `string` is immutable, so it cannot be overwritten; it cannot be scheduled for deletion; and because its memory is not pinned, the garbage collector makes additional copies when it moves and compacts memory, each of which outlives any attempt to erase the original. Material is therefore held in a byte buffer, which is the other reason resolution is byte-oriented.
+
+**The buffer is pinned and zeroed.** Material is allocated with `GC.AllocateArray<byte>(length, pinned: true)` so the collector cannot relocate it and leave an un-erased copy behind, and erased with `CryptographicOperations.ZeroMemory`, which exists — in its own documented words — "to future-proof against potential optimizations in the .NET runtime that could eliminate memory writes that aren't followed by memory reads." A plain loop assigning zeroes carries no such guarantee. Pooled buffers are not used for secret material at all, because a returned buffer that was not cleared hands the material to the next unrelated caller.
+
+**Resolved material is owned and disposed.** A resolved secret is disposable, is owned by the operation that resolved it, and is erased when that operation ends. This composes with per-use resolution: material exists for the length of one synchronization run or one connection attempt rather than for the process lifetime, so the window in which a dump could contain it is bounded by an operation rather than by uptime. Because each operation owns its own instance, a configuration reload never erases material an in-flight operation is still using.
+
+Two exposures are accepted and must be documented rather than hidden. Some framework contracts take a `string` — the IMAP client's authentication call and the database connection string among them — so a short-lived `string` copy is unavoidable at exactly those call sites; it is created as late as possible, at the boundary itself, and never stored, logged, or passed on. And managed memory remains readable through a process dump, a debugger, or swap. Those are operational controls rather than code: the deployment must disable core dumps for the service and keep its memory out of swap, and the operations documentation must say so. Locking pages with `mlock` is deliberately not attempted — it would require P/Invoke plus elevated capability in every deployment shape, against a repository rule that restricts unsafe and platform-invoke code to measured need, and it does not address dumps or debuggers anyway.
+
 ## Safety and privacy
 
 A resolution failure message names the account identifier, the logical secret name, and the scheme, and never the reference target path, the environment variable value, or any part of the resolved secret. Resolved secrets are excluded from structured logging by construction: the options type exposes them through a dedicated accessor rather than an ordinary public property, so a future serializer or diagnostic dump cannot pick them up incidentally. `plaintext:` outside Development is a startup failure, not a warning.
 
 ## Testing
 
-`Infrastructure.UnitTests` cover each scheme adapter against an in-memory abstraction over the credential directory and file system, since unit tests must not touch the real file system. Tests assert the unknown-scheme failure, the missing-reference failure, the Development-only `plaintext:` rule, the composite dispatch, and that failure results carry no secret material. A test registers a scheme adapter that exists only in the test project and asserts it resolves through the same dispatch, which is what proves a future provider is an adapter rather than a refactor. Material-kind tests cover the UTF-8 text view with its newline trim, binary material surviving resolution byte-for-byte, and a PEM and a DER certificate both loading. Reload tests cover a rotated reference being adopted, a candidate snapshot with an unresolvable reference being rejected while the previous secrets stay active, and rotated material behind an unchanged reference being observed by the next operation but not mid-operation. Trust-anchor tests cover a valid certificate being installed into the validation path, a malformed one failing startup, and the absence of any configuration path that disables validation. An architecture test asserts that no secret-resolution type is reachable from `Application` or `Domain`.
+`Infrastructure.UnitTests` cover each scheme adapter against an in-memory abstraction over the credential directory and file system, since unit tests must not touch the real file system. Tests assert the unknown-scheme failure, the missing-reference failure, the Development-only `plaintext:` rule, the composite dispatch, and that failure results carry no secret material. A test registers a scheme adapter that exists only in the test project and asserts it resolves through the same dispatch, which is what proves a future provider is an adapter rather than a refactor. Material-kind tests cover the UTF-8 text view with its newline trim, binary material surviving resolution byte-for-byte, and a PEM and a DER certificate both loading. Memory-hygiene tests cover a disposed secret no longer yielding its material, disposal being idempotent, and no accessor returning a `string` except the documented framework-boundary one. Reload tests cover a rotated reference being adopted, a candidate snapshot with an unresolvable reference being rejected while the previous secrets stay active, and rotated material behind an unchanged reference being observed by the next operation but not mid-operation. Trust-anchor tests cover a valid certificate being installed into the validation path, a malformed one failing startup, and the absence of any configuration path that disables validation. An architecture test asserts that no secret-resolution type is reachable from `Application` or `Domain`.
 
 ## Delivery size
 
@@ -138,6 +152,8 @@ Adapters for external managed secret stores — Kubernetes, Azure Key Vault, Has
 - Rotating the material behind an unchanged reference is observed by the next operation without a process restart.
 - A configuration reload carrying an unresolvable reference is rejected and leaves the previous secrets active.
 - ADR 0002 has been amended, with owner approval, to classify referenced secrets as reloadable for new operations.
+- No secret material is held in a `string`, a pooled buffer, or a `SecureString`; buffers are pinned and zeroed with `CryptographicOperations.ZeroMemory` when their owning operation ends.
+- `docs/operations/` documents disabling core dumps and swap exposure for the service, in both the systemd and container deployment shapes.
 - A private server with a configured trust anchor connects with certificate validation fully enabled.
 - `docs/operations/local-development.md` documents the Development workflow and `docs/operations/` gains a page describing the systemd credential deployment path alongside the container path.
 - `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
