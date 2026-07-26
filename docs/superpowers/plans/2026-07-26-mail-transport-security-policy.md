@@ -24,6 +24,13 @@
 - Unit tests only. No integration test project, Testcontainers, real IMAP server, network, filesystem, or database.
 - `dotnet msbuild .config/CodeCoverage.proj -t:Collect` must pass the 85% whole-scope gate.
 
+## Revisions accepted during implementation
+
+The owner accepted decision 3 as written and changed the other two:
+
+- **Decision 7 reversed.** `PermittedAuthenticationMechanisms` now defaults to `[ "PLAIN", "LOGIN" ]` instead of failing startup when omitted. The default is applied post-binding through `EffectivePermittedAuthenticationMechanisms`, mirroring the existing `EffectiveFolders` pattern, because the configuration binder appends bound entries to an existing list and a property initializer would silently keep both clear-text mechanisms permitted next to the configured ones.
+- **Decision 6 replaced.** Rather than adding a `Host.UnitTests` project, the settings that needed testing moved up into `Infrastructure` as `MailAccountTransportSecurityOptions`, which ADR 0002 already designates as an adapter concern. `Host`'s account DTO holds it as a nested `TransportSecurity` section and turns its reported errors into `ValidationResult` values. `Infrastructure.UnitTests` therefore covers every unsafe configuration shape and the post-binding default, with no new test project and no change to the coverage configuration.
+
 ## Design decisions locked before implementation
 
 1. **The permitted mechanism set is a closed domain enum, not free text.** Config supplies SASL names as strings; `Domain` owns the canonical name table because SASL mechanism names are RFC vocabulary, not MailKit vocabulary. This gives one parse/normalize implementation shared by `Host` (configuration) and `Infrastructure` (filtering MailKit's advertised set), and makes the clear-text classification an exhaustive switch instead of a string comparison.

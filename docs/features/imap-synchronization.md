@@ -38,11 +38,13 @@ Synchronization is disabled by default:
         "AccountId": "primary",
         "Host": "imap.example.test",
         "Port": 993,
-        "ConnectionSecurity": "TlsOnConnect",
-        "PermittedAuthenticationMechanisms": [ "SCRAM-SHA-256", "PLAIN" ],
-        "AllowInsecureConnection": false,
-        "AllowClearTextAuthenticationOverUnencryptedConnection": false,
-        "CertificateTrust": "SystemTrustStore",
+        "TransportSecurity": {
+          "ConnectionSecurity": "TlsOnConnect",
+          "PermittedAuthenticationMechanisms": [ "SCRAM-SHA-256", "PLAIN" ],
+          "AllowInsecureConnection": false,
+          "AllowClearTextAuthenticationOverUnencryptedConnection": false,
+          "CertificateTrust": "SystemTrustStore"
+        },
         "Folders": [ "INBOX" ]
       }
     ]
@@ -66,7 +68,7 @@ Account identifiers and folder names must be unique after domain normalization, 
 
 ### Transport security
 
-`ConnectionSecurity` selects one of five modes and defaults to `TlsOnConnect`:
+Every setting below lives in the account's `TransportSecurity` section, which `MailAccountTransportSecurityOptions` in `Infrastructure` binds and validates. `ConnectionSecurity` selects one of five modes and defaults to `TlsOnConnect`:
 
 | Mode | Behavior |
 | --- | --- |
@@ -78,13 +80,13 @@ Account identifiers and folder names must be unique after domain normalization, 
 
 Only the first two guarantee that nothing travels unencrypted. The other three require `AllowInsecureConnection: true`, including `Auto` and `StartTlsWhenAvailable`: an opportunistic mode completes the connection in clear text whenever the server declines encryption, which is the same exposure as `None`.
 
-`PermittedAuthenticationMechanisms` is an explicit allow-list with no implicit default, so a configuration that enables synchronization without naming at least one supported mechanism fails startup. Supported names are `PLAIN`, `LOGIN`, `CRAM-MD5`, `DIGEST-MD5`, `SCRAM-SHA-1`, `SCRAM-SHA-1-PLUS`, `SCRAM-SHA-256`, `SCRAM-SHA-256-PLUS`, `SCRAM-SHA-512`, `SCRAM-SHA-512-PLUS`, and `NTLM`; names are matched ignoring case and duplicates collapse while keeping the configured order. Permitting `PLAIN` or `LOGIN` on a mode that can stay unencrypted additionally requires `AllowClearTextAuthenticationOverUnencryptedConnection: true` on top of `AllowInsecureConnection: true`, because those two mechanisms hand over the reusable password itself.
+`PermittedAuthenticationMechanisms` is an allow-list that defaults to `[ "PLAIN", "LOGIN" ]` when omitted, which is safe under the default `TlsOnConnect` and trips the clear-text rule on any mode that can stay unencrypted. The default is applied after binding rather than as a property initializer, because the configuration binder appends bound entries to an existing list and would otherwise keep `PLAIN` and `LOGIN` permitted alongside whatever the operator configured. Supported names are `PLAIN`, `LOGIN`, `CRAM-MD5`, `DIGEST-MD5`, `SCRAM-SHA-1`, `SCRAM-SHA-1-PLUS`, `SCRAM-SHA-256`, `SCRAM-SHA-256-PLUS`, `SCRAM-SHA-512`, `SCRAM-SHA-512-PLUS`, and `NTLM`; names are matched ignoring case and duplicates collapse while keeping the configured order. Permitting `PLAIN` or `LOGIN` on a mode that can stay unencrypted additionally requires `AllowClearTextAuthenticationOverUnencryptedConnection: true` on top of `AllowInsecureConnection: true`, because those two mechanisms hand over the reusable password itself.
 
 The MailKit adapter removes every non-permitted mechanism from the set the server advertised before it authenticates, and fails with `MailAuthenticationMechanismUnavailableException` when nothing permitted remains. It never restores a removed mechanism after a failed authentication, so a server cannot negotiate its way to a mechanism the operator refused. A server that advertises no SASL mechanism at all is treated the same way and the account fails rather than falling back to the clear-text IMAP `LOGIN` command, which the allow-list cannot describe.
 
 Certificate validation is always enabled and no configuration path disables it. A private or self-signed server is supported by setting `CertificateTrust` to `AdditionalTrustedAuthority` and naming the deployment-provisioned material in `TrustedCertificateAuthorityReference`; the reference is a credential name, never certificate material or a secret value. `SystemTrustStore` rejects a reference, and `AdditionalTrustedAuthority` requires one.
 
-Every rule above is enforced twice: in the domain policy object and again during `ValidateOnStart` options validation, which names the offending account and the violated rule and never includes the user name, password, or the trust anchor reference.
+Every rule above is enforced twice: in the domain policy object and again during `ValidateOnStart` options validation. `Host` binds the section and turns each reported configuration error into a startup failure that names the account and the violated rule and never includes the user name, password, or the trust anchor reference.
 
 ## Safety assumptions
 
