@@ -59,6 +59,23 @@ public sealed class MailAuthenticationPolicyTests
     }
 
     [Fact]
+    public void PermittedMechanisms_CreatedPolicy_CannotBeCastBackToAMutableCollection()
+    {
+        // Arrange
+        var policy = MailAuthenticationPolicy.Create(
+            [MailAuthenticationMechanism.ScramSha256],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Act
+        var mutableView = policy.PermittedMechanisms as IList<MailAuthenticationMechanism>;
+
+        // Assert
+        Assert.Null(policy.PermittedMechanisms as MailAuthenticationMechanism[]);
+        Assert.Throws<NotSupportedException>(() => mutableView![0] = MailAuthenticationMechanism.Plain);
+    }
+
+    [Fact]
     public void PermitsClearTextCredentials_ChallengeResponseMechanismsOnly_ReportsFalse()
     {
         // Arrange

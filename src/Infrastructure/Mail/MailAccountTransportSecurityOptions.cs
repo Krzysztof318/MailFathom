@@ -23,9 +23,11 @@ public sealed class MailAccountTransportSecurityOptions
     /// <remarks>Only <c>TlsOnConnect</c> and <c>StartTlsRequired</c> guarantee encryption; every other mode requires <see cref="AllowInsecureConnection" />.</remarks>
     public MailConnectionSecurity ConnectionSecurity { get; set; } = MailConnectionSecurity.TlsOnConnect;
 
-    /// <summary>Gets or sets the SASL mechanisms the account may authenticate with, in preference order.</summary>
+    /// <summary>Gets or sets the SASL mechanisms the account may authenticate with.</summary>
     /// <remarks>
-    /// The list is an allow-list: the adapter removes every other mechanism from the server's advertised set. When it
+    /// The list is an unordered allow-list: the adapter removes every other mechanism from the server's advertised
+    /// set and lets the client pick the strongest mechanism that survives, so listing a weaker mechanism first does
+    /// not make it preferred. When it
     /// is omitted, the post-binding default in <see cref="EffectivePermittedAuthenticationMechanisms" /> applies. That
     /// default must not be a property initializer, because the configuration binder appends bound entries to an
     /// existing list, which would silently keep the default mechanisms permitted alongside the configured ones.
@@ -134,6 +136,7 @@ public sealed class MailAccountTransportSecurityOptions
         MailTransportSecurityViolation.PermittedAuthenticationMechanismRequired => nameof(PermittedAuthenticationMechanisms),
         MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceRequired
             or MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceNotApplicable => nameof(TrustedCertificateAuthorityReference),
+        MailTransportSecurityViolation.CertificateTrustNotSupported => nameof(CertificateTrust),
         _ => nameof(ConnectionSecurity),
     };
 
@@ -151,6 +154,10 @@ public sealed class MailAccountTransportSecurityOptions
             "Trusting an additional certificate authority requires TrustedCertificateAuthorityReference.",
         MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceNotApplicable =>
             "TrustedCertificateAuthorityReference applies only when CertificateTrust is AdditionalTrustedAuthority.",
+        MailTransportSecurityViolation.ConnectionSecurityNotSupported =>
+            "ConnectionSecurity must name one of the supported connection security modes.",
+        MailTransportSecurityViolation.CertificateTrustNotSupported =>
+            "CertificateTrust must name one of the supported certificate trust sources.",
         _ => "The transport security policy is not supported.",
     };
 }

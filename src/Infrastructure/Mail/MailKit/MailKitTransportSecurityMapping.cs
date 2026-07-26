@@ -35,8 +35,11 @@ internal static class MailKitTransportSecurityMapping
     /// <exception cref="MailAuthenticationMechanismUnavailableException">Thrown when the server advertises no permitted mechanism.</exception>
     /// <remarks>
     /// MailKit chooses a mechanism from whatever remains in this set, so restricting it before authenticating is what
-    /// makes the allow-list binding. The failure is deliberately terminal: restoring removed mechanisms after a failed
-    /// authentication would let a server downgrade the account to a mechanism the operator refused.
+    /// makes the allow-list binding. The choice among the survivors is left to MailKit's strength ranking rather than
+    /// to the configured order, because an allow-list bounds what is acceptable while the client is better placed to
+    /// pick the strongest acceptable mechanism the server actually advertises. The failure is deliberately terminal:
+    /// restoring removed mechanisms after a failed authentication would let a server downgrade the account to a
+    /// mechanism the operator refused.
     /// </remarks>
     internal static void RestrictAdvertisedMechanisms(
         ISet<string> advertisedMechanisms,

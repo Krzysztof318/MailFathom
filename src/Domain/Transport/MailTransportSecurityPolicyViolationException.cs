@@ -1,5 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Collections.ObjectModel;
+
 namespace MailMcp.Domain.Transport;
 
 /// <summary>Indicates that a mail transport security policy would weaken transport protection in a way no opt-in allows.</summary>
@@ -26,7 +28,8 @@ public sealed class MailTransportSecurityPolicyViolationException : Exception
     /// <summary>Initializes a new transport security policy violation for the violated rules.</summary>
     /// <param name="violations">The violated transport security rules.</param>
     public MailTransportSecurityPolicyViolationException(IReadOnlyList<MailTransportSecurityViolation> violations)
-        : base($"The mail transport security policy violates {DescribeViolations(violations)}.") => this.Violations = violations ?? [];
+        : base($"The mail transport security policy violates {DescribeViolations(violations)}.") =>
+        this.Violations = new ReadOnlyCollection<MailTransportSecurityViolation>([.. violations ?? []]);
 
     /// <summary>Gets the violated transport security rules.</summary>
     public IReadOnlyList<MailTransportSecurityViolation> Violations { get; }

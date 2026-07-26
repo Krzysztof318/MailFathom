@@ -182,6 +182,40 @@ public sealed class MailAccountTransportSecurityOptionsTests
     }
 
     [Fact]
+    public void FindConfigurationErrors_UndefinedCertificateTrust_ReportsTheCertificateTrustSetting()
+    {
+        // Arrange
+        var options = new MailAccountTransportSecurityOptions
+        {
+            CertificateTrust = (MailServerCertificateTrust)99,
+        };
+
+        // Act
+        var errors = options.FindConfigurationErrors();
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Equal(nameof(MailAccountTransportSecurityOptions.CertificateTrust), error.PropertyName);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_UndefinedConnectionSecurity_ReportsTheConnectionSecuritySetting()
+    {
+        // Arrange
+        var options = new MailAccountTransportSecurityOptions
+        {
+            ConnectionSecurity = (MailConnectionSecurity)99,
+        };
+
+        // Act
+        var errors = options.FindConfigurationErrors();
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Equal(nameof(MailAccountTransportSecurityOptions.ConnectionSecurity), error.PropertyName);
+    }
+
+    [Fact]
     public void CreatePolicy_SafeSettings_MapsEveryValueOntoTheDomainPolicy()
     {
         // Arrange

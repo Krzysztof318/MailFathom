@@ -13,8 +13,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(TimeProvider.System);
+// Bound strictly: mail transport is security-sensitive, and a misspelled key such as a singular
+// "PermittedAuthenticationMechanism" would otherwise be ignored and silently replaced by the default allow-list.
 builder.Services.AddOptions<MailSynchronizationOptions>()
-    .Bind(builder.Configuration.GetSection("MailSynchronization"))
+    .Bind(
+        builder.Configuration.GetSection("MailSynchronization"),
+        binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddOptions<PersistenceOptions>()

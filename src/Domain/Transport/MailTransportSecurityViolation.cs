@@ -27,4 +27,12 @@ public enum MailTransportSecurityViolation
 
     /// <summary>A trusted certificate authority reference was supplied while only the system trust store is used.</summary>
     TrustedCertificateAuthorityReferenceNotApplicable = 5,
+
+    /// <summary>The selected connection security mode is not one of the supported modes.</summary>
+    /// <remarks>Reachable because configuration can bind an enum from a raw number that names no member.</remarks>
+    ConnectionSecurityNotSupported = 6,
+
+    /// <summary>The selected certificate trust source is not one of the supported sources.</summary>
+    /// <remarks>Reachable because configuration can bind an enum from a raw number that names no member.</remarks>
+    CertificateTrustNotSupported = 7,
 }

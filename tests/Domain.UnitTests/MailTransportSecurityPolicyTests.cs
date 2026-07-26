@@ -260,6 +260,62 @@ public sealed class MailTransportSecurityPolicyTests
     }
 
     [Fact]
+    public void FindViolations_UndefinedConnectionSecurityMode_ReportsItInsteadOfEvaluatingTheRemainingRules()
+    {
+        // Arrange
+        const MailConnectionSecurity undefinedMode = (MailConnectionSecurity)99;
+
+        // Act
+        var violations = FindViolations(
+            undefinedMode,
+            [MailAuthenticationMechanism.Plain],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Assert
+        Assert.Equal([MailTransportSecurityViolation.ConnectionSecurityNotSupported], violations);
+    }
+
+    [Fact]
+    public void FindViolations_UndefinedCertificateTrust_ReportsItInsteadOfAcceptingThePolicy()
+    {
+        // Arrange
+        const MailServerCertificateTrust undefinedTrust = (MailServerCertificateTrust)99;
+
+        // Act
+        var violations = MailTransportSecurityPolicy.FindViolations(
+            MailConnectionSecurity.TlsOnConnect,
+            [MailAuthenticationMechanism.Plain],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false,
+            undefinedTrust,
+            trustedCertificateAuthorityReference: null);
+
+        // Assert
+        Assert.Equal([MailTransportSecurityViolation.CertificateTrustNotSupported], violations);
+    }
+
+    [Fact]
+    public void Create_UndefinedCertificateTrust_ThrowsInsteadOfReturningAValidatedPolicy()
+    {
+        // Arrange
+        var authentication = MailAuthenticationPolicy.Create(
+            [MailAuthenticationMechanism.ScramSha256],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Act
+        var exception = Assert.Throws<MailTransportSecurityPolicyViolationException>(() => MailTransportSecurityPolicy.Create(
+            MailConnectionSecurity.TlsOnConnect,
+            authentication,
+            (MailServerCertificateTrust)99,
+            trustedCertificateAuthorityReference: null));
+
+        // Assert
+        Assert.Equal([MailTransportSecurityViolation.CertificateTrustNotSupported], exception.Violations);
+    }
+
+    [Fact]
     public void GuaranteesEncryptedChannel_UndefinedConnectionSecurityMode_Throws()
     {
         // Arrange

@@ -90,10 +90,11 @@ public sealed record MailTransportSecurityPolicy
     /// <param name="certificateTrust">The certificate authorities that validate the server certificate.</param>
     /// <param name="trustedCertificateAuthorityReference">The reference to additional trust anchor material, or <see langword="null" />.</param>
     /// <returns>The violated rules, empty when the combination is safe.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="connectionSecurity" /> is not a defined member.</exception>
     /// <remarks>
     /// A configuration boundary calls this before building the policy so it can report every unsafe setting of an
-    /// account at once instead of failing on the first one.
+    /// account at once instead of failing on the first one. The evaluation is total: an undefined enum value, which
+    /// configuration can produce by binding a raw number, is reported as a violation instead of falling through the
+    /// rules it cannot be evaluated against.
     /// </remarks>
     public static IReadOnlyList<MailTransportSecurityViolation> FindViolations(
         MailConnectionSecurity connectionSecurity,
@@ -127,6 +128,15 @@ public sealed record MailTransportSecurityPolicy
         bool allowInsecureConnection,
         bool allowClearTextAuthenticationOverUnencryptedConnection)
     {
+        // An undefined mode cannot be classified as encrypted or unencrypted, so the remaining rules would silently
+        // pass it. It is rejected outright instead.
+        if (!Enum.IsDefined(connectionSecurity))
+        {
+            yield return MailTransportSecurityViolation.ConnectionSecurityNotSupported;
+
+            yield break;
+        }
+
         if (connectionSecurity == MailConnectionSecurity.None && !allowInsecureConnection)
         {
             yield return MailTransportSecurityViolation.UnencryptedConnectionRequiresExplicitOptIn;
@@ -151,6 +161,13 @@ public sealed record MailTransportSecurityPolicy
         MailServerCertificateTrust certificateTrust,
         string? trustedCertificateAuthorityReference)
     {
+        if (!Enum.IsDefined(certificateTrust))
+        {
+            yield return MailTransportSecurityViolation.CertificateTrustNotSupported;
+
+            yield break;
+        }
+
         var hasReference = !string.IsNullOrWhiteSpace(trustedCertificateAuthorityReference);
 
         if (certificateTrust == MailServerCertificateTrust.AdditionalTrustedAuthority && !hasReference)
