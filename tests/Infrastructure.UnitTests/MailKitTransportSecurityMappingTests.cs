@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Domain.Transport;
+using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Mail.MailKit;
 using Xunit;
 

@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-namespace MailMcp.Infrastructure.Mail.MailKit;
+namespace MailMcp.Infrastructure.Mail;
 
 /// <summary>Indicates that a mail server advertises no authentication mechanism the account's policy permits.</summary>
 /// <remarks>

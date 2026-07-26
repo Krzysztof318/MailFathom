@@ -7,7 +7,16 @@ namespace MailMcp.Infrastructure.Mail;
 /// <summary>Describes one configuration error in an account's transport security settings.</summary>
 /// <param name="PropertyName">The setting the operator must correct.</param>
 /// <param name="Description">A safe sentence naming the rule, free of credentials and secret references.</param>
-public sealed record MailAccountTransportSecurityConfigurationError(string PropertyName, string Description);
+/// <param name="Violation">
+/// The domain rule the settings violate, or <see langword="null" /> when the error is a mechanism-name parse failure
+/// rather than a rule violation. Carrying it keeps the stable machine-readable identity the domain already computed
+/// available to the boundary that renders the operator message, so diagnostics can be matched on the rule instead of
+/// on prose that is free to change.
+/// </param>
+public sealed record MailAccountTransportSecurityConfigurationError(
+    string PropertyName,
+    string Description,
+    MailTransportSecurityViolation? Violation);
 
 /// <summary>Binds an account's transport security settings and maps them onto the domain policy.</summary>
 /// <remarks>
@@ -91,7 +100,8 @@ public sealed class MailAccountTransportSecurityOptions
         {
             errors.Add(new MailAccountTransportSecurityConfigurationError(
                 nameof(this.PermittedAuthenticationMechanisms),
-                $"SASL mechanism '{unsupportedMechanismName}' is not supported."));
+                $"SASL mechanism '{unsupportedMechanismName}' is not supported.",
+                Violation: null));
         }
 
         var violations = MailTransportSecurityPolicy.FindViolations(
@@ -104,7 +114,8 @@ public sealed class MailAccountTransportSecurityOptions
 
         errors.AddRange(violations.Select(violation => new MailAccountTransportSecurityConfigurationError(
             SettingFor(violation),
-            DescribeViolation(violation))));
+            DescribeViolation(violation),
+            violation)));
 
         return errors;
     }

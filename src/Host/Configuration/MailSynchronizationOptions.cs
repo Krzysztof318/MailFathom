@@ -7,13 +7,12 @@ using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Mail.MailKit;
 
 namespace MailMcp.Host.Configuration;
 
 /// <summary>Configures periodic IMAP synchronization.</summary>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
-internal sealed class MailSynchronizationOptions : IValidatableObject, IMailKitImapAccountSettingsProvider, IMailTransportSecurityPolicyReader
+internal sealed class MailSynchronizationOptions : IValidatableObject, IImapAccountSettingsProvider, IMailTransportSecurityPolicyReader
 {
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
@@ -38,12 +37,12 @@ internal sealed class MailSynchronizationOptions : IValidatableObject, IMailKitI
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
 
     /// <inheritdoc />
-    public MailKitImapAccountSettings GetSettings(string accountId)
+    public ImapAccountSettings GetSettings(string accountId)
     {
         var normalizedAccountId = MailAccountId.Create(accountId).Value;
         var account = this.FindAccount(normalizedAccountId);
 
-        return new MailKitImapAccountSettings(
+        return new ImapAccountSettings(
             normalizedAccountId,
             account.Host.Trim(),
             account.Port,
@@ -194,8 +193,19 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     private IEnumerable<ValidationResult> ValidateTransportSecurity() => this.TransportSecurity
         .FindConfigurationErrors()
         .Select(error => new ValidationResult(
-            $"Account '{this.AccountId}': {error.Description}",
+            DescribeConfigurationError(this.AccountId, error),
             [$"{nameof(this.TransportSecurity)}.{error.PropertyName}"]));
+
+    /// <summary>Builds the startup message for one transport security configuration error.</summary>
+    /// <remarks>
+    /// The violation name is appended so the message carries a stable identity an operator or log query can match on,
+    /// while the prose stays free to change. A mechanism-name parse failure has no violation and is reported without
+    /// one. Neither part may name the user name, password, or trust anchor reference.
+    /// </remarks>
+    private static string DescribeConfigurationError(string accountId, MailAccountTransportSecurityConfigurationError error) =>
+        error.Violation is { } violation
+            ? $"Account '{accountId}': {error.Description} [{violation}]"
+            : $"Account '{accountId}': {error.Description}";
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.ValidateForSynchronization(synchronizationEnabled: true);

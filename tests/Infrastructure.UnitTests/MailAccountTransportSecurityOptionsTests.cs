@@ -67,6 +67,7 @@ public sealed class MailAccountTransportSecurityOptionsTests
         var error = Assert.Single(errors);
         Assert.Equal(nameof(MailAccountTransportSecurityOptions.ConnectionSecurity), error.PropertyName);
         Assert.Contains("AllowInsecureConnection", error.Description, StringComparison.Ordinal);
+        Assert.Equal(MailTransportSecurityViolation.UnencryptedConnectionRequiresExplicitOptIn, error.Violation);
     }
 
     [Theory]
@@ -144,6 +145,48 @@ public sealed class MailAccountTransportSecurityOptionsTests
                 "At least one supported SASL mechanism must be permitted.",
             ],
             errors.Select(error => error.Description));
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_UnsupportedMechanismName_CarriesNoViolationBecauseItIsAParseFailure()
+    {
+        // Arrange
+        var options = new MailAccountTransportSecurityOptions
+        {
+            PermittedAuthenticationMechanisms = ["GSSAPI", "SCRAM-SHA-256"],
+        };
+
+        // Act
+        var errors = options.FindConfigurationErrors();
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Equal(nameof(MailAccountTransportSecurityOptions.PermittedAuthenticationMechanisms), error.PropertyName);
+        Assert.Null(error.Violation);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_SeveralViolatedRules_PreservesEveryDomainViolationIdentity()
+    {
+        // Arrange
+        var options = new MailAccountTransportSecurityOptions
+        {
+            ConnectionSecurity = MailConnectionSecurity.None,
+            PermittedAuthenticationMechanisms = ["PLAIN"],
+            TrustedCertificateAuthorityReference = "mailmcp-imap-ca",
+        };
+
+        // Act
+        var errors = options.FindConfigurationErrors();
+
+        // Assert
+        Assert.Equal(
+            [
+                MailTransportSecurityViolation.UnencryptedConnectionRequiresExplicitOptIn,
+                MailTransportSecurityViolation.ClearTextAuthenticationRequiresEncryptedConnection,
+                MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceNotApplicable,
+            ],
+            errors.Select(error => error.Violation));
     }
 
     [Fact]

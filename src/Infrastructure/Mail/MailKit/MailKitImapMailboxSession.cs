@@ -80,7 +80,7 @@ internal sealed class MailKitImapClientAdapter(ImapClient client) : IMailKitImap
 /// <summary>MailKit-backed factory for authenticated read-only IMAP folder sessions.</summary>
 internal sealed class MailKitImapMailboxSessionFactory(
     Func<IMailKitImapClient> clientFactory,
-    IMailKitImapAccountSettingsProvider settingsProvider) : IMailboxSessionFactory
+    IImapAccountSettingsProvider settingsProvider) : IMailboxSessionFactory
 {
     /// <inheritdoc />
     public async Task<IMailboxSession> OpenReadOnlyAsync(

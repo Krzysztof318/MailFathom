@@ -8,6 +8,7 @@ using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Transport;
+using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Mail.MailKit;
 using NSubstitute;
 using Xunit;
@@ -160,8 +161,8 @@ public sealed class MailKitImapMailboxSessionTests
         // Arrange
         await using var client = new FakeImapClient();
         var folder = Substitute.For<IMailFolder>();
-        var settingsProvider = Substitute.For<IMailKitImapAccountSettingsProvider>();
-        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
+        var settingsProvider = Substitute.For<IImapAccountSettingsProvider>();
+        settingsProvider.GetSettings("primary").Returns(new ImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
         client.IsConnected = true;
         client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = folder;
@@ -188,9 +189,9 @@ public sealed class MailKitImapMailboxSessionTests
         // Arrange
         await using var client = new FakeImapClient();
         var folder = Substitute.For<IMailFolder>();
-        var settingsProvider = Substitute.For<IMailKitImapAccountSettingsProvider>();
+        var settingsProvider = Substitute.For<IImapAccountSettingsProvider>();
         var folderOpenException = new InvalidOperationException("folder open failed");
-        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
+        settingsProvider.GetSettings("primary").Returns(new ImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
         client.IsConnected = true;
         client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = folder;
@@ -280,8 +281,8 @@ public sealed class MailKitImapMailboxSessionTests
         // Arrange
         await using var client = new FakeImapClient();
         var folder = Substitute.For<IMailFolder>();
-        var settingsProvider = Substitute.For<IMailKitImapAccountSettingsProvider>();
-        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
+        var settingsProvider = Substitute.For<IImapAccountSettingsProvider>();
+        settingsProvider.GetSettings("primary").Returns(new ImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
         client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = folder;
         var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
@@ -492,8 +493,8 @@ public sealed class MailKitImapMailboxSessionTests
 
     private static MailKitImapMailboxSessionFactory CreateFactory(FakeImapClient client, IMailFolder folder)
     {
-        var settingsProvider = Substitute.For<IMailKitImapAccountSettingsProvider>();
-        settingsProvider.GetSettings("primary").Returns(new MailKitImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
+        var settingsProvider = Substitute.For<IImapAccountSettingsProvider>();
+        settingsProvider.GetSettings("primary").Returns(new ImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
         client.Folder = folder;
 
         return new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
