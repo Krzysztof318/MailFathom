@@ -147,7 +147,7 @@ Work is tracked as GitHub issues on the `MailMcp roadmap` project board, which i
 
 ### The issue that governs a change
 
-- Every change starts from an issue. Identify it during `$start-task`, before editing files, and name it in the task brief.
+- Every change starts from an issue. Identify it during `$start-task`, before editing files, and name it in the task brief. Read the governing specification and ADR context first, because an issue body is written from them.
 - Each numbered specification under `specs/` has exactly one issue, titled `Spec NN — <specification title>`. Create the issue in the same change set that adds a new specification, so a specification never exists without a tracked unit of work.
 - Work that is not a numbered specification — maintenance, an ADR consequence, a defect — also gets an issue. State in its body that no `specs/` file backs it and name the ADR or the reason instead.
 - Do not open a second issue for work an existing issue already covers. Extend the existing issue when scope grows and record why.
