@@ -1,7 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Npgsql;
 using Xunit;
 
 namespace MailMcp.Infrastructure.UnitTests;
@@ -36,5 +39,50 @@ public sealed class ServiceCollectionExtensionsTests
         // Assert
         using var provider = services.BuildServiceProvider();
         Assert.Equal(interpretation, provider.GetRequiredService<SecretResolutionOptions>().Interpretation);
+    }
+
+    /// <summary>
+    /// The container must be the only owner of the data source. It was previously built inside the startup provider,
+    /// which the container never sees, so a host that resolved no context shut down leaving a connection pool open.
+    /// </summary>
+    [Fact]
+    public async Task AddInfrastructure_AfterStartup_HandsTheContainerADataSourceItCreatedItself()
+    {
+        // Arrange
+        await using var provider = BuildConfiguredProvider();
+        var connectionStringProvider = provider.GetServices<IHostedService>()
+            .OfType<IHostedLifecycleService>()
+            .Single();
+
+        // Act
+        await connectionStringProvider.StartingAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Same(provider.GetRequiredService<NpgsqlDataSource>(), provider.GetRequiredService<NpgsqlDataSource>());
+        Assert.IsNotAssignableFrom<IDisposable>(connectionStringProvider);
+        Assert.IsNotAssignableFrom<IAsyncDisposable>(connectionStringProvider);
+    }
+
+    [Fact]
+    public async Task AddInfrastructure_DataSourceRequestedBeforeStartup_ThrowsInsteadOfUsingAnUncomposedConnectionString()
+    {
+        // Arrange
+        await using var provider = BuildConfiguredProvider();
+
+        // Act, Assert
+        Assert.Throws<InvalidOperationException>(provider.GetRequiredService<NpgsqlDataSource>);
+    }
+
+    private static ServiceProvider BuildConfiguredProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
+        services.AddInfrastructure(new PostgresConnectionSettings(
+            "Host=localhost;Database=mailmcp;Username=mailmcp",
+            ConnectionStringSecret: null,
+            Password: null));
+
+        return services.BuildServiceProvider();
     }
 }

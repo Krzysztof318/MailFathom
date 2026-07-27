@@ -7,22 +7,22 @@ using Xunit;
 
 namespace MailMcp.Infrastructure.UnitTests;
 
-public sealed class PostgresDataSourceProviderTests
+public sealed class PostgresConnectionStringProviderTests
 {
     private const string ConnectionStringWithoutPassword = "Host=localhost;Database=mailmcp;Username=mailmcp";
 
     [Fact]
-    public void DataSource_BeforeStartup_ThrowsRatherThanBuildingOneFromAnUnresolvedConnectionString()
+    public void ConnectionString_BeforeStartup_ThrowsRatherThanFallingBackToAnUnresolvedOne()
     {
         // Arrange
         var provider = CreateProvider();
 
         // Act, Assert
-        Assert.Throws<InvalidOperationException>(() => provider.DataSource);
+        Assert.Throws<InvalidOperationException>(() => provider.ConnectionString);
     }
 
     [Fact]
-    public async Task StartingAsync_ResolvablePassword_ComposesTheDataSourceBeforeAnyWorkerStarts()
+    public async Task StartingAsync_ResolvablePassword_ComposesTheConnectionStringBeforeAnyWorkerStarts()
     {
         // Arrange
         var provider = CreateProvider(new ConfiguredSecret { SecretReference = "plaintext:postgres-password" });
@@ -31,7 +31,7 @@ public sealed class PostgresDataSourceProviderTests
         await provider.StartingAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Contains("Username=mailmcp", provider.DataSource.ConnectionString, StringComparison.Ordinal);
+        Assert.Contains("Password=postgres-password", provider.ConnectionString, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -45,11 +45,11 @@ public sealed class PostgresDataSourceProviderTests
             () => provider.StartingAsync(TestContext.Current.CancellationToken));
     }
 
-    private static PostgresDataSourceProvider CreateProvider(ConfiguredSecret? password = null) => new(
+    private static PostgresConnectionStringProvider CreateProvider(ConfiguredSecret? password = null) => new(
         new PostgresConnectionSettings(ConnectionStringWithoutPassword, ConnectionStringSecret: null, password),
         new PlaintextOnlySecretReferenceResolver(),
         new SecretResolutionOptions(SecretValueInterpretation.ReferenceOnly),
-        NullLogger<PostgresDataSourceProvider>.Instance);
+        NullLogger<PostgresConnectionStringProvider>.Instance);
 
     private sealed class PlaintextOnlySecretReferenceResolver : ISecretReferenceResolver
     {
