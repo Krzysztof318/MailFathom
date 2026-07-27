@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Domain.Transport;
+using MailMcp.Infrastructure.Secrets;
 
 namespace MailMcp.Infrastructure.Mail;
 
@@ -53,9 +54,16 @@ public sealed class MailAccountTransportSecurityOptions
     /// <remarks>Certificate validation itself cannot be disabled; a private server is supported by trusting an additional authority.</remarks>
     public MailServerCertificateTrust CertificateTrust { get; set; } = MailServerCertificateTrust.SystemTrustStore;
 
-    /// <summary>Gets or sets the reference to deployment-provisioned trust anchor material.</summary>
-    /// <remarks>The value is a reference such as a credential name, never certificate material and never a secret value.</remarks>
-    public string? TrustedCertificateAuthorityReference { get; set; }
+    /// <summary>Gets or sets the secret block referencing deployment-provisioned trust anchor material.</summary>
+    /// <remarks>
+    /// The block carries a reference such as a credential name, never certificate material inline. Loading the material
+    /// behind it is separate work; these settings only fix its configuration shape, so that the uniform block
+    /// convention holds for every secret-bearing setting rather than for newly added ones alone. A block present with a
+    /// blank <see cref="ConfiguredSecret.SecretReference" /> reads as an absent anchor, so
+    /// <c>"TrustedCertificateAuthority": {}</c> fails the domain rule that requires one instead of passing it and then
+    /// failing later with a confusing missing-material error.
+    /// </remarks>
+    public ConfiguredSecret? TrustedCertificateAuthority { get; set; }
 
     /// <summary>Gets the configured SASL mechanisms or the post-binding default allow-list.</summary>
     /// <remarks>
@@ -83,7 +91,7 @@ public sealed class MailAccountTransportSecurityOptions
             this.AllowInsecureConnection,
             this.AllowClearTextAuthenticationOverUnencryptedConnection),
         this.CertificateTrust,
-        this.TrustedCertificateAuthorityReference);
+        this.ConfiguredTrustAnchorReference);
 
     /// <summary>Finds every unsupported mechanism name and every violated domain transport security rule.</summary>
     /// <returns>The errors to report at startup, empty when the settings are safe.</returns>
@@ -110,7 +118,7 @@ public sealed class MailAccountTransportSecurityOptions
             this.AllowInsecureConnection,
             this.AllowClearTextAuthenticationOverUnencryptedConnection,
             this.CertificateTrust,
-            this.TrustedCertificateAuthorityReference);
+            this.ConfiguredTrustAnchorReference);
 
         errors.AddRange(violations.Select(violation => new MailAccountTransportSecurityConfigurationError(
             SettingFor(violation),
@@ -119,6 +127,28 @@ public sealed class MailAccountTransportSecurityOptions
 
         return errors;
     }
+
+    /// <summary>Gets the masked trust anchor reference, or <see langword="null" /> when no usable anchor is configured.</summary>
+    /// <remarks>
+    /// <para>
+    /// The block is a configuration-adapter shape and must not cross into <c>Domain</c>, which keeps taking a nullable
+    /// string. An empty reference inside a present block is an absent anchor here, so the domain rule reports the
+    /// missing anchor the operator actually has to fix.
+    /// </para>
+    /// <para>
+    /// What crosses is <see cref="SecretReference.ToString" />, not the operator's raw value. The domain reads this
+    /// only for presence, but it is a public property of a record whose synthesized printing reaches any log line the
+    /// policy appears in, and the raw value is a credential name, a file path, or — under an inline interpretation
+    /// mode — the material itself. Masking keeps the domain's documented invariant that the value is never material
+    /// true by construction instead of by convention. A value that does not parse as a reference reads as absent, so
+    /// certificate material pasted where a reference belongs fails the domain rule rather than being carried;
+    /// inline anchor material is specification 02b's work and arrives with a loader that can validate it.
+    /// </para>
+    /// </remarks>
+    private string? ConfiguredTrustAnchorReference =>
+        SecretReference.TryParse(this.TrustedCertificateAuthority?.SecretReference, out var reference, out _)
+            ? reference.ToString()
+            : null;
 
     private IReadOnlyList<MailAuthenticationMechanism> ParsePermittedMechanisms(out IReadOnlyList<string> unsupportedMechanismNames)
     {
@@ -146,7 +176,7 @@ public sealed class MailAccountTransportSecurityOptions
     {
         MailTransportSecurityViolation.PermittedAuthenticationMechanismRequired => nameof(PermittedAuthenticationMechanisms),
         MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceRequired
-            or MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceNotApplicable => nameof(TrustedCertificateAuthorityReference),
+            or MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceNotApplicable => nameof(TrustedCertificateAuthority),
         MailTransportSecurityViolation.CertificateTrustNotSupported => nameof(CertificateTrust),
         _ => nameof(ConnectionSecurity),
     };
@@ -162,9 +192,9 @@ public sealed class MailAccountTransportSecurityOptions
         MailTransportSecurityViolation.ClearTextAuthenticationRequiresEncryptedConnection =>
             "A clear-text SASL mechanism on a channel that can stay unencrypted requires both AllowInsecureConnection and AllowClearTextAuthenticationOverUnencryptedConnection.",
         MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceRequired =>
-            "Trusting an additional certificate authority requires TrustedCertificateAuthorityReference.",
+            "Trusting an additional certificate authority requires a TrustedCertificateAuthority secret reference.",
         MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceNotApplicable =>
-            "TrustedCertificateAuthorityReference applies only when CertificateTrust is AdditionalTrustedAuthority.",
+            "TrustedCertificateAuthority applies only when CertificateTrust is AdditionalTrustedAuthority.",
         MailTransportSecurityViolation.ConnectionSecurityNotSupported =>
             "ConnectionSecurity must name one of the supported connection security modes.",
         MailTransportSecurityViolation.CertificateTrustNotSupported =>

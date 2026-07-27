@@ -39,6 +39,27 @@ dotnet run --project src/AppHost/AppHost.csproj
 
 The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.2-pg17` image so local development starts with a PostgreSQL server that can support the `vector` extension required by the RAG and embedding slices.
 
+## Development secrets
+
+Secrets are never written into configuration as values, in development either. `appsettings.Development.json` sets the interpretation mode to `ReferenceOrInline`, which keeps `plaintext:` references convenient without weakening the shipped `ReferenceOnly` default:
+
+```json
+{
+  "Secrets": { "Interpretation": "ReferenceOrInline" }
+}
+```
+
+Configure a development account in `appsettings.Development.json` or, better, in user secrets:
+
+```bash
+dotnet user-secrets --project src/Host/Host.csproj set \
+  "MailSynchronization:Accounts:0:Secrets:Password:SecretReference" "plaintext:dev-password"
+```
+
+The block shape is identical to production, so moving a working development configuration to a real deployment is one string edit — `plaintext:dev-password` becomes `systemd-credential:imap-primary-password` — rather than a restructuring.
+
+Neither file nor user secrets is a production secret store. User secrets are stored unencrypted in the developer's profile directory and exist only to keep credentials out of the repository; `appsettings.Development.json` is committed and must never hold a real credential. [Secret provisioning](secret-provisioning.md) describes the deployment paths.
+
 ## Command-line tooling
 
 The repository provisions no development environment, so install the SDK and any command-line tools on the developer machine. Repository-local tools declared in `.config/dotnet-tools.json` come from `dotnet tool restore` and are limited to what the coverage gate needs.

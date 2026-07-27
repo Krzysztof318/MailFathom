@@ -1,0 +1,34 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+
+using Microsoft.Extensions.Logging;
+
+namespace MailMcp.Host.UnitTests;
+
+/// <summary>Captures formatted log messages so a test can assert what startup told the operator — and what it did not.</summary>
+/// <remarks>
+/// Logging is part of the contract here rather than incidental: the host promises to name every setting that resolved
+/// to an inline value and to keep secret material out of every line it writes.
+/// </remarks>
+internal sealed class RecordingLogger<TCategory> : ILogger<TCategory>
+{
+    private readonly List<string> messages = [];
+
+    public IReadOnlyList<string> Messages => this.messages;
+
+    public IDisposable? BeginScope<TState>(TState state)
+        where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(
+        LogLevel logLevel,
+        EventId eventId,
+        TState state,
+        Exception? exception,
+        Func<TState, Exception?, string> formatter)
+    {
+        ArgumentNullException.ThrowIfNull(formatter);
+
+        this.messages.Add(formatter(state, exception));
+    }
+}

@@ -8,9 +8,11 @@ using MailMcp.Application.Synchronization;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Mail.MailKit;
 using MailMcp.Infrastructure.Persistence;
+using MailMcp.Infrastructure.Secrets;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace MailMcp.Infrastructure;
 
@@ -19,18 +21,75 @@ namespace MailMcp.Infrastructure;
 [ExcludeFromCodeCoverage(Justification = "Will be covered later by host integration tests.")]
 public static class ServiceCollectionExtensions
 {
-    /// <summary>Registers EF Core persistence, MailKit mailbox access, and application synchronization services.</summary>
-    public static IServiceCollection AddMailMcpInfrastructure(
+    /// <summary>Registers the secret reference grammar, the shipped scheme adapters, and the composite dispatch.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="interpretation">How configured secret-bearing values are interpreted.</param>
+    /// <returns>The service collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="interpretation" /> is not a defined member.</exception>
+    /// <remarks>
+    /// <para>
+    /// A provider for a managed store registers its own <see cref="ISecretSchemeResolver" /> through its own extension
+    /// beside this call and needs no edit here, because the composite dispatches over whatever adapters it is handed.
+    /// </para>
+    /// <para>
+    /// The mode is checked here rather than trusted, because a numeric configuration value binds to an undefined
+    /// member without complaint. The composite compares against the two inline modes explicitly, so an undefined value
+    /// would fall through and behave like the strictest mode — the safe outcome, but reached by accident and reported
+    /// in the startup log as a mode nobody selected. A configuration mistake has to fail rather than be absorbed.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddSecretResolution(
         this IServiceCollection services,
-        IConfiguration configuration)
+        SecretValueInterpretation interpretation)
     {
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(configuration);
 
-        var connectionString = configuration.GetConnectionString("mailmcp");
-        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+        if (!Enum.IsDefined(interpretation))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(interpretation),
+                interpretation,
+                "The configured secret value interpretation is not a supported mode.");
+        }
 
-        services.AddDbContext<MailMcpDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddSingleton(new SecretResolutionOptions(interpretation));
+        services.AddSingleton<ISecretFileReader, FileSystemSecretFileReader>();
+        services.AddSingleton<IEnvironmentVariableReader, ProcessEnvironmentVariableReader>();
+        services.AddSingleton<ISecretSchemeResolver, SystemdCredentialSecretReferenceResolver>();
+        services.AddSingleton<ISecretSchemeResolver, FileSecretReferenceResolver>();
+        services.AddSingleton<ISecretSchemeResolver, EnvironmentVariableSecretReferenceResolver>();
+        services.AddSingleton<ISecretSchemeResolver, PlaintextSecretReferenceResolver>();
+        services.AddSingleton<ISecretReferenceResolver, CompositeSecretReferenceResolver>();
+
+        return services;
+    }
+
+    /// <summary>Registers EF Core persistence, MailKit mailbox access, and application synchronization services.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="connectionSettings">Where the PostgreSQL connection string and its password come from.</param>
+    /// <returns>The service collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> or <paramref name="connectionSettings" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The connection string arrives already read rather than as an <c>IConfiguration</c> this method reaches into,
+    /// so which key holds it stays a host decision and this assembly gains no configuration dependency.
+    /// </remarks>
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services,
+        PostgresConnectionSettings connectionSettings)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(connectionSettings);
+
+        services.AddSingleton(provider => new PostgresDataSourceProvider(
+            connectionSettings,
+            provider.GetRequiredService<ISecretReferenceResolver>(),
+            provider.GetRequiredService<SecretResolutionOptions>(),
+            provider.GetRequiredService<ILogger<PostgresDataSourceProvider>>()));
+        services.AddHostedService(provider => provider.GetRequiredService<PostgresDataSourceProvider>());
+        services.AddSingleton(provider => provider.GetRequiredService<PostgresDataSourceProvider>().DataSource);
+        services.AddDbContext<MailMcpDbContext>((provider, options) =>
+            options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()));
         services.AddScoped<IPersistenceSessionFactory, PersistenceSessionFactory>();
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();

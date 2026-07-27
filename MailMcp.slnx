@@ -12,6 +12,7 @@
     <Project Path="tests/AI.UnitTests/AI.UnitTests.csproj" />
     <Project Path="tests/Application.UnitTests/Application.UnitTests.csproj" />
     <Project Path="tests/Domain.UnitTests/Domain.UnitTests.csproj" />
+    <Project Path="tests/Host.UnitTests/Host.UnitTests.csproj" />
     <Project Path="tests/Infrastructure.UnitTests/Infrastructure.UnitTests.csproj" />
     <Project Path="tests/Mcp.UnitTests/Mcp.UnitTests.csproj" />
   </Folder>

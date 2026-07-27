@@ -92,7 +92,28 @@ internal sealed class MailKitImapMailboxSessionFactory(
         ArgumentNullException.ThrowIfNull(clientFactory);
         ArgumentNullException.ThrowIfNull(transportSecurityPolicy);
 
-        var settings = settingsProvider.GetSettings(accountId.Value);
+        var settings = await settingsProvider.GetSettingsAsync(accountId.Value, cancellationToken);
+
+        // The resolved material is owned by this connection attempt and erased when it ends, whether it succeeded or
+        // not, so the material exists for one attempt rather than for the lifetime of the process.
+        using (settings.Secrets)
+        {
+            return await this.OpenAuthenticatedFolderAsync(
+                accountId,
+                folderName,
+                transportSecurityPolicy,
+                settings,
+                cancellationToken);
+        }
+    }
+
+    private async Task<IMailboxSession> OpenAuthenticatedFolderAsync(
+        MailAccountId accountId,
+        MailFolderName folderName,
+        MailTransportSecurityPolicy transportSecurityPolicy,
+        ImapAccountSettings settings,
+        CancellationToken cancellationToken)
+    {
         var client = clientFactory();
         try
         {
@@ -110,7 +131,12 @@ internal sealed class MailKitImapMailboxSessionFactory(
                 transportSecurityPolicy.Authentication,
                 settings.AccountId);
 
-            await client.AuthenticateAsync(settings.UserName, settings.Password, cancellationToken);
+            // MailKit's authentication contract takes a string, so an un-erasable copy of the password is unavoidable
+            // here. It is created at the call itself and never stored, logged, or passed on.
+            await client.AuthenticateAsync(
+                settings.UserName,
+                settings.Secrets.Password.RevealAsString(),
+                cancellationToken);
 
             var folder = await client.GetFolderAsync(folderName.Value, cancellationToken);
             await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);

@@ -2,6 +2,7 @@
 
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
+using MailMcp.Infrastructure.Secrets;
 using Xunit;
 
 namespace MailMcp.Infrastructure.UnitTests;
@@ -173,7 +174,7 @@ public sealed class MailAccountTransportSecurityOptionsTests
         {
             ConnectionSecurity = MailConnectionSecurity.None,
             PermittedAuthenticationMechanisms = ["PLAIN"],
-            TrustedCertificateAuthorityReference = "mailmcp-imap-ca",
+            TrustedCertificateAuthority = new ConfiguredSecret { SecretReference = "systemd-credential:mailmcp-imap-ca" },
         };
 
         // Act
@@ -203,7 +204,43 @@ public sealed class MailAccountTransportSecurityOptionsTests
 
         // Assert
         var error = Assert.Single(errors);
-        Assert.Equal(nameof(MailAccountTransportSecurityOptions.TrustedCertificateAuthorityReference), error.PropertyName);
+        Assert.Equal(nameof(MailAccountTransportSecurityOptions.TrustedCertificateAuthority), error.PropertyName);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_AdditionalTrustedAuthorityWithABlock_ReportsNoError()
+    {
+        // Arrange
+        var options = new MailAccountTransportSecurityOptions
+        {
+            CertificateTrust = MailServerCertificateTrust.AdditionalTrustedAuthority,
+            TrustedCertificateAuthority = new ConfiguredSecret { SecretReference = "file:/run/secrets/private-ca.pem" },
+        };
+
+        // Act
+        var errors = options.FindConfigurationErrors();
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_AdditionalTrustedAuthorityWithAnEmptyBlock_ReportsTheAnchorAsMissing()
+    {
+        // Arrange
+        var options = new MailAccountTransportSecurityOptions
+        {
+            CertificateTrust = MailServerCertificateTrust.AdditionalTrustedAuthority,
+            TrustedCertificateAuthority = new ConfiguredSecret(),
+        };
+
+        // Act
+        var errors = options.FindConfigurationErrors();
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Equal(nameof(MailAccountTransportSecurityOptions.TrustedCertificateAuthority), error.PropertyName);
+        Assert.Equal(MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceRequired, error.Violation);
     }
 
     [Fact]
@@ -212,7 +249,7 @@ public sealed class MailAccountTransportSecurityOptionsTests
         // Arrange
         var options = new MailAccountTransportSecurityOptions
         {
-            TrustedCertificateAuthorityReference = "mailmcp-imap-ca",
+            TrustedCertificateAuthority = new ConfiguredSecret { SecretReference = "systemd-credential:mailmcp-imap-ca" },
         };
 
         // Act
@@ -220,7 +257,7 @@ public sealed class MailAccountTransportSecurityOptionsTests
 
         // Assert
         var error = Assert.Single(errors);
-        Assert.Equal(nameof(MailAccountTransportSecurityOptions.TrustedCertificateAuthorityReference), error.PropertyName);
+        Assert.Equal(nameof(MailAccountTransportSecurityOptions.TrustedCertificateAuthority), error.PropertyName);
         Assert.DoesNotContain("mailmcp-imap-ca", error.Description, StringComparison.Ordinal);
     }
 
@@ -267,7 +304,7 @@ public sealed class MailAccountTransportSecurityOptionsTests
             ConnectionSecurity = MailConnectionSecurity.StartTlsRequired,
             PermittedAuthenticationMechanisms = ["scram-sha-256", "SCRAM-SHA-256", "PLAIN"],
             CertificateTrust = MailServerCertificateTrust.AdditionalTrustedAuthority,
-            TrustedCertificateAuthorityReference = " mailmcp-imap-ca ",
+            TrustedCertificateAuthority = new ConfiguredSecret { SecretReference = "systemd-credential:mailmcp-imap-ca" },
         };
 
         // Act
@@ -278,7 +315,7 @@ public sealed class MailAccountTransportSecurityOptionsTests
         Assert.Equal(
             [MailAuthenticationMechanism.ScramSha256, MailAuthenticationMechanism.Plain],
             policy.Authentication.PermittedMechanisms);
-        Assert.Equal("mailmcp-imap-ca", policy.TrustedCertificateAuthorityReference);
+        Assert.Equal("systemd-credential:***", policy.TrustedCertificateAuthorityReference);
     }
 
     [Fact]

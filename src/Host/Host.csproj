@@ -17,4 +17,8 @@
     <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
     <ProjectReference Include="..\Mcp\Mcp.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MailMcp.Host.UnitTests" />
+  </ItemGroup>
 </Project>

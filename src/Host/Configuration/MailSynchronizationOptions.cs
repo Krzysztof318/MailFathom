@@ -7,12 +7,13 @@ using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
+using MailMcp.Infrastructure.Secrets;
 
 namespace MailMcp.Host.Configuration;
 
 /// <summary>Configures periodic IMAP synchronization.</summary>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
-internal sealed class MailSynchronizationOptions : IValidatableObject, IImapAccountSettingsProvider, IMailTransportSecurityPolicyReader
+internal sealed class MailSynchronizationOptions : IValidatableObject, IMailTransportSecurityPolicyReader
 {
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
@@ -36,18 +37,27 @@ internal sealed class MailSynchronizationOptions : IValidatableObject, IImapAcco
     /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
 
-    /// <inheritdoc />
-    public ImapAccountSettings GetSettings(string accountId)
+    /// <summary>Builds one account's connection settings, resolving its secrets for the caller to own.</summary>
+    /// <param name="accountId">The local account identifier.</param>
+    /// <param name="resolver">The resolver that turns configured references into material.</param>
+    /// <param name="cancellationToken">Cancels the secret resolution.</param>
+    /// <returns>The settings, whose secrets the caller must dispose when its operation ends.</returns>
+    internal async Task<ImapAccountSettings> ResolveSettingsAsync(
+        string accountId,
+        ISecretReferenceResolver resolver,
+        CancellationToken cancellationToken)
     {
         var normalizedAccountId = MailAccountId.Create(accountId).Value;
         var account = this.FindAccount(normalizedAccountId);
+
+        var secrets = await account.Secrets.ResolveAsync(resolver, cancellationToken);
 
         return new ImapAccountSettings(
             normalizedAccountId,
             account.Host.Trim(),
             account.Port,
             account.UserName,
-            account.Password);
+            secrets);
     }
 
     /// <inheritdoc />
@@ -116,11 +126,11 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <summary>Gets or sets the account's transport security settings.</summary>
     public MailAccountTransportSecurityOptions TransportSecurity { get; set; } = new();
 
-    /// <summary>Gets or sets the IMAP user name. Store secret values outside ordinary configuration files.</summary>
+    /// <summary>Gets or sets the IMAP user name, which is an identifier rather than a credential and stays a plain configuration value.</summary>
     public string UserName { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets the IMAP password or app password. Store secret values outside ordinary configuration files.</summary>
-    public string Password { get; set; } = string.Empty;
+    /// <summary>Gets or sets the account's secret-bearing settings, which carry references rather than credentials.</summary>
+    public MailAccountSecretOptions Secrets { get; set; } = new();
 
     /// <summary>Gets or sets configured folder names. When omitted, the worker synchronizes INBOX only.</summary>
     public List<string> Folders { get; set; } = [];
@@ -169,11 +179,6 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             if (string.IsNullOrWhiteSpace(this.UserName))
             {
                 yield return new ValidationResult("IMAP user name is required when synchronization is enabled.", [nameof(this.UserName)]);
-            }
-
-            if (string.IsNullOrWhiteSpace(this.Password))
-            {
-                yield return new ValidationResult("IMAP password is required when synchronization is enabled.", [nameof(this.Password)]);
             }
 
             foreach (var result in this.ValidateTransportSecurity())
