@@ -130,16 +130,7 @@ public sealed class MailAccountTransportSecurityOptions
     /// </remarks>
     public IReadOnlyList<MailAccountTransportSecurityConfigurationError> FindConfigurationErrors()
     {
-        var errors = new List<MailAccountTransportSecurityConfigurationError>();
         var permittedMechanisms = this.ParsePermittedMechanisms(out var unsupportedMechanismNames);
-
-        foreach (var unsupportedMechanismName in unsupportedMechanismNames)
-        {
-            errors.Add(new MailAccountTransportSecurityConfigurationError(
-                nameof(this.PermittedAuthenticationMechanisms),
-                $"SASL mechanism '{unsupportedMechanismName}' is not supported.",
-                Violation: null));
-        }
 
         var violations = MailTransportSecurityPolicy.FindViolations(
             this.ConnectionSecurity,
@@ -149,12 +140,17 @@ public sealed class MailAccountTransportSecurityOptions
             this.CertificateTrust,
             this.ConfiguredTrustAnchorReference);
 
-        errors.AddRange(violations.Select(violation => new MailAccountTransportSecurityConfigurationError(
-            SettingFor(violation),
-            DescribeViolation(violation),
-            violation)));
-
-        return errors;
+        return
+        [
+            .. unsupportedMechanismNames.Select(unsupportedMechanismName => new MailAccountTransportSecurityConfigurationError(
+                nameof(this.PermittedAuthenticationMechanisms),
+                $"SASL mechanism '{unsupportedMechanismName}' is not supported.",
+                Violation: null)),
+            .. violations.Select(violation => new MailAccountTransportSecurityConfigurationError(
+                SettingFor(violation),
+                DescribeViolation(violation),
+                violation)),
+        ];
     }
 
     /// <summary>The stand-in the domain receives for a configured value that is not a reference, such as inline PEM.</summary>

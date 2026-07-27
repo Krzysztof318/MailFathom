@@ -94,12 +94,9 @@ internal sealed class MailSynchronizationOptions : IValidatableObject, IMailTran
             yield return new ValidationResult("Account IDs must be unique after normalization.", [nameof(this.Accounts)]);
         }
 
-        foreach (var account in this.Accounts)
+        foreach (var result in this.Accounts.SelectMany(account => account.ValidateForSynchronization(this.Enabled)))
         {
-            foreach (var result in account.ValidateForSynchronization(this.Enabled))
-            {
-                yield return result;
-            }
+            yield return result;
         }
     }
 

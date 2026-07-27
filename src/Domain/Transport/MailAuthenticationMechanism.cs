@@ -110,17 +110,12 @@ public readonly record struct MailAuthenticationMechanism
         }
 
         var normalizedName = saslName.Trim();
-        foreach (var candidate in All)
-        {
-            if (StringComparer.OrdinalIgnoreCase.Equals(candidate.SaslName, normalizedName))
-            {
-                mechanism = candidate;
 
-                return true;
-            }
-        }
+        // No supported mechanism is the struct default, so an unmatched name yields the unspecified value the caller
+        // already receives when parsing fails.
+        mechanism = All.FirstOrDefault(candidate => StringComparer.OrdinalIgnoreCase.Equals(candidate.SaslName, normalizedName));
 
-        return false;
+        return mechanism.IsSpecified;
     }
 
     /// <inheritdoc />

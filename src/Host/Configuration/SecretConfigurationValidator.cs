@@ -111,9 +111,10 @@ internal sealed partial class SecretConfigurationValidator
     {
         var errors = new List<string>();
 
-        for (var accountIndex = 0; accountIndex < candidate.Accounts.Count; accountIndex++)
+        // The position is part of the reported configuration path, so it comes from Index rather than from a counter
+        // the loop body could forget to advance. The loop itself stays, because each step awaits a retrieval.
+        foreach (var (accountIndex, account) in candidate.Accounts.Index())
         {
-            var account = candidate.Accounts[accountIndex];
             var configurationPath =
                 $"{MailSynchronizationConfigurationPath}:{nameof(MailSynchronizationOptions.Accounts)}:{accountIndex}:{nameof(MailSynchronizationAccountOptions.TransportSecurity)}:{nameof(MailAccountTransportSecurityOptions.TrustedCertificateAuthority)}";
 
