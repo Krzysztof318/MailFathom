@@ -23,6 +23,10 @@ The HTML-to-text derivation uses `MimeKit.Text.HtmlTokenizer`, which is already 
 
 Persistence adds the extracted text column, a lossy-derivation marker, and a generated `tsvector` column covering subject, normalized participant addresses, and the trimmed body text, with the GIN index draft section 9.2 requires. The text search configuration is an explicit, validated setting rather than a database default, because changing it silently invalidates the index contents.
 
+Text comes from the message body only. Attachment payloads are never opened, so a PDF or an office document contributes nothing to the index; a message whose information lives entirely in an attachment is indexed on its subject and participants alone. That is a deliberate limitation rather than an oversight — draft section 21.5 names attachment extraction as an unbounded-cost path, and document parsers are a far larger hostile-input surface than MIME parsing. It is recorded in the feature documentation so the search behavior is not surprising.
+
+A message that specification 06 recorded as encrypted has no readable body. It is marked as having no extractable text for that reason and is not indexed as though its body were empty, so an encrypted message stays distinguishable from a genuinely empty one and does not become a permanent silent gap in search. The backfill re-evaluates such messages if decryption is ever enabled (#75).
+
 A bounded backfill operation re-derives text for messages stored before this change, running in the background with the same batch bounds and cancellation behavior as synchronization. Backfill is idempotent and restartable from a persisted position.
 
 ## Safety and privacy
@@ -35,7 +39,7 @@ Unit tests cover plain-text preference, HTML derivation and its lossy marker, co
 
 ## Out of scope
 
-Chunking, embeddings, hybrid ranking, and snippet generation, which belong to the RAG stages after the read-only MCP tools land.
+Chunking, embeddings, hybrid ranking, and snippet generation, which belong to the RAG stages after the read-only MCP tools land. Extracting text from attachment payloads, including PDF, office document, and image OCR extraction, which needs its own bounded-cost design and its own parser-hardening review. Decrypting encrypted messages so their bodies become indexable (#75).
 
 ## Definition of done
 

@@ -17,13 +17,21 @@ Implement the `GetEmailContent` application use case per draft section 13.2: nor
 
 The use case takes one stable local message identifier and returns normalized headers, the plain-text body, attachment metadata, source account and folder alias, the remote flag snapshot, and truncation metadata. Plain text is the default representation. Sanitized HTML is returned only when the caller asks for it and the message actually has an HTML part.
 
+The per-attachment metadata — normalized file name, media type, and decoded size — is re-derived from the stored raw MIME during the same parse that produces the body, using the specification 06 classification rule and its structural limits. Specification 07 deliberately persists only the indexable summary, so this is the point where the full list is produced, and producing it costs nothing extra because the raw MIME is already being read. Re-deriving also guarantees the list cannot drift from the message it describes. Inline resources and cryptographic parts are reported as their own counts, never as attachments.
+
 Bodies are bounded by a validated maximum size. When a body exceeds it, the result is truncated at a character boundary and the truncation metadata states the original length and that truncation occurred, so a caller never has to guess whether it received a complete message.
+
+A message specification 06 recorded as encrypted returns a stable "encrypted, not readable locally" state rather than an empty body, so a caller can distinguish mail it cannot read from mail with nothing in it. Its headers and attachment summary are still returned. Decryption is out of scope and tracked in #75.
 
 Missing or corrupt content is an expected failure, not an exception path: the use case returns a stable consistency error and schedules background repair. It must never trigger a synchronous IMAP fetch, which draft sections 10 and 17 both require and which the acceptance criteria in draft section 23 name explicitly. The repair request is recorded durably so the synchronizer can act on it; the use case does not wait for it.
 
 ## Safety and privacy
 
 HTML sanitization treats message HTML as hostile input. The sanitized output permits a conservative element and attribute allow-list, strips scripts, event handlers, embedded objects, and form elements, neutralizes external references so no remote image or linked resource can be fetched by a client rendering the output, and rewrites or removes URLs that would leak a read receipt. The allow-list approach is required rather than a deny-list, because a deny-list cannot be proven complete.
+
+`cid:` URIs need their own rule because they are not external references and the general rule does not decide them. They point at inline parts of the same message, and this use case never returns part bytes, so a surviving `cid:` reference is one no caller can resolve — a broken image at best and, in a client that resolves content identifiers against something other than the message, a reference that leads somewhere unintended. The `cid:` scheme is therefore not in the allow-list: such references are removed, and the result reports the inline-resource count so a caller can state that the message contained embedded images rather than silently rendering gaps.
+
+Attachment file names are attacker-controlled and reach a model through specification 17, so they are returned in the normalized form specification 06 defines and are never returned as a path or resolved against one.
 
 Sanitization needs a library rather than hand-written parsing. The evaluation was completed while writing this specification and is recorded below; the selected component is pinned centrally and recorded in `LICENSES.md` in the same change as the implementation.
 
@@ -49,7 +57,7 @@ Should the pinned version develop an unpatched advisory before this work starts,
 
 ## Testing
 
-`Application.UnitTests` cover: plain-text preference, HTML requested and absent, truncation metadata at and beyond the boundary, missing content producing the consistency error and a recorded repair request, corrupt content detected through the stored length and hash, and the absence of any IMAP call on every path. Sanitization tests cover script removal, event-handler attributes, external reference neutralization, nested and malformed markup, and an encoding-confusion case.
+`Application.UnitTests` cover: plain-text preference, HTML requested and absent, truncation metadata at and beyond the boundary, missing content producing the consistency error and a recorded repair request, corrupt content detected through the stored length and hash, an encrypted message returning the not-readable state rather than an empty body, per-attachment metadata re-derived to match the persisted summary, a signed message returning no attachment for its signature part, and the absence of any IMAP call on every path. Sanitization tests cover script removal, event-handler attributes, external reference neutralization, `cid:` reference removal with the inline-resource count still reported, nested and malformed markup, and an encoding-confusion case.
 
 ## Out of scope
 
@@ -58,8 +66,9 @@ Returning attachment bytes, which draft section 3.2 excludes from the first rele
 ## Definition of done
 
 - No code path in this use case can reach an IMAP session, proven by test.
-- Sanitized HTML contains no script, no event handler, and no external reference.
-- Truncation is always explicit in the result.
+- Sanitized HTML contains no script, no event handler, no external reference, and no `cid:` reference.
+- Truncation is always explicit in the result, and an unreadable encrypted body is explicit rather than empty.
+- Per-attachment metadata is re-derived from raw MIME, is consistent with the persisted summary, and carries normalized file names.
 - `HtmlSanitizer`, `AngleSharp`, and `AngleSharp.Css` are pinned in `Directory.Packages.props` and recorded in `LICENSES.md`, and the sanitizer type does not escape the adapter that owns it.
 - `docs/features/` documents the representations, the sanitization policy, and the consistency-error behavior.
 - `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
