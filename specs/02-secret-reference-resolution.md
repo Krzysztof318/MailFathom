@@ -3,7 +3,7 @@
 **Roadmap group:** A — configuration, transport security, resilience
 **Draft delivery stage:** 2
 **Depends on:** 01
-**Estimated change size:** ~1600 lines including tests and documentation — above the ~1000-line ceiling `specs/README.md` sets per specification, so this specification is a candidate for splitting; see "Delivery size" below
+**Estimated change size:** ~1700 lines including tests and documentation — above the ~1000-line ceiling `specs/README.md` sets per specification, so this specification is a candidate for splitting; see "Delivery size" below
 
 ## Goal
 
@@ -12,6 +12,8 @@ Implement the secret handling model from draft section 7.3 so that no mailbox pa
 ## Current state
 
 `MailSynchronizationAccountOptions` holds a plain `Password` string bound directly from configuration. The default `appsettings.json` ships an empty account list, so nothing is leaked today, but the shape invites operators to commit credentials.
+
+Specification 01 shipped `MailAccountTransportSecurityOptions.TrustedCertificateAuthorityReference` as a nullable string, already documented as carrying a reference rather than certificate material. It keeps its key name here but changes shape from a string to the secret block defined below, so an operator who configured it edits one line. This is a deliberate break taken now, while the setting has one consumer and no shipped release depends on it; deferring it would mean either two spellings of a secret setting or the same break later against real deployments. `MailTransportSecurityPolicy` in `Domain` continues to receive a nullable string and is unaffected — the block is a configuration-adapter shape and does not cross the boundary.
 
 ## Approved scope
 
@@ -24,7 +26,7 @@ Configuration values that carry secrets become secret references rather than sec
 
 The scheme set is open by design; see "Extensibility to external secret providers" below. The grammar is fixed, the set of schemes that satisfy it is not.
 
-Configuration carries the reference and nothing else. Every secret-bearing setting is a `*Reference` property whose value the host resolves at startup, so the shape an operator commits to Git is:
+Configuration carries the reference and nothing else. Every secret-bearing setting is a JSON *object* whose `SecretReference` property carries the reference the host resolves, never a bare string:
 
 ```json
 {
@@ -34,19 +36,44 @@ Configuration carries the reference and nothing else. Every secret-bearing setti
         "AccountId": "primary",
         "Host": "imap.example.test",
         "UserName": "mailmcp@example.test",
-        "Secrets": { "PasswordReference": "systemd-credential:imap-primary-password" },
+        "Secrets": {
+          "Password": { "SecretReference": "systemd-credential:imap-primary-password" }
+        },
         "TransportSecurity": {
           "CertificateTrust": "AdditionalTrustedAuthority",
-          "TrustedCertificateAuthorityReference": "file:/run/secrets/private-ca.pem"
+          "TrustedCertificateAuthorityReference": { "SecretReference": "file:/run/secrets/private-ca.pem" }
         }
       }
     ]
   },
-  "Persistence": { "PasswordReference": "file:/run/secrets/postgres-password" }
+  "Persistence": {
+    "Password": { "SecretReference": "file:/run/secrets/postgres-password" }
+  }
 }
 ```
 
 A setting that names a reference is inert on its own: nothing in the file discloses a secret, and a file leaked from a backup or a repository yields only credential names and paths.
+
+## The secret block
+
+Every secret-bearing setting uses the same object shape, and the shape is uniform whether the secret is a password, a trust anchor, or a key. Two reasons make the object the right unit rather than a bare string.
+
+**It has room to grow without a breaking configuration change.** A secret is not always one opaque value. A PKCS#12 bundle carries its own password, which is a second reference; a certificate may need an explicit format hint when the extension lies about its encoding; a future managed-store reference may need a version pin. Each of those is a sibling property inside a block that already exists:
+
+```json
+"ClientCertificate": {
+  "SecretReference": "file:/run/secrets/client.pfx",
+  "PasswordSecretReference": "systemd-credential:client-certificate-password"
+}
+```
+
+Had the setting shipped as a bare string, adding the bundle password would change the setting's JSON type from string to object, which breaks every deployment that already configured it. Only the first such setting is free; the block makes all of them free. Nothing beyond `SecretReference` is defined by this specification — the point is that adding one later costs nothing.
+
+**The block's type is what marks a setting as secret-bearing.** A secret block binds to a dedicated options type rather than to `string`, so a setting is secret-bearing because of what it *is*, not because someone remembered to annotate it. A marker attribute can be omitted on a newly added property and nothing would notice; a type cannot, because the property would not bind. Startup validation therefore discovers secret-bearing settings by walking the bound options graph for that type, and every rule below applies to every such setting automatically, including settings added after this specification ships.
+
+This is what makes the `ReferenceOnly` guarantee complete rather than per-setting. Under the default mode a secret block whose `SecretReference` is not a well-formed `<scheme>:<target>` fails startup, naming the configuration path and the failure identity. A value that is merely text — a password pasted where a reference belongs, or a mistyped `fil:/run/secrets/imap` — is a startup failure, never a secret that resolved by accident. There is no path by which an unmarked setting quietly skips the check, because there is no unmarked secret-bearing setting.
+
+A consequence worth stating: the object shape survives configuration providers that flatten hierarchy. Azure App Configuration, environment variables, and command-line arguments address the same setting as `MailSynchronization:Accounts:0:Secrets:Password:SecretReference`, so the block costs a pre-resolving provider nothing.
 
 ## Inline values and pre-resolving configuration providers
 
@@ -95,7 +122,7 @@ Secrets reload without a process restart, on the same terms as the configuration
 
 Two independent things can change, and both are covered:
 
-- **The reference changes.** A configuration reload delivers a new `*Reference` value. The candidate snapshot is validated by resolving every reference in it before it is published; a snapshot containing an unresolvable reference is rejected and the last known good snapshot stays active, exactly as ADR 0002 requires for reloadable groups. A rejected reload is logged with the account, the setting, and the failure identity, never with material.
+- **The reference changes.** A configuration reload delivers a new `SecretReference` inside one of the secret blocks. The candidate snapshot is validated by resolving every reference in it before it is published; a snapshot containing an unresolvable reference is rejected and the last known good snapshot stays active, exactly as ADR 0002 requires for reloadable groups. A rejected reload is logged with the account, the setting, and the failure identity, never with material.
 - **The material behind an unchanged reference changes.** Rotating the credential file, the systemd credential, or the vault entry leaves configuration untouched, so no configuration reload fires. Resolution therefore happens per use rather than once at startup, and the next operation that needs the secret observes the rotated value. A network-backed provider that cannot afford per-use retrieval caches inside its own adapter with its own expiry, which is why caching policy is an adapter concern rather than a contract concern.
 
 Material is applied at operation boundaries, not mid-operation: a synchronization run that has authenticated continues with the credential it authenticated with, and the next run picks up the rotation. This is ADR 0002's "reloadable for new operations" classification, chosen over "reloadable during running operations" because swapping a credential or a trust anchor underneath an open IMAP session has no coherent meaning.
@@ -142,13 +169,13 @@ A resolution failure message names the account identifier, the logical secret na
 
 ## Testing
 
-`Infrastructure.UnitTests` cover each scheme adapter against an in-memory abstraction over the credential directory and file system, since unit tests must not touch the real file system. Tests assert the unknown-scheme failure, the missing-reference failure, each of the three interpretation modes including a bare value failing under `ReferenceOnly` and resolving under `ReferenceOrInline`, an unparsed value under `InlineOnly`, the composite dispatch, and that failure results carry no secret material. A test registers a scheme adapter that exists only in the test project and asserts it resolves through the same dispatch, which is what proves a future provider is an adapter rather than a refactor. Material-kind tests cover the UTF-8 text view with its newline trim, binary material surviving resolution byte-for-byte, and a PEM and a DER certificate both loading. Memory-hygiene tests cover a disposed secret no longer yielding its material, disposal being idempotent, and no accessor returning a `string` except the documented framework-boundary one. Reload tests cover a rotated reference being adopted, a candidate snapshot with an unresolvable reference being rejected while the previous secrets stay active, and rotated material behind an unchanged reference being observed by the next operation but not mid-operation. Trust-anchor tests cover a valid certificate being installed into the validation path, a malformed one failing startup, and the absence of any configuration path that disables validation. An architecture test asserts that no secret-resolution type is reachable from `Application` or `Domain`.
+`Infrastructure.UnitTests` cover each scheme adapter against an in-memory abstraction over the credential directory and file system, since unit tests must not touch the real file system. Tests assert the unknown-scheme failure, the missing-reference failure, each of the three interpretation modes including a bare value failing under `ReferenceOnly` and resolving under `ReferenceOrInline`, an unparsed value under `InlineOnly`, the composite dispatch, and that failure results carry no secret material. A test registers a scheme adapter that exists only in the test project and asserts it resolves through the same dispatch, which is what proves a future provider is an adapter rather than a refactor. Material-kind tests cover the UTF-8 text view with its newline trim, binary material surviving resolution byte-for-byte, and a PEM and a DER certificate both loading. Memory-hygiene tests cover a disposed secret no longer yielding its material, disposal being idempotent, and no accessor returning a `string` except the documented framework-boundary one. Reload tests cover a rotated reference being adopted, a candidate snapshot with an unresolvable reference being rejected while the previous secrets stay active, and rotated material behind an unchanged reference being observed by the next operation but not mid-operation. Trust-anchor tests cover a valid certificate being installed into the validation path, a malformed one failing startup, and the absence of any configuration path that disables validation. Secret-block tests bind the shipped options types from in-memory configuration and assert that a plain-text value in a block fails startup under `ReferenceOnly` while naming its configuration path, that an empty or absent `SecretReference` is reported as a missing reference rather than as an empty secret, and that a sibling property added to a block leaves already-configured settings binding unchanged. An architecture test asserts that no secret-resolution type is reachable from `Application` or `Domain`, and a second one enumerates the bound options graph and fails if any property outside the secret block type carries a name suggesting it holds a secret, so a future raw `Password` string cannot be added silently.
 
 ## Delivery size
 
 `specs/README.md` scopes each specification to roughly 1000 changed lines. Adding certificate and private-key material kinds and dynamic reload pushes this past that ceiling, so the specification is a candidate for splitting into:
 
-- **02a — reference resolution and text secrets:** the grammar, the four schemes, the byte-oriented contract, mailbox and database passwords, fail-fast startup validation.
+- **02a — reference resolution and text secrets:** the grammar, the secret block and its discovery, the four schemes, the byte-oriented contract, mailbox and database passwords, fail-fast startup validation.
 - **02b — certificate material and dynamic reload:** trust anchor loading into the MailKit validation path, PKCS#12 and PEM key material, and the reload behavior with last-known-good rejection.
 
 The split is clean because 02b consumes 02a's contract without changing it, and because 02a alone already satisfies the original goal of keeping passwords out of `appsettings.json`. It is not applied here: renumbering interacts with the roadmap board and the dependency chain of specifications 03 onward, and that is the owner's call. Implementation should not begin until it is made.
@@ -166,7 +193,9 @@ Adapters for external managed secret stores — Kubernetes, Azure Key Vault, Has
 - No options type in the repository exposes a raw password bound directly from configuration.
 - A missing or malformed reference fails startup with a message that identifies the account without disclosing the secret.
 - No secret-resolution contract is reachable from `Application` or `Domain`.
-- Under the default `ReferenceOnly` mode every secret-bearing setting is a `*Reference` string and a bare value fails startup; the inline modes are reachable only by an explicit, logged configuration choice.
+- Every secret-bearing setting binds to the secret block type, so no configuration path carries a secret as a bare string and no setting can be secret-bearing without being subject to the rules below.
+- Under the default `ReferenceOnly` mode a secret block whose `SecretReference` is not a well-formed `<scheme>:<target>` fails startup naming the configuration path; a plain-text value is never accepted as the secret. The inline modes are reachable only by an explicit, logged configuration choice.
+- Adding a second property to a secret block — a bundle password, a format hint — requires no change to the JSON type of any already-configured setting.
 - A configuration provider that pre-resolves secrets, such as Azure App Configuration with Key Vault references, works without a scheme adapter and without code changes.
 - Resolution yields bytes, so a PKCS#12 bundle or DER certificate is representable without encoding damage, and text secrets are decoded and newline-trimmed only in the text view.
 - A new scheme can be added by registering one adapter, without editing the dispatch, an existing adapter, or any consumer.
