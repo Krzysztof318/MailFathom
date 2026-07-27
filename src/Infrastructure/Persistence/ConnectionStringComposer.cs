@@ -5,16 +5,16 @@ using Npgsql;
 
 namespace MailMcp.Infrastructure.Persistence;
 
-/// <summary>Applies a resolved database password to the configured connection string.</summary>
+/// <summary>Applies a resolved secret to a configured connection string.</summary>
 /// <remarks>
 /// The connection string in configuration keeps host, database, and user name and never carries the password, so a
 /// configuration file leaked from a backup or a repository yields no database credential. When no password block is
 /// configured the connection string is used unchanged, which keeps trust authentication and an orchestrator-provided
 /// connection string working untouched.
 /// </remarks>
-internal static class DatabaseConnectionStringComposer
+internal static class ConnectionStringComposer
 {
-    /// <summary>Composes the connection settings the data source is built from.</summary>
+    /// <summary>Composes the connection settings a data source is built from.</summary>
     /// <param name="connectionString">The configured connection string, without a password.</param>
     /// <param name="configuredPassword">The password block, or <see langword="null" /> when the deployment configures none.</param>
     /// <param name="resolver">The resolver that turns the reference into material.</param>

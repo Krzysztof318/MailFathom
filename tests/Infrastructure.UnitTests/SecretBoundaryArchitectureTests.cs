@@ -103,6 +103,7 @@ public sealed class SecretBoundaryArchitectureTests
             : [];
     }
 
-    private static bool IsOwnedType(Type type) =>
-        type.Assembly.GetName().Name?.StartsWith("MailMcp.", StringComparison.Ordinal) == true;
+    private static bool IsOwnedType(Type type) => type.Assembly.GetName().Name?.StartsWith(
+        ConfiguredSecretDiscovery.OwnedAssemblyNamePrefix,
+        StringComparison.Ordinal) == true;
 }

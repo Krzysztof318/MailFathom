@@ -20,7 +20,13 @@ namespace MailMcp.Infrastructure.Secrets;
 /// </remarks>
 public static class ConfiguredSecretDiscovery
 {
-    private const string OwnedAssemblyPrefix = "MailMcp.";
+    /// <summary>Gets the assembly-name prefix shared by every assembly this repository owns.</summary>
+    /// <remarks>
+    /// It is derived from this assembly's own name rather than written as a literal, so renaming the product cannot
+    /// leave a stale string behind that silently stops the walk from descending into anything and reports every
+    /// options graph as free of secrets.
+    /// </remarks>
+    internal static string OwnedAssemblyNamePrefix { get; } = DeriveOwnedAssemblyNamePrefix();
 
     /// <summary>Walks a bound options object and reports its secret-bearing settings.</summary>
     /// <param name="boundOptions">The bound options root, for example the object behind the <c>MailSynchronization</c> section.</param>
@@ -37,6 +43,16 @@ public static class ConfiguredSecretDiscovery
         walk.Descend(boundOptions, rootConfigurationPath);
 
         return new DiscoveredSecretSettings(walk.Blocks, walk.RawSecretPropertyPaths);
+    }
+
+    private static string DeriveOwnedAssemblyNamePrefix()
+    {
+        var assemblyName = typeof(ConfiguredSecretDiscovery).Assembly.GetName().Name
+            ?? throw new InvalidOperationException("The infrastructure assembly has no simple name to derive the product prefix from.");
+
+        var boundaryIndex = assemblyName.IndexOf('.', StringComparison.Ordinal);
+
+        return boundaryIndex < 0 ? $"{assemblyName}." : assemblyName[..(boundaryIndex + 1)];
     }
 
     private sealed class OptionsGraphWalk
@@ -132,6 +148,6 @@ public static class ConfiguredSecretDiscovery
             .Where(property => property.CanRead && property.GetIndexParameters().Length == 0);
 
         private static bool IsOwnedOptionsType(Type type) => !type.IsValueType
-            && type.Assembly.GetName().Name?.StartsWith(OwnedAssemblyPrefix, StringComparison.Ordinal) == true;
+            && type.Assembly.GetName().Name?.StartsWith(OwnedAssemblyNamePrefix, StringComparison.Ordinal) == true;
     }
 }

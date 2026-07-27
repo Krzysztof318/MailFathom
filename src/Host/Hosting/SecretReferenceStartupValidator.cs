@@ -23,21 +23,21 @@ namespace MailMcp.Host.Hosting;
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
-internal sealed partial class MailSecretReferenceStartupValidator : IHostedLifecycleService
+internal sealed partial class SecretReferenceStartupValidator : IHostedLifecycleService
 {
     private readonly IOptions<MailSynchronizationOptions> synchronizationOptions;
     private readonly IOptions<PersistenceOptions> persistenceOptions;
     private readonly ISecretReferenceResolver secretReferenceResolver;
     private readonly SecretResolutionOptions resolutionOptions;
-    private readonly ILogger<MailSecretReferenceStartupValidator> logger;
+    private readonly ILogger<SecretReferenceStartupValidator> logger;
 
     /// <summary>Initializes a new secret reference startup validator.</summary>
-    public MailSecretReferenceStartupValidator(
+    public SecretReferenceStartupValidator(
         IOptions<MailSynchronizationOptions> synchronizationOptions,
         IOptions<PersistenceOptions> persistenceOptions,
         ISecretReferenceResolver secretReferenceResolver,
         SecretResolutionOptions resolutionOptions,
-        ILogger<MailSecretReferenceStartupValidator> logger)
+        ILogger<SecretReferenceStartupValidator> logger)
     {
         this.synchronizationOptions = synchronizationOptions;
         this.persistenceOptions = persistenceOptions;

@@ -6,7 +6,7 @@ using Xunit;
 
 namespace MailMcp.Infrastructure.UnitTests;
 
-public sealed class DatabasePasswordCompositionTests
+public sealed class ConnectionStringComposerTests
 {
     private const string ConnectionStringWithoutPassword = "Host=localhost;Database=mailmcp;Username=mailmcp";
 
@@ -17,7 +17,7 @@ public sealed class DatabasePasswordCompositionTests
         var configuredPassword = new ConfiguredSecret { SecretReference = "plaintext:postgres-password" };
 
         // Act
-        var connectionSettings = await DatabaseConnectionStringComposer.ComposeAsync(
+        var connectionSettings = await ConnectionStringComposer.ComposeAsync(
             ConnectionStringWithoutPassword,
             configuredPassword,
             new PlaintextOnlySecretReferenceResolver(),
@@ -32,7 +32,7 @@ public sealed class DatabasePasswordCompositionTests
     public async Task ComposeAsync_NoPasswordBlock_LeavesTheConnectionStringUnchanged()
     {
         // Act
-        var connectionSettings = await DatabaseConnectionStringComposer.ComposeAsync(
+        var connectionSettings = await ConnectionStringComposer.ComposeAsync(
             ConnectionStringWithoutPassword,
             configuredPassword: null,
             new PlaintextOnlySecretReferenceResolver(),
@@ -50,7 +50,7 @@ public sealed class DatabasePasswordCompositionTests
         var configuredPassword = new ConfiguredSecret { SecretReference = "file:/run/secrets/absent" };
 
         // Act, Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() => DatabaseConnectionStringComposer.ComposeAsync(
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ConnectionStringComposer.ComposeAsync(
             ConnectionStringWithoutPassword,
             configuredPassword,
             new PlaintextOnlySecretReferenceResolver(),
@@ -64,7 +64,7 @@ public sealed class DatabasePasswordCompositionTests
         var configuredPassword = new ConfiguredSecret();
 
         // Act, Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() => DatabaseConnectionStringComposer.ComposeAsync(
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ConnectionStringComposer.ComposeAsync(
             ConnectionStringWithoutPassword,
             configuredPassword,
             new PlaintextOnlySecretReferenceResolver(),

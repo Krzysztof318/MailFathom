@@ -30,7 +30,7 @@ public static class ServiceCollectionExtensions
     /// A provider for a managed store registers its own <see cref="ISecretSchemeResolver" /> through its own extension
     /// beside this call and needs no edit here, because the composite dispatches over whatever adapters it is handed.
     /// </remarks>
-    public static IServiceCollection AddMailMcpSecretResolution(
+    public static IServiceCollection AddSecretResolution(
         this IServiceCollection services,
         SecretValueInterpretation interpretation)
     {
@@ -54,7 +54,7 @@ public static class ServiceCollectionExtensions
     /// <param name="databasePassword">The database password block, or <see langword="null" /> when the deployment authenticates without one.</param>
     /// <returns>The service collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> or <paramref name="configuration" /> is <see langword="null" />.</exception>
-    public static IServiceCollection AddMailMcpInfrastructure(
+    public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
         IConfiguration configuration,
         ConfiguredSecret? databasePassword)
@@ -93,7 +93,7 @@ public static class ServiceCollectionExtensions
         string connectionString,
         ConfiguredSecret? databasePassword)
     {
-        var connectionSettings = DatabaseConnectionStringComposer
+        var connectionSettings = ConnectionStringComposer
             .ComposeAsync(
                 connectionString,
                 databasePassword,
