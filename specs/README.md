@@ -73,6 +73,18 @@ The first vertical slice is already merged: periodic read-only IMAP reconciliati
 
 Stages 6 through 10 of the draft: pgvector ingestion and embedding profiles, Agent Framework RAG and `ask_mail`, the SMTP outbox, OAuth 2.1 and the ChatGPT mTLS profile, and production hardening. Those are decomposed into specifications when this segment nears completion, so they are written against the code that actually exists by then.
 
+Beyond the draft, five capabilities are tracked as issues on the roadmap board without a specification, because each needs a decision — in one case an ADR — before its scope can be written. They are listed here so the roadmap does not read as the complete set of known work.
+
+| Capability | Issue | What has to be settled first |
+|---|---|---|
+| Encrypted and signed email, S/MIME and OpenPGP | [#75](https://github.com/Krzysztof318/MailMcp/issues/75) | Whether local decryption is permitted at all, since it converts end-to-end protected mail into searchable plaintext; needs an ADR |
+| Spam and junk classification | [#76](https://github.com/Krzysztof318/MailMcp/issues/76) | The asynchronous job model from draft section 21.5, which nothing has built yet |
+| Antivirus scanning for stored attachments | [#77](https://github.com/Krzysztof318/MailMcp/issues/77) | Engine choice under the licensing constraint: ClamAV's `libclamav` is GPL-2.0 and cannot be linked |
+| OAuth for outbound IMAP and SMTP | [#78](https://github.com/Krzysztof318/MailMcp/issues/78) | The credential shape from #62 and #36, plus Gmail's restricted-scope assessment obligation |
+| Local secret detection before AI egress | [#79](https://github.com/Krzysztof318/MailMcp/issues/79) | Which egress points exist, which only becomes concrete once the RAG stages land |
+
+Attachment handling is not on that list. It is inside this roadmap, and [#80](https://github.com/Krzysztof318/MailMcp/issues/80) corrected specifications 06, 07, 08, 13, 14, 15, and 17 so the classification rule, file-name normalization, and structural parsing bounds are stated before any of that work starts.
+
 Until the OAuth work lands, the MCP endpoint has no transport authentication. The owner has accepted that for this development segment, so specification 16 imposes no address restriction; it keeps the endpoint disabled by default and warns explicitly at startup when it is enabled without authentication.
 
 ## Dependencies these specifications add
