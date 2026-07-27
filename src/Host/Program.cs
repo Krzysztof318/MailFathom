@@ -3,6 +3,7 @@
 using MailMcp.Application.Mail;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
+using MailMcp.Host;
 using MailMcp.Host.Configuration;
 using MailMcp.Infrastructure;
 using MailMcp.Infrastructure.Mail;

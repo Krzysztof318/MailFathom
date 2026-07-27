@@ -11,7 +11,7 @@ Stand up the MCP protocol surface and establish the conventions every later tool
 
 ## Current state
 
-`src/Mcp` contains a project file referencing `ModelContextProtocol.AspNetCore` 1.4.1 and nothing else. The host exposes a root readiness response and the shared service-defaults endpoints. There is no MCP endpoint, no tool, no error mapping, and no authentication.
+`src/Mcp` contains a project file referencing `ModelContextProtocol.AspNetCore` 1.4.1 and nothing else. The host exposes a root readiness response and the service-defaults health endpoints. There is no MCP endpoint, no tool, no error mapping, and no authentication.
 
 ## Approved scope
 
