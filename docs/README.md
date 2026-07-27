@@ -8,6 +8,7 @@ This documentation set explains the durable design and operating model for MailM
 - [Features](features/initial-scope.md) summarizes the first scaffolded capability scope.
 - [Operations](operations/local-development.md) covers local .NET and Aspire development commands.
 - [Secret provisioning](operations/secret-provisioning.md) covers secret references, the systemd and container provisioning paths, and in-memory exposure.
+- [Host startup telemetry](operations/host-startup-telemetry.md) describes the bootstrap logging pipeline that reports process start, startup failure, and shutdown.
 - [Agent workflow](operations/agent-workflow.md) documents the shared Codex and Claude Code workflow.
 - [Decisions](decisions/README.md) describes the ADR workflow and templates.
 
