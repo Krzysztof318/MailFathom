@@ -67,11 +67,13 @@ Every secret-bearing setting uses the same object shape, whether the secret is a
 ```json
 "ClientCertificate": {
   "SecretReference": "file:/run/secrets/client.pfx",
-  "PasswordSecretReference": "systemd-credential:client-certificate-password"
+  "Password": { "SecretReference": "systemd-credential:client-certificate-password" }
 }
 ```
 
-Had the setting shipped as a bare string, adding the bundle password would change the setting's JSON type from string to object, which breaks every deployment that already configured it. Only the first such setting is free; the block makes all of them free. Nothing beyond `SecretReference` is defined by this specification — the point is that adding one later costs nothing.
+Had the setting shipped as a bare string, adding the bundle password would change the setting's JSON type from string to object, which breaks every deployment that already configured it. Only the first such setting is free; the block makes all of them free.
+
+One sibling is defined now: an optional nested `Password` block, itself a secret block. Specification 02b needs it for a password-protected PKCS#12 bundle, and a sibling *string* would not do — the discovery walk finds settings by the block type, so a string would be invisible to binding, validation, resolution, and erasure alike. Defining it here keeps the recursion honest and keeps 02b from having to change a contract this specification already shipped.
 
 **The block's type is what marks a setting as secret-bearing.** A secret block binds to a dedicated options type rather than to `string`, so a setting is secret-bearing because of what it *is*, not because someone remembered to annotate it. A marker attribute can be omitted on a newly added property and nothing would notice; a type cannot, because the property would not bind. Startup validation therefore discovers secret-bearing settings by walking the bound options graph for that type, and every rule below applies to every such setting automatically, including settings added after this specification ships.
 
@@ -115,6 +117,10 @@ A secret is not necessarily a password. The contract is shaped so that certifica
 - **Text secrets** — mailbox passwords, database passwords, and API keys. Resolved material is decoded as UTF-8 and stripped of a single trailing newline, because `LoadCredential=`, Compose secrets, and Kubernetes Secret files routinely end with one and an untrimmed byte would present as a wrong password.
 - **Certificates and key bundles** — a PKCS#12 bundle is binary, and DER-encoded material is not text at all. Specification 02b loads them; this specification guarantees they arrive intact.
 
+Reading material is bounded. A `file:` target can name a log, a database file, or a device-backed pseudo-file by mistake, and reading it whole would exhaust memory or stall the host before validation completes — at startup and again per use. Every read therefore enforces an explicit maximum size while reading, before an owned buffer is allocated, and an oversized target is a named resolution failure rather than an allocation.
+
+A successful resolution records whether its material came from a scheme adapter or was accepted inline. Two things depend on that distinction and neither can be derived from the interpretation mode: naming the settings that resolved inline in the startup log, and specification 02b accepting a binary certificate read through `file:` while rejecting the same bytes supplied inline.
+
 Resolution therefore yields opaque bytes, not a string. A text accessor performs the UTF-8 decode and newline trim for the first kind. Returning a string from the resolver would make a PKCS#12 bundle unrepresentable and would corrupt DER material through encoding round-trips, so the byte form is the primitive and text is the view over it. Trimming applies only to the text view: binary material is never modified.
 
 Loading typed material is the responsibility of the consumer that needs the type, above the resolver. The resolver knows about bytes and schemes and nothing about X.509.
@@ -145,13 +151,15 @@ Resolved material must live as briefly as possible and be erased when it stops b
 
 **`SecureString` is not used.** Microsoft's own documentation says "We recommend that you don't use the `SecureString` class for new development on .NET (Core)", and states that because of platform dependencies "`SecureString` does not encrypt the internal storage on non-Windows platform" — which is every environment MailMcp targets. The same documentation names the recommended alternative: "use an opaque handle to credentials that are stored outside of the process." That is precisely what a secret reference already is, so this specification's core design *is* the sanctioned approach and `SecureString` would add ceremony without protection.
 
-**Secret material is never held in a `string`.** A `string` is immutable, so it cannot be overwritten; it cannot be scheduled for deletion; and because its memory is not pinned, the garbage collector makes additional copies when it moves and compacts memory, each of which outlives any attempt to erase the original. Material is therefore held in a byte buffer, which is the other reason resolution is byte-oriented.
+**Secret material MailMcp allocates is never held in a `string`.** A `string` is immutable, so it cannot be overwritten; it cannot be scheduled for deletion; and because its memory is not pinned, the garbage collector makes additional copies when it moves and compacts memory, each of which outlives any attempt to erase the original. Material is therefore held in a byte buffer, which is the other reason resolution is byte-oriented.
 
 **The buffer is pinned and zeroed.** Material is allocated with `GC.AllocateArray<byte>(length, pinned: true)` so the collector cannot relocate it and leave an un-erased copy behind, and erased with `CryptographicOperations.ZeroMemory`, which exists — in its own documented words — "to future-proof against potential optimizations in the .NET runtime that could eliminate memory writes that aren't followed by memory reads." A plain loop assigning zeroes carries no such guarantee. Pooled buffers are not used for secret material at all, because a returned buffer that was not cleared hands the material to the next unrelated caller.
 
 **Resolved material is owned and disposed.** A resolved secret is disposable, is owned by the operation that resolved it, and is erased when that operation ends. Material exists for the length of one synchronization run or one connection attempt rather than for the process lifetime, so the window in which a dump could contain it is bounded by an operation rather than by uptime. Because each operation owns its own instance, the reload behavior specification 02b adds can publish new material without erasing what an in-flight operation is still using.
 
-Two exposures are accepted and must be documented rather than hidden. Some framework contracts take a `string` — the IMAP client's authentication call and the database connection string among them — so a short-lived `string` copy is unavoidable at exactly those call sites; it is created as late as possible, at the boundary itself, and never stored, logged, or passed on. And managed memory remains readable through a process dump, a debugger, or swap. Those are operational controls rather than code: the deployment must disable core dumps for the service and keep its memory out of swap, and the operations documentation must say so. Locking pages with `mlock` is deliberately not attempted — it would require P/Invoke plus elevated capability in every deployment shape, against a repository rule that restricts unsafe and platform-invoke code to measured need, and it does not address dumps or debuggers anyway.
+Three exposures are accepted and must be documented rather than hidden. `env:` is the first: `Environment.GetEnvironmentVariable` returns a `string`, so an environment-sourced secret arrives already un-erasable and no amount of care downstream changes that. It is a further reason the documentation recommends against `env:` outside non-production automation, and it is why the guarantee above is scoped to material MailMcp allocates rather than material the platform hands it. An inline value under the two inline modes has the same property, for the same reason.
+
+Second, some framework contracts take a `string` — the IMAP client's authentication call and the database connection string among them — so a short-lived `string` copy is unavoidable at exactly those call sites; it is created as late as possible, at the boundary itself, and never stored, logged, or passed on. Third, managed memory remains readable through a process dump, a debugger, or swap. Those are operational controls rather than code: the deployment must disable core dumps for the service and keep its memory out of swap, and the operations documentation must say so. Locking pages with `mlock` is deliberately not attempted — it would require P/Invoke plus elevated capability in every deployment shape, against a repository rule that restricts unsafe and platform-invoke code to measured need, and it does not address dumps or debuggers anyway.
 
 ## Safety and privacy
 
@@ -187,7 +195,11 @@ Adapters for external managed secret stores — Kubernetes, Azure Key Vault, Has
 - Resolution yields bytes, so a PKCS#12 bundle or DER certificate is representable without encoding damage, and text secrets are decoded and newline-trimmed only in the text view.
 - A new scheme can be added by registering one adapter, without editing the dispatch, an existing adapter, or any consumer.
 - The resolution contract is asynchronous and cancellable, so a network-backed provider needs no breaking change.
-- No secret material is held in a `string`, a pooled buffer, or a `SecureString`; buffers are pinned and zeroed with `CryptographicOperations.ZeroMemory` when their owning operation ends.
+- No secret material that MailMcp allocates is held in a `string`, a pooled buffer, or a `SecureString`; buffers are pinned and zeroed with `CryptographicOperations.ZeroMemory` when their owning operation ends, and no intermediate read buffer survives un-erased.
+- The residual exposures — `env:`, inline values, the two framework `string` boundaries, and process memory itself — are documented for the operator rather than implied away.
+- Reading material enforces an explicit maximum size, so a mistaken reference to a large file is a named failure rather than an allocation.
+- A successful resolution records whether its material came from an adapter or was accepted inline.
+- Reading a secret is asynchronous and honours the caller's cancellation token end to end, including at the file-system boundary.
 - `docs/operations/` documents disabling core dumps and swap exposure for the service, in both the systemd and container deployment shapes.
 - `docs/operations/local-development.md` documents the Development workflow and `docs/operations/` gains a page describing the systemd credential deployment path alongside the container path.
 - `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

@@ -32,7 +32,14 @@ This plan inherits the decisions recorded in the 02a plan and does not restate t
 Two decisions are new to this plan:
 
 - **28. Inline certificate material is PEM only, and says so.** A trust anchor is a public certificate, so writing one into configuration leaks nothing and the inline interpretation modes must accept it — that is what makes an Azure App Configuration deployment work end to end for the anchor as well as for passwords. But only PEM survives a configuration value: DER and PKCS#12 are binary and have no faithful representation there. An inline block carrying binary material therefore fails startup with a failure identity that names the encoding as the reason, rather than surfacing a generic parse error that sends the operator looking in the wrong place. PEM is multi-line, so a JSON document has to escape the newlines; that is the operator's problem to accept, and a store-backed provider does not have it because the value is transported rather than authored in JSON.
-- **29. The bundle password is a second secret block, resolved through the same contract.** A PKCS#12 bundle protected by a password needs two references, which is the concrete case 02a decision 25 shaped the block for. The password is a sibling `PasswordSecretReference` inside the same block, so it is discovered, validated, and erased by exactly the machinery 02a already built. Nothing about PKCS#12 gets its own resolution path.
+- **29. The bundle password is the nested block 02a already ships.** A PKCS#12 bundle protected by a password needs two references, which is the case 02a decision 25 shaped `ConfiguredSecret` for: the block carries an optional nested `Password` that is itself a `ConfiguredSecret`. An earlier draft made it a sibling *string* named `PasswordSecretReference`, which would have been invisible to the discovery walk — the walk looks for the block type, and a string is not one — so it could not have been bound, validated, resolved, or erased by the machinery this plan claims to reuse. Worse, fixing it here would have changed a contract 02a had already shipped, which this plan is barred from doing. The nested block is therefore defined in 02a, and this plan adds no property to `ConfiguredSecret` at all.
+
+```json
+"TrustedCertificateAuthority": {
+  "SecretReference": "file:/run/secrets/ca-bundle.pfx",
+  "Password": { "SecretReference": "systemd-credential:ca-bundle-password" }
+}
+```
 
 ## File structure
 
@@ -73,6 +80,7 @@ public enum CertificateMaterialFailure
     BinaryEncodingNotPermittedInline = 1,
     BundlePasswordMissing = 2,
     BundlePasswordIncorrect = 3,
+    PrivateKeyNotPermittedInTrustAnchor = 4,
 }
 
 internal static class X509CertificateMaterialLoader
@@ -80,6 +88,7 @@ internal static class X509CertificateMaterialLoader
     internal static bool TryLoad(
         ReadOnlySpan<byte> material,
         ResolvedSecret? bundlePassword,
+        SecretMaterialSource source,
         out X509Certificate2? certificate,
         out CertificateMaterialFailure failure);
 }
@@ -93,7 +102,8 @@ The fixture builds its certificates in memory with `CertificateRequest` and `Cre
 [Fact] TryLoad_PemCertificate_LoadsTheSubject
 [Fact] TryLoad_DerCertificate_LoadsTheSubject
 [Fact] TryLoad_Pkcs12BundleWithTheCorrectPassword_LoadsTheCertificate
-[Fact] TryLoad_Pkcs12BundleWithoutAPassword_ReportsBundlePasswordMissing
+[Fact] TryLoad_UnprotectedPkcs12Bundle_LoadsWithoutAPasswordBlock
+[Fact] TryLoad_ProtectedPkcs12BundleWithNoPasswordBlock_ReportsBundlePasswordMissing
 [Fact] TryLoad_Pkcs12BundleWithTheWrongPassword_ReportsBundlePasswordIncorrect
 [Fact] TryLoad_ArbitraryBytes_ReportsNotACertificate
 [Fact] TryLoad_EveryFailure_ProducesNoExceptionAndNoMaterialInTheResult
@@ -105,9 +115,15 @@ Expected: FAIL — the loader does not exist.
 
 - [ ] **Step 3: Implement**
 
-`X509Certificate2.CreateFromPem` and the PKCS#12 constructor both throw `CryptographicException` on bad material, so each is wrapped in a `try`/`catch (CryptographicException)` that becomes a named failure. A catch this broad is justified only because the alternative is an unhandled exception during startup validation with a message that may quote material; the caught exception is not rethrown and its message is not propagated.
+`X509Certificate2.CreateFromPem` and the PKCS#12 import both throw `CryptographicException` on bad material, so each is wrapped in a `try`/`catch (CryptographicException)` that becomes a named failure. A catch this broad is justified only because the alternative is an unhandled exception during startup validation with a message that may quote material; the caught exception is not rethrown and its message is not propagated.
 
 Encoding is detected by inspecting the material rather than by trusting a file extension, because `file:/run/secrets/ca.pem` may hold DER and the operator will not find that out from the name.
+
+**An unprotected PKCS#12 bundle is valid and loads.** The specification says a bundle *may* carry its own password, so a certificate-only or deliberately unprotected PFX is a legitimate form of a required encoding. The loader attempts a null password when no password block is configured, and reserves `BundlePasswordMissing` for a bundle that is actually protected. Requiring a password block unconditionally would reject files an operator is entitled to use.
+
+**A trust anchor must not carry a private key.** PKCS#12 bundles commonly do, and this feature needs only a public anchor — it presents no certificate of its own. An imported private key would sit outside the buffer this plan owns, so disposing the certificate would not satisfy the operation-scoped lifetime guarantee, and with default key-storage flags the import can persist key material to disk. Import therefore uses `X509KeyStorageFlags.EphemeralKeySet` so nothing is written to a key store, and a bundle whose certificate carries a private key is rejected as `PrivateKeyNotPermittedInTrustAnchor` rather than silently accepted. The rule is stated on the loader because a later caller that legitimately needs a key — a client certificate in stage 9 — must opt in explicitly rather than inherit an anchor's permissions.
+
+**Binary encodings are rejected only when the material came inline.** This is where 02a decision 28's `SecretMaterialSource` earns its place. `InlineValue` plus a detected binary encoding is `BinaryEncodingNotPermittedInline`; `SchemeAdapter` plus the same bytes is a perfectly ordinary DER or PFX anchor read from a file. Consulting the global interpretation mode instead would be wrong in both directions under `ReferenceOrInline` — it would reject a valid `file:` DER anchor, or accept an inline one, depending on which way the guess was written.
 
 - [ ] **Step 4: Resolve the anchor in the account options**
 
@@ -151,6 +167,7 @@ internal static class MailServerCertificateValidator
     internal static bool IsTrusted(
         X509Certificate2? trustedCertificateAuthority,
         X509Certificate? serverCertificate,
+        X509Chain? serverChain,
         SslPolicyErrors sslPolicyErrors);
 }
 ```
@@ -164,6 +181,8 @@ The fixture builds an in-memory CA and a leaf signed by it with `CertificateRequ
 ```csharp
 [Fact] IsTrusted_NoPolicyErrors_TrustsWithoutConsultingTheAnchor
 [Fact] IsTrusted_ChainErrorsAndLeafChainsToTheConfiguredAnchor_Trusts
+[Fact] IsTrusted_LeafSignedByAnIntermediateSuppliedByTheServer_Trusts
+[Fact] IsTrusted_IntermediateSuppliedByTheServerIsNotItselfTrusted_Rejects
 [Fact] IsTrusted_ChainErrorsAndLeafChainsToADifferentAuthority_Rejects
 [Fact] IsTrusted_ChainErrorsWithoutAConfiguredAnchor_Rejects
 [Fact] IsTrusted_NameMismatch_RejectsEvenWhenTheAnchorMatches
@@ -183,6 +202,7 @@ Expected: FAIL — the validator does not exist.
 internal static bool IsTrusted(
     X509Certificate2? trustedCertificateAuthority,
     X509Certificate? serverCertificate,
+    X509Chain? serverChain,
     SslPolicyErrors sslPolicyErrors)
 {
     if (sslPolicyErrors == SslPolicyErrors.None)
@@ -207,6 +227,18 @@ internal static bool IsTrusted(
     chain.ChainPolicy.CustomTrustStore.Add(trustedCertificateAuthority);
     chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
     chain.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;
+
+    // The server may have supplied intermediates that are in neither the machine store nor an AIA-reachable
+    // location. Discarding the callback's chain would reject a correctly provisioned root -> intermediate -> leaf
+    // deployment. Only non-leaf elements are carried over, and ExtraStore supplies candidates for path building
+    // without granting any of them trust: trust still comes solely from CustomTrustStore.
+    if (serverChain is not null)
+    {
+        foreach (var element in serverChain.ChainElements.Skip(1))
+        {
+            chain.ChainPolicy.ExtraStore.Add(element.Certificate);
+        }
+    }
 
     return chain.Build(presentedCertificate);
 }
@@ -254,6 +286,9 @@ Decision 18 makes this a blocking prerequisite: **do not start this task until A
 [Fact] ReloadAsync_ReferenceChangedToAResolvableTarget_PublishesTheNewSecrets
 [Fact] ReloadAsync_CandidateSnapshotHasAnUnresolvableReference_KeepsThePreviousSecrets
 [Fact] ReloadAsync_RejectedSnapshot_LogsThePathAndFailureWithoutMaterial
+[Fact] ReloadAsync_ResolutionThrows_KeepsThePreviousSnapshotAndDoesNotPropagate
+[Fact] ReloadAsync_TwoCandidatesInRapidSuccession_PublishesTheNewerOneLast
+[Fact] ReloadAsync_DatabasePasswordReferenceChanged_RebuildsTheDataSource
 [Fact] ResolveAsync_MaterialRotatedBehindAnUnchangedReference_ReturnsTheRotatedValue
 [Fact] ResolveAsync_MaterialRotatedMidOperation_DoesNotAffectTheOperationInFlight
 ```
@@ -266,15 +301,27 @@ The last two are the pair that distinguishes the two reload halves, and the last
 
 - [ ] **Step 3: Validate the candidate before publishing it**
 
-`MailSecretSnapshotPublisher` subscribes to `OnChange`, resolves every reference in the candidate snapshot, and publishes an immutable snapshot only when all of them resolve. On failure it retains the previous snapshot and logs the configuration path and the `SecretResolutionFailure` — never a path, a variable name, or material. This is the last-known-good behavior ADR 0002 requires of any reloadable group.
+`IOptionsMonitor.OnChange` takes a **synchronous** callback, and resolving a candidate snapshot is asynchronous by decision 4 and may later perform network I/O. Implementing this literally leaves only two shapes, and both are defects: blocking inside the callback stalls the configuration-provider thread, and `async void` lets an exception tear down the process and lets two rapid reloads race so that an older candidate publishes after a newer one.
 
-Reload validation must not crash the process: ADR 0002 is explicit that a rejected reload leaves the previous valid settings active, unlike a startup failure which is fatal.
+`MailSecretSnapshotPublisher` therefore does almost nothing in the callback. `OnChange` writes the candidate into a bounded channel and returns; a single `BackgroundService` reads it, resolves every reference, and publishes an immutable snapshot only when all of them resolve. One reader means candidates are validated in arrival order and the last one to publish is the last one to arrive. The channel drops the older candidate when a newer arrives while one is queued, since validating a superseded snapshot wastes a credential read for a result nobody will use.
+
+On failure it retains the previous snapshot and logs the configuration path and the `SecretResolutionFailure` — never the target, a variable name, or material. This is the last-known-good behavior ADR 0002 requires of any reloadable group.
+
+Reload validation must not crash the process: ADR 0002 is explicit that a rejected reload leaves the previous valid settings active, unlike a startup failure, which is fatal. The worker therefore catches every exception from resolution, logs it, and continues — the one place in this plan where a blanket catch is correct, because the alternative is a configuration edit killing a running host.
 
 - [ ] **Step 4: Resolve material per operation**
 
-No change is needed for the material half — decision 16 already resolves per use, which is what makes rotation behind an unchanged reference work. The test in Step 1 is what proves it, and it exists to catch a future "optimization" that caches the resolved value on the options instance.
+For mail secrets no change is needed: 02a decision 16 already resolves per use, which is what makes rotation behind an unchanged reference work. The test in Step 1 exists to catch a future "optimization" that caches the resolved value on the options instance.
 
-- [ ] **Step 5: Run the tests and commit**
+- [ ] **Step 5: Rotate the database credential too**
+
+The database password is the exception, and it would otherwise silently break the promise this specification makes for it. 02a composes it once into a singleton `NpgsqlDataSource`, so neither a changed `Persistence:Password` reference nor rotated material behind it reaches a connection opened afterwards — revoking the old credential would take MailMcp offline until restart, which is exactly the outcome rotation exists to prevent.
+
+`NpgsqlDataSource` is registered behind a provider that rebuilds it when the persistence snapshot changes, disposing the superseded data source only after its in-flight connections drain. Connections already open keep the credential they authenticated with, which is decision 17's operation boundary applied to the database rather than an exception to it.
+
+Rotation of material behind an *unchanged* database reference cannot be observed by a data source that was built once, so the provider re-resolves on a bounded interval and rebuilds when the resolved value differs. That is a deliberate departure from per-use resolution: opening a pooled connection is not the place to read a credential file, and the interval bounds how long a revoked credential stays usable. The interval is configuration, and its default is documented.
+
+- [ ] **Step 6: Run the tests and commit**
 
 ```bash
 dotnet test --project tests/Infrastructure.UnitTests/Infrastructure.UnitTests.csproj
@@ -316,7 +363,12 @@ git commit -m "Document trust anchor behavior and the secret rotation procedure"
 | Specification requirement | Covered by |
 | --- | --- |
 | PEM, DER, and PKCS#12 all load from resolved bytes | Task 1 |
-| A PKCS#12 password comes from a second secret block | decision 29, Task 1 |
+| A PKCS#12 password comes from the nested secret block 02a ships | decision 29, Task 1 |
+| An unprotected PKCS#12 bundle loads without a password block | Task 1 |
+| A private-key-bearing anchor is rejected; import is ephemeral | Task 1 |
+| A server-supplied intermediate completes the chain without gaining trust | Task 2 |
+| The database credential rotates too | Task 3 Step 5 |
+| Reload never blocks, never crashes, never publishes out of order | Task 3 Step 3 |
 | Inline PEM works; inline binary fails naming the encoding | decision 28, Task 1 |
 | Malformed anchor material fails startup without disclosing material | Task 1 |
 | A private server connects with validation fully enabled | Task 2 |
@@ -330,5 +382,6 @@ git commit -m "Document trust anchor behavior and the secret rotation procedure"
 **Flagged for the owner**
 
 - **Blocking:** ADR 0002 must be amended before Task 3 begins (decision 18). Tasks 1 and 2 are unaffected and can proceed as soon as 02a merges.
+- The Codex review on PR #59 raised the intermediate-certificate, private-key, unprotected-bundle, reload-callback, and database-rotation points now folded into this plan. The one that changed the shape of the split is the bundle password: it had to become a nested block in 02a, because a sibling string would have been invisible to the discovery walk and fixing it here would have modified a contract 02a had already shipped. That is the escalation this plan's global constraint asks for, and it was resolved by moving the property rather than by bending the constraint.
 - Decision 28 rejects inline binary certificate material rather than accepting base64. Base64 would work and would let a DER anchor be configured inline, but it introduces a second encoding an operator has to know about and get right, for a case PEM already covers. If you would rather support it, it is a small addition to the loader and a line in the documentation.
 - `RevocationMode = NoCheck` on the custom-anchor path is a real trade-off, not an oversight: a private authority typically publishes no reachable CRL or OCSP responder, and a revocation lookup that cannot complete would reject a correctly provisioned server. It is confined to the custom-anchor path and the system trust path keeps the platform default. If revocation checking on private anchors matters more than that failure mode, this is the decision to revisit.

@@ -27,6 +27,8 @@ The IDLE session opens the folder read-only exactly as the polling path does, an
 
 A long-lived connection holds credentials in memory for the process lifetime; the specification requires that the session obtains its secret through the resolver from specification 02a at connect time and does not retain a copy beyond the session object.
 
+A long-lived session also breaks the rotation boundary specification 02b defines. That specification applies a rotated secret at the start of the next operation, which for ordinary polling is the next run's connect. An IDLE session has no next connect, so a rotated password or trust anchor would stay in use for the process lifetime unless an unrelated disconnect happened to occur — and a revoked credential would keep working, which is the opposite of what rotation is for. The connection is therefore the operation boundary here: a session whose secrets have rotated is recycled at the next safe point rather than left running, and this specification owns that recycling because it is what introduces the long-lived session.
+
 ## Testing
 
 `Infrastructure.UnitTests` drive the narrow IMAP client port with NSubstitute to model: a server advertising IDLE, a server not advertising it, renewal firing before the timeout under `FakeTimeProvider`, a notification triggering exactly one synchronization pass, a dropped connection reconnecting, repeated failures degrading to polling and later retrying push, and cancellation exiting IDLE promptly during shutdown. Tests assert the effective mode is reported when it differs from the configured mode.
