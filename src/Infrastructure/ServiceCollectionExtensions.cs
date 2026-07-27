@@ -106,10 +106,11 @@ public static class ServiceCollectionExtensions
 
             return dataSourceBuilder.Build();
         });
-        // EnableRetryOnFailure is deliberately not configured. Its execution strategy retries a whole unit of work
-        // and therefore refuses an explicitly started transaction, which is how every write here reaches the
-        // database through IPersistenceSession. Database retry is the OutboundDependency.DatabaseCommandExecution
-        // pipeline's job for command paths that own no transaction; enabling both would retry one command twice.
+        // EnableRetryOnFailure is deliberately not configured. A retrying execution strategy refuses the
+        // user-initiated transaction PersistenceSessionFactory opens for every session, so turning it on would fail
+        // every write at session start rather than merely leave it un-retried. Adopting it instead means handing each
+        // unit of work to Database.CreateExecutionStrategy().ExecuteAsync so the strategy can replay it whole, and
+        // dropping OutboundDependency.DatabaseCommandExecution from those paths so the two never stack.
         services.AddDbContext<MailMcpDbContext>((provider, options) =>
             options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()));
         services.AddScoped<IPersistenceSessionFactory, PersistenceSessionFactory>();

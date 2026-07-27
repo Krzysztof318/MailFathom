@@ -75,12 +75,23 @@ is the layer rather than something MailMcp re-implements:
   client that reaches its model over `HttpClient` is therefore already protected, and must not also be wrapped in the
   `AiProviderInvocation` pipeline. An adapter that wants the pipeline instead has to remove the handler from its own
   client; it may not have both.
-- **EF Core.** `EnableRetryOnFailure` is deliberately not configured. Its execution strategy retries a whole unit of
-  work and refuses an explicitly started transaction, which is how every write reaches the database through
-  `IPersistenceSession`. Database retry belongs to the `DatabaseCommandExecution` pipeline for command paths that own
-  no transaction. Enabling both would retry one command twice and break the transaction boundaries; adopting the EF
-  strategy instead would mean wrapping each unit of work in `IExecutionStrategy.ExecuteAsync` and dropping the
-  pipeline from those paths.
+- **EF Core.** `EnableRetryOnFailure` is deliberately not configured. The obstacle is not the unit of work: with a
+  retrying execution strategy each query and each `SaveChangesAsync` is already replayed as its own retriable unit. It
+  is the *user-initiated* transaction. `PersistenceSessionFactory` opens one with `BeginTransactionAsync` for every
+  session, and EF Core refuses that under a retrying strategy with `InvalidOperationException: The configured
+  execution strategy 'NpgsqlRetryingExecutionStrategy' does not support user-initiated transactions`. Turning the
+  setting on today would therefore fail every write at the moment its session starts, rather than merely leave it
+  un-retried.
+
+  The supported alternative works and stays open: hand the whole transactional unit to
+  `Database.CreateExecutionStrategy().ExecuteAsync(...)`, which replays the delegate — begin, work, `SaveChanges`,
+  commit — as one retriable unit. Adopting it means reshaping `IPersistenceSessionFactory` from the imperative
+  `BeginSessionAsync` scope into a delegate the strategy can re-invoke, ensuring everything inside is safe to replay,
+  and dropping the pipeline from those paths so the two never stack.
+
+  Until then the boundary is: the `DatabaseCommandExecution` pipeline covers command paths that own no transaction,
+  and a transient failure *inside* a transactional write is surfaced rather than retried. The commit either succeeds
+  or the session rolls back and the caller decides.
 - **Optimistic concurrency.** `OptimisticConcurrencyRetryPolicy` in `Application` already retries a commit that lost a
   race. That is why the classifier reports a concurrency conflict as terminal: the pipeline must not become a second
   layer around the same rows.
