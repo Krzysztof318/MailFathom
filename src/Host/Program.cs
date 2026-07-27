@@ -7,6 +7,7 @@ using MailMcp.Host;
 using MailMcp.Host.Configuration;
 using MailMcp.Infrastructure;
 using MailMcp.Infrastructure.Mail;
+using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,6 +15,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(TimeProvider.System);
+// ReferenceOnly is the default, so a deployment that configures nothing gets the mode under which a plain-text value
+// where a reference belongs fails startup instead of authenticating.
+builder.Services.AddMailMcpSecretResolution(
+    builder.Configuration.GetValue("Secrets:Interpretation", SecretValueInterpretation.ReferenceOnly));
 // Bound strictly: mail transport is security-sensitive, and a misspelled key such as a singular
 // "PermittedAuthenticationMechanism" would otherwise be ignored and silently replaced by the default allow-list.
 builder.Services.AddOptions<MailSynchronizationOptions>()
@@ -26,7 +31,7 @@ builder.Services.AddOptions<PersistenceOptions>()
     .Bind(builder.Configuration.GetSection("Persistence"))
     .ValidateDataAnnotations()
     .ValidateOnStart();
-builder.Services.AddScoped<IImapAccountSettingsProvider>(provider => provider.GetRequiredService<IOptions<MailSynchronizationOptions>>().Value);
+builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();
 builder.Services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<IOptions<MailSynchronizationOptions>>().Value);
 builder.Services.AddScoped(provider =>
 {
@@ -42,7 +47,14 @@ builder.Services.AddSingleton(provider => new PersistenceConcurrencyOptions
 {
     MaximumCommitAttempts = provider.GetRequiredService<IOptions<PersistenceOptions>>().Value.MaximumConcurrencyCommitAttempts,
 });
-builder.Services.AddMailMcpInfrastructure(builder.Configuration);
+// The password block is read here rather than through IOptions because the data source it configures is registered
+// before any options instance can be resolved. Only the reference is read; resolution happens on first use.
+builder.Services.AddMailMcpInfrastructure(
+    builder.Configuration,
+    builder.Configuration.GetSection("Persistence").Get<PersistenceOptions>()?.Password);
+// The validator is registered ahead of the worker so hosted-service ordering reinforces the StartingAsync ordering
+// rather than depending on it alone.
+builder.Services.AddHostedService<MailMcp.Host.Hosting.MailSecretReferenceStartupValidator>();
 builder.Services.AddHostedService<MailMcp.Host.Hosting.MailSynchronizationWorker>();
 
 var app = builder.Build();

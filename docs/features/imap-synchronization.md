@@ -20,7 +20,8 @@ MailMcp now includes the first vertical slice for read-only IMAP synchronization
 - `Domain` owns the mail transport security policy: the five connection-security modes, the ordered SASL allow-list, the two opt-ins that permit weakening transport protection, and the trust-anchor selection. The rules that reject an unsafe combination live in `MailTransportSecurityPolicy` rather than in a configuration validator, so a future command-line or MCP entry point cannot reach a transport adapter with a policy that host startup would have refused.
 - A permitted mechanism is a domain value object rather than an enum, so its registered SASL name, its clear-text classification, and its JSON form travel with the value instead of living in a separate mapping table that could drift. It serializes as that SASL name, which is also the name configuration accepts and the name matched against a server's advertised set.
 - The policy is an input to `IMailboxSessionFactory.OpenReadOnlyAsync`, not something the adapter resolves. `MailboxSynchronizer` reads it per run through `IMailTransportSecurityPolicyReader`, which is why an adapter can only narrow what it is handed.
-- `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, and a periodic scoped background worker that isolates failures per account/folder work unit.
+- `Infrastructure` owns secret reference resolution. Every secret-bearing setting binds to a block carrying a `<scheme>:<target>` reference, four scheme adapters resolve it into pinned byte material that is erased when the operation that owns it ends, and `Host` fails startup when any reference is unresolvable. `Application` and `Domain` see none of it. [Secret provisioning](../operations/secret-provisioning.md) documents the grammar, the deployment shapes, the interpretation modes, and the residual in-memory exposures.
+- `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, secret resolution before any hosted service starts, and a periodic scoped background worker that isolates failures per account/folder work unit.
 
 ## Configuration
 
@@ -39,6 +40,10 @@ Synchronization is disabled by default:
         "AccountId": "primary",
         "Host": "imap.example.test",
         "Port": 993,
+        "UserName": "mailmcp@example.test",
+        "Secrets": {
+          "Password": { "SecretReference": "systemd-credential:imap-primary-password" }
+        },
         "TransportSecurity": {
           "ConnectionSecurity": "TlsOnConnect",
           "PermittedAuthenticationMechanisms": [ "SCRAM-SHA-256", "PLAIN" ],
@@ -53,17 +58,26 @@ Synchronization is disabled by default:
 }
 ```
 
-Optimistic concurrency is configured once for the whole deployment, outside the synchronization section, because it bounds every local writer rather than this feature:
+Optimistic concurrency is configured once for the whole deployment, outside the synchronization section, because it bounds every local writer rather than this feature. The PostgreSQL password sits in the same section as an optional secret reference, so the connection string in configuration keeps host, database, and user name and never carries the credential:
 
 ```json
 {
   "Persistence": {
-    "MaximumConcurrencyCommitAttempts": 2
+    "MaximumConcurrencyCommitAttempts": 2,
+    "Password": { "SecretReference": "file:/run/secrets/postgres-password" }
   }
 }
 ```
 
-When enabled, at least one account with a non-blank `AccountId`, host, user name, and password must be configured. If an account omits `Folders`, the worker applies the post-binding default `INBOX`; explicit folder lists replace that default. Account secrets and concrete IMAP connection settings are intentionally not committed in ordinary configuration files.
+When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. If an account omits `Folders`, the worker applies the post-binding default `INBOX`; explicit folder lists replace that default.
+
+### Secrets
+
+Every secret-bearing setting — the account password, the trust anchor, the database password — binds to a block whose `SecretReference` property holds a `<scheme>:<target>` reference rather than the credential. The host resolves every reference before any hosted service starts and reports all failures at once, each naming its configuration path and a stable failure identity and nothing else. Each actual connection attempt resolves again and erases the material when it finishes, so no long-lived copy exists and a rotated credential is observed without a restart.
+
+Secret resolution is not gated on `Enabled`, unlike the transport security rules. Every configured account's password reference is resolved at startup even when synchronization is disabled, because a reference an operator wrote is a reference they intend to work, and discovering it broken at the moment synchronization is switched on is worse than discovering it now. An account that is configured but has no reachable password therefore fails startup; remove the account rather than disabling synchronization around it.
+
+[Secret provisioning](../operations/secret-provisioning.md) is the operator reference: the four schemes, the systemd, Compose, and Kubernetes provisioning paths, the three interpretation modes and why `ReferenceOnly` is the default, and the in-memory exposures that need operational rather than code-level mitigation.
 
 Account identifiers and folder names must be unique after domain normalization, IMAP ports must be between 1 and 65535, and `MaximumConcurrencyCommitAttempts` must be between 1 and 10. The default of two attempts covers the single lost race that a rare conflict represents; a folder deferred after that is retried by the next interval anyway.
 
@@ -85,7 +99,7 @@ Only the first two guarantee that nothing travels unencrypted. The other three r
 
 The MailKit adapter removes every non-permitted mechanism from the set the server advertised before it authenticates, and fails with `MailAuthenticationMechanismUnavailableException` when nothing permitted remains. It never restores a removed mechanism after a failed authentication, so a server cannot negotiate its way to a mechanism the operator refused. A server that advertises no SASL mechanism at all is treated the same way and the account fails rather than falling back to the clear-text IMAP `LOGIN` command, which the allow-list cannot describe.
 
-Certificate validation is always enabled and no configuration path disables it. A private or self-signed server is supported by setting `CertificateTrust` to `AdditionalTrustedAuthority` and naming the deployment-provisioned material in `TrustedCertificateAuthorityReference`; the reference is a credential name, never certificate material or a secret value. `SystemTrustStore` rejects a reference, and `AdditionalTrustedAuthority` requires one.
+Certificate validation is always enabled and no configuration path disables it. A private or self-signed server is supported by setting `CertificateTrust` to `AdditionalTrustedAuthority` and naming the deployment-provisioned material in the `TrustedCertificateAuthority` secret block; the block carries a reference, never certificate material inline. `SystemTrustStore` rejects a configured anchor, and `AdditionalTrustedAuthority` requires one. A block present with a blank `SecretReference` reads as no anchor at all, so `"TrustedCertificateAuthority": {}` fails the rule that requires one rather than passing it and failing later with a confusing missing-material error.
 
 The whole `MailSynchronization` section binds strictly (`ErrorOnUnknownConfiguration`), so a misspelled key fails startup instead of being ignored. Without that, a singular `PermittedAuthenticationMechanism` would be dropped silently and the default allow-list would take its place, quietly permitting mechanisms the operator meant to exclude.
 
@@ -93,14 +107,17 @@ Every rule above is enforced twice: in the domain policy object and again during
 
 Each reported error carries the domain's `MailTransportSecurityViolation` alongside its operator sentence, and the startup message appends that identity in brackets — for example `Account 'primary': An unencrypted connection requires AllowInsecureConnection. [UnencryptedConnectionRequiresExplicitOptIn]`. The bracketed name is the stable half: an operator or log query can match on it while the surrounding prose stays free to change. An unsupported SASL mechanism name carries no violation and is reported without brackets, because it is a parse failure rather than a violated rule.
 
+Secret resolution is the one rule that cannot join `ValidateOnStart`, because options validation is synchronous while resolution is not — the contract is asynchronous so a network-backed secret store needs no breaking change later. It runs instead in the host's starting phase, which completes before any hosted service starts, so the worker never runs against an unresolvable secret.
+
 ## Safety assumptions
 
 The application layer exposes only `FetchEmailContentWithoutSettingSeenAsync` for content retrieval during synchronization. This name is part of the contract: implementations must use IMAP read-only selection and BODY.PEEK-equivalent behavior so remote `\Seen` flags are not changed. The MailKit adapter satisfies both halves — it selects the folder with `FolderAccess.ReadOnly` and retrieves content through `GetStreamAsync(uid)`, which issues `UID FETCH <uid> (BODY.PEEK[])`. A regression test exercises a successful fetch and asserts that neither `StoreAsync`, the only `IMailFolder` member able to change flags, nor a read-write reselection was requested. Metadata requests are bounded by `MaxMetadataBatchSize`, each run is bounded by `MaxMetadataBatchesPerRun`, empty unassigned UID ranges are not checkpointed speculatively, and raw MIME above `MaxRawMimeBytes` is recorded as metadata-only. Logs record counts and account/folder identifiers only; raw MIME, email bodies, attachments, credentials, and tokens remain sensitive and must not be logged.
 
 ## Pending work
 
-- Deployment-specific secret binding for IMAP passwords and reviewed operational examples for external secret stores.
-- Loading trust anchor material and installing it into the certificate validation path. `CertificateTrust` and `TrustedCertificateAuthorityReference` are validated configuration shape only until the secret-reference resolution work lands, so an account pointing at a private authority still fails its TLS handshake today.
+- Loading trust anchor material and installing it into the certificate validation path. `CertificateTrust` and `TrustedCertificateAuthority` are validated configuration shape only — the reference is resolved at startup, but nothing loads the certificate — so an account pointing at a private authority still fails its TLS handshake today.
+- Secret rotation without a restart for the PostgreSQL password. The data source is composed once, so a rotated database credential is picked up only on the next start; mailbox passwords are already resolved per connection attempt.
+- Adapters for external managed secret stores. Kubernetes and container deployments need none, because their secrets are files.
 - OAuth mailbox authentication. `XOAUTH2` and `OAUTHBEARER` are deliberately absent from the allow-list because no token source exists yet.
 - IMAP IDLE and NOTIFY support.
 - Explicit EF Core migrations after schema review.

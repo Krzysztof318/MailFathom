@@ -229,7 +229,7 @@ public sealed record SecretResolutionResult
 }
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/Infrastructure.UnitTests/SecretReferenceTests.cs`, one behavior per test:
 
@@ -259,12 +259,12 @@ TryParse_SupportedScheme_ParsesSchemeAndTarget
 
 The last three matter more than they look: they are the regression guard for decision 12. `SecretReference` is a record with a public `Target`, so the synthesized printing would otherwise write a file path, a variable name, a vault identifier, or — for `plaintext:` — the complete secret into any log, exception message, or diagnostic dump the parsed object reaches.
 
-- [ ] **Step 2: Run the tests and confirm they fail to compile**
+- [x] **Step 2: Run the tests and confirm they fail to compile**
 
 Run: `dotnet test --project tests/Infrastructure.UnitTests/Infrastructure.UnitTests.csproj`
 Expected: FAIL — `SecretReference` does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `TryParse` rejects a blank input, splits on `IndexOf(':')`, and normalizes the scheme name to lower case with `ToLowerInvariant`. It trims **only the scheme**, never the target: `plaintext: secret ` must resolve to `" secret "`, because leading and trailing spaces are valid password characters and a parser that trims them silently changes the credential. A target that is empty after the separator is still a failure; a target that is entirely whitespace is not, because that too can be a password. Every byte after the first colon reaches the adapter untouched. It does not check the name against a list: an unknown scheme is a well-formed reference to a provider that is not registered, and decision 3 puts that answer in the dispatch. `SecretReferenceScheme` compares by normalized name with `StringComparer.Ordinal`, and its well-known members are the four wire names. The member name `EnvironmentVariable` and the wire name `env` deliberately differ, because the configuration prefix should stay short while the member name stays explicit.
 
@@ -287,11 +287,11 @@ public void Dispose()
 
 The zeroing must go through `CryptographicOperations.ZeroMemory` rather than `Array.Clear` or a loop: it is documented as existing "to future-proof against potential optimizations in the .NET runtime that could eliminate memory writes that aren't followed by memory reads", which is exactly this write.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/Infrastructure/Secrets tests/Infrastructure.UnitTests/SecretReferenceTests.cs
@@ -336,7 +336,7 @@ The file reader is asynchronous, takes the caller's token, and takes a byte ceil
 
 `ISecretSchemeResolver` is `public` — unusually for this repository, which defaults to `internal` — because it is the extension point decision 2 promises. A provider adapter in another folder, another project, or a later change set implements it, and an `internal` contract would make that impossible without editing this file. The four adapters implementing it here stay `internal sealed`. The two reader ports stay `internal`: they exist for testability, not for extension, and `InternalsVisibleTo MailMcp.Infrastructure.UnitTests` already covers them.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `SecretReferenceResolverTests` uses hand-written in-memory fakes — a dictionary-backed `ISecretFileReader` and `IEnvironmentVariableReader` — never the real file system or environment block:
 
@@ -369,11 +369,11 @@ The file reader is asynchronous, takes the caller's token, and takes a byte ceil
 
 The path-separator test encodes a real hazard: `systemd-credential:../../etc/shadow` must not become a traversal. The trailing-newline test encodes the other: `LoadCredential=` and Compose secrets both commonly carry a file that ends with a newline, and an untrimmed `\n` produces an authentication failure that looks like a wrong password.
 
-- [ ] **Step 2: Run the tests and confirm they fail**
+- [x] **Step 2: Run the tests and confirm they fail**
 
 Expected: FAIL — the resolvers do not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `SystemdCredentialSecretReferenceResolver` reads `CREDENTIALS_DIRECTORY` through `IEnvironmentVariableReader` — systemd documents that "the path to access them is derived from the environment variable `$CREDENTIALS_DIRECTORY`" and that access is restricted to the service's user — rejects a target containing `/`, `\`, or `..`, joins, and reads. `FileSecretReferenceResolver` reads the target directly, which is also the container path: Compose mounts secrets at `/run/secrets/<secret_name>`. Both read bytes and neither modifies them; the newline trim lives in `ResolvedSecret.RevealAsString()` so binary material is never touched, and both report `MaterialEmpty` when the material has zero length.
 
@@ -385,11 +385,11 @@ Expected: FAIL — the resolvers do not exist.
 
 `FileSystemSecretFileReader` validates the path before touching the file system and then catches the complete set of expected failures — `IOException`, `UnauthorizedAccessException`, `ArgumentException`, `NotSupportedException`, and `System.Security.SecurityException` — mapping each to `false`. Catching only the first two would let a malformed target such as a path containing a NUL character throw `ArgumentException` straight out of the resolver, past the result boundary, into an unhandled startup exception whose message quotes the path. That defeats both fail-fast aggregation and the guarantee that no diagnostic carries a target.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/Infrastructure/Secrets tests/Infrastructure.UnitTests/SecretReferenceResolverTests.cs
@@ -442,7 +442,7 @@ public sealed record ImapAccountSettings(
 - `SettingFor(MailTransportSecurityViolation)` maps those two violations onto a setting name for the operator message. It must report `TrustedCertificateAuthority`, the new key, not the violation member's own spelling — otherwise the startup error names a key that does not exist in the file the operator is editing.
 - The existing `MailAccountTransportSecurityOptionsTests` that set the reference as a string are updated to the block. They are assertions about domain rules, not about the JSON shape, so their expectations stay as they are.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```csharp
 [Fact] FindConfigurationErrorsAsync_ResolvableReferences_ReportsNoError
@@ -463,11 +463,11 @@ public sealed record ImapAccountSettings(
 [Fact] FindConfigurationErrors_TrustAnchorViolation_NamesTheTrustedCertificateAuthoritySetting
 ```
 
-- [ ] **Step 2: Run the tests and confirm they fail**
+- [x] **Step 2: Run the tests and confirm they fail**
 
 Expected: FAIL — `MailAccountSecretOptions` does not exist and `ImapAccountSettings.Password` is still a `string`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `FindConfigurationErrorsAsync` resolves the password reference and discards the material — decision 16's startup half.
 
@@ -477,11 +477,11 @@ Expected: FAIL — `MailAccountSecretOptions` does not exist and `ImapAccountSet
 
 `MailAccountSecrets` implements `IDisposable` and disposes the password. Per decision 9 the instance is owned by the operation that resolved it: `MailKitImapMailboxSessionFactory.OpenReadOnlyAsync` disposes it once the client is authenticated and the folder is open, and the startup validator disposes everything it resolved before returning. `ImapAccountSettings` does *not* own the secrets — it is a carrier — so the ownership rule is stated in its XML documentation to stop a future caller from disposing it twice or not at all.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Expected: PASS for `Infrastructure.UnitTests`; the solution does not build until Task 5 updates `Host`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/Infrastructure/Mail tests/Infrastructure.UnitTests/MailAccountSecretOptionsTests.cs tests/Infrastructure.UnitTests/MailAccountTransportSecurityOptionsTests.cs
@@ -496,7 +496,7 @@ git commit -m "Bind account secrets as reference blocks and resolve them in Infr
 - Modify: `src/Host/Configuration/PersistenceOptions.cs`, `src/Infrastructure/ServiceCollectionExtensions.cs`
 - Test: `tests/Infrastructure.UnitTests/DatabasePasswordCompositionTests.cs`
 
-- [ ] **Step 1: Add the optional reference**
+- [x] **Step 1: Add the optional reference**
 
 `PersistenceOptions` gains `ConfiguredSecret? Password`:
 
@@ -506,7 +506,7 @@ git commit -m "Bind account secrets as reference blocks and resolve them in Infr
 
 When it is null the connection string is used unchanged, which keeps trust-authentication and Aspire-provided connection strings working untouched. A block present with an empty `SecretReference` is a startup failure rather than a silent fallback to the unchanged connection string, because an operator who wrote the block meant to supply a password.
 
-- [ ] **Step 2: Compose the connection string after resolution, not during registration**
+- [x] **Step 2: Compose the connection string after resolution, not during registration**
 
 The obvious shape — `AddMailMcpInfrastructure` taking an already-resolved password — does not work, and the reason is an ordering trap worth stating so nobody reintroduces it. Service registration runs synchronously during composition, while resolution is asynchronous and decision 5 puts it in `StartingAsync`, which runs *after* every registration. A resolved password therefore does not exist yet at the moment the connection string would be composed. An optional parameter would simply stay omitted: the host would still build, the reference would still validate, and EF Core would quietly keep using the passwordless connection string.
 
@@ -543,7 +543,7 @@ Without those the failure mode is silent: everything validates, nothing connects
 
 Rotation of this reference is specification 02b's concern and is listed in its plan, because a singleton data source composed once cannot observe a rotated credential.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/Host/Configuration/PersistenceOptions.cs src/Infrastructure/ServiceCollectionExtensions.cs tests/Infrastructure.UnitTests/DatabasePasswordCompositionTests.cs
@@ -573,15 +573,15 @@ New account configuration shape:
 }
 ```
 
-- [ ] **Step 1: Replace the raw password**
+- [x] **Step 1: Replace the raw password**
 
 `MailSynchronizationAccountOptions` drops `Password` and gains `MailAccountSecretOptions Secrets { get; set; } = new();`, mirroring the `TransportSecurity` nesting specification 01 established. The `Password is required` validation rule becomes a reference rule reported by `MailAccountSecretOptions`.
 
-- [ ] **Step 2: Resolve at the settings boundary**
+- [x] **Step 2: Resolve at the settings boundary**
 
 `IImapAccountSettingsProvider.GetSettings` becomes `GetSettingsAsync(string accountId, CancellationToken cancellationToken)` per decision 4, and `MailSynchronizationOptions` takes `ISecretReferenceResolver` to satisfy it. `MailKitImapMailboxSessionFactory.OpenReadOnlyAsync` is already asynchronous and already holds the token, so the call site changes by one `await`.
 
-- [ ] **Step 3: Fail fast on an unresolvable reference**
+- [x] **Step 3: Fail fast on an unresolvable reference**
 
 Add `MailSecretReferenceStartupValidator : IHostedLifecycleService` in `src/Host/Hosting/`, injected with the options and the resolver. `StartingAsync` walks the bound options graph, collects every `ConfiguredSecret` it finds with the configuration path that reached it, resolves each one through the resolver, and throws `OptionsValidationException` listing every failure at once:
 
@@ -600,7 +600,7 @@ The graph walk is the one place this plan accepts reflection, and it earns it: e
 
 `StartingAsync` is documented to run before any hosted service's `StartAsync`, so the synchronization worker never starts against an unresolvable secret. The remaining four lifecycle members are empty. The type stays a thin translation because `Host` is excluded from coverage; every rule it reports comes from Task 3 and from `ConfiguredSecretDiscovery`.
 
-- [ ] **Step 4: Wire the resolver**
+- [x] **Step 4: Wire the resolver**
 
 ```csharp
 builder.Services.AddMailMcpSecretResolution(builder.Configuration.GetValue("Secrets:Interpretation", SecretValueInterpretation.ReferenceOnly));
@@ -611,7 +611,7 @@ builder.Services.AddHostedService<MailSecretReferenceStartupValidator>();
 
 The validator is registered before the synchronization worker so hosted-service ordering reinforces `StartingAsync` ordering rather than depending on it alone.
 
-- [ ] **Step 5: Update the shipped configuration examples**
+- [x] **Step 5: Update the shipped configuration examples**
 
 `appsettings.json` keeps an empty account list, documents the block shape by example only, and leaves `Secrets:Interpretation` unset so the default `ReferenceOnly` applies. `appsettings.Development.json` sets `ReferenceOrInline` and shows the block carrying a `plaintext:` reference:
 
@@ -621,7 +621,7 @@ The validator is registered before the synchronization worker so hosted-service 
 
 That is what makes local development convenient without weakening the shipped default — the shape is identical to production, only the reference differs, so moving a working development configuration to a real deployment is one string edit rather than a restructuring. No real credential appears in either file.
 
-- [ ] **Step 6: Verify the removal is complete**
+- [x] **Step 6: Verify the removal is complete**
 
 ```bash
 dotnet build MailMcp.slnx
@@ -630,7 +630,7 @@ grep -rnE "string\??\s+(Password|Secret|Credential|PrivateKey|Token)\b" src/ --i
 
 Expected: build succeeds; the grep matches only `ConfiguredSecret.SecretReference`. Searching for the *type* rather than for the JSON key `"Password"` is the point — after decision 25 the key is legitimate and appears in every secret block, so the old key-based grep would report the correct shape as a finding. This is the specification's first definition-of-done item, and Task 6's assembly-wide test is its permanent form; this grep also reaches `Host`, which that test cannot.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/Host
@@ -644,7 +644,7 @@ git commit -m "Bind mail and database secrets as references and fail startup whe
 **Files:**
 - Create: `tests/Infrastructure.UnitTests/SecretBoundaryArchitectureTests.cs`
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 ```csharp
 [Fact]
@@ -679,7 +679,7 @@ The test reaches `Infrastructure` only, because `MailSynchronizationOptions` and
 
 No architecture-test package is added for either test: introducing one would require a license review and owner approval for rules that a few lines of reflection already prove. Both live in `Infrastructure.UnitTests` because that is the only unit-test project referencing all three assemblies.
 
-- [ ] **Step 2: Run and commit**
+- [x] **Step 2: Run and commit**
 
 ```bash
 dotnet test --project tests/Infrastructure.UnitTests/Infrastructure.UnitTests.csproj
@@ -695,21 +695,21 @@ git commit -m "Assert secret resolution stays out of Domain and Application"
 - Create: `docs/operations/secret-provisioning.md`
 - Modify: `docs/features/imap-synchronization.md`, `docs/operations/local-development.md`
 
-- [ ] **Step 1: Write the provisioning page**
+- [x] **Step 1: Write the provisioning page**
 
 `docs/operations/secret-provisioning.md` documents the reference grammar, the four schemes, and — because MailMcp is deployed several ways — a section per deployment shape: the native systemd path with `LoadCredential=`, `LoadCredentialEncrypted=`, `systemd-creds`, and `$CREDENTIALS_DIRECTORY`; the container path with Compose `secrets:` mounted at `/run/secrets/<name>`; and the Kubernetes path with a Secret mounted as a read-only tmpfs volume — the last two both addressed as `file:`, with an explicit note that no container- or Kubernetes-specific scheme exists or is needed. It states the trailing-newline trimming and that it applies to text secrets only, the operational hardening that bounds in-memory exposure — `LimitCORE=0` on the systemd unit, `Storage=none` and `ProcessSizeMax=0` for `systemd-coredump`, and keeping the service out of swap in both the systemd and container shapes, with the honest statement that a dump or debugger can still read managed memory and that no code-level measure changes that — the three interpretation modes with `ReferenceOnly` as the default and `InlineOnly` as the Azure App Configuration path, the fact that inline values cannot be erased from memory, and the recommendation against `env:` in production. It also states, for each of the three modes, how the same setting is addressed by a flattening provider — `MailSynchronization:Accounts:0:Secrets:Password:SecretReference` in Azure App Configuration and its double-underscore form in an environment block — because that is the path an operator on a managed store actually configures.
 
 A closing section states what a future managed-store provider would add — one `ISecretSchemeResolver`, one registration extension, its own timeouts and caching, platform identity rather than a MailMcp-held credential, and a `LICENSES.md` entry — so an operator reading the page can tell which schemes exist today from which are anticipated. It documents anticipated extension, not unimplemented behavior, and says so plainly; `docs/AGENTS.md` requires documentation to describe verified implemented behavior, and this section is explicitly labelled as the extension contract rather than as a feature.
 
-- [ ] **Step 2: Update the feature and development pages**
+- [x] **Step 2: Update the feature and development pages**
 
 `docs/features/imap-synchronization.md` gets the new account JSON and the resolution and fail-fast behavior, and loses the now-resolved pending item on deployment-specific secret binding. Trust anchor loading stays listed as pending, because specification 02b delivers it. `docs/operations/local-development.md` gains the Development workflow: `plaintext:` in `appsettings.Development.json` or user secrets, and why neither is a production secret store.
 
-- [ ] **Step 3: Run the documentation and licensing gate**
+- [x] **Step 3: Run the documentation and licensing gate**
 
 Run `$check-docs-licenses`. No dependency changed, so the licensing verdict is `n/a`; the documentation verdict must be satisfied by Steps 1 and 2.
 
-- [ ] **Step 4: Run the full verification gate**
+- [x] **Step 4: Run the full verification gate**
 
 ```bash
 git add -A
@@ -719,11 +719,11 @@ dotnet msbuild .config/CodeCoverage.proj -t:Collect
 
 Expected: build, format, workflow contract, complete unit-test suite, and the 85% whole-scope coverage gate all pass.
 
-- [ ] **Step 5: Review the change**
+- [x] **Step 5: Review the change**
 
 Run `$review-change`. Check specifically: no secret material in any message, log, or exception; no `Application` or `Domain` reference to a resolver, reference, or scheme; no certificate-validation opt-out and no callback returning `true` on an unexamined chain; no cached secret material outliving its use.
 
-- [ ] **Step 6: Finish**
+- [x] **Step 6: Finish**
 
 Run `$finish-change`: commit, push, and open a draft pull request whose body contains `Closes #36`. Patch the body through `gh api repos/Krzysztof318/MailMcp/pulls/<number> -X PATCH -f body="$(cat body.md)"` because `gh pr edit` fails against this repository with a Projects-classic GraphQL error.
 

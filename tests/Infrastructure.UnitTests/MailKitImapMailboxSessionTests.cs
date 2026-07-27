@@ -10,6 +10,7 @@ using MailMcp.Domain.Folders;
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Mail.MailKit;
+using MailMcp.Infrastructure.Secrets;
 using NSubstitute;
 using Xunit;
 
@@ -161,8 +162,7 @@ public sealed class MailKitImapMailboxSessionTests
         // Arrange
         await using var client = new FakeImapClient();
         var folder = Substitute.For<IMailFolder>();
-        var settingsProvider = Substitute.For<IImapAccountSettingsProvider>();
-        settingsProvider.GetSettings("primary").Returns(new ImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
+        var settingsProvider = CreateSettingsProvider();
         client.IsConnected = true;
         client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = folder;
@@ -189,9 +189,8 @@ public sealed class MailKitImapMailboxSessionTests
         // Arrange
         await using var client = new FakeImapClient();
         var folder = Substitute.For<IMailFolder>();
-        var settingsProvider = Substitute.For<IImapAccountSettingsProvider>();
+        var settingsProvider = CreateSettingsProvider();
         var folderOpenException = new InvalidOperationException("folder open failed");
-        settingsProvider.GetSettings("primary").Returns(new ImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
         client.IsConnected = true;
         client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = folder;
@@ -281,8 +280,7 @@ public sealed class MailKitImapMailboxSessionTests
         // Arrange
         await using var client = new FakeImapClient();
         var folder = Substitute.For<IMailFolder>();
-        var settingsProvider = Substitute.For<IImapAccountSettingsProvider>();
-        settingsProvider.GetSettings("primary").Returns(new ImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
+        var settingsProvider = CreateSettingsProvider();
         client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = folder;
         var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
@@ -297,6 +295,50 @@ public sealed class MailKitImapMailboxSessionTests
         // Assert
         await folder.Received(1).OpenAsync(FolderAccess.ReadOnly, CancellationToken.None);
         await folder.DidNotReceive().OpenAsync(FolderAccess.ReadWrite, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task OpenReadOnlyAsync_FolderOpened_ErasesTheResolvedPasswordMaterial()
+    {
+        // Arrange
+        await using var client = new FakeImapClient();
+        var folder = Substitute.For<IMailFolder>();
+        var settingsProvider = CreateSettingsProvider(out var resolvedSecrets);
+        client.AuthenticationMechanisms.Add("PLAIN");
+        client.Folder = folder;
+        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
+
+        // Act
+        await using var session = await factory.OpenReadOnlyAsync(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            TlsOnConnectWithPlainPolicy,
+            CancellationToken.None);
+
+        // Assert
+        var secrets = Assert.Single(resolvedSecrets);
+        Assert.Throws<ObjectDisposedException>(() => secrets.Password.RevealAsString());
+    }
+
+    [Fact]
+    public async Task OpenReadOnlyAsync_ConnectionFails_StillErasesTheResolvedPasswordMaterial()
+    {
+        // Arrange
+        await using var client = new FakeImapClient();
+        var settingsProvider = CreateSettingsProvider(out var resolvedSecrets);
+        client.ConnectException = new IOException("connect failed");
+        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
+
+        // Act
+        await Assert.ThrowsAsync<IOException>(() => factory.OpenReadOnlyAsync(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            TlsOnConnectWithPlainPolicy,
+            CancellationToken.None));
+
+        // Assert
+        var secrets = Assert.Single(resolvedSecrets);
+        Assert.Throws<ObjectDisposedException>(() => secrets.Password.RevealAsString());
     }
 
     [Fact]
@@ -493,11 +535,29 @@ public sealed class MailKitImapMailboxSessionTests
 
     private static MailKitImapMailboxSessionFactory CreateFactory(FakeImapClient client, IMailFolder folder)
     {
-        var settingsProvider = Substitute.For<IImapAccountSettingsProvider>();
-        settingsProvider.GetSettings("primary").Returns(new ImapAccountSettings("primary", "imap.example.test", 993, "user", "password"));
+        var settingsProvider = CreateSettingsProvider();
         client.Folder = folder;
 
         return new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
+    }
+
+    private static IImapAccountSettingsProvider CreateSettingsProvider() => CreateSettingsProvider(out _);
+
+    private static IImapAccountSettingsProvider CreateSettingsProvider(out List<MailAccountSecrets> resolvedSecrets)
+    {
+        var issuedSecrets = new List<MailAccountSecrets>();
+        var settingsProvider = Substitute.For<IImapAccountSettingsProvider>();
+        settingsProvider.GetSettingsAsync("primary", Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            var secrets = new MailAccountSecrets(ResolvedSecret.FromText("password"));
+            issuedSecrets.Add(secrets);
+
+            return Task.FromResult(new ImapAccountSettings("primary", "imap.example.test", 993, "user", secrets));
+        });
+
+        resolvedSecrets = issuedSecrets;
+
+        return settingsProvider;
     }
 
     private sealed class FakeImapClient : IMailKitImapClient
@@ -518,6 +578,8 @@ public sealed class MailKitImapMailboxSessionTests
 
         public int GetFolderAsyncCount { get; private set; }
 
+        public Exception? ConnectException { get; set; }
+
         public Exception? DisconnectException { get; set; }
 
         public Exception? DisposeException { get; set; }
@@ -531,6 +593,11 @@ public sealed class MailKitImapMailboxSessionTests
             CancellationToken cancellationToken)
         {
             this.ConnectSocketOptions = options;
+            if (this.ConnectException is not null)
+            {
+                throw this.ConnectException;
+            }
+
             return Task.CompletedTask;
         }
 
