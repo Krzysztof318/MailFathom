@@ -25,7 +25,9 @@ Persistence adds the extracted text column, a lossy-derivation marker, and a gen
 
 Text comes from the message body only. Attachment payloads are never opened, so a PDF or an office document contributes nothing to the index; a message whose information lives entirely in an attachment is indexed on its subject and participants alone. That is a deliberate limitation rather than an oversight — draft section 21.5 names attachment extraction as an unbounded-cost path, and document parsers are a far larger hostile-input surface than MIME parsing. It is recorded in the feature documentation so the search behavior is not surprising.
 
-A message that specification 06 recorded as encrypted has no readable body. It is marked as having no extractable text for that reason and is not indexed as though its body were empty, so an encrypted message stays distinguishable from a genuinely empty one and does not become a permanent silent gap in search. The backfill re-evaluates such messages if decryption is ever enabled (#75).
+A message that specification 06 recorded as encrypted has no readable body. It is marked as having no extractable text for that reason and is not indexed as though its body were empty, so an encrypted message stays distinguishable from a genuinely empty one and does not become a permanent silent gap in search.
+
+That marker cannot simply be read for messages stored before specification 06, because those rows have raw MIME and no classification at all — specification 06 applies to synchronization and hands re-extraction of existing rows to this backfill. So the backfill runs specification 06 classification first and persists its markers, then derives text from what that classification found. Reading a marker that was never written would leave every pre-existing encrypted message indistinguishable from an empty one, which is the exact gap the previous paragraph exists to close, and it would close it only for mail that arrives after the change. The backfill re-evaluates these messages again if decryption is ever enabled (#75).
 
 A bounded backfill operation re-derives text for messages stored before this change, running in the background with the same batch bounds and cancellation behavior as synchronization. Backfill is idempotent and restartable from a persisted position.
 
@@ -44,7 +46,7 @@ Chunking, embeddings, hybrid ranking, and snippet generation, which belong to th
 ## Definition of done
 
 - Every newly synchronized message gets extracted text and an indexed `tsvector`.
-- Backfill completes for pre-existing messages and is safe to interrupt and resume.
+- Backfill completes for pre-existing messages and is safe to interrupt and resume, and it persists specification 06 classification markers before deriving text so a message stored before that specification is not left permanently unclassified.
 - No extracted text appears in any log or error message.
 - `docs/features/` documents the extraction rules, the lossy-HTML marker, and the text search configuration setting.
 - `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.
