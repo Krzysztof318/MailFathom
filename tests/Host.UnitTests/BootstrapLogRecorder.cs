@@ -9,6 +9,11 @@ namespace MailMcp.Host.UnitTests;
 /// The startup records are a contract rather than incidental output: an operator diagnoses a host that never began
 /// listening from them alone, so their level, their named properties, and the absence of anything else are asserted.
 /// Disposal is counted because the bootstrap logger owns this pipeline and is the only thing that will ever close it.
+/// <para>
+/// <c>tests/shared/RecordingLoggerProvider.cs</c> does not fit here: it is an <see cref="ILoggerProvider" /> plugged
+/// into a real factory, so it can neither observe the factory ownership this type exists to prove nor expose the named
+/// properties a record carries, which is how a test shows that nothing beyond service identity reaches a collector.
+/// </para>
 /// </remarks>
 internal sealed class BootstrapLogRecorder : ILoggerFactory, ILogger
 {
