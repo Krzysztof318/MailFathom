@@ -156,6 +156,7 @@ public enum SecretResolutionFailure
     MaterialNotFound = 6,
     MaterialEmpty = 7,
     ProviderUnavailable = 8,
+    MaterialTooLarge = 9,
 }
 
 public sealed record SecretReference
@@ -193,7 +194,7 @@ internal static class ConfiguredSecretDiscovery
 
 `ConfiguredSecretDiscovery` is what makes the marker useful: it walks public readable properties of the bound options object, descends into nested options objects, into `IEnumerable` elements, and into a block's own nested `Password` block, and yields each `ConfiguredSecret` with the colon-separated path that reached it — `MailSynchronization:Accounts:0:Secrets:Password`. It must guard against a cycle in the object graph, since options types are ordinary classes and nothing forbids a back-reference. It never reads a `ConfiguredSecret`'s value; it returns the block and lets the caller resolve, so nothing in the walk can end up in a diagnostic.
 
-Tests cover a block at the root, a nested one, one inside a list with its index in the path, a null block being skipped rather than reported as missing, and a cyclic graph terminating. A separate binding test builds the options graph from an in-memory provider populated with flat colon-separated keys and asserts the discovered paths match them exactly — decision 27, and what keeps the Azure App Configuration and environment-variable paths honest.
+Tests cover a block at the root, a nested one, one inside a list with its index in the path, a block's own nested `Password` block reported at `…:TrustedCertificateAuthority:Password` so 02b's bundle password is discovered by the same walk, a null block being skipped rather than reported as missing, a `string` property named for a secret failing the walk under decision 32, and a cyclic graph terminating. A separate binding test builds the options graph from an in-memory provider populated with flat colon-separated keys and asserts the discovered paths match them exactly — decision 27, and what keeps the Azure App Configuration and environment-variable paths honest.
 
 `SecretReferenceScheme` is open by decision 2: a future Azure Key Vault adapter calls `Create("azure-key-vault")` in its own file and registers itself. `ProviderUnavailable` is appended now rather than later so a network-backed adapter has a failure identity to report that is distinguishable from a missing secret; nothing in this change set produces it. Enum values are append-only, so this costs nothing and avoids renumbering a persisted-looking value later.
 
@@ -237,7 +238,8 @@ public sealed record SecretResolutionResult
 TryParse_SupportedScheme_ParsesSchemeAndTarget
 [Fact]    TryParse_TargetContainsColon_KeepsEverythingAfterTheFirstColon        // "file:C:\\secrets\\imap" => "C:\\secrets\\imap"
 [Fact]    TryParse_MixedCaseScheme_ParsesScheme                                 // "File:/run/secrets/imap"
-[Fact]    TryParse_SurroundingWhitespace_TrimsBeforeParsing
+[Fact]    TryParse_WhitespaceAroundTheScheme_TrimsTheSchemeOnly                 // " file :/run/secrets/imap"
+[Fact]    TryParse_PlaintextTargetWithLeadingAndTrailingSpaces_KeepsEverySpace  // "plaintext: secret " => " secret "
 [Fact]    TryParse_NullOrWhitespace_FailsWithReferenceMissing
 [Fact]    TryParse_NoColon_FailsWithSchemeMissing                               // under ReferenceOnly a bare password must never parse
 [Fact]    TryParse_UnregisteredScheme_ParsesBecauseSupportIsADispatchQuestion   // "azure-key-vault:imap" parses
@@ -252,9 +254,10 @@ TryParse_SupportedScheme_ParsesSchemeAndTarget
 [Fact]    Dispose_CalledTwice_DoesNotThrow
 [Fact]    RevealBytes_AfterDispose_Throws                           // a use-after-erase is a bug, not a silent empty
 [Fact]    ToString_SecretResolutionResult_DoesNotContainTheMaterial             // the record's synthesized ToString
+[Fact]    ToString_SecretReference_ContainsNeitherTheTargetNorAPlaintextSecret  // the record's synthesized ToString
 ```
 
-The last two matter more than they look: they are the regression guard for decision 4.
+The last three matter more than they look: they are the regression guard for decision 12. `SecretReference` is a record with a public `Target`, so the synthesized printing would otherwise write a file path, a variable name, a vault identifier, or — for `plaintext:` — the complete secret into any log, exception message, or diagnostic dump the parsed object reaches.
 
 - [ ] **Step 2: Run the tests and confirm they fail to compile**
 
@@ -345,6 +348,8 @@ The file reader is asynchronous, takes the caller's token, and takes a byte ceil
 [Fact] ResolveAsync_File_ReadsTheProvisionedFile
 [Fact] ResolveAsync_FileMissing_FailsWithMaterialNotFound
 [Fact] ResolveAsync_FileEmpty_FailsWithMaterialEmpty
+[Fact] ResolveAsync_FileLargerThanTheCeiling_FailsWithMaterialTooLargeWithoutAllocatingTheMaterial
+[Fact] ResolveAsync_FileMalformedPath_FailsWithMaterialNotFoundInsteadOfThrowing   // a NUL character throws ArgumentException
 [Fact] ResolveAsync_EnvironmentVariable_ReadsTheVariable
 [Fact] ResolveAsync_EnvironmentVariableUnset_FailsWithMaterialNotFound
 [Fact] ResolveAsync_Plaintext_ReturnsTheLiteralInEveryModeThatParses
@@ -355,6 +360,8 @@ The file reader is asynchronous, takes the caller's token, and takes a byte ceil
 [Fact] ResolveAsync_UnregisteredScheme_FailsWithSchemeNotSupportedWithoutConsultingAnyReader
 [Fact] ResolveAsync_SchemeAdapterRegisteredOnlyByTheTest_ResolvesThroughTheSameDispatch
 [Fact] ResolveAsync_Cancelled_PropagatesTheCancellation
+[Fact] ResolveAsync_ResolvedThroughAnAdapter_ReportsSchemeAdapterAsTheSource
+[Fact] ResolveAsync_ValueAcceptedInline_ReportsInlineValueAsTheSource
 [Theory] ResolveAsync_EveryFailure_ReturnsNoSecretMaterial
 ```
 
@@ -487,6 +494,7 @@ git commit -m "Bind account secrets as reference blocks and resolve them in Infr
 
 **Files:**
 - Modify: `src/Host/Configuration/PersistenceOptions.cs`, `src/Infrastructure/ServiceCollectionExtensions.cs`
+- Test: `tests/Infrastructure.UnitTests/DatabasePasswordCompositionTests.cs`
 
 - [ ] **Step 1: Add the optional reference**
 
@@ -524,14 +532,21 @@ services.AddSingleton(provider =>
 
 The composed string is never logged and never returned; `NpgsqlDataSource` owns it and no code path reads it back. The revealed password is the second documented `string` boundary from decision 8.
 
-A test asserts the resolved password actually reaches Npgsql — `NpgsqlDataSource.ConnectionString` redacts the password, so the assertion is made on the `NpgsqlConnectionStringBuilder` the factory composed, before the data source is built. Without that test the failure mode is silent: everything validates, nothing connects.
+`DatabasePasswordCompositionTests` asserts the resolved password actually reaches Npgsql — `NpgsqlDataSource.ConnectionString` redacts the password, so the assertion is made on the `NpgsqlConnectionStringBuilder` the factory composed, before the data source is built:
+
+```csharp
+[Fact] BuildDataSource_ResolvablePasswordReference_ComposesTheResolvedPasswordIntoTheConnectionString
+[Fact] BuildDataSource_NoPasswordBlock_LeavesTheConnectionStringUnchanged
+```
+
+Without those the failure mode is silent: everything validates, nothing connects.
 
 Rotation of this reference is specification 02b's concern and is listed in its plan, because a singleton data source composed once cannot observe a rotated credential.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/Host/Configuration/PersistenceOptions.cs src/Infrastructure/ServiceCollectionExtensions.cs
+git add src/Host/Configuration/PersistenceOptions.cs src/Infrastructure/ServiceCollectionExtensions.cs tests/Infrastructure.UnitTests/DatabasePasswordCompositionTests.cs
 git commit -m "Resolve the database password from a secret reference"
 ```
 
@@ -576,6 +591,8 @@ MailSynchronization:Accounts:1:Secrets:Password — the value is not a secret re
 ```
 
 The configuration path, the failure identity, and nothing else — no target path, no variable name, no material. The path replaces the earlier account-plus-property phrasing because decision 25 nests the setting one level deeper and because an operator fixes the error by editing that exact path; `AccountId` is not usable as the anchor anyway, since a mistyped or duplicated account may not have one.
+
+The same walk applies decision 32's other half: a `string` property whose name contains `Password`, `Secret`, `Credential`, `PrivateKey`, or `Token` is reported as a configuration error against its path, because `MailSynchronizationOptions` and `PersistenceOptions` live in `Host` where Task 6's build-time test cannot reach them.
 
 The second line is decision 26 doing its work: the block was found by type, so a plain-text password sitting where a reference belongs fails here rather than authenticating successfully against the server. Reporting every failure together matters when an operator provisions five accounts and mistypes two names; one-at-a-time discovery costs five restarts.
 

@@ -129,10 +129,14 @@ Encoding is detected by inspecting the material rather than by trusting a file e
 
 `MailAccountSecretOptions.FindConfigurationErrorsAsync` and `ResolveAsync` regain the `ConfiguredSecret? trustedCertificateAuthority` parameter that 02a deliberately left out, resolve it when present, and load it through `TryLoad`. `MailAccountSecrets` becomes `(ResolvedSecret Password, X509Certificate2? TrustedCertificateAuthority)` and disposes both — `X509Certificate2` is itself disposable, and 02a decision 9's ownership rule already says the operation that resolved it disposes it.
 
-Inline material reaches `TryLoad` as bytes like any other, so decision 28's binary-inline rejection is a check on the interpretation mode plus the detected encoding, not a separate code path.
+Inline material reaches `TryLoad` as bytes like any other, so the binary-inline rejection is a check on 02a decision 28's `SecretMaterialSource` plus the detected encoding, not a separate code path.
+
+A protected bundle takes its password from the nested `Password` block 02a decision 25 defines, resolved through the same resolver as every other secret and disposed with the rest of `MailAccountSecrets`. Nothing here adds a property to `ConfiguredSecret`.
 
 ```csharp
 [Fact] FindConfigurationErrorsAsync_UnresolvableTrustAnchorReference_ReportsTheFailureAgainstTheTrustAnchorSetting
+[Fact] FindConfigurationErrorsAsync_UnresolvableBundlePasswordBlock_ReportsTheFailureAgainstTheNestedPasswordPath
+[Fact] ResolveAsync_ProtectedPkcs12AnchorWithANestedPasswordBlock_ResolvesBothAndLoadsTheAnchor
 [Fact] FindConfigurationErrorsAsync_TrustAnchorMaterialIsNotACertificate_ReportsNotACertificate
 [Fact] FindConfigurationErrorsAsync_InlineDerTrustAnchor_ReportsBinaryEncodingNotPermittedInline
 [Fact] FindConfigurationErrorsAsync_NoTrustAnchorConfigured_DoesNotConsultTheResolver
