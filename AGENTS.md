@@ -7,6 +7,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 ## Development environment
 
 - Development runs locally. The repository does not provision agent environments, so install the SDK pinned in `global.json` and any command-line tooling such as `dotnet-ef` or the Aspire CLI on the developer machine. `docs/operations/local-development.md` lists the commands that must work.
+- Never invoke `dotnet ef` directly. EF Core design-time and migration commands must run through `aspire exec`, so they see the orchestrated resources and the connection strings the AppHost issues rather than an ad-hoc local environment that can differ from every real one. That path is not wired up yet, so do not run EF Core tooling at all for now; work that needs a migration is blocked until it is, and the block is reported rather than worked around.
 
 ## Critical repository rules
 

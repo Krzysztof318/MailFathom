@@ -423,6 +423,24 @@ public sealed class SecretReferenceResolverTests
     }
 
     [Fact]
+    public async Task ResolveAsync_EnvironmentValueAboveTheCeiling_FailsLikeAnyOtherOversizedMaterial()
+    {
+        // Arrange
+        var environment = new InMemoryEnvironmentVariableReader
+        {
+            Variables = { ["MAILMCP_OVERSIZED"] = new string('p', SecretMaterialLimits.MaximumMaterialByteCount + 1) },
+        };
+        var resolver = CreateResolver(SecretValueInterpretation.ReferenceOnly, new InMemorySecretFileReader(), environment);
+
+        // Act
+        var result = await resolver.ResolveAsync("env:MAILMCP_OVERSIZED", CancellationToken.None);
+
+        // Assert
+        Assert.Equal(SecretResolutionFailure.MaterialTooLarge, result.Failure);
+        Assert.Null(result.Secret);
+    }
+
+    [Fact]
     public async Task ResolveAsync_PlaintextLiteralAboveTheCeiling_FailsLikeAnyOtherOversizedMaterial()
     {
         // Arrange

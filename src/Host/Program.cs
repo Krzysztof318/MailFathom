@@ -28,8 +28,12 @@ builder.Services.AddOptions<MailSynchronizationOptions>()
         binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
     .ValidateDataAnnotations()
     .ValidateOnStart();
+// Bound strictly for the same reason as mail transport: a misspelled "Passwrod" would leave the secret block
+// undiscovered, start the host on a passwordless connection string, and surface as an authentication failure later.
 builder.Services.AddOptions<PersistenceOptions>()
-    .Bind(builder.Configuration.GetSection("Persistence"))
+    .Bind(
+        builder.Configuration.GetSection("Persistence"),
+        binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();
@@ -54,7 +58,8 @@ builder.Services.AddSingleton(provider => new PersistenceConcurrencyOptions
 builder.Services.AddHostedService<MailMcp.Host.Hosting.SecretReferenceStartupValidator>();
 // The blocks are read here rather than through IOptions because the data source they configure is registered before
 // any options instance can be resolved. Only the references are read; resolution happens during startup.
-var persistenceSecrets = builder.Configuration.GetSection("Persistence").Get<PersistenceOptions>();
+var persistenceSecrets = builder.Configuration.GetSection("Persistence").Get<PersistenceOptions>(
+    binderOptions => binderOptions.ErrorOnUnknownConfiguration = true);
 builder.Services.AddInfrastructure(new PostgresConnectionSettings(
     builder.Configuration.GetConnectionString("mailmcp"),
     persistenceSecrets?.ConnectionString,

@@ -81,13 +81,15 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(connectionSettings);
 
-        services.AddSingleton(provider => new PostgresDataSourceProvider(
+        services.AddSingleton(provider => new PostgresConnectionStringProvider(
             connectionSettings,
             provider.GetRequiredService<ISecretReferenceResolver>(),
             provider.GetRequiredService<SecretResolutionOptions>(),
-            provider.GetRequiredService<ILogger<PostgresDataSourceProvider>>()));
-        services.AddHostedService(provider => provider.GetRequiredService<PostgresDataSourceProvider>());
-        services.AddSingleton(provider => provider.GetRequiredService<PostgresDataSourceProvider>().DataSource);
+            provider.GetRequiredService<ILogger<PostgresConnectionStringProvider>>()));
+        services.AddHostedService(provider => provider.GetRequiredService<PostgresConnectionStringProvider>());
+        // The container both creates and disposes the data source, so no second owner can leave its pool open.
+        services.AddSingleton(provider => new NpgsqlDataSourceBuilder(
+            provider.GetRequiredService<PostgresConnectionStringProvider>().ConnectionString).Build());
         services.AddDbContext<MailMcpDbContext>((provider, options) =>
             options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()));
         services.AddScoped<IPersistenceSessionFactory, PersistenceSessionFactory>();

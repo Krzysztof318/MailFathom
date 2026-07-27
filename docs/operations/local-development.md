@@ -73,6 +73,14 @@ dotnet tool install --global Aspire.Cli --version 13.4.6
 
 `dotnet ef` runs EF Core migrations and design-time commands. `aspire` is only required for Aspire CLI workflows against the AppHost. Both versions are recorded in `LICENSES.md`; keep the register aligned when you move to a newer one.
 
+### EF Core design-time commands
+
+**Do not invoke `dotnet ef` directly.** Design-time and migration commands must run through `aspire exec`, so they see the orchestrated resources and the connection strings the AppHost issues rather than a local environment that can differ from every real one. That path is not wired up yet, so EF Core tooling is not to be run at all for now, and work that needs a migration is blocked until it is.
+
+The pieces the tooling will need are already in place. `MailMcpDbContextDesignTimeFactory` gives EF Core a context without starting the host, which matters because the host composes its connection string during startup and design-time tooling never runs that. It resolves no secret: `migrations add` and `dbcontext script` need the model rather than a reachable server, and a deployment credential does not belong on a workstation. A command that does need a live database reads `MAILMCP_DESIGN_TIME_CONNECTION_STRING`, falling back to `Host=localhost;Database=mailmcp;Username=mailmcp`.
+
+`Infrastructure` is its own startup project for these commands. It owns the context, the factory, and the only reference to `Microsoft.EntityFrameworkCore.Design`; `Host` references that package nowhere, so naming it as the startup project fails.
+
 The GitHub CLI (`gh`) is installed separately through the operating system package manager and is required for the issue and pull-request workflow in root `AGENTS.md`. It needs the `project` scope on top of its default scopes so it can read and update the roadmap board.
 
 On a machine that has never authenticated, log in and request the scope in the same step:
