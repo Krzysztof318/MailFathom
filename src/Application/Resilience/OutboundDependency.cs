@@ -27,7 +27,11 @@ public enum OutboundDependency
     MailboxDataRetrieval = 1,
 
     /// <summary>Submitting an email to the SMTP server.</summary>
-    /// <remarks>Only submission steps proven idempotent by the outbox may be repeated, because a repeated delivery is visible to the recipient.</remarks>
+    /// <remarks>
+    /// The only failure repeated here is a server's explicit temporary rejection. A submission that ended in an
+    /// ambiguous transport failure may already have been accepted, and a repeated delivery is visible in the
+    /// recipient's mailbox.
+    /// </remarks>
     EmailDelivery = 2,
 
     /// <summary>Executing a command or query against the local PostgreSQL database.</summary>

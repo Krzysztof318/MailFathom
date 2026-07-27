@@ -45,8 +45,10 @@ internal sealed class OutboundOperationExecutor
     /// <exception cref="KeyNotFoundException">Thrown when no pipeline is registered for <paramref name="dependency" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the same dependency class is already executing on this asynchronous flow.</exception>
     /// <remarks>
-    /// Caller cancellation, per-attempt timeout, total timeout, an open circuit, and a rejected execution reach the
-    /// caller as distinct exception types, so a caller never has to infer which limit stopped the work.
+    /// Caller cancellation, an abandoned attempt, an open circuit, and a shed execution reach the caller as distinct
+    /// exception types. The total timeout is the one limit that does not always name itself: expiring inside an
+    /// attempt surfaces <see cref="Polly.Timeout.TimeoutRejectedException" />, while expiring between attempts stops
+    /// the retry and surfaces the failure that ended the last one.
     /// </remarks>
     public async Task<TResult> ExecuteAsync<TResult>(
         OutboundDependency dependency,

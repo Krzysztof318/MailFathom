@@ -30,9 +30,9 @@ public static class ResilienceServiceCollectionExtensions
     /// operator convinced they had tuned a limit that never moved.
     /// </para>
     /// <para>
-    /// A pipeline rebuilds itself when its options reload, which makes retry bounds and backoff adjustable without a
-    /// restart. An operation already running keeps the pipeline it started under, because a budget swapped mid-flight
-    /// would apply half of one configuration and half of another.
+    /// A budget is read once, at startup. The settings are restart-required: a reloaded candidate is not adopted, and
+    /// a malformed one cannot disturb a pipeline that is already serving. Tuning a dependency therefore needs a
+    /// restart, but never a rebuild.
     /// </para>
     /// <para>
     /// This registration covers non-HTTP dependencies only. <c>HttpClient</c> traffic is already wrapped once by the
@@ -47,6 +47,10 @@ public static class ResilienceServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(resilienceConfiguration);
 
+        var startupBudgets = CaptureStartupBudgets(resilienceConfiguration);
+
+        RejectSectionsNamingNoDependency(startupBudgets);
+
         services.AddSingleton<ITransientFailureClassifier, TransientFailureClassifier>();
         services.AddSingleton<IValidateOptions<OutboundDependencyResilienceOptions>, OutboundDependencyResilienceOptionsValidator>();
         services.AddSingleton<OutboundOperationExecutor>();
@@ -58,7 +62,7 @@ public static class ResilienceServiceCollectionExtensions
             services.AddOptions<OutboundDependencyResilienceOptions>(dependencyName)
                 .Configure(options => OutboundDependencyResilienceDefaults.ApplyTo(options, dependency))
                 .Bind(
-                    resilienceConfiguration.GetSection(dependencyName),
+                    startupBudgets.GetSection(dependencyName),
                     binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
@@ -69,6 +73,44 @@ public static class ResilienceServiceCollectionExtensions
         }
 
         return services;
+    }
+
+    /// <summary>Copies the configured budgets into a standalone configuration that never reloads.</summary>
+    /// <remarks>
+    /// This is what makes the restart-required classification true by construction rather than by intention. Bound
+    /// against the live configuration, these options would be reachable from a reload: `OptionsMonitor` drops its
+    /// cache when a change token fires and rebuilds the named instance inside that notification, so one malformed
+    /// edit would raise `OptionsValidationException` on the thread that reported the change — a file-watcher callback
+    /// in a deployed host. ADR 0002 rules that out, and a validated-snapshot layer that would make these settings
+    /// safely reloadable does not exist for them yet. Binding a frozen copy means a reload has nothing to notify:
+    /// the pipeline keeps the budget the host validated at startup, and a bad edit is inert until a restart reads it.
+    /// </remarks>
+    private static IConfiguration CaptureStartupBudgets(IConfiguration resilienceConfiguration) =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(resilienceConfiguration.AsEnumerable(makePathsRelative: true))
+            .Build();
+
+    /// <summary>Fails when the configuration holds a section that names no dependency class.</summary>
+    /// <remarks>
+    /// Strict binding only inspects the keys inside a section it was pointed at, so a misspelled section name is not
+    /// an unknown key to it — it is a section nobody reads. Startup would succeed on the shipped budget while the
+    /// operator believed they had tuned it, which is the failure strict binding exists to prevent. The check runs at
+    /// registration, before the host starts anything.
+    /// </remarks>
+    private static void RejectSectionsNamingNoDependency(IConfiguration resilienceConfiguration)
+    {
+        var dependencyNames = Enum.GetNames<OutboundDependency>();
+        var unknownSections = resilienceConfiguration.GetChildren()
+            .Select(section => section.Key)
+            .Where(sectionName => !dependencyNames.Contains(sectionName, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (unknownSections.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Resilience configuration names no outbound dependency class in [{string.Join(", ", unknownSections)}]. "
+                + $"The supported sections are [{string.Join(", ", dependencyNames)}].");
+        }
     }
 
     /// <summary>Composes the strategies of one dependency class from outermost to innermost.</summary>
@@ -87,8 +129,11 @@ public static class ResilienceServiceCollectionExtensions
     {
         var dependencyName = dependency.ToString();
 
-        context.EnableReloads<OutboundDependencyResilienceOptions>(dependencyName);
-
+        // EnableReloads is deliberately not called. Registering a listener on the named options makes
+        // OptionsMonitor.InvokeChanged materialize the candidate — validation included — on the very thread that
+        // reported the configuration change, so one malformed edit throws out of the file watcher instead of being
+        // rejected. ADR 0002 forbids exactly that, and its default for a setting group without a validated-snapshot
+        // layer is restart-required. These budgets take that default until they get one.
         var options = context.GetOptions<OutboundDependencyResilienceOptions>(dependencyName);
         var classifier = context.ServiceProvider.GetRequiredService<ITransientFailureClassifier>();
         var logger = context.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(OutboundResilienceEvents));

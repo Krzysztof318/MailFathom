@@ -29,6 +29,25 @@ public sealed class TransientFailureClassifierTests
 
     public static TheoryData<OutboundDependency> EveryDependency => [.. Enum.GetValues<OutboundDependency>()];
 
+    public static TheoryData<OutboundDependency> MailboxDependencies =>
+    [
+        OutboundDependency.MailboxSessionEstablishment,
+        OutboundDependency.MailboxDataRetrieval,
+    ];
+
+    public static TheoryData<OutboundDependency> RepeatableDependencies =>
+    [
+        .. Enum.GetValues<OutboundDependency>().Where(dependency => dependency != OutboundDependency.EmailDelivery),
+    ];
+
+    public static TheoryData<Exception> AmbiguousDeliveryFailures =>
+    [
+        new SmtpProtocolException("The server closed the stream before its reply."),
+        new SocketException((int)SocketError.ConnectionReset),
+        new IOException("The stream was closed."),
+        new ServiceNotConnectedException("The client is no longer connected."),
+    ];
+
     /// <summary>Repeating a rejected credential against a mail server can lock the mailbox account.</summary>
     [Theory]
     [MemberData(nameof(MailDependencies))]
@@ -88,6 +107,21 @@ public sealed class TransientFailureClassifierTests
         Assert.True(this.classifier.IsTransientFailure(OutboundDependency.MailboxDataRetrieval, failure));
     }
 
+    /// <summary>
+    /// A connection lost after the message data cannot be told apart from one lost before it, and MailKit reports
+    /// both as ordinary transport failures. Repeating either would risk a second copy in the recipient's mailbox.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(AmbiguousDeliveryFailures))]
+    public void IsTransientFailure_AmbiguousDeliveryOutcome_IsTerminal(Exception failure)
+    {
+        // Act
+        var isTransient = this.classifier.IsTransientFailure(OutboundDependency.EmailDelivery, failure);
+
+        // Assert
+        Assert.False(isTransient);
+    }
+
     /// <summary>RFC 5321 defines the 4yz reply class as a temporary rejection and the 5yz class as permanent.</summary>
     [Theory]
     [InlineData(SmtpStatusCode.ServiceNotAvailable, true)]
@@ -107,9 +141,10 @@ public sealed class TransientFailureClassifierTests
         Assert.Equal(expectedTransient, isTransient);
     }
 
+    /// <summary>A dropped mailbox connection costs nothing to repeat, unlike a dropped submission.</summary>
     [Theory]
-    [MemberData(nameof(MailDependencies))]
-    public void IsTransientFailure_LostMailConnection_IsWorthRepeating(OutboundDependency dependency)
+    [MemberData(nameof(MailboxDependencies))]
+    public void IsTransientFailure_LostMailboxConnection_IsWorthRepeating(OutboundDependency dependency)
     {
         // Arrange
         var failure = new ServiceNotConnectedException("The client is no longer connected.");
@@ -176,9 +211,10 @@ public sealed class TransientFailureClassifierTests
         Assert.Equal(expectedTransient, isTransient);
     }
 
+    /// <summary>Every class except delivery repeats a lost transport, because only a submission can already have succeeded.</summary>
     [Theory]
-    [MemberData(nameof(EveryDependency))]
-    public void IsTransientFailure_LostTransport_IsWorthRepeatingForEveryDependency(OutboundDependency dependency)
+    [MemberData(nameof(RepeatableDependencies))]
+    public void IsTransientFailure_LostTransport_IsWorthRepeating(OutboundDependency dependency)
     {
         // Arrange
         var failure = new SocketException((int)SocketError.ConnectionReset);

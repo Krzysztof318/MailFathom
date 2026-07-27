@@ -17,6 +17,9 @@ internal static class ServiceDefaultsExtensions
     private const string HealthEndpointPath = "/health";
     private const string AlivenessEndpointPath = "/alive";
 
+    /// <summary>The meter Polly's telemetry publishes every resilience event to.</summary>
+    private const string PollyMeterName = "Polly";
+
     /// <summary>
     /// Adds observability, service discovery, HTTP resilience, and health-check defaults.
     /// </summary>
@@ -60,7 +63,11 @@ internal static class ServiceDefaultsExtensions
             {
                 metrics.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
-                    .AddRuntimeInstrumentation();
+                    .AddRuntimeInstrumentation()
+                    // The outbound resilience pipelines report attempts, outcomes, and durations to Polly's meter.
+                    // Emitting them is not exporting them: without this subscription the instruments exist and
+                    // nothing collects them.
+                    .AddMeter(PollyMeterName);
             })
             .WithTracing(tracing =>
             {

@@ -9,7 +9,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly.CircuitBreaker;
 using Polly.RateLimiting;
-using Polly.Timeout;
 using Xunit;
 
 namespace MailMcp.Infrastructure.UnitTests;
@@ -18,6 +17,14 @@ public sealed class OutboundResiliencePipelineTests
 {
     private static readonly TimeSpan FineAdvanceStep = TimeSpan.FromMilliseconds(100);
 
+    /// <summary>
+    /// A budget the pumping loop cannot consume. The loop advances virtual time until the execution completes, so a
+    /// test that asserts anything other than the total timeout must keep that limit beyond the loop's reach: at its
+    /// coarsest step the loop can move the clock by hours, and a smaller budget would be tripped by the pumping
+    /// rather than by the behavior under test.
+    /// </summary>
+    private const string UnreachableTotalTimeout = "1.00:00:00";
+
     [Fact]
     public async Task ExecuteAsync_RepeatedTransientFailure_StopsAtTheConfiguredAttemptCap()
     {
@@ -25,7 +32,8 @@ public sealed class OutboundResiliencePipelineTests
         using var host = OutboundResilienceTestHost.WithConfiguredSettings(
             ("MailboxDataRetrieval:MaxAttempts", "3"),
             ("MailboxDataRetrieval:BaseDelay", "00:00:01"),
-            ("MailboxDataRetrieval:MaxDelay", "00:00:04"));
+            ("MailboxDataRetrieval:MaxDelay", "00:00:04"),
+            ("MailboxDataRetrieval:TotalTimeout", UnreachableTotalTimeout));
         var attempts = 0;
 
         // Act
@@ -82,7 +90,7 @@ public sealed class OutboundResiliencePipelineTests
             ("MailboxDataRetrieval:MaxAttempts", "9"),
             ("MailboxDataRetrieval:BaseDelay", "00:00:01"),
             ("MailboxDataRetrieval:MaxDelay", "00:30:00"),
-            ("MailboxDataRetrieval:TotalTimeout", "01:00:00"),
+            ("MailboxDataRetrieval:TotalTimeout", UnreachableTotalTimeout),
             ("MailboxDataRetrieval:AttemptTimeout", "00:10:00"));
 
         // Act
@@ -104,7 +112,7 @@ public sealed class OutboundResiliencePipelineTests
             ("MailboxDataRetrieval:MaxAttempts", "8"),
             ("MailboxDataRetrieval:BaseDelay", "00:00:01"),
             ("MailboxDataRetrieval:MaxDelay", "00:00:02"),
-            ("MailboxDataRetrieval:TotalTimeout", "00:10:00"));
+            ("MailboxDataRetrieval:TotalTimeout", UnreachableTotalTimeout));
 
         // Act
         var waits = await this.MeasureWaitsBetweenAttemptsAsync(host, OutboundDependency.MailboxDataRetrieval, FineAdvanceStep);
@@ -137,7 +145,10 @@ public sealed class OutboundResiliencePipelineTests
             },
             TestContext.Current.CancellationToken);
 
-        await Assert.ThrowsAsync<TimeoutRejectedException>(
+        // The budget runs out while the pipeline is waiting to retry rather than inside an attempt, so the retry stops
+        // and reports the failure that caused the last attempt to fail. A budget that runs out during an attempt
+        // surfaces TimeoutRejectedException instead, which is what the stalled-attempt test covers.
+        await Assert.ThrowsAsync<ImapProtocolException>(
             () => host.CompleteOnVirtualTimeAsync(execution, FineAdvanceStep));
 
         // Assert
@@ -154,9 +165,7 @@ public sealed class OutboundResiliencePipelineTests
             ("MailboxDataRetrieval:BaseDelay", "00:00:01"),
             ("MailboxDataRetrieval:MaxDelay", "00:00:02"),
             ("MailboxDataRetrieval:AttemptTimeout", "00:00:05"),
-            // Generous, because the virtual clock keeps advancing while the abandoned attempt's cancellation is still
-            // propagating. The point of the test is that the attempt is abandoned at all, not when exactly.
-            ("MailboxDataRetrieval:TotalTimeout", "01:00:00"));
+            ("MailboxDataRetrieval:TotalTimeout", UnreachableTotalTimeout));
         var attempts = 0;
 
         // Act
@@ -328,7 +337,8 @@ public sealed class OutboundResiliencePipelineTests
         using var host = OutboundResilienceTestHost.WithConfiguredSettings(
             ("MailboxDataRetrieval:MaxAttempts", "2"),
             ("MailboxDataRetrieval:BaseDelay", "00:00:01"),
-            ("MailboxDataRetrieval:MaxDelay", "00:00:02"));
+            ("MailboxDataRetrieval:MaxDelay", "00:00:02"),
+            ("MailboxDataRetrieval:TotalTimeout", UnreachableTotalTimeout));
 
         // Act
         var execution = host.Executor.ExecuteAsync(
@@ -383,6 +393,115 @@ public sealed class OutboundResiliencePipelineTests
         // Act, Assert
         Assert.Throws<InvalidOperationException>(
             () => host.Services.GetRequiredService<IStartupValidator>().Validate());
+    }
+
+    /// <summary>Strict binding inspects keys inside a section it was pointed at, so a misspelled section is invisible to it.</summary>
+    [Fact]
+    public void AddOutboundResiliencePipelines_SectionNamingNoDependency_FailsBeforeTheHostStarts()
+    {
+        // Act, Assert
+        var failure = Assert.Throws<InvalidOperationException>(
+            () => OutboundResilienceTestHost.WithConfiguredSettings(("EmailDelivry:MaxAttempts", "2")));
+        Assert.Contains("EmailDelivry", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A timeout the strategy rejects would otherwise start the host and fail at the dependency's first use.</summary>
+    [Theory]
+    [InlineData("AttemptTimeout")]
+    [InlineData("TotalTimeout")]
+    public void AddOutboundResiliencePipelines_TimeoutBelowTheStrategyMinimum_FailsStartup(string settingName)
+    {
+        // Arrange
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings(
+            ($"MailboxDataRetrieval:{settingName}", "00:00:00.001"));
+
+        // Act, Assert
+        Assert.Throws<OptionsValidationException>(
+            () => host.Services.GetRequiredService<IStartupValidator>().Validate());
+    }
+
+    [Fact]
+    public void AddOutboundResiliencePipelines_CircuitWindowBelowTheStrategyMinimum_FailsStartup()
+    {
+        // Arrange
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings(
+            ("MailboxDataRetrieval:CircuitBreakerBreakDuration", "00:00:00.500"));
+
+        // Act, Assert
+        Assert.Throws<OptionsValidationException>(
+            () => host.Services.GetRequiredService<IStartupValidator>().Validate());
+    }
+
+    /// <summary>
+    /// A malformed runtime edit must neither throw on the thread that reported it nor disarm a dependency that is
+    /// already serving. Listening for reloads would do both, because the options monitor materializes and validates
+    /// the candidate inside the change notification.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_AfterAnInvalidReload_KeepsServingUnderTheStartupBudget()
+    {
+        // Arrange
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings(
+            ("MailboxDataRetrieval:MaxAttempts", "2"),
+            ("MailboxDataRetrieval:BaseDelay", "00:00:01"),
+            ("MailboxDataRetrieval:MaxDelay", "00:00:02"),
+            ("MailboxDataRetrieval:TotalTimeout", UnreachableTotalTimeout));
+        await host.Executor.ExecuteAsync(
+            OutboundDependency.MailboxDataRetrieval,
+            _ => Task.CompletedTask,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        host.ReloadWithSetting("MailboxDataRetrieval:MaxAttempts", "99");
+
+        // Assert
+        var attempts = 0;
+        var execution = host.Executor.ExecuteAsync(
+            OutboundDependency.MailboxDataRetrieval,
+            _ =>
+            {
+                attempts++;
+
+                throw new ImapProtocolException("The server closed the stream.");
+            },
+            TestContext.Current.CancellationToken);
+        await Assert.ThrowsAsync<ImapProtocolException>(
+            () => host.CompleteOnVirtualTimeAsync(execution, FineAdvanceStep));
+        Assert.Equal(2, attempts);
+    }
+
+    /// <summary>The budgets are restart-required, so even a valid edit is deliberately not adopted in place.</summary>
+    [Fact]
+    public async Task ExecuteAsync_AfterAValidReload_KeepsTheStartupBudgetUntilRestart()
+    {
+        // Arrange
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings(
+            ("MailboxDataRetrieval:MaxAttempts", "2"),
+            ("MailboxDataRetrieval:BaseDelay", "00:00:01"),
+            ("MailboxDataRetrieval:MaxDelay", "00:00:02"),
+            ("MailboxDataRetrieval:TotalTimeout", UnreachableTotalTimeout));
+        await host.Executor.ExecuteAsync(
+            OutboundDependency.MailboxDataRetrieval,
+            _ => Task.CompletedTask,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        host.ReloadWithSetting("MailboxDataRetrieval:MaxAttempts", "4");
+
+        // Assert
+        var attempts = 0;
+        var execution = host.Executor.ExecuteAsync(
+            OutboundDependency.MailboxDataRetrieval,
+            _ =>
+            {
+                attempts++;
+
+                throw new ImapProtocolException("The server closed the stream.");
+            },
+            TestContext.Current.CancellationToken);
+        await Assert.ThrowsAsync<ImapProtocolException>(
+            () => host.CompleteOnVirtualTimeAsync(execution, FineAdvanceStep));
+        Assert.Equal(2, attempts);
     }
 
     /// <summary>A delivery repeated as freely as a mailbox read is visible in the recipient's inbox.</summary>

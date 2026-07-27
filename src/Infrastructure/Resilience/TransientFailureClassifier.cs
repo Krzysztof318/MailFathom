@@ -34,8 +34,8 @@ internal sealed class TransientFailureClassifier : ITransientFailureClassifier
         var classifyFailureOfFamily = dependency switch
         {
             OutboundDependency.MailboxSessionEstablishment
-                or OutboundDependency.MailboxDataRetrieval
-                or OutboundDependency.EmailDelivery => IsTransientMailFailure,
+                or OutboundDependency.MailboxDataRetrieval => IsTransientMailboxFailure,
+            OutboundDependency.EmailDelivery => IsRepeatableDeliveryFailure,
             OutboundDependency.DatabaseCommandExecution => IsTransientDatabaseFailure,
             OutboundDependency.AiProviderInvocation => (Func<Exception, bool>)IsTransientProviderFailure,
             _ => throw new ArgumentOutOfRangeException(
@@ -48,25 +48,39 @@ internal sealed class TransientFailureClassifier : ITransientFailureClassifier
         return failure is not OperationCanceledException && classifyFailureOfFamily(failure);
     }
 
-    /// <summary>Classifies an IMAP or SMTP failure.</summary>
+    /// <summary>Classifies an IMAP mailbox failure, where reading is free to be repeated.</summary>
     /// <remarks>
     /// A rejected credential, an unusable TLS handshake, and a command the server refused are decisions the server
     /// will repeat identically. A dropped connection or a protocol desynchronization is not: the next session starts
-    /// clean.
+    /// clean, and a repeated read changes nothing on the server.
     /// </remarks>
-    private static bool IsTransientMailFailure(Exception failure) => failure switch
+    private static bool IsTransientMailboxFailure(Exception failure) => failure switch
     {
         MailKit.Security.AuthenticationException => false,
         MailKit.Security.SslHandshakeException => false,
         System.Security.Authentication.AuthenticationException => false,
         ServiceNotAuthenticatedException => false,
         MailAuthenticationMechanismUnavailableException => false,
-        SmtpCommandException smtpCommandFailure => IsTemporarySmtpRejection(smtpCommandFailure.StatusCode),
         CommandException => false,
         ProtocolException => true,
         ServiceNotConnectedException => true,
         _ => IsTransientTransportFailure(failure),
     };
+
+    /// <summary>Classifies an SMTP submission failure, where an ambiguous outcome has to count as delivered.</summary>
+    /// <remarks>
+    /// A connection lost between the message data and the server's final reply leaves the client unable to tell an
+    /// accepted message from a rejected one, and MailKit surfaces exactly that as an ordinary protocol, socket, or
+    /// I/O failure — the same types a pre-submission failure produces. No outbox can separate the two after the fact,
+    /// so repeating any of them risks a second copy in a recipient's mailbox.
+    /// <para>
+    /// Only an explicit temporary rejection is repeated: a 4yz reply is the server stating that it did not take the
+    /// message and that the client should try later. Everything else, including a failure that happened before the
+    /// message was ever submitted, is terminal here and left to the outbox to re-drive under its own idempotency.
+    /// </para>
+    /// </remarks>
+    private static bool IsRepeatableDeliveryFailure(Exception failure) =>
+        failure is SmtpCommandException rejection && IsTemporarySmtpRejection(rejection.StatusCode);
 
     /// <summary>Classifies a PostgreSQL failure.</summary>
     /// <remarks>

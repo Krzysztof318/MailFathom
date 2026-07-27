@@ -37,18 +37,27 @@ from outermost to innermost as:
 4. **Circuit breaker** — sits inside retry, so it observes every attempt rather than every operation.
 5. **Per-attempt timeout** — innermost, so a stalled attempt becomes a transient failure the retry above it acts on.
 
+Where the total timeout expires decides what the caller sees. Expiring inside an attempt cancels it and surfaces
+`TimeoutRejectedException`; expiring while the pipeline waits to retry stops the retry and surfaces the failure that
+ended the last attempt. Both abandon the remaining attempts, which is the guarantee; the exception names the more
+useful of the two causes.
+
 The order is the one the standard HTTP resilience pipeline established, and each position follows from the one before
-it. Every limit is an operator setting bound from configuration, and a pipeline is rebuilt when its options reload, so
-a flaky dependency is tuned without a rebuild and without a restart.
+it. Every limit is an operator setting bound from configuration, read once at startup, so a flaky dependency is tuned
+without a rebuild.
 
 ## Classifying a failure
 
 `ITransientFailureClassifier` is an `Application` port so a use case can ask the question the pipeline asks itself
 without depending on Polly. `Infrastructure` implements it per protocol family:
 
-- **Mail** — a rejected credential, an unusable TLS handshake, an unavailable authentication mechanism, and a refused
-  IMAP command are terminal. A dropped connection, a desynchronized protocol stream, and an SMTP 4yz reply are
-  transient.
+- **Mailbox** — a rejected credential, an unusable TLS handshake, an unavailable authentication mechanism, and a
+  refused IMAP command are terminal. A dropped connection and a desynchronized protocol stream are transient, because
+  a repeated read changes nothing on the server.
+- **Delivery** — only an explicit 4yz reply is repeated, which is the server stating it did not take the message. A
+  connection lost between the message data and the final reply is reported as an ordinary protocol, socket, or I/O
+  failure, indistinguishable from one that happened before submission, so repeating it risks a second copy in the
+  recipient's mailbox. Everything that is not a temporary rejection is therefore terminal and left to the outbox.
 - **Database** — the provider answers through `DbException.IsTransient`, so MailMcp keeps no second SQLSTATE table.
   A `PersistenceConcurrencyConflictException` is terminal here on purpose; see the single-layer rule below.
 - **Provider** — the HTTP status is the provider's own statement about whether the request may be sent again. `408`,
@@ -99,7 +108,8 @@ is the layer rather than something MailMcp re-implements:
 ## Telemetry and privacy
 
 Polly's metrics stay on and carry the dependency class as the pipeline name, the event, the attempt number, the
-outcome, and the duration. Its *logging* is replaced: Polly renders the outcome exception in full, and a mail server
+outcome, and the duration. Emitting them is not exporting them: the host subscribes OpenTelemetry to Polly's meter in
+`ServiceDefaultsExtensions`, without which the instruments would exist and nothing would collect them. Its *logging* is replaced: Polly renders the outcome exception in full, and a mail server
 puts the rejected recipient into its error text. `OutboundResilienceEvents` therefore records a retry, a circuit
 opening, and a circuit closing with the dependency class, the failure's type name, the attempt number, and the delay —
 never a message, an address, an identifier, or a payload.
@@ -128,14 +138,24 @@ names only the limits it disagrees with:
 }
 ```
 
-Binding is strict: an unknown key fails startup rather than leaving an operator convinced they tuned a limit that
-never moved. Validation runs on start and rejects contradictions as well as out-of-range values — an attempt allowed
+Binding is strict in both directions: an unknown key inside a section fails startup, and so does a section that names
+no dependency class. The second check is separate because strict binding only inspects the keys of a section it was
+pointed at — `Resilience:EmailDelivry` is not an unknown key to it, it is a section nobody reads, which would leave an
+operator convinced they tuned a limit that never moved. Validation runs on start and rejects contradictions as well as out-of-range values — an attempt allowed
 to outlive its operation, or a backoff ceiling longer than the total timeout, describes a limit that can never be
 reached. `MaxAttempts` counts the first call, so `1` disables retry and leaves the other strategies in place.
 
-The settings are classified **reloadable for new operations** under
-[ADR 0002](../decisions/0002-configuration-reading-mapping-and-reload-boundary.md): a reload rebuilds the pipeline, and
-an operation already running keeps the budget it started under.
+The settings are classified **restart-required** under
+[ADR 0002](../decisions/0002-configuration-reading-mapping-and-reload-boundary.md), which is that ADR's default for a
+group without a validated-snapshot layer. The registration binds a frozen copy of the section rather than the live
+configuration, so the classification holds by construction: a reloaded budget is not adopted, and a malformed one
+cannot disturb a pipeline that is already serving.
+
+That indirection is not ceremony. Bound against the live configuration, `OptionsMonitor` drops its cache when a change
+token fires and rebuilds the named instance *inside* that notification, so one malformed edit raises
+`OptionsValidationException` on the thread that reported the change — a file-watcher callback in a deployed host. ADR
+0002 forbids validation on that thread precisely because of this. Making these budgets reloadable therefore needs the
+validated-snapshot layer the mail and persistence settings already have, not a call to Polly's `EnableReloads`.
 
 ## Deliberate exclusions
 
