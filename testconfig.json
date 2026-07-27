@@ -3,7 +3,7 @@
     "Coverlet": {
       "Include": "[MailMcp.*]*",
       "Exclude": "[MailMcp.Host]*,[MailMcp.AppHost]*,[MailMcp.*.UnitTests]*,[coverlet.*]*,[xunit.*]*,[Microsoft.Testing.*]*,[Microsoft.TestPlatform.*]*,[Microsoft.VisualStudio.TestPlatform.*]*,[testhost*]*",
-      "ExcludeByAttribute": "ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,GeneratedCodeAttribute",
+      "ExcludeByAttribute": "ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,GeneratedCodeAttribute,RequiresIntegrationCoverage,RequiresIntegrationCoverageAttribute",
       "Format": "cobertura",
       "IncludeTestAssembly": false,
       "DeterministicReport": true,

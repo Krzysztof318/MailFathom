@@ -1,12 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-using System.Diagnostics.CodeAnalysis;
+using MailMcp.CodeCoverage;
 using MailMcp.Domain.Emails;
 
 namespace MailMcp.Infrastructure.Persistence;
 
-// TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
-[ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
+[RequiresIntegrationCoverage]
 internal sealed class StoredEmailEntity
 {
     public Guid Id { get; set; }

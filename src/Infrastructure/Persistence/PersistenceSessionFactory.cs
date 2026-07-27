@@ -2,6 +2,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailMcp.Application.Persistence;
+using MailMcp.CodeCoverage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -9,8 +10,7 @@ using Npgsql;
 namespace MailMcp.Infrastructure.Persistence;
 
 /// <summary>Creates EF Core-backed persistence sessions for application write transactions.</summary>
-// TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
-[ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
+[RequiresIntegrationCoverage]
 internal sealed class PersistenceSessionFactory(MailMcpDbContext dbContext) : IPersistenceSessionFactory
 {
     /// <inheritdoc />

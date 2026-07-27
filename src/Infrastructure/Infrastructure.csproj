@@ -18,6 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\shared\RequiresIntegrationCoverageAttribute.cs" Link="RequiresIntegrationCoverageAttribute.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="MailMcp.Infrastructure.UnitTests" />
   </ItemGroup>
 </Project>

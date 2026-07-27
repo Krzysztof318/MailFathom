@@ -109,6 +109,8 @@ dotnet msbuild .config/CodeCoverage.proj -t:Collect
 
 The command produces one uniquely prefixed Cobertura report per unit-test project, merges the reports, and requires at least 85% aggregate line coverage across `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`. The result always represents the whole configured scope, not only changed lines. `Host` and `AppHost` are excluded as thin executable composition roots.
 
+Two attributes take code out of that denominator, and `testconfig.json` configures the collector to honor both. `[ExcludeFromCodeCoverage]` marks code that should never participate in coverage. `[RequiresIntegrationCoverage]`, declared in `src/shared/RequiresIntegrationCoverageAttribute.cs`, marks code whose verification needs a real database, a real mail server, or a composed host: the EF Core context and its entities, the persistence stores, the MailKit client adapter, the file-system and environment secret readers, and the infrastructure registration extensions carry it today. Integration tests will prove that code once they exist, and they will collect no coverage, so a marked class is measured by neither run. Removing the marker from a class puts every line of it back into the denominator, which is how to check that the exclusion is still earned.
+
 Raw Cobertura reports and TRX files are written under `artifacts/coverage/raw/`. The merged Cobertura and HTML reports are written under `artifacts/coverage/report/`.
 
 ## Pull request checks

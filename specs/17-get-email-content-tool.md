@@ -23,7 +23,7 @@ Body content is never logged, and the tool's error responses carry stable codes 
 
 ## Testing
 
-`Mcp.UnitTests` cover: advertised metadata and annotations, mapping of the full result including truncation metadata, the HTML flag requested and absent, the not-found code, the consistency-error code being distinct from not-found, attachment metadata containing no byte content, rejection of a message belonging to an account the owner does not control, and an invalid identifier being rejected at the boundary.
+`Mcp.UnitTests` cover: advertised metadata and annotations, mapping of the full result including truncation metadata, the HTML flag requested and absent, the not-found code, the consistency-error code being distinct from not-found, attachment metadata containing no byte content, attachment file names returned in the normalized form specification 06 defines and never as a path, an encrypted message surfacing the not-readable state rather than an empty body, rejection of a message belonging to an account the owner does not control, and an invalid identifier being rejected at the boundary.
 
 ## Out of scope
 
@@ -31,7 +31,7 @@ Attachment download, message export, and any mutation of remote state.
 
 ## Definition of done
 
-- The tool returns bounded content with explicit truncation and no attachment bytes.
+- The tool returns bounded content with explicit truncation and no attachment bytes, and every returned file name is normalized before it reaches a model.
 - Missing local content produces a distinct stable code and never an IMAP fetch.
 - Advertised metadata matches the read-only annotation conventions.
 - `docs/features/` documents the tool contract and its error codes.

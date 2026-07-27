@@ -15,7 +15,7 @@ The `tsvector` column and GIN index exist after specification 08, and `ListEmail
 
 ## Approved scope
 
-The use case takes a free-text query plus the same structured filters as `ListEmails` — accounts, folder aliases, participants, date range, attachment presence — and returns a bounded, ranked result set. Each result carries the stable local message identifier, the summary fields needed to make it useful without a second call, a relevance rank, and one or more highlighted snippets.
+The use case takes a free-text query plus the same structured filters as `ListEmails` — accounts, folder aliases, participants, date range, attachment presence with the same specification 06 meaning — and returns a bounded, ranked result set. Each result carries the stable local message identifier, the summary fields needed to make it useful without a second call, a relevance rank, and one or more highlighted snippets. Because specification 08 indexes body text only, a query matching words that appear solely inside an attachment payload returns nothing; that limitation is documented rather than worked around here.
 
 User query text is turned into a full-text query through provider-supported parameterization only. No part of the query string is concatenated into SQL, and the text search configuration is the validated application-owned setting from specification 08, never a value taken from the request.
 
