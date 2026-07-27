@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="xunit.v3.mtp-v2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The shared sources have no project of their own: they are compiled into every assembly that needs them, so
+         the only way to test them is to compile them here the same way a production project does. -->
+    <Compile Include="..\..\src\shared\*.cs" LinkBase="shared" />
+  </ItemGroup>
+</Project>

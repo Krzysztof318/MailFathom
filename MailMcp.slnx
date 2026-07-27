@@ -15,5 +15,7 @@
     <Project Path="tests/Host.UnitTests/Host.UnitTests.csproj" />
     <Project Path="tests/Infrastructure.UnitTests/Infrastructure.UnitTests.csproj" />
     <Project Path="tests/Mcp.UnitTests/Mcp.UnitTests.csproj" />
+    <Project Path="tests/SharedSources.UnitTests/SharedSources.UnitTests.csproj" />
+    <Project Path="tests/TestDoubles.UnitTests/TestDoubles.UnitTests.csproj" />
   </Folder>
 </Solution>
