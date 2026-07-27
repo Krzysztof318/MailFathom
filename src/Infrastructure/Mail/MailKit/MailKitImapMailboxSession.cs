@@ -9,6 +9,7 @@ using MailKit.Search;
 using MailKit.Security;
 using MailMcp.Application.EmailContent;
 using MailMcp.Application.Synchronization;
+using MailMcp.CodeCoverage;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
@@ -43,8 +44,7 @@ internal interface IMailKitImapClient : IAsyncDisposable
         CancellationToken cancellationToken);
 }
 
-// TODO: Remove this exclusion when the planned MailKit integration tests are enabled.
-[ExcludeFromCodeCoverage(Justification = "Will be covered later by MailKit integration tests.")]
+[RequiresIntegrationCoverage]
 internal sealed class MailKitImapClientAdapter(ImapClient client) : IMailKitImapClient
 {
     public bool IsConnected => client.IsConnected;

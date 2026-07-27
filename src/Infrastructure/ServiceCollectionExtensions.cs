@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-using System.Diagnostics.CodeAnalysis;
 using MailKit.Net.Imap;
 using MailMcp.Application.EmailContent;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
+using MailMcp.CodeCoverage;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Mail.MailKit;
 using MailMcp.Infrastructure.Persistence;
@@ -17,8 +17,7 @@ using Npgsql;
 namespace MailMcp.Infrastructure;
 
 /// <summary>Infrastructure dependency registration.</summary>
-// TODO: Remove this exclusion when the planned host integration tests are enabled.
-[ExcludeFromCodeCoverage(Justification = "Will be covered later by host integration tests.")]
+[RequiresIntegrationCoverage]
 public static class ServiceCollectionExtensions
 {
     /// <summary>Registers the secret reference grammar, the shipped scheme adapters, and the composite dispatch.</summary>

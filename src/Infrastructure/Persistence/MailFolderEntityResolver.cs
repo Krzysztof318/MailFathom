@@ -1,13 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-using System.Diagnostics.CodeAnalysis;
+using MailMcp.CodeCoverage;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
 
 namespace MailMcp.Infrastructure.Persistence;
 
-// TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
-[ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
+[RequiresIntegrationCoverage]
 internal static class MailFolderEntityResolver
 {
     public static async Task<MailFolderEntity> GetOrAddAsync(

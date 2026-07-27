@@ -121,5 +121,5 @@ The application layer exposes only `FetchEmailContentWithoutSettingSeenAsync` fo
 - OAuth mailbox authentication. `XOAUTH2` and `OAUTHBEARER` are deliberately absent from the allow-list because no token source exists yet.
 - IMAP IDLE and NOTIFY support.
 - Explicit EF Core migrations after schema review.
-- Integration tests with PostgreSQL and a real IMAP server in the later integration-test phase, including EF mapping, `xmin` conflict detection across transactions, same-transaction token semantics, PK/FK, integrity-metadata, and uniqueness-constraint verification required by ADR 001. Temporary provider-bound coverage exclusions carry adjacent TODOs for removal at that point.
+- Integration tests with PostgreSQL and a real IMAP server in the later integration-test phase, including EF mapping, `xmin` conflict detection across transactions, same-transaction token semantics, PK/FK, integrity-metadata, and uniqueness-constraint verification required by ADR 001. The provider-bound types those tests will prove carry `[RequiresIntegrationCoverage]`, which keeps them out of the unit-test coverage denominator and stays in place afterwards, because the integration suite collects no coverage of its own.
 - MCP read tools, RAG indexing, and SMTP outbox integration.
