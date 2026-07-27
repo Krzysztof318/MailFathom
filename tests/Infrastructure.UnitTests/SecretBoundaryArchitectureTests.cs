@@ -65,28 +65,25 @@ public sealed class SecretBoundaryArchitectureTests
     {
         if (type == typeof(ConfiguredSecret) || !visitedTypes.Add(type))
         {
-            yield break;
+            return [];
         }
 
-        foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        return type
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .SelectMany(property => FindRawSecretProperties(property, $"{path}.{property.Name}", visitedTypes));
+    }
+
+    private static IEnumerable<string> FindRawSecretProperties(
+        PropertyInfo property,
+        string propertyPath,
+        HashSet<Type> visitedTypes)
+    {
+        if (property.PropertyType != typeof(string))
         {
-            var propertyPath = $"{path}.{property.Name}";
-
-            if (property.PropertyType == typeof(string))
-            {
-                if (SecretPropertyNaming.NamesASecret(property.Name))
-                {
-                    yield return propertyPath;
-                }
-
-                continue;
-            }
-
-            foreach (var nested in FindNestedRawSecretProperties(property.PropertyType, propertyPath, visitedTypes))
-            {
-                yield return nested;
-            }
+            return FindNestedRawSecretProperties(property.PropertyType, propertyPath, visitedTypes);
         }
+
+        return SecretPropertyNaming.NamesASecret(property.Name) ? [propertyPath] : [];
     }
 
     private static IEnumerable<string> FindNestedRawSecretProperties(

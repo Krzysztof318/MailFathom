@@ -131,15 +131,14 @@ public static class ConfiguredSecretDiscovery
 
         private void DescendIntoElements(IEnumerable elements, string path)
         {
-            var index = 0;
-            foreach (var element in elements)
+            // The position is part of the reported configuration path and must count the absent elements the walk
+            // skips, so it comes from Index rather than from a counter the loop body could forget to advance.
+            foreach (var (index, element) in elements.Cast<object?>().Index())
             {
                 if (element is not null)
                 {
                     this.Visit(element, $"{path}:{index}", propertyName: string.Empty);
                 }
-
-                index++;
             }
         }
 

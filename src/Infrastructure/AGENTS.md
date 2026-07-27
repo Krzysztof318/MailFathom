@@ -9,6 +9,8 @@ These instructions apply under `src/Infrastructure/` in addition to parent instr
 - Project queries directly into application read models. Do not load full entity graphs when a bounded projection is sufficient.
 - Use `AsNoTracking` for read-only queries unless identity resolution or change tracking is explicitly required.
 - Avoid lazy loading and hidden N+1 queries. Make related data loading explicit.
+- Keep an EF Core query composed as `IQueryable<T>` until the database has done the filtering, ordering, and projection. `AsEnumerable`, `ToListAsync`, or a `foreach` placed before those operators moves the rest of the pipeline into the process and turns a bounded query into a full table read. The repository's preference for LINQ over hand-written loops is about naming the operation, never about evaluating it on the wrong side of the boundary.
+- Write query predicates and projections from expressions the provider can translate. A local helper method or a domain value object's member inside an `IQueryable` lambda either fails to translate or silently forces client evaluation, so map to and from the domain type outside the query.
 - Express uniqueness, concurrency, and idempotency guarantees in PostgreSQL constraints as well as in application logic.
 - Keep transactions short and define their boundary in the application operation. Do not hold a database transaction open across IMAP, SMTP, or AI network calls.
 - A write repository obtains its `DbContext` from the `IPersistenceSession` it is given and does not inject one. A read method joins no transaction, so it takes no session and uses the scoped context. Never accept a contract parameter the implementation ignores: a session that is not written through guarantees nothing and only appears to.

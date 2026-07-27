@@ -507,19 +507,16 @@ public sealed class MailKitImapMailboxSessionTests
         Assert.Equal(1000U, batch.InspectedThroughUid!.Value.Value);
     }
 
-    private static List<IMessageSummary> CreateSummaries(IList<UniqueId> uids)
-    {
-        var summaries = new List<IMessageSummary>(uids.Count);
-        foreach (var uid in uids)
-        {
-            var summary = Substitute.For<IMessageSummary>();
-            summary.UniqueId.Returns(uid);
-            summary.Envelope.Returns(new Envelope { Subject = $"Subject {uid.Id}" });
-            summary.Size.Returns(128U);
-            summaries.Add(summary);
-        }
+    private static List<IMessageSummary> CreateSummaries(IList<UniqueId> uids) => [.. uids.Select(CreateSummary)];
 
-        return summaries;
+    private static IMessageSummary CreateSummary(UniqueId uid)
+    {
+        var summary = Substitute.For<IMessageSummary>();
+        summary.UniqueId.Returns(uid);
+        summary.Envelope.Returns(new Envelope { Subject = $"Subject {uid.Id}" });
+        summary.Size.Returns(128U);
+
+        return summary;
     }
 
     private static MailTransportSecurityPolicy CreatePolicy(
