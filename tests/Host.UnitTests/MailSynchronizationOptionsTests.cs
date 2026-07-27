@@ -3,6 +3,7 @@
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Transport;
 using MailMcp.Host.Configuration;
+using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.Configuration;
@@ -182,7 +183,8 @@ public sealed class MailSynchronizationOptionsTests
         using var settings = (await options.ResolveSettingsAsync(
             "primary",
             new PlaintextOnlySecretReferenceResolver(),
-            CancellationToken.None)).Secrets;
+            CreateTrustAnchorLoader(),
+            CancellationToken.None)).Material;
 
         // Assert
         Assert.Equal("dev-password", settings.Password.RevealAsString());
@@ -202,10 +204,11 @@ public sealed class MailSynchronizationOptionsTests
         var settings = await options.ResolveSettingsAsync(
             "  primary ",
             new PlaintextOnlySecretReferenceResolver(),
+            CreateTrustAnchorLoader(),
             CancellationToken.None);
 
         // Assert
-        using (settings.Secrets)
+        using (settings.Material)
         {
             Assert.Equal("primary", settings.AccountId);
             Assert.Equal("imap.example.test", settings.Host);
@@ -227,6 +230,7 @@ public sealed class MailSynchronizationOptionsTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => options.ResolveSettingsAsync(
             "primary",
             new PlaintextOnlySecretReferenceResolver(),
+            CreateTrustAnchorLoader(),
             CancellationToken.None));
     }
 
@@ -253,6 +257,9 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Equal("systemd-credential:imap-primary-password", account.Secrets.Password.SecretReference);
         Assert.Empty(options.ValidateForSynchronization());
     }
+
+    private static TrustAnchorLoader CreateTrustAnchorLoader() =>
+        new(new PlaintextOnlySecretReferenceResolver());
 
     private static MailSynchronizationAccountOptions CreateAccount(
         string accountId,

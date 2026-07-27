@@ -7,7 +7,6 @@ using MailMcp.Host;
 using MailMcp.Host.Configuration;
 using MailMcp.Infrastructure;
 using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.Options;
 
@@ -36,16 +35,39 @@ builder.Services.AddOptions<PersistenceOptions>()
         binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
     .ValidateDataAnnotations()
     .ValidateOnStart();
+// The published snapshot, not the bound one, is what every consumer reads: a reload whose secret references do not
+// resolve is rejected and leaves the previous configuration active for new operations.
+builder.Services.AddSingleton<DatabaseConnectionSettingsMapper>();
+builder.Services.AddSingleton<SecretConfigurationValidator>();
+builder.Services.AddSingleton(provider => new ValidatedSettingsSnapshot<MailSynchronizationOptions>(
+    provider.GetRequiredService<IOptionsMonitor<MailSynchronizationOptions>>(),
+    (candidate, cancellationToken) => provider.GetRequiredService<SecretConfigurationValidator>()
+        .FindMailConfigurationErrorsAsync(candidate, cancellationToken),
+    "MailSynchronization",
+    provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<MailSynchronizationOptions>>>()));
+builder.Services.AddSingleton(provider => new ValidatedSettingsSnapshot<PersistenceOptions>(
+    provider.GetRequiredService<IOptionsMonitor<PersistenceOptions>>(),
+    (candidate, cancellationToken) => provider.GetRequiredService<SecretConfigurationValidator>()
+        .FindPersistenceConfigurationErrorsAsync(candidate, cancellationToken),
+    "Persistence",
+    provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<PersistenceOptions>>>()));
+builder.Services.AddSingleton<ISettingsSnapshot<MailSynchronizationOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>());
+builder.Services.AddSingleton<ISettingsSnapshot<PersistenceOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<PersistenceOptions>>());
+// One work unit runs against one snapshot: the enclosing run hands its own down, and a scope with no enclosing run
+// falls back to the published one. That is what keeps the transport security policy a work unit validates against,
+// the material it connects with, and the account list it was scheduled from all from the same reload.
+builder.Services.AddScoped<ScopedMailSynchronizationSettings>();
+builder.Services.AddScoped(provider => provider.GetRequiredService<ScopedMailSynchronizationSettings>().Current);
+builder.Services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
 builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();
-builder.Services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<IOptions<MailSynchronizationOptions>>().Value);
 builder.Services.AddScoped(provider =>
 {
-    var synchronizationOptions = provider.GetRequiredService<IOptions<MailSynchronizationOptions>>().Value;
+    var synchronizationSettings = provider.GetRequiredService<MailSynchronizationOptions>();
     return new MailboxSynchronizationOptions
     {
-        MaxMetadataBatchSize = synchronizationOptions.MaxMetadataBatchSize,
-        MaxRawMimeBytes = synchronizationOptions.MaxRawMimeBytes,
-        MaxMetadataBatchesPerRun = synchronizationOptions.MaxMetadataBatchesPerRun,
+        MaxMetadataBatchSize = synchronizationSettings.MaxMetadataBatchSize,
+        MaxRawMimeBytes = synchronizationSettings.MaxRawMimeBytes,
+        MaxMetadataBatchesPerRun = synchronizationSettings.MaxMetadataBatchesPerRun,
     };
 });
 builder.Services.AddSingleton(provider => new PersistenceConcurrencyOptions
@@ -55,15 +77,14 @@ builder.Services.AddSingleton(provider => new PersistenceConcurrencyOptions
 // The validator is registered ahead of the worker so hosted-service ordering reinforces the StartingAsync ordering
 // rather than depending on it alone, and ahead of the infrastructure so an operator who mistyped several references
 // reads one aggregated report rather than whichever failure the database happened to hit first.
-builder.Services.AddHostedService<MailMcp.Host.Hosting.SecretReferenceStartupValidator>();
-// The blocks are read here rather than through IOptions because the data source they configure is registered before
-// any options instance can be resolved. Only the references are read; resolution happens during startup.
-var persistenceSecrets = builder.Configuration.GetSection("Persistence").Get<PersistenceOptions>(
-    binderOptions => binderOptions.ErrorOnUnknownConfiguration = true);
-builder.Services.AddInfrastructure(new PostgresConnectionSettings(
-    builder.Configuration.GetConnectionString("mailmcp"),
-    persistenceSecrets?.ConnectionString,
-    persistenceSecrets?.Password));
+builder.Services.AddHostedService<MailMcp.Host.Hosting.SecretConfigurationStartupValidator>();
+// Registered after the startup gate so the first snapshot is proven before either begins accepting reloaded ones.
+builder.Services.AddHostedService(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>());
+builder.Services.AddHostedService(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<PersistenceOptions>>());
+// The secret blocks come from the published snapshot on every read, so a reference an operator repoints reaches the
+// next physical connection instead of waiting for a restart.
+builder.Services.AddInfrastructure(provider => provider.GetRequiredService<DatabaseConnectionSettingsMapper>()
+    .Map(provider.GetRequiredService<ISettingsSnapshot<PersistenceOptions>>().Current));
 builder.Services.AddHostedService<MailMcp.Host.Hosting.MailSynchronizationWorker>();
 
 var app = builder.Build();

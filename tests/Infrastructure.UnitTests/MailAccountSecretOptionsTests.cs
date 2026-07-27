@@ -101,7 +101,7 @@ public sealed class MailAccountSecretOptionsTests
     }
 
     [Fact]
-    public async Task ResolveAsync_ResolvableReference_ReturnsTheResolvedPassword()
+    public async Task ResolvePasswordAsync_ResolvableReference_ReturnsTheResolvedPassword()
     {
         // Arrange
         var options = new MailAccountSecretOptions
@@ -110,14 +110,14 @@ public sealed class MailAccountSecretOptionsTests
         };
 
         // Act
-        using var secrets = await options.ResolveAsync(new StubSecretReferenceResolver(), CancellationToken.None);
+        using var password = await options.ResolvePasswordAsync(new StubSecretReferenceResolver(), CancellationToken.None);
 
         // Assert
-        Assert.Equal("dev-password", secrets.Password.RevealAsString());
+        Assert.Equal("dev-password", password.RevealAsString());
     }
 
     [Fact]
-    public async Task ResolveAsync_UnresolvableReference_FailsClosedInsteadOfConnecting()
+    public async Task ResolvePasswordAsync_UnresolvableReference_FailsClosedInsteadOfConnecting()
     {
         // Arrange
         var options = new MailAccountSecretOptions
@@ -127,25 +127,27 @@ public sealed class MailAccountSecretOptionsTests
 
         // Act, Assert
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            options.ResolveAsync(new StubSecretReferenceResolver(), CancellationToken.None));
+            options.ResolvePasswordAsync(new StubSecretReferenceResolver(), CancellationToken.None));
         Assert.Contains(nameof(SecretResolutionFailure.MaterialNotFound), exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task Dispose_ResolvedAccountSecrets_ErasesThePasswordMaterial()
+    public async Task Dispose_ResolvedConnectionMaterial_ErasesThePasswordMaterial()
     {
         // Arrange
         var options = new MailAccountSecretOptions
         {
             Password = new ConfiguredSecret { SecretReference = "plaintext:dev-password" },
         };
-        var secrets = await options.ResolveAsync(new StubSecretReferenceResolver(), CancellationToken.None);
+        var material = new MailAccountConnectionMaterial(
+            await options.ResolvePasswordAsync(new StubSecretReferenceResolver(), CancellationToken.None),
+            TrustedCertificateAuthority: null);
 
         // Act
-        secrets.Dispose();
+        material.Dispose();
 
         // Assert
-        Assert.Throws<ObjectDisposedException>(() => secrets.Password.RevealAsString());
+        Assert.Throws<ObjectDisposedException>(() => material.Password.RevealAsString());
     }
 
     /// <summary>Resolves the four shipped schemes without touching the file system or the environment block.</summary>

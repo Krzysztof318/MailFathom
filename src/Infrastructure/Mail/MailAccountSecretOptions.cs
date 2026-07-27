@@ -53,26 +53,22 @@ public sealed class MailAccountSecretOptions
         return errors;
     }
 
-    /// <summary>Resolves every secret and hands ownership of the material to the caller.</summary>
+    /// <summary>Resolves the mailbox password and hands ownership of the material to the caller.</summary>
     /// <param name="resolver">The resolver that turns references into material.</param>
     /// <param name="cancellationToken">Cancels the resolution.</param>
-    /// <returns>The owned secrets, which the caller must dispose when its operation ends.</returns>
+    /// <returns>The owned password, which the caller must dispose when its operation ends.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="resolver" /> is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when a reference that passed startup validation no longer resolves.</exception>
     /// <remarks>The exception is a fail-closed path rather than an ordinary branch: startup already proved the reference resolves, so a failure here means the material disappeared underneath a running deployment.</remarks>
-    public async Task<MailAccountSecrets> ResolveAsync(
+    public async Task<ResolvedSecret> ResolvePasswordAsync(
         ISecretReferenceResolver resolver,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(resolver);
 
         var passwordResult = await resolver.ResolveAsync(this.Password?.SecretReference, cancellationToken);
-        if (passwordResult.Secret is not { } password)
-        {
-            throw new InvalidOperationException(
-                $"The account password secret reference could not be resolved [{passwordResult.Failure}].");
-        }
 
-        return new MailAccountSecrets(password);
+        return passwordResult.Secret ?? throw new InvalidOperationException(
+            $"The account password secret reference could not be resolved [{passwordResult.Failure}].");
     }
 }

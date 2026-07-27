@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Host.Configuration;
+using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Secrets;
-using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace MailMcp.Host.UnitTests;
@@ -20,10 +20,10 @@ public sealed class ConfiguredImapAccountSettingsProviderTests
         var settings = await provider.GetSettingsAsync("primary", CancellationToken.None);
 
         // Assert
-        using (settings.Secrets)
+        using (settings.Material)
         {
             Assert.Equal("primary", settings.AccountId);
-            Assert.Equal("dev-password", settings.Secrets.Password.RevealAsString());
+            Assert.Equal("dev-password", settings.Material.Password.RevealAsString());
         }
     }
 
@@ -39,10 +39,10 @@ public sealed class ConfiguredImapAccountSettingsProviderTests
         var second = await provider.GetSettingsAsync("primary", CancellationToken.None);
 
         // Assert
-        using (first.Secrets)
-        using (second.Secrets)
+        using (first.Material)
+        using (second.Material)
         {
-            Assert.NotSame(first.Secrets.Password, second.Secrets.Password);
+            Assert.NotSame(first.Material.Password, second.Material.Password);
         }
     }
 
@@ -56,12 +56,34 @@ public sealed class ConfiguredImapAccountSettingsProviderTests
 
         // Act
         var finished = await provider.GetSettingsAsync("primary", CancellationToken.None);
-        finished.Secrets.Dispose();
+        finished.Material.Dispose();
 
         // Assert
-        using (inFlight.Secrets)
+        using (inFlight.Material)
         {
-            Assert.Equal("dev-password", inFlight.Secrets.Password.RevealAsString());
+            Assert.Equal("dev-password", inFlight.Material.Password.RevealAsString());
+        }
+    }
+
+    /// <summary>Rotating the credential file behind an unchanged reference must reach the next connection attempt.</summary>
+    [Fact]
+    public async Task GetSettingsAsync_MaterialRotatedBehindAnUnchangedReference_ResolvesTheRotatedPasswordForTheNextAttempt()
+    {
+        // Arrange
+        var resolver = new RotatingSecretReferenceResolver("first-password");
+        var provider = CreateProvider(resolver);
+        var inFlight = await provider.GetSettingsAsync("primary", CancellationToken.None);
+
+        // Act
+        resolver.Rotate("second-password");
+        var afterRotation = await provider.GetSettingsAsync("primary", CancellationToken.None);
+
+        // Assert
+        using (inFlight.Material)
+        using (afterRotation.Material)
+        {
+            Assert.Equal("second-password", afterRotation.Material.Password.RevealAsString());
+            Assert.Equal("first-password", inFlight.Material.Password.RevealAsString());
         }
     }
 
@@ -76,7 +98,7 @@ public sealed class ConfiguredImapAccountSettingsProviderTests
             provider.GetSettingsAsync("absent", CancellationToken.None));
     }
 
-    private static ConfiguredImapAccountSettingsProvider CreateProvider()
+    private static ConfiguredImapAccountSettingsProvider CreateProvider(ISecretReferenceResolver? resolver = null)
     {
         var options = new MailSynchronizationOptions
         {
@@ -95,8 +117,24 @@ public sealed class ConfiguredImapAccountSettingsProviderTests
             ],
         };
 
+        var secretReferenceResolver = resolver ?? new PlaintextOnlySecretReferenceResolver();
+
         return new ConfiguredImapAccountSettingsProvider(
-            Options.Create(options),
-            new PlaintextOnlySecretReferenceResolver());
+            options,
+            secretReferenceResolver,
+            new TrustAnchorLoader(secretReferenceResolver));
+    }
+
+    /// <summary>Stands in for a credential file whose contents change while the reference naming it does not.</summary>
+    private sealed class RotatingSecretReferenceResolver(string initialMaterial) : ISecretReferenceResolver
+    {
+        private string material = initialMaterial;
+
+        public void Rotate(string rotatedMaterial) => this.material = rotatedMaterial;
+
+        public Task<SecretResolutionResult> ResolveAsync(string? configuredValue, CancellationToken cancellationToken) =>
+            Task.FromResult(SecretResolutionResult.Resolved(
+                ResolvedSecret.FromText(this.material),
+                SecretMaterialSource.SchemeAdapter));
     }
 }

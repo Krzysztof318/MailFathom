@@ -12,7 +12,6 @@ using MailMcp.Host.Hosting;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -185,12 +184,15 @@ public sealed class MailSynchronizationWorkerTests
         services.AddSingleton(new MailboxSynchronizationOptions());
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<MailboxSynchronizer>();
+        // The worker hands its run snapshot to each work-unit scope, so the scope has to be able to receive one.
+        services.AddSingleton<ISettingsSnapshot<MailSynchronizationOptions>>(new StubSettingsSnapshot<MailSynchronizationOptions>(options));
+        services.AddScoped<ScopedMailSynchronizationSettings>();
 
         var serviceProvider = services.BuildServiceProvider();
 
         return new MailSynchronizationWorker(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            Options.Create(options),
+            new StubSettingsSnapshot<MailSynchronizationOptions>(options),
             logger,
             timeProvider);
     }

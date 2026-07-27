@@ -29,31 +29,31 @@ namespace MailMcp.Infrastructure.Persistence;
 /// string before that throws rather than quietly falling back to an unresolved one.
 /// </para>
 /// </remarks>
-internal sealed partial class PostgresConnectionStringProvider : IHostedLifecycleService
+internal sealed partial class PostgresConnectionStringProvider : IHostedLifecycleService, IDatabaseConnectionSettingsValidator
 {
-    private readonly PostgresConnectionSettings connectionSettings;
+    private readonly Func<PostgresConnectionSettings> currentConnectionSettings;
     private readonly ISecretReferenceResolver secretReferenceResolver;
     private readonly SecretResolutionOptions resolutionOptions;
     private readonly ILogger<PostgresConnectionStringProvider> logger;
 
     /// <summary>Initializes a new PostgreSQL connection string provider.</summary>
-    /// <param name="connectionSettings">Where the connection string and the password come from.</param>
+    /// <param name="currentConnectionSettings">Supplies the settings validated for the current configuration, re-read whenever a credential is needed.</param>
     /// <param name="secretReferenceResolver">The resolver that turns a reference into material.</param>
     /// <param name="resolutionOptions">The deployment's interpretation mode.</param>
     /// <param name="logger">The startup logger.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public PostgresConnectionStringProvider(
-        PostgresConnectionSettings connectionSettings,
+        Func<PostgresConnectionSettings> currentConnectionSettings,
         ISecretReferenceResolver secretReferenceResolver,
         SecretResolutionOptions resolutionOptions,
         ILogger<PostgresConnectionStringProvider> logger)
     {
-        ArgumentNullException.ThrowIfNull(connectionSettings);
+        ArgumentNullException.ThrowIfNull(currentConnectionSettings);
         ArgumentNullException.ThrowIfNull(secretReferenceResolver);
         ArgumentNullException.ThrowIfNull(resolutionOptions);
         ArgumentNullException.ThrowIfNull(logger);
 
-        this.connectionSettings = connectionSettings;
+        this.currentConnectionSettings = currentConnectionSettings;
         this.secretReferenceResolver = secretReferenceResolver;
         this.resolutionOptions = resolutionOptions;
         this.logger = logger;
@@ -62,8 +62,21 @@ internal sealed partial class PostgresConnectionStringProvider : IHostedLifecycl
     /// <summary>Gets or sets the connection string once startup composed it.</summary>
     private string? ComposedConnectionString { get; set; }
 
-    /// <summary>Gets the composed connection string, credentials included.</summary>
+    /// <summary>Gets or sets which configured setting supplies the password per connection.</summary>
+    private DatabasePasswordSource PasswordSource { get; set; }
+
+    /// <summary>Gets or sets the credential-source shape startup composed the pool against, or <see langword="null" /> before it has.</summary>
+    private DatabaseCredentialSourceShape? ComposedCredentialSourceShape { get; set; }
+
+    /// <summary>Gets the composed connection string, which deliberately carries no rotatable credential.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the host has not run startup composition yet.</exception>
+    /// <remarks>
+    /// A password provisioned through a secret block is stripped from this string and supplied per physical connection
+    /// instead, so rotating it never means rebuilding the pool. Host, database, and user name are read once, because
+    /// changing them describes a different database rather than a rotated credential. Call
+    /// <see cref="SupplyThePasswordPerConnection" /> on the builder that consumes this string, or the deployment
+    /// authenticates with no password at all.
+    /// </remarks>
     internal string ConnectionString => this.ComposedConnectionString
         ?? throw new InvalidOperationException(
             "The PostgreSQL connection string is requested before host startup composed it. Register the infrastructure services on a host that runs hosted service lifecycle events, or use the design-time context factory outside a host.");
@@ -72,16 +85,20 @@ internal sealed partial class PostgresConnectionStringProvider : IHostedLifecycl
     /// <exception cref="InvalidOperationException">Thrown when a configured reference does not resolve or a password is configured twice.</exception>
     public async Task StartingAsync(CancellationToken cancellationToken)
     {
+        var startupSettings = this.currentConnectionSettings();
+
         var composed = await ConnectionStringComposer.ComposeAsync(
-            this.connectionSettings.ConfiguredConnectionString,
-            this.connectionSettings.ConnectionStringSecret,
-            this.connectionSettings.Password,
+            startupSettings.ConfiguredConnectionString,
+            startupSettings.ConnectionStringSecret,
+            startupSettings.Password,
             this.secretReferenceResolver,
             cancellationToken);
 
-        this.WarnWhenTheCredentialBypassedTheSecretBlock(composed);
+        this.WarnWhenTheCredentialBypassedTheSecretBlock(startupSettings, composed.ConnectionSettings);
 
-        this.ComposedConnectionString = composed.ConnectionString;
+        this.ComposedConnectionString = composed.ConnectionSettings.ConnectionString;
+        this.PasswordSource = composed.PasswordSource;
+        this.ComposedCredentialSourceShape = DatabaseCredentialSourceShape.Of(startupSettings);
     }
 
     /// <inheritdoc />
@@ -99,6 +116,90 @@ internal sealed partial class PostgresConnectionStringProvider : IHostedLifecycl
     /// <inheritdoc />
     public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
+    /// <summary>Points a data source builder at the configured credential source instead of baking a password into it.</summary>
+    /// <param name="dataSourceBuilder">The builder the container builds the data source from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="dataSourceBuilder" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// The provider invokes this when it opens a physical connection, so a credential rotated behind an unchanged
+    /// reference authenticates the next connection with no restart and no rebuilt data source. Connections already
+    /// open are untouched and finish with the credential they authenticated with, which is what makes a rotation safe
+    /// for work in flight. Pooled logical connections that reuse an open physical one likewise keep it; the rotated
+    /// credential applies from the next physical connect.
+    /// </para>
+    /// <para>
+    /// The synchronous provider deliberately throws, as the provider's own documentation recommends. Retrieval is
+    /// asynchronous by contract and can reach a file or one day a managed store, and satisfying a synchronous callback
+    /// would mean blocking a thread on it. Every MailMcp database access opens its connection asynchronously, so the
+    /// synchronous path is unreachable rather than merely discouraged.
+    /// </para>
+    /// </remarks>
+    internal void SupplyThePasswordPerConnection(NpgsqlDataSourceBuilder dataSourceBuilder)
+    {
+        ArgumentNullException.ThrowIfNull(dataSourceBuilder);
+
+        if (this.PasswordSource == DatabasePasswordSource.None)
+        {
+            return;
+        }
+
+        dataSourceBuilder.UsePasswordProvider(
+            _ => throw new NotSupportedException(
+                "The PostgreSQL password is retrieved asynchronously. Open the connection with OpenAsync."),
+            async (_, cancellationToken) => await this.RetrieveCurrentPasswordAsync(cancellationToken));
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DatabaseConnectionConfigurationFailure>> FindConfigurationFailuresAsync(
+        PostgresConnectionSettings candidate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        if (this.ComposedCredentialSourceShape is not { } composedShape)
+        {
+            return [];
+        }
+
+        // Which setting supplies the credential is fixed when the pool is built: the password provider is attached, or
+        // not, once. A candidate that adds, removes, or swaps that setting would be logged as adopted while every
+        // connection kept using what startup composed, or would point the attached provider at a block that is no
+        // longer there. Neither is a rotation, so both are refused rather than half-applied.
+        if (!composedShape.Equals(DatabaseCredentialSourceShape.Of(candidate)))
+        {
+            return [DatabaseConnectionConfigurationFailure.CredentialSourceChangeRequiresRestart];
+        }
+
+        var materialFailure = await ConnectionStringComposer.FindConnectionStringMaterialFailureAsync(
+            candidate.ConnectionStringSecret,
+            mustCarryAPassword: this.PasswordSource == DatabasePasswordSource.ConnectionStringSecret,
+            this.secretReferenceResolver,
+            cancellationToken);
+
+        return materialFailure is { } failure ? [failure] : [];
+    }
+
+    /// <summary>Retrieves the password the connection being opened should authenticate with.</summary>
+    /// <param name="cancellationToken">Cancels the retrieval; the data source triggers it when it is disposed.</param>
+    /// <returns>The current password.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no configured secret supplies one or the reference no longer resolves.</exception>
+    /// <remarks>
+    /// The configured blocks are re-read here rather than captured, so an operator who repoints
+    /// <c>Persistence:Password</c> at a different credential name has it take effect on the next physical connection,
+    /// exactly as rotating the material behind an unchanged name already does.
+    /// </remarks>
+    internal Task<string> RetrieveCurrentPasswordAsync(CancellationToken cancellationToken)
+    {
+        var connectionSettings = this.currentConnectionSettings();
+
+        return ConnectionStringComposer.ResolveCurrentPasswordAsync(
+            this.PasswordSource,
+            connectionSettings.ConnectionStringSecret,
+            connectionSettings.Password,
+            this.secretReferenceResolver,
+            cancellationToken);
+    }
+
     /// <summary>Reports a database password that reached the connection string without a secret block.</summary>
     /// <remarks>
     /// It is a warning rather than a startup failure because the same shape is both a mistake and a legitimate
@@ -108,13 +209,15 @@ internal sealed partial class PostgresConnectionStringProvider : IHostedLifecycl
     /// because that mode is the deployment stating that every secret arrives by reference, which this contradicts. The
     /// inline modes are the deliberate opt-in for a pre-resolved value, so warning there would be noise.
     /// </remarks>
-    private void WarnWhenTheCredentialBypassedTheSecretBlock(NpgsqlConnectionStringBuilder composed)
+    private void WarnWhenTheCredentialBypassedTheSecretBlock(
+        PostgresConnectionSettings connectionSettings,
+        NpgsqlConnectionStringBuilder composedConnectionSettings)
     {
         if (this.resolutionOptions.Interpretation == SecretValueInterpretation.ReferenceOnly
             && ConnectionStringComposer.CarriesPasswordFromOrdinaryConfiguration(
-                composed,
-                this.connectionSettings.ConnectionStringSecret,
-                this.connectionSettings.Password))
+                composedConnectionSettings,
+                connectionSettings.ConnectionStringSecret,
+                connectionSettings.Password))
         {
             this.LogConnectionStringCarriesAPassword();
         }

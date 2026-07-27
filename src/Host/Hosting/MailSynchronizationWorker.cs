@@ -6,7 +6,6 @@ using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
 using MailMcp.Host.Configuration;
-using Microsoft.Extensions.Options;
 
 namespace MailMcp.Host.Hosting;
 
@@ -15,47 +14,53 @@ namespace MailMcp.Host.Hosting;
 internal sealed partial class MailSynchronizationWorker : BackgroundService
 {
     private readonly IServiceScopeFactory scopeFactory;
-    private readonly IOptions<MailSynchronizationOptions> options;
+    private readonly ISettingsSnapshot<MailSynchronizationOptions> settings;
     private readonly ILogger<MailSynchronizationWorker> logger;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes a new mail synchronization worker.</summary>
     public MailSynchronizationWorker(
         IServiceScopeFactory scopeFactory,
-        IOptions<MailSynchronizationOptions> options,
+        ISettingsSnapshot<MailSynchronizationOptions> settings,
         ILogger<MailSynchronizationWorker> logger,
         TimeProvider timeProvider)
     {
         this.scopeFactory = scopeFactory;
-        this.options = options;
+        this.settings = settings;
         this.logger = logger;
         this.timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Whether synchronization runs at all and how often are read once, because both shape the loop this method is.
+    /// Everything a run reads — accounts, folders, and the references behind their secrets — is taken from the
+    /// published snapshot when that run begins, so a configuration reload or a rotated credential reaches the next run
+    /// and never the one already under way.
+    /// </remarks>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var currentOptions = this.options.Value;
-        if (!currentOptions.Enabled)
+        var startupSettings = this.settings.Current;
+        if (!startupSettings.Enabled)
         {
             this.LogSynchronizationDisabled();
 
             return;
         }
 
-        using var timer = new PeriodicTimer(currentOptions.Interval, this.timeProvider);
+        using var timer = new PeriodicTimer(startupSettings.Interval, this.timeProvider);
 
         do
         {
-            await this.RunOnceAsync(currentOptions, stoppingToken);
+            await this.RunOnceAsync(this.settings.Current, stoppingToken);
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The hosted worker isolates unexpected per-folder failures so later folders and intervals can continue.")]
-    private async Task RunOnceAsync(MailSynchronizationOptions currentOptions, CancellationToken cancellationToken)
+    private async Task RunOnceAsync(MailSynchronizationOptions runSettings, CancellationToken cancellationToken)
     {
-        var scheduledFolders = currentOptions.Accounts.SelectMany(
+        var scheduledFolders = runSettings.Accounts.SelectMany(
             account => account.EffectiveFolders,
             (account, folder) => (AccountId: account.AccountId, FolderName: folder));
 
@@ -64,6 +69,11 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
             try
             {
                 using var scope = this.scopeFactory.CreateScope();
+
+                // The folder was scheduled from this run's snapshot, so the scope must connect with that snapshot too.
+                // Letting the scope read the published one would pair an account list from before a reload with an
+                // endpoint, policy, and credential from after it.
+                scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
 
                 var synchronizer = scope.ServiceProvider.GetRequiredService<MailboxSynchronizer>();
                 var result = await synchronizer.SynchronizeAsync(MailAccountId.Create(accountId), MailFolderName.Create(folderName), cancellationToken);

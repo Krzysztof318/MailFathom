@@ -2,10 +2,12 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography.X509Certificates;
 using MailMcp.Application.Mail;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Transport;
+using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Secrets;
 
@@ -37,27 +39,30 @@ internal sealed class MailSynchronizationOptions : IValidatableObject, IMailTran
     /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
 
-    /// <summary>Builds one account's connection settings, resolving its secrets for the caller to own.</summary>
+    /// <summary>Builds one account's connection settings, resolving its material for the caller to own.</summary>
     /// <param name="accountId">The local account identifier.</param>
     /// <param name="resolver">The resolver that turns configured references into material.</param>
+    /// <param name="trustAnchorLoader">The loader that turns configured material into a trust anchor.</param>
     /// <param name="cancellationToken">Cancels the secret resolution.</param>
-    /// <returns>The settings, whose secrets the caller must dispose when its operation ends.</returns>
+    /// <returns>The settings, whose material the caller must dispose when its operation ends.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the resolved material passes to the caller, which erases it when its operation ends.")]
     internal async Task<ImapAccountSettings> ResolveSettingsAsync(
         string accountId,
         ISecretReferenceResolver resolver,
+        TrustAnchorLoader trustAnchorLoader,
         CancellationToken cancellationToken)
     {
         var normalizedAccountId = MailAccountId.Create(accountId).Value;
         var account = this.FindAccount(normalizedAccountId);
 
-        var secrets = await account.Secrets.ResolveAsync(resolver, cancellationToken);
+        var material = await account.ResolveConnectionMaterialAsync(resolver, trustAnchorLoader, cancellationToken);
 
         return new ImapAccountSettings(
             normalizedAccountId,
             account.Host.Trim(),
             account.Port,
             account.UserName,
-            secrets);
+            material);
     }
 
     /// <inheritdoc />
@@ -189,6 +194,57 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <returns>The policy the mailbox adapter must obey.</returns>
     /// <exception cref="MailTransportSecurityPolicyViolationException">Thrown when the configured combination is unsafe.</exception>
     internal MailTransportSecurityPolicy CreateTransportSecurityPolicy() => this.TransportSecurity.CreatePolicy();
+
+    /// <summary>Resolves the password and trust anchor one connection attempt needs.</summary>
+    /// <param name="resolver">The resolver that turns configured references into material.</param>
+    /// <param name="trustAnchorLoader">The loader that turns configured material into a trust anchor.</param>
+    /// <param name="cancellationToken">Cancels the retrieval.</param>
+    /// <returns>The material, which the caller must dispose when its operation ends.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when configuration that passed startup validation no longer yields usable material.</exception>
+    /// <remarks>
+    /// An anchor that fails to load fails the connection attempt rather than downgrading it to the system trust store,
+    /// and the password resolved first is erased on that path so a failed attempt leaves nothing behind.
+    /// </remarks>
+    internal async Task<MailAccountConnectionMaterial> ResolveConnectionMaterialAsync(
+        ISecretReferenceResolver resolver,
+        TrustAnchorLoader trustAnchorLoader,
+        CancellationToken cancellationToken)
+    {
+        var password = await this.Secrets.ResolvePasswordAsync(resolver, cancellationToken);
+
+        try
+        {
+            var trustedCertificateAuthority = await this.LoadTrustedCertificateAuthorityAsync(
+                trustAnchorLoader,
+                cancellationToken);
+
+            return new MailAccountConnectionMaterial(password, trustedCertificateAuthority);
+        }
+        catch
+        {
+            password.Dispose();
+
+            throw;
+        }
+    }
+
+    private async Task<X509Certificate2?> LoadTrustedCertificateAuthorityAsync(
+        TrustAnchorLoader trustAnchorLoader,
+        CancellationToken cancellationToken)
+    {
+        var loadResult = await this.TransportSecurity.LoadTrustedCertificateAuthorityAsync(
+            trustAnchorLoader,
+            cancellationToken);
+
+        if (loadResult is null)
+        {
+            return null;
+        }
+
+        // A failed result owns nothing, so nothing leaks by throwing past it.
+        return loadResult.TrustAnchor ?? throw new InvalidOperationException(
+            $"Account '{this.AccountId}': the configured trusted certificate authority material could not be loaded [{loadResult.Failure}].");
+    }
 
     /// <summary>Re-checks the transport security rules so an unsafe account fails startup.</summary>
     /// <returns>One result per unsupported mechanism name and per violated rule, each naming the account.</returns>

@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Domain.Transport;
+using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Secrets;
 
 namespace MailMcp.Infrastructure.Mail;
@@ -56,12 +57,12 @@ public sealed class MailAccountTransportSecurityOptions
 
     /// <summary>Gets or sets the secret block referencing deployment-provisioned trust anchor material.</summary>
     /// <remarks>
-    /// The block carries a reference such as a credential name, never certificate material inline. Loading the material
-    /// behind it is separate work; these settings only fix its configuration shape, so that the uniform block
-    /// convention holds for every secret-bearing setting rather than for newly added ones alone. A block present with a
-    /// blank <see cref="ConfiguredSecret.SecretReference" /> reads as an absent anchor, so
-    /// <c>"TrustedCertificateAuthority": {}</c> fails the domain rule that requires one instead of passing it and then
-    /// failing later with a confusing missing-material error.
+    /// The block carries a reference such as a credential name under the default interpretation mode, and the PEM text
+    /// itself under an inline one — a trust anchor is a public certificate, so writing one into configuration leaks
+    /// nothing. Its nested <see cref="ConfiguredSecret.Password" /> supplies the password of a protected PKCS#12
+    /// bundle. A block present with a blank <see cref="ConfiguredSecret.SecretReference" /> reads as an absent anchor,
+    /// so <c>"TrustedCertificateAuthority": {}</c> fails the domain rule that requires one instead of passing it and
+    /// then failing later with a confusing missing-material error.
     /// </remarks>
     public ConfiguredSecret? TrustedCertificateAuthority { get; set; }
 
@@ -92,6 +93,34 @@ public sealed class MailAccountTransportSecurityOptions
             this.AllowClearTextAuthenticationOverUnencryptedConnection),
         this.CertificateTrust,
         this.ConfiguredTrustAnchorReference);
+
+    /// <summary>Loads the certificate the account's server must chain to, when it trusts an additional authority.</summary>
+    /// <param name="trustAnchorLoader">The loader that turns configured material into a certificate.</param>
+    /// <param name="cancellationToken">Cancels the retrieval of the material and of a bundle password.</param>
+    /// <returns>
+    /// The load outcome, which the caller owns and must dispose, or <see langword="null" /> when the account validates
+    /// against the system trust store alone and no anchor applies.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="trustAnchorLoader" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Unusable material is returned as a named failure rather than thrown, so startup can report every account's
+    /// unusable anchor at once. A caller that is about to connect must treat that failure as fatal for the connection:
+    /// continuing without the anchor would validate the private server against the system trust store and fail, or
+    /// worse, invite an operator to look for a way to disable validation.
+    /// </remarks>
+    public async Task<TrustAnchorLoadResult?> LoadTrustedCertificateAuthorityAsync(
+        TrustAnchorLoader trustAnchorLoader,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(trustAnchorLoader);
+
+        if (this.CertificateTrust != MailServerCertificateTrust.AdditionalTrustedAuthority)
+        {
+            return null;
+        }
+
+        return await trustAnchorLoader.LoadAsync(this.TrustedCertificateAuthority, cancellationToken);
+    }
 
     /// <summary>Finds every unsupported mechanism name and every violated domain transport security rule.</summary>
     /// <returns>The errors to report at startup, empty when the settings are safe.</returns>
@@ -124,7 +153,10 @@ public sealed class MailAccountTransportSecurityOptions
         ];
     }
 
-    /// <summary>Gets the masked trust anchor reference, or <see langword="null" /> when no usable anchor is configured.</summary>
+    /// <summary>The stand-in the domain receives for a configured value that is not a reference, such as inline PEM.</summary>
+    private const string ConfiguredButUnparsedTrustAnchor = "***";
+
+    /// <summary>Gets the masked trust anchor value, or <see langword="null" /> when no anchor is configured.</summary>
     /// <remarks>
     /// <para>
     /// The block is a configuration-adapter shape and must not cross into <c>Domain</c>, which keeps taking a nullable
@@ -132,19 +164,35 @@ public sealed class MailAccountTransportSecurityOptions
     /// missing anchor the operator actually has to fix.
     /// </para>
     /// <para>
-    /// What crosses is <see cref="SecretReference.ToString" />, not the operator's raw value. The domain reads this
-    /// only for presence, but it is a public property of a record whose synthesized printing reaches any log line the
-    /// policy appears in, and the raw value is a credential name, a file path, or — under an inline interpretation
-    /// mode — the material itself. Masking keeps the domain's documented invariant that the value is never material
-    /// true by construction instead of by convention. A value that does not parse as a reference reads as absent, so
-    /// certificate material pasted where a reference belongs fails the domain rule rather than being carried;
-    /// inline anchor material is specification 02b's work and arrives with a loader that can validate it.
+    /// The domain reads this for presence only, so presence is what it must answer: a non-blank configured value is an
+    /// anchor the operator supplied, whether or not it is a <c>&lt;scheme&gt;:&lt;target&gt;</c> reference. Under an
+    /// inline interpretation mode the value is the PEM text itself and parses as no reference at all; deciding
+    /// presence by parsing would report a missing anchor for the one deployment shape that supplies it directly, and
+    /// the host would refuse to start on a correct configuration.
+    /// </para>
+    /// <para>
+    /// What crosses is never the operator's raw value. A parsed reference crosses as
+    /// <see cref="SecretReference.ToString" /> and anything else as a fixed mask, because this is a public property of
+    /// a record whose synthesized printing reaches any log line the policy appears in, and the raw value is a
+    /// credential name, a file path, or the certificate itself. Whether the material is usable is the loader's
+    /// question, not this one: it reports a named failure that names the encoding or the parse error, which is a
+    /// better diagnostic than a presence rule could give.
     /// </para>
     /// </remarks>
-    private string? ConfiguredTrustAnchorReference =>
-        SecretReference.TryParse(this.TrustedCertificateAuthority?.SecretReference, out var reference, out _)
-            ? reference.ToString()
-            : null;
+    private string? ConfiguredTrustAnchorReference
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(this.TrustedCertificateAuthority?.SecretReference))
+            {
+                return null;
+            }
+
+            return SecretReference.TryParse(this.TrustedCertificateAuthority.SecretReference, out var reference, out _)
+                ? reference.ToString()
+                : ConfiguredButUnparsedTrustAnchor;
+        }
+    }
 
     private IReadOnlyList<MailAuthenticationMechanism> ParsePermittedMechanisms(out IReadOnlyList<string> unsupportedMechanismNames)
     {

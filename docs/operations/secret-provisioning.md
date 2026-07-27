@@ -35,7 +35,16 @@ Every secret-bearing setting is a JSON object whose `SecretReference` property c
 }
 ```
 
-The object rather than a bare string is the unit so that a sibling property can be added later — a bundle password, a format hint, a managed-store version pin — without changing the JSON type of a setting an operator already configured. One sibling exists today: an optional nested `Password` block, itself a secret block, for material that is protected by its own password.
+The object rather than a bare string is the unit so that a sibling property can be added later — a bundle password, a format hint, a managed-store version pin — without changing the JSON type of a setting an operator already configured. One sibling exists today: an optional nested `Password` block, itself a secret block, for material that is protected by its own password. A password-protected PKCS#12 trust anchor is the case that uses it:
+
+```json
+{
+  "TrustedCertificateAuthority": {
+    "SecretReference": "systemd-credential:private-ca-bundle",
+    "Password": { "SecretReference": "systemd-credential:private-ca-bundle-password" }
+  }
+}
+```
 
 A setting is secret-bearing because it binds to this block type, not because it was annotated. Startup discovers every block by walking the bound configuration, so the rules below apply to settings added in future releases without anyone registering them. The same walk rejects a plain `string` setting whose name contains `Password`, `Secret`, `Credential`, `PrivateKey`, or `Token`, because such a setting would bypass validation, resolution, and erasure alike.
 
@@ -126,6 +135,14 @@ A Secret mounted as a read-only tmpfs volume becomes one file per key at the pat
 
 `LoadCredential=`, Compose secrets, and Kubernetes Secret files routinely end with a newline, and an untrimmed byte presents as a wrong password. MailMcp therefore strips **one** trailing newline when it decodes material as text. Binary material is never modified: a PKCS#12 bundle or a DER-encoded certificate survives resolution byte for byte.
 
+## Certificate material
+
+A trust anchor is provisioned like any other secret, but the bytes behind it are loaded as a certificate rather than used as a credential. PEM, DER, and PKCS#12 all load, recognized from the material itself so a mistyped encoding hint cannot exist. Only PEM can be supplied inline, because the other two are binary; an inline block carrying them fails startup naming the encoding. A bundle's password, when it has one, goes in the nested `Password` block.
+
+An anchor that carries a private key is rejected. Provision the public certificate — `openssl x509 -in ca.pem -out ca-public.pem` if the file you have holds more than that — because a trust anchor needs nothing else, and a private key MailMcp holds is an authority MailMcp could impersonate.
+
+[IMAP synchronization](../features/imap-synchronization.md) describes how the anchor is used, including the revocation trade-off a private authority implies.
+
 ## Interpretation modes
 
 A secret-bearing setting does not always carry a reference. How MailMcp reads one is an explicit deployment choice, configured once at the root:
@@ -170,7 +187,7 @@ MailSynchronization:Accounts:1:Secrets:Password — the secret reference could n
 
 The path and the identity are the whole vocabulary. No message, log line, or exception carries the reference target, the environment variable's value, or any part of the material.
 
-Startup resolves and immediately erases. Each actual mailbox connection resolves again, so nothing long-lived is cached and material rotated behind an unchanged reference is picked up by the next operation without a restart. The PostgreSQL data source is the one exception: it is composed once during startup, so rotating the database password still requires a restart today. Specification 02b removes that exception.
+Startup resolves and immediately erases. Each actual use resolves again, so nothing long-lived is cached and material rotated behind an unchanged reference is picked up by the next operation without a restart. That includes the database credential, which is retrieved when a physical connection opens rather than baked into the pool's connection string. [Secret rotation](secret-rotation.md) is the operator procedure and states the one shape that still needs a restart.
 
 ## Secret material in process memory
 
