@@ -8,6 +8,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\shared\RecordingLoggerProvider.cs" Link="RecordingLoggerProvider.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Host\Host.csproj" />
   </ItemGroup>
 </Project>
