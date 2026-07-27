@@ -128,16 +128,27 @@ public sealed class MailAccountTransportSecurityOptions
         return errors;
     }
 
-    /// <summary>Gets the configured trust anchor reference, or <see langword="null" /> when no anchor is configured.</summary>
+    /// <summary>Gets the masked trust anchor reference, or <see langword="null" /> when no usable anchor is configured.</summary>
     /// <remarks>
+    /// <para>
     /// The block is a configuration-adapter shape and must not cross into <c>Domain</c>, which keeps taking a nullable
     /// string. An empty reference inside a present block is an absent anchor here, so the domain rule reports the
     /// missing anchor the operator actually has to fix.
+    /// </para>
+    /// <para>
+    /// What crosses is <see cref="SecretReference.ToString" />, not the operator's raw value. The domain reads this
+    /// only for presence, but it is a public property of a record whose synthesized printing reaches any log line the
+    /// policy appears in, and the raw value is a credential name, a file path, or — under an inline interpretation
+    /// mode — the material itself. Masking keeps the domain's documented invariant that the value is never material
+    /// true by construction instead of by convention. A value that does not parse as a reference reads as absent, so
+    /// certificate material pasted where a reference belongs fails the domain rule rather than being carried;
+    /// inline anchor material is specification 02b's work and arrives with a loader that can validate it.
+    /// </para>
     /// </remarks>
     private string? ConfiguredTrustAnchorReference =>
-        string.IsNullOrWhiteSpace(this.TrustedCertificateAuthority?.SecretReference)
-            ? null
-            : this.TrustedCertificateAuthority.SecretReference;
+        SecretReference.TryParse(this.TrustedCertificateAuthority?.SecretReference, out var reference, out _)
+            ? reference.ToString()
+            : null;
 
     private IReadOnlyList<MailAuthenticationMechanism> ParsePermittedMechanisms(out IReadOnlyList<string> unsupportedMechanismNames)
     {

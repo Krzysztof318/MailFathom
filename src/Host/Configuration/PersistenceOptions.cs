@@ -18,7 +18,15 @@ internal sealed class PersistenceOptions
     [Range(1, 10)]
     public int MaximumConcurrencyCommitAttempts { get; set; } = 2;
 
-    /// <summary>Gets or sets the reference to the PostgreSQL password, or <see langword="null" /> when the deployment authenticates without one.</summary>
+    /// <summary>Gets or sets the reference to a complete PostgreSQL connection string, or <see langword="null" /> when <c>ConnectionStrings:mailmcp</c> supplies it.</summary>
+    /// <remarks>
+    /// A connection string is more than a password, so a deployment backed by a secret store usually keeps it whole and
+    /// rotates one artifact instead of splitting the credential across two systems. Configuring this replaces
+    /// <c>ConnectionStrings:mailmcp</c> rather than adding to it.
+    /// </remarks>
+    public ConfiguredSecret? ConnectionString { get; set; }
+
+    /// <summary>Gets or sets the reference to the PostgreSQL password, or <see langword="null" /> when the connection string already carries it.</summary>
     /// <remarks>
     /// The connection string keeps host, database, and user name; the password joins it only after resolution, so
     /// configuration never carries it. A block present with a blank reference fails startup rather than silently

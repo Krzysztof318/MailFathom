@@ -44,7 +44,20 @@ internal static class BoundedSecretMaterialReader
                     buffer = GrowAndEraseSource(buffer, byteCount, capacityCeiling);
                 }
 
-                var read = await source.ReadAsync(buffer.AsMemory(byteCount), cancellationToken);
+                int read;
+                try
+                {
+                    read = await source.ReadAsync(buffer.AsMemory(byteCount), cancellationToken);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    // A network-mounted credential store can disconnect after the target opened. Letting that escape
+                    // would abort startup on the first reference instead of reporting every unresolvable one, and the
+                    // provider's message names the target this boundary exists to keep out of diagnostics. Caller
+                    // cancellation is not a transport failure and keeps propagating.
+                    return SecretResolutionResult.Failed(SecretResolutionFailure.ProviderUnavailable);
+                }
+
                 if (read == 0)
                 {
                     break;

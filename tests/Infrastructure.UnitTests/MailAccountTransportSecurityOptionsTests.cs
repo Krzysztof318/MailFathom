@@ -315,7 +315,7 @@ public sealed class MailAccountTransportSecurityOptionsTests
         Assert.Equal(
             [MailAuthenticationMechanism.ScramSha256, MailAuthenticationMechanism.Plain],
             policy.Authentication.PermittedMechanisms);
-        Assert.Equal("systemd-credential:mailmcp-imap-ca", policy.TrustedCertificateAuthorityReference);
+        Assert.Equal("systemd-credential:***", policy.TrustedCertificateAuthorityReference);
     }
 
     [Fact]

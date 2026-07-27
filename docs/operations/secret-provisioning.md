@@ -1,6 +1,8 @@
 # Secret provisioning
 
-MailMcp never stores a secret in `appsettings.json`. Every secret-bearing setting holds a *reference* to material the deployment provisions, and the host resolves those references once before any worker starts. A configuration file leaked from a backup or a repository therefore yields credential names and paths, not credentials.
+Every secret-bearing setting holds a *reference* to material the deployment provisions, and the host resolves those references before any worker starts. Under the default `ReferenceOnly` mode with an externally provisioned scheme, a configuration file leaked from a backup or a repository therefore yields credential names and paths, not credentials.
+
+That guarantee is a property of how a deployment is configured, not of MailMcp. Three shapes break it deliberately, and each is a visible choice rather than an accident: `plaintext:` puts the value in the file by definition, the `ReferenceOrInline` and `InlineOnly` modes accept a raw secret in `SecretReference`, and a password written into the connection string never passes through a secret block at all. Each is logged at startup by setting name. When judging what a leaked configuration file exposes, read the deployment's mode and schemes rather than this paragraph.
 
 ## The secret block
 
@@ -52,11 +54,33 @@ A reference is `<scheme>:<target>`, split on the **first** colon only, so a Wind
 
 An unknown scheme is a startup failure naming the setting, which is also how an operator learns that a provider adapter was not compiled in or not enabled.
 
-`plaintext:` is the unambiguous spelling for a literal that would otherwise look like a reference — a password whose value genuinely begins with `file:`.
+`plaintext:` is the unambiguous spelling for a literal that would otherwise look like a reference — a password whose value genuinely begins with `file:`. It retrieves nothing, so it is reported as inline material and earns the same startup warning as any other value written into configuration.
 
 A credential name for `systemd-credential:` may not contain `/`, `\`, or `..`, so a reference cannot escape the directory the unit was granted.
 
-Material read through `file:` and `systemd-credential:` is bounded at 1 MiB. A mistaken reference to a log or a device-backed pseudo-file fails as an oversized secret rather than exhausting memory.
+Material is bounded at 1 MiB, whether it was retrieved or supplied inline. A mistaken reference to a log or a device-backed pseudo-file fails as an oversized secret rather than exhausting memory, and so does a whole document pasted where a credential belongs.
+
+## The PostgreSQL connection string
+
+Three shapes are supported, because provisioning systems differ and none of them is wrong.
+
+| Setting | When to use it |
+| --- | --- |
+| `ConnectionStrings:mailmcp` plus `Persistence:Password` | The connection string names host, database, and user in ordinary configuration while only the credential is provisioned. |
+| `Persistence:ConnectionString` | A secret store holds the whole connection string. It is more than a password, so keeping it whole means one artifact to rotate instead of a credential split across two systems. |
+| `ConnectionStrings:mailmcp` alone | An orchestrator or a pre-resolving configuration provider injects a complete connection string. Aspire does this locally. |
+
+```json
+{
+  "Persistence": {
+    "ConnectionString": { "SecretReference": "systemd-credential:mailmcp-connection-string" }
+  }
+}
+```
+
+`Persistence:ConnectionString` replaces `ConnectionStrings:mailmcp` rather than adding to it. Configuring a password in both the connection string and `Persistence:Password` is a startup failure, because two sources for one credential leave the effective one decided by implementation order — and an operator rotating the one that loses would see neither an effect nor an error.
+
+A password written into the connection string with no secret block is **not** rejected. The same shape is both a mistake and a legitimate deployment: an orchestrator-injected connection string never touched a file anyone could commit. Under `ReferenceOnly` it is logged as a warning naming the setting, because that mode is the deployment stating that every secret arrives by reference.
 
 ## Deployment shapes
 
@@ -120,7 +144,9 @@ A secret-bearing setting does not always carry a reference. How MailMcp reads on
 
 `InlineOnly` exists for a configuration provider that resolved the secret *before* MailMcp bound it. Azure App Configuration with Key Vault references is the concrete case: the provider substitutes the vault value, so the bound setting is the raw secret with no prefix MailMcp could recognize. That integration needs no MailMcp adapter and no code change — only this mode.
 
-The active mode is logged at startup. Under either inline mode, every setting that resolved to an inline value is logged **by name**, never by value, so an unintended inline secret is discoverable rather than silent.
+The active mode is logged at startup. Every setting that resolved to an inline value is logged **by name**, never by value, so an unintended inline secret is discoverable rather than silent. That includes `plaintext:` under any mode, because the value sits in configuration either way.
+
+An undefined mode is a startup failure. A numeric value such as `99` binds without complaint, and treating it as the strictest mode would be safe by accident while reporting a mode nobody selected.
 
 ### Addressing the block from a flattening provider
 
@@ -144,7 +170,7 @@ MailSynchronization:Accounts:1:Secrets:Password — the secret reference could n
 
 The path and the identity are the whole vocabulary. No message, log line, or exception carries the reference target, the environment variable's value, or any part of the material.
 
-Startup resolves and immediately erases. Each actual use — one connection attempt, one data-source construction — resolves again, so nothing long-lived is cached and material rotated behind an unchanged reference is picked up by the next operation without a restart. The PostgreSQL data source is the one exception: it is composed once, so rotating the database password still requires a restart today.
+Startup resolves and immediately erases. Each actual mailbox connection resolves again, so nothing long-lived is cached and material rotated behind an unchanged reference is picked up by the next operation without a restart. The PostgreSQL data source is the one exception: it is composed once during startup, so rotating the database password still requires a restart today. Specification 02b removes that exception.
 
 ## Secret material in process memory
 

@@ -7,6 +7,7 @@ using MailMcp.Host;
 using MailMcp.Host.Configuration;
 using MailMcp.Infrastructure;
 using MailMcp.Infrastructure.Mail;
+using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.Options;
 
@@ -47,14 +48,17 @@ builder.Services.AddSingleton(provider => new PersistenceConcurrencyOptions
 {
     MaximumCommitAttempts = provider.GetRequiredService<IOptions<PersistenceOptions>>().Value.MaximumConcurrencyCommitAttempts,
 });
-// The password block is read here rather than through IOptions because the data source it configures is registered
-// before any options instance can be resolved. Only the reference is read; resolution happens on first use.
-builder.Services.AddInfrastructure(
-    builder.Configuration,
-    builder.Configuration.GetSection("Persistence").Get<PersistenceOptions>()?.Password);
 // The validator is registered ahead of the worker so hosted-service ordering reinforces the StartingAsync ordering
-// rather than depending on it alone.
+// rather than depending on it alone, and ahead of the infrastructure so an operator who mistyped several references
+// reads one aggregated report rather than whichever failure the database happened to hit first.
 builder.Services.AddHostedService<MailMcp.Host.Hosting.SecretReferenceStartupValidator>();
+// The blocks are read here rather than through IOptions because the data source they configure is registered before
+// any options instance can be resolved. Only the references are read; resolution happens during startup.
+var persistenceSecrets = builder.Configuration.GetSection("Persistence").Get<PersistenceOptions>();
+builder.Services.AddInfrastructure(new PostgresConnectionSettings(
+    builder.Configuration.GetConnectionString("mailmcp"),
+    persistenceSecrets?.ConnectionString,
+    persistenceSecrets?.Password));
 builder.Services.AddHostedService<MailMcp.Host.Hosting.MailSynchronizationWorker>();
 
 var app = builder.Build();

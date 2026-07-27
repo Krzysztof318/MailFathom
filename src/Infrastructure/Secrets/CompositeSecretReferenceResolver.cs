@@ -62,8 +62,17 @@ internal sealed class CompositeSecretReferenceResolver : ISecretReferenceResolve
             ? AcceptInline(configuredValue, failure)
             : SecretResolutionResult.Failed(failure);
 
-    private static SecretResolutionResult AcceptInline(string? configuredValue, SecretResolutionFailure whenAbsent) =>
-        string.IsNullOrEmpty(configuredValue)
-            ? SecretResolutionResult.Failed(whenAbsent)
+    private static SecretResolutionResult AcceptInline(string? configuredValue, SecretResolutionFailure whenAbsent)
+    {
+        if (string.IsNullOrEmpty(configuredValue))
+        {
+            return SecretResolutionResult.Failed(whenAbsent);
+        }
+
+        // The ceiling binds here too. A retrieved target that is really a log file fails with MaterialTooLarge, and a
+        // configured value that is really a pasted document has to fail the same way rather than pin megabytes.
+        return SecretMaterialLimits.ExceedsMaximumByteCount(configuredValue)
+            ? SecretResolutionResult.Failed(SecretResolutionFailure.MaterialTooLarge)
             : SecretResolutionResult.Resolved(ResolvedSecret.FromText(configuredValue), SecretMaterialSource.InlineValue);
+    }
 }

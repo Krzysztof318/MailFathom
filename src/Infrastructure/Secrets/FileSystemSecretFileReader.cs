@@ -12,7 +12,8 @@ namespace MailMcp.Infrastructure.Secrets;
 /// file-system failure is mapped onto <see cref="SecretResolutionFailure.MaterialNotFound" /> rather than escaping.
 /// Catching fewer of them would let a malformed target — a path containing a NUL character throws
 /// <see cref="ArgumentException" /> — travel past the result boundary into an unhandled startup exception whose message
-/// quotes the path, defeating both fail-fast aggregation and the guarantee that no diagnostic carries a target.
+/// quotes the path, defeating both fail-fast aggregation and the guarantee that no diagnostic carries a target. A failure that
+/// only appears after the file opened is translated by <see cref="BoundedSecretMaterialReader" />, which owns the read.
 /// </remarks>
 // TODO: Remove this exclusion when the planned host integration tests are enabled.
 [ExcludeFromCodeCoverage(Justification = "Real file-system access will be covered later by host integration tests.")]
