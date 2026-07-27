@@ -3,7 +3,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
-using MailMcp.TestDoubles;
+using MailMcp.TestSupport;
 using Xunit;
 
 namespace MailMcp.SharedSources.UnitTests;

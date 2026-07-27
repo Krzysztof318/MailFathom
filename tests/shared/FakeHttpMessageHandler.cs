@@ -3,7 +3,7 @@
 using System.Collections.ObjectModel;
 using System.Net.Http.Headers;
 
-namespace MailMcp.TestDoubles;
+namespace MailMcp.TestSupport;
 
 /// <summary>
 /// An <see cref="HttpMessageHandler" /> that answers requests from a test-supplied script and records every request

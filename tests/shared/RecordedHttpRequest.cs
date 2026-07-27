@@ -2,7 +2,7 @@
 
 using System.Text;
 
-namespace MailMcp.TestDoubles;
+namespace MailMcp.TestSupport;
 
 /// <summary>
 /// An immutable snapshot of one request observed by <see cref="FakeHttpMessageHandler" />.
