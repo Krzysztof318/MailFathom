@@ -59,8 +59,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
                 cancellationToken));
 
         failures.AddRange(
-            await this.validator.FindSecretReferenceErrorsAsync(
-                "Persistence",
+            await this.validator.FindPersistenceConfigurationErrorsAsync(
                 this.persistenceSettings.Current,
                 cancellationToken));
 

@@ -72,7 +72,13 @@ The credential is retrieved when the pool opens a physical connection, so:
 
 Both provisioning shapes rotate: `Persistence:Password`, and `Persistence:ConnectionString` where the whole connection string is one secret and its password is re-read from the rotated material. Repointing either reference at a different credential name works too, and goes through the reload path: the candidate is rejected if the new reference does not resolve, leaving the previous one active.
 
-**The one shape that still needs a restart** is a password written into `ConnectionStrings:mailmcp` with no secret block — an orchestrator-injected connection string. Nothing re-reads it, and under `ReferenceOnly` startup already logs a warning naming it. The same restriction applies to the non-credential parts of `Persistence:ConnectionString`: a rotated connection string that also changes host, database, or user name describes a different database rather than a rotated credential, and only its password is adopted in place.
+**Two shapes still need a restart, and both are refused rather than half-applied.**
+
+*Changing where the credential comes from.* The pool attaches its password provider once, when it is built, so adding `Persistence:Password` to a deployment that started without one — or removing it, or switching to `Persistence:ConnectionString` — is not a rotation. A reload that does so is rejected with `CredentialSourceChangeRequiresRestart` and the previous settings stay active, rather than being logged as adopted while every connection keeps using what startup composed. Restart to change the shape; rotate freely within it.
+
+*A password written into `ConnectionStrings:mailmcp` with no secret block* — an orchestrator-injected connection string. Nothing re-reads it, and under `ReferenceOnly` startup already logs a warning naming it. The same restriction applies to the non-credential parts of `Persistence:ConnectionString`: a rotated connection string that also changes host, database, or user name describes a different database rather than a rotated credential, and only its password is adopted in place.
+
+A rotated `Persistence:ConnectionString` is also parsed before it is published. Material that resolves but is not a valid connection string, or that no longer carries a password when it is what supplies the credential, is rejected as `ConnectionStringNotParsable` or `ConnectionStringCarriesNoPassword` — otherwise it would replace working settings and then fail every connection opened afterwards.
 
 ## Watching a reload
 

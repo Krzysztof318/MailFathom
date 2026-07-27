@@ -4,7 +4,9 @@ using MailMcp.Domain.Transport;
 using MailMcp.Host.Configuration;
 using MailMcp.Host.Hosting;
 using MailMcp.Infrastructure.Certificates;
+using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -155,6 +157,30 @@ public sealed class SecretConfigurationStartupValidatorTests
         Assert.Contains(nameof(CertificateMaterialFailure.EncodingNotRecognized), failure, StringComparison.Ordinal);
     }
 
+    /// <summary>Material that resolves but is not a connection string would otherwise replace a working snapshot and then fail every connection.</summary>
+    [Fact]
+    public async Task StartingAsync_UnusableDatabaseConnectionSettings_FailsStartupNamingTheFailure()
+    {
+        // Arrange
+        var databaseConnectionSettings = new StubDatabaseConnectionSettingsValidator
+        {
+            Failures = [DatabaseConnectionConfigurationFailure.ConnectionStringNotParsable],
+        };
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions(),
+            databaseConnectionSettings: databaseConnectionSettings);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("Persistence", failure, StringComparison.Ordinal);
+        Assert.Contains(nameof(DatabaseConnectionConfigurationFailure.ConnectionStringNotParsable), failure, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task StartingAsync_InlineResolvedSetting_IsLoggedByNameAndNeverByValue()
     {
@@ -225,16 +251,23 @@ public sealed class SecretConfigurationStartupValidatorTests
         MailSynchronizationOptions synchronizationOptions,
         PersistenceOptions persistenceOptions,
         SecretValueInterpretation interpretation = SecretValueInterpretation.ReferenceOnly,
-        SecretMaterialSource source = SecretMaterialSource.SchemeAdapter)
+        SecretMaterialSource source = SecretMaterialSource.SchemeAdapter,
+        IDatabaseConnectionSettingsValidator? databaseConnectionSettings = null)
     {
         var resolver = new PlaintextOnlySecretReferenceResolver { Source = source };
+        var connectionSettingsValidator = databaseConnectionSettings ?? new StubDatabaseConnectionSettingsValidator();
         var validationLogger = new RecordingLogger<SecretConfigurationValidator>();
         var startupLogger = new RecordingLogger<SecretConfigurationStartupValidator>();
 
         var validator = new SecretConfigurationStartupValidator(
             new StubSettingsSnapshot<MailSynchronizationOptions>(synchronizationOptions),
             new StubSettingsSnapshot<PersistenceOptions>(persistenceOptions),
-            new SecretConfigurationValidator(resolver, new TrustAnchorLoader(resolver), validationLogger),
+            new SecretConfigurationValidator(
+                resolver,
+                new TrustAnchorLoader(resolver),
+                new DatabaseConnectionSettingsMapper(new ConfigurationBuilder().Build()),
+                connectionSettingsValidator,
+                validationLogger),
             new SecretResolutionOptions(interpretation),
             startupLogger);
 

@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Diagnostics.CodeAnalysis;
 using MailMcp.Infrastructure.Secrets;
 using Npgsql;
 
@@ -113,6 +114,50 @@ internal static class ConnectionStringComposer
         };
     }
 
+    /// <summary>Resolves a connection-string secret and reports whether the material behind it is usable.</summary>
+    /// <param name="connectionStringSecret">The block referencing a complete connection string.</param>
+    /// <param name="mustCarryAPassword">Whether this connection string is what supplies the credential.</param>
+    /// <param name="resolver">The resolver that turns a reference into material.</param>
+    /// <param name="cancellationToken">Cancels the resolution.</param>
+    /// <returns>The failure, or <see langword="null" /> when the material is usable.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="resolver" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// An unresolvable reference reports nothing here, because the walk over every secret-bearing setting already
+    /// reports that with the precise resolution failure. This answers the question that walk cannot: whether the bytes
+    /// it retrieved are a connection string at all.
+    /// </remarks>
+    internal static async Task<DatabaseConnectionConfigurationFailure?> FindConnectionStringMaterialFailureAsync(
+        ConfiguredSecret? connectionStringSecret,
+        bool mustCarryAPassword,
+        ISecretReferenceResolver resolver,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+
+        if (connectionStringSecret is null)
+        {
+            return null;
+        }
+
+        var result = await resolver.ResolveAsync(connectionStringSecret.SecretReference, cancellationToken);
+        if (result.Secret is not { } material)
+        {
+            return null;
+        }
+
+        using (material)
+        {
+            if (!TryParseResolvedConnectionString(material.RevealAsString(), out var connectionSettings))
+            {
+                return DatabaseConnectionConfigurationFailure.ConnectionStringNotParsable;
+            }
+
+            return mustCarryAPassword && string.IsNullOrEmpty(connectionSettings.Password)
+                ? DatabaseConnectionConfigurationFailure.ConnectionStringCarriesNoPassword
+                : null;
+        }
+    }
+
     /// <summary>Reports whether a password reached the connection string without passing through a secret block.</summary>
     /// <param name="connectionSettings">The composed connection settings.</param>
     /// <param name="connectionStringSecret">The block that supplied the connection string, or <see langword="null" />.</param>
@@ -216,16 +261,27 @@ internal static class ConnectionStringComposer
     /// The provider's own parse failure quotes the offending keyword and value, so letting it escape would print a
     /// resolved connection string — password included — into a startup log. The replacement names the setting only.
     /// </remarks>
-    private static NpgsqlConnectionStringBuilder ParseResolvedConnectionString(string resolvedConnectionString)
+    private static NpgsqlConnectionStringBuilder ParseResolvedConnectionString(string resolvedConnectionString) =>
+        TryParseResolvedConnectionString(resolvedConnectionString, out var connectionSettings)
+            ? connectionSettings
+            : throw new InvalidOperationException(
+                "The material behind Persistence:ConnectionString is not a valid PostgreSQL connection string.");
+
+    private static bool TryParseResolvedConnectionString(
+        string resolvedConnectionString,
+        [NotNullWhen(true)] out NpgsqlConnectionStringBuilder? connectionSettings)
     {
         try
         {
-            return new NpgsqlConnectionStringBuilder(resolvedConnectionString);
+            connectionSettings = new NpgsqlConnectionStringBuilder(resolvedConnectionString);
+
+            return true;
         }
         catch (Exception exception) when (exception is ArgumentException or FormatException)
         {
-            throw new InvalidOperationException(
-                "The material behind Persistence:ConnectionString is not a valid PostgreSQL connection string.");
+            connectionSettings = null;
+
+            return false;
         }
     }
 }

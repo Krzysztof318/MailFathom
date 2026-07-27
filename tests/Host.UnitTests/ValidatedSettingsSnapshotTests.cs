@@ -6,6 +6,7 @@ using MailMcp.Domain.Transport;
 using MailMcp.Host.Configuration;
 using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Secrets;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace MailMcp.Host.UnitTests;
@@ -265,6 +266,8 @@ public sealed class ValidatedSettingsSnapshotTests
         var validator = new SecretConfigurationValidator(
             secretReferenceResolver,
             new TrustAnchorLoader(secretReferenceResolver),
+            new DatabaseConnectionSettingsMapper(new ConfigurationBuilder().Build()),
+            new StubDatabaseConnectionSettingsValidator(),
             new RecordingLogger<SecretConfigurationValidator>());
 
         var settings = new ValidatedSettingsSnapshot<MailSynchronizationOptions>(

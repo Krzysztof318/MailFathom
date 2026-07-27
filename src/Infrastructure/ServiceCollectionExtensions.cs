@@ -93,6 +93,9 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<SecretResolutionOptions>(),
             provider.GetRequiredService<ILogger<PostgresConnectionStringProvider>>()));
         services.AddHostedService(provider => provider.GetRequiredService<PostgresConnectionStringProvider>());
+        // The adapter that composed the pool is the only thing that knows which setting currently supplies the
+        // credential, so it is also what answers whether a reloaded candidate can be adopted.
+        services.AddSingleton<IDatabaseConnectionSettingsValidator>(provider => provider.GetRequiredService<PostgresConnectionStringProvider>());
         // The container both creates and disposes the data source, so no second owner can leave its pool open. The
         // credential is not part of the composed string: it is retrieved per physical connection so that rotating it
         // needs neither a restart nor a rebuilt pool.

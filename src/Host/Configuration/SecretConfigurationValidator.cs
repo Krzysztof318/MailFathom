@@ -2,6 +2,7 @@
 
 using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Mail;
+using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
 
 namespace MailMcp.Host.Configuration;
@@ -24,19 +25,56 @@ internal sealed partial class SecretConfigurationValidator
 {
     private const string MailSynchronizationConfigurationPath = "MailSynchronization";
 
+    private const string PersistenceConfigurationPath = "Persistence";
+
     private readonly ISecretReferenceResolver secretReferenceResolver;
     private readonly TrustAnchorLoader trustAnchorLoader;
+    private readonly DatabaseConnectionSettingsMapper connectionSettingsMapper;
+    private readonly IDatabaseConnectionSettingsValidator connectionSettingsValidator;
     private readonly ILogger<SecretConfigurationValidator> logger;
 
     /// <summary>Initializes a new secret configuration validator.</summary>
     public SecretConfigurationValidator(
         ISecretReferenceResolver secretReferenceResolver,
         TrustAnchorLoader trustAnchorLoader,
+        DatabaseConnectionSettingsMapper connectionSettingsMapper,
+        IDatabaseConnectionSettingsValidator connectionSettingsValidator,
         ILogger<SecretConfigurationValidator> logger)
     {
         this.secretReferenceResolver = secretReferenceResolver;
         this.trustAnchorLoader = trustAnchorLoader;
+        this.connectionSettingsMapper = connectionSettingsMapper;
+        this.connectionSettingsValidator = connectionSettingsValidator;
         this.logger = logger;
+    }
+
+    /// <summary>Finds everything an operator must fix before a persistence snapshot can be used.</summary>
+    /// <param name="candidate">The bound snapshot, which may be the startup one or a reloaded one.</param>
+    /// <param name="cancellationToken">Cancels the resolution and the connection-string check.</param>
+    /// <returns>One message per unusable setting, empty when the snapshot is usable.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Resolving the references is not enough: material behind <c>Persistence:ConnectionString</c> that resolves but
+    /// does not parse would pass a reference check, replace the last known good settings, and then fail every
+    /// connection opened afterwards. The database adapter answers that half, because only it knows which setting
+    /// currently supplies the credential.
+    /// </remarks>
+    internal async Task<IReadOnlyList<string>> FindPersistenceConfigurationErrorsAsync(
+        PersistenceOptions candidate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        var errors = new List<string>(
+            await this.FindSecretReferenceErrorsAsync(PersistenceConfigurationPath, candidate, cancellationToken));
+
+        var connectionFailures = await this.connectionSettingsValidator.FindConfigurationFailuresAsync(
+            this.connectionSettingsMapper.Map(candidate),
+            cancellationToken);
+
+        errors.AddRange(connectionFailures.Select(DescribeConnectionFailure));
+
+        return errors;
     }
 
     /// <summary>Finds everything an operator must fix before a mail synchronization snapshot can be used.</summary>
@@ -95,6 +133,9 @@ internal sealed partial class SecretConfigurationValidator
 
         return errors;
     }
+
+    private static string DescribeConnectionFailure(DatabaseConnectionConfigurationFailure failure) =>
+        $"{PersistenceConfigurationPath} — the database connection settings cannot be used [{failure}].";
 
     private static string DescribeRawSecretProperty(string configurationPath) =>
         $"{configurationPath} — a setting that names a secret must bind to a secret reference block rather than to a plain string.";

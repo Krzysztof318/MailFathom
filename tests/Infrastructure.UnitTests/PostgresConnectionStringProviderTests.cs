@@ -108,6 +108,133 @@ public sealed class PostgresConnectionStringProviderTests
         Assert.Equal("the-repointed-password", afterTheReload);
     }
 
+    /// <summary>Startup composition validates the first settings itself, so there is nothing to answer before it runs.</summary>
+    [Fact]
+    public async Task FindConfigurationFailuresAsync_BeforeStartupComposedTheConnection_ReportsNothing()
+    {
+        // Arrange
+        var provider = CreateProvider();
+
+        // Act
+        var failures = await provider.FindConfigurationFailuresAsync(
+            new PostgresConnectionSettings(ConnectionStringWithoutPassword, ConnectionStringSecret: null, Password: null),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(failures);
+    }
+
+    [Fact]
+    public async Task FindConfigurationFailuresAsync_UnchangedShapeAndUsableMaterial_ReportsNothing()
+    {
+        // Arrange
+        var password = new ConfiguredSecret { SecretReference = "plaintext:postgres-password" };
+        var provider = CreateProvider(password);
+        await provider.StartingAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        var failures = await provider.FindConfigurationFailuresAsync(
+            new PostgresConnectionSettings(
+                ConnectionStringWithoutPassword,
+                ConnectionStringSecret: null,
+                new ConfiguredSecret { SecretReference = "plaintext:the-rotated-password" }),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(failures);
+    }
+
+    /// <summary>The pool attaches its password provider once, so adding a credential source later would be adopted without effect.</summary>
+    [Fact]
+    public async Task FindConfigurationFailuresAsync_CredentialSourceAddedByAReload_ReportsThatItRequiresARestart()
+    {
+        // Arrange
+        var provider = CreateProvider();
+        await provider.StartingAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        var failures = await provider.FindConfigurationFailuresAsync(
+            new PostgresConnectionSettings(
+                ConnectionStringWithoutPassword,
+                ConnectionStringSecret: null,
+                new ConfiguredSecret { SecretReference = "plaintext:added-later" }),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([DatabaseConnectionConfigurationFailure.CredentialSourceChangeRequiresRestart], failures);
+    }
+
+    [Fact]
+    public async Task FindConfigurationFailuresAsync_CredentialSourceRemovedByAReload_ReportsThatItRequiresARestart()
+    {
+        // Arrange
+        var provider = CreateProvider(new ConfiguredSecret { SecretReference = "plaintext:postgres-password" });
+        await provider.StartingAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        var failures = await provider.FindConfigurationFailuresAsync(
+            new PostgresConnectionSettings(ConnectionStringWithoutPassword, ConnectionStringSecret: null, Password: null),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([DatabaseConnectionConfigurationFailure.CredentialSourceChangeRequiresRestart], failures);
+    }
+
+    /// <summary>A reference that resolves says nothing about whether the bytes behind it are a connection string.</summary>
+    [Fact]
+    public async Task FindConfigurationFailuresAsync_ConnectionStringSecretThatDoesNotParse_ReportsIt()
+    {
+        // Arrange
+        var connectionStringSecret = new ConfiguredSecret
+        {
+            SecretReference = $"plaintext:{ConnectionStringWithoutPassword};Password=composed-at-startup",
+        };
+        var provider = new PostgresConnectionStringProvider(
+            () => new PostgresConnectionSettings(ConfiguredConnectionString: null, connectionStringSecret, Password: null),
+            new PlaintextOnlySecretReferenceResolver(),
+            new SecretResolutionOptions(SecretValueInterpretation.ReferenceOnly),
+            NullLogger<PostgresConnectionStringProvider>.Instance);
+        await provider.StartingAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        var failures = await provider.FindConfigurationFailuresAsync(
+            new PostgresConnectionSettings(
+                ConfiguredConnectionString: null,
+                new ConfiguredSecret { SecretReference = "plaintext:NotAKeyword=value" },
+                Password: null),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([DatabaseConnectionConfigurationFailure.ConnectionStringNotParsable], failures);
+    }
+
+    [Fact]
+    public async Task FindConfigurationFailuresAsync_RotatedConnectionStringWithoutAPassword_ReportsIt()
+    {
+        // Arrange
+        var connectionStringSecret = new ConfiguredSecret
+        {
+            SecretReference = $"plaintext:{ConnectionStringWithoutPassword};Password=composed-at-startup",
+        };
+        var provider = new PostgresConnectionStringProvider(
+            () => new PostgresConnectionSettings(ConfiguredConnectionString: null, connectionStringSecret, Password: null),
+            new PlaintextOnlySecretReferenceResolver(),
+            new SecretResolutionOptions(SecretValueInterpretation.ReferenceOnly),
+            NullLogger<PostgresConnectionStringProvider>.Instance);
+        await provider.StartingAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        var failures = await provider.FindConfigurationFailuresAsync(
+            new PostgresConnectionSettings(
+                ConfiguredConnectionString: null,
+                new ConfiguredSecret { SecretReference = $"plaintext:{ConnectionStringWithoutPassword}" },
+                Password: null),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([DatabaseConnectionConfigurationFailure.ConnectionStringCarriesNoPassword], failures);
+    }
+
     private static PostgresConnectionStringProvider CreateProvider(ConfiguredSecret? password = null) => new(
         () => new PostgresConnectionSettings(ConnectionStringWithoutPassword, ConnectionStringSecret: null, password),
         new PlaintextOnlySecretReferenceResolver(),

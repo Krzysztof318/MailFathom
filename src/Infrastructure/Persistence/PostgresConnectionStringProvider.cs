@@ -29,7 +29,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// string before that throws rather than quietly falling back to an unresolved one.
 /// </para>
 /// </remarks>
-internal sealed partial class PostgresConnectionStringProvider : IHostedLifecycleService
+internal sealed partial class PostgresConnectionStringProvider : IHostedLifecycleService, IDatabaseConnectionSettingsValidator
 {
     private readonly Func<PostgresConnectionSettings> currentConnectionSettings;
     private readonly ISecretReferenceResolver secretReferenceResolver;
@@ -65,6 +65,9 @@ internal sealed partial class PostgresConnectionStringProvider : IHostedLifecycl
     /// <summary>Gets or sets which configured setting supplies the password per connection.</summary>
     private DatabasePasswordSource PasswordSource { get; set; }
 
+    /// <summary>Gets or sets the credential-source shape startup composed the pool against, or <see langword="null" /> before it has.</summary>
+    private DatabaseCredentialSourceShape? ComposedCredentialSourceShape { get; set; }
+
     /// <summary>Gets the composed connection string, which deliberately carries no rotatable credential.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the host has not run startup composition yet.</exception>
     /// <remarks>
@@ -95,6 +98,7 @@ internal sealed partial class PostgresConnectionStringProvider : IHostedLifecycl
 
         this.ComposedConnectionString = composed.ConnectionSettings.ConnectionString;
         this.PasswordSource = composed.PasswordSource;
+        this.ComposedCredentialSourceShape = DatabaseCredentialSourceShape.Of(startupSettings);
     }
 
     /// <inheritdoc />
@@ -143,6 +147,36 @@ internal sealed partial class PostgresConnectionStringProvider : IHostedLifecycl
             _ => throw new NotSupportedException(
                 "The PostgreSQL password is retrieved asynchronously. Open the connection with OpenAsync."),
             async (_, cancellationToken) => await this.RetrieveCurrentPasswordAsync(cancellationToken));
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DatabaseConnectionConfigurationFailure>> FindConfigurationFailuresAsync(
+        PostgresConnectionSettings candidate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        if (this.ComposedCredentialSourceShape is not { } composedShape)
+        {
+            return [];
+        }
+
+        // Which setting supplies the credential is fixed when the pool is built: the password provider is attached, or
+        // not, once. A candidate that adds, removes, or swaps that setting would be logged as adopted while every
+        // connection kept using what startup composed, or would point the attached provider at a block that is no
+        // longer there. Neither is a rotation, so both are refused rather than half-applied.
+        if (!composedShape.Equals(DatabaseCredentialSourceShape.Of(candidate)))
+        {
+            return [DatabaseConnectionConfigurationFailure.CredentialSourceChangeRequiresRestart];
+        }
+
+        var materialFailure = await ConnectionStringComposer.FindConnectionStringMaterialFailureAsync(
+            candidate.ConnectionStringSecret,
+            mustCarryAPassword: this.PasswordSource == DatabasePasswordSource.ConnectionStringSecret,
+            this.secretReferenceResolver,
+            cancellationToken);
+
+        return materialFailure is { } failure ? [failure] : [];
     }
 
     /// <summary>Retrieves the password the connection being opened should authenticate with.</summary>

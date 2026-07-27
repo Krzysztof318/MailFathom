@@ -58,9 +58,9 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The hosted worker isolates unexpected per-folder failures so later folders and intervals can continue.")]
-    private async Task RunOnceAsync(MailSynchronizationOptions currentOptions, CancellationToken cancellationToken)
+    private async Task RunOnceAsync(MailSynchronizationOptions runSettings, CancellationToken cancellationToken)
     {
-        var scheduledFolders = currentOptions.Accounts.SelectMany(
+        var scheduledFolders = runSettings.Accounts.SelectMany(
             account => account.EffectiveFolders,
             (account, folder) => (AccountId: account.AccountId, FolderName: folder));
 
@@ -69,6 +69,11 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
             try
             {
                 using var scope = this.scopeFactory.CreateScope();
+
+                // The folder was scheduled from this run's snapshot, so the scope must connect with that snapshot too.
+                // Letting the scope read the published one would pair an account list from before a reload with an
+                // endpoint, policy, and credential from after it.
+                scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
 
                 var synchronizer = scope.ServiceProvider.GetRequiredService<MailboxSynchronizer>();
                 var result = await synchronizer.SynchronizeAsync(MailAccountId.Create(accountId), MailFolderName.Create(folderName), cancellationToken);
