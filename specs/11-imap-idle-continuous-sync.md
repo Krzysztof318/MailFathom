@@ -25,7 +25,7 @@ Loss of the IDLE connection is a transient failure handled by the session pipeli
 
 The IDLE session opens the folder read-only exactly as the polling path does, and the notification handler performs no fetch of its own; it only signals that a synchronization pass should run. This keeps the `\Seen` invariant proven by the existing synchronizer tests rather than duplicated into a second fetch path, and the specification requires a test asserting the push path performs no direct content fetch.
 
-A long-lived connection holds credentials in memory for the process lifetime; the specification requires that the session obtains its secret through the resolver from specification 02 at connect time and does not retain a copy beyond the session object.
+A long-lived connection holds credentials in memory for the process lifetime; the specification requires that the session obtains its secret through the resolver from specification 02a at connect time and does not retain a copy beyond the session object.
 
 ## Testing
 

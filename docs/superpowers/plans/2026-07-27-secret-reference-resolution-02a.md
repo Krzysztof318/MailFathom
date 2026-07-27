@@ -1,15 +1,16 @@
-# Secret Reference Resolution Implementation Plan
+# Secret Reference Resolution Implementation Plan (02a)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Governing issue:** [#36 — Spec 02 — Secret reference resolution](https://github.com/Krzysztof318/MailMcp/issues/36)
-**Governing specification:** [`specs/02-secret-reference-resolution.md`](../../../specs/02-secret-reference-resolution.md)
+**Governing issue:** [#36 — Spec 02a — Secret reference resolution](https://github.com/Krzysztof318/MailMcp/issues/36)
+**Governing specification:** [`specs/02a-secret-reference-resolution.md`](../../../specs/02a-secret-reference-resolution.md)
+**Followed by:** [`docs/superpowers/plans/2026-07-27-certificate-material-and-secret-rotation-02b.md`](2026-07-27-certificate-material-and-secret-rotation-02b.md), which consumes this contract for certificate material and rotation
 **Architectural context:** `specs/2026-07-22-mail-mcp-architecture-draft.md` sections 7.3 and 19, ADR `docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md`
 **Depends on:** [#35 — Spec 01](https://github.com/Krzysztof318/MailMcp/issues/35), merged as `a732e9a`
 
-**Goal:** Replace every raw secret bound from configuration with a scheme-qualified reference that `Infrastructure` resolves and `Host` fails fast on, and load the trust anchor material that specification 01 deliberately left as configuration shape only.
+**Goal:** Replace every raw secret bound from configuration with a scheme-qualified reference that `Infrastructure` resolves and `Host` fails fast on, and give every secret-bearing setting one uniform block shape so the guarantee holds for settings that do not exist yet.
 
-**Architecture:** `Infrastructure` owns the reference grammar, the per-scheme adapters, the composite dispatch, and the certificate-validation path that consumes a resolved trust anchor. `Host` binds reference strings, invokes resolution once before hosted services start, and turns failures into startup errors. `Application` and `Domain` gain nothing: they never see a resolver, a reference, or a scheme, which is the boundary ADR 0002 draws when it forbids normalizing broad secret access into application code.
+**Architecture:** `Infrastructure` owns the reference grammar, the secret block and its discovery, the per-scheme adapters, and the composite dispatch. `Host` binds secret blocks, invokes resolution once before hosted services start, and turns failures into startup errors. `Application` and `Domain` gain nothing: they never see a resolver, a reference, or a scheme, which is the boundary ADR 0002 draws when it forbids normalizing broad secret access into application code.
 
 The shape is chosen so that a future Kubernetes, Azure Key Vault, HashiCorp Vault, or AWS Secrets Manager adapter is a registration rather than a refactor: a scheme is declared by the adapter that serves it, dispatch is a lookup, and the contract is asynchronous and cancellable from the first commit. None of those providers is implemented here.
 
@@ -18,7 +19,7 @@ The shape is chosen so that a future Kubernetes, Azure Key Vault, HashiCorp Vaul
 ## Global Constraints
 
 - No new third-party packages. `LICENSES.md` therefore needs no dependency entry; `$check-docs-licenses` returns `n/a` for licensing and must still be run.
-- `Domain` and `Application` stay free of every type introduced here. The architecture test in Task 7 is the enforcement, not a review habit.
+- `Domain` and `Application` stay free of every type introduced here. The architecture test in Task 6 is the enforcement, not a review habit.
 - Certificate validation stays enabled unconditionally. Nothing introduced here may expose a "trust any certificate" flag, an `SslProtocols` override, or a callback that returns `true` on an unexamined chain.
 - No resolution failure message, log line, or exception may contain the resolved material, the file path, the environment variable's value, or the credential's contents. The account identifier, the logical secret name, and the scheme are the permitted vocabulary.
 - Unit tests never touch the real file system, environment block, network, or clock. Every scheme adapter reads through an injected in-memory port.
@@ -52,24 +53,25 @@ Two integration shapes exist and must not be conflated. A provider that **pre-re
 6. **The resolver returns bytes; text is a view over them.** A secret is not always a password: a trust anchor may be PEM or DER, and a private key arrives as a PKCS#12 bundle that is binary and may carry its own password reference. A `string`-returning resolver would make PKCS#12 unrepresentable and would corrupt DER through encoding round-trips. `ResolvedSecret` therefore stores a pinned `byte[]` (decision 7) and exposes it as `ReadOnlySpan<byte>`, which is what the root rules prescribe for byte payloads. `RevealBytes()` returns the material untouched; `RevealAsString()` returns the UTF-8 text view with one trailing newline stripped. The trim belongs to the text view only — trimming a PFX would corrupt it. `plaintext:` and `env:` UTF-8-encode on the way in, which costs nothing and keeps one result shape.
 7. **Secret material is a pinned byte buffer that is zeroed on dispose; it is never a `string` and never a `SecureString`.** Microsoft's guidance is explicit on all three points. `SecureString` is not recommended for new development on .NET, and it "does not encrypt the internal storage on non-Windows platform" — every MailMcp deployment target. A `string` is immutable, cannot be scheduled for deletion, and because its memory is not pinned "the garbage collector will make additional copies of `String` values when moving and compacting memory", so erasing one is not even well defined. The buffer is therefore allocated with `GC.AllocateArray<byte>(length, pinned: true)`, which the collector cannot relocate, and erased with `CryptographicOperations.ZeroMemory`, documented as existing "to future-proof against potential optimizations in the .NET runtime that could eliminate memory writes that aren't followed by memory reads" — a hand-written zeroing loop carries no such guarantee. `ArrayPool` is not used for secret material at all: a buffer returned uncleared hands the material to the next unrelated caller.
 8. **`RevealAsString()` exists, is the exception, and is named to look like one.** MailKit's `AuthenticateAsync(string, string)` and Npgsql's connection-string password are framework contracts that take a `string`, so a copy that cannot be erased is unavoidable at exactly those two call sites. `RevealBytes()` is the primary accessor and everything else uses it. `RevealAsString()` is called at the boundary itself, as late as possible, and its result is never stored, logged, or passed on. Its XML documentation states that the returned string cannot be erased and will persist until the collector reclaims it.
-9. **A resolved secret is owned by the operation that resolved it and disposed when that operation ends.** Combined with per-use resolution this bounds the exposure window to one synchronization run or one connection attempt rather than to process uptime. It also removes a lifetime hazard from dynamic reload: because every operation owns its own instance, publishing a new configuration snapshot never disposes material that an in-flight operation is still reading. `MailAccountSecrets` therefore implements `IDisposable` and disposes the secrets it owns, and `X509Certificate2` — itself disposable — is disposed on the same path.
+9. **A resolved secret is owned by the operation that resolved it and disposed when that operation ends.** Combined with per-use resolution this bounds the exposure window to one synchronization run or one connection attempt rather than to process uptime. It also removes a lifetime hazard from dynamic reload: because every operation owns its own instance, publishing a new configuration snapshot never disposes material that an in-flight operation is still reading. `MailAccountSecrets` therefore implements `IDisposable` and disposes the secrets it owns; specification 02b adds the resolved trust anchor to the same disposal path, since `X509Certificate2` is itself disposable.
 10. **The residual exposures are documented, not papered over.** Managed memory is still readable through a process dump, a debugger, or swap, and no code-level measure changes that. The mitigations are operational and belong in the operations documentation: `LimitCORE=0` on the systemd unit and `Storage=none` / `ProcessSizeMax=0` for `systemd-coredump`, plus keeping the service's memory out of swap in both the systemd and container shapes. `mlock` is deliberately rejected — it needs P/Invoke plus `CAP_IPC_LOCK` and a raised `RLIMIT_MEMLOCK` in every deployment shape, against the repository rule restricting unsafe and platform-invoke code to measured need, and it does not address dumps or debuggers anyway.
-11. **Typed material is loaded above the resolver, not inside it.** `X509CertificateMaterialLoader` in `Infrastructure` turns resolved bytes into an `X509Certificate2`, accepting PEM and DER and, for key material, PKCS#12 with an optional separately-referenced password. The resolver stays ignorant of X.509 so that adding a future material kind — an SSH key, a JWT signing key — adds a loader rather than touching every scheme adapter.
+11. **Typed material is loaded above the resolver, not inside it.** — *moved to specification 02b.* Recorded there, keeping this number so cross-references from either plan resolve to the same decision.
 12. **`ResolvedSecret` hides its material behind a method, not a property.** `System.Text.Json`, `record` synthesized `ToString()`, and most diagnostic dumps enumerate properties, so a property named `Value` would eventually be serialized by something. `ImapAccountSettings` is a `record`, which makes this concrete: its synthesized `ToString()` prints every member today. `RevealBytes()` and `RevealAsString()` are methods for that reason, and `ToString()` is overridden to return `***`.
 13. **Interpretation is an explicit three-valued mode, not an environment gate.** `SecretValueInterpretation` is `ReferenceOnly = 0` (default), `ReferenceOrInline = 1`, `InlineOnly = 2`. This replaces the earlier "`plaintext:` only in Development" rule, which turned out to be both too strict and too weak: too strict because an operator may knowingly put a secret in JSON and that is their call, and too weak because it does not address the real driver — a configuration provider that has already resolved the secret before MailMcp binds it. Azure App Configuration with Key Vault references is exactly that: the provider substitutes the vault value, so the bound setting is the raw secret with no prefix MailMcp could recognize. `InlineOnly` serves it by parsing nothing at all, which removes the ambiguity rather than guessing at it. The mode is passed to the composite resolver at registration, so `Infrastructure` still needs no reference to `Microsoft.Extensions.Hosting.Abstractions` and the rule stays trivially testable in all three directions.
 14. **Inline modes are logged, and their memory cost is stated.** Startup logs the active mode and, when it is not `ReferenceOnly`, the *names* of settings that resolved to an inline value — never the values — so an unintended inline secret is discoverable instead of silent. And an inline value arrives from `IConfiguration` as a `string`, which decision 7 establishes cannot be erased; the inline modes therefore forfeit part of the in-memory protection, which the operations documentation must say plainly. Both facts are why `ReferenceOnly` stays the default rather than the friendliest option winning.
 15. **`env:` resolves in every environment.** The specification gates exactly one scheme on the environment, and the definition of done names only the `plaintext:` rule. `env:` stays permitted with a documented recommendation against production use, rather than inventing a second environment gate the specification did not ask for. *Flagged for the owner: if `env:` should also fail outside Development, it is a one-line change to the same flag.*
 16. **Resolution runs at startup validation and again per use, which is what makes rotation work.** Startup validation resolves every reference and discards the material, so an unresolvable reference fails the host. Each actual use resolves again, so no long-lived copy exists and material rotated behind an unchanged reference — a replaced credential file, a re-issued vault entry — is observed by the next operation with no cache to invalidate and no restart. The material is a few hundred bytes from a tmpfs or an environment block; per-run re-reading is not a measured cost. A network-backed adapter for which per-use retrieval is too expensive caches inside itself under decision 19, without changing this.
-17. **Secrets are reloadable for new operations, not during running operations.** Both halves reload: a changed *reference* arrives through `IOptionsMonitor` and is validated by resolving the whole candidate snapshot before publishing it, with the last known good snapshot retained on failure; changed *material* is picked up by decision 10. Neither is applied mid-operation — a synchronization run that has authenticated finishes with the credential it authenticated with, because swapping a credential or trust anchor underneath an open IMAP session has no coherent meaning. This is ADR 0002's middle classification, chosen deliberately over the strictest one.
-18. **ADR 0002 must be amended before this is implemented.** The ADR currently classifies credentials and certificate trust anchors as restart-required, and decision 17 departs from that. The departure is defensible — the reference indirection means rotation re-resolves a validated reference rather than mutating a bound secret in place — but `docs/AGENTS.md` forbids modifying an ADR without explicit owner approval, so no ADR is touched here. **This is a blocking prerequisite, not a follow-up.**
+17. **Secrets are reloadable for new operations, not during running operations.** — *moved to specification 02b.* Recorded there, keeping this number so cross-references from either plan resolve to the same decision.
+18. **ADR 0002 must be amended before reload is implemented.** — *moved to specification 02b.* Recorded there, keeping this number so cross-references from either plan resolve to the same decision.
 19. **Provider-specific concerns stay inside the provider's adapter.** Timeouts, retry, backoff, endpoint and region configuration, SDK client lifetime, platform identity, and caching policy belong to the adapter that needs them, never to `ISecretReferenceResolver`. The contract carries a reference and a cancellation token and returns a result; that is the whole surface. This is what lets a store that must cache aggressively and a local file that must never cache coexist without the contract taking a position, and it keeps SDK types out of everything above the adapter exactly as the root dependency rules require.
 20. **A managed-store adapter authenticates through platform identity, not through a MailMcp secret.** An Azure managed identity, a Kubernetes ServiceAccount token, or a Vault role is issued by the platform the process already runs on. Requiring MailMcp to hold a credential in order to fetch its credentials would be circular and would put the most sensitive value back into the configuration this specification removes it from. Recorded now so a future adapter does not quietly reintroduce the problem; nothing implements it here.
-21. **A custom trust anchor is validated by rebuilding the chain, never by accepting errors.** `RemoteCertificateNotAvailable` and `RemoteCertificateNameMismatch` are rejected outright. Only `RemoteCertificateChainErrors` is re-examined, by building an `X509Chain` with `TrustMode = X509ChainTrustMode.CustomRootTrust` and the anchor in `CustomTrustStore` — which Microsoft documents as respected only under that trust mode — and requiring a clean rebuild. MailKit's own `SslCertificateValidation.cs` example stops at describing errors and does not implement custom-CA trust, so this logic is ours to write and ours to test.
+21. **A custom trust anchor is validated by rebuilding the chain, never by accepting errors.** — *moved to specification 02b.* Recorded there, keeping this number so cross-references from either plan resolve to the same decision.
 22. **The database password becomes a reference too.** The specification's goal names it explicitly. `ConnectionStrings:mailmcp` keeps host, database, and user name; an optional `Persistence:Password` secret block is resolved at startup and applied through `NpgsqlConnectionStringBuilder.Password`, so the connection string in `appsettings.json` never carries the password and the composed string never reaches a log.
 23. **Two resolver names, two scopes.** `ISecretReferenceResolver` resolves one reference. `MailAccountSecretOptions` resolves one account's set of secrets and reports per-account configuration errors. Naming them both "secret resolver" would make the call sites ambiguous, which the root naming rules forbid.
 24. **`UserName` stays a plain configuration value.** The definition of done names raw *passwords*. A mailbox user name is an identifier the operator already writes next to the host, and turning it into a reference would double the provisioning burden for no confidentiality gain. It remains excluded from logs as personal data.
 25. **Every secret-bearing setting is a JSON object, never a bare string.** The object is `ConfiguredSecret`, and its `SecretReference` property carries the reference. The reason is forward compatibility: a PKCS#12 bundle needs a second reference for its own password, a certificate may need an explicit format hint, and a managed-store reference may need a version pin. Inside a block each of those is a sibling property. Had the setting shipped as a bare string, the first such addition would change the setting's JSON type from string to object and break every deployment that had configured it. Only the first setting to need it would be affected, but the fix would then have to be applied setting by setting against real deployments; the uniform block pays that cost once, now, while `TrustedCertificateAuthorityReference` has one consumer and no shipped release depends on it. Nothing beyond `SecretReference` is defined here — the property is the whole shape today, and the point is only that a second one costs nothing later.
-26. **The block's type is the marker, in place of an attribute.** A secret-bearing property is declared by binding to `ConfiguredSecret` rather than to `string`, so `MailSecretReferenceStartupValidator` discovers every one of them by walking the bound options graph for that type. An attribute would work the same way at the point of use, but it can be omitted on a property added six months from now and nothing would notice — the property would bind to `string`, hold a password, and skip every rule in this plan. A type cannot be omitted, because the property would not bind to the block shape at all. This is what makes decision 13's `ReferenceOnly` guarantee total rather than per-setting: under the default mode a block whose `SecretReference` is not a well-formed `<scheme>:<target>` fails startup naming its configuration path, so a plain-text password pasted where a reference belongs is a startup error and never a secret that resolved by accident. The Task 7 architecture test enforces the other direction, failing the build if a secret-looking property is bound as a raw `string`.
+26. **The block's type is the marker, in place of an attribute.** A secret-bearing property is declared by binding to `ConfiguredSecret` rather than to `string`, so `MailSecretReferenceStartupValidator` discovers every one of them by walking the bound options graph for that type. An attribute would work the same way at the point of use, but it can be omitted on a property added six months from now and nothing would notice — the property would bind to `string`, hold a password, and skip every rule in this plan. A type cannot be omitted, because the property would not bind to the block shape at all. This is what makes decision 13's `ReferenceOnly` guarantee total rather than per-setting: under the default mode a block whose `SecretReference` is not a well-formed `<scheme>:<target>` fails startup naming its configuration path, so a plain-text password pasted where a reference belongs is a startup error and never a secret that resolved by accident. The Task 6 architecture test enforces the other direction, failing the build if a secret-looking property is bound as a raw `string`.
+27. **The block is verified against flat colon-separated keys, not only against JSON.** The block is one more path segment to any hierarchical configuration provider, so `MailSynchronization:Accounts:0:Secrets:Password:SecretReference` in Azure App Configuration and `MailSynchronization__Accounts__0__Secrets__Password__SecretReference` in an environment block address exactly the same setting. That has to be proved rather than assumed, because the whole Azure App Configuration path depends on it: the store holds that key, Key Vault holds the value, the provider maps one to the other, and `InlineOnly` tells MailMcp the bound value is already the secret. Binding tests therefore populate an in-memory provider with flat keys instead of parsing a JSON document, so a change that made the block depend on JSON document structure fails a test rather than a deployment.
 
 ## File structure
 
@@ -85,30 +87,27 @@ Two integration shapes exist and must not be conflated. A provider that **pre-re
 - `src/Infrastructure/Secrets/ISecretReferenceResolver.cs`, `ISecretSchemeResolver.cs` — the one-reference contract and the public per-scheme extension point.
 - `src/Infrastructure/Secrets/ISecretFileReader.cs`, `IEnvironmentVariableReader.cs` — the two in-memory-testable ports.
 - `src/Infrastructure/Secrets/FileSystemSecretFileReader.cs`, `ProcessEnvironmentVariableReader.cs` — the real adapters.
-- `src/Infrastructure/Secrets/X509CertificateMaterialLoader.cs` — PEM, DER, and PKCS#12 loading over resolved bytes.
 - `src/Infrastructure/Secrets/SystemdCredentialSecretReferenceResolver.cs`, `FileSecretReferenceResolver.cs`, `EnvironmentVariableSecretReferenceResolver.cs`, `PlaintextSecretReferenceResolver.cs`, `CompositeSecretReferenceResolver.cs`
 - `src/Infrastructure/Mail/MailAccountSecretOptions.cs` — the account's secret blocks and their resolution into `MailAccountSecrets`.
-- `src/Infrastructure/Mail/MailAccountSecrets.cs` — resolved password plus optional trust anchor.
-- `src/Infrastructure/Mail/MailServerCertificateValidator.cs` — the custom-root-trust validation callback.
+- `src/Infrastructure/Mail/MailAccountSecrets.cs` — the account's resolved secrets, owned and disposed by the operation that resolved them.
 - `tests/Infrastructure.UnitTests/SecretReferenceTests.cs`
 - `tests/Infrastructure.UnitTests/SecretReferenceResolverTests.cs`
 - `tests/Infrastructure.UnitTests/MailAccountSecretOptionsTests.cs`
-- `tests/Infrastructure.UnitTests/MailServerCertificateValidatorTests.cs`
 - `tests/Infrastructure.UnitTests/SecretBoundaryArchitectureTests.cs`
 - `src/Host/Hosting/MailSecretReferenceStartupValidator.cs` — `IHostedLifecycleService.StartingAsync` fail-fast resolution.
 - `docs/operations/secret-provisioning.md`
 
 **Modify**
 
-- `src/Infrastructure/Mail/ImapAccountSettings.cs` — `Password` becomes `ResolvedSecret`; the record gains the trust anchor; `IImapAccountSettingsProvider.GetSettings` becomes `GetSettingsAsync`.
-- `src/Infrastructure/Mail/MailAccountTransportSecurityOptions.cs` — `TrustedCertificateAuthorityReference` becomes a `ConfiguredSecret?` block; the key name and the domain contract are unchanged.
-- `src/Infrastructure/Mail/MailKit/MailKitImapMailboxSession.cs` — the client port carries the validation callback; the factory installs it before connecting and reveals the password at the single `AuthenticateAsync` call.
+- `src/Infrastructure/Mail/ImapAccountSettings.cs` — `Password` becomes `ResolvedSecret`; `IImapAccountSettingsProvider.GetSettings` becomes `GetSettingsAsync`.
+- `src/Infrastructure/Mail/MailAccountTransportSecurityOptions.cs` — `TrustedCertificateAuthorityReference` is renamed to `TrustedCertificateAuthority` and becomes a `ConfiguredSecret?` block; the domain contract is unchanged.
+- `src/Infrastructure/Mail/MailKit/MailKitImapMailboxSession.cs` — the factory awaits `GetSettingsAsync`, reveals the password at the single `AuthenticateAsync` call, and disposes the resolved secrets once the folder is open.
 - `src/Infrastructure/ServiceCollectionExtensions.cs` — `AddMailMcpSecretResolution`, and the resolved database password applied to the connection string.
 - `src/Host/Configuration/MailSynchronizationOptions.cs` — `Password` becomes a nested `Secrets` section; `GetSettings` becomes `GetSettingsAsync` and resolves.
 - `src/Host/Configuration/PersistenceOptions.cs` — optional `Password` secret block.
 - `src/Host/Program.cs` — register secret resolution with the configured interpretation mode, register the startup validator ahead of the worker, compose the connection string.
 - `src/Host/appsettings.json`, `src/Host/appsettings.Development.json` — reference-shaped examples.
-- `docs/features/imap-synchronization.md` — configuration, the two resolved pending items, transport-security trust anchor behavior.
+- `docs/features/imap-synchronization.md` — the new account configuration shape and the resolution and fail-fast behavior.
 - `docs/operations/local-development.md` — the Development secret workflow.
 
 ---
@@ -182,7 +181,7 @@ internal static class ConfiguredSecretDiscovery
 
 `ConfiguredSecretDiscovery` is what makes the marker useful: it walks public readable properties of the bound options object, descends into nested options objects and into `IEnumerable` elements, and yields each `ConfiguredSecret` with the colon-separated path that reached it — `MailSynchronization:Accounts:0:Secrets:Password`. It must guard against a cycle in the object graph, since options types are ordinary classes and nothing forbids a back-reference. It never reads a `ConfiguredSecret`'s value; it returns the block and lets the caller resolve, so nothing in the walk can end up in a diagnostic.
 
-Tests cover a block at the root, a nested one, one inside a list with its index in the path, a null block being skipped rather than reported as missing, and a cyclic graph terminating.
+Tests cover a block at the root, a nested one, one inside a list with its index in the path, a null block being skipped rather than reported as missing, and a cyclic graph terminating. A separate binding test builds the options graph from an in-memory provider populated with flat colon-separated keys and asserts the discovered paths match them exactly — decision 27, and what keeps the Azure App Configuration and environment-variable paths honest.
 
 `SecretReferenceScheme` is open by decision 2: a future Azure Key Vault adapter calls `Create("azure-key-vault")` in its own file and registers itself. `ProviderUnavailable` is appended now rather than later so a network-backed adapter has a failure identity to report that is distinguishable from a missing secret; nothing in this change set produces it. Enum values are append-only, so this costs nothing and avoids renumbering a persisted-looking value later.
 
@@ -388,32 +387,30 @@ public sealed class MailAccountSecretOptions
 
     public Task<IReadOnlyList<MailAccountSecretConfigurationError>> FindConfigurationErrorsAsync(
         ISecretReferenceResolver resolver,
-        ConfiguredSecret? trustedCertificateAuthority,
         CancellationToken cancellationToken);
 
     public Task<MailAccountSecrets> ResolveAsync(
         ISecretReferenceResolver resolver,
-        ConfiguredSecret? trustedCertificateAuthority,
         CancellationToken cancellationToken);
 }
 
-public sealed record MailAccountSecrets(ResolvedSecret Password, X509Certificate2? TrustedCertificateAuthority) : IDisposable;
+public sealed record MailAccountSecrets(ResolvedSecret Password) : IDisposable;
 
 public sealed record ImapAccountSettings(
     string AccountId,
     string Host,
     int Port,
     string UserName,
-    ResolvedSecret Password,
-    X509Certificate2? TrustedCertificateAuthority);
+    ResolvedSecret Password);
 ```
 
-The trust anchor block is passed in rather than duplicated onto this type, because specification 01 already placed it on `MailAccountTransportSecurityOptions` and moving it between sections would churn a shipped configuration key for no gain.
+`MailAccountSecrets` wraps a single secret today and looks like a type that could be collapsed into `ResolvedSecret`. It is not, because specification 02b adds the resolved trust anchor beside the password and the ownership rule below has to cover both; introducing it now keeps that a one-line addition instead of a signature change through the session factory.
 
-Its *shape* does change, though: `TrustedCertificateAuthorityReference` goes from `string?` to `ConfiguredSecret?` so that decision 25 holds for every secret-bearing setting rather than for the new ones only. The key name is unchanged, so an operator who configured it edits one line. Three consequences to handle in this task:
+**The trust anchor setting is reshaped here but not read here.** `MailAccountTransportSecurityOptions.TrustedCertificateAuthorityReference` is renamed to `TrustedCertificateAuthority` and goes from `string?` to `ConfiguredSecret?`, so decision 25 holds for every secret-bearing setting from the moment the block exists rather than for new settings only. The `Reference` suffix earned its place while the value *was* the reference string; now that a block holds it in `SecretReference`, the suffix repeats the word and the setting is better named after what it configures. Loading the material behind it is specification 02b. Four consequences to handle in this task:
 
-- `MailTransportSecurityPolicy.Create` and `FindViolations` in `Domain` keep taking a nullable `string`, and the options type now passes `this.TrustedCertificateAuthorityReference?.SecretReference`. The block is a configuration-adapter shape and must not cross into `Domain`, which is also why the domain rules for `TrustedCertificateAuthorityReferenceRequired` and `TrustedCertificateAuthorityReferenceNotApplicable` need no change.
-- A block that is present but carries an empty `SecretReference` must read as *absent* to those domain rules, not as a configured anchor. Otherwise `"TrustedCertificateAuthorityReference": {}` would satisfy `TrustedCertificateAuthorityReferenceRequired` and then fail later at resolution, reporting a confusing missing-material error instead of the missing-anchor error the operator needs.
+- `MailTransportSecurityPolicy.Create` and `FindViolations` in `Domain` keep taking a nullable `string`, and the options type now passes `this.TrustedCertificateAuthority?.SecretReference`. The block is a configuration-adapter shape and must not cross into `Domain`, which is also why the domain violation members `TrustedCertificateAuthorityReferenceRequired` and `TrustedCertificateAuthorityReferenceNotApplicable` keep their names: they describe a domain rule about a reference being present, not the configuration key that carries it.
+- A block that is present but carries an empty `SecretReference` must read as *absent* to those domain rules, not as a configured anchor. Otherwise `"TrustedCertificateAuthority": {}` would satisfy `TrustedCertificateAuthorityReferenceRequired` and then fail later at resolution, reporting a confusing missing-material error instead of the missing-anchor error the operator needs.
+- `SettingFor(MailTransportSecurityViolation)` maps those two violations onto a setting name for the operator message. It must report `TrustedCertificateAuthority`, the new key, not the violation member's own spelling — otherwise the startup error names a key that does not exist in the file the operator is editing.
 - The existing `MailAccountTransportSecurityOptionsTests` that set the reference as a string are updated to the block. They are assertions about domain rules, not about the JSON shape, so their expectations stay as they are.
 
 - [ ] **Step 1: Write the failing tests**
@@ -423,15 +420,19 @@ Its *shape* does change, though: `TrustedCertificateAuthorityReference` goes fro
 [Fact] FindConfigurationErrorsAsync_UnresolvablePasswordReference_ReportsTheFailureAgainstThePasswordBlock
 [Fact] FindConfigurationErrorsAsync_EmptyPasswordSecretReference_ReportsReferenceMissing
 [Fact] FindConfigurationErrorsAsync_PlainTextInThePasswordBlockUnderReferenceOnly_ReportsSchemeMissing
-[Fact] FindConfigurationErrorsAsync_UnresolvableTrustAnchorReference_ReportsTheFailureAgainstTheTrustAnchorSetting
-[Fact] FindConfigurationErrorsAsync_TrustAnchorMaterialIsNotACertificate_ReportsMaterialNotFound
-[Fact] FindConfigurationErrorsAsync_NoTrustAnchorConfigured_DoesNotConsultTheResolver
 [Fact] FindConfigurationErrorsAsync_EveryError_CarriesNoSecretMaterial
-[Fact] ResolveAsync_ResolvableReferences_ReturnsThePasswordAndTheParsedTrustAnchor
-[Fact] ResolveAsync_PemTrustAnchor_LoadsTheCertificateSubject
+[Fact] ResolveAsync_ResolvableReference_ReturnsTheResolvedPassword
+[Fact] Dispose_ResolvedAccountSecrets_ErasesThePasswordMaterial
 ```
 
-The PEM test builds its certificate in memory with `CertificateRequest` and `CreateSelfSigned`, then exports it with `ExportCertificatePem()` — no file system, no network.
+`MailAccountTransportSecurityOptionsTests` gains coverage of the reshaped setting, since the domain rules now read through the block:
+
+```csharp
+[Fact] FindConfigurationErrors_AdditionalTrustedAuthorityWithABlock_ReportsNoError
+[Fact] FindConfigurationErrors_AdditionalTrustedAuthorityWithAnEmptyBlock_ReportsTheAnchorAsMissing
+[Fact] FindConfigurationErrors_TrustAnchorBlockWithoutAdditionalTrustedAuthority_ReportsNotApplicable
+[Fact] FindConfigurationErrors_TrustAnchorViolation_NamesTheTrustedCertificateAuthoritySetting
+```
 
 - [ ] **Step 2: Run the tests and confirm they fail**
 
@@ -439,17 +440,17 @@ Expected: FAIL — `MailAccountSecretOptions` does not exist and `ImapAccountSet
 
 - [ ] **Step 3: Implement**
 
-`FindConfigurationErrorsAsync` resolves the password reference and, when a trust anchor reference is present, resolves and parses it, then discards both — decision 16's startup half. Trust anchor parsing uses `X509Certificate2.CreateFromPem` inside a `try`/`catch (CryptographicException)` that becomes a configuration error, so malformed material fails startup instead of failing the first TLS handshake hours later.
+`FindConfigurationErrorsAsync` resolves the password reference and discards the material — decision 16's startup half.
 
-`Resolve` performs the same work and returns the values, and throws `InvalidOperationException` if a reference that validated at startup no longer resolves — a fail-closed path, not an ordinary branch.
+`ResolveAsync` performs the same work and returns the value, and throws `InvalidOperationException` if a reference that validated at startup no longer resolves — a fail-closed path, not an ordinary branch.
 
-`ImapAccountSettings` carries `ResolvedSecret` and the optional anchor. Its XML documentation gains a remark that the record's synthesized `ToString()` is safe only because `ResolvedSecret` redacts itself.
+`ImapAccountSettings` carries `ResolvedSecret`. Its XML documentation gains a remark that the record's synthesized `ToString()` is safe only because `ResolvedSecret` redacts itself.
 
-`MailAccountSecrets` implements `IDisposable` and disposes both the password and the `X509Certificate2`, which is itself disposable. Per decision 9 the instance is owned by the operation that resolved it: `MailKitImapMailboxSessionFactory.OpenReadOnlyAsync` disposes it once the client is authenticated and the folder is open, and the startup validator disposes everything it resolved before returning. `ImapAccountSettings` does *not* own the secrets — it is a carrier — so the ownership rule is stated in its XML documentation to stop a future caller from disposing it twice or not at all.
+`MailAccountSecrets` implements `IDisposable` and disposes the password. Per decision 9 the instance is owned by the operation that resolved it: `MailKitImapMailboxSessionFactory.OpenReadOnlyAsync` disposes it once the client is authenticated and the folder is open, and the startup validator disposes everything it resolved before returning. `ImapAccountSettings` does *not* own the secrets — it is a carrier — so the ownership rule is stated in its XML documentation to stop a future caller from disposing it twice or not at all.
 
 - [ ] **Step 4: Run the tests**
 
-Expected: PASS for `Infrastructure.UnitTests`; the solution does not build until Task 6 updates `Host`.
+Expected: PASS for `Infrastructure.UnitTests`; the solution does not build until Task 5 updates `Host`.
 
 - [ ] **Step 5: Commit**
 
@@ -460,111 +461,7 @@ git commit -m "Bind account secrets as reference blocks and resolve them in Infr
 
 ---
 
-### Task 4: Custom trust anchor in the certificate validation path
-
-**Files:**
-- Create: `src/Infrastructure/Mail/MailServerCertificateValidator.cs`
-- Modify: `src/Infrastructure/Mail/MailKit/MailKitImapMailboxSession.cs`
-- Test: `tests/Infrastructure.UnitTests/MailServerCertificateValidatorTests.cs`
-
-**Interfaces produced:**
-
-```csharp
-internal static class MailServerCertificateValidator
-{
-    internal static RemoteCertificateValidationCallback? CreateCallback(X509Certificate2? trustedCertificateAuthority);
-
-    internal static bool IsTrusted(
-        X509Certificate2? trustedCertificateAuthority,
-        X509Certificate? serverCertificate,
-        SslPolicyErrors sslPolicyErrors);
-}
-```
-
-`IMailKitImapClient` gains `RemoteCertificateValidationCallback? ServerCertificateValidationCallback { get; set; }`, forwarded by `MailKitImapClientAdapter` to `ImapClient.ServerCertificateValidationCallback`.
-
-- [ ] **Step 1: Write the failing tests**
-
-The fixture builds an in-memory CA and a leaf signed by it with `CertificateRequest`, so no file system, network, or real trust store is involved:
-
-```csharp
-[Fact] IsTrusted_NoPolicyErrors_TrustsWithoutConsultingTheAnchor
-[Fact] IsTrusted_ChainErrorsAndLeafChainsToTheConfiguredAnchor_Trusts
-[Fact] IsTrusted_ChainErrorsAndLeafChainsToADifferentAuthority_Rejects
-[Fact] IsTrusted_ChainErrorsWithoutAConfiguredAnchor_Rejects
-[Fact] IsTrusted_NameMismatch_RejectsEvenWhenTheAnchorMatches
-[Fact] IsTrusted_CertificateNotAvailable_Rejects
-[Fact] CreateCallback_NoAnchorConfigured_ReturnsNullSoTheDefaultValidationApplies
-```
-
-`IsTrusted_NameMismatch_RejectsEvenWhenTheAnchorMatches` is the test that stops this task from becoming a certificate-validation bypass.
-
-- [ ] **Step 2: Run the tests and confirm they fail**
-
-Expected: FAIL — the validator does not exist.
-
-- [ ] **Step 3: Implement**
-
-```csharp
-internal static bool IsTrusted(
-    X509Certificate2? trustedCertificateAuthority,
-    X509Certificate? serverCertificate,
-    SslPolicyErrors sslPolicyErrors)
-{
-    if (sslPolicyErrors == SslPolicyErrors.None)
-    {
-        return true;
-    }
-
-    // Only an untrusted chain is reconsidered. A missing certificate proves nothing, and a name mismatch means the
-    // certificate belongs to a different host, which a private trust anchor does not and must not excuse.
-    if (trustedCertificateAuthority is null || sslPolicyErrors != SslPolicyErrors.RemoteCertificateChainErrors)
-    {
-        return false;
-    }
-
-    if (serverCertificate is not X509Certificate2 presentedCertificate)
-    {
-        return false;
-    }
-
-    using var chain = new X509Chain();
-    chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-    chain.ChainPolicy.CustomTrustStore.Add(trustedCertificateAuthority);
-    chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-    chain.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;
-
-    return chain.Build(presentedCertificate);
-}
-```
-
-`CustomTrustStore` is documented as respected only when `TrustMode` is `CustomRootTrust`, so both must be set together; setting the collection alone would silently keep the system trust store in effect. `VerificationFlags` is pinned to `NoFlag` so no future edit can relax expiry or basic-constraint checking. `RevocationMode` is `NoCheck` because a private authority typically publishes no reachable CRL or OCSP responder, and a revocation lookup that cannot complete would otherwise reject a correctly provisioned server — this is a deliberate, documented trade-off confined to the custom-anchor path, and the system trust path keeps whatever the platform default applies.
-
-The session factory installs the callback before connecting and reveals the password once:
-
-```csharp
-client.ServerCertificateValidationCallback =
-    MailServerCertificateValidator.CreateCallback(settings.TrustedCertificateAuthority);
-
-await client.ConnectAsync(...);
-...
-await client.AuthenticateAsync(settings.UserName, settings.Password.RevealAsString(), cancellationToken);
-```
-
-- [ ] **Step 4: Run the tests**
-
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/Infrastructure/Mail tests/Infrastructure.UnitTests/MailServerCertificateValidatorTests.cs
-git commit -m "Validate a private mail server against its configured trust anchor"
-```
-
----
-
-### Task 5: Database password reference
+### Task 4: Database password reference
 
 **Files:**
 - Modify: `src/Host/Configuration/PersistenceOptions.cs`, `src/Infrastructure/ServiceCollectionExtensions.cs`
@@ -602,7 +499,7 @@ git commit -m "Resolve the database password from a secret reference"
 
 ---
 
-### Task 6: Host binding, wiring, and fail-fast validation
+### Task 5: Host binding, wiring, and fail-fast validation
 
 **Files:**
 - Modify: `src/Host/Configuration/MailSynchronizationOptions.cs`, `src/Host/Program.cs`, `src/Host/appsettings.json`, `src/Host/appsettings.Development.json`
@@ -644,7 +541,7 @@ The configuration path, the failure identity, and nothing else — no target pat
 
 The second line is decision 26 doing its work: the block was found by type, so a plain-text password sitting where a reference belongs fails here rather than authenticating successfully against the server. Reporting every failure together matters when an operator provisions five accounts and mistypes two names; one-at-a-time discovery costs five restarts.
 
-The graph walk is the one place this plan accepts reflection, and it earns it: enumerating `ConfiguredSecret` properties is what makes decision 26's guarantee automatic for settings that do not exist yet, which an explicit call list cannot be. It runs once, at startup, over a bound options object of a few dozen properties. The walk itself lives in `Infrastructure` as `ConfiguredSecretDiscovery` so it is unit-testable — `Host` is excluded from coverage, and the same rule that put `MailAccountSecretOptions` in `Infrastructure` applies here. `MailAccountSecretOptions.FindConfigurationErrorsAsync` stays as the account-scoped path used by Task 8's reload, which validates one candidate snapshot rather than the whole graph.
+The graph walk is the one place this plan accepts reflection, and it earns it: enumerating `ConfiguredSecret` properties is what makes decision 26's guarantee automatic for settings that do not exist yet, which an explicit call list cannot be. It runs once, at startup, over a bound options object of a few dozen properties. The walk itself lives in `Infrastructure` as `ConfiguredSecretDiscovery` so it is unit-testable — `Host` is excluded from coverage, and the same rule that put `MailAccountSecretOptions` in `Infrastructure` applies here. `MailAccountSecretOptions.FindConfigurationErrorsAsync` stays as the account-scoped path, which specification 02b's reload reuses to validate one candidate snapshot rather than the whole graph.
 
 `StartingAsync` is documented to run before any hosted service's `StartAsync`, so the synchronization worker never starts against an unresolvable secret. The remaining four lifecycle members are empty. The type stays a thin translation because `Host` is excluded from coverage; every rule it reports comes from Task 3 and from `ConfiguredSecretDiscovery`.
 
@@ -676,7 +573,7 @@ dotnet build MailMcp.slnx
 grep -rnE "string\??\s+(Password|Secret|Credential|PrivateKey|Token)\b" src/ --include=*.cs
 ```
 
-Expected: build succeeds; the grep matches only `ConfiguredSecret.SecretReference`. Searching for the *type* rather than for the JSON key `"Password"` is the point — after decision 25 the key is legitimate and appears in every secret block, so the old key-based grep would report the correct shape as a finding. This is the specification's first definition-of-done item, and Task 7's assembly-wide test is its permanent form; this grep also reaches `Host`, which that test cannot.
+Expected: build succeeds; the grep matches only `ConfiguredSecret.SecretReference`. Searching for the *type* rather than for the JSON key `"Password"` is the point — after decision 25 the key is legitimate and appears in every secret block, so the old key-based grep would report the correct shape as a finding. This is the specification's first definition-of-done item, and Task 6's assembly-wide test is its permanent form; this grep also reaches `Host`, which that test cannot.
 
 - [ ] **Step 7: Commit**
 
@@ -687,7 +584,7 @@ git commit -m "Bind mail and database secrets as references and fail startup whe
 
 ---
 
-### Task 7: Architecture test for the boundary
+### Task 6: Architecture tests for the boundary and the marker
 
 **Files:**
 - Create: `tests/Infrastructure.UnitTests/SecretBoundaryArchitectureTests.cs`
@@ -735,52 +632,7 @@ git commit -m "Assert secret resolution stays out of Domain and Application"
 
 ---
 
-### Task 8: Dynamic reload of references and material
-
-**Files:**
-- Modify: `src/Host/Configuration/MailSynchronizationOptions.cs`, `src/Host/Program.cs`, `src/Infrastructure/Mail/MailAccountSecretOptions.cs`
-- Create: `src/Host/Configuration/MailSecretSnapshotPublisher.cs`
-- Test: `tests/Infrastructure.UnitTests/MailAccountSecretReloadTests.cs`
-
-Decision 18 makes this a blocking prerequisite: **do not start this task until ADR 0002 has been amended with owner approval.** The ADR classifies credentials and trust anchors as restart-required, and this task deliberately reclassifies them as reloadable for new operations.
-
-- [ ] **Step 1: Write the failing tests**
-
-```csharp
-[Fact] ReloadAsync_ReferenceChangedToAResolvableTarget_PublishesTheNewSecrets
-[Fact] ReloadAsync_CandidateSnapshotHasAnUnresolvableReference_KeepsThePreviousSecrets
-[Fact] ReloadAsync_RejectedSnapshot_LogsTheAccountAndFailureWithoutMaterial
-[Fact] ResolveAsync_MaterialRotatedBehindAnUnchangedReference_ReturnsTheRotatedValue
-[Fact] ResolveAsync_MaterialRotatedMidOperation_DoesNotAffectTheOperationInFlight
-```
-
-The last two are the pair that distinguishes the two reload halves, and the last one is what keeps decision 17's "not during running operations" honest.
-
-- [ ] **Step 2: Bind for reload**
-
-`Host` switches the mail options consumer from `IOptions<MailSynchronizationOptions>` to `IOptionsMonitor<MailSynchronizationOptions>`. Note that `IOptions<T>` is a singleton captured once, so leaving it in place would silently defeat the reference half of this task.
-
-- [ ] **Step 3: Validate the candidate before publishing it**
-
-`MailSecretSnapshotPublisher` subscribes to `OnChange`, resolves every reference in the candidate snapshot, and publishes an immutable snapshot only when all of them resolve. On failure it retains the previous snapshot and logs the account, the setting, and the `SecretResolutionFailure` — never a path, a variable name, or material. This is the last-known-good behavior ADR 0002 requires of any reloadable group.
-
-Reload validation must not crash the process: ADR 0002 is explicit that a rejected reload leaves the previous valid settings active, unlike a startup failure which is fatal.
-
-- [ ] **Step 4: Resolve material per operation**
-
-No change is needed for the material half — decision 16 already resolves per use, which is what makes rotation behind an unchanged reference work. The test in Step 1 is what proves it, and it exists to catch a future "optimization" that caches the resolved value on the options instance.
-
-- [ ] **Step 5: Run the tests and commit**
-
-```bash
-dotnet test --project tests/Infrastructure.UnitTests/Infrastructure.UnitTests.csproj
-git add src/Host src/Infrastructure tests/Infrastructure.UnitTests/MailAccountSecretReloadTests.cs
-git commit -m "Reload secret references and material without restarting the host"
-```
-
----
-
-### Task 9: Documentation and full verification
+### Task 7: Documentation and full verification
 
 **Files:**
 - Create: `docs/operations/secret-provisioning.md`
@@ -788,13 +640,13 @@ git commit -m "Reload secret references and material without restarting the host
 
 - [ ] **Step 1: Write the provisioning page**
 
-`docs/operations/secret-provisioning.md` documents the reference grammar, the four schemes, and — because MailMcp is deployed several ways — a section per deployment shape: the native systemd path with `LoadCredential=`, `LoadCredentialEncrypted=`, `systemd-creds`, and `$CREDENTIALS_DIRECTORY`; the container path with Compose `secrets:` mounted at `/run/secrets/<name>`; and the Kubernetes path with a Secret mounted as a read-only tmpfs volume — the last two both addressed as `file:`, with an explicit note that no container- or Kubernetes-specific scheme exists or is needed. It states the trailing-newline trimming and that it applies to text secrets only, the accepted certificate encodings, the operational hardening that bounds in-memory exposure — `LimitCORE=0` on the systemd unit, `Storage=none` and `ProcessSizeMax=0` for `systemd-coredump`, and keeping the service out of swap in both the systemd and container shapes, with the honest statement that a dump or debugger can still read managed memory and that no code-level measure changes that — the three interpretation modes with `ReferenceOnly` as the default and `InlineOnly` as the Azure App Configuration path, the fact that inline values cannot be erased from memory, the recommendation against `env:` in production, and the ADR 0002 classification from decision 17.
+`docs/operations/secret-provisioning.md` documents the reference grammar, the four schemes, and — because MailMcp is deployed several ways — a section per deployment shape: the native systemd path with `LoadCredential=`, `LoadCredentialEncrypted=`, `systemd-creds`, and `$CREDENTIALS_DIRECTORY`; the container path with Compose `secrets:` mounted at `/run/secrets/<name>`; and the Kubernetes path with a Secret mounted as a read-only tmpfs volume — the last two both addressed as `file:`, with an explicit note that no container- or Kubernetes-specific scheme exists or is needed. It states the trailing-newline trimming and that it applies to text secrets only, the operational hardening that bounds in-memory exposure — `LimitCORE=0` on the systemd unit, `Storage=none` and `ProcessSizeMax=0` for `systemd-coredump`, and keeping the service out of swap in both the systemd and container shapes, with the honest statement that a dump or debugger can still read managed memory and that no code-level measure changes that — the three interpretation modes with `ReferenceOnly` as the default and `InlineOnly` as the Azure App Configuration path, the fact that inline values cannot be erased from memory, and the recommendation against `env:` in production. It also states, for each of the three modes, how the same setting is addressed by a flattening provider — `MailSynchronization:Accounts:0:Secrets:Password:SecretReference` in Azure App Configuration and its double-underscore form in an environment block — because that is the path an operator on a managed store actually configures.
 
 A closing section states what a future managed-store provider would add — one `ISecretSchemeResolver`, one registration extension, its own timeouts and caching, platform identity rather than a MailMcp-held credential, and a `LICENSES.md` entry — so an operator reading the page can tell which schemes exist today from which are anticipated. It documents anticipated extension, not unimplemented behavior, and says so plainly; `docs/AGENTS.md` requires documentation to describe verified implemented behavior, and this section is explicitly labelled as the extension contract rather than as a feature.
 
 - [ ] **Step 2: Update the feature and development pages**
 
-`docs/features/imap-synchronization.md` gets the new account JSON, the resolution and fail-fast behavior, the trust-anchor behavior from Task 4 including the revocation trade-off, and loses the two now-resolved pending items — deployment-specific secret binding, and trust anchor loading. `docs/operations/local-development.md` gains the Development workflow: `plaintext:` in `appsettings.Development.json` or user secrets, and why neither is a production secret store.
+`docs/features/imap-synchronization.md` gets the new account JSON and the resolution and fail-fast behavior, and loses the now-resolved pending item on deployment-specific secret binding. Trust anchor loading stays listed as pending, because specification 02b delivers it. `docs/operations/local-development.md` gains the Development workflow: `plaintext:` in `appsettings.Development.json` or user secrets, and why neither is a production secret store.
 
 - [ ] **Step 3: Run the documentation and licensing gate**
 
@@ -836,7 +688,7 @@ Run `$finish-change`: commit, push, and open a draft pull request whose body con
 | Provider concerns confined to the provider's adapter | decisions 19 and 20 |
 | Resolver contract and adapters live in `Infrastructure` | 1–4 |
 | `Host` invokes resolution once before hosted services start | 6 |
-| No options type binds a raw password | 3, 5, 6 (verified by `grep` in Task 6 Step 6) |
+| No options type binds a raw password | 3, 4, 5 (verified by `grep` in Task 5 Step 6) |
 | Failure message names account, logical secret, and scheme only | 3, 6 |
 | Secrets exposed through an accessor, not an ordinary property | 1, 3 |
 | Rotated material observed without restart | decision 16, Tasks 3 and 8 |
@@ -852,9 +704,7 @@ Run `$finish-change`: commit, push, and open a draft pull request whose body con
 | Core-dump and swap exposure documented for both shapes | 9 |
 | Text view decodes UTF-8 and trims one trailing newline | 1 |
 | Rotated material observed by the next operation, no restart | 8 |
-| Reload with an unresolvable reference keeps previous secrets | 8 |
-| Trust anchor loaded, validated as usable, and installed in the validation path | 3, 4 |
-| Malformed trust anchor fails startup | 3 |
+| Trust anchor setting reshaped to a block without being read | 3 |
 | Private server connects with validation fully enabled | 4 |
 | No secret-resolution contract reachable from `Application` or `Domain` | 7 |
 | Scheme adapters tested against in-memory file/credential abstractions | 2 |
@@ -863,16 +713,14 @@ Run `$finish-change`: commit, push, and open a draft pull request whose body con
 | `docs/operations/` page for the systemd credential deployment path | 8 |
 | 85% coverage gate | 8 |
 
-**Deliberately out of scope:** Data Protection key-ring provisioning, encrypted secret storage in PostgreSQL, secret rotation without restart, and MCP client certificates (stage 9).
+**Deliberately out of scope:** certificate and private-key material loading, installing a trust anchor into the validation path, and secret rotation without restart — all three are specification 02b, which consumes this contract unchanged. Also out of scope: Data Protection key-ring provisioning, encrypted secret storage in PostgreSQL, and MCP client certificates (stage 9).
 
 Managed secret stores — Kubernetes-native APIs, Azure Key Vault, HashiCorp Vault, AWS Secrets Manager — are out of scope as implementations but not as constraints. Decisions 2, 4, 19, and 20 exist for them, and the Task 2 extensibility test is what keeps the promise honest. Note that Kubernetes and container deployments need nothing added at all: their secrets are files, so `file:` already serves them today.
 
 **Flagged for the owner**
 
-- **Blocking:** ADR 0002 must be amended before Task 8 begins (decision 18). The dynamic-reload requirement contradicts the ADR's current restart-required classification for credentials and trust anchors, and `docs/AGENTS.md` forbids amending an ADR without explicit owner approval. Tasks 1–7 and 9 are unaffected.
-- **Blocking:** the specification is now estimated at ~1700 lines against `specs/README.md`'s ~1000-line ceiling, and `specs/02` records a proposed 02a/02b split. Whether to split — and therefore whether this plan stays one plan — is the owner's call, because renumbering touches the roadmap board and the dependency chain from specification 03 onward.
-- The specification originally estimated ~500 lines. Loading and validating the trust anchor (Task 4), the database password reference (Task 5), the asynchronous contract that ripples through `IImapAccountSettingsProvider` and startup validation (decisions 4 and 5), memory hygiene, dynamic reload, and now the secret block with its discovery walk (decisions 25 and 26) bring this to roughly 1700 lines including tests and documentation. Nothing is proposed for deferral; the estimate is what is optimistic. Issue #36's `Size` line should be updated when this plan is accepted.
-- Decision 25 changes `MailAccountTransportSecurityOptions.TrustedCertificateAuthorityReference` from a string to a block, which is a breaking configuration change to a setting specification 01 already shipped. It is proposed now precisely because it is cheap now — one consumer, no released deployment — and expensive later. The key name is unchanged, so an affected operator edits one line.
+- The combined specification reached ~1700 lines against `specs/README.md`'s ~1000-line ceiling and has been split. This plan covers 02a at roughly 950 lines including tests and documentation; certificate material and rotation are ~750 lines in the 02b plan. Nothing is deferred outside the two specifications, and nothing depended on `02`, so the split cost no renumbering of specifications 03 onward. Issue #36's `Size` line should be updated when this plan is accepted.
+- Decision 25 renames `MailAccountTransportSecurityOptions.TrustedCertificateAuthorityReference` to `TrustedCertificateAuthority` and changes it from a string to a block. That is a breaking configuration change to a setting specification 01 already shipped, and it is proposed now precisely because it is cheap now — one consumer, no released deployment — and expensive later. An affected operator edits one line.
 - Decision 26's discovery walk uses reflection over the bound options graph, which the root rules restrict to measured need. The need argued here is that an explicit call list cannot cover a secret-bearing setting added after this ships, which is the entire value of the marker. It runs once at startup over a small object. If you would rather keep reflection out and accept that each new secret setting must be registered by hand, `ConfiguredSecretDiscovery` collapses into an explicit list and decision 26's guarantee weakens from structural to procedural.
 - Decision 15 reads "permitted for non-production automation" as guidance rather than an enforced environment gate for `env:`. If it should be enforced, say so and it moves onto the same Development flag as `plaintext:`.
 - Decision 4 makes the contract asynchronous before any asynchronous provider exists. The cost is real and visible: `GetSettings` becomes `GetSettingsAsync`, and startup validation moves out of `IValidateOptions` into `IHostedLifecycleService`. It is proposed because retrofitting it alongside a first Key Vault adapter would touch the same files while also introducing SDK, identity, and licensing questions, and doing one of those at a time is cheaper. If managed stores are further off than this assumes, the synchronous contract is defensible and this is the decision to revisit.
