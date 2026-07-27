@@ -136,6 +136,27 @@ public sealed class MailServerCertificateValidatorTests
         Assert.False(trusted);
     }
 
+    /// <summary>A chain error also covers a usage rejection, so the rebuild must not treat every one as an untrusted root.</summary>
+    [Fact]
+    public void IsServerCertificateTrusted_CertificateUsableOnlyForClientAuthentication_IsRejected()
+    {
+        // Arrange
+        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var anchor = TestCertificates.WithoutPrivateKey(authority);
+        using var clientCertificate = TestCertificates.IssueClientAuthenticationCertificate(authority, "imap.example.test");
+        using var handshakeChain = BuildHandshakeChain(clientCertificate);
+
+        // Act
+        var trusted = MailServerCertificateValidator.IsServerCertificateTrusted(
+            anchor,
+            clientCertificate,
+            handshakeChain,
+            SslPolicyErrors.RemoteCertificateChainErrors);
+
+        // Assert
+        Assert.False(trusted);
+    }
+
     [Fact]
     public void IsServerCertificateTrusted_PlatformValidationSucceeded_NeedsNoRebuild()
     {

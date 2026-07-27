@@ -330,4 +330,43 @@ public sealed class MailAccountTransportSecurityOptionsTests
         // Act, Assert
         Assert.Throws<MailTransportSecurityPolicyViolationException>(options.CreatePolicy);
     }
+    /// <summary>Under an inline interpretation mode the anchor is the PEM text, which parses as no reference at all.</summary>
+    [Fact]
+    public void FindConfigurationErrors_InlinePemTrustAnchor_ReportsNoMissingAnchor()
+    {
+        // Arrange
+        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        var options = new MailAccountTransportSecurityOptions
+        {
+            CertificateTrust = MailServerCertificateTrust.AdditionalTrustedAuthority,
+            TrustedCertificateAuthority = new ConfiguredSecret { SecretReference = authority.ExportCertificatePem() },
+        };
+
+        // Act
+        var errors = options.FindConfigurationErrors();
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>The domain reads the anchor for presence only, so the operator's raw value must never reach it.</summary>
+    [Fact]
+    public void CreatePolicy_InlinePemTrustAnchor_CarriesAMaskedValueIntoTheDomain()
+    {
+        // Arrange
+        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        var options = new MailAccountTransportSecurityOptions
+        {
+            CertificateTrust = MailServerCertificateTrust.AdditionalTrustedAuthority,
+            TrustedCertificateAuthority = new ConfiguredSecret { SecretReference = authority.ExportCertificatePem() },
+        };
+
+        // Act
+        var policy = options.CreatePolicy();
+
+        // Assert
+        Assert.Equal("***", policy.TrustedCertificateAuthorityReference);
+        Assert.DoesNotContain("BEGIN CERTIFICATE", policy.ToString(), StringComparison.Ordinal);
+    }
+
 }

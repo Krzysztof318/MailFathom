@@ -71,22 +71,24 @@ public static class ServiceCollectionExtensions
 
     /// <summary>Registers EF Core persistence, MailKit mailbox access, and application synchronization services.</summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="connectionSettings">Where the PostgreSQL connection string and its password come from.</param>
+    /// <param name="currentConnectionSettings">Supplies where the PostgreSQL connection string and its password currently come from.</param>
     /// <returns>The service collection, for chaining.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> or <paramref name="connectionSettings" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> or <paramref name="currentConnectionSettings" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The connection string arrives already read rather than as an <c>IConfiguration</c> this method reaches into,
-    /// so which key holds it stays a host decision and this assembly gains no configuration dependency.
+    /// The settings arrive already read rather than as an <c>IConfiguration</c> this method reaches into, so which key
+    /// holds them stays a host decision and this assembly gains no configuration dependency. They arrive as an
+    /// accessor rather than as a value because a secret reference can be repointed by a configuration reload, and a
+    /// value captured at registration would keep authenticating with the reference the operator replaced.
     /// </remarks>
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        PostgresConnectionSettings connectionSettings)
+        Func<IServiceProvider, PostgresConnectionSettings> currentConnectionSettings)
     {
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(connectionSettings);
+        ArgumentNullException.ThrowIfNull(currentConnectionSettings);
 
         services.AddSingleton(provider => new PostgresConnectionStringProvider(
-            connectionSettings,
+            () => currentConnectionSettings(provider),
             provider.GetRequiredService<ISecretReferenceResolver>(),
             provider.GetRequiredService<SecretResolutionOptions>(),
             provider.GetRequiredService<ILogger<PostgresConnectionStringProvider>>()));

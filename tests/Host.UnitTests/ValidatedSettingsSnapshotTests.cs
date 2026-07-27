@@ -10,7 +10,7 @@ using Xunit;
 
 namespace MailMcp.Host.UnitTests;
 
-public sealed class ValidatedMailSynchronizationSettingsTests
+public sealed class ValidatedSettingsSnapshotTests
 {
     [Fact]
     public async Task Current_BeforeAnyReload_IsTheSnapshotBoundAtStartup()
@@ -35,7 +35,7 @@ public sealed class ValidatedMailSynchronizationSettingsTests
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
-            new ValidatedMailSynchronizationSettings.ReloadCandidate(1, rotatedReference),
+            new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(1, rotatedReference),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -52,7 +52,7 @@ public sealed class ValidatedMailSynchronizationSettingsTests
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
-            new ValidatedMailSynchronizationSettings.ReloadCandidate(1, brokenCandidate),
+            new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(1, brokenCandidate),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -68,7 +68,7 @@ public sealed class ValidatedMailSynchronizationSettingsTests
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
-            new ValidatedMailSynchronizationSettings.ReloadCandidate(1, brokenCandidate),
+            new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(1, brokenCandidate),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -91,7 +91,7 @@ public sealed class ValidatedMailSynchronizationSettingsTests
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
-            new ValidatedMailSynchronizationSettings.ReloadCandidate(1, brokenCandidate),
+            new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(1, brokenCandidate),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -109,14 +109,55 @@ public sealed class ValidatedMailSynchronizationSettingsTests
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
-            new ValidatedMailSynchronizationSettings.ReloadCandidate(2, newerCandidate),
+            new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(2, newerCandidate),
             TestContext.Current.CancellationToken);
         await harness.Settings.PublishWhenUsableAsync(
-            new ValidatedMailSynchronizationSettings.ReloadCandidate(1, olderCandidate),
+            new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(1, olderCandidate),
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Same(newerCandidate, harness.Settings.Current);
+    }
+
+    /// <summary>A candidate superseded while it was being validated must not reach operations even briefly.</summary>
+    [Fact]
+    public async Task PublishWhenUsableAsync_CandidateSupersededWhileValidating_IsNotPublished()
+    {
+        // Arrange
+        var startupSettings = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        await using var harness = CreateHarness(startupSettings);
+        await harness.Settings.StartingAsync(TestContext.Current.CancellationToken);
+        var supersededCandidate = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:superseded-password"));
+
+        // Act
+        // Two reports move the observed count past the candidate below, whether or not the reader has reached either
+        // of them yet, which is what makes this independent of the background loop's timing.
+        harness.OptionsMonitor.ReportReload(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:newer-password")));
+        harness.OptionsMonitor.ReportReload(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:newest-password")));
+        await harness.Settings.PublishWhenUsableAsync(
+            new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(1, supersededCandidate),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotSame(supersededCandidate, harness.Settings.Current);
+    }
+
+    /// <summary>Hosted services are constructed before the startup gate runs, so a reload can land before any listener exists.</summary>
+    [Fact]
+    public async Task StartingAsync_ReloadLandedBeforeSubscribing_AdoptsItInsteadOfHoldingTheCapturedSnapshot()
+    {
+        // Arrange
+        var startupSettings = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        await using var harness = CreateHarness(startupSettings);
+        var reloadedDuringTheGap = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:rotated-password"));
+        harness.OptionsMonitor.ReportReload(reloadedDuringTheGap);
+
+        // Act
+        await harness.Settings.StartingAsync(TestContext.Current.CancellationToken);
+        await harness.Settings.StoppedAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Same(reloadedDuringTheGap, harness.Settings.Current);
     }
 
     /// <summary>A reload that fails unexpectedly must leave a running deployment alone rather than end the process.</summary>
@@ -130,12 +171,14 @@ public sealed class ValidatedMailSynchronizationSettingsTests
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
-            new ValidatedMailSynchronizationSettings.ReloadCandidate(1, candidate),
+            new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(1, candidate),
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Same(startupSettings, harness.Settings.Current);
-        Assert.Single(harness.SettingsLogger.Messages);
+        var rejection = Assert.Single(harness.SettingsLogger.Messages);
+        Assert.Contains(nameof(IOException), rejection, StringComparison.Ordinal);
+        Assert.DoesNotContain("unreachable", rejection, StringComparison.Ordinal);
     }
 
     /// <summary>Resolution can reach a file or a managed store, so it must never run on the thread reporting the reload.</summary>
@@ -190,8 +233,9 @@ public sealed class ValidatedMailSynchronizationSettingsTests
         Assert.Same(startupSettings, harness.Settings.Current);
     }
 
+    /// <summary>A work unit reads its transport policy from the snapshot it captured, which the publisher supplies.</summary>
     [Fact]
-    public async Task GetPolicy_AfterAPublishedReload_ReadsTheAdoptedSnapshot()
+    public async Task Current_AfterAPublishedReload_SuppliesTheAdoptedTransportSecurityPolicy()
     {
         // Arrange
         await using var harness = CreateHarness(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")));
@@ -200,13 +244,13 @@ public sealed class ValidatedMailSynchronizationSettingsTests
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
-            new ValidatedMailSynchronizationSettings.ReloadCandidate(1, candidate),
+            new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(1, candidate),
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
             MailConnectionSecurity.StartTlsRequired,
-            harness.Settings.GetPolicy(MailAccountId.Create("primary")).ConnectionSecurity);
+            harness.Settings.Current.GetPolicy(MailAccountId.Create("primary")).ConnectionSecurity);
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The harness owns the settings and every test disposes the harness.")]
@@ -216,23 +260,26 @@ public sealed class ValidatedMailSynchronizationSettingsTests
     {
         var secretReferenceResolver = resolver ?? new PlaintextOnlySecretReferenceResolver();
         var optionsMonitor = new TestOptionsMonitor<MailSynchronizationOptions>(startupSettings);
-        var settingsLogger = new RecordingLogger<ValidatedMailSynchronizationSettings>();
+        var settingsLogger = new RecordingLogger<ValidatedSettingsSnapshot<MailSynchronizationOptions>>();
 
-        var settings = new ValidatedMailSynchronizationSettings(
+        var validator = new SecretConfigurationValidator(
+            secretReferenceResolver,
+            new TrustAnchorLoader(secretReferenceResolver),
+            new RecordingLogger<SecretConfigurationValidator>());
+
+        var settings = new ValidatedSettingsSnapshot<MailSynchronizationOptions>(
             optionsMonitor,
-            new SecretConfigurationValidator(
-                secretReferenceResolver,
-                new TrustAnchorLoader(secretReferenceResolver),
-                new RecordingLogger<SecretConfigurationValidator>()),
+            validator.FindMailConfigurationErrorsAsync,
+            "MailSynchronization",
             settingsLogger);
 
         return new SettingsHarness(settings, optionsMonitor, settingsLogger);
     }
 
     private sealed record SettingsHarness(
-        ValidatedMailSynchronizationSettings Settings,
+        ValidatedSettingsSnapshot<MailSynchronizationOptions> Settings,
         TestOptionsMonitor<MailSynchronizationOptions> OptionsMonitor,
-        RecordingLogger<ValidatedMailSynchronizationSettings> SettingsLogger) : IAsyncDisposable
+        RecordingLogger<ValidatedSettingsSnapshot<MailSynchronizationOptions>> SettingsLogger) : IAsyncDisposable
     {
         public ValueTask DisposeAsync() => this.Settings.DisposeAsync();
     }

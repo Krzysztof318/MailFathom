@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using System.Net.Security;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 namespace MailMcp.Infrastructure.Mail;
@@ -21,6 +22,9 @@ namespace MailMcp.Infrastructure.Mail;
 /// </remarks>
 internal static class MailServerCertificateValidator
 {
+    /// <summary>The extended key usage a certificate must carry to authenticate a TLS server, <c>id-kp-serverAuth</c>.</summary>
+    private const string ServerAuthenticationOid = "1.3.6.1.5.5.7.3.1";
+
     /// <summary>Reports whether the server certificate chains to the configured trust anchor.</summary>
     /// <param name="trustAnchor">The deployment-provisioned authority, which is the only root the rebuild trusts.</param>
     /// <param name="serverCertificate">The certificate the server presented, or <see langword="null" /> when it presented none.</param>
@@ -47,11 +51,30 @@ internal static class MailServerCertificateValidator
             return false;
         }
 
+        if (ReportsAVerdictTheRebuildCannotReach(platformChain))
+        {
+            return false;
+        }
+
         // Only a certificate the platform already parsed can be rebuilt against another root. Every TLS handshake the
         // runtime completes supplies one, so this guard covers a caller that fabricated a chain rather than a
         // deployment shape an operator can reach.
         return serverCertificate is X509Certificate2 presentedCertificate
             && ChainsToTrustAnchor(trustAnchor, presentedCertificate, platformChain);
+    }
+
+    /// <summary>Reports a platform verdict that a rebuild against another root could not have re-derived.</summary>
+    /// <remarks>
+    /// <c>RemoteCertificateChainErrors</c> is not only "untrusted root". Revocation and explicit distrust are verdicts
+    /// about the certificate itself rather than about which authority signed it, and the rebuild deliberately checks
+    /// no revocation, so it would silently overturn them. They are refused instead.
+    /// </remarks>
+    private static bool ReportsAVerdictTheRebuildCannotReach(X509Chain? platformChain)
+    {
+        const X509ChainStatusFlags VerdictsAboutTheCertificateItself =
+            X509ChainStatusFlags.Revoked | X509ChainStatusFlags.ExplicitDistrust;
+
+        return platformChain?.ChainStatus.Any(status => (status.Status & VerdictsAboutTheCertificateItself) != 0) == true;
     }
 
     private static bool ChainsToTrustAnchor(
@@ -63,6 +86,16 @@ internal static class MailServerCertificateValidator
 
         rebuiltChain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
         rebuiltChain.ChainPolicy.CustomTrustStore.Add(trustAnchor);
+
+        // A chain error also covers a certificate rejected for its usage, so the rebuild has to re-apply the usage
+        // requirement the platform applied. Without this, a client-authentication certificate the same private
+        // authority issued would rebuild cleanly and be accepted as the server's.
+        rebuiltChain.ChainPolicy.ApplicationPolicy.Add(new Oid(ServerAuthenticationOid));
+
+        // The handshake already supplied every intermediate this rebuild is meant to use. Leaving downloads enabled
+        // would let an incomplete, server-chosen chain send this synchronous callback to a URL of the server's
+        // choosing, with no caller cancellation reaching it.
+        rebuiltChain.ChainPolicy.DisableCertificateDownloads = true;
 
         // A private authority typically publishes neither a CRL distribution point nor an OCSP responder, so an online
         // check would fail every connection to the server this feature exists to support. Compromise of a

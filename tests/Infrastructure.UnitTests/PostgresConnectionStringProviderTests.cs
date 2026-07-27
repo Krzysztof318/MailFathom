@@ -79,8 +79,37 @@ public sealed class PostgresConnectionStringProviderTests
         Assert.Equal(provider.ConnectionString, dataSourceBuilder.ConnectionString);
     }
 
+    /// <summary>Repointing the reference is the other half of rotation, and a captured settings object would miss it.</summary>
+    [Fact]
+    public async Task RetrieveCurrentPasswordAsync_ReferenceRepointedByAReload_AuthenticatesWithTheNewReference()
+    {
+        // Arrange
+        var configuredSettings = new PostgresConnectionSettings(
+            ConnectionStringWithoutPassword,
+            ConnectionStringSecret: null,
+            new ConfiguredSecret { SecretReference = "plaintext:the-original-password" });
+        var provider = new PostgresConnectionStringProvider(
+            () => configuredSettings,
+            new PlaintextOnlySecretReferenceResolver(),
+            new SecretResolutionOptions(SecretValueInterpretation.ReferenceOnly),
+            NullLogger<PostgresConnectionStringProvider>.Instance);
+        await provider.StartingAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        var beforeTheReload = await provider.RetrieveCurrentPasswordAsync(TestContext.Current.CancellationToken);
+        configuredSettings = configuredSettings with
+        {
+            Password = new ConfiguredSecret { SecretReference = "plaintext:the-repointed-password" },
+        };
+        var afterTheReload = await provider.RetrieveCurrentPasswordAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("the-original-password", beforeTheReload);
+        Assert.Equal("the-repointed-password", afterTheReload);
+    }
+
     private static PostgresConnectionStringProvider CreateProvider(ConfiguredSecret? password = null) => new(
-        new PostgresConnectionSettings(ConnectionStringWithoutPassword, ConnectionStringSecret: null, password),
+        () => new PostgresConnectionSettings(ConnectionStringWithoutPassword, ConnectionStringSecret: null, password),
         new PlaintextOnlySecretReferenceResolver(),
         new SecretResolutionOptions(SecretValueInterpretation.ReferenceOnly),
         NullLogger<PostgresConnectionStringProvider>.Instance);

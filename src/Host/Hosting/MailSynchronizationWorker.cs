@@ -14,14 +14,14 @@ namespace MailMcp.Host.Hosting;
 internal sealed partial class MailSynchronizationWorker : BackgroundService
 {
     private readonly IServiceScopeFactory scopeFactory;
-    private readonly IMailSynchronizationSettingsReader settings;
+    private readonly ISettingsSnapshot<MailSynchronizationOptions> settings;
     private readonly ILogger<MailSynchronizationWorker> logger;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes a new mail synchronization worker.</summary>
     public MailSynchronizationWorker(
         IServiceScopeFactory scopeFactory,
-        IMailSynchronizationSettingsReader settings,
+        ISettingsSnapshot<MailSynchronizationOptions> settings,
         ILogger<MailSynchronizationWorker> logger,
         TimeProvider timeProvider)
     {

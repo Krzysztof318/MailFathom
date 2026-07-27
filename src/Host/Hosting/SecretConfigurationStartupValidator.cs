@@ -26,22 +26,22 @@ namespace MailMcp.Host.Hosting;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
 internal sealed partial class SecretConfigurationStartupValidator : IHostedLifecycleService
 {
-    private readonly IMailSynchronizationSettingsReader mailSynchronizationSettings;
-    private readonly IOptions<PersistenceOptions> persistenceOptions;
+    private readonly ISettingsSnapshot<MailSynchronizationOptions> mailSynchronizationSettings;
+    private readonly ISettingsSnapshot<PersistenceOptions> persistenceSettings;
     private readonly SecretConfigurationValidator validator;
     private readonly SecretResolutionOptions resolutionOptions;
     private readonly ILogger<SecretConfigurationStartupValidator> logger;
 
     /// <summary>Initializes a new secret configuration startup validator.</summary>
     public SecretConfigurationStartupValidator(
-        IMailSynchronizationSettingsReader mailSynchronizationSettings,
-        IOptions<PersistenceOptions> persistenceOptions,
+        ISettingsSnapshot<MailSynchronizationOptions> mailSynchronizationSettings,
+        ISettingsSnapshot<PersistenceOptions> persistenceSettings,
         SecretConfigurationValidator validator,
         SecretResolutionOptions resolutionOptions,
         ILogger<SecretConfigurationStartupValidator> logger)
     {
         this.mailSynchronizationSettings = mailSynchronizationSettings;
-        this.persistenceOptions = persistenceOptions;
+        this.persistenceSettings = persistenceSettings;
         this.validator = validator;
         this.resolutionOptions = resolutionOptions;
         this.logger = logger;
@@ -61,7 +61,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         failures.AddRange(
             await this.validator.FindSecretReferenceErrorsAsync(
                 "Persistence",
-                this.persistenceOptions.Value,
+                this.persistenceSettings.Current,
                 cancellationToken));
 
         if (failures.Count > 0)

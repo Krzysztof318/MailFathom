@@ -232,8 +232,8 @@ public sealed class SecretConfigurationStartupValidatorTests
         var startupLogger = new RecordingLogger<SecretConfigurationStartupValidator>();
 
         var validator = new SecretConfigurationStartupValidator(
-            new StubMailSynchronizationSettingsReader(synchronizationOptions),
-            Options.Create(persistenceOptions),
+            new StubSettingsSnapshot<MailSynchronizationOptions>(synchronizationOptions),
+            new StubSettingsSnapshot<PersistenceOptions>(persistenceOptions),
             new SecretConfigurationValidator(resolver, new TrustAnchorLoader(resolver), validationLogger),
             new SecretResolutionOptions(interpretation),
             startupLogger);

@@ -78,7 +78,7 @@ public sealed class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
-        services.AddInfrastructure(new PostgresConnectionSettings(
+        services.AddInfrastructure(_ => new PostgresConnectionSettings(
             "Host=localhost;Database=mailmcp;Username=mailmcp",
             ConnectionStringSecret: null,
             Password: null));

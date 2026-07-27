@@ -7,14 +7,21 @@ namespace MailMcp.Infrastructure.UnitTests;
 
 /// <summary>Builds the certificates a trust-anchor test needs, entirely in memory.</summary>
 /// <remarks>
-/// Nothing here touches a certificate store, a file, or a network. Validity is expressed relative to the current
-/// instant because chain building compares against the system clock, which no injected time provider reaches; the
-/// window is wide enough that no test depends on when it runs.
+/// Nothing here touches a certificate store, a file, or a network, and no value depends on when the test runs.
+/// Validity is a fixed absolute interval rather than an offset from the current instant: chain building compares
+/// against the system clock, which no injected time provider reaches, so the interval is made wide enough that the
+/// comparison has one answer for the lifetime of this repository instead of one that a clock jump could change.
+/// Serial numbers come from a counter for the same reason — they must be unique per issuer, not unpredictable.
 /// </remarks>
 internal static class TestCertificates
 {
-    private static readonly DateTimeOffset ValidFrom = DateTimeOffset.UtcNow.AddDays(-1);
-    private static readonly DateTimeOffset ValidUntil = DateTimeOffset.UtcNow.AddDays(30);
+    /// <summary><c>id-kp-clientAuth</c>, which a TLS server certificate must not be limited to.</summary>
+    private const string ClientAuthenticationOid = "1.3.6.1.5.5.7.3.2";
+
+    private static readonly DateTimeOffset ValidFrom = new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset ValidUntil = new(2100, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+    private static long issuedCount;
 
     /// <summary>Creates a self-signed certificate authority, private key included so it can issue.</summary>
     internal static X509Certificate2 CreateCertificateAuthority(string commonName)
@@ -41,7 +48,18 @@ internal static class TestCertificates
 
     /// <summary>Issues a server certificate for one host name, as the server presents it on the wire.</summary>
     internal static X509Certificate2 IssueServerCertificate(X509Certificate2 issuer, string dnsName) =>
-        Issue(issuer, dnsName, certificateAuthority: false, dnsName, keepPrivateKey: false);
+        Issue(issuer, commonName: dnsName, certificateAuthority: false, dnsName, keepPrivateKey: false);
+
+    /// <summary>Issues a certificate for the same host that is usable only for client authentication.</summary>
+    /// <remarks>The same private authority commonly issues both kinds, which is why one must not be accepted as the other.</remarks>
+    internal static X509Certificate2 IssueClientAuthenticationCertificate(X509Certificate2 issuer, string dnsName) =>
+        Issue(
+            issuer,
+            commonName: dnsName,
+            certificateAuthority: false,
+            dnsName,
+            keepPrivateKey: false,
+            extendedKeyUsageOid: ClientAuthenticationOid);
 
     /// <summary>Strips the private key, which is what a deployment provisions as a trust anchor.</summary>
     internal static X509Certificate2 WithoutPrivateKey(X509Certificate2 certificate) =>
@@ -57,12 +75,15 @@ internal static class TestCertificates
             ? certificate.Export(X509ContentType.Pkcs12)
             : certificate.Export(X509ContentType.Pkcs12, bundlePassword);
 
+    private static byte[] NextSerialNumber() => BitConverter.GetBytes(Interlocked.Increment(ref issuedCount));
+
     private static X509Certificate2 Issue(
         X509Certificate2 issuer,
         string commonName,
         bool certificateAuthority,
         string? dnsName,
-        bool keepPrivateKey)
+        bool keepPrivateKey,
+        string? extendedKeyUsageOid = null)
     {
         using var subjectKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var request = new CertificateRequest($"CN={commonName}", subjectKey, HashAlgorithmName.SHA256);
@@ -74,6 +95,13 @@ internal static class TestCertificates
             critical: true));
         request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, critical: false));
 
+        if (extendedKeyUsageOid is not null)
+        {
+            request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
+                [new Oid(extendedKeyUsageOid)],
+                critical: true));
+        }
+
         if (dnsName is not null)
         {
             var subjectAlternativeNames = new SubjectAlternativeNameBuilder();
@@ -81,7 +109,7 @@ internal static class TestCertificates
             request.CertificateExtensions.Add(subjectAlternativeNames.Build());
         }
 
-        var issued = request.Create(issuer, ValidFrom, ValidUntil, RandomNumberGenerator.GetBytes(16));
+        var issued = request.Create(issuer, ValidFrom, ValidUntil, NextSerialNumber());
         if (!keepPrivateKey)
         {
             return issued;

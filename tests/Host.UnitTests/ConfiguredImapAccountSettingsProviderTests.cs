@@ -120,7 +120,7 @@ public sealed class ConfiguredImapAccountSettingsProviderTests
         var secretReferenceResolver = resolver ?? new PlaintextOnlySecretReferenceResolver();
 
         return new ConfiguredImapAccountSettingsProvider(
-            new StubMailSynchronizationSettingsReader(options),
+            options,
             secretReferenceResolver,
             new TrustAnchorLoader(secretReferenceResolver));
     }

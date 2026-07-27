@@ -189,7 +189,7 @@ public sealed class MailSynchronizationWorkerTests
 
         return new MailSynchronizationWorker(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            new StubMailSynchronizationSettingsReader(options),
+            new StubSettingsSnapshot<MailSynchronizationOptions>(options),
             logger,
             timeProvider);
     }

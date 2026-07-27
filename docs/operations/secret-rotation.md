@@ -70,7 +70,7 @@ The credential is retrieved when the pool opens a physical connection, so:
 2. Existing connections keep working; new physical connections authenticate with the new credential.
 3. Revoke the old credential once the pool has turned over — `SELECT * FROM pg_stat_activity WHERE usename = '<old user>'` shows what is still connected.
 
-Both provisioning shapes rotate: `Persistence:Password`, and `Persistence:ConnectionString` where the whole connection string is one secret and its password is re-read from the rotated material.
+Both provisioning shapes rotate: `Persistence:Password`, and `Persistence:ConnectionString` where the whole connection string is one secret and its password is re-read from the rotated material. Repointing either reference at a different credential name works too, and goes through the reload path: the candidate is rejected if the new reference does not resolve, leaving the previous one active.
 
 **The one shape that still needs a restart** is a password written into `ConnectionStrings:mailmcp` with no secret block — an orchestrator-injected connection string. Nothing re-reads it, and under `ReferenceOnly` startup already logs a warning naming it. The same restriction applies to the non-credential parts of `Persistence:ConnectionString`: a rotated connection string that also changes host, database, or user name describes a different database rather than a rotated credential, and only its password is adopted in place.
 

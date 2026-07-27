@@ -157,7 +157,10 @@ public sealed class MailAccountTransportSecurityOptions
         return errors;
     }
 
-    /// <summary>Gets the masked trust anchor reference, or <see langword="null" /> when no usable anchor is configured.</summary>
+    /// <summary>The stand-in the domain receives for a configured value that is not a reference, such as inline PEM.</summary>
+    private const string ConfiguredButUnparsedTrustAnchor = "***";
+
+    /// <summary>Gets the masked trust anchor value, or <see langword="null" /> when no anchor is configured.</summary>
     /// <remarks>
     /// <para>
     /// The block is a configuration-adapter shape and must not cross into <c>Domain</c>, which keeps taking a nullable
@@ -165,19 +168,35 @@ public sealed class MailAccountTransportSecurityOptions
     /// missing anchor the operator actually has to fix.
     /// </para>
     /// <para>
-    /// What crosses is <see cref="SecretReference.ToString" />, not the operator's raw value. The domain reads this
-    /// only for presence, but it is a public property of a record whose synthesized printing reaches any log line the
-    /// policy appears in, and the raw value is a credential name, a file path, or — under an inline interpretation
-    /// mode — the material itself. Masking keeps the domain's documented invariant that the value is never material
-    /// true by construction instead of by convention. A value that does not parse as a reference reads as absent, so
-    /// certificate material pasted where a reference belongs fails the domain rule rather than being carried;
-    /// inline anchor material is specification 02b's work and arrives with a loader that can validate it.
+    /// The domain reads this for presence only, so presence is what it must answer: a non-blank configured value is an
+    /// anchor the operator supplied, whether or not it is a <c>&lt;scheme&gt;:&lt;target&gt;</c> reference. Under an
+    /// inline interpretation mode the value is the PEM text itself and parses as no reference at all; deciding
+    /// presence by parsing would report a missing anchor for the one deployment shape that supplies it directly, and
+    /// the host would refuse to start on a correct configuration.
+    /// </para>
+    /// <para>
+    /// What crosses is never the operator's raw value. A parsed reference crosses as
+    /// <see cref="SecretReference.ToString" /> and anything else as a fixed mask, because this is a public property of
+    /// a record whose synthesized printing reaches any log line the policy appears in, and the raw value is a
+    /// credential name, a file path, or the certificate itself. Whether the material is usable is the loader's
+    /// question, not this one: it reports a named failure that names the encoding or the parse error, which is a
+    /// better diagnostic than a presence rule could give.
     /// </para>
     /// </remarks>
-    private string? ConfiguredTrustAnchorReference =>
-        SecretReference.TryParse(this.TrustedCertificateAuthority?.SecretReference, out var reference, out _)
-            ? reference.ToString()
-            : null;
+    private string? ConfiguredTrustAnchorReference
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(this.TrustedCertificateAuthority?.SecretReference))
+            {
+                return null;
+            }
+
+            return SecretReference.TryParse(this.TrustedCertificateAuthority.SecretReference, out var reference, out _)
+                ? reference.ToString()
+                : ConfiguredButUnparsedTrustAnchor;
+        }
+    }
 
     private IReadOnlyList<MailAuthenticationMechanism> ParsePermittedMechanisms(out IReadOnlyList<string> unsupportedMechanismNames)
     {
