@@ -507,7 +507,19 @@ public sealed class MailKitImapMailboxSessionTests
         Assert.Equal(1000U, batch.InspectedThroughUid!.Value.Value);
     }
 
-    private static List<IMessageSummary> CreateSummaries(IList<UniqueId> uids) => [.. uids.Select(CreateSummary)];
+    // Building a substitute configures NSubstitute's ambient call context rather than only the returned object, so the
+    // construction stays in a loop instead of a Select whose deferred execution could interleave it with another
+    // substitute's setup.
+    private static List<IMessageSummary> CreateSummaries(IList<UniqueId> uids)
+    {
+        var summaries = new List<IMessageSummary>(uids.Count);
+        foreach (var uid in uids)
+        {
+            summaries.Add(CreateSummary(uid));
+        }
+
+        return summaries;
+    }
 
     private static IMessageSummary CreateSummary(UniqueId uid)
     {

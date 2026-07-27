@@ -51,14 +51,17 @@ public sealed class SecretBoundaryArchitectureTests
         Assert.Empty(rawSecretProperties);
     }
 
-    private static IEnumerable<string> FindRawSecretProperties(Type optionsType)
+    private static IReadOnlyList<string> FindRawSecretProperties(Type optionsType)
     {
         var visitedTypes = new HashSet<Type>();
 
         return FindRawSecretProperties(optionsType, optionsType.Name, visitedTypes);
     }
 
-    private static IEnumerable<string> FindRawSecretProperties(
+    // The cycle guard makes the walk stateful, so every level materializes instead of returning a deferred query. A
+    // lazy pipeline over a mutating visitedTypes would yield whatever the set happened to hold when the caller
+    // enumerated it, and a second enumeration would report nothing because every type is already marked visited.
+    private static IReadOnlyList<string> FindRawSecretProperties(
         Type type,
         string path,
         HashSet<Type> visitedTypes)
@@ -68,12 +71,15 @@ public sealed class SecretBoundaryArchitectureTests
             return [];
         }
 
-        return type
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .SelectMany(property => FindRawSecretProperties(property, $"{path}.{property.Name}", visitedTypes));
+        return
+        [
+            .. type
+                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .SelectMany(property => FindRawSecretProperties(property, $"{path}.{property.Name}", visitedTypes)),
+        ];
     }
 
-    private static IEnumerable<string> FindRawSecretProperties(
+    private static IReadOnlyList<string> FindRawSecretProperties(
         PropertyInfo property,
         string propertyPath,
         HashSet<Type> visitedTypes)
@@ -86,7 +92,7 @@ public sealed class SecretBoundaryArchitectureTests
         return SecretPropertyNaming.NamesASecret(property.Name) ? [propertyPath] : [];
     }
 
-    private static IEnumerable<string> FindNestedRawSecretProperties(
+    private static IReadOnlyList<string> FindNestedRawSecretProperties(
         Type propertyType,
         string propertyPath,
         HashSet<Type> visitedTypes)
