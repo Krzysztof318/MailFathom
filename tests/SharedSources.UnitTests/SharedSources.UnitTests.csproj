@@ -11,8 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The coverage marker only means anything where it is applied, so the rule that no element carries it alongside
-         [ExcludeFromCodeCoverage] can only be proven against a boundary that applies it. -->
-    <ProjectReference Include="..\..\src\Infrastructure\Infrastructure.csproj" />
+    <!-- RecordingLoggerProvider from tests/shared implements ILoggerProvider. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 </Project>

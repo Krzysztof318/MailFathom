@@ -1,9 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using MailMcp.CodeCoverage;
-using MailMcp.Infrastructure.Secrets;
 using Xunit;
 
 namespace MailMcp.SharedSources.UnitTests;
@@ -50,34 +48,37 @@ public sealed class RequiresIntegrationCoverageAttributeTests
     }
 
     /// <summary>
-    /// The two attributes state different things: one defers verification to the integration suite, the other says the
-    /// code never participates in coverage. Carrying both leaves the reason for the exclusion unreadable.
+    /// The collector reads the marker off individual elements, so a marker that bound only to types would silently
+    /// leave a marked method or property in the measured denominator.
     /// </summary>
-    /// <remarks>
-    /// The marker is matched by name rather than through <c>typeof</c>. Every assembly that applies it compiles its own
-    /// copy from <c>src/shared</c>, so the type this project compiles and the type <c>Infrastructure</c> applies are
-    /// distinct to the runtime: <c>IsDefined(typeof(RequiresIntegrationCoverageAttribute))</c> would find nothing and
-    /// the assertion would pass without ever inspecting a marked type. Matching by name is also exactly how the
-    /// coverage collector recognizes the marker, so this test and the gate read the code the same way.
-    /// </remarks>
     [Fact]
-    public void MarkedElements_AcrossAnApplyingBoundary_AreNotAlsoExcludedFromCodeCoverage()
+    public void MarkedElements_TypeAndItsMembers_AreDiscoverableUnderTheCollectedName()
     {
         // Arrange
-        var applyingBoundaryTypes = typeof(ISecretReferenceResolver).Assembly.GetTypes();
+        var sampleType = typeof(IntegrationVerifiedSample);
 
         // Act
-        var markedTypes = applyingBoundaryTypes.Where(IsMarkedForIntegrationCoverage).ToArray();
-        var doublyMarkedTypeNames = markedTypes
-            .Where(type => type.IsDefined(typeof(ExcludeFromCodeCoverageAttribute), inherit: false))
-            .Select(type => type.FullName);
+        var markedElementNames = sampleType.GetMembers()
+            .Cast<MemberInfo>()
+            .Prepend(sampleType)
+            .Where(IsMarkedForIntegrationCoverage)
+            .Select(element => element.Name);
 
         // Assert
-        Assert.NotEmpty(markedTypes);
-        Assert.Empty(doublyMarkedTypeNames);
+        Assert.Equal(
+            [
+                nameof(IntegrationVerifiedSample.Connect),
+                nameof(IntegrationVerifiedSample),
+                nameof(IntegrationVerifiedSample.IsConnected),
+            ],
+            markedElementNames.Order(StringComparer.Ordinal));
     }
 
-    private static bool IsMarkedForIntegrationCoverage(Type type) =>
-        type.GetCustomAttributes(inherit: false)
+    /// <summary>
+    /// The collector matches the marker by name rather than by declaring assembly, because every consumer compiles its
+    /// own copy from <c>src/shared</c>. Reading it the same way here keeps this test and the gate in agreement.
+    /// </summary>
+    private static bool IsMarkedForIntegrationCoverage(MemberInfo element) =>
+        element.GetCustomAttributes(inherit: false)
             .Any(attribute => attribute.GetType().Name == nameof(RequiresIntegrationCoverageAttribute));
 }
