@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
+using MailMcp.CodeCoverage;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailMcp.Infrastructure.Persistence;
@@ -16,9 +16,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// natively. This helper exists for lookups by an alternate key, where no such framework shortcut applies.
 /// </para>
 /// </remarks>
-// TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled. Both passes need a real
-// DbSet and change tracker, so this cannot be proven without a database.
-[ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
+[RequiresIntegrationCoverage]
 internal static class TrackedEntityLookup
 {
     /// <summary>Gets the single entity matching <paramref name="match" />, preferring one pending in the session.</summary>

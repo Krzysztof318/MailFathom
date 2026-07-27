@@ -2,6 +2,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Security;
+using MailMcp.CodeCoverage;
 
 namespace MailMcp.Infrastructure.Secrets;
 
@@ -15,8 +16,7 @@ namespace MailMcp.Infrastructure.Secrets;
 /// quotes the path, defeating both fail-fast aggregation and the guarantee that no diagnostic carries a target. A failure that
 /// only appears after the file opened is translated by <see cref="BoundedSecretMaterialReader" />, which owns the read.
 /// </remarks>
-// TODO: Remove this exclusion when the planned host integration tests are enabled.
-[ExcludeFromCodeCoverage(Justification = "Real file-system access will be covered later by host integration tests.")]
+[RequiresIntegrationCoverage]
 internal sealed class FileSystemSecretFileReader : ISecretFileReader
 {
     /// <inheritdoc />

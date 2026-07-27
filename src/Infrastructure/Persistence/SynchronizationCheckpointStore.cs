@@ -1,8 +1,8 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-using System.Diagnostics.CodeAnalysis;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
+using MailMcp.CodeCoverage;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
@@ -16,8 +16,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// The read path uses the scoped context because it joins no transaction. The write path uses the context enlisted in
 /// the caller's session, so a checkpoint can only be written inside the transaction the caller opened.
 /// </remarks>
-// TODO: Remove this exclusion when the planned PostgreSQL integration tests are enabled.
-[ExcludeFromCodeCoverage(Justification = "Will be covered later by PostgreSQL integration tests.")]
+[RequiresIntegrationCoverage]
 internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContext) : ISynchronizationCheckpointStore
 {
     /// <inheritdoc />

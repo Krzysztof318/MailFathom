@@ -29,11 +29,15 @@ These instructions apply under `tests/` in addition to the repository root instr
 - Keep `Host` and `AppHost` excluded as thin composition roots. Do not add other exclusions merely to pass the threshold.
 - The exclusion is about the coverage denominator, not about testing. `Host.UnitTests` runs in the same suite and its assertions are as binding as any other project's; its subject simply does not count towards the aggregate, because a composition root's uncovered wiring would otherwise dilute the measurement of the boundaries that hold the logic.
 - Add `using System.Diagnostics.CodeAnalysis;` and apply `[ExcludeFromCodeCoverage]` only to a class with no executable application, domain, mapping, validation, policy, or infrastructure logic. Do not fully qualify the attribute.
-- Never exclude meaningfully testable behavior. Remove the exclusion and add coverage when logic enters an excluded class.
+- Add `using MailMcp.CodeCoverage;` and apply `[RequiresIntegrationCoverage]` to a class or member whose behavior is real but can only be proven against a real database, a real mail server, or a composed host. The two attributes answer different questions: `[ExcludeFromCodeCoverage]` says the code never participates in coverage, `[RequiresIntegrationCoverage]` says the verification lives in the integration suite, which collects no coverage of its own. Choosing the accurate one keeps the reason for an exclusion readable years later.
+- The marker is declared once in `src/shared/RequiresIntegrationCoverageAttribute.cs` and compiled into each project that applies it through a `Compile Include` item, because the collector matches it by name rather than by declaring assembly. Add that item when a second project needs the marker; do not reference a project for it.
+- Never exclude meaningfully testable behavior with either attribute. Business logic, mapping, validation, and policy stay in the denominator, and needing a marker to reach the threshold means the test is missing, not the exclusion.
+- Remove the exclusion and add coverage when unit-testable logic enters an excluded class. `[RequiresIntegrationCoverage]` survives the arrival of the integration suite, because integration runs never feed the unit-test metric; `[ExcludeFromCodeCoverage]` is removed as soon as executable logic appears.
 - Run `dotnet msbuild .config/CodeCoverage.proj -t:Collect` before committing production or test changes.
 
 ## Integration tests
 
 - Integration tests are planned for a later phase and currently exist only in the architecture draft.
+- When they arrive they must not collect, merge, publish, or enforce code coverage. Unit tests stay the only source of the metric, so an expensive suite never has to run to know whether the gate passes.
 - Do not add integration-test projects, Testcontainers, Docker fixtures, real PostgreSQL dependencies, or real or mock network mail servers yet.
 - MailKit wire behavior against an IMAP or SMTP server belongs to the future integration suite; do not mislabel it as a unit test.
