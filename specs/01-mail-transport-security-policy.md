@@ -19,7 +19,7 @@ Replace the current boolean `UseSslOnConnect` switch with the connection-securit
 
 `Application` extends the mailbox session port inputs with the resolved connection policy. `Infrastructure` maps the domain policy onto MailKit's `SecureSocketOptions` and its authentication mechanism set, and removes mechanisms the policy does not permit from the client's advertised mechanism collection before authenticating. Certificate validation stays enabled unconditionally; there is no configuration path that disables it.
 
-Private servers are supported through explicit trusted certificate authority configuration. This specification defines the configuration shape — the policy carries a reference to trust anchor material — and validates that the reference is present when required. Loading that material and installing it into the certificate validation path is assigned to specification 02, which owns deployment-provisioned material and builds the reference-resolution mechanism it arrives through.
+Private servers are supported through explicit trusted certificate authority configuration. This specification defines the configuration shape — the policy carries a reference to trust anchor material — and validates that the reference is present when required. Loading that material and installing it into the certificate validation path is assigned to specification 02b, which builds on the reference-resolution mechanism specification 02a delivers. Specification 02a also renames this setting from `TrustedCertificateAuthorityReference` to `TrustedCertificateAuthority` and changes it from a bare string to a secret block.
 
 `Host` binds the new options, validates them with `ValidateOnStart`, and fails startup with a specific message naming the offending account when a policy is unsafe.
 
@@ -33,7 +33,7 @@ The rejection rule is enforced in the domain object that owns it and again at op
 
 ## Out of scope
 
-Secret reference resolution and trusted certificate authority loading, both of which specification 02 owns; SMTP transport policy; and OAuth-based mailbox authentication mechanisms. GSSAPI/Kerberos remains unsupported per draft section 7.2.
+Secret reference resolution, which specification 02a owns, and trusted certificate authority loading, which specification 02b owns; SMTP transport policy; and OAuth-based mailbox authentication mechanisms. GSSAPI/Kerberos remains unsupported per draft section 7.2.
 
 ## Definition of done
 

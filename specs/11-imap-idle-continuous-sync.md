@@ -25,7 +25,9 @@ Loss of the IDLE connection is a transient failure handled by the session pipeli
 
 The IDLE session opens the folder read-only exactly as the polling path does, and the notification handler performs no fetch of its own; it only signals that a synchronization pass should run. This keeps the `\Seen` invariant proven by the existing synchronizer tests rather than duplicated into a second fetch path, and the specification requires a test asserting the push path performs no direct content fetch.
 
-A long-lived connection holds credentials in memory for the process lifetime; the specification requires that the session obtains its secret through the resolver from specification 02 at connect time and does not retain a copy beyond the session object.
+A long-lived connection holds credentials in memory for the process lifetime; the specification requires that the session obtains its secret through the resolver from specification 02a at connect time and does not retain a copy beyond the session object.
+
+A long-lived session also breaks the rotation boundary specification 02b defines. That specification applies a rotated secret at the start of the next operation, which for ordinary polling is the next run's connect. An IDLE session has no next connect, so a rotated password or trust anchor would stay in use for the process lifetime unless an unrelated disconnect happened to occur — and a revoked credential would keep working, which is the opposite of what rotation is for. The connection is therefore the operation boundary here: a session whose secrets have rotated is recycled at the next safe point rather than left running, and this specification owns that recycling because it is what introduces the long-lived session.
 
 ## Testing
 

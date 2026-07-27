@@ -19,7 +19,8 @@ The first vertical slice is already merged: periodic read-only IMAP reconciliati
 | # | Specification | Draft stage |
 |---|---|---|
 | 01 | [Mail transport security policy](01-mail-transport-security-policy.md) | 2 |
-| 02 | [Secret reference resolution](02-secret-reference-resolution.md) | 2 |
+| 02a | [Secret reference resolution](02a-secret-reference-resolution.md) | 2 |
+| 02b | [Certificate material and secret rotation](02b-certificate-material-and-secret-rotation.md) | 2 |
 | 03 | [Resilience pipeline foundation](03-resilience-pipeline-foundation.md) | cross-cutting |
 | 04 | [IMAP session resilience](04-imap-session-resilience.md) | 3 |
 | 05 | [Mail folder configuration and discovery](05-mail-folder-configuration-and-discovery.md) | 3 |
