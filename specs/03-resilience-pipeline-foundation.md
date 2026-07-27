@@ -11,7 +11,7 @@ Give MailMcp one deliberate, configurable, and testable resilience model for out
 
 ## Current state
 
-`Microsoft.Extensions.Http.Resilience` 10.6.0 is already pinned and `shared/Extensions.cs` calls `AddStandardResilienceHandler` for `HttpClient` defaults. That covers HTTP only. IMAP, SMTP, PostgreSQL, and future embedding and chat calls have no timeout, retry, or circuit-breaker policy at all. The architecture draft asks for bounded jittered backoff and isolated retry state but never names a mechanism.
+`Microsoft.Extensions.Http.Resilience` 10.6.0 is already pinned and `src/Host/ServiceDefaultsExtensions.cs` calls `AddStandardResilienceHandler` for `HttpClient` defaults. That covers HTTP only. IMAP, SMTP, PostgreSQL, and future embedding and chat calls have no timeout, retry, or circuit-breaker policy at all. The architecture draft asks for bounded jittered backoff and isolated retry state but never names a mechanism.
 
 ## Approved scope
 

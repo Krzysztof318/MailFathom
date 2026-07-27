@@ -231,7 +231,7 @@ Each unit-test project references only the production boundary it verifies and t
 | Optional compatibility | Semantic Kernel | Added behind adapters only when justified by a missing MAF capability |
 | Authentication | ASP.NET Core JWT bearer + external OAuth 2.1 IdP | Auth0 is the default deployment choice |
 | Resilience | Polly v8 resilience pipelines | Named pipelines per outbound dependency class, resolved through `ResiliencePipelineProvider`; see section 17.1 |
-| Observability | Aspire ServiceDefaults + OpenTelemetry + JSON console logging | Logs, metrics, traces, health checks, and OTLP export are scaffolded through shared extensions |
+| Observability | Aspire ServiceDefaults + OpenTelemetry + JSON console logging | Logs, metrics, traces, health checks, and OTLP export are scaffolded through the host's service-defaults extensions |
 | Unit testing | xUnit.net v3 + Microsoft Testing Platform v2 + NSubstitute | Isolated behavior tests and mocked protocol boundaries |
 | Integration testing | Aspire test mode via `Aspire.Hosting.Testing` | Deferred phase; drives the real `AppHost` app model rather than a parallel container definition |
 | Local orchestration | Aspire AppHost | First-release development-time orchestration and observability for MailMcp and PostgreSQL |
@@ -647,7 +647,7 @@ Retry is restricted to operations that are safe to repeat. Authentication, permi
 
 ## 18. Observability
 
-- Aspire ServiceDefaults provide the initial shared `Extensions.cs` scaffold for OpenTelemetry logs, metrics, traces, health checks, service discovery hooks where useful, and OTLP export configuration. MailMcp extends those defaults rather than duplicating per-project telemetry setup.
+- Aspire ServiceDefaults provide the initial scaffold for OpenTelemetry logs, metrics, traces, health checks, service discovery hooks where useful, and OTLP export configuration. MailMcp owns that source as `src/Host/ServiceDefaultsExtensions.cs` rather than in the template's repository-root `shared/` directory, because one executable service consumes it. MailMcp extends those defaults rather than duplicating per-project telemetry setup; a second executable service would promote the file to a project both reference, not to a linked source file.
 - Structured JSON logs with account IDs and message IDs, never addresses, subjects, bodies, tokens, or credentials by default.
 - OpenTelemetry traces for MCP calls, database operations, IMAP push or time-based synchronization cycles, retrieval, embedding generation, agent runs, and SMTP delivery when SMTP is implemented.
 - Metrics include sync lag, reconnect count, cached messages, missing content, embedding backlog, retrieval latency, token usage when available, outbox depth when SMTP is implemented, and tool errors.

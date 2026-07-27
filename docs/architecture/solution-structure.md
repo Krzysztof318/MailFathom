@@ -12,6 +12,14 @@ MailMcp uses a clean-architecture modular monolith. Dependencies point inward fr
 - `Host` is the ASP.NET Core composition root.
 - `AppHost` is the Aspire local-development orchestration host.
 
+## Keeping compiled source inside its project
+
+No project compiles source from outside its own directory. The Aspire service-defaults template scaffolds its extensions into a repository-root `shared/` directory and links them into each executable service with a `Compile Include="..\..\shared\..."` item, which pays for itself only when several services consume the same file. MailMcp has one such consumer, so the scaffold lives with it as `src/Host/ServiceDefaultsExtensions.cs` in the `MailMcp.Host` namespace.
+
+That linked-source arrangement also cost visibility, because both CI workflows filter on `src/**` and `tests/**`: a file outside those paths changed a production assembly without triggering the build, unit-test, coverage, or formatting gates. Keeping every compiled file under `src/**` is what makes those path filters trustworthy.
+
+If a second executable service ever needs these defaults, the answer is a project that both reference, not a source file linked into each.
+
 ## Naming an adapter after its library
 
 A type inside an adapter carries the library's name only when its own members traffic in that library's types. `IMailKitImapClient` and `MailKitTransportSecurityMapping` take or return `SecureSocketOptions` and `IMailFolder`, so their names are accurate. `ImapAccountSettings` and `IImapAccountSettingsProvider` describe a host, a port, and credentials in plain IMAP vocabulary and would survive replacing the client library unchanged, so they live directly under `Infrastructure/Mail/` and name no vendor. The test is mechanical: if swapping the library would not change a single member, the name must not say the library.

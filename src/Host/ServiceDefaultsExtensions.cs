@@ -6,18 +6,19 @@ using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
-namespace Microsoft.Extensions.Hosting;
+namespace MailMcp.Host;
 
 /// <summary>
-/// Provides shared service defaults for MailMcp executable service projects.
+/// Provides the cross-cutting observability, service-discovery, HTTP-resilience, and health-check defaults
+/// that the MailMcp host applies before any feature-specific composition.
 /// </summary>
-internal static class Extensions
+internal static class ServiceDefaultsExtensions
 {
     private const string HealthEndpointPath = "/health";
     private const string AlivenessEndpointPath = "/alive";
 
     /// <summary>
-    /// Adds shared observability, service discovery, HTTP resilience, and health-check defaults.
+    /// Adds observability, service discovery, HTTP resilience, and health-check defaults.
     /// </summary>
     /// <typeparam name="TBuilder">The host application builder type.</typeparam>
     /// <param name="builder">The host application builder to configure.</param>
@@ -90,7 +91,7 @@ internal static class Extensions
     }
 
     /// <summary>
-    /// Adds the default liveness health check used by the shared health endpoints.
+    /// Adds the default liveness health check that <see cref="MapDefaultEndpoints"/> exposes.
     /// </summary>
     /// <typeparam name="TBuilder">The host application builder type.</typeparam>
     /// <param name="builder">The host application builder to configure.</param>
