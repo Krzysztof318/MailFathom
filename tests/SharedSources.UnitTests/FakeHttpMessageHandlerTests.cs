@@ -3,9 +3,10 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using MailMcp.TestDoubles;
 using Xunit;
 
-namespace MailMcp.TestDoubles.UnitTests;
+namespace MailMcp.SharedSources.UnitTests;
 
 /// <summary>
 /// Proves the shared HTTP test double, because a fault in it reports a false result in every adapter suite that

@@ -1,7 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using MailMcp.CodeCoverage;
+using MailMcp.Infrastructure.Secrets;
 using Xunit;
 
 namespace MailMcp.SharedSources.UnitTests;
@@ -46,4 +48,36 @@ public sealed class RequiresIntegrationCoverageAttributeTests
         Assert.Equal(ExpectedTargets, usage.ValidOn);
         Assert.False(usage.Inherited);
     }
+
+    /// <summary>
+    /// The two attributes state different things: one defers verification to the integration suite, the other says the
+    /// code never participates in coverage. Carrying both leaves the reason for the exclusion unreadable.
+    /// </summary>
+    /// <remarks>
+    /// The marker is matched by name rather than through <c>typeof</c>. Every assembly that applies it compiles its own
+    /// copy from <c>src/shared</c>, so the type this project compiles and the type <c>Infrastructure</c> applies are
+    /// distinct to the runtime: <c>IsDefined(typeof(RequiresIntegrationCoverageAttribute))</c> would find nothing and
+    /// the assertion would pass without ever inspecting a marked type. Matching by name is also exactly how the
+    /// coverage collector recognizes the marker, so this test and the gate read the code the same way.
+    /// </remarks>
+    [Fact]
+    public void MarkedElements_AcrossAnApplyingBoundary_AreNotAlsoExcludedFromCodeCoverage()
+    {
+        // Arrange
+        var applyingBoundaryTypes = typeof(ISecretReferenceResolver).Assembly.GetTypes();
+
+        // Act
+        var markedTypes = applyingBoundaryTypes.Where(IsMarkedForIntegrationCoverage).ToArray();
+        var doublyMarkedTypeNames = markedTypes
+            .Where(type => type.IsDefined(typeof(ExcludeFromCodeCoverageAttribute), inherit: false))
+            .Select(type => type.FullName);
+
+        // Assert
+        Assert.NotEmpty(markedTypes);
+        Assert.Empty(doublyMarkedTypeNames);
+    }
+
+    private static bool IsMarkedForIntegrationCoverage(Type type) =>
+        type.GetCustomAttributes(inherit: false)
+            .Any(attribute => attribute.GetType().Name == nameof(RequiresIntegrationCoverageAttribute));
 }
