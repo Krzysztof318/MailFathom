@@ -36,16 +36,21 @@ builder.Services.AddOptions<PersistenceOptions>()
         binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
     .ValidateDataAnnotations()
     .ValidateOnStart();
+// The published snapshot, not the bound one, is what every consumer reads: a reload whose secret references do not
+// resolve is rejected and leaves the previous configuration active for new operations.
+builder.Services.AddSingleton<SecretConfigurationValidator>();
+builder.Services.AddSingleton<ValidatedMailSynchronizationSettings>();
+builder.Services.AddSingleton<IMailSynchronizationSettingsReader>(provider => provider.GetRequiredService<ValidatedMailSynchronizationSettings>());
+builder.Services.AddSingleton<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<ValidatedMailSynchronizationSettings>());
 builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();
-builder.Services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<IOptions<MailSynchronizationOptions>>().Value);
 builder.Services.AddScoped(provider =>
 {
-    var synchronizationOptions = provider.GetRequiredService<IOptions<MailSynchronizationOptions>>().Value;
+    var synchronizationSettings = provider.GetRequiredService<IMailSynchronizationSettingsReader>().Current;
     return new MailboxSynchronizationOptions
     {
-        MaxMetadataBatchSize = synchronizationOptions.MaxMetadataBatchSize,
-        MaxRawMimeBytes = synchronizationOptions.MaxRawMimeBytes,
-        MaxMetadataBatchesPerRun = synchronizationOptions.MaxMetadataBatchesPerRun,
+        MaxMetadataBatchSize = synchronizationSettings.MaxMetadataBatchSize,
+        MaxRawMimeBytes = synchronizationSettings.MaxRawMimeBytes,
+        MaxMetadataBatchesPerRun = synchronizationSettings.MaxMetadataBatchesPerRun,
     };
 });
 builder.Services.AddSingleton(provider => new PersistenceConcurrencyOptions
@@ -55,7 +60,9 @@ builder.Services.AddSingleton(provider => new PersistenceConcurrencyOptions
 // The validator is registered ahead of the worker so hosted-service ordering reinforces the StartingAsync ordering
 // rather than depending on it alone, and ahead of the infrastructure so an operator who mistyped several references
 // reads one aggregated report rather than whichever failure the database happened to hit first.
-builder.Services.AddHostedService<MailMcp.Host.Hosting.SecretReferenceStartupValidator>();
+builder.Services.AddHostedService<MailMcp.Host.Hosting.SecretConfigurationStartupValidator>();
+// Registered after the startup gate so the first snapshot is proven before this begins accepting reloaded ones.
+builder.Services.AddHostedService(provider => provider.GetRequiredService<ValidatedMailSynchronizationSettings>());
 // The blocks are read here rather than through IOptions because the data source they configure is registered before
 // any options instance can be resolved. Only the references are read; resolution happens during startup.
 var persistenceSecrets = builder.Configuration.GetSection("Persistence").Get<PersistenceOptions>(

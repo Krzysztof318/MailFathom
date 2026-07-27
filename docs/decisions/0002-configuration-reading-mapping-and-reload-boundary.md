@@ -1,7 +1,7 @@
 ---
 status: proposed
 contact: Krzysztof Kasprowicz
-date: 2026-07-24
+date: 2026-07-27
 deciders: Krzysztof Kasprowicz
 consulted:
 informed:
@@ -72,7 +72,7 @@ Source validators should report stable machine-readable codes, setting paths, an
 
 Reload is opt-in per setting group. Each group must be classified before implementation:
 
-- Restart-required: values that affect dependency graph shape, database/provider selection, credentials, certificate trust anchors, schema assumptions, or security posture in ways that cannot be safely swapped.
+- Restart-required: values that affect dependency graph shape, database/provider selection, schema assumptions, or security posture in ways that cannot be safely swapped. A credential or certificate trust anchor that is *bound as a value* belongs here, because swapping such a value in place has no validation step before it takes effect. A credential or trust anchor reached through a validated secret reference does not; see [Amendment 1](#amendment-1-referenced-secrets-are-reloadable-for-new-operations).
 - Reloadable for new operations: values that can be applied when a new synchronization pass, MCP request, indexing batch, or SMTP delivery attempt starts.
 - Reloadable during running operations: values that can be safely observed mid-operation without violating consistency, cancellation, retry, or audit guarantees.
 
@@ -106,6 +106,24 @@ This ADR does not choose how configuration is stored. File-based configuration, 
 Secrets remain outside ordinary source-controlled configuration. The configuration access layer may reference secret identifiers or consume already-bound secret values at the host boundary, but it must not normalize broad secret access into application code or log secret material.
 
 This ADR also does not permit adding new third-party packages. Any future provider package, hosted configuration service, or secret-store integration requires separate official documentation, license, service-terms, telemetry, and data-processing review, plus `LICENSES.md` updates when applicable.
+
+## Amendments
+
+### Amendment 1: referenced secrets are reloadable for new operations
+
+*Approved by the owner on 2026-07-27, for `specs/02b-certificate-material-and-secret-rotation.md`.*
+
+The original reload policy classified credentials and certificate trust anchors as restart-required without qualification. That guidance was written before a secret-reference indirection existed. With one, reload no longer means mutating a bound secret value in place; it means re-resolving a reference whose validity is proven before the snapshot carrying it is published. The two are different operations with different risks, and the original text could only describe the first.
+
+A credential or trust anchor reached through a secret reference is therefore classified **reloadable for new operations**, subject to all of the following:
+
+- A candidate snapshot is validated by resolving every reference in it, and by loading the material behind any reference whose consumer requires a typed artifact, before it is published. A candidate that fails is rejected and the last known good snapshot stays active.
+- Material is applied at operation boundaries only: a synchronization run that has authenticated continues with the credential it authenticated with, and a long-lived authenticated session is recycled at its next safe point rather than having its credentials swapped underneath it. "Reloadable during running operations" is deliberately not chosen, because swapping a credential or a trust anchor mid-operation has no coherent meaning.
+- Resolution moves from once-at-startup to per use, so material rotated behind an unchanged reference is observed without any configuration reload at all. A network-backed provider that cannot afford per-use retrieval caches inside its own adapter with its own expiry, which keeps caching policy an adapter concern rather than a contract concern.
+- Validation never runs on the thread that reported the reload, never terminates the process on a resolution failure, and never lets an older candidate publish after a newer one.
+- A rejected reload is logged with the configuration path and a stable failure identity, and never with material.
+
+A secret that is *not* reached through a reference — a password written into a connection string in ordinary configuration — keeps the original classification, because nothing re-reads it and no validation step precedes its use.
 
 ## Validation
 

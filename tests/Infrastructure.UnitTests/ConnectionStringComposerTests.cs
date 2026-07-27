@@ -12,49 +12,34 @@ public sealed class ConnectionStringComposerTests
     private const string ConnectionStringWithoutPassword = "Host=localhost;Database=mailmcp;Username=mailmcp";
 
     [Fact]
-    public async Task ComposeAsync_ResolvablePasswordReference_ComposesTheResolvedPasswordIntoTheConnectionString()
+    public async Task ComposeAsync_PasswordBlock_KeepsTheCredentialOutOfTheConnectionStringAndNamesItsSource()
     {
         // Arrange
         var configuredPassword = new ConfiguredSecret { SecretReference = "plaintext:postgres-password" };
 
         // Act
-        var connectionSettings = await ComposeAsync(configuredPassword: configuredPassword);
+        var composed = await ComposeAsync(configuredPassword: configuredPassword);
 
         // Assert
-        Assert.Equal("postgres-password", connectionSettings.Password);
-        Assert.Equal("mailmcp", connectionSettings.Database);
+        Assert.Null(composed.ConnectionSettings.Password);
+        Assert.Equal("mailmcp", composed.ConnectionSettings.Database);
+        Assert.Equal(DatabasePasswordSource.PasswordSecret, composed.PasswordSource);
     }
 
     [Fact]
     public async Task ComposeAsync_NoPasswordBlock_LeavesTheConnectionStringUnchanged()
     {
         // Act
-        var connectionSettings = await ComposeAsync();
+        var composed = await ComposeAsync();
 
         // Assert
-        Assert.Null(connectionSettings.Password);
-        Assert.Equal("mailmcp", connectionSettings.Username);
+        Assert.Null(composed.ConnectionSettings.Password);
+        Assert.Equal("mailmcp", composed.ConnectionSettings.Username);
+        Assert.Equal(DatabasePasswordSource.None, composed.PasswordSource);
     }
 
     [Fact]
-    public async Task ComposeAsync_UnresolvablePasswordReference_FailsInsteadOfConnectingWithoutAPassword()
-    {
-        // Arrange
-        var configuredPassword = new ConfiguredSecret { SecretReference = "file:/run/secrets/absent" };
-
-        // Act, Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() => ComposeAsync(configuredPassword: configuredPassword));
-    }
-
-    [Fact]
-    public async Task ComposeAsync_EmptyPasswordReference_FailsRatherThanSilentlyUsingTheUnchangedConnectionString()
-    {
-        // Act, Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() => ComposeAsync(configuredPassword: new ConfiguredSecret()));
-    }
-
-    [Fact]
-    public async Task ComposeAsync_ConnectionStringSecret_SuppliesTheWholeConnectionString()
+    public async Task ComposeAsync_ConnectionStringSecret_SuppliesEverythingButTheCredential()
     {
         // Arrange
         var connectionStringSecret = new ConfiguredSecret
@@ -63,13 +48,14 @@ public sealed class ConnectionStringComposerTests
         };
 
         // Act
-        var connectionSettings = await ComposeAsync(
+        var composed = await ComposeAsync(
             configuredConnectionString: null,
             connectionStringSecret: connectionStringSecret);
 
         // Assert
-        Assert.Equal("from-the-store", connectionSettings.Password);
-        Assert.Equal("mailmcp", connectionSettings.Database);
+        Assert.Null(composed.ConnectionSettings.Password);
+        Assert.Equal("mailmcp", composed.ConnectionSettings.Database);
+        Assert.Equal(DatabasePasswordSource.ConnectionStringSecret, composed.PasswordSource);
     }
 
     [Fact]
@@ -110,16 +96,17 @@ public sealed class ConnectionStringComposerTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => ComposeAsync(configuredConnectionString: null));
     }
 
-    /// <summary>An orchestrator-supplied connection string keeps working; only a second source for the same credential is rejected.</summary>
+    /// <summary>An orchestrator-supplied connection string keeps working; it simply has no source to rotate from.</summary>
     [Fact]
     public async Task ComposeAsync_PasswordInTheConnectionStringWithoutABlock_KeepsIt()
     {
         // Act
-        var connectionSettings = await ComposeAsync(
+        var composed = await ComposeAsync(
             configuredConnectionString: $"{ConnectionStringWithoutPassword};Password=orchestrator-supplied");
 
         // Assert
-        Assert.Equal("orchestrator-supplied", connectionSettings.Password);
+        Assert.Equal("orchestrator-supplied", composed.ConnectionSettings.Password);
+        Assert.Equal(DatabasePasswordSource.None, composed.PasswordSource);
     }
 
     [Fact]
@@ -132,6 +119,99 @@ public sealed class ConnectionStringComposerTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => ComposeAsync(
             configuredConnectionString: $"{ConnectionStringWithoutPassword};Password=from-the-connection-string",
             configuredPassword: configuredPassword));
+    }
+
+    [Fact]
+    public async Task ResolveCurrentPasswordAsync_PasswordSecret_ReturnsTheMaterialBehindTheReference()
+    {
+        // Arrange
+        var configuredPassword = new ConfiguredSecret { SecretReference = "plaintext:postgres-password" };
+
+        // Act
+        var password = await ConnectionStringComposer.ResolveCurrentPasswordAsync(
+            DatabasePasswordSource.PasswordSecret,
+            connectionStringSecret: null,
+            configuredPassword,
+            new PlaintextOnlySecretReferenceResolver(),
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal("postgres-password", password);
+    }
+
+    [Fact]
+    public async Task ResolveCurrentPasswordAsync_ConnectionStringSecret_TakesThePasswordOutOfTheRotatedMaterial()
+    {
+        // Arrange
+        var connectionStringSecret = new ConfiguredSecret
+        {
+            SecretReference = $"plaintext:{ConnectionStringWithoutPassword};Password=from-the-store",
+        };
+
+        // Act
+        var password = await ConnectionStringComposer.ResolveCurrentPasswordAsync(
+            DatabasePasswordSource.ConnectionStringSecret,
+            connectionStringSecret,
+            configuredPassword: null,
+            new PlaintextOnlySecretReferenceResolver(),
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal("from-the-store", password);
+    }
+
+    /// <summary>Rotation behind an unchanged reference is what the per-connection retrieval exists for.</summary>
+    [Fact]
+    public async Task ResolveCurrentPasswordAsync_MaterialRotatedBehindAnUnchangedReference_ReturnsTheRotatedPassword()
+    {
+        // Arrange
+        var configuredPassword = new ConfiguredSecret { SecretReference = "rotating:postgres-password" };
+        var resolver = new RotatingSecretReferenceResolver("first-password");
+
+        // Act
+        var beforeRotation = await ResolveCurrentPasswordAsync(configuredPassword, resolver);
+        resolver.Rotate("second-password");
+        var afterRotation = await ResolveCurrentPasswordAsync(configuredPassword, resolver);
+
+        // Assert
+        Assert.Equal("first-password", beforeRotation);
+        Assert.Equal("second-password", afterRotation);
+    }
+
+    [Fact]
+    public async Task ResolveCurrentPasswordAsync_UnresolvableReference_FailsTheConnectionInsteadOfAuthenticatingWithoutAPassword()
+    {
+        // Arrange
+        var configuredPassword = new ConfiguredSecret { SecretReference = "file:/run/secrets/absent" };
+
+        // Act
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => ConnectionStringComposer.ResolveCurrentPasswordAsync(
+            DatabasePasswordSource.PasswordSecret,
+            connectionStringSecret: null,
+            configuredPassword,
+            new PlaintextOnlySecretReferenceResolver(),
+            CancellationToken.None));
+
+        // Assert
+        Assert.Contains(nameof(SecretResolutionFailure.MaterialNotFound), exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ResolveCurrentPasswordAsync_RotatedConnectionStringWithoutAPassword_FailsRatherThanReturningNothing()
+    {
+        // Arrange
+        var connectionStringSecret = new ConfiguredSecret
+        {
+            SecretReference = $"plaintext:{ConnectionStringWithoutPassword}",
+        };
+
+        // Act, Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ConnectionStringComposer.ResolveCurrentPasswordAsync(
+            DatabasePasswordSource.ConnectionStringSecret,
+            connectionStringSecret,
+            configuredPassword: null,
+            new PlaintextOnlySecretReferenceResolver(),
+            CancellationToken.None));
     }
 
     [Fact]
@@ -166,7 +246,7 @@ public sealed class ConnectionStringComposerTests
         Assert.True(carries);
     }
 
-    private static Task<NpgsqlConnectionStringBuilder> ComposeAsync(
+    private static Task<ComposedConnectionSettings> ComposeAsync(
         string? configuredConnectionString = ConnectionStringWithoutPassword,
         ConfiguredSecret? connectionStringSecret = null,
         ConfiguredSecret? configuredPassword = null) => ConnectionStringComposer.ComposeAsync(
@@ -174,6 +254,15 @@ public sealed class ConnectionStringComposerTests
             connectionStringSecret,
             configuredPassword,
             new PlaintextOnlySecretReferenceResolver(),
+            CancellationToken.None);
+
+    private static Task<string> ResolveCurrentPasswordAsync(
+        ConfiguredSecret configuredPassword,
+        ISecretReferenceResolver resolver) => ConnectionStringComposer.ResolveCurrentPasswordAsync(
+            DatabasePasswordSource.PasswordSecret,
+            connectionStringSecret: null,
+            configuredPassword,
+            resolver,
             CancellationToken.None);
 
     private sealed class PlaintextOnlySecretReferenceResolver : ISecretReferenceResolver
@@ -191,5 +280,18 @@ public sealed class ConnectionStringComposerTests
                     SecretMaterialSource.InlineValue)
                 : SecretResolutionResult.Failed(SecretResolutionFailure.MaterialNotFound));
         }
+    }
+
+    /// <summary>Stands in for a credential file or vault entry whose contents change while the reference does not.</summary>
+    private sealed class RotatingSecretReferenceResolver(string initialMaterial) : ISecretReferenceResolver
+    {
+        private string material = initialMaterial;
+
+        public void Rotate(string rotatedMaterial) => this.material = rotatedMaterial;
+
+        public Task<SecretResolutionResult> ResolveAsync(string? configuredValue, CancellationToken cancellationToken) =>
+            Task.FromResult(SecretResolutionResult.Resolved(
+                ResolvedSecret.FromText(this.material),
+                SecretMaterialSource.SchemeAdapter));
     }
 }

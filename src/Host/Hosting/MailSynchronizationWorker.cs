@@ -6,7 +6,6 @@ using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
 using MailMcp.Host.Configuration;
-using Microsoft.Extensions.Options;
 
 namespace MailMcp.Host.Hosting;
 
@@ -15,39 +14,45 @@ namespace MailMcp.Host.Hosting;
 internal sealed partial class MailSynchronizationWorker : BackgroundService
 {
     private readonly IServiceScopeFactory scopeFactory;
-    private readonly IOptions<MailSynchronizationOptions> options;
+    private readonly IMailSynchronizationSettingsReader settings;
     private readonly ILogger<MailSynchronizationWorker> logger;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes a new mail synchronization worker.</summary>
     public MailSynchronizationWorker(
         IServiceScopeFactory scopeFactory,
-        IOptions<MailSynchronizationOptions> options,
+        IMailSynchronizationSettingsReader settings,
         ILogger<MailSynchronizationWorker> logger,
         TimeProvider timeProvider)
     {
         this.scopeFactory = scopeFactory;
-        this.options = options;
+        this.settings = settings;
         this.logger = logger;
         this.timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Whether synchronization runs at all and how often are read once, because both shape the loop this method is.
+    /// Everything a run reads — accounts, folders, and the references behind their secrets — is taken from the
+    /// published snapshot when that run begins, so a configuration reload or a rotated credential reaches the next run
+    /// and never the one already under way.
+    /// </remarks>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var currentOptions = this.options.Value;
-        if (!currentOptions.Enabled)
+        var startupSettings = this.settings.Current;
+        if (!startupSettings.Enabled)
         {
             this.LogSynchronizationDisabled();
 
             return;
         }
 
-        using var timer = new PeriodicTimer(currentOptions.Interval, this.timeProvider);
+        using var timer = new PeriodicTimer(startupSettings.Interval, this.timeProvider);
 
         do
         {
-            await this.RunOnceAsync(currentOptions, stoppingToken);
+            await this.RunOnceAsync(this.settings.Current, stoppingToken);
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }

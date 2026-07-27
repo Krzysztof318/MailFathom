@@ -1,5 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using MailKit;
 using MailKit.Search;
 using MailKit.Security;
@@ -303,7 +305,7 @@ public sealed class MailKitImapMailboxSessionTests
         // Arrange
         await using var client = new FakeImapClient();
         var folder = Substitute.For<IMailFolder>();
-        var settingsProvider = CreateSettingsProvider(out var resolvedSecrets);
+        var settingsProvider = CreateSettingsProvider(out var resolvedMaterial);
         client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = folder;
         var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
@@ -316,8 +318,53 @@ public sealed class MailKitImapMailboxSessionTests
             CancellationToken.None);
 
         // Assert
-        var secrets = Assert.Single(resolvedSecrets);
-        Assert.Throws<ObjectDisposedException>(() => secrets.Password.RevealAsString());
+        var material = Assert.Single(resolvedMaterial);
+        Assert.Throws<ObjectDisposedException>(() => material.Password.RevealAsString());
+    }
+
+    [Fact]
+    public async Task OpenReadOnlyAsync_AccountTrustingAnAdditionalAuthority_InstallsTheTrustDecisionBeforeConnecting()
+    {
+        // Arrange
+        await using var client = new FakeImapClient();
+        var folder = Substitute.For<IMailFolder>();
+        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var anchor = TestCertificates.WithoutPrivateKey(authority);
+        var settingsProvider = CreateSettingsProvider(out _, anchor);
+        client.AuthenticationMechanisms.Add("PLAIN");
+        client.Folder = folder;
+        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
+
+        // Act
+        await using var session = await factory.OpenReadOnlyAsync(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            TlsOnConnectWithPlainPolicy,
+            CancellationToken.None);
+
+        // Assert
+        Assert.NotNull(client.ValidationCallbackWhenConnected);
+    }
+
+    /// <summary>Without a configured authority the client keeps its own validating default rather than being handed a callback.</summary>
+    [Fact]
+    public async Task OpenReadOnlyAsync_AccountTrustingTheSystemStore_LeavesTheClientValidationUntouched()
+    {
+        // Arrange
+        await using var client = new FakeImapClient();
+        var folder = Substitute.For<IMailFolder>();
+        var factory = CreateFactory(client, folder);
+        client.AuthenticationMechanisms.Add("PLAIN");
+
+        // Act
+        await using var session = await factory.OpenReadOnlyAsync(
+            MailAccountId.Create("primary"),
+            MailFolderName.Create("INBOX"),
+            TlsOnConnectWithPlainPolicy,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Null(client.ValidationCallbackWhenConnected);
     }
 
     [Fact]
@@ -325,7 +372,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         await using var client = new FakeImapClient();
-        var settingsProvider = CreateSettingsProvider(out var resolvedSecrets);
+        var settingsProvider = CreateSettingsProvider(out var resolvedMaterial);
         client.ConnectException = new IOException("connect failed");
         var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
 
@@ -337,8 +384,8 @@ public sealed class MailKitImapMailboxSessionTests
             CancellationToken.None));
 
         // Assert
-        var secrets = Assert.Single(resolvedSecrets);
-        Assert.Throws<ObjectDisposedException>(() => secrets.Password.RevealAsString());
+        var material = Assert.Single(resolvedMaterial);
+        Assert.Throws<ObjectDisposedException>(() => material.Password.RevealAsString());
     }
 
     [Fact]
@@ -543,19 +590,26 @@ public sealed class MailKitImapMailboxSessionTests
 
     private static IImapAccountSettingsProvider CreateSettingsProvider() => CreateSettingsProvider(out _);
 
-    private static IImapAccountSettingsProvider CreateSettingsProvider(out List<MailAccountSecrets> resolvedSecrets)
+    private static IImapAccountSettingsProvider CreateSettingsProvider(out List<MailAccountConnectionMaterial> resolvedMaterial) =>
+        CreateSettingsProvider(out resolvedMaterial, trustedCertificateAuthority: null);
+
+    private static IImapAccountSettingsProvider CreateSettingsProvider(
+        out List<MailAccountConnectionMaterial> resolvedMaterial,
+        X509Certificate2? trustedCertificateAuthority)
     {
-        var issuedSecrets = new List<MailAccountSecrets>();
+        var issuedMaterial = new List<MailAccountConnectionMaterial>();
         var settingsProvider = Substitute.For<IImapAccountSettingsProvider>();
         settingsProvider.GetSettingsAsync("primary", Arg.Any<CancellationToken>()).Returns(_ =>
         {
-            var secrets = new MailAccountSecrets(ResolvedSecret.FromText("password"));
-            issuedSecrets.Add(secrets);
+            var material = new MailAccountConnectionMaterial(
+                ResolvedSecret.FromText("password"),
+                trustedCertificateAuthority);
+            issuedMaterial.Add(material);
 
-            return Task.FromResult(new ImapAccountSettings("primary", "imap.example.test", 993, "user", secrets));
+            return Task.FromResult(new ImapAccountSettings("primary", "imap.example.test", 993, "user", material));
         });
 
-        resolvedSecrets = issuedSecrets;
+        resolvedMaterial = issuedMaterial;
 
         return settingsProvider;
     }
@@ -565,6 +619,8 @@ public sealed class MailKitImapMailboxSessionTests
         public bool IsConnected { get; set; }
 
         public ISet<string> AuthenticationMechanisms { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        public RemoteCertificateValidationCallback? ServerCertificateValidationCallback { get; set; }
 
         public IReadOnlyList<string> MechanismsWhenAuthenticated { get; private set; } = [];
 
@@ -586,12 +642,15 @@ public sealed class MailKitImapMailboxSessionTests
 
         public SecureSocketOptions? ConnectSocketOptions { get; private set; }
 
+        public RemoteCertificateValidationCallback? ValidationCallbackWhenConnected { get; private set; }
+
         public Task ConnectAsync(
             string host,
             int port,
             SecureSocketOptions options,
             CancellationToken cancellationToken)
         {
+            this.ValidationCallbackWhenConnected = this.ServerCertificateValidationCallback;
             this.ConnectSocketOptions = options;
             if (this.ConnectException is not null)
             {

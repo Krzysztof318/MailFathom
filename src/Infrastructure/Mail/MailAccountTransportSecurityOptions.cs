@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Domain.Transport;
+using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Secrets;
 
 namespace MailMcp.Infrastructure.Mail;
@@ -56,12 +57,12 @@ public sealed class MailAccountTransportSecurityOptions
 
     /// <summary>Gets or sets the secret block referencing deployment-provisioned trust anchor material.</summary>
     /// <remarks>
-    /// The block carries a reference such as a credential name, never certificate material inline. Loading the material
-    /// behind it is separate work; these settings only fix its configuration shape, so that the uniform block
-    /// convention holds for every secret-bearing setting rather than for newly added ones alone. A block present with a
-    /// blank <see cref="ConfiguredSecret.SecretReference" /> reads as an absent anchor, so
-    /// <c>"TrustedCertificateAuthority": {}</c> fails the domain rule that requires one instead of passing it and then
-    /// failing later with a confusing missing-material error.
+    /// The block carries a reference such as a credential name under the default interpretation mode, and the PEM text
+    /// itself under an inline one — a trust anchor is a public certificate, so writing one into configuration leaks
+    /// nothing. Its nested <see cref="ConfiguredSecret.Password" /> supplies the password of a protected PKCS#12
+    /// bundle. A block present with a blank <see cref="ConfiguredSecret.SecretReference" /> reads as an absent anchor,
+    /// so <c>"TrustedCertificateAuthority": {}</c> fails the domain rule that requires one instead of passing it and
+    /// then failing later with a confusing missing-material error.
     /// </remarks>
     public ConfiguredSecret? TrustedCertificateAuthority { get; set; }
 
@@ -92,6 +93,34 @@ public sealed class MailAccountTransportSecurityOptions
             this.AllowClearTextAuthenticationOverUnencryptedConnection),
         this.CertificateTrust,
         this.ConfiguredTrustAnchorReference);
+
+    /// <summary>Loads the certificate the account's server must chain to, when it trusts an additional authority.</summary>
+    /// <param name="trustAnchorLoader">The loader that turns configured material into a certificate.</param>
+    /// <param name="cancellationToken">Cancels the retrieval of the material and of a bundle password.</param>
+    /// <returns>
+    /// The load outcome, which the caller owns and must dispose, or <see langword="null" /> when the account validates
+    /// against the system trust store alone and no anchor applies.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="trustAnchorLoader" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Unusable material is returned as a named failure rather than thrown, so startup can report every account's
+    /// unusable anchor at once. A caller that is about to connect must treat that failure as fatal for the connection:
+    /// continuing without the anchor would validate the private server against the system trust store and fail, or
+    /// worse, invite an operator to look for a way to disable validation.
+    /// </remarks>
+    public async Task<TrustAnchorLoadResult?> LoadTrustedCertificateAuthorityAsync(
+        TrustAnchorLoader trustAnchorLoader,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(trustAnchorLoader);
+
+        if (this.CertificateTrust != MailServerCertificateTrust.AdditionalTrustedAuthority)
+        {
+            return null;
+        }
+
+        return await trustAnchorLoader.LoadAsync(this.TrustedCertificateAuthority, cancellationToken);
+    }
 
     /// <summary>Finds every unsupported mechanism name and every violated domain transport security rule.</summary>
     /// <returns>The errors to report at startup, empty when the settings are safe.</returns>

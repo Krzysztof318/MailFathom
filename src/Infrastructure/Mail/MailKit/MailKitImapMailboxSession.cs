@@ -2,7 +2,9 @@
 
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using System.Net.Security;
 using System.Runtime.ExceptionServices;
+using System.Security.Cryptography.X509Certificates;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
@@ -22,6 +24,14 @@ internal interface IMailKitImapClient : IAsyncDisposable
 
     /// <summary>Gets the mechanism set the server advertised while connecting, which the caller narrows before authenticating.</summary>
     ISet<string> AuthenticationMechanisms { get; }
+
+    /// <summary>Gets or sets the decision the client asks for when the platform's own certificate validation objects.</summary>
+    /// <remarks>
+    /// It is left unset for an account that trusts the system store alone, which keeps the client's validating default
+    /// in place. Nothing assigned here may accept a certificate the configured policy rejects; it exists to admit a
+    /// deployment-provisioned authority, not to forgive an error.
+    /// </remarks>
+    RemoteCertificateValidationCallback? ServerCertificateValidationCallback { get; set; }
 
     Task ConnectAsync(
         string host,
@@ -50,6 +60,12 @@ internal sealed class MailKitImapClientAdapter(ImapClient client) : IMailKitImap
     public bool IsConnected => client.IsConnected;
 
     public ISet<string> AuthenticationMechanisms => client.AuthenticationMechanisms;
+
+    public RemoteCertificateValidationCallback? ServerCertificateValidationCallback
+    {
+        get => client.ServerCertificateValidationCallback;
+        set => client.ServerCertificateValidationCallback = value;
+    }
 
     public Task ConnectAsync(
         string host,
@@ -94,9 +110,10 @@ internal sealed class MailKitImapMailboxSessionFactory(
 
         var settings = await settingsProvider.GetSettingsAsync(accountId.Value, cancellationToken);
 
-        // The resolved material is owned by this connection attempt and erased when it ends, whether it succeeded or
-        // not, so the material exists for one attempt rather than for the lifetime of the process.
-        using (settings.Secrets)
+        // The resolved material is owned by this connection attempt and released when it ends, whether it succeeded or
+        // not, so the password exists for one attempt rather than for the lifetime of the process. A rotation that
+        // lands mid-attempt therefore reaches the next connection instead of the one already authenticating.
+        using (settings.Material)
         {
             return await this.OpenAuthenticatedFolderAsync(
                 accountId,
@@ -117,6 +134,8 @@ internal sealed class MailKitImapMailboxSessionFactory(
         var client = clientFactory();
         try
         {
+            TrustConfiguredCertificateAuthority(client, settings.Material.TrustedCertificateAuthority);
+
             await client.ConnectAsync(
                 settings.Host,
                 settings.Port,
@@ -135,7 +154,7 @@ internal sealed class MailKitImapMailboxSessionFactory(
             // here. It is created at the call itself and never stored, logged, or passed on.
             await client.AuthenticateAsync(
                 settings.UserName,
-                settings.Secrets.Password.RevealAsString(),
+                settings.Material.Password.RevealAsString(),
                 cancellationToken);
 
             var folder = await client.GetFolderAsync(folderName.Value, cancellationToken);
@@ -148,6 +167,29 @@ internal sealed class MailKitImapMailboxSessionFactory(
             await CleanupFailedOpenAsync(client);
             throw;
         }
+    }
+
+    /// <summary>Points the client at the account's configured authority before the handshake that will consult it.</summary>
+    /// <remarks>
+    /// The anchor lives as long as the connection attempt that resolved it, and so does the callback that closes over
+    /// it: the client is created per attempt and disposed with it, so no callback outlives the certificate it reads.
+    /// An account without a configured authority leaves the client's own validating default untouched.
+    /// </remarks>
+    private static void TrustConfiguredCertificateAuthority(
+        IMailKitImapClient client,
+        X509Certificate2? trustedCertificateAuthority)
+    {
+        if (trustedCertificateAuthority is null)
+        {
+            return;
+        }
+
+        client.ServerCertificateValidationCallback = (_, certificate, chain, sslPolicyErrors) =>
+            MailServerCertificateValidator.IsServerCertificateTrusted(
+                trustedCertificateAuthority,
+                certificate,
+                chain,
+                sslPolicyErrors);
     }
 
     private static ValueTask CleanupFailedOpenAsync(IMailKitImapClient client) => DisconnectAndDisposeAsync(client, throwOnFailure: false);

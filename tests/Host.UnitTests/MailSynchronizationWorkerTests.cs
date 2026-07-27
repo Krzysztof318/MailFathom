@@ -12,7 +12,6 @@ using MailMcp.Host.Hosting;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -190,7 +189,7 @@ public sealed class MailSynchronizationWorkerTests
 
         return new MailSynchronizationWorker(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            Options.Create(options),
+            new StubMailSynchronizationSettingsReader(options),
             logger,
             timeProvider);
     }

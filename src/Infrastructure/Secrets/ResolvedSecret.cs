@@ -83,6 +83,35 @@ public sealed class ResolvedSecret : IDisposable
         return Encoding.UTF8.GetString(WithoutOneTrailingNewline(this.material));
     }
 
+    /// <summary>Gets the number of characters <see cref="RevealTextInto" /> writes.</summary>
+    /// <exception cref="ObjectDisposedException">Thrown when the material has already been erased.</exception>
+    public int TextLength
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(this.disposed, this);
+
+            return Encoding.UTF8.GetCharCount(WithoutOneTrailingNewline(this.material));
+        }
+    }
+
+    /// <summary>Decodes the material as UTF-8 text into a caller-owned buffer, with one trailing newline removed.</summary>
+    /// <param name="destination">A buffer of at least <see cref="TextLength" /> characters.</param>
+    /// <exception cref="ObjectDisposedException">Thrown when the material has already been erased.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="destination" /> is too small.</exception>
+    /// <remarks>
+    /// This is the erasable counterpart to <see cref="RevealAsString" />, for a framework contract that accepts a
+    /// <see cref="ReadOnlySpan{T}" /> of characters rather than a <see cref="string" /> — loading a password-protected
+    /// PKCS#12 bundle is the case that exists today. The caller owns the buffer and must erase it, which is what keeps
+    /// a secret out of an un-erasable string wherever the platform makes that avoidable.
+    /// </remarks>
+    public void RevealTextInto(Span<char> destination)
+    {
+        ObjectDisposedException.ThrowIf(this.disposed, this);
+
+        Encoding.UTF8.GetChars(WithoutOneTrailingNewline(this.material), destination);
+    }
+
     /// <inheritdoc />
     /// <remarks>Erasure is idempotent, and every accessor throws afterwards rather than returning empty material, because a use after erasure is a defect.</remarks>
     public void Dispose()

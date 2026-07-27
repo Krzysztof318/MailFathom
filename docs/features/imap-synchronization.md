@@ -21,7 +21,10 @@ MailMcp now includes the first vertical slice for read-only IMAP synchronization
 - A permitted mechanism is a domain value object rather than an enum, so its registered SASL name, its clear-text classification, and its JSON form travel with the value instead of living in a separate mapping table that could drift. It serializes as that SASL name, which is also the name configuration accepts and the name matched against a server's advertised set.
 - The policy is an input to `IMailboxSessionFactory.OpenReadOnlyAsync`, not something the adapter resolves. `MailboxSynchronizer` reads it per run through `IMailTransportSecurityPolicyReader`, which is why an adapter can only narrow what it is handed.
 - `Infrastructure` owns secret reference resolution. Every secret-bearing setting binds to a block carrying a `<scheme>:<target>` reference, four scheme adapters resolve it into pinned byte material that is erased when the operation that owns it ends, and `Host` fails startup when any reference is unresolvable. `Application` and `Domain` see none of it. [Secret provisioning](../operations/secret-provisioning.md) documents the grammar, the deployment shapes, the interpretation modes, and the residual in-memory exposures.
-- `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, secret resolution before any hosted service starts, and a periodic scoped background worker that isolates failures per account/folder work unit.
+- `Infrastructure` also owns the one place that knows about X.509. `TrustAnchorLoader` turns the bytes a resolver produced into a certificate, so a future material kind arrives as another loader rather than as a change to how a secret is retrieved. It recognizes PEM, DER, and PKCS#12 from the material itself, imports every bundle with ephemeral key storage, and rejects an anchor that carries a private key.
+- `MailServerCertificateValidator` decides trust for an account that names an additional authority, by rebuilding the chain against the configured anchor rather than by forgiving what the platform reported. Nothing anywhere can switch validation off.
+- Secrets are re-resolved per operation rather than cached, and the configuration snapshot that names them is republished only after every reference in it has resolved. A rotated credential, trust anchor, or database password therefore reaches the next operation without a restart, and a reload that cannot resolve leaves the previous snapshot active. [Secret rotation](../operations/secret-rotation.md) is the operator procedure.
+- `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, secret resolution and trust anchor loading before any hosted service starts, a validated snapshot every consumer reads instead of the raw bound one, and a periodic scoped background worker that isolates failures per account/folder work unit.
 
 ## Configuration
 
@@ -99,7 +102,56 @@ Only the first two guarantee that nothing travels unencrypted. The other three r
 
 The MailKit adapter removes every non-permitted mechanism from the set the server advertised before it authenticates, and fails with `MailAuthenticationMechanismUnavailableException` when nothing permitted remains. It never restores a removed mechanism after a failed authentication, so a server cannot negotiate its way to a mechanism the operator refused. A server that advertises no SASL mechanism at all is treated the same way and the account fails rather than falling back to the clear-text IMAP `LOGIN` command, which the allow-list cannot describe.
 
-Certificate validation is always enabled and no configuration path disables it. A private or self-signed server is supported by setting `CertificateTrust` to `AdditionalTrustedAuthority` and naming the deployment-provisioned material in the `TrustedCertificateAuthority` secret block; the block carries a reference, never certificate material inline. `SystemTrustStore` rejects a configured anchor, and `AdditionalTrustedAuthority` requires one. A block present with a blank `SecretReference` reads as no anchor at all, so `"TrustedCertificateAuthority": {}` fails the rule that requires one rather than passing it and failing later with a confusing missing-material error.
+Certificate validation is always enabled and no configuration path disables it. A private or self-signed server is supported by setting `CertificateTrust` to `AdditionalTrustedAuthority` and naming the deployment-provisioned material in the `TrustedCertificateAuthority` secret block. `SystemTrustStore` rejects a configured anchor, and `AdditionalTrustedAuthority` requires one. A block present with a blank `SecretReference` reads as no anchor at all, so `"TrustedCertificateAuthority": {}` fails the rule that requires one rather than passing it and failing later with a confusing missing-material error.
+
+#### Trust anchor material
+
+The block resolves like any other secret, and the bytes behind it are loaded as a certificate. Three encodings occur in deployment and all three load, recognized from the material rather than declared in configuration:
+
+| Encoding | Where it comes from | Inline |
+| --- | --- | --- |
+| PEM | What a certificate authority hands an operator. | Yes |
+| DER | What some tooling emits. Binary. | No |
+| PKCS#12 / PFX | A bundle, optionally protected by a password. Binary. | No |
+
+A protected bundle takes its password from the nested `Password` block, which is itself an ordinary secret block, so a bundle password is validated, resolved, and erased by exactly the machinery every other secret uses. An unprotected bundle is still a valid file an operator is entitled to use and loads without one.
+
+```json
+{
+  "TrustedCertificateAuthority": {
+    "SecretReference": "systemd-credential:private-ca-bundle",
+    "Password": { "SecretReference": "systemd-credential:private-ca-bundle-password" }
+  }
+}
+```
+
+Under `ReferenceOrInline` or `InlineOnly` the block may carry the PEM text directly, which is what makes an Azure App Configuration deployment work end to end: the store holds the certificate, the provider binds it, and MailMcp parses what it was given. A trust anchor is a public certificate, so writing one into configuration leaks nothing. Only PEM works that way — DER and PKCS#12 are binary and have no faithful representation in a configuration value, so an inline block carrying them fails startup with `InlineEncodingNotSupported`, naming the encoding rather than surfacing a parse error further down. PEM is multi-line, so a JSON document has to escape the newlines; a store-backed provider has no such problem, because the value is transported rather than authored in JSON.
+
+Material is imported with ephemeral key storage, and an anchor that carries a private key is **rejected**. A trust anchor needs only a public certificate; a private key would sit outside the buffer whose lifetime the secret machinery controls, and with default key-storage flags the import could persist it to a key store on disk. Material that does not parse, or parses but is unusable, fails startup with a named failure and never with the material itself:
+
+| Failure | Meaning |
+| --- | --- |
+| `MaterialMissing` | The block carries no reference at all. |
+| `SecretNotResolvable` | The reference, or the bundle password's reference, produced no material. |
+| `EncodingNotRecognized` | The material is neither PEM nor an ASN.1 certificate or bundle. |
+| `InlineEncodingNotSupported` | Binary material was supplied as the configuration value itself. |
+| `MaterialNotReadable` | The encoding is supported but the material does not parse. |
+| `BundlePasswordMissing` | The bundle is protected and no nested `Password` block was configured. |
+| `BundlePasswordIncorrect` | The bundle did not open with the configured password. |
+| `BundleCarriesNoCertificate` | The bundle parsed but holds no certificate. |
+| `TrustAnchorCarriesPrivateKey` | The certificate carries a private key. |
+
+The platform reports a wrong bundle password, a missing one, and corrupt bundle contents identically, so the last two are told apart by what was configured rather than by what the platform said. It is a diagnostic refinement that points at the part an operator controls, not a claim about the material. A loaded anchor is logged by subject and thumbprint, which is public information and the detail that confirms MailMcp trusts the authority the operator provisioned.
+
+#### How the anchor is used
+
+Trust is decided by rebuilding the chain against the configured anchor, never by accepting the error the platform reported:
+
+- A name mismatch and an unavailable certificate are rejected outright. Neither has anything to do with which authority signed the certificate, and forgiving them would turn the private-authority path into the validation bypass this design exists to avoid.
+- Only a chain-trust failure is re-examined, by building a chain that trusts the configured anchor as its sole root and requiring a clean rebuild.
+- The certificates the server sent are reused as path-building candidates. A private server whose certificate is signed by an intermediate rather than directly by the configured root is an ordinary deployment, and that intermediate is often reachable only from the handshake. It completes a path; it gains no trust of its own.
+
+**Revocation trade-off.** The rebuild does not check revocation. A private authority typically publishes neither a CRL distribution point nor an OCSP responder, so an online check would fail every connection to the server this feature exists to support, and a status-unknown result would have to be either ignored — which is what skipping the check states plainly — or treated as fatal. Compromise of a deployment-provisioned anchor is therefore handled by replacing the provisioned material, which rotation now makes possible without a restart. An account left on `SystemTrustStore` is unaffected: it keeps the mail client's own validation, revocation checking included.
 
 The whole `MailSynchronization` section binds strictly (`ErrorOnUnknownConfiguration`), so a misspelled key fails startup instead of being ignored. Without that, a singular `PermittedAuthenticationMechanism` would be dropped silently and the default allow-list would take its place, quietly permitting mechanisms the operator meant to exclude.
 
@@ -113,10 +165,16 @@ Secret resolution is the one rule that cannot join `ValidateOnStart`, because op
 
 The application layer exposes only `FetchEmailContentWithoutSettingSeenAsync` for content retrieval during synchronization. This name is part of the contract: implementations must use IMAP read-only selection and BODY.PEEK-equivalent behavior so remote `\Seen` flags are not changed. The MailKit adapter satisfies both halves — it selects the folder with `FolderAccess.ReadOnly` and retrieves content through `GetStreamAsync(uid)`, which issues `UID FETCH <uid> (BODY.PEEK[])`. A regression test exercises a successful fetch and asserts that neither `StoreAsync`, the only `IMailFolder` member able to change flags, nor a read-write reselection was requested. Metadata requests are bounded by `MaxMetadataBatchSize`, each run is bounded by `MaxMetadataBatchesPerRun`, empty unassigned UID ranges are not checkpointed speculatively, and raw MIME above `MaxRawMimeBytes` is recorded as metadata-only. Logs record counts and account/folder identifiers only; raw MIME, email bodies, attachments, credentials, and tokens remain sensitive and must not be logged.
 
+### Reloading a rotated reference
+
+Every consumer reads a published snapshot rather than the raw bound options. A configuration reload produces a candidate, and the candidate becomes the published snapshot only after every secret reference in it resolves and every configured trust anchor loads. A candidate that fails is discarded with a log line naming the configuration path and the failure identity, and the previous snapshot stays active — a mistyped credential name does not take a running deployment offline.
+
+Validation never runs on the thread that reported the reload. It is handed to a single background reader through a channel that keeps only the newest candidate, so a burst of reloads costs one validation rather than a queue of stale ones, and an older candidate can never overwrite a newer one that already published. A reload that fails unexpectedly is logged and dropped; it never terminates the process.
+
+Snapshots are read once per operation. The worker takes accounts and folders when a run begins, and a connection attempt resolves its own material, so a rotation reaches the next run or the next connection and never one already under way. Whether synchronization runs at all and how often are read once at start, because both shape the worker loop itself.
+
 ## Pending work
 
-- Loading trust anchor material and installing it into the certificate validation path. `CertificateTrust` and `TrustedCertificateAuthority` are validated configuration shape only — the reference is resolved at startup, but nothing loads the certificate — so an account pointing at a private authority still fails its TLS handshake today.
-- Secret rotation without a restart for the PostgreSQL password. The data source is composed once, so a rotated database credential is picked up only on the next start; mailbox passwords are already resolved per connection attempt.
 - Adapters for external managed secret stores. Kubernetes and container deployments need none, because their secrets are files.
 - OAuth mailbox authentication. `XOAUTH2` and `OAUTHBEARER` are deliberately absent from the allow-list because no token source exists yet.
 - IMAP IDLE and NOTIFY support.

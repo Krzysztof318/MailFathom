@@ -5,6 +5,7 @@ using MailKit.Net.Imap;
 using MailMcp.Application.EmailContent;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
+using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Mail.MailKit;
 using MailMcp.Infrastructure.Persistence;
@@ -61,6 +62,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISecretSchemeResolver, EnvironmentVariableSecretReferenceResolver>();
         services.AddSingleton<ISecretSchemeResolver, PlaintextSecretReferenceResolver>();
         services.AddSingleton<ISecretReferenceResolver, CompositeSecretReferenceResolver>();
+        // The loader belongs here rather than beside the mail adapter: it turns resolved bytes into typed material and
+        // knows nothing about IMAP, so a future material kind joins it instead of touching a scheme adapter.
+        services.AddSingleton<TrustAnchorLoader>();
 
         return services;
     }
@@ -87,9 +91,17 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<SecretResolutionOptions>(),
             provider.GetRequiredService<ILogger<PostgresConnectionStringProvider>>()));
         services.AddHostedService(provider => provider.GetRequiredService<PostgresConnectionStringProvider>());
-        // The container both creates and disposes the data source, so no second owner can leave its pool open.
-        services.AddSingleton(provider => new NpgsqlDataSourceBuilder(
-            provider.GetRequiredService<PostgresConnectionStringProvider>().ConnectionString).Build());
+        // The container both creates and disposes the data source, so no second owner can leave its pool open. The
+        // credential is not part of the composed string: it is retrieved per physical connection so that rotating it
+        // needs neither a restart nor a rebuilt pool.
+        services.AddSingleton(provider =>
+        {
+            var connectionStringProvider = provider.GetRequiredService<PostgresConnectionStringProvider>();
+            var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionStringProvider.ConnectionString);
+            connectionStringProvider.SupplyThePasswordPerConnection(dataSourceBuilder);
+
+            return dataSourceBuilder.Build();
+        });
         services.AddDbContext<MailMcpDbContext>((provider, options) =>
             options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()));
         services.AddScoped<IPersistenceSessionFactory, PersistenceSessionFactory>();
