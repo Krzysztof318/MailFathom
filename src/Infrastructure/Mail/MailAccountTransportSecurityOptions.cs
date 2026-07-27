@@ -101,16 +101,7 @@ public sealed class MailAccountTransportSecurityOptions
     /// </remarks>
     public IReadOnlyList<MailAccountTransportSecurityConfigurationError> FindConfigurationErrors()
     {
-        var errors = new List<MailAccountTransportSecurityConfigurationError>();
         var permittedMechanisms = this.ParsePermittedMechanisms(out var unsupportedMechanismNames);
-
-        foreach (var unsupportedMechanismName in unsupportedMechanismNames)
-        {
-            errors.Add(new MailAccountTransportSecurityConfigurationError(
-                nameof(this.PermittedAuthenticationMechanisms),
-                $"SASL mechanism '{unsupportedMechanismName}' is not supported.",
-                Violation: null));
-        }
 
         var violations = MailTransportSecurityPolicy.FindViolations(
             this.ConnectionSecurity,
@@ -120,12 +111,17 @@ public sealed class MailAccountTransportSecurityOptions
             this.CertificateTrust,
             this.ConfiguredTrustAnchorReference);
 
-        errors.AddRange(violations.Select(violation => new MailAccountTransportSecurityConfigurationError(
-            SettingFor(violation),
-            DescribeViolation(violation),
-            violation)));
-
-        return errors;
+        return
+        [
+            .. unsupportedMechanismNames.Select(unsupportedMechanismName => new MailAccountTransportSecurityConfigurationError(
+                nameof(this.PermittedAuthenticationMechanisms),
+                $"SASL mechanism '{unsupportedMechanismName}' is not supported.",
+                Violation: null)),
+            .. violations.Select(violation => new MailAccountTransportSecurityConfigurationError(
+                SettingFor(violation),
+                DescribeViolation(violation),
+                violation)),
+        ];
     }
 
     /// <summary>Gets the masked trust anchor reference, or <see langword="null" /> when no usable anchor is configured.</summary>

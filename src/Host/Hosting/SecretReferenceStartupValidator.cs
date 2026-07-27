@@ -92,17 +92,13 @@ internal sealed partial class SecretReferenceStartupValidator : IHostedLifecycle
     private static DiscoveredSecretSettings FindSecretBearingSettings(
         params (string ConfigurationPath, object BoundOptions)[] roots)
     {
-        var blocks = new List<DiscoveredSecret>();
-        var rawSecretPropertyPaths = new List<string>();
+        var discoveredPerRoot = roots
+            .Select(root => ConfiguredSecretDiscovery.FindSecretBearingSettings(root.BoundOptions, root.ConfigurationPath))
+            .ToArray();
 
-        foreach (var (configurationPath, boundOptions) in roots)
-        {
-            var discovered = ConfiguredSecretDiscovery.FindSecretBearingSettings(boundOptions, configurationPath);
-            blocks.AddRange(discovered.Blocks);
-            rawSecretPropertyPaths.AddRange(discovered.RawSecretPropertyPaths);
-        }
-
-        return new DiscoveredSecretSettings(blocks, rawSecretPropertyPaths);
+        return new DiscoveredSecretSettings(
+            [.. discoveredPerRoot.SelectMany(discovered => discovered.Blocks)],
+            [.. discoveredPerRoot.SelectMany(discovered => discovered.RawSecretPropertyPaths)]);
     }
 
     private static string DescribeRawSecretProperty(string configurationPath) =>

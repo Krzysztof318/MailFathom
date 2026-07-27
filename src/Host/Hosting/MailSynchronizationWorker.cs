@@ -55,36 +55,37 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The hosted worker isolates unexpected per-folder failures so later folders and intervals can continue.")]
     private async Task RunOnceAsync(MailSynchronizationOptions currentOptions, CancellationToken cancellationToken)
     {
-        foreach (var account in currentOptions.Accounts)
+        var scheduledFolders = currentOptions.Accounts.SelectMany(
+            account => account.EffectiveFolders,
+            (account, folder) => (AccountId: account.AccountId, FolderName: folder));
+
+        foreach (var (accountId, folderName) in scheduledFolders)
         {
-            foreach (var folder in account.EffectiveFolders)
+            try
             {
-                try
-                {
-                    using var scope = this.scopeFactory.CreateScope();
+                using var scope = this.scopeFactory.CreateScope();
 
-                    var synchronizer = scope.ServiceProvider.GetRequiredService<MailboxSynchronizer>();
-                    var result = await synchronizer.SynchronizeAsync(MailAccountId.Create(account.AccountId), MailFolderName.Create(folder), cancellationToken);
+                var synchronizer = scope.ServiceProvider.GetRequiredService<MailboxSynchronizer>();
+                var result = await synchronizer.SynchronizeAsync(MailAccountId.Create(accountId), MailFolderName.Create(folderName), cancellationToken);
 
-                    this.LogFolderSynchronized(
-                        account.AccountId,
-                        folder,
-                        result.StoredEmailCount,
-                        result.SkippedOversizedEmailCount,
-                        result.HasMoreEmails);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (PersistenceConcurrencyConflictException exception)
-                {
-                    this.LogFolderSynchronizationDeferredAfterConcurrencyConflict(exception, account.AccountId, folder);
-                }
-                catch (Exception exception)
-                {
-                    this.LogFolderSynchronizationFailed(exception, account.AccountId, folder);
-                }
+                this.LogFolderSynchronized(
+                    accountId,
+                    folderName,
+                    result.StoredEmailCount,
+                    result.SkippedOversizedEmailCount,
+                    result.HasMoreEmails);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (PersistenceConcurrencyConflictException exception)
+            {
+                this.LogFolderSynchronizationDeferredAfterConcurrencyConflict(exception, accountId, folderName);
+            }
+            catch (Exception exception)
+            {
+                this.LogFolderSynchronizationFailed(exception, accountId, folderName);
             }
         }
     }
