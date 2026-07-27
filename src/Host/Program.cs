@@ -7,6 +7,7 @@ using MailMcp.Host;
 using MailMcp.Host.Configuration;
 using MailMcp.Infrastructure;
 using MailMcp.Infrastructure.Mail;
+using MailMcp.Infrastructure.Resilience;
 using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.Options;
 
@@ -19,6 +20,9 @@ builder.Services.AddSingleton(TimeProvider.System);
 // where a reference belongs fails startup instead of authenticating.
 builder.Services.AddSecretResolution(
     builder.Configuration.GetValue("Secrets:Interpretation", SecretValueInterpretation.ReferenceOnly));
+// The non-HTTP dependency classes only. HttpClient traffic, which is how the AI provider clients reach a hosted
+// model, is already wrapped once by AddStandardResilienceHandler in the service defaults above.
+builder.Services.AddOutboundResiliencePipelines(builder.Configuration.GetSection("Resilience"));
 // Bound strictly: mail transport is security-sensitive, and a misspelled key such as a singular
 // "PermittedAuthenticationMechanism" would otherwise be ignored and silently replaced by the default allow-list.
 builder.Services.AddOptions<MailSynchronizationOptions>()
