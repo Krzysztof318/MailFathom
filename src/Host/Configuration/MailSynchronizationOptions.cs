@@ -36,6 +36,14 @@ internal sealed class MailSynchronizationOptions : IValidatableObject, IMailTran
     [Range(1, 1000)]
     public int MaxMetadataBatchesPerRun { get; set; } = 10;
 
+    /// <summary>Gets or sets the maximum number of MIME entities one message may declare before extraction abandons it.</summary>
+    [Range(1, 100000)]
+    public int MaxMimePartCount { get; set; } = 1000;
+
+    /// <summary>Gets or sets the maximum depth to which one message may nest multiparts before extraction abandons it.</summary>
+    [Range(1, 1000)]
+    public int MaxMimeNestingDepth { get; set; } = 30;
+
     /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
 

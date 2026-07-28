@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailMcp.Application.Emails;
 using MailMcp.Application.Mail;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
@@ -81,6 +82,15 @@ try
             MaxMetadataBatchSize = synchronizationSettings.MaxMetadataBatchSize,
             MaxRawMimeBytes = synchronizationSettings.MaxRawMimeBytes,
             MaxMetadataBatchesPerRun = synchronizationSettings.MaxMetadataBatchesPerRun,
+        };
+    });
+    builder.Services.AddScoped(provider =>
+    {
+        var synchronizationSettings = provider.GetRequiredService<MailSynchronizationOptions>();
+        return new EmailMimeExtractionOptions
+        {
+            MaxPartCount = synchronizationSettings.MaxMimePartCount,
+            MaxNestingDepth = synchronizationSettings.MaxMimeNestingDepth,
         };
     });
     builder.Services.AddSingleton(provider => new PersistenceConcurrencyOptions

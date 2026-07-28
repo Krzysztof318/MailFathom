@@ -25,6 +25,7 @@ MailMcp now includes the first vertical slice for read-only IMAP synchronization
 - `Infrastructure` also owns the one place that knows about X.509. `TrustAnchorLoader` turns the bytes a resolver produced into a certificate, so a future material kind arrives as another loader rather than as a change to how a secret is retrieved. It recognizes PEM, DER, and PKCS#12 from the material itself, imports every bundle with ephemeral key storage, and rejects an anchor that carries a private key.
 - `MailServerCertificateValidator` decides trust for an account that names an additional authority, by rebuilding the chain against the configured anchor rather than by forgiving what the platform reported. Nothing anywhere can switch validation off.
 - Secrets are re-resolved per operation rather than cached, and the configuration snapshot that names them is republished only after every reference in it has resolved. A rotated credential, trust anchor, or database password therefore reaches the next operation without a restart, and a reload that cannot resolve leaves the previous snapshot active. [Secret rotation](../operations/secret-rotation.md) is the operator procedure.
+- Every message whose raw MIME was stored is also read for normalized metadata — participants by role, sent and received timestamps, subject, thread identifiers, and an attachment summary. The read happens on the payload the run already fetched, so enrichment costs no second IMAP round trip and cannot reach the remote `\Seen` flag. [MIME metadata extraction](#mime-metadata-extraction) describes what is extracted and how each part is classified.
 - `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, secret resolution and trust anchor loading before any hosted service starts, a validated snapshot every consumer reads instead of the raw bound one, and a periodic scoped background worker that isolates failures per account/folder work unit.
 
 ## Folder aliases and discovery
@@ -141,6 +142,146 @@ checkpoint. The worker logs the failure and the next run starts the folder over 
 Budgets are the operator settings described in [outbound resilience](../architecture/outbound-resilience.md) and are
 bound from `Resilience:MailboxSessionEstablishment` and `Resilience:MailboxDataRetrieval`.
 
+## MIME metadata extraction
+
+`IEmailMimeReader` turns raw RFC 822 content into normalized metadata. The port is named for the mail artifact rather
+than for MIME's own vocabulary, because `Message` is reserved repository-wide so it stays unambiguous once AI
+conversation types exist. Its implementation is the only place MimeKit types appear; `Application` and `Domain` see
+domain values.
+
+The synchronizer calls it on the payload each occurrence was already fetched with, between the fetch and the local
+write. Nothing is fetched twice, and no extraction path can select a folder or set a flag.
+
+### What is extracted
+
+| Field | Source | Notes |
+| --- | --- | --- |
+| Participants | `Sender`, `From`, `Reply-To`, `To`, `Cc`, `Bcc` | Each address carries the role of the header it was written in. Group syntax is flattened to its members. |
+| Sent timestamp | `Date` | UTC. Absent or unparseable yields nothing rather than a guess. |
+| Received timestamp | topmost `Received` | UTC, taken from the trace after the header's final semicolon. |
+| Subject | `Subject` | Decoded; control characters removed so it cannot span lines it never spanned. |
+| Thread identifiers | `Message-ID`, `In-Reply-To`, `References` | Angle brackets and the whitespace around them removed; `References` keeps header order and collapses duplicates. |
+| Attachment summary | the message structure | Counts, total decoded size, inline-resource count, three markers, and one record per attachment. |
+
+An address is normalized to an upper-cased comparison form and keeps what the message wrote alongside it, and that
+comparison form is the whole of its identity: two addresses differing only in case, or only in the display name one
+sender chose, are one participant in any `Distinct`, set, or dictionary. What the message wrote is never edited —
+`"John Smith"@example.com` is a valid mailbox whose space belongs to it, and the domain is taken as whatever follows
+the *last* at-sign, because a quoted local part is allowed to contain one. Unfolding is the mail parser's job and has
+already happened before an address reaches the domain type.
+
+Only what surrounds a message identifier is removed. What the identifier itself holds is kept, including interior
+whitespace: the mail parser resolves header folding long before a value reaches the domain type, so a space that
+survives that far is content rather than leftover folding, and `"a b"@example.test` is an identifier a message may
+legitimately carry. Deleting its space would record an identifier nobody minted and merge the message into a
+conversation it does not belong to. An identifier still carrying a control character after the surrounding transport
+is stripped is refused rather than repaired, because no parser produces one and a repaired identifier would be a thread
+key nobody wrote.
+
+Case is *not* normalized in a message identifier, on either half. An identifier is an opaque token that the mail
+ecosystem compares octet for octet, and a client places an ancestor in `References` by copying the identifier it
+received rather than by rewriting it, so case-folding would not repair a difference that arises in practice while it
+would merge two identifiers every other client keeps apart — and merging is the direction that joins unrelated
+conversations.
+
+A malformed address is dropped rather than repaired — it costs one participant of one message, and a repaired address
+nobody wrote would end up in a filter someone trusts.
+
+### What counts as an attachment
+
+The rule is MailMcp's, not a library default. MimeKit's own `Attachments` keys off `Content-Disposition`, and inheriting
+that would report an `smime.p7s` attachment on every signed message and would leave an embedded logo counting or not
+counting depending on how the sender wrote one header. The classification runs in a fixed order, and the order is the
+rule — several ordinary parts satisfy more than one of these at once:
+
+1. **The cryptographic envelope.** A `multipart/encrypted` container marks the message encrypted and **no child of it is
+   classified at all**. A `multipart/signed` container marks an unverified signature, classifies its signed content
+   normally, and classifies the detached signature not at all. Both are recognized from the container, never from a
+   child's media type: PGP/MIME ciphertext is usually typed `application/octet-stream`, so a child-driven rule would
+   report a file that does not exist. Recognition requires the `protocol` parameter RFC 1847 mandates on both
+   containers, because a container that names no protocol has stated nothing about its children: honoring a bare
+   `multipart/encrypted` header would let anyone take a file out of the summary by writing one line. Such a container
+   is classified as the ordinary multipart it is, and a real signature or ciphertext part inside it is still caught by
+   the cryptographic leaf rule. RFC 1847 gives a signed container exactly two children; one carrying more is
+   malformed, and its extra children are still classified rather than dropped, so a part smuggled past the signature
+   cannot disappear from the summary and from every filter built on it.
+2. **Cryptographic leaf parts** — `application/pkcs7-signature`, `application/pgp-signature`,
+   `application/pkcs7-mime`, `application/pgp-encrypted`. This precedes disposition deliberately, because an
+   `smime.p7s` part almost always declares itself an attachment. An opaque `application/pkcs7-mime` part *is* the
+   message rather than a file beside it, so its `smime-type` parameter sets the matching marker — `enveloped-data` and
+   `authEnveloped-data` mark the message encrypted, `signed-data` marks an unverified signature — instead of leaving it
+   looking like a message with no parts and no explanation.
+3. **The body branch**, resolved recursively rather than at the message root: in a `multipart/mixed` the body is its
+   first child resolved again by these rules, in a `multipart/related` the part the `start` parameter names or the
+   first child, and in a `multipart/alternative` every member. Resolving only at the root would classify the
+   `text/plain` body of the most ordinary message there is — a body and one PDF — as an attachment.
+4. **Inline resources** — a part with a `Content-ID` that an HTML body part references, whose disposition is `inline`
+   or absent. The absent case carries the weight, because senders routinely omit the header on embedded images. An
+   explicit `attachment` disposition overrides it, since there the sender has said what the part is. A `cid:` URL is
+   percent-decoded before it is compared, because RFC 2392 escapes whatever cannot appear literally in a URL, so
+   `<logo/dark@example.test>` is referenced as `cid:logo%2Fdark@example.test`. A reference counts only where a renderer
+   would follow it — an attribute value, or the style sheet a `<style>` element carries — so the body is tokenized
+   rather than scanned as text. Matching every occurrence in the source would let a crafted message hide a real file by
+   naming its `Content-ID` in visible text, in a comment, or in script data, taking the part out of the summary and out
+   of every filter built on it.
+5. **Everything else is an attachment.**
+
+Three cases follow from the ordering and are worth naming. A nested `message/rfc822` is one attachment and is not
+recursed into, so a forwarded thread does not report the attachment count of every message inside it. A TNEF
+`winmail.dat` part is one attachment marked unexpanded, because expanding it is a separate decision with its own
+parsing surface. A `text/calendar` part is a body alternative when it sits in a `multipart/alternative`, which is how
+Outlook sends an invitation, and an attachment when it is a separate part, which is how several other clients send one.
+
+Attachment presence means the attachment count is greater than zero, so an inline-only or signature-only message does
+not have attachments. The signature marker states **presence only** and its name says so: anyone can attach a
+signature-typed part, nothing here verifies one, and a marker named after signing would be read downstream as an
+authenticity result that was never established. Decryption and verification are out of scope and tracked separately.
+
+Size is the **decoded** octet count, measured by streaming the part through a counter that discards the bytes. MIME
+declares no per-part length, so this is measured rather than read, and the sum over a message's attachments does not
+equal the message size IMAP reports. The parse itself is persistent: part content stays in the fetched raw MIME and is
+read from there when a part is measured, rather than being copied into a second buffer the parser owns, so a message
+near `MaxRawMimeBytes` is held once. A forwarded `message/rfc822` part that arrived under a transfer encoding is
+decoded like any other part, so its own formatting is what gets measured; one that arrived unencoded is measured as the
+parsed message writes itself, which matches its transmitted octets for the CRLF line endings mail transport requires.
+
+### File names are untrusted input
+
+A file name arrives RFC 2047 encoded-word or RFC 2231 continuation encoded, and after decoding can carry path
+separators and traversal segments, control characters and line breaks, unbounded length, and bidirectional overrides
+that make a name render as something other than what it is. `AttachmentFileName` decodes nothing itself — the adapter
+hands it the decoded name — and then removes control and Unicode formatting characters, scalar by scalar rather than
+code unit by code unit so that a formatting character written as a surrogate pair is removed like any other, keeps only
+the segment after the last `/`, `\`, or `:` so a result can never be a path, trims, and bounds the length at 200
+characters. The bound falls on a text-element boundary rather than on a count of UTF-16 code units, so a name ending in
+an emoji or a combining sequence is never cut through the middle of a character and left as a string a JSON writer
+would have to replace or reject. When any of that changed the name the record says so, so a caller can tell a plain name from a
+repaired one. A part left with nothing usable is recorded as **unnamed** rather than given a synthetic name, which
+would be indistinguishable from one the sender wrote.
+
+### Structural limits and unreadable messages
+
+`MaxRawMimeBytes` bounds the bytes, but a message far below it can declare tens of thousands of parts or nest
+multiparts hundreds deep, which is an inexpensive way to consume disproportionate CPU and allocations.
+`MaxMimePartCount` and `MaxMimeNestingDepth` bound the structure, and both are enforced **while the message is read**:
+a forward-only `MimeReader` pass reports the structure through callbacks and abandons the message the moment a limit is
+crossed, so the object tree the limit exists to prevent is never built. Counting the parts of an already parsed message
+would concede exactly the allocations being refused.
+
+A message that crosses a limit, and one whose bytes do not parse, produce a **result rather than an exception**. Badly
+formed mail is expected: the occurrence is still stored with its content, the folder checkpoint still advances past it,
+and the run reports how many stored messages carried MIME it could not read. Content that defeats the bounded scan for
+embedded-resource references is reported the same way, because the alternative is worse than an imprecise label — an
+exception there would leave the occurrence unstored and its checkpoint unmoved, so one crafted message would block its
+folder on every later run. The worker logs that count alongside the
+stored and oversized counts. An occurrence stored without content has no MIME to read and is counted as neither
+enriched nor unreadable.
+
+Logs record counts and the account and folder identity only. Addresses, subjects, file names, and body text are never
+written to a log — a file name is both mail content and attacker-controlled, so logging one would leak and inject at
+once. Extracted participant data is personal data by default, which constrains how specification 07 will persist and
+index it.
+
 ## Configuration
 
 Synchronization is disabled by default:
@@ -153,6 +294,8 @@ Synchronization is disabled by default:
     "MaxMetadataBatchSize": 100,
     "MaxRawMimeBytes": 26214400,
     "MaxMetadataBatchesPerRun": 10,
+    "MaxMimePartCount": 1000,
+    "MaxMimeNestingDepth": 30,
     "Accounts": [
       {
         "AccountId": "primary",
@@ -199,6 +342,10 @@ Every secret-bearing setting — the account password, the trust anchor, the dat
 Secret resolution is not gated on `Enabled`, unlike the transport security rules. Every configured account's password reference is resolved at startup even when synchronization is disabled, because a reference an operator wrote is a reference they intend to work, and discovering it broken at the moment synchronization is switched on is worse than discovering it now. An account that is configured but has no reachable password therefore fails startup; remove the account rather than disabling synchronization around it.
 
 [Secret provisioning](../operations/secret-provisioning.md) is the operator reference: the four schemes, the systemd, Compose, and Kubernetes provisioning paths, the three interpretation modes and why `ReferenceOnly` is the default, and the in-memory exposures that need operational rather than code-level mitigation.
+
+`MaxMimePartCount` must be between 1 and 100 000 and `MaxMimeNestingDepth` between 1 and 1 000. The defaults are far
+above what real mail declares — a message with a thousand parts or thirty levels of nesting was constructed rather than
+written — so lowering them refuses more and raising them costs work per message rather than buying anything.
 
 Account identifiers and folder aliases must be unique after domain normalization, IMAP ports must be between 1 and 65535, and `MaximumConcurrencyCommitAttempts` must be between 1 and 10. The default of two attempts covers the single lost race that a rare conflict represents; a folder deferred after that is retried by the next interval anyway.
 
@@ -284,7 +431,7 @@ Secret resolution is the one rule that cannot join `ValidateOnStart`, because op
 
 ## Safety assumptions
 
-The application layer exposes only `FetchEmailContentWithoutSettingSeenAsync` for content retrieval during synchronization. This name is part of the contract: implementations must use IMAP read-only selection and BODY.PEEK-equivalent behavior so remote `\Seen` flags are not changed. The MailKit adapter satisfies both halves — it selects the folder with `FolderAccess.ReadOnly` and retrieves content through `GetStreamAsync(uid)`, which issues `UID FETCH <uid> (BODY.PEEK[])`. Regression tests exercise both a successful fetch and a fetch retried after a dropped connection, and assert that neither `StoreAsync`, the only `IMailFolder` member able to change flags, nor a read-write reselection was requested on either path. Metadata requests are bounded by `MaxMetadataBatchSize`, each run is bounded by `MaxMetadataBatchesPerRun`, empty unassigned UID ranges are not checkpointed speculatively, and raw MIME above `MaxRawMimeBytes` is recorded as metadata-only. Logs record counts and account/folder identifiers only; raw MIME, email bodies, attachments, credentials, and tokens remain sensitive and must not be logged.
+The application layer exposes only `FetchEmailContentWithoutSettingSeenAsync` for content retrieval during synchronization. This name is part of the contract: implementations must use IMAP read-only selection and BODY.PEEK-equivalent behavior so remote `\Seen` flags are not changed. The MailKit adapter satisfies both halves — it selects the folder with `FolderAccess.ReadOnly` and retrieves content through `GetStreamAsync(uid)`, which issues `UID FETCH <uid> (BODY.PEEK[])`. Regression tests exercise both a successful fetch and a fetch retried after a dropped connection, and assert that neither `StoreAsync`, the only `IMailFolder` member able to change flags, nor a read-write reselection was requested on either path. Metadata requests are bounded by `MaxMetadataBatchSize`, each run is bounded by `MaxMetadataBatchesPerRun`, empty unassigned UID ranges are not checkpointed speculatively, and raw MIME above `MaxRawMimeBytes` is recorded as metadata-only. Metadata extraction reads only the payload that fetch already produced and never materializes attachment content: each attachment's size is measured by decoding the part into a counter that keeps nothing. Logs record counts and account/folder identifiers only; raw MIME, email bodies, attachments, participant addresses, subjects, attachment file names, credentials, and tokens remain sensitive and must not be logged.
 
 ### Reloading a rotated reference
 
@@ -300,6 +447,10 @@ A rejected reload is logged with the configuration path and the failure identity
 
 ## Pending work
 
+- Persisting extracted metadata. Enrichment produces participants, thread identifiers, and the attachment summary for
+  every stored message, and today only the count of messages whose MIME could not be read survives the run. The
+  persistence model and its indexes are the next specification's work, and re-extracting already stored messages is a
+  backfill concern that arrives with body-text extraction.
 - Per-account discovery. Every folder currently resolves on its own short-lived connection, so a run costs one extra
   IMAP login per configured folder on top of its synchronization session. The listing is the same for every folder of
   an account, so the per-account synchronization supervisor is where one listing can serve them all.
