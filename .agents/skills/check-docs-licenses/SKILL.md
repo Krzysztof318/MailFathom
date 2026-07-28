@@ -7,6 +7,8 @@ description: Use when a change is nearing completion or affects behavior, config
 
 This is a mandatory completion gate. Inspect the complete diff and applicable repository instructions.
 
+Running the gate is mandatory; finding something to change is not. `n/a` and `pass` are complete, successful verdicts, and a gate that reports `n/a` with evidence has done its whole job. Never register a dependency, expand documentation, or widen the diff so the gate looks exercised.
+
 ## Documentation
 
 Confirm that durable documentation describes implemented behavior:
@@ -30,6 +32,8 @@ For every affected item, verify current official upstream evidence for:
 - separate service, model, telemetry, data-use, trademark, and data-processing terms when applicable.
 
 Ensure `LICENSES.md` is updated in the same change. A permissive SDK does not approve its hosted service. Unknown, conflicting, or unofficial evidence is a failure. Use `n/a` only when the inventory is empty.
+
+`LICENSES.md` records what the repository actually pins, bundles, or calls. A component the change only mentions, plans, or might adopt later does not belong in the register, because a row implies a review that a future adoption would have to redo anyway. The `Planned dependency review` section holds the deliberate exceptions the owner has already accepted; do not add to it for a dependency the change does not introduce.
 
 ## Verdict
 

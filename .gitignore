@@ -3,6 +3,9 @@
 .vs/
 .idea/
 .worktrees/
+.claude/worktrees/
+.claude/settings.local.json
+.remember/
 *.user
 *.suo
 TestResults/

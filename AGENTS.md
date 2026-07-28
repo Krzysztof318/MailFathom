@@ -52,6 +52,17 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 
 ## .NET and C# conventions
 
+Some of the rules below are enforced by the build rather than by a reader. Those are listed here so nobody re-checks by hand what the compiler already rejects, and so a new rule lands in the mechanism that can enforce it instead of becoming another paragraph:
+
+| Enforced by | Covers |
+|---|---|
+| `.editorconfig` diagnostic severities, with `TreatWarningsAsErrors` | Formatting, unnecessary usings, accessibility modifiers, file-scoped namespaces, sealing internal types, disposal (`CA2000`), and the rest of the configured `CA`/`IDE` set |
+| `BannedSymbols.txt`, through `Microsoft.CodeAnalysis.BannedApiAnalyzers` (`RS0030`) | Ambient clocks (`DateTime.Now`, `DateTimeOffset.UtcNow`, and siblings), `Thread.Sleep`, and the `System.Net.Mail` types |
+| `Microsoft.VisualStudio.Threading.Analyzers` | Blocking on tasks and other async hazards |
+| `Roslynator.*` and `xunit.analyzers` | General C# quality and xUnit usage |
+
+Add a mechanically checkable rule to the mechanism, not to this file: a severity in `.editorconfig` when an analyzer already covers it, a line in `BannedSymbols.txt` when the rule is "never call this". Prose here is for what a tool cannot decide — architecture, naming, and the reasoning behind a constraint. When a rule appears in both places, the tool is authoritative and this file explains why the rule exists.
+
 - Target .NET 10 and use idiomatic modern C# supported by the pinned SDK.
 - Keep the SDK version in `global.json`. Shared compiler and build settings belong in `Directory.Build.props`; shared package versions belong in `Directory.Packages.props`.
 - Enable nullable reference types, implicit usings, deterministic builds, .NET analyzers, and code-style enforcement during builds.
@@ -86,7 +97,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Avoid reflection, `dynamic`, source-code generation, and unsafe code unless a measured requirement justifies them. This restricts authoring custom generators and generator-driven designs, not first-party framework generators such as `[LoggerMessage]`, `[GeneratedRegex]`, or `System.Text.Json` source generation, which are the recommended shape of those APIs.
 - Use constructor injection. Avoid service locators, global mutable state, and static dependencies that hide collaborators.
 - When a method, constructor, or primary-constructor parameter list has three or more parameters, put each parameter on its own line. If all involved type and parameter names are genuinely short, this may be deferred until four parameters. Keep the closing parenthesis and base/initializer on their own readable line when wrapping.
-- Make I/O asynchronous end-to-end. Never block on tasks with `.Result`, `.Wait()`, or `GetAwaiter().GetResult()`.
+- Make I/O asynchronous end-to-end. Never block on tasks with `.Result`, `.Wait()`, or `GetAwaiter().GetResult()`; the threading analyzers reject these.
 - Suffix task-returning methods with `Async`, except framework-defined signatures where the ecosystem convention differs.
 - Async methods that perform I/O accept and propagate `CancellationToken`. Put it last and do not replace it with `CancellationToken.None` inside a call chain.
 - Use `await using` and `IAsyncDisposable` for asynchronously released resources. Dispose owned resources; never dispose dependencies owned by the DI container.
@@ -94,7 +105,7 @@ The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`;
 - Use `Task` by default. Choose `ValueTask` only after measurement shows a meaningful benefit and its consumption constraints are acceptable.
 - Avoid unbounded concurrency. Put explicit limits and backpressure around mailbox synchronization, MIME processing, embedding generation, and SMTP delivery.
 - Do not use blanket `ConfigureAwait(false)` in ASP.NET Core application code. Use it only where a reusable library boundary has a documented reason.
-- Use `DateTimeOffset` for timestamps and inject `TimeProvider` wherever current time affects behavior.
+- Use `DateTimeOffset` for timestamps and inject `TimeProvider` wherever current time affects behavior. `BannedSymbols.txt` bans the ambient clock properties outright, so a test never depends on the wall clock and a delay is always cancellable.
 - Validate options at startup. Fail fast on invalid or unsafe configuration.
 - Use structured logging with named properties. Never log credentials, tokens, message bodies, attachment content, or raw MIME.
 - Do not wrap ordinary log calls in `ILogger.IsEnabled(...)`. The logging infrastructure already skips disabled levels, so the guard only adds noise. Use it exclusively when producing the log arguments themselves is expensive, for example serialization, formatting, LINQ materialization, large allocations, or an extra query. Prefer removing the cost or using compile-time `LoggerMessage` source-generated methods over adding a guard.
@@ -197,7 +208,8 @@ Work is tracked as GitHub issues on the `MailMcp roadmap` project board, which i
 - Before final verification, use `$review-change`.
 - To finish, use `$finish-change`; it requires `$check-docs-licenses`, full verification, focused staging, and a draft pull request.
 - Use `scripts/inspect-workspace.sh` for a read-only workspace preflight.
-- Use `scripts/verify-fast.sh` during implementation.
+- Use `scripts/verify-fast.sh` during implementation. It restores, builds, tests, and verifies formatting, so a style diagnostic surfaces in the implementation loop instead of after the full gate has already restored tools and collected coverage.
+- Rename a harness-created `worktree-<id>` branch to `agent/<short-description>` before editing. `$start-task` treats this as its first corrective step rather than as a reason to stop.
 - Stage the task files before running `scripts/verify-full.sh`; the gate rejects remaining untracked files so newly added files cannot bypass diff validation.
 - Use `scripts/verify-full.sh` before committing. It fetches `origin main` and rejects a branch that does not contain that freshly fetched base, then runs the workflow contract suite, restores tools and packages, builds, runs the complete unit-test and coverage gate, verifies formatting, and checks the diff.
 - Rebase onto the fetched `origin/main` when the base check fails, and treat an unreachable remote as a blocked gate. Verification against a stale base proves nothing about the branch that will actually merge.

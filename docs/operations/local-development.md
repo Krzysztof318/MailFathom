@@ -17,13 +17,16 @@ git add <task-files>
 bash scripts/verify-full.sh
 ```
 
-The fast script restores the solution, builds it in Release configuration, and
-runs all unit tests without rebuilding. The full script additionally restores
-repository tools, runs the workflow contract suite, executes the aggregate
-coverage gate, verifies formatting, and checks the Git diff. It rejects
-remaining untracked files, so inspect the staged diff before running it. See
-[Agent workflow](agent-workflow.md) for the workspace inspection command and
-shared skills.
+The fast script restores the solution, builds it in Release configuration, runs
+all unit tests without rebuilding, and verifies formatting. Formatting runs in
+both scripts on purpose: style diagnostics such as `IDE0005` come from
+`dotnet format` rather than from the build, and leaving them to the final gate
+means discovering them only after tool restore and the whole coverage
+collection have run. The full script additionally restores repository tools,
+runs the workflow contract suite, executes the aggregate coverage gate, and
+checks the Git diff. It rejects remaining untracked files, so inspect the
+staged diff before running it. See [Agent workflow](agent-workflow.md) for the
+workspace inspection command and shared skills.
 
 The full script fetches `origin main` and refuses to continue when the branch
 does not contain that base, so it needs access to the remote and cannot run
@@ -67,7 +70,10 @@ Neither file nor user secrets is a production secret store. User secrets are sto
 
 ## Command-line tooling
 
-The repository provisions no development environment, so install the SDK and any command-line tools on the developer machine. Repository-local tools declared in `.config/dotnet-tools.json` come from `dotnet tool restore` and are limited to what the coverage gate needs.
+The repository provisions no development environment, so install the SDK and any command-line tools on the developer machine. Repository-local tools declared in `.config/dotnet-tools.json` come from `dotnet tool restore`:
+
+- `reportgenerator` merges the per-project Cobertura reports the coverage gate enforces.
+- `csharp-ls` is the C# language server that editors and agent tooling use to resolve symbols. It is pinned here rather than installed globally so every checkout resolves the same version, and so an environment that has run `dotnet tool restore` can look a symbol up before editing instead of discovering a misspelled type at build time.
 
 Two tools are installed globally when their workflows are needed:
 
