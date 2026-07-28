@@ -10,6 +10,11 @@ namespace MailMcp.Application.Folders;
 /// <remarks>
 /// A binding has to be durable before anything is synchronized under it, because the generation it carries is what
 /// separates the occurrences and the checkpoint of one binding from those of the next.
+/// <para>
+/// The port exists for that rule rather than for storage, and no persistence library publishes a contract for it:
+/// staging a binding is a comparison against the generation already held, so a competing run that resolved the same
+/// alias to a different remote folder is refused instead of merged.
+/// </para>
 /// </remarks>
 public interface IMailFolderResolutionStore
 {

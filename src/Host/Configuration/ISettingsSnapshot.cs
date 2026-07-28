@@ -16,6 +16,12 @@ namespace MailMcp.Host.Configuration;
 /// thing the reload contract promises never happens. Where an operation spans several services, the snapshot is
 /// registered as a scoped dependency so the scope, not each service, decides which one they share.
 /// </para>
+/// <para>
+/// That publication rule, together with the surface it withholds, is why this is declared rather than left to the
+/// framework: the single member is <c>IOptionsMonitor</c> deliberately narrowed — no lookup by name, no change
+/// callback, no way to observe a candidate that failed to resolve — and what it returns follows a rule no framework
+/// options type applies.
+/// </para>
 /// </remarks>
 internal interface ISettingsSnapshot<out TSettings>
     where TSettings : class
