@@ -59,6 +59,14 @@ public sealed class MailboxSynchronizer
     /// Thrown when a competing writer wins a race that the bounded local retries could not resolve. Progress already
     /// committed by this run stays durable, and the next run rereads the committed checkpoint before deciding again.
     /// </exception>
+    /// <exception cref="MailboxUnavailableException">
+    /// Thrown when the mail server did not serve the run within its configured resilience budget. Progress already
+    /// committed stays durable and the next run resumes from the persisted checkpoint.
+    /// </exception>
+    /// <exception cref="MailboxFolderRecreatedException">
+    /// Thrown when a recovered connection reselected the folder with a different UIDVALIDITY, so the identities this
+    /// run was working with no longer name the same emails. The next run starts the folder over.
+    /// </exception>
     public async Task<MailboxSynchronizationResult> SynchronizeAsync(
         MailAccountId accountId,
         MailFolderName folderName,

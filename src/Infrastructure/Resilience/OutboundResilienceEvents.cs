@@ -8,18 +8,22 @@ namespace MailMcp.Infrastructure.Resilience;
 /// <remarks>
 /// Polly's own log records render the outcome exception in full, and a mail server puts the rejected recipient into
 /// its error text. These events therefore replace that output: a failure appears as its type name, and the dependency
-/// class, attempt number, and delay carry everything an operator needs to see a dependency degrade. Durations and
-/// outcome counts remain available as Polly's metrics, which are tagged rather than formatted and carry no message.
+/// class, the remote instance, the operation, the attempt number, and the delay carry everything an operator needs to
+/// see a dependency degrade. The instance is a configured account identifier and the operation a folder name — both
+/// deployment vocabulary rather than mailbox contents. Durations and outcome counts remain available as Polly's
+/// metrics, which are tagged rather than formatted and carry no message.
 /// </remarks>
 internal static partial class OutboundResilienceEvents
 {
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Warning,
-        Message = "Outbound dependency {OutboundDependency} failed with {FailureType} and will be retried as attempt {NextAttemptNumber} after {RetryDelay}.")]
+        Message = "Outbound dependency {OutboundDependency} instance {DependencyInstance} failed operation {OutboundOperation} with {FailureType} and will retry as attempt {NextAttemptNumber} after {RetryDelay}.")]
     internal static partial void LogRetryScheduled(
         ILogger logger,
         string outboundDependency,
+        string dependencyInstance,
+        string outboundOperation,
         string failureType,
         int nextAttemptNumber,
         TimeSpan retryDelay);
@@ -27,16 +31,20 @@ internal static partial class OutboundResilienceEvents
     [LoggerMessage(
         EventId = 2,
         Level = LogLevel.Error,
-        Message = "Outbound dependency {OutboundDependency} exceeded its failure ratio after {FailureType}; further executions are rejected for {BreakDuration}.")]
+        Message = "Outbound dependency {OutboundDependency} instance {DependencyInstance} exceeded its failure ratio after {FailureType}; further executions are rejected for {BreakDuration}.")]
     internal static partial void LogCircuitOpened(
         ILogger logger,
         string outboundDependency,
+        string dependencyInstance,
         string failureType,
         TimeSpan breakDuration);
 
     [LoggerMessage(
         EventId = 3,
         Level = LogLevel.Information,
-        Message = "Outbound dependency {OutboundDependency} recovered and is accepting executions again.")]
-    internal static partial void LogCircuitClosed(ILogger logger, string outboundDependency);
+        Message = "Outbound dependency {OutboundDependency} instance {DependencyInstance} recovered and is accepting executions again.")]
+    internal static partial void LogCircuitClosed(
+        ILogger logger,
+        string outboundDependency,
+        string dependencyInstance);
 }

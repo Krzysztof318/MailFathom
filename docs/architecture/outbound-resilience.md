@@ -22,13 +22,30 @@ establishment is separate from retrieval because a rejected credential must neve
 that is how an account gets locked. Delivery is separate because a repeated submission is visible in the recipient's
 inbox, which is why its shipped budget is the smallest of the five.
 
-The enumeration is also the pipeline key. A value that is not declared resolves no pipeline and raises
+The enumeration is half the pipeline key. A value that is not declared resolves no pipeline and raises
 `KeyNotFoundException`, so a typo cannot silently run an operation with no resilience at all.
+
+## One pipeline per remote instance
+
+The other half of the key is the *dependency instance*: the remote server the operation actually talks to.
+`OutboundPipelineKey` pairs the two, and the registry keeps one built pipeline per pair.
+
+A circuit breaker is state, and state shared between two servers reports neither of them. Both mailbox classes are
+therefore keyed by account: one unreachable mail server opens the circuit for its own account, and every other account
+keeps reading through a breaker that never saw those failures. The same follows for the concurrency limiter — an
+account's in-flight limit is its own, so a slow server cannot shed a healthy account's work. A class that talks to one
+remote instance, such as the local database, uses `OutboundPipelineKey.SharedInstance` and keeps a single process-wide
+pipeline.
+
+This costs configuration nothing. One builder is registered per dependency class and a custom `BuilderComparer` matches
+a requested key to it by class alone, so the budget is still tuned once per class and the registry creates and caches
+an instance the first time one is asked for. Instances are created from configured accounts, so their number is
+bounded by the deployment rather than by traffic.
 
 ## What a pipeline is made of
 
-`Infrastructure` owns every Polly type. `AddOutboundResiliencePipelines` registers one pipeline per class, composed
-from outermost to innermost as:
+`Infrastructure` owns every Polly type. `AddOutboundResiliencePipelines` registers one builder per class, from which
+every instance of that class is composed, from outermost to innermost as:
 
 1. **Concurrency limiter** — sheds work beyond the class's in-flight limit before it consumes any other budget.
 2. **Total timeout** — bounds the whole operation, including its backoff waits. It is the only limit that can bound a
@@ -37,10 +54,17 @@ from outermost to innermost as:
 4. **Circuit breaker** — sits inside retry, so it observes every attempt rather than every operation.
 5. **Per-attempt timeout** — innermost, so a stalled attempt becomes a transient failure the retry above it acts on.
 
-Where the total timeout expires decides what the caller sees. Expiring inside an attempt cancels it and surfaces
-`TimeoutRejectedException`; expiring while the pipeline waits to retry stops the retry and surfaces the failure that
-ended the last attempt. Both abandon the remaining attempts, which is the guarantee; the exception names the more
-useful of the two causes.
+Where the total timeout expires decides what the caller sees. Expiring inside an attempt cancels it and is reported as
+a rejection; expiring while the pipeline waits to retry stops the retry and surfaces the failure that ended the last
+attempt. Both abandon the remaining attempts, which is the guarantee; the exception names the more useful of the two
+causes.
+
+Every limit the pipeline itself imposed — an abandoned attempt, an exhausted total timeout, an open circuit, a shed
+execution — reaches the caller as `OutboundDependencyUnavailableException`, with the Polly rejection kept as its inner
+exception. That translation is what stops the resilience library at the `Infrastructure.Resilience` boundary: an
+adapter maps this one type onto the failure its own application port documents, and the IMAP adapter turns it into
+`MailboxUnavailableException`. A caller's own cancellation is never translated; it stays an
+`OperationCanceledException`, so a host shutting down and a mail server refusing work never arrive as one failure.
 
 The order is the one the standard HTTP resilience pipeline established, and each position follows from the one before
 it. Every limit is an operator setting bound from configuration, read once at startup, so a flaky dependency is tuned
@@ -107,12 +131,18 @@ is the layer rather than something MailMcp re-implements:
 
 ## Telemetry and privacy
 
-Polly's metrics stay on and carry the dependency class as the pipeline name, the event, the attempt number, the
-outcome, and the duration. Emitting them is not exporting them: the host subscribes OpenTelemetry to Polly's meter in
-`ServiceDefaultsExtensions`, without which the instruments would exist and nothing would collect them. Its *logging* is replaced: Polly renders the outcome exception in full, and a mail server
+Polly's metrics stay on and carry the dependency class as the pipeline name, the remote instance as the pipeline
+instance, the event, the attempt number, the outcome, and the duration. Emitting them is not exporting them: the host
+subscribes OpenTelemetry to Polly's meter in `ServiceDefaultsExtensions`, without which the instruments would exist and
+nothing would collect them. Its *logging* is replaced: Polly renders the outcome exception in full, and a mail server
 puts the rejected recipient into its error text. `OutboundResilienceEvents` therefore records a retry, a circuit
-opening, and a circuit closing with the dependency class, the failure's type name, the attempt number, and the delay —
-never a message, an address, an identifier, or a payload.
+opening, and a circuit closing with the dependency class, the instance, the operation, the failure's type name, the
+attempt number, and the delay — never a message, an address, an identifier, or a payload.
+
+The instance is the configured account identifier and the operation is the folder name, both carried into the callbacks
+by the pipeline key and by `ResilienceContext.OperationKey`. Neither is mailbox content: they are the same deployment
+vocabulary the synchronization worker already logs, and they are what makes a degrading dependency attributable to one
+account and one folder rather than to "IMAP".
 
 ## Configuration
 
@@ -165,4 +195,5 @@ validated-snapshot layer the mail and persistence settings already have, not a c
 - **Chaos injection** is not wired up. Polly's chaos strategies ship inside `Polly.Core`, so adopting them later costs
   no new dependency, but injecting faults is only meaningful against the real adapters and belongs with the
   integration-test foundation rather than with the pipelines themselves.
-- **Distributed rate limiting and cross-process circuit state** are out of scope. Every limit here is per process.
+- **Distributed rate limiting and cross-process circuit state** are out of scope. Every limit here is per process, and
+  within a process per dependency instance.

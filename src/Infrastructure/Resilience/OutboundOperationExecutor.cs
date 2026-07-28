@@ -2,6 +2,7 @@
 
 using System.Collections.Immutable;
 using MailMcp.Application.Resilience;
+using Polly;
 using Polly.Registry;
 
 namespace MailMcp.Infrastructure.Resilience;
@@ -23,73 +24,43 @@ internal sealed class OutboundOperationExecutor
 {
     private static readonly AsyncLocal<ImmutableHashSet<OutboundDependency>?> DependenciesInFlight = new();
 
-    private readonly ResiliencePipelineProvider<OutboundDependency> pipelineProvider;
+    private readonly ResiliencePipelineProvider<OutboundPipelineKey> pipelineProvider;
 
     /// <summary>Initializes an executor over the registered pipelines.</summary>
-    /// <param name="pipelineProvider">Resolves the pipeline registered for a dependency class.</param>
+    /// <param name="pipelineProvider">Resolves, and creates on first use, the pipeline registered for a key.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="pipelineProvider" /> is <see langword="null" />.</exception>
-    public OutboundOperationExecutor(ResiliencePipelineProvider<OutboundDependency> pipelineProvider)
+    public OutboundOperationExecutor(ResiliencePipelineProvider<OutboundPipelineKey> pipelineProvider)
     {
         ArgumentNullException.ThrowIfNull(pipelineProvider);
 
         this.pipelineProvider = pipelineProvider;
     }
 
-    /// <summary>Runs an operation that produces a result under its dependency class pipeline.</summary>
+    /// <summary>Runs an operation under the process-wide pipeline of a dependency class that talks to one remote instance.</summary>
     /// <typeparam name="TResult">The result the operation produces.</typeparam>
     /// <param name="dependency">The dependency class whose budget governs the operation.</param>
     /// <param name="operation">The operation, which must be safe to repeat.</param>
     /// <param name="cancellationToken">Cancels the operation and every remaining attempt.</param>
     /// <returns>The result of the attempt that succeeded.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="operation" /> is <see langword="null" />.</exception>
-    /// <exception cref="KeyNotFoundException">Thrown when no pipeline is registered for <paramref name="dependency" />.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the same dependency class is already executing on this asynchronous flow.</exception>
-    /// <remarks>
-    /// Caller cancellation, an abandoned attempt, an open circuit, and a shed execution reach the caller as distinct
-    /// exception types. The total timeout is the one limit that does not always name itself: expiring inside an
-    /// attempt surfaces <see cref="Polly.Timeout.TimeoutRejectedException" />, while expiring between attempts stops
-    /// the retry and surfaces the failure that ended the last one.
-    /// </remarks>
-    public async Task<TResult> ExecuteAsync<TResult>(
+    /// <exception cref="OutboundDependencyUnavailableException">Thrown when a configured limit stopped the operation.</exception>
+    public Task<TResult> ExecuteAsync<TResult>(
         OutboundDependency dependency,
         Func<CancellationToken, Task<TResult>> operation,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(operation);
+        CancellationToken cancellationToken) =>
+        this.ExecuteAsync(
+            new OutboundPipelineKey(dependency),
+            operationKey: null,
+            operation,
+            cancellationToken);
 
-        var pipeline = this.pipelineProvider.GetPipeline(dependency);
-        var enclosingDependencies = DependenciesInFlight.Value ?? [];
-
-        if (enclosingDependencies.Contains(dependency))
-        {
-            throw new InvalidOperationException(
-                $"A resilience pipeline for {dependency} is already running on this execution flow. "
-                + "One logical operation is retried at exactly one layer.");
-        }
-
-        DependenciesInFlight.Value = enclosingDependencies.Add(dependency);
-
-        try
-        {
-            return await pipeline.ExecuteAsync(
-                static async (attempt, attemptToken) => await attempt(attemptToken),
-                operation,
-                cancellationToken);
-        }
-        finally
-        {
-            DependenciesInFlight.Value = enclosingDependencies;
-        }
-    }
-
-    /// <summary>Runs an operation that produces no result under its dependency class pipeline.</summary>
+    /// <summary>Runs an operation that produces no result under the process-wide pipeline of its dependency class.</summary>
     /// <param name="dependency">The dependency class whose budget governs the operation.</param>
     /// <param name="operation">The operation, which must be safe to repeat.</param>
     /// <param name="cancellationToken">Cancels the operation and every remaining attempt.</param>
     /// <returns>A task that completes when an attempt has succeeded.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="operation" /> is <see langword="null" />.</exception>
-    /// <exception cref="KeyNotFoundException">Thrown when no pipeline is registered for <paramref name="dependency" />.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the same dependency class is already executing on this asynchronous flow.</exception>
+    /// <exception cref="OutboundDependencyUnavailableException">Thrown when a configured limit stopped the operation.</exception>
     public async Task ExecuteAsync(
         OutboundDependency dependency,
         Func<CancellationToken, Task> operation,
@@ -106,5 +77,64 @@ internal sealed class OutboundOperationExecutor
                 return true;
             },
             cancellationToken);
+    }
+
+    /// <summary>Runs an operation under the pipeline of one remote instance of a dependency class.</summary>
+    /// <typeparam name="TResult">The result the operation produces.</typeparam>
+    /// <param name="pipelineKey">The dependency class and the remote instance whose pipeline state governs the operation.</param>
+    /// <param name="operationKey">Names the logical operation in resilience telemetry, or <see langword="null" /> when it has no useful name. It must never carry personal data.</param>
+    /// <param name="operation">The operation, which must be safe to repeat.</param>
+    /// <param name="cancellationToken">Cancels the operation and every remaining attempt.</param>
+    /// <returns>The result of the attempt that succeeded.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="operation" /> is <see langword="null" />.</exception>
+    /// <exception cref="KeyNotFoundException">Thrown when no pipeline is registered for the key's dependency class.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the same dependency class is already executing on this asynchronous flow.</exception>
+    /// <exception cref="OutboundDependencyUnavailableException">Thrown when a configured limit stopped the operation.</exception>
+    /// <remarks>
+    /// Caller cancellation reaches the caller as <see cref="OperationCanceledException" />, and every limit the
+    /// pipeline itself imposed as <see cref="OutboundDependencyUnavailableException" />. The total timeout is the one
+    /// limit that does not always announce itself that way: expiring inside an attempt is a rejection, while expiring
+    /// between attempts stops the retry and surfaces the failure that ended the last attempt.
+    /// </remarks>
+    public async Task<TResult> ExecuteAsync<TResult>(
+        OutboundPipelineKey pipelineKey,
+        string? operationKey,
+        Func<CancellationToken, Task<TResult>> operation,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        var pipeline = this.pipelineProvider.GetPipeline(pipelineKey);
+        var enclosingDependencies = DependenciesInFlight.Value ?? [];
+
+        if (enclosingDependencies.Contains(pipelineKey.Dependency))
+        {
+            throw new InvalidOperationException(
+                $"A resilience pipeline for {pipelineKey.Dependency} is already running on this execution flow. "
+                + "One logical operation is retried at exactly one layer.");
+        }
+
+        DependenciesInFlight.Value = enclosingDependencies.Add(pipelineKey.Dependency);
+
+        // The context carries the operation name into the retry and circuit-breaker events, which have no other way to
+        // say which of an instance's operations was refused.
+        var context = ResilienceContextPool.Shared.Get(operationKey, cancellationToken);
+
+        try
+        {
+            return await pipeline.ExecuteAsync(
+                static async (attemptContext, attempt) => await attempt(attemptContext.CancellationToken),
+                context,
+                operation);
+        }
+        catch (ExecutionRejectedException rejection)
+        {
+            throw new OutboundDependencyUnavailableException(pipelineKey.Dependency, rejection);
+        }
+        finally
+        {
+            ResilienceContextPool.Shared.Return(context);
+            DependenciesInFlight.Value = enclosingDependencies;
+        }
     }
 }

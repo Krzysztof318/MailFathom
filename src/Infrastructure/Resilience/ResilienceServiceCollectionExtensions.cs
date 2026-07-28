@@ -39,6 +39,12 @@ public static class ResilienceServiceCollectionExtensions
     /// standard resilience handler in the host's service defaults, and adding a pipeline around an HTTP-based
     /// provider client would place two retry layers on one call.
     /// </para>
+    /// <para>
+    /// One builder is registered per dependency class and the registry builds a pipeline per
+    /// <see cref="OutboundPipelineKey" /> from it, so a class that talks to several remote instances gets one
+    /// pipeline — and therefore one circuit-breaker and one concurrency budget — per instance without any additional
+    /// configuration.
+    /// </para>
     /// </remarks>
     public static IServiceCollection AddOutboundResiliencePipelines(
         this IServiceCollection services,
@@ -55,6 +61,15 @@ public static class ResilienceServiceCollectionExtensions
         services.AddSingleton<IValidateOptions<OutboundDependencyResilienceOptions>, OutboundDependencyResilienceOptionsValidator>();
         services.AddSingleton<OutboundOperationExecutor>();
 
+        // Only the dependency class selects a builder, so every instance of a class is built from its one
+        // registration. The formatters keep the two halves of the key readable in Polly's own telemetry tags.
+        services.AddResiliencePipelineRegistry<OutboundPipelineKey>(registryOptions =>
+        {
+            registryOptions.BuilderComparer = new OutboundPipelineBuilderComparer();
+            registryOptions.BuilderNameFormatter = key => key.Dependency.ToString();
+            registryOptions.InstanceNameFormatter = key => key.DependencyInstance;
+        });
+
         foreach (var dependency in Enum.GetValues<OutboundDependency>())
         {
             var dependencyName = dependency.ToString();
@@ -68,7 +83,7 @@ public static class ResilienceServiceCollectionExtensions
                 .ValidateOnStart();
 
             services.AddResiliencePipeline(
-                dependency,
+                new OutboundPipelineKey(dependency),
                 (builder, context) => ComposePipeline(builder, context, dependency));
         }
 
@@ -124,10 +139,13 @@ public static class ResilienceServiceCollectionExtensions
     /// </remarks>
     private static void ComposePipeline(
         ResiliencePipelineBuilder builder,
-        AddResiliencePipelineContext<OutboundDependency> context,
+        AddResiliencePipelineContext<OutboundPipelineKey> context,
         OutboundDependency dependency)
     {
         var dependencyName = dependency.ToString();
+        // The builder runs once per requested key, so the instance the registry is creating names itself here and is
+        // the only place a retry or a breaker event can learn which remote server it is reporting on.
+        var dependencyInstance = context.PipelineKey.DependencyInstance;
 
         // EnableReloads is deliberately not called. Registering a listener on the named options makes
         // OptionsMonitor.InvokeChanged materialize the candidate — validation included — on the very thread that
@@ -148,10 +166,10 @@ public static class ResilienceServiceCollectionExtensions
 
         if (options.MaxAttempts > 1)
         {
-            builder.AddRetry(ComposeRetryStrategy(options, dependency, dependencyName, classifier, logger));
+            builder.AddRetry(ComposeRetryStrategy(options, dependency, dependencyName, dependencyInstance, classifier, logger));
         }
 
-        builder.AddCircuitBreaker(ComposeCircuitBreakerStrategy(options, dependency, dependencyName, classifier, logger));
+        builder.AddCircuitBreaker(ComposeCircuitBreakerStrategy(options, dependency, dependencyName, dependencyInstance, classifier, logger));
         builder.AddTimeout(options.AttemptTimeout);
     }
 
@@ -159,6 +177,7 @@ public static class ResilienceServiceCollectionExtensions
         OutboundDependencyResilienceOptions options,
         OutboundDependency dependency,
         string dependencyName,
+        string dependencyInstance,
         ITransientFailureClassifier classifier,
         ILogger logger) =>
         new()
@@ -178,6 +197,8 @@ public static class ResilienceServiceCollectionExtensions
                 OutboundResilienceEvents.LogRetryScheduled(
                     logger,
                     dependencyName,
+                    dependencyInstance,
+                    DescribeOperation(arguments.Context),
                     DescribeFailureType(arguments.Outcome.Exception),
                     arguments.AttemptNumber + 2,
                     arguments.RetryDelay);
@@ -190,6 +211,7 @@ public static class ResilienceServiceCollectionExtensions
         OutboundDependencyResilienceOptions options,
         OutboundDependency dependency,
         string dependencyName,
+        string dependencyInstance,
         ITransientFailureClassifier classifier,
         ILogger logger) =>
         new()
@@ -205,6 +227,7 @@ public static class ResilienceServiceCollectionExtensions
                 OutboundResilienceEvents.LogCircuitOpened(
                     logger,
                     dependencyName,
+                    dependencyInstance,
                     DescribeFailureType(arguments.Outcome.Exception),
                     arguments.BreakDuration);
 
@@ -212,7 +235,7 @@ public static class ResilienceServiceCollectionExtensions
             },
             OnClosed = _ =>
             {
-                OutboundResilienceEvents.LogCircuitClosed(logger, dependencyName);
+                OutboundResilienceEvents.LogCircuitClosed(logger, dependencyName, dependencyInstance);
 
                 return default;
             },
@@ -238,4 +261,7 @@ public static class ResilienceServiceCollectionExtensions
 
     private static string DescribeFailureType(Exception? failure) =>
         failure?.GetType().Name ?? "no exception";
+
+    private static string DescribeOperation(ResilienceContext context) =>
+        context.OperationKey ?? "unnamed";
 }
