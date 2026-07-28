@@ -8,6 +8,14 @@ using Microsoft.EntityFrameworkCore;
 namespace MailMcp.Infrastructure.Persistence;
 
 /// <summary>Provides the EF Core and transaction operations owned by one persistence session.</summary>
+/// <remarks>
+/// EF Core publishes no interface over this seam. <see cref="Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction" />
+/// covers committing and rolling back alone, while a session also has to save tracked changes, ask the provider
+/// whether an update failure is an optimistic conflict, and clear tracked state after cleanup — and the type that
+/// offers the rest, <see cref="DbContext" />, is a concrete class no fake provider may stand in for. Bundling those
+/// operations here is what lets the commit, rollback, and disposal ordering of
+/// <see cref="EfCorePersistenceSession" /> be asserted without a database.
+/// </remarks>
 internal interface IEfCorePersistenceSessionResources : IAsyncDisposable
 {
     /// <summary>Gets the context used by repositories participating in the session.</summary>

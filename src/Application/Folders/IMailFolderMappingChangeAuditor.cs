@@ -10,6 +10,11 @@ namespace MailMcp.Application.Folders;
 /// A rebinding makes a folder synchronize from the beginning under a new generation, which an operator sees as a
 /// mailbox suddenly reprocessing itself. The audit record is the explanation, and it is the only place a remote folder
 /// path is written outside the database, because a path can carry personal or organizational information.
+/// <para>
+/// The port exists as a deliberately narrow surface: the sink behind it is undecided — a log today, an audit table or
+/// an external evidence store once compliance evidence is collected — and one operation is all a caller may reach for,
+/// so no other code path acquires a way to write a folder path outside the database.
+/// </para>
 /// </remarks>
 public interface IMailFolderMappingChangeAuditor
 {

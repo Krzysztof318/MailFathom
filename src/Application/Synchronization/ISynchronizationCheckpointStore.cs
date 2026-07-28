@@ -8,6 +8,12 @@ using MailMcp.Domain.Synchronization;
 namespace MailMcp.Application.Synchronization;
 
 /// <summary>Persists synchronization checkpoints for mailbox folders.</summary>
+/// <remarks>
+/// The port carries behavior of its own rather than a row's storage: staging an advance is a compare against the
+/// progress the caller decided from, so a run that resumed from stale state is refused instead of overwriting a run
+/// that already moved the binding forward. No persistence library publishes that contract, and expressing it here is
+/// what lets the compare be asserted without a database.
+/// </remarks>
 public interface ISynchronizationCheckpointStore
 {
     /// <summary>Gets the last durable checkpoint for one alias binding.</summary>

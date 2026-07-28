@@ -12,8 +12,9 @@ namespace MailMcp.Host.Configuration;
 /// <para>
 /// A configuration reload can rewrite a secret reference, so a snapshot is a candidate until every reference in it has
 /// resolved. A candidate that fails validation is discarded and the last known good snapshot stays active, which is
-/// what ADR 0002 requires of a reloadable setting group and what keeps a mistyped credential name from taking a
-/// running deployment offline.
+/// what <see href="../../../docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md">ADR 0002</see>
+/// requires of a reloadable setting group and what keeps a mistyped credential name from taking a running deployment
+/// offline.
 /// </para>
 /// <para>
 /// Validation never runs on the thread that reported the change. Configuration providers raise reloads from a file

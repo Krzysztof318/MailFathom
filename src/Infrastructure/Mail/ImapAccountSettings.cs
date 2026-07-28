@@ -26,6 +26,12 @@ public sealed record ImapAccountSettings(
     MailAccountConnectionMaterial Material);
 
 /// <summary>Resolves IMAP connection settings for configured accounts.</summary>
+/// <remarks>
+/// The port carries behavior of its own rather than exposing bound configuration: it resolves the account's secret
+/// references at the moment a connection is about to be made and hands the material to the caller, so no settings
+/// object holds a live password between operations. Nothing in the mail client library publishes such a contract, and
+/// every member here would survive replacing that library unchanged.
+/// </remarks>
 public interface IImapAccountSettingsProvider
 {
     /// <summary>Gets connection settings for one local account identifier, resolving its password and trust anchor.</summary>
