@@ -25,6 +25,11 @@ remaining untracked files, so inspect the staged diff before running it. See
 [Agent workflow](agent-workflow.md) for the workspace inspection command and
 shared skills.
 
+The full script fetches `origin main` and refuses to continue when the branch
+does not contain that base, so it needs access to the remote and cannot run
+offline. Rebase onto the fetched base when it reports the branch is behind.
+The fast script performs no Git operations and remains available offline.
+
 Run the web host directly:
 
 ```bash

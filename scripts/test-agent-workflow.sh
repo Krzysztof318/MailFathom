@@ -20,6 +20,7 @@ scripts_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source_repository_root="$(cd "$scripts_directory/.." && pwd -P)"
 test_directory="$(mktemp -d)"
 repository_root="$test_directory/repository"
+remote_repository_root="$test_directory/remote"
 fake_bin_directory="$test_directory/bin"
 invocation_log="$test_directory/dotnet-invocations.log"
 workflow_invocation_log="$test_directory/workflow-invocations.log"
@@ -55,7 +56,12 @@ printf '%s\n' \
 chmod +x "$repository_root/scripts/test-agent-workflow.sh"
 git -C "$repository_root" add MailMcp.slnx scripts/test-agent-workflow.sh tracked.txt
 git -C "$repository_root" commit --quiet -m 'test fixture'
-git -C "$repository_root" update-ref refs/remotes/origin/main HEAD
+
+git clone --quiet "$repository_root" "$remote_repository_root"
+git -C "$remote_repository_root" config user.email agent-workflow@example.invalid
+git -C "$remote_repository_root" config user.name 'Agent Workflow Tests'
+git -C "$repository_root" remote add origin "$remote_repository_root"
+git -C "$repository_root" fetch --quiet origin main
 
 export FAKE_DOTNET_LOG="$invocation_log"
 export FAKE_WORKFLOW_LOG="$workflow_invocation_log"
@@ -226,6 +232,95 @@ verify_full_rejects_untracked_files() {
   assert_contains 'untracked.txt' "$untracked_output"
 }
 
+verify_full_fetches_the_remote_base_before_verifying() {
+  git -C "$repository_root" update-ref -d refs/remotes/origin/main
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  [[ "$(git -C "$repository_root" rev-parse refs/remotes/origin/main)" == "$(git -C "$remote_repository_root" rev-parse main)" ]]
+}
+
+verify_full_stops_when_head_is_behind_origin_main() {
+  local behind_output="$test_directory/behind-origin-main-output"
+  local script_status=0
+
+  : > "$invocation_log"
+  : > "$workflow_invocation_log"
+  git -C "$remote_repository_root" commit --quiet --allow-empty -m 'remote main moved ahead'
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  ) > "$behind_output" 2>&1 || script_status=$?
+
+  git -C "$remote_repository_root" reset --quiet --hard HEAD~1
+  git -C "$repository_root" fetch --quiet --force origin main
+
+  if ((script_status == 0)); then
+    printf 'verify-full.sh accepted a branch behind origin/main\n' >&2
+    return 1
+  fi
+
+  assert_contains 'HEAD does not contain the current origin/main.' "$behind_output"
+  assert_file_content '' "$invocation_log"
+  assert_file_content '' "$workflow_invocation_log"
+}
+
+verify_full_stops_when_the_remote_is_unreachable() {
+  local unreachable_output="$test_directory/unreachable-remote-output"
+  local script_status=0
+
+  : > "$invocation_log"
+  : > "$workflow_invocation_log"
+  git -C "$repository_root" remote set-url origin "$test_directory/missing-remote"
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  ) > "$unreachable_output" 2>&1 || script_status=$?
+
+  git -C "$repository_root" remote set-url origin "$remote_repository_root"
+
+  if ((script_status == 0)); then
+    printf 'verify-full.sh continued despite an unreachable remote\n' >&2
+    return 1
+  fi
+
+  assert_contains 'verify-full.sh cannot fetch origin main.' "$unreachable_output"
+  assert_file_content '' "$invocation_log"
+  assert_file_content '' "$workflow_invocation_log"
+}
+
+verify_full_stops_when_a_stale_tracking_ref_hides_remote_movement() {
+  local stale_base_output="$test_directory/stale-tracking-ref-output"
+  local script_status=0
+
+  : > "$invocation_log"
+  git -C "$repository_root" config --unset remote.origin.fetch
+  git -C "$repository_root" update-ref refs/remotes/origin/main HEAD
+  git -C "$remote_repository_root" commit --quiet --allow-empty -m 'remote main moved past the stale tracking ref'
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  ) > "$stale_base_output" 2>&1 || script_status=$?
+
+  git -C "$remote_repository_root" reset --quiet --hard HEAD~1
+  git -C "$repository_root" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+  git -C "$repository_root" fetch --quiet --force origin main
+
+  if ((script_status == 0)); then
+    printf 'verify-full.sh accepted a stale remote-tracking ref\n' >&2
+    return 1
+  fi
+
+  assert_contains 'HEAD does not contain the current origin/main.' "$stale_base_output"
+  assert_file_content '' "$invocation_log"
+}
+
 verification_stops_after_first_failure() {
   : > "$invocation_log"
 
@@ -309,6 +404,10 @@ run_test verify_full_runs_workflow_contracts
 run_test verify_full_stops_when_workflow_contracts_fail
 run_test verify_full_checks_committed_staged_and_unstaged_changes
 run_test verify_full_rejects_untracked_files
+run_test verify_full_fetches_the_remote_base_before_verifying
+run_test verify_full_stops_when_head_is_behind_origin_main
+run_test verify_full_stops_when_the_remote_is_unreachable
+run_test verify_full_stops_when_a_stale_tracking_ref_hides_remote_movement
 run_test verification_stops_after_first_failure
 run_test workspace_inspection_is_read_only_and_labeled
 run_test workspace_inspection_reports_unavailable_sdk

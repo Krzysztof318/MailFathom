@@ -199,5 +199,6 @@ Work is tracked as GitHub issues on the `MailMcp roadmap` project board, which i
 - Use `scripts/inspect-workspace.sh` for a read-only workspace preflight.
 - Use `scripts/verify-fast.sh` during implementation.
 - Stage the task files before running `scripts/verify-full.sh`; the gate rejects remaining untracked files so newly added files cannot bypass diff validation.
-- Use `scripts/verify-full.sh` before committing. It runs the workflow contract suite, restores tools and packages, builds, runs the complete unit-test and coverage gate, verifies formatting, and checks the diff.
+- Use `scripts/verify-full.sh` before committing. It fetches `origin main` and rejects a branch that does not contain that freshly fetched base, then runs the workflow contract suite, restores tools and packages, builds, runs the complete unit-test and coverage gate, verifies formatting, and checks the diff.
+- Rebase onto the fetched `origin/main` when the base check fails, and treat an unreachable remote as a blocked gate. Verification against a stale base proves nothing about the branch that will actually merge.
 - Inspect the final diff for accidental secrets, unrelated edits, generated files, and dependency-boundary violations.
