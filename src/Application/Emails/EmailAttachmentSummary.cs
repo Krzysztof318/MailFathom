@@ -58,7 +58,7 @@ public sealed record EmailAttachmentSummary
 
     /// <summary>Gets the summary of a message that carries nothing besides its body.</summary>
     public static EmailAttachmentSummary None { get; } = new(
-        attachments: [],
+        attachments: new List<ExtractedEmailAttachment>().AsReadOnly(),
         totalSizeOctets: 0,
         inlineResourceCount: 0,
         isEncrypted: false,
@@ -82,7 +82,10 @@ public sealed record EmailAttachmentSummary
     {
         ArgumentNullException.ThrowIfNull(attachments);
 
-        IReadOnlyList<ExtractedEmailAttachment> materializedAttachments = [.. attachments];
+        // Wrapped rather than left as the array a collection expression produces: an IReadOnlyList backed directly by
+        // an array can be cast back to that array and written through, which would leave TotalSizeOctets describing a
+        // list that no longer exists.
+        IReadOnlyList<ExtractedEmailAttachment> materializedAttachments = new List<ExtractedEmailAttachment>(attachments).AsReadOnly();
 
         return new EmailAttachmentSummary(
             materializedAttachments,

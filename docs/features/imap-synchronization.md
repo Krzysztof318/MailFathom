@@ -163,11 +163,21 @@ write. Nothing is fetched twice, and no extraction path can select a folder or s
 | Thread identifiers | `Message-ID`, `In-Reply-To`, `References` | Angle brackets and folding removed; `References` keeps header order and collapses duplicates. |
 | Attachment summary | the message structure | Counts, total decoded size, inline-resource count, three markers, and one record per attachment. |
 
-An address is normalized to an upper-cased comparison form and keeps what the message wrote alongside it, so two
-addresses that differ only in case or folding compare equal. Case is *not* normalized in a message identifier: RFC 5322
-leaves the left half of one a token a client may vary, so lower-casing it would merge identifiers a mail server minted
-as distinct. A malformed address is dropped rather than repaired — it costs one participant of one message, and a
-repaired address nobody wrote would end up in a filter someone trusts.
+An address is normalized to an upper-cased comparison form and keeps what the message wrote alongside it, and that
+comparison form is the whole of its identity: two addresses differing only in case, or only in the display name one
+sender chose, are one participant in any `Distinct`, set, or dictionary. What the message wrote is never edited —
+`"John Smith"@example.com` is a valid mailbox whose space belongs to it, and the domain is taken as whatever follows
+the *last* at-sign, because a quoted local part is allowed to contain one. Unfolding is the mail parser's job and has
+already happened before an address reaches the domain type.
+
+Case is *not* normalized in a message identifier, on either half. An identifier is an opaque token that the mail
+ecosystem compares octet for octet, and a client places an ancestor in `References` by copying the identifier it
+received rather than by rewriting it, so case-folding would not repair a difference that arises in practice while it
+would merge two identifiers every other client keeps apart — and merging is the direction that joins unrelated
+conversations.
+
+A malformed address is dropped rather than repaired — it costs one participant of one message, and a repaired address
+nobody wrote would end up in a filter someone trusts.
 
 ### What counts as an attachment
 
@@ -180,17 +190,24 @@ rule — several ordinary parts satisfy more than one of these at once:
    classified at all**. A `multipart/signed` container marks an unverified signature, classifies its signed content
    normally, and classifies the detached signature not at all. Both are recognized from the container, never from a
    child's media type: PGP/MIME ciphertext is usually typed `application/octet-stream`, so a child-driven rule would
-   report a file that does not exist.
+   report a file that does not exist. RFC 1847 gives a signed container exactly two children; one carrying more is
+   malformed, and its extra children are still classified rather than dropped, so a part smuggled past the signature
+   cannot disappear from the summary and from every filter built on it.
 2. **Cryptographic leaf parts** — `application/pkcs7-signature`, `application/pgp-signature`,
    `application/pkcs7-mime`, `application/pgp-encrypted`. This precedes disposition deliberately, because an
-   `smime.p7s` part almost always declares itself an attachment.
+   `smime.p7s` part almost always declares itself an attachment. An opaque `application/pkcs7-mime` part *is* the
+   message rather than a file beside it, so its `smime-type` parameter sets the matching marker — `enveloped-data` and
+   `authEnveloped-data` mark the message encrypted, `signed-data` marks an unverified signature — instead of leaving it
+   looking like a message with no parts and no explanation.
 3. **The body branch**, resolved recursively rather than at the message root: in a `multipart/mixed` the body is its
    first child resolved again by these rules, in a `multipart/related` the part the `start` parameter names or the
    first child, and in a `multipart/alternative` every member. Resolving only at the root would classify the
    `text/plain` body of the most ordinary message there is — a body and one PDF — as an attachment.
 4. **Inline resources** — a part with a `Content-ID` that an HTML body part references, whose disposition is `inline`
    or absent. The absent case carries the weight, because senders routinely omit the header on embedded images. An
-   explicit `attachment` disposition overrides it, since there the sender has said what the part is.
+   explicit `attachment` disposition overrides it, since there the sender has said what the part is. A `cid:` URL is
+   percent-decoded before it is compared, because RFC 2392 escapes whatever cannot appear literally in a URL, so
+   `<logo/dark@example.test>` is referenced as `cid:logo%2Fdark@example.test`.
 5. **Everything else is an attachment.**
 
 Three cases follow from the ordering and are worth naming. A nested `message/rfc822` is one attachment and is not
@@ -214,10 +231,12 @@ A file name arrives RFC 2047 encoded-word or RFC 2231 continuation encoded, and 
 separators and traversal segments, control characters and line breaks, unbounded length, and bidirectional overrides
 that make a name render as something other than what it is. `AttachmentFileName` decodes nothing itself — the adapter
 hands it the decoded name — and then removes control and Unicode formatting characters, keeps only the segment after
-the last `/`, `\`, or `:` so a result can never be a path, trims, and bounds the length at 200 characters. When any of
-that changed the name the record says so, so a caller can tell a plain name from a repaired one. A part left with
-nothing usable is recorded as **unnamed** rather than given a synthetic name, which would be indistinguishable from one
-the sender wrote.
+the last `/`, `\`, or `:` so a result can never be a path, trims, and bounds the length at 200 characters. The bound
+falls on a text-element boundary rather than on a count of UTF-16 code units, so a name ending in an emoji or a
+combining sequence is never cut through the middle of a character and left as a string a JSON writer would have to
+replace or reject. When any of that changed the name the record says so, so a caller can tell a plain name from a
+repaired one. A part left with nothing usable is recorded as **unnamed** rather than given a synthetic name, which
+would be indistinguishable from one the sender wrote.
 
 ### Structural limits and unreadable messages
 
@@ -230,7 +249,10 @@ would concede exactly the allocations being refused.
 
 A message that crosses a limit, and one whose bytes do not parse, produce a **result rather than an exception**. Badly
 formed mail is expected: the occurrence is still stored with its content, the folder checkpoint still advances past it,
-and the run reports how many stored messages carried MIME it could not read. The worker logs that count alongside the
+and the run reports how many stored messages carried MIME it could not read. Content that defeats the bounded scan for
+embedded-resource references is reported the same way, because the alternative is worse than an imprecise label — an
+exception there would leave the occurrence unstored and its checkpoint unmoved, so one crafted message would block its
+folder on every later run. The worker logs that count alongside the
 stored and oversized counts. An occurrence stored without content has no MIME to read and is counted as neither
 enriched nor unreadable.
 

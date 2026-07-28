@@ -202,6 +202,117 @@ public sealed class MimeKitEmailMimeReaderTests
         Assert.False(attachments.CarriesUnverifiedSignature);
     }
 
+    /// <summary>An opaque S/MIME part replaces the body, so the record must say what happened to it rather than look empty.</summary>
+    [Theory]
+    [InlineData("enveloped-data", true, false)]
+    [InlineData("authEnveloped-data", true, false)]
+    [InlineData("signed-data", false, true)]
+    public async Task ReadMetadataAsync_OpaqueSmimeMessage_MarksWhatReplacedTheBody(
+        string smimeType,
+        bool expectedEncrypted,
+        bool expectedUnverifiedSignature)
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "From: anna@example.test",
+            $"Content-Type: application/pkcs7-mime; smime-type={smimeType}; name=\"smime.p7m\"",
+            "Content-Disposition: attachment; filename=\"smime.p7m\"",
+            "Content-Transfer-Encoding: base64",
+            string.Empty,
+            "SGVsbG8sIHdvcmxkIQ==");
+
+        // Act
+        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var attachments = AssertExtracted(result).Attachments;
+        Assert.Empty(attachments.Attachments);
+        Assert.Equal(expectedEncrypted, attachments.IsEncrypted);
+        Assert.Equal(expectedUnverifiedSignature, attachments.CarriesUnverifiedSignature);
+    }
+
+    /// <summary>A signed container carrying more than its two defined children must not lose the extra ones.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_SignedContainerWithAnExtraChild_KeepsThatChildInTheSummary()
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "From: anna@example.test",
+            "Content-Type: multipart/signed; protocol=\"application/pkcs7-signature\"; micalg=sha-256; boundary=\"signed\"",
+            string.Empty,
+            "--signed",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Signed body",
+            "--signed",
+            "Content-Type: application/pkcs7-signature; name=\"smime.p7s\"",
+            "Content-Disposition: attachment; filename=\"smime.p7s\"",
+            string.Empty,
+            "signature",
+            "--signed",
+            "Content-Type: application/pdf; name=\"smuggled.pdf\"",
+            "Content-Disposition: attachment; filename=\"smuggled.pdf\"",
+            string.Empty,
+            "payload",
+            "--signed--");
+
+        // Act
+        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var attachments = AssertExtracted(result).Attachments;
+        Assert.Equal("smuggled.pdf", Assert.Single(attachments.Attachments).FileName?.Value);
+        Assert.True(attachments.CarriesUnverifiedSignature);
+    }
+
+    /// <summary>A CID URL percent-encodes what cannot appear in a URL, so the comparison has to decode it first.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_PercentEncodedContentIdReference_MatchesTheEmbeddedResource()
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "From: anna@example.test",
+            "Content-Type: multipart/related; type=\"text/html\"; boundary=\"related\"",
+            string.Empty,
+            "--related",
+            "Content-Type: text/html; charset=utf-8",
+            string.Empty,
+            "<html><body><img src=\"cid:logo%2Fdark@example.test\"></body></html>",
+            "--related",
+            "Content-Type: image/png; name=\"logo.png\"",
+            "Content-Id: <logo/dark@example.test>",
+            string.Empty,
+            "image",
+            "--related--");
+
+        // Act
+        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var attachments = AssertExtracted(result).Attachments;
+        Assert.Empty(attachments.Attachments);
+        Assert.Equal(1, attachments.InlineResourceCount);
+    }
+
+    /// <summary>A quoted local part reaches the record with its space intact, because the space is part of the mailbox.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_QuotedLocalPart_KeepsTheAddressTheSenderWrote()
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "From: \"John Smith\"@example.test",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var participant = Assert.Single(AssertExtracted(result).Participants);
+        Assert.Equal("\"John Smith\"@example.test", participant.Address.Address);
+    }
+
     /// <summary>An embedded image with no disposition header at all is a resource, because that is how senders write one.</summary>
     [Fact]
     public async Task ReadMetadataAsync_HtmlBodyEmbeddingAnImageWithoutDisposition_ReportsAnInlineResource()

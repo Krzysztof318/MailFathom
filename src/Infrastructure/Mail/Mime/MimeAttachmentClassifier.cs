@@ -24,6 +24,9 @@ namespace MailMcp.Infrastructure.Mail.Mime;
 /// </remarks>
 internal sealed partial class MimeAttachmentClassifier
 {
+    /// <summary>Where RFC 1847 places the detached signature inside a signed container.</summary>
+    private const int DetachedSignaturePosition = 1;
+
     private static readonly string[] CryptographicMediaTypes =
     [
         "application/pkcs7-signature",
@@ -114,9 +117,19 @@ internal sealed partial class MimeAttachmentClassifier
 
         this.carriesUnverifiedSignature = true;
 
-        // The signed content is the first child and is classified as though the envelope were not there; the detached
-        // signature that follows it is not classified at all.
-        this.WalkEntity(envelope.FirstOrDefault(), isInBodyBranch);
+        // RFC 1847 gives a signed container exactly two children: the signed content, classified as though the
+        // envelope were not there, and the detached signature, classified not at all. A message carrying more is
+        // malformed, and its extra children are still walked rather than dropped — silently discarding a third part
+        // would take a real file out of the attachment summary and out of every filter built on it.
+        foreach (var (child, position) in envelope.Select((child, position) => (child, position)))
+        {
+            if (position == DetachedSignaturePosition)
+            {
+                continue;
+            }
+
+            this.WalkEntity(child, isInBodyBranch && position == 0);
+        }
 
         return true;
     }
@@ -139,7 +152,36 @@ internal sealed partial class MimeAttachmentClassifier
             this.carriesUnverifiedSignature = true;
         }
 
+        this.MarkOpaqueSmimeBody(entity);
+
         return true;
+    }
+
+    /// <summary>Marks what an opaque S/MIME part did to the body it replaced.</summary>
+    /// <remarks>
+    /// An <c>application/pkcs7-mime</c> part is the whole message rather than a file beside it, and its
+    /// <c>smime-type</c> parameter says which. Without this, an enveloped message would be recorded as one with no
+    /// parts and no explanation — indistinguishable from an empty message, which is exactly the gap the encrypted
+    /// marker exists to close for the <c>multipart/encrypted</c> shape.
+    /// </remarks>
+    private void MarkOpaqueSmimeBody(MimeEntity entity)
+    {
+        if (!entity.ContentType.IsMimeType("application", "pkcs7-mime"))
+        {
+            return;
+        }
+
+        // A MIME parameter value is not case-normalized by the parser, so the comparison is.
+        var smimeType = entity.ContentType.Parameters["smime-type"];
+        if (string.Equals(smimeType, "enveloped-data", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(smimeType, "authEnveloped-data", StringComparison.OrdinalIgnoreCase))
+        {
+            this.isEncrypted = true;
+        }
+        else if (string.Equals(smimeType, "signed-data", StringComparison.OrdinalIgnoreCase))
+        {
+            this.carriesUnverifiedSignature = true;
+        }
     }
 
     /// <summary>Resolves the body branch recursively, which is what keeps an ordinary attachment count correct.</summary>
@@ -231,7 +273,10 @@ internal sealed partial class MimeAttachmentClassifier
         {
             foreach (Match reference in ContentIdReference().Matches(htmlBody.Text))
             {
-                referencedContentIds.Add(reference.Groups["contentId"].Value);
+                // RFC 2392 builds a cid URL by removing the angle brackets and percent-encoding whatever cannot appear
+                // literally in a URL, so "<logo/dark@example.test>" is written "cid:logo%2Fdark@example.test". Comparing
+                // the encoded form would miss the part and report an embedded resource as a file.
+                referencedContentIds.Add(DecodeContentIdReference(reference.Groups["contentId"].Value));
             }
         }
 
@@ -298,6 +343,20 @@ internal sealed partial class MimeAttachmentClassifier
         }
 
         return counter.WrittenOctets;
+    }
+
+    /// <summary>Turns a <c>cid:</c> URL body back into the identifier a <c>Content-ID</c> header carries.</summary>
+    /// <remarks>A reference whose escaping is malformed is compared as written rather than discarded.</remarks>
+    private static string DecodeContentIdReference(string reference)
+    {
+        try
+        {
+            return Uri.UnescapeDataString(reference);
+        }
+        catch (UriFormatException)
+        {
+            return reference;
+        }
     }
 
     private static string? NormalizeContentId(string? contentId)

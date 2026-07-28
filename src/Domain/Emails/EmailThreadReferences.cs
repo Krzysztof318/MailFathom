@@ -1,5 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Collections.ObjectModel;
+
 namespace MailMcp.Domain.Emails;
 
 /// <summary>Holds the message identifiers that place one email in a conversation.</summary>
@@ -27,7 +29,10 @@ public sealed record EmailThreadReferences
     public IReadOnlyList<string> References { get; }
 
     /// <summary>Gets the references of a message that carried no threading headers at all.</summary>
-    public static EmailThreadReferences None { get; } = new(messageId: null, inReplyTo: null, references: []);
+    public static EmailThreadReferences None { get; } = new(
+        messageId: null,
+        inReplyTo: null,
+        references: new List<string>().AsReadOnly());
 
     /// <summary>Builds the reference set from what the message's threading headers carried.</summary>
     /// <param name="messageId">The <c>Message-ID</c> header value.</param>
@@ -53,19 +58,27 @@ public sealed record EmailThreadReferences
             : new EmailThreadReferences(normalizedMessageId, normalizedInReplyTo, normalizedReferences);
     }
 
-    private static IReadOnlyList<string> NormalizeReferences(IEnumerable<string> references) =>
-    [
-        .. references
+    /// <summary>Normalizes the referenced ancestors, keeping header order and dropping repeats.</summary>
+    /// <remarks>
+    /// The result is wrapped rather than returned as the array a collection expression builds, because an
+    /// <see cref="IReadOnlyList{T}" /> backed directly by an array can be cast back to it and written through.
+    /// </remarks>
+    private static ReadOnlyCollection<string> NormalizeReferences(IEnumerable<string> references) =>
+        references
             .Select(NormalizeIdentifier)
             .OfType<string>()
-            .Distinct(StringComparer.Ordinal),
-    ];
+            .Distinct(StringComparer.Ordinal)
+            .ToList()
+            .AsReadOnly();
 
     /// <summary>Reduces one written identifier to the form everything compares on.</summary>
     /// <remarks>
-    /// Case is preserved: RFC 5322 makes the identifier's domain part case-insensitive but its left half a token that a
-    /// client is entitled to vary, and lower-casing the whole value would merge two identifiers a mail server minted as
-    /// distinct.
+    /// Only transport is removed — angle brackets and the whitespace a folded header introduced. Case is preserved on
+    /// both halves, deliberately and including the domain: a message identifier is an opaque token that the mail
+    /// ecosystem compares octet for octet, and a client places an ancestor in <c>References</c> by copying the
+    /// identifier it received rather than by rewriting it. Case-folding the domain would therefore not repair a
+    /// difference that arises in practice, while it would merge two identifiers that every other mail client keeps
+    /// apart — and merging is the direction that joins unrelated conversations.
     /// </remarks>
     private static string? NormalizeIdentifier(string? identifier)
     {

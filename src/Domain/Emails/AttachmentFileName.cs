@@ -64,7 +64,13 @@ public readonly record struct AttachmentFileName
             return false;
         }
 
-        var bounded = trimmed.Length > MaxLength ? trimmed[..MaxLength] : trimmed;
+        // A single text element longer than the bound leaves nothing to keep, which is the unnamed case rather than a
+        // name cut through the middle of one grapheme.
+        var bounded = BoundLength(trimmed);
+        if (bounded.Length == 0)
+        {
+            return false;
+        }
 
         fileName = new AttachmentFileName(bounded, !string.Equals(bounded, decodedFileName, StringComparison.Ordinal));
 
@@ -83,6 +89,37 @@ public readonly record struct AttachmentFileName
     private static string RemoveControlAndFormattingCharacters(string fileName) =>
         new([.. fileName.Where(character =>
             !char.IsControl(character) && char.GetUnicodeCategory(character) != UnicodeCategory.Format)]);
+
+    /// <summary>Cuts an over-long name at a boundary that leaves it a valid string.</summary>
+    /// <remarks>
+    /// Cutting at a fixed number of UTF-16 code units would split a surrogate pair or a combining sequence, so a name
+    /// ending in an emoji could keep a lone high surrogate. That is not a string every consumer can carry: a JSON
+    /// writer replaces or rejects it, and this value is documented as safe to store and display. The cut therefore
+    /// falls on a text-element boundary, which also keeps a flag or skin-tone sequence whole.
+    /// </remarks>
+    private static string BoundLength(string fileName)
+    {
+        if (fileName.Length <= MaxLength)
+        {
+            return fileName;
+        }
+
+        var boundedLength = 0;
+        var textElements = StringInfo.GetTextElementEnumerator(fileName);
+
+        while (textElements.MoveNext())
+        {
+            var elementEnd = textElements.ElementIndex + ((string)textElements.Current).Length;
+            if (elementEnd > MaxLength)
+            {
+                break;
+            }
+
+            boundedLength = elementEnd;
+        }
+
+        return fileName[..boundedLength];
+    }
 
     /// <summary>Reduces a name that carries path structure to the name at its end.</summary>
     /// <remarks>
