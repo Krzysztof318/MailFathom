@@ -2,11 +2,21 @@
 set -euo pipefail
 
 if ! repository_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
-  printf 'verify-full.sh must run inside a Git worktree.\n' >&2
+  printf 'verify-full.sh must run inside a Git repository.\n' >&2
   exit 1
 fi
 
 cd "$repository_root"
+
+# Refusing here, before the fetch and before any dotnet invocation, is what makes the refusal
+# meaningful: the base check below passes trivially on main, because origin/main is its own
+# ancestor. A detached HEAD is left alone, because it is not a branch anyone pushes to.
+current_branch="$(git symbolic-ref --quiet --short HEAD || true)"
+if [[ "$current_branch" == 'main' || "$current_branch" == 'master' ]]; then
+  printf 'verify-full.sh must not run on %s. Switch to the branch that carries the change.\n' \
+    "$current_branch" >&2
+  exit 1
+fi
 
 mapfile -t untracked_files < <(git ls-files --others --exclude-standard)
 if ((${#untracked_files[@]} > 0)); then

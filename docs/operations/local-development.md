@@ -31,7 +31,13 @@ workspace inspection command and shared skills.
 The full script fetches `origin main` and refuses to continue when the branch
 does not contain that base, so it needs access to the remote and cannot run
 offline. Rebase onto the fetched base when it reports the branch is behind.
-The fast script performs no Git operations and remains available offline.
+The fast script queries only local Git state and remains available offline.
+
+Both scripts stop immediately when `HEAD` resolves to `main` or `master`,
+because verification on the integration branch reports on code that no change
+is about to touch. Check out the branch that carries the change first. A
+detached `HEAD` and any other branch name are accepted, in the primary checkout
+as well as in a linked worktree.
 
 Run the web host directly:
 
