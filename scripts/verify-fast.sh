@@ -32,20 +32,23 @@ resolve_branch_base() {
   done
 }
 
-# Every C# file this branch touches: committed since the base, staged, modified, or newly added.
-# Deletions are filtered out because a removed file cannot be formatted.
-list_changed_csharp_files() {
+# Every path this branch touches: committed since the base, staged, modified, or newly added.
+# Deletions are filtered out because a removed file cannot be formatted. Each command reports its
+# own failure, because errexit does not apply to a function called in a condition and the caller
+# would otherwise read a truncated list as "nothing to format": a shallow clone whose merge base
+# with origin/main is unavailable fails exactly that way, and the loop would silently format
+# nothing rather than saying it could not tell what changed.
+list_changed_paths() {
   local branch_base
 
   branch_base="$(resolve_branch_base)"
 
-  {
-    git diff --name-only --diff-filter=ACMR HEAD
-    git ls-files --others --exclude-standard
-    if [[ -n "$branch_base" ]]; then
-      git diff --name-only --diff-filter=ACMR "$branch_base...HEAD"
-    fi
-  } | grep -E '\.cs$' | sort --unique
+  git diff --name-only --diff-filter=ACMR HEAD || return 1
+  git ls-files --others --exclude-standard || return 1
+
+  if [[ -n "$branch_base" ]]; then
+    git diff --name-only --diff-filter=ACMR "$branch_base...HEAD" || return 1
+  fi
 }
 
 dotnet restore MailMcp.slnx
@@ -61,7 +64,12 @@ dotnet test --solution MailMcp.slnx --configuration Release --no-build
 # here while a handful of files costs about 30. Splitting the run into the `whitespace`, `style`,
 # and `analyzers` subcommands does not help: it pays that workspace load three times. The final gate
 # still formats the whole solution, so a defect outside the changed files cannot merge.
-mapfile -t changed_csharp_files < <(list_changed_csharp_files)
+if ! changed_paths="$(list_changed_paths)"; then
+  printf 'verify-fast.sh cannot determine which files the branch changed. Formatting the wrong scope proves nothing, so fix the repository state instead.\n' >&2
+  exit 1
+fi
+
+mapfile -t changed_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '\.cs$' | sort --unique)
 
 if ((${#changed_csharp_files[@]} > 0)); then
   # Two passes, because neither reports what the other does. The first rewrites everything that has
