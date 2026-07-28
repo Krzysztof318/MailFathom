@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Application.EmailContent;
+using MailMcp.Application.Folders;
 using MailMcp.Application.Mail;
 using MailMcp.Application.Persistence;
 using MailMcp.Domain.Accounts;
@@ -14,6 +15,7 @@ namespace MailMcp.Application.Synchronization;
 /// <summary>Coordinates read-only mailbox folder synchronization into local persistence.</summary>
 public sealed class MailboxSynchronizer
 {
+    private readonly MailFolderResolver folderResolver;
     private readonly IMailboxSessionFactory mailboxSessionFactory;
     private readonly IMailTransportSecurityPolicyReader transportSecurityPolicyReader;
     private readonly ISynchronizationCheckpointStore checkpointStore;
@@ -26,6 +28,7 @@ public sealed class MailboxSynchronizer
 
     /// <summary>Initializes a new mailbox synchronizer.</summary>
     public MailboxSynchronizer(
+        MailFolderResolver folderResolver,
         IMailboxSessionFactory mailboxSessionFactory,
         IMailTransportSecurityPolicyReader transportSecurityPolicyReader,
         ISynchronizationCheckpointStore checkpointStore,
@@ -36,6 +39,7 @@ public sealed class MailboxSynchronizer
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options)
     {
+        this.folderResolver = folderResolver;
         this.mailboxSessionFactory = mailboxSessionFactory;
         this.transportSecurityPolicyReader = transportSecurityPolicyReader;
         this.checkpointStore = checkpointStore;
@@ -47,11 +51,12 @@ public sealed class MailboxSynchronizer
         this.options = options;
     }
 
-    /// <summary>Synchronizes one account folder without mutating remote mailbox flags.</summary>
+    /// <summary>Synchronizes one configured folder alias without mutating remote mailbox flags.</summary>
     /// <param name="accountId">The account to synchronize.</param>
-    /// <param name="folderName">The folder to synchronize.</param>
+    /// <param name="folderMapping">What configuration says the alias names.</param>
     /// <param name="cancellationToken">Cancels the run between remote reads and local writes.</param>
-    /// <returns>The bounded progress this run committed.</returns>
+    /// <returns>The bounded progress this run committed, or the reason the alias named no remote folder.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="folderMapping" /> is <see langword="null" />.</exception>
     /// <exception cref="MailTransportSecurityPolicyViolationException">
     /// Thrown when the account's configured transport security policy is unsafe, before any connection is attempted.
     /// </exception>
@@ -67,19 +72,50 @@ public sealed class MailboxSynchronizer
     /// Thrown when a recovered connection reselected the folder with a different UIDVALIDITY, so the identities this
     /// run was working with no longer name the same emails. The next run starts the folder over.
     /// </exception>
+    /// <remarks>
+    /// The alias is resolved against the server's advertised folders before anything is read, so a run always works
+    /// under the binding that is durable at the moment it starts. An alias the server advertises no folder for ends
+    /// this run and no other.
+    /// </remarks>
     public async Task<MailboxSynchronizationResult> SynchronizeAsync(
         MailAccountId accountId,
-        MailFolderName folderName,
+        MailFolderMapping folderMapping,
         CancellationToken cancellationToken)
     {
-        var persistedCheckpoint =
-            await this.checkpointStore.GetCheckpointAsync(accountId, folderName, cancellationToken);
+        ArgumentNullException.ThrowIfNull(folderMapping);
 
         var transportSecurityPolicy = this.transportSecurityPolicyReader.GetPolicy(accountId);
 
+        var resolutionResult = await this.folderResolver.ResolveAsync(
+            accountId,
+            folderMapping,
+            transportSecurityPolicy,
+            cancellationToken);
+
+        if (resolutionResult.Resolution is not { } folder)
+        {
+            return MailboxSynchronizationResult.FolderNotResolved(resolutionResult.Outcome);
+        }
+
+        return await this.SynchronizeResolvedFolderAsync(
+            accountId,
+            folder,
+            transportSecurityPolicy,
+            cancellationToken);
+    }
+
+    private async Task<MailboxSynchronizationResult> SynchronizeResolvedFolderAsync(
+        MailAccountId accountId,
+        MailFolderResolution folder,
+        MailTransportSecurityPolicy transportSecurityPolicy,
+        CancellationToken cancellationToken)
+    {
+        var persistedCheckpoint =
+            await this.checkpointStore.GetCheckpointAsync(accountId, folder.Id, cancellationToken);
+
         await using var mailboxSession = await this.mailboxSessionFactory.OpenReadOnlyAsync(
             accountId,
-            folderName,
+            folder,
             transportSecurityPolicy,
             cancellationToken);
 
@@ -116,7 +152,7 @@ public sealed class MailboxSynchronizer
                 var advancedCheckpoint = checkpoint.AdvanceTo(inspectedThroughUid, this.timeProvider.GetUtcNow());
                 await this.CommitCheckpointAsync(
                     accountId,
-                    folderName,
+                    folder,
                     persistedCheckpoint,
                     advancedCheckpoint,
                     cancellationToken);
@@ -128,7 +164,7 @@ public sealed class MailboxSynchronizer
             hasMore = batch.HasMore;
         }
 
-        return new MailboxSynchronizationResult(
+        return MailboxSynchronizationResult.Synchronized(
             storedCount,
             skippedOversizedCount,
             hasMore,
@@ -198,7 +234,7 @@ public sealed class MailboxSynchronizer
     // at the start of the run, so a competing advance invalidates the decision itself instead of only the write.
     private async Task CommitCheckpointAsync(
         MailAccountId accountId,
-        MailFolderName folderName,
+        MailFolderResolution folder,
         SynchronizationCheckpoint? expectedCheckpoint,
         SynchronizationCheckpoint checkpoint,
         CancellationToken cancellationToken)
@@ -209,7 +245,7 @@ public sealed class MailboxSynchronizer
         await this.checkpointStore.SaveCheckpointAsync(
             persistenceSession,
             accountId,
-            folderName,
+            folder.Id,
             expectedCheckpoint,
             checkpoint,
             cancellationToken);
@@ -217,14 +253,70 @@ public sealed class MailboxSynchronizer
         if (await persistenceSession.CommitAsync(cancellationToken) == PersistenceCommitResult.ConcurrencyConflict)
         {
             throw new PersistenceConcurrencyConflictException(
-                $"Synchronization progress for folder {folderName.Value} was changed by another writer before this run committed its advance.");
+                $"Synchronization progress for folder {folder.Alias.Value} was changed by another writer before this run committed its advance.");
         }
     }
 }
 
+/// <summary>States whether a synchronization run reached its folder at all.</summary>
+public enum MailboxSynchronizationOutcome
+{
+    /// <summary>The run synchronized the folder the alias is bound to.</summary>
+    Synchronized = 0,
+
+    /// <summary>The server advertised no folder matching the alias, so this folder was not synchronized.</summary>
+    FolderAliasUnresolved = 1,
+
+    /// <summary>Several advertised folders matched the alias, so this folder was not synchronized until the operator says which one it means.</summary>
+    FolderAliasAmbiguous = 2,
+}
+
 /// <summary>Summarizes one mailbox synchronization run.</summary>
+/// <param name="Outcome">Whether the run reached a folder.</param>
+/// <param name="StoredEmailCount">How many occurrences were stored with their content.</param>
+/// <param name="SkippedOversizedEmailCount">How many occurrences were stored as metadata only.</param>
+/// <param name="HasMoreEmails">Whether the folder still held unprocessed emails when the run's batch budget ran out.</param>
+/// <param name="Checkpoint">The progress the run ended on, which is present exactly when <paramref name="Outcome" /> is <see cref="MailboxSynchronizationOutcome.Synchronized" />.</param>
 public sealed record MailboxSynchronizationResult(
+    MailboxSynchronizationOutcome Outcome,
     int StoredEmailCount,
     int SkippedOversizedEmailCount,
     bool HasMoreEmails,
-    SynchronizationCheckpoint Checkpoint);
+    SynchronizationCheckpoint? Checkpoint)
+{
+    /// <summary>Reports a run that reached its folder.</summary>
+    /// <param name="storedEmailCount">How many occurrences were stored with their content.</param>
+    /// <param name="skippedOversizedEmailCount">How many occurrences were stored as metadata only.</param>
+    /// <param name="hasMoreEmails">Whether unprocessed emails remain.</param>
+    /// <param name="checkpoint">The progress the run ended on.</param>
+    /// <returns>A synchronized result.</returns>
+    public static MailboxSynchronizationResult Synchronized(
+        int storedEmailCount,
+        int skippedOversizedEmailCount,
+        bool hasMoreEmails,
+        SynchronizationCheckpoint checkpoint) =>
+        new(MailboxSynchronizationOutcome.Synchronized, storedEmailCount, skippedOversizedEmailCount, hasMoreEmails, checkpoint);
+
+    /// <summary>Reports a configured alias that named no single advertised folder.</summary>
+    /// <param name="resolutionOutcome">Why resolution produced no binding.</param>
+    /// <returns>An unsynchronized result, which describes no progress because none was attempted.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="resolutionOutcome" /> reports a binding that this result cannot describe.</exception>
+    /// <remarks>
+    /// The two reasons stay distinct all the way to the worker's log, because they ask the operator for different
+    /// things: one to correct an alias that names nothing, the other to name a path where a role is not unique.
+    /// </remarks>
+    public static MailboxSynchronizationResult FolderNotResolved(MailFolderResolutionOutcome resolutionOutcome)
+    {
+        var outcome = resolutionOutcome switch
+        {
+            MailFolderResolutionOutcome.NoAdvertisedFolderMatched => MailboxSynchronizationOutcome.FolderAliasUnresolved,
+            MailFolderResolutionOutcome.AdvertisedFoldersAreAmbiguous => MailboxSynchronizationOutcome.FolderAliasAmbiguous,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(resolutionOutcome),
+                resolutionOutcome,
+                "A resolved folder is reported through Synchronized rather than as an unresolved alias."),
+        };
+
+        return new MailboxSynchronizationResult(outcome, 0, 0, HasMoreEmails: false, Checkpoint: null);
+    }
+}

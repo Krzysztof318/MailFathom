@@ -3,6 +3,7 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using MailKit;
+using MailKit.Net.Imap;
 using MailKit.Search;
 using MailMcp.Application.EmailContent;
 using MailMcp.Application.Resilience;
@@ -17,7 +18,7 @@ namespace MailMcp.Infrastructure.Mail.MailKit;
 
 /// <summary>MailKit-backed factory for authenticated read-only IMAP folder sessions.</summary>
 internal sealed class MailKitImapMailboxSessionFactory(
-    Func<IMailKitImapClient> clientFactory,
+    Func<IImapClient> clientFactory,
     IImapAccountSettingsProvider settingsProvider,
     OutboundOperationExecutor operationExecutor,
     ITransientFailureClassifier transientFailureClassifier) : IMailboxSessionFactory
@@ -26,17 +27,19 @@ internal sealed class MailKitImapMailboxSessionFactory(
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the connection passes to the returned session; an establishment failure disposes it here instead.")]
     public async Task<IMailboxSession> OpenReadOnlyAsync(
         MailAccountId accountId,
-        MailFolderName folderName,
+        MailFolderResolution folder,
         MailTransportSecurityPolicy transportSecurityPolicy,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(folder);
+
         var connection = new MailKitImapConnection(
             clientFactory,
             settingsProvider,
             operationExecutor,
             transientFailureClassifier,
             accountId,
-            folderName,
+            folder,
             transportSecurityPolicy);
 
         try
@@ -49,7 +52,7 @@ internal sealed class MailKitImapMailboxSessionFactory(
             throw;
         }
 
-        return new MailKitImapMailboxSession(accountId, folderName, connection);
+        return new MailKitImapMailboxSession(accountId, folder, connection);
     }
 }
 
@@ -61,7 +64,7 @@ internal sealed class MailKitImapMailboxSessionFactory(
 /// </remarks>
 internal sealed class MailKitImapMailboxSession(
     MailAccountId accountId,
-    MailFolderName folderName,
+    MailFolderResolution folder,
     MailKitImapConnection connection) : IMailboxSession
 {
     /// <inheritdoc />
@@ -70,9 +73,9 @@ internal sealed class MailKitImapMailboxSession(
     /// <inheritdoc />
     public async Task<ImapUidValidity> GetUidValidityAsync(CancellationToken cancellationToken)
     {
-        var folder = await connection.EnsureOpenFolderAsync(cancellationToken);
+        var openFolder = await connection.EnsureOpenFolderAsync(cancellationToken);
 
-        return ImapUidValidity.Create(folder.UidValidity);
+        return ImapUidValidity.Create(openFolder.UidValidity);
     }
 
     /// <inheritdoc />
@@ -88,8 +91,8 @@ internal sealed class MailKitImapMailboxSession(
             return Task.FromResult(new RemoteEmailMetadataBatch([], checkpointUid, HasMore: false));
         }
 
-        return connection.ExecuteRetrievalAsync(
-            (folder, attemptToken) => this.SearchAndFetchBatchAsync(folder, lastSeenUid, maxEmailCount, attemptToken),
+        return connection.ExecuteFolderReadAsync(
+            (openFolder, attemptToken) => this.SearchAndFetchBatchAsync(openFolder, lastSeenUid, maxEmailCount, attemptToken),
             cancellationToken);
     }
 
@@ -101,19 +104,19 @@ internal sealed class MailKitImapMailboxSession(
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxRawMimeBytes);
 
-        return connection.ExecuteRetrievalAsync(
-            (folder, attemptToken) => this.FetchRawMimeWithPeekAsync(folder, occurrenceId, maxRawMimeBytes, attemptToken),
+        return connection.ExecuteFolderReadAsync(
+            (openFolder, attemptToken) => this.FetchRawMimeWithPeekAsync(openFolder, occurrenceId, maxRawMimeBytes, attemptToken),
             cancellationToken);
     }
 
     private async Task<RemoteEmailMetadataBatch> SearchAndFetchBatchAsync(
-        IMailFolder folder,
+        IMailFolder openFolder,
         ImapUid? lastSeenUid,
         int maxEmailCount,
         CancellationToken cancellationToken)
     {
         var minValue = lastSeenUid is { } uid ? uid.Value + 1U : 1U;
-        var highestAssignedUid = GetHighestAssignedUid(folder.UidNext);
+        var highestAssignedUid = GetHighestAssignedUid(openFolder.UidNext);
         if (highestAssignedUid is null || minValue > highestAssignedUid.Value)
         {
             return new RemoteEmailMetadataBatch([], lastSeenUid, HasMore: false);
@@ -123,7 +126,7 @@ internal sealed class MailKitImapMailboxSession(
         // be bounded by email count rather than by UID-space width. Bounding by UID-space width would advance a sparse
         // folder by at most maxEmailCount UIDs per batch and make an initial backfill take an impractical number of runs.
         var searchRange = new UniqueIdRange(new UniqueId(minValue), new UniqueId(highestAssignedUid.Value));
-        var matchingUids = await folder.SearchAsync(SearchQuery.Uids(searchRange), cancellationToken);
+        var matchingUids = await openFolder.SearchAsync(SearchQuery.Uids(searchRange), cancellationToken);
         var assignedUids = matchingUids
             .Where(candidate => candidate.Id >= minValue && candidate.Id <= highestAssignedUid.Value)
             .OrderBy(candidate => candidate.Id)
@@ -137,11 +140,11 @@ internal sealed class MailKitImapMailboxSession(
         var inspectedThroughUid = hasMore ? batchedUids[^1].Id : highestAssignedUid.Value;
         var summaries = batchedUids.Length == 0
             ? []
-            : await folder.FetchAsync(batchedUids, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size, cancellationToken);
+            : await openFolder.FetchAsync(batchedUids, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size, cancellationToken);
 
-        var uidValidity = ImapUidValidity.Create(folder.UidValidity);
+        var uidValidity = ImapUidValidity.Create(openFolder.UidValidity);
         var messages = summaries.Select(summary => new RemoteEmailMetadata(
-            EmailOccurrenceId.Create(accountId, folderName, uidValidity, ImapUid.Create(summary.UniqueId.Id)),
+            EmailOccurrenceId.Create(accountId, folder.Id, uidValidity, ImapUid.Create(summary.UniqueId.Id)),
             summary.Envelope?.MessageId,
             summary.Envelope?.Subject,
             summary.Envelope?.Date?.ToUniversalTime(),
@@ -151,14 +154,14 @@ internal sealed class MailKitImapMailboxSession(
     }
 
     private async Task<RemoteEmailContent> FetchRawMimeWithPeekAsync(
-        IMailFolder folder,
+        IMailFolder openFolder,
         EmailOccurrenceId occurrenceId,
         long maxRawMimeBytes,
         CancellationToken cancellationToken)
     {
         if (occurrenceId.AccountId != accountId ||
-            occurrenceId.FolderName != folderName ||
-            occurrenceId.UidValidity.Value != folder.UidValidity)
+            occurrenceId.FolderResolutionId != folder.Id ||
+            occurrenceId.UidValidity.Value != openFolder.UidValidity)
         {
             throw new ArgumentException("The message occurrence does not belong to the open mailbox session.", nameof(occurrenceId));
         }
@@ -167,7 +170,7 @@ internal sealed class MailKitImapMailboxSession(
         // the selection mode nor the fetch item is capable of setting the remote \Seen flag. Changing this call to any
         // non-PEEK retrieval or to a StoreAsync-based flag update would break the read-only synchronization invariant,
         // including on the attempt that follows a recovered connection.
-        await using var stream = await folder.GetStreamAsync(new UniqueId(occurrenceId.Uid.Value), cancellationToken);
+        await using var stream = await openFolder.GetStreamAsync(new UniqueId(occurrenceId.Uid.Value), cancellationToken);
         using var memory = new MemoryStream();
 
         await CopyToMemoryWithLimitAsync(occurrenceId, stream, memory, maxRawMimeBytes, cancellationToken);

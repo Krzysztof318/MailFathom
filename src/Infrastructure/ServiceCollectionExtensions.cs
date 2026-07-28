@@ -2,11 +2,13 @@
 
 using MailKit.Net.Imap;
 using MailMcp.Application.EmailContent;
+using MailMcp.Application.Folders;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Resilience;
 using MailMcp.Application.Synchronization;
 using MailMcp.CodeCoverage;
 using MailMcp.Infrastructure.Certificates;
+using MailMcp.Infrastructure.Folders;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Mail.MailKit;
 using MailMcp.Infrastructure.Persistence;
@@ -119,10 +121,18 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();
+        services.AddScoped<IMailFolderResolutionStore, MailFolderResolutionStore>();
+        services.AddScoped<IMailFolderMappingChangeAuditor, LoggedMailFolderMappingChangeAuditor>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
+        services.AddScoped<MailFolderResolver>();
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(
-            static () => new MailKitImapClientAdapter(new ImapClient()),
+            static () => new ImapClient(),
+            provider.GetRequiredService<IImapAccountSettingsProvider>(),
+            provider.GetRequiredService<OutboundOperationExecutor>(),
+            provider.GetRequiredService<ITransientFailureClassifier>()));
+        services.AddScoped<IRemoteFolderCatalog>(provider => new MailKitRemoteFolderCatalog(
+            static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<ITransientFailureClassifier>()));

@@ -38,25 +38,37 @@ public sealed class MailboxUnavailableException : Exception
     {
     }
 
-    /// <summary>Initializes a new mailbox unavailability failure naming the account and folder it stopped.</summary>
+    /// <summary>Initializes a new mailbox unavailability failure naming the account and folder alias it stopped.</summary>
     /// <param name="accountId">The account whose mail server did not serve the operation.</param>
-    /// <param name="folderName">The folder the operation was working on.</param>
+    /// <param name="folderAlias">The folder the operation was working on.</param>
     /// <param name="innerException">The rejection the resilience pipeline produced.</param>
+    /// <remarks>The alias is named rather than the remote path, because a path can carry personal information and this message is logged.</remarks>
     public MailboxUnavailableException(
         MailAccountId accountId,
-        MailFolderName folderName,
+        MailFolderAlias folderAlias,
         Exception innerException)
         : base(
-            $"The mail server for {accountId.Value}/{folderName.Value} did not serve the operation within its configured resilience budget.",
+            $"The mail server for {accountId.Value}/{folderAlias.Value} did not serve the operation within its configured resilience budget.",
             innerException)
     {
         this.AccountId = accountId;
-        this.FolderName = folderName;
+        this.FolderAlias = folderAlias;
+    }
+
+    /// <summary>Initializes a new mailbox unavailability failure for an operation that works on no single folder, such as folder discovery.</summary>
+    /// <param name="accountId">The account whose mail server did not serve the operation.</param>
+    /// <param name="innerException">The rejection the resilience pipeline produced.</param>
+    public MailboxUnavailableException(MailAccountId accountId, Exception innerException)
+        : base(
+            $"The mail server for {accountId.Value} did not serve the operation within its configured resilience budget.",
+            innerException)
+    {
+        this.AccountId = accountId;
     }
 
     /// <summary>Gets the account whose mail server was unavailable, when available.</summary>
     public MailAccountId? AccountId { get; }
 
-    /// <summary>Gets the folder the stopped operation was working on, when available.</summary>
-    public MailFolderName? FolderName { get; }
+    /// <summary>Gets the folder the stopped operation was working on, when it worked on one.</summary>
+    public MailFolderAlias? FolderAlias { get; }
 }

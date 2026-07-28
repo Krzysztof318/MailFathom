@@ -134,11 +134,16 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <summary>Gets or sets the account's secret-bearing settings, which carry references rather than credentials.</summary>
     public MailAccountSecretOptions Secrets { get; set; } = new();
 
-    /// <summary>Gets or sets configured folder names. When omitted, the worker synchronizes INBOX only.</summary>
-    public List<string> Folders { get; set; } = [];
+    /// <summary>Gets or sets the configured folder aliases. When omitted, the worker synchronizes the inbox only.</summary>
+    public List<MailFolderMappingOptions> Folders { get; set; } = [];
 
-    /// <summary>Gets the configured folders or the post-binding default folder.</summary>
-    public IReadOnlyList<string> EffectiveFolders => this.Folders is not { Count: > 0 } ? ["INBOX"] : this.Folders;
+    /// <summary>Gets the configured folders or the post-binding default one.</summary>
+    /// <remarks>
+    /// The default names the inbox by its special-use role rather than by the path <c>INBOX</c>, so an account whose
+    /// server presents the inbox under another name still synchronizes with no folder configuration at all.
+    /// </remarks>
+    public IReadOnlyList<MailFolderMappingOptions> EffectiveFolders =>
+        this.Folders is not { Count: > 0 } ? [CreateDefaultInboxFolder()] : this.Folders;
 
     internal IEnumerable<ValidationResult> ValidateForSynchronization(bool synchronizationEnabled)
     {
@@ -153,17 +158,19 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield break;
         }
 
-        if (this.Folders.Any(string.IsNullOrWhiteSpace))
+        foreach (var result in this.Folders.SelectMany(folder => folder.ValidateForSynchronization()))
         {
-            yield return new ValidationResult("Configured folder names must be non-empty.", [nameof(this.Folders)]);
+            yield return result;
         }
 
+        // Grouped the way MailFolderAlias normalizes rather than through the factory itself, because an alias this
+        // method has already reported as unusable must not throw out of the rule that follows it.
         if (this.Folders
-            .Where(folder => !string.IsNullOrWhiteSpace(folder))
-            .GroupBy(folder => MailFolderName.Create(folder).Value, StringComparer.Ordinal)
+            .Where(folder => !string.IsNullOrWhiteSpace(folder.Alias))
+            .GroupBy(folder => folder.Alias.Trim(), StringComparer.OrdinalIgnoreCase)
             .Any(group => group.Count() > 1))
         {
-            yield return new ValidationResult("Configured folder names must be unique after normalization.", [nameof(this.Folders)]);
+            yield return new ValidationResult("Configured folder aliases must be unique after normalization.", [nameof(this.Folders)]);
         }
 
         if (synchronizationEnabled)
@@ -267,4 +274,11 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.ValidateForSynchronization(synchronizationEnabled: true);
+
+    /// <summary>Builds the folder an account that configured none synchronizes.</summary>
+    private static MailFolderMappingOptions CreateDefaultInboxFolder() => new()
+    {
+        Alias = nameof(MailFolderSpecialUse.Inbox),
+        SpecialUse = nameof(MailFolderSpecialUse.Inbox),
+    };
 }

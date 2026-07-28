@@ -25,7 +25,7 @@ Every secret-bearing setting is a JSON object whose `SecretReference` property c
           "CertificateTrust": "AdditionalTrustedAuthority",
           "TrustedCertificateAuthority": { "SecretReference": "file:/run/secrets/private-ca.pem" }
         },
-        "Folders": [ "INBOX" ]
+        "Folders": [ { "Alias": "inbox", "SpecialUse": "Inbox" } ]
       }
     ]
   },

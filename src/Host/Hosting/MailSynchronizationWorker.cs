@@ -4,7 +4,6 @@ using System.Diagnostics.CodeAnalysis;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
 using MailMcp.Host.Configuration;
 
 namespace MailMcp.Host.Hosting;
@@ -62,12 +61,19 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
     {
         var scheduledFolders = runSettings.Accounts.SelectMany(
             account => account.EffectiveFolders,
-            (account, folder) => (AccountId: account.AccountId, FolderName: folder));
+            (account, folder) => (AccountId: account.AccountId, ConfiguredFolder: folder));
 
-        foreach (var (accountId, folderName) in scheduledFolders)
+        foreach (var (accountId, configuredFolder) in scheduledFolders)
         {
+            // The configured folder is turned into a mapping inside the guarded body rather than while the sequence is
+            // built, so a folder whose configuration reached the worker unusable fails that folder and not the loop.
+            var folderAlias = configuredFolder.Alias;
+
             try
             {
+                var folderMapping = configuredFolder.CreateMapping();
+                folderAlias = folderMapping.Alias.Value;
+
                 using var scope = this.scopeFactory.CreateScope();
 
                 // The folder was scheduled from this run's snapshot, so the scope must connect with that snapshot too.
@@ -76,14 +82,9 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
                 scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
 
                 var synchronizer = scope.ServiceProvider.GetRequiredService<MailboxSynchronizer>();
-                var result = await synchronizer.SynchronizeAsync(MailAccountId.Create(accountId), MailFolderName.Create(folderName), cancellationToken);
+                var result = await synchronizer.SynchronizeAsync(MailAccountId.Create(accountId), folderMapping, cancellationToken);
 
-                this.LogFolderSynchronized(
-                    accountId,
-                    folderName,
-                    result.StoredEmailCount,
-                    result.SkippedOversizedEmailCount,
-                    result.HasMoreEmails);
+                this.ReportFolderOutcome(accountId, folderAlias, result);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -91,17 +92,42 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
             }
             catch (PersistenceConcurrencyConflictException exception)
             {
-                this.LogFolderSynchronizationDeferredAfterConcurrencyConflict(exception, accountId, folderName);
+                this.LogFolderSynchronizationDeferredAfterConcurrencyConflict(exception, accountId, folderAlias);
             }
             catch (MailboxUnavailableException exception)
             {
-                this.LogFolderSynchronizationDeferredAfterMailServerUnavailable(exception, accountId, folderName);
+                this.LogFolderSynchronizationDeferredAfterMailServerUnavailable(exception, accountId, folderAlias);
             }
             catch (Exception exception)
             {
-                this.LogFolderSynchronizationFailed(exception, accountId, folderName);
+                this.LogFolderSynchronizationFailed(exception, accountId, folderAlias);
             }
         }
+    }
+
+    /// <summary>Reports one folder's run, keeping an alias that named no single folder separate from a failure.</summary>
+    private void ReportFolderOutcome(string accountId, string folderAlias, MailboxSynchronizationResult result)
+    {
+        if (result.Outcome == MailboxSynchronizationOutcome.FolderAliasUnresolved)
+        {
+            this.LogFolderAliasUnresolved(accountId, folderAlias);
+
+            return;
+        }
+
+        if (result.Outcome == MailboxSynchronizationOutcome.FolderAliasAmbiguous)
+        {
+            this.LogFolderAliasAmbiguous(accountId, folderAlias);
+
+            return;
+        }
+
+        this.LogFolderSynchronized(
+            accountId,
+            folderAlias,
+            result.StoredEmailCount,
+            result.SkippedOversizedEmailCount,
+            result.HasMoreEmails);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "IMAP synchronization worker is disabled.")]
@@ -109,36 +135,52 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Synchronized IMAP folder {AccountId}/{FolderName}; stored {StoredEmailCount} messages, skipped {SkippedOversizedEmailCount} oversized messages, and has more work: {HasMoreEmails}.")]
+        Message = "Synchronized IMAP folder {AccountId}/{FolderAlias}; stored {StoredEmailCount} messages, skipped {SkippedOversizedEmailCount} oversized messages, and has more work: {HasMoreEmails}.")]
     private partial void LogFolderSynchronized(
         string accountId,
-        string folderName,
+        string folderAlias,
         int storedEmailCount,
         int skippedOversizedEmailCount,
         bool hasMoreEmails);
 
+    /// <summary>Separates a folder the server does not advertise from a folder that failed, because only one of them is the operator's to fix in configuration.</summary>
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "IMAP synchronization failed for {AccountId}/{FolderName}; the worker will continue with remaining folders and retry on a later interval.")]
-    private partial void LogFolderSynchronizationFailed(
-        Exception exception,
+        Message = "Folder alias {AccountId}/{FolderAlias} matched no folder the mail server advertises; it was not synchronized and the remaining folders of this account continue.")]
+    private partial void LogFolderAliasUnresolved(
         string accountId,
-        string folderName);
+        string folderAlias);
+
+    /// <summary>Names the remedy, because an ambiguous role is fixed by configuring a path rather than by waiting.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Folder alias {AccountId}/{FolderAlias} matched several folders the mail server advertises, so it was not synchronized; configure its RemotePath to state which folder it names.")]
+    private partial void LogFolderAliasAmbiguous(
+        string accountId,
+        string folderAlias);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "Deferred IMAP folder synchronization for {AccountId}/{FolderName} after an unresolved optimistic concurrency conflict; the next interval will retry from the persisted checkpoint.")]
+        Message = "IMAP synchronization failed for {AccountId}/{FolderAlias}; the worker will continue with remaining folders and retry on a later interval.")]
+    private partial void LogFolderSynchronizationFailed(
+        Exception exception,
+        string accountId,
+        string folderAlias);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Deferred IMAP folder synchronization for {AccountId}/{FolderAlias} after an unresolved optimistic concurrency conflict; the next interval will retry from the persisted checkpoint.")]
     private partial void LogFolderSynchronizationDeferredAfterConcurrencyConflict(
         Exception exception,
         string accountId,
-        string folderName);
+        string folderAlias);
 
     /// <summary>Separates a mail server that is refusing work from a host that is shutting down, which cancellation already reports.</summary>
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "Deferred IMAP folder synchronization for {AccountId}/{FolderName} because the mail server did not serve it within its configured resilience budget; the next interval will retry from the persisted checkpoint.")]
+        Message = "Deferred IMAP folder synchronization for {AccountId}/{FolderAlias} because the mail server did not serve it within its configured resilience budget; the next interval will retry from the persisted checkpoint.")]
     private partial void LogFolderSynchronizationDeferredAfterMailServerUnavailable(
         Exception exception,
         string accountId,
-        string folderName);
+        string folderAlias);
 }

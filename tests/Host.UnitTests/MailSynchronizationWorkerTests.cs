@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Application.EmailContent;
+using MailMcp.Application.Folders;
 using MailMcp.Application.Mail;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
@@ -60,7 +61,7 @@ public sealed class MailSynchronizationWorkerTests
         await worker.StopAsync(CancellationToken.None);
 
         // Assert
-        Assert.Equal(["INBOX", "Archive"], attemptedFolders);
+        Assert.Equal(["INBOX", "ARCHIVE"], attemptedFolders);
     }
 
     [Fact]
@@ -102,7 +103,7 @@ public sealed class MailSynchronizationWorkerTests
             folderName => folderName == "INBOX"
                 ? new MailboxUnavailableException(
                     MailAccountId.Create("primary"),
-                    MailFolderName.Create("INBOX"),
+                    MailFolderAlias.Create("INBOX"),
                     new TimeoutException("The server stopped answering."))
                 : new InvalidOperationException("connect failed"));
         var options = CreateOptions(enabled: true, "INBOX", "Archive");
@@ -114,10 +115,98 @@ public sealed class MailSynchronizationWorkerTests
         await worker.StopAsync(CancellationToken.None);
 
         // Assert
-        Assert.Equal(["INBOX", "Archive"], attemptedFolders);
+        Assert.Equal(["INBOX", "ARCHIVE"], attemptedFolders);
         Assert.Contains(
             logger.Messages,
             message => message.Contains("primary/INBOX because the mail server did not serve it", StringComparison.Ordinal));
+    }
+
+    /// <summary>An alias the server advertises no folder for is a configuration mistake, not a failed run.</summary>
+    [Fact]
+    public async Task ExecuteAsync_AliasMatchesNoAdvertisedFolder_LogsItAndSynchronizesTheRemainingFolder()
+    {
+        // Arrange
+        var attemptedFolders = new List<string>();
+        var lastFolderAttempted = new TaskCompletionSource();
+        var sessionFactory = CreateFailingSessionFactory(
+            attemptedFolders,
+            lastFolderAttempted,
+            expectedFolderCount: 1,
+            _ => new InvalidOperationException("connect failed"));
+        var options = CreateOptions(enabled: true, "Archive", "INBOX");
+        using var worker = CreateWorker(options, sessionFactory, out var logger, unadvertisedAliases: ["ARCHIVE"]);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await lastFolderAttempted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await worker.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(["INBOX"], attemptedFolders);
+        Assert.Contains(
+            logger.Messages,
+            message => message.Contains("Folder alias primary/ARCHIVE matched no folder", StringComparison.Ordinal));
+    }
+
+    /// <summary>An ambiguous role and an alias that matches nothing need different remedies, so they are logged as different things.</summary>
+    [Fact]
+    public async Task ExecuteAsync_AliasMatchesSeveralAdvertisedFolders_LogsTheAmbiguityAndTheRemedy()
+    {
+        // Arrange
+        var listingRequested = new TaskCompletionSource();
+        var catalog = Substitute.For<IRemoteFolderCatalog>();
+        catalog
+            .ListFoldersAsync(Arg.Any<MailAccountId>(), Arg.Any<MailTransportSecurityPolicy>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                listingRequested.TrySetResult();
+
+                return Task.FromResult<IReadOnlyList<RemoteFolder>>(
+                [
+                    new RemoteFolder(RemoteFolderPath.Create("Archief", '/'), [MailFolderSpecialUse.Archive]),
+                    new RemoteFolder(RemoteFolderPath.Create("Archive", '/'), [MailFolderSpecialUse.Archive]),
+                ]);
+            });
+        var options = CreateOptions(enabled: true);
+        options.Accounts[0].Folders = [new MailFolderMappingOptions { Alias = "archive", SpecialUse = "Archive" }];
+        using var worker = CreateWorker(options, Substitute.For<IMailboxSessionFactory>(), out var logger, catalog);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await listingRequested.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await worker.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Contains(
+            logger.Messages,
+            message => message.Contains("primary/ARCHIVE matched several folders", StringComparison.Ordinal)
+                && message.Contains("configure its RemotePath", StringComparison.Ordinal));
+    }
+
+    /// <summary>Options validation should have caught it, but a folder that reaches the worker unusable must not end the loop.</summary>
+    [Fact]
+    public async Task ExecuteAsync_ConfiguredFolderCannotBecomeAMapping_FailsThatFolderAndContinues()
+    {
+        // Arrange
+        var attemptedFolders = new List<string>();
+        var lastFolderAttempted = new TaskCompletionSource();
+        var sessionFactory = CreateFailingSessionFactory(
+            attemptedFolders,
+            lastFolderAttempted,
+            expectedFolderCount: 1,
+            _ => new InvalidOperationException("connect failed"));
+        var options = CreateOptions(enabled: true, "INBOX");
+        options.Accounts[0].Folders.Insert(0, new MailFolderMappingOptions { Alias = "  ", RemotePath = "Archive" });
+        using var worker = CreateWorker(options, sessionFactory, out var logger);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await lastFolderAttempted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await worker.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(["INBOX"], attemptedFolders);
+        Assert.Contains(logger.Messages, message => message.Contains("IMAP synchronization failed for primary/", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -155,13 +244,13 @@ public sealed class MailSynchronizationWorkerTests
         sessionFactory
             .OpenReadOnlyAsync(
                 Arg.Any<MailAccountId>(),
-                Arg.Any<MailFolderName>(),
+                Arg.Any<MailFolderResolution>(),
                 Arg.Any<MailTransportSecurityPolicy>(),
                 Arg.Any<CancellationToken>())
             .Throws(call =>
             {
-                var folderName = call.Arg<MailFolderName>().Value;
-                attemptedFolders.Add(folderName);
+                var folderAlias = call.Arg<MailFolderResolution>()!.Alias.Value;
+                attemptedFolders.Add(folderAlias);
 
                 // The worker loops until it is stopped, and its timer never ticks under a fake clock, so the test
                 // observes exactly one run by counting the folders it reached rather than by waiting on time.
@@ -170,12 +259,13 @@ public sealed class MailSynchronizationWorkerTests
                     runFinished.TrySetResult();
                 }
 
-                return failureFor(folderName);
+                return failureFor(folderAlias);
             });
 
         return sessionFactory;
     }
 
+    /// <summary>Configures folders whose alias and remote path are the same text, so a test names one folder once.</summary>
     private static MailSynchronizationOptions CreateOptions(bool enabled, params string[] folders) => new()
     {
         Enabled = enabled,
@@ -187,7 +277,7 @@ public sealed class MailSynchronizationWorkerTests
                 AccountId = "primary",
                 Host = "imap.example.test",
                 UserName = "mailmcp@example.test",
-                Folders = [.. folders],
+                Folders = [.. folders.Select(folder => new MailFolderMappingOptions { Alias = folder, RemotePath = folder })],
                 Secrets = new MailAccountSecretOptions
                 {
                     Password = new ConfiguredSecret { SecretReference = "systemd-credential:imap-primary-password" },
@@ -196,10 +286,64 @@ public sealed class MailSynchronizationWorkerTests
         ],
     };
 
+    /// <summary>Models a server that advertises exactly the configured folders, each already bound to its alias.</summary>
+    /// <remarks>
+    /// Binding them up front keeps these tests about what the worker does with a folder's outcome. Resolution and
+    /// rebinding are covered where they live, in the application layer.
+    /// </remarks>
+    private static (IRemoteFolderCatalog Catalog, IMailFolderResolutionStore ResolutionStore) CreateResolvedFolders(
+        MailSynchronizationOptions options,
+        IReadOnlyCollection<string> unadvertisedAliases)
+    {
+        // A folder the worker itself cannot turn into a mapping is not one the modelled server can advertise either.
+        var pathsByAlias = options.Accounts
+            .SelectMany(account => account.EffectiveFolders)
+            .Select(TryCreateMapping)
+            .OfType<MailFolderMapping>()
+            .Where(mapping => mapping.RemotePath is not null && !unadvertisedAliases.Contains(mapping.Alias.Value))
+            .DistinctBy(mapping => mapping.Alias.Value, StringComparer.Ordinal)
+            .ToDictionary(mapping => mapping.Alias.Value, mapping => mapping.RemotePath!.Value, StringComparer.Ordinal);
+
+        var catalog = Substitute.For<IRemoteFolderCatalog>();
+        catalog
+            .ListFoldersAsync(Arg.Any<MailAccountId>(), Arg.Any<MailTransportSecurityPolicy>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<RemoteFolder>>(
+                [.. pathsByAlias.Values.Select(path => new RemoteFolder(path, []))]));
+
+        var resolutionStore = Substitute.For<IMailFolderResolutionStore>();
+        resolutionStore
+            .GetCurrentResolutionAsync(Arg.Any<MailAccountId>(), Arg.Any<MailFolderAlias>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var alias = call.Arg<MailFolderAlias>();
+                MailFolderResolution? binding = pathsByAlias.TryGetValue(alias.Value, out var path)
+                    ? MailFolderResolution.FirstBindingOf(alias, path)
+                    : null;
+
+                return Task.FromResult(binding);
+            });
+
+        return (catalog, resolutionStore);
+    }
+
+    private static MailFolderMapping? TryCreateMapping(MailFolderMappingOptions configuredFolder)
+    {
+        try
+        {
+            return configuredFolder.CreateMapping();
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
     private static MailSynchronizationWorker CreateWorker(
         MailSynchronizationOptions options,
         IMailboxSessionFactory sessionFactory,
-        out RecordingLogger<MailSynchronizationWorker> logger)
+        out RecordingLogger<MailSynchronizationWorker> logger,
+        IRemoteFolderCatalog? remoteFolderCatalog = null,
+        params string[] unadvertisedAliases)
     {
         logger = new RecordingLogger<MailSynchronizationWorker>();
         var timeProvider = new FakeTimeProvider();
@@ -214,6 +358,12 @@ public sealed class MailSynchronizationWorkerTests
         services.AddSingleton(Substitute.For<IEmailContentStore>());
         services.AddSingleton(new PersistenceConcurrencyOptions());
         services.AddSingleton(new MailboxSynchronizationOptions());
+
+        var (catalog, resolutionStore) = CreateResolvedFolders(options, unadvertisedAliases);
+        services.AddSingleton(remoteFolderCatalog ?? catalog);
+        services.AddSingleton(resolutionStore);
+        services.AddSingleton(Substitute.For<IMailFolderMappingChangeAuditor>());
+        services.AddScoped<MailFolderResolver>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<MailboxSynchronizer>();
         // The worker hands its run snapshot to each work-unit scope, so the scope has to be able to receive one.

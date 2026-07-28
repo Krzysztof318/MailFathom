@@ -2,6 +2,7 @@
 
 using System.Security.Cryptography.X509Certificates;
 using MailKit;
+using MailKit.Net.Imap;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
@@ -21,7 +22,9 @@ internal static class MailKitImapSessionTestContext
 
     internal static MailAccountId SecondaryAccount { get; } = MailAccountId.Create("secondary");
 
-    internal static MailFolderName InboxFolder { get; } = MailFolderName.Create("INBOX");
+    internal static MailFolderResolution InboxFolder { get; } = MailFolderResolution.FirstBindingOf(
+        MailFolderAlias.Create("inbox"),
+        RemoteFolderPath.Create("INBOX", '/'));
 
     internal static MailTransportSecurityPolicy TlsOnConnectWithPlainPolicy { get; } =
         CreatePolicy(MailConnectionSecurity.TlsOnConnect, MailAuthenticationMechanism.Plain);
@@ -55,9 +58,23 @@ internal static class MailKitImapSessionTestContext
 
     internal static EmailOccurrenceId CreateOccurrenceId(uint uid, uint uidValidity = 7U) => EmailOccurrenceId.Create(
         PrimaryAccount,
-        InboxFolder,
+        InboxFolder.Id,
         ImapUidValidity.Create(uidValidity),
         ImapUid.Create(uid));
+
+    /// <summary>Builds a catalog over one scripted connection, so a discovery test scripts the same server a session test does.</summary>
+    internal static MailKitRemoteFolderCatalog CreateFolderCatalog(
+        OutboundResilienceTestHost resilience,
+        FakeImapClient client)
+    {
+        client.AuthenticationMechanisms.Add("PLAIN");
+
+        return new MailKitRemoteFolderCatalog(
+            () => client.Client,
+            CreateSettingsProvider(),
+            resilience.Executor,
+            resilience.TransientFailureClassifier);
+    }
 
     /// <summary>Opens a session over one scripted connection that authenticates with the default permitted mechanism.</summary>
     internal static Task<IMailboxSession> OpenSessionAsync(
@@ -82,13 +99,13 @@ internal static class MailKitImapSessionTestContext
     {
         client.Folder = folder;
 
-        return CreateFactory(resilience, () => client, CreateSettingsProvider());
+        return CreateFactory(resilience, () => client.Client, CreateSettingsProvider());
     }
 
     /// <summary>Builds a factory over a scripted connection sequence and the real classifier the adapter consults.</summary>
     internal static MailKitImapMailboxSessionFactory CreateFactory(
         OutboundResilienceTestHost resilience,
-        Func<IMailKitImapClient> clientFactory,
+        Func<IImapClient> clientFactory,
         IImapAccountSettingsProvider settingsProvider) =>
         new(
             clientFactory,
@@ -98,12 +115,12 @@ internal static class MailKitImapSessionTestContext
 
     /// <summary>Hands out one client per establishment attempt, in the order a test scripted the reconnections.</summary>
     /// <remarks>A request beyond the scripted sequence is a test asserting on a reconnection it did not intend, so it fails loudly.</remarks>
-    internal static Func<IMailKitImapClient> ConnectionSequence(params FakeImapClient[] clients)
+    internal static Func<IImapClient> ConnectionSequence(params FakeImapClient[] clients)
     {
         var pendingClients = new Queue<FakeImapClient>(clients);
 
         return () => pendingClients.Count > 0
-            ? pendingClients.Dequeue()
+            ? pendingClients.Dequeue().Client
             : throw new InvalidOperationException("The adapter established more connections than the test scripted.");
     }
 

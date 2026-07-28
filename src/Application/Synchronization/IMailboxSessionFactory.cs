@@ -11,18 +11,22 @@ public interface IMailboxSessionFactory
 {
     /// <summary>Opens a folder read-only so synchronization cannot mutate remote mailbox state.</summary>
     /// <param name="accountId">The local account identifier.</param>
-    /// <param name="folderName">The remote folder to select read-only.</param>
+    /// <param name="folder">The alias binding whose remote path is selected read-only.</param>
     /// <param name="transportSecurityPolicy">The connection and authentication policy the implementation must obey.</param>
     /// <param name="cancellationToken">Cancels connecting, authenticating, and selecting the folder.</param>
     /// <returns>An open read-only mailbox session the caller owns and must dispose.</returns>
     /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not accept the session within its configured resilience budget.</exception>
     /// <remarks>
+    /// The session receives the whole binding rather than a path, because every occurrence identity it produces is
+    /// scoped by the generation the binding carries.
+    /// <para>
     /// The policy is an input rather than something the implementation resolves, so an adapter cannot widen the
     /// permitted authentication mechanisms or downgrade the connection on its own.
+    /// </para>
     /// </remarks>
     Task<IMailboxSession> OpenReadOnlyAsync(
         MailAccountId accountId,
-        MailFolderName folderName,
+        MailFolderResolution folder,
         MailTransportSecurityPolicy transportSecurityPolicy,
         CancellationToken cancellationToken);
 }

@@ -11,7 +11,15 @@ internal sealed class MailFolderEntity
 
     public required string MailboxAccountId { get; set; }
 
-    public required string RemoteName { get; set; }
+    public required string Alias { get; set; }
+
+    public int ResolutionGeneration { get; set; }
+
+    public required string RemotePath { get; set; }
+
+    // Stored as text rather than as a single character, because PostgreSQL pads `character(1)` and the provider
+    // mapping of a nullable CLR `char` has not been validated against a real database yet.
+    public string? HierarchyDelimiter { get; set; }
 
     public required MailboxAccountEntity MailboxAccount { get; set; }
 

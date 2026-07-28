@@ -26,7 +26,7 @@ public sealed class EmailContentTooLargeException : Exception
 
     /// <summary>Initializes a new oversized-email exception.</summary>
     public EmailContentTooLargeException(EmailOccurrenceId occurrenceId, long sizeOctets, long maxAllowedOctets)
-        : base($"Email {occurrenceId.AccountId.Value}/{occurrenceId.FolderName.Value}/{occurrenceId.UidValidity.Value}/{occurrenceId.Uid.Value} is {sizeOctets} octets, which exceeds the configured {maxAllowedOctets} octet raw MIME limit.")
+        : base($"Email {occurrenceId.AccountId.Value}/{occurrenceId.FolderResolutionId}/{occurrenceId.UidValidity.Value}/{occurrenceId.Uid.Value} is {sizeOctets} octets, which exceeds the configured {maxAllowedOctets} octet raw MIME limit.")
     {
         this.OccurrenceId = occurrenceId;
         this.SizeOctets = sizeOctets;

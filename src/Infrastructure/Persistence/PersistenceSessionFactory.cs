@@ -44,11 +44,19 @@ internal sealed class PersistenceSessionFactory(MailMcpDbContext dbContext) : IP
         public Task RollbackTransactionAsync(CancellationToken cancellationToken) =>
             transaction.RollbackAsync(cancellationToken);
 
+        /// <summary>Recognizes the two inserts a competing writer can win, and nothing else.</summary>
+        /// <remarks>
+        /// Both name a constraint whose violation means "another run got here first" rather than "this data is
+        /// wrong": the first checkpoint of a folder, and the first binding of an alias to a remote folder. Every
+        /// other unique violation stays a failure, because treating an unnamed collision as a race would retry a
+        /// write that will never succeed.
+        /// </remarks>
         public bool IsConcurrencyConflict(DbUpdateException exception) =>
             exception.InnerException is PostgresException
             {
                 SqlState: PostgresErrorCodes.UniqueViolation,
-                ConstraintName: MailMcpDbContext.SynchronizationCheckpointPrimaryKeyConstraintName,
+                ConstraintName: MailMcpDbContext.SynchronizationCheckpointPrimaryKeyConstraintName
+                    or MailMcpDbContext.MailFolderBindingUniqueIndexName,
             };
 
         public void ClearTrackedState() => dbContext.ChangeTracker.Clear();

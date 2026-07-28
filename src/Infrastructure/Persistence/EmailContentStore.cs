@@ -92,7 +92,8 @@ internal sealed class EmailContentStore(TimeProvider timeProvider) : IEmailConte
     {
         var occurrenceId = content.OccurrenceId;
         if (storedEmail.MailFolder.MailboxAccountId != occurrenceId.AccountId.Value
-            || storedEmail.MailFolder.RemoteName != occurrenceId.FolderName.Value
+            || storedEmail.MailFolder.Alias != occurrenceId.FolderResolutionId.Alias.Value
+            || storedEmail.MailFolder.ResolutionGeneration != occurrenceId.FolderResolutionId.Generation.Value
             || storedEmail.UidValidity != occurrenceId.UidValidity.Value
             || storedEmail.Uid != occurrenceId.Uid.Value)
         {

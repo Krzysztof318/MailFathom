@@ -26,7 +26,9 @@ If a second executable service ever needs these defaults, the answer is a projec
 
 ## Naming an adapter after its library
 
-A type inside an adapter carries the library's name only when its own members traffic in that library's types. `IMailKitImapClient` and `MailKitTransportSecurityMapping` take or return `SecureSocketOptions` and `IMailFolder`, so their names are accurate. `ImapAccountSettings` and `IImapAccountSettingsProvider` describe a host, a port, and credentials in plain IMAP vocabulary and would survive replacing the client library unchanged, so they live directly under `Infrastructure/Mail/` and name no vendor. The test is mechanical: if swapping the library would not change a single member, the name must not say the library.
+A type inside an adapter carries the library's name only when its own members traffic in that library's types. `MailKitImapConnection`, `MailKitRemoteFolderCatalog`, and `MailKitTransportSecurityMapping` take or return `IImapClient`, `IMailFolder`, and `SecureSocketOptions`, so their names are accurate. `ImapAccountSettings` and `IImapAccountSettingsProvider` describe a host, a port, and credentials in plain IMAP vocabulary and would survive replacing the client library unchanged, so they live directly under `Infrastructure/Mail/` and name no vendor. The test is mechanical: if swapping the library would not change a single member, the name must not say the library.
+
+The adapter consumes MailKit's own `IImapClient` rather than a port restating it. An interface this repository declares has to earn its existence — a seam the library leaves open, behavior of its own, or a surface deliberately narrowed for a stated safety reason. A member-for-member copy of a published interface is none of those: it buys no replaceability, because every one of its members would change with the library anyway, and it goes stale the moment the library moves. Replaceability lives one layer up, at `IMailboxSession`, `IMailboxSessionFactory`, and `IRemoteFolderCatalog`, which traffic in domain types and keep mail-library types out of `Application`.
 
 ## Test projects
 

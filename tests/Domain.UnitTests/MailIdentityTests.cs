@@ -15,16 +15,19 @@ public sealed class MailIdentityTests
     {
         // Arrange
         var accountId = MailAccountId.Create("primary");
-        var folderName = MailFolderName.Create("INBOX");
+        var folderResolutionId = new MailFolderResolutionId(
+            MailFolderAlias.Create("inbox"),
+            MailFolderResolutionGeneration.First);
         var uidValidity = ImapUidValidity.Create(42);
         var uid = ImapUid.Create(100);
 
         // Act
-        var occurrence = EmailOccurrenceId.Create(accountId, folderName, uidValidity, uid);
+        var occurrence = EmailOccurrenceId.Create(accountId, folderResolutionId, uidValidity, uid);
 
         // Assert
         Assert.Equal("primary", occurrence.AccountId.Value);
-        Assert.Equal("INBOX", occurrence.FolderName.Value);
+        Assert.Equal("INBOX", occurrence.FolderResolutionId.Alias.Value);
+        Assert.Equal(1, occurrence.FolderResolutionId.Generation.Value);
         Assert.Equal(42U, occurrence.UidValidity.Value);
         Assert.Equal(100U, occurrence.Uid.Value);
     }
