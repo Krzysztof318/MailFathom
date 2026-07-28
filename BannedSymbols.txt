@@ -11,10 +11,13 @@ P:System.DateTimeOffset.Now;Inject TimeProvider and call GetUtcNow(); see root A
 P:System.DateTimeOffset.UtcNow;Inject TimeProvider and call GetUtcNow(); see root AGENTS.md.
 
 ; Blocking sleeps. Mail synchronization and delivery are asynchronous end to end, and a delay that
-; must be observable in a test belongs to TimeProvider.Delay.
+; must be observable in a test belongs to TimeProvider.Delay. An entry binds one signature, so both
+; overloads are listed; naming the method alone would leave the other one callable.
 M:System.Threading.Thread.Sleep(System.Int32);Await TimeProvider.Delay so the wait is cancellable and testable.
+M:System.Threading.Thread.Sleep(System.TimeSpan);Await TimeProvider.Delay so the wait is cancellable and testable.
 
 ; The BCL mail stack. MailMcp speaks IMAP and SMTP through MailKit inside the transport adapter, and
 ; System.Net.Mail.MailMessage is the name collision root AGENTS.md forbids for the mail artifact.
-T:System.Net.Mail.SmtpClient;Send through the MailKit-backed transport adapter instead.
-T:System.Net.Mail.MailMessage;Model mail as the domain Email types; see root AGENTS.md naming rules.
+; The whole namespace is banned rather than the two obvious types, so MailAddress, Attachment, and
+; the rest cannot reintroduce the second mail stack one type at a time.
+N:System.Net.Mail;Use MailKit through the transport adapter and the domain Email types; see root AGENTS.md.

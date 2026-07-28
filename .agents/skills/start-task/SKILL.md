@@ -8,7 +8,7 @@ description: Use when beginning repository work that may edit files, change depe
 ## Workflow
 
 1. Resolve the repository root and run `scripts/inspect-workspace.sh`.
-2. Rename the branch when `Branch` does not match `agent/*`. The agent harness names a new worktree branch `worktree-<id>`, which this workflow rejects, so `git branch -m agent/<short-description>` is the expected first move rather than a sign that the workspace is wrong. Only a branch carrying someone else's work needs a question first.
+2. Rename the branch with `git branch -m agent/<short-description>` only when `Worktree` is `linked worktree` and `Branch` matches `worktree-*`. That combination is the harness naming its own scratch branch, which this workflow rejects, so renaming it is the expected first move rather than a sign that the workspace is wrong. Never rename any other branch: in the primary checkout the branch is the developer's own, and renaming `main` there would destroy it while making no progress on the task. Any other mismatch is corrected by creating or entering a worktree, not by renaming.
 3. Fetch the current remote base with `git fetch origin main`, then run workspace inspection again.
 4. Stop before edits unless `Branch` matches `agent/*`, `Worktree` is `linked worktree`, `Contains origin/main` is `yes`, and the working tree is either clean or fully inventoried under a user-approved preservation plan. Correct the workspace according to root instructions.
    - If the working tree is dirty, run `git status --short --untracked-files=all` and inventory every existing path.

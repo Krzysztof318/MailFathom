@@ -209,7 +209,7 @@ Work is tracked as GitHub issues on the `MailMcp roadmap` project board, which i
 - To finish, use `$finish-change`; it requires `$check-docs-licenses`, full verification, focused staging, and a draft pull request.
 - Use `scripts/inspect-workspace.sh` for a read-only workspace preflight.
 - Use `scripts/verify-fast.sh` during implementation. It restores, builds, tests, and verifies formatting, so a style diagnostic surfaces in the implementation loop instead of after the full gate has already restored tools and collected coverage.
-- Rename a harness-created `worktree-<id>` branch to `agent/<short-description>` before editing. `$start-task` treats this as its first corrective step rather than as a reason to stop.
+- Rename a harness-created `worktree-<id>` branch to `agent/<short-description>` before editing, but only inside the linked worktree that owns it. `$start-task` treats that as its first corrective step rather than as a reason to stop; a branch in the primary checkout is never renamed.
 - Stage the task files before running `scripts/verify-full.sh`; the gate rejects remaining untracked files so newly added files cannot bypass diff validation.
 - Use `scripts/verify-full.sh` before committing. It fetches `origin main` and rejects a branch that does not contain that freshly fetched base, then runs the workflow contract suite, restores tools and packages, builds, runs the complete unit-test and coverage gate, verifies formatting, and checks the diff.
 - Rebase onto the fetched `origin/main` when the base check fails, and treat an unreachable remote as a blocked gate. Verification against a stale base proves nothing about the branch that will actually merge.

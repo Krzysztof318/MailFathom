@@ -2,12 +2,6 @@
   "version": 1,
   "isRoot": true,
   "tools": {
-    "csharp-ls": {
-      "version": "0.26.0",
-      "commands": [
-        "csharp-ls"
-      ]
-    },
     "dotnet-reportgenerator-globaltool": {
       "version": "5.5.10",
       "commands": [

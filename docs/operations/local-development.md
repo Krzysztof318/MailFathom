@@ -70,19 +70,19 @@ Neither file nor user secrets is a production secret store. User secrets are sto
 
 ## Command-line tooling
 
-The repository provisions no development environment, so install the SDK and any command-line tools on the developer machine. Repository-local tools declared in `.config/dotnet-tools.json` come from `dotnet tool restore`:
+The repository provisions no development environment, so install the SDK and any command-line tools on the developer machine. Repository-local tools declared in `.config/dotnet-tools.json` come from `dotnet tool restore` and are limited to what the coverage gate needs: `reportgenerator` merges the per-project Cobertura reports.
 
-- `reportgenerator` merges the per-project Cobertura reports the coverage gate enforces.
-- `csharp-ls` is the C# language server that editors and agent tooling use to resolve symbols. It is pinned here rather than installed globally so every checkout resolves the same version, and so an environment that has run `dotnet tool restore` can look a symbol up before editing instead of discovering a misspelled type at build time.
-
-Two tools are installed globally when their workflows are needed:
+Three tools are installed globally when their workflows are needed:
 
 ```bash
 dotnet tool install --global dotnet-ef --version 10.0.10
 dotnet tool install --global Aspire.Cli --version 13.4.6
+dotnet tool install --global csharp-ls --version 0.26.0
 ```
 
-`dotnet ef` runs EF Core migrations and design-time commands. `aspire` is only required for Aspire CLI workflows against the AppHost. Both versions are recorded in `LICENSES.md`; keep the register aligned when you move to a newer one.
+`dotnet ef` runs EF Core migrations and design-time commands. `aspire` is only required for Aspire CLI workflows against the AppHost. `csharp-ls` is the C# language server that editors and agent tooling launch to resolve symbols before editing, instead of discovering a misspelled type at build time.
+
+`csharp-ls` is installed globally rather than pinned in `.config/dotnet-tools.json` because a manifest-local tool is only reachable as `dotnet tool run csharp-ls`; it never lands on `PATH`, so a client that launches the bare `csharp-ls` executable still fails with `ENOENT`. A global install puts it in `~/.dotnet/tools`, which is on `PATH`, and keeps the language server out of the `dotnet tool restore` that continuous integration runs for the coverage gate. All three versions are recorded in `LICENSES.md`; keep the register aligned when you move to a newer one.
 
 ### EF Core design-time commands
 
