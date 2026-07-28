@@ -18,6 +18,36 @@ if [[ "$current_branch" == 'main' || "$current_branch" == 'master' ]]; then
   exit 1
 fi
 
+# The branch base, preferred as the remote-tracking ref and falling back to the local branch, so the
+# loop keeps working offline. Printing nothing when neither exists widens the scope below to the
+# uncommitted work alone rather than failing the run.
+resolve_branch_base() {
+  local candidate_ref
+
+  for candidate_ref in 'refs/remotes/origin/main' 'refs/heads/main'; do
+    if git rev-parse --verify --quiet "$candidate_ref" > /dev/null; then
+      printf '%s\n' "$candidate_ref"
+      return 0
+    fi
+  done
+}
+
+# Every C# file this branch touches: committed since the base, staged, modified, or newly added.
+# Deletions are filtered out because a removed file cannot be formatted.
+list_changed_csharp_files() {
+  local branch_base
+
+  branch_base="$(resolve_branch_base)"
+
+  {
+    git diff --name-only --diff-filter=ACMR HEAD
+    git ls-files --others --exclude-standard
+    if [[ -n "$branch_base" ]]; then
+      git diff --name-only --diff-filter=ACMR "$branch_base...HEAD"
+    fi
+  } | grep -E '\.cs$' | sort --unique
+}
+
 dotnet restore MailMcp.slnx
 dotnet build MailMcp.slnx --configuration Release --no-restore
 dotnet test --solution MailMcp.slnx --configuration Release --no-build
@@ -25,4 +55,19 @@ dotnet test --solution MailMcp.slnx --configuration Release --no-build
 # Formatting runs in the fast loop as well as the final gate. Style diagnostics such as IDE0005 are
 # reported by `dotnet format` rather than by the build, so leaving them to full verification means
 # discovering them only after tool restore and the whole coverage collection have already run.
-dotnet format MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic
+#
+# The loop formats only what the branch changed. `dotnet format` reloads the MSBuild workspace on
+# every invocation and analyzes whatever is in scope, so the whole solution costs about 70 seconds
+# here while a handful of files costs about 30. Splitting the run into the `whitespace`, `style`,
+# and `analyzers` subcommands does not help: it pays that workspace load three times. The final gate
+# still formats the whole solution, so a defect outside the changed files cannot merge.
+mapfile -t changed_csharp_files < <(list_changed_csharp_files)
+
+if ((${#changed_csharp_files[@]} > 0)); then
+  # Two passes, because neither reports what the other does. The first rewrites everything that has
+  # a code fix, but exits 0 and names no file when a diagnostic has none. The second turns whatever
+  # survived into the `file(line,col): error IDEnnnn` the loop can act on, and fails the run.
+  dotnet format MailMcp.slnx --no-restore --include "${changed_csharp_files[@]}"
+  dotnet format MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic \
+    --include "${changed_csharp_files[@]}"
+fi

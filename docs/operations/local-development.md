@@ -18,11 +18,24 @@ bash scripts/verify-full.sh
 ```
 
 The fast script restores the solution, builds it in Release configuration, runs
-all unit tests without rebuilding, and verifies formatting. Formatting runs in
-both scripts on purpose: style diagnostics such as `IDE0005` come from
-`dotnet format` rather than from the build, and leaving them to the final gate
-means discovering them only after tool restore and the whole coverage
-collection have run. The full script additionally restores repository tools,
+all unit tests without rebuilding, and formats the C# files the branch changed.
+Formatting runs in both scripts on purpose: style diagnostics such as `IDE0005`
+come from `dotnet format` rather than from the build, and leaving them to the
+final gate means discovering them only after tool restore and the whole coverage
+collection have run.
+
+The fast script is the only one that rewrites source files. It runs
+`dotnet format` twice over the changed files: a repairing pass applies every
+available code fix, and a `--verify-no-changes` pass names by file and line what
+had none. Neither pass replaces the other, because the repairing pass exits `0`
+and identifies no file when a diagnostic such as `IDE0060` has no code fix.
+Restricting both passes to the changed files is what keeps the loop usable:
+`dotnet format` reloads the MSBuild workspace on every invocation, which costs
+roughly 15 seconds, and analyzing the whole solution costs about 70 seconds
+against about 30 for a handful of files. The final gate still formats the whole
+solution, so a defect outside the changed files cannot merge.
+
+The full script additionally restores repository tools,
 runs the workflow contract suite, executes the aggregate coverage gate, and
 checks the Git diff. It rejects remaining untracked files, so inspect the
 staged diff before running it. See [Agent workflow](agent-workflow.md) for the

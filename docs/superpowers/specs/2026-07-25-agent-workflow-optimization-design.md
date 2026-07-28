@@ -6,6 +6,12 @@
 > list and the "no hidden mutation" statement below therefore no longer describe
 > the script; see [Agent workflow](../../operations/agent-workflow.md) for the
 > current contract.
+>
+> **Further superseded on 2026-07-28.** `scripts/verify-fast.sh` now ends with
+> two `dotnet format` passes restricted to the C# files the branch changed: a
+> repairing pass and a `--verify-no-changes` pass. The inner-loop step list below
+> omits formatting entirely, and the fast loop does rewrite working-tree source
+> files, which the "no hidden mutation" statement did not anticipate.
 
 ## Goal
 
