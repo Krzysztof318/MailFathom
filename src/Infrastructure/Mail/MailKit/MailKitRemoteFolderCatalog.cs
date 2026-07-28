@@ -22,6 +22,9 @@ internal sealed class MailKitRemoteFolderCatalog(
     OutboundOperationExecutor operationExecutor,
     ITransientFailureClassifier transientFailureClassifier) : IRemoteFolderCatalog
 {
+    /// <summary>Bounds what one listing may retain, since the folder tree is a remote answer rather than local state.</summary>
+    private const int MaximumAdvertisedFolderCount = 10_000;
+
     /// <summary>Maps each attribute the library reports onto the domain role it means.</summary>
     private static readonly (FolderAttributes Attribute, MailFolderSpecialUse Role)[] ReportedRolesByAttribute =
     [
@@ -54,32 +57,70 @@ internal sealed class MailKitRemoteFolderCatalog(
         return await connection.ExecuteClientReadAsync(ListAdvertisedFoldersAsync, cancellationToken);
     }
 
-    /// <summary>Reads the inbox and every folder of every personal namespace, keeping the server's own order.</summary>
+    /// <summary>Reads the inbox and every folder of every namespace the account can reach, keeping the server's own order.</summary>
     /// <remarks>
+    /// <para>
     /// The inbox is read separately because a namespace listing does not always include it — a server whose personal
     /// namespace has a prefix lists the folders under that prefix and leaves the mandatory <c>INBOX</c> outside it.
     /// Reading it first also makes it the folder an inbox mapping matches when a server advertises no role at all.
+    /// </para>
+    /// <para>
+    /// Shared and other-user namespaces are listed alongside the personal one. A mailbox delegated to the account is
+    /// a folder an operator is entitled to name, and the server will open it; leaving those namespaces out would
+    /// report such an alias as unresolved even though the folder exists.
+    /// </para>
     /// </remarks>
     private static async Task<IReadOnlyList<RemoteFolder>> ListAdvertisedFoldersAsync(
         IMailKitImapClient client,
         CancellationToken cancellationToken)
     {
         var advertisedFolders = new List<IMailFolder> { client.Inbox };
+        var reachableNamespaces = client.PersonalNamespaces
+            .Concat(client.OtherNamespaces)
+            .Concat(client.SharedNamespaces);
 
-        foreach (var personalNamespace in client.PersonalNamespaces)
+        foreach (var reachableNamespace in reachableNamespaces)
         {
-            advertisedFolders.AddRange(await client.GetFoldersAsync(personalNamespace, cancellationToken));
+            advertisedFolders.AddRange(await client.GetFoldersAsync(reachableNamespace, cancellationToken));
+
+            EnsureListingStaysBounded(advertisedFolders.Count);
         }
 
         return
         [
             .. advertisedFolders
                 .DistinctBy(folder => folder.FullName, StringComparer.Ordinal)
-                .Where(folder => !folder.Attributes.HasFlag(FolderAttributes.NonExistent))
+                .Where(IsSelectableFolder)
                 .Select(DescribeAdvertisedFolder)
                 .OfType<RemoteFolder>(),
         ];
     }
+
+    /// <summary>Stops a listing before an implausible folder tree becomes an unbounded amount of retained state.</summary>
+    /// <remarks>
+    /// The count is checked after each namespace rather than at the end, so a server that answers with an inflated
+    /// tree cannot make the catalog keep growing across the namespaces that follow. The limit is generous by design:
+    /// exceeding it says the answer is not a mailbox layout anyone configured folders against, so discovery fails and
+    /// names the limit instead of truncating and reporting aliases as unresolved for a reason nothing explains.
+    /// </remarks>
+    private static void EnsureListingStaysBounded(int advertisedFolderCount)
+    {
+        if (advertisedFolderCount > MaximumAdvertisedFolderCount)
+        {
+            throw new InvalidOperationException(
+                $"The mail server advertised more than {MaximumAdvertisedFolderCount} folders, which is beyond what folder discovery accepts.");
+        }
+    }
+
+    /// <summary>Keeps entries the server lists but refuses to open out of the catalog.</summary>
+    /// <remarks>
+    /// A <c>\NoSelect</c> entry is a hierarchy container rather than a mailbox, and a <c>\NonExistent</c> one holds no
+    /// mail at all. Binding an alias to either would commit a generation for a name every later run then fails to
+    /// select, which reads as a mail-server failure rather than as the configuration mistake it is.
+    /// </remarks>
+    private static bool IsSelectableFolder(IMailFolder folder) =>
+        !folder.Attributes.HasFlag(FolderAttributes.NonExistent)
+        && !folder.Attributes.HasFlag(FolderAttributes.NoSelect);
 
     /// <summary>Describes one listed folder, or nothing when what the server listed does not name a folder.</summary>
     /// <remarks>

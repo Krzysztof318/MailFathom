@@ -105,12 +105,19 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
         }
     }
 
-    /// <summary>Reports one folder's run, keeping an alias the server advertises no folder for separate from a failure.</summary>
+    /// <summary>Reports one folder's run, keeping an alias that named no single folder separate from a failure.</summary>
     private void ReportFolderOutcome(string accountId, string folderAlias, MailboxSynchronizationResult result)
     {
         if (result.Outcome == MailboxSynchronizationOutcome.FolderAliasUnresolved)
         {
             this.LogFolderAliasUnresolved(accountId, folderAlias);
+
+            return;
+        }
+
+        if (result.Outcome == MailboxSynchronizationOutcome.FolderAliasAmbiguous)
+        {
+            this.LogFolderAliasAmbiguous(accountId, folderAlias);
 
             return;
         }
@@ -141,6 +148,14 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "Folder alias {AccountId}/{FolderAlias} matched no folder the mail server advertises; it was not synchronized and the remaining folders of this account continue.")]
     private partial void LogFolderAliasUnresolved(
+        string accountId,
+        string folderAlias);
+
+    /// <summary>Names the remedy, because an ambiguous role is fixed by configuring a path rather than by waiting.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Folder alias {AccountId}/{FolderAlias} matched several folders the mail server advertises, so it was not synchronized; configure its RemotePath to state which folder it names.")]
+    private partial void LogFolderAliasAmbiguous(
         string accountId,
         string folderAlias);
 

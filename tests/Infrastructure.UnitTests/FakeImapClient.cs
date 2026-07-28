@@ -100,6 +100,10 @@ internal sealed class FakeImapClient : IMailKitImapClient
 
     public IReadOnlyList<FolderNamespace> PersonalNamespaces { get; set; } = [new FolderNamespace('/', string.Empty)];
 
+    public IReadOnlyList<FolderNamespace> OtherNamespaces { get; set; } = [];
+
+    public IReadOnlyList<FolderNamespace> SharedNamespaces { get; set; } = [];
+
     public IMailFolder? InboxFolder { get; set; }
 
     public IMailFolder Inbox =>

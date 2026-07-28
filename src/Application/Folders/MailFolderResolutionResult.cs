@@ -12,6 +12,9 @@ public enum MailFolderResolutionOutcome
 
     /// <summary>No advertised folder matched the configured path or role, so this one alias cannot be synchronized.</summary>
     NoAdvertisedFolderMatched = 1,
+
+    /// <summary>Several advertised folders carry the configured role, so which one the alias names is the operator's to state.</summary>
+    AdvertisedFoldersAreAmbiguous = 2,
 }
 
 /// <summary>Carries the binding an alias resolved to, or the reason it resolved to none.</summary>
@@ -43,4 +46,9 @@ public sealed record MailFolderResolutionResult
     /// <returns>An unmatched result.</returns>
     public static MailFolderResolutionResult NoAdvertisedFolderMatched() =>
         new(MailFolderResolutionOutcome.NoAdvertisedFolderMatched, resolution: null);
+
+    /// <summary>Reports a configured role that several advertised folders carry.</summary>
+    /// <returns>An ambiguous result.</returns>
+    public static MailFolderResolutionResult AdvertisedFoldersAreAmbiguous() =>
+        new(MailFolderResolutionOutcome.AdvertisedFoldersAreAmbiguous, resolution: null);
 }

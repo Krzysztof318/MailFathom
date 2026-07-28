@@ -99,6 +99,48 @@ public sealed class MailFolderResolverTests
         Assert.Null(result.Resolution);
     }
 
+    /// <summary>
+    /// IMAP LIST ordering is a response order, not an identity contract. Taking the first of several folders carrying
+    /// a role would let a reordered response repoint the alias, start a generation, and resynchronize a different
+    /// folder with no configuration having changed.
+    /// </summary>
+    [Fact]
+    public async Task ResolveAsync_SeveralAdvertisedFoldersCarryTheRole_ReportsAmbiguityInsteadOfChoosingByResponseOrder()
+    {
+        // Arrange
+        var context = new ResolverContext(
+            new RemoteFolder(RemoteFolderPath.Create("Archief", '/'), [MailFolderSpecialUse.Archive]),
+            new RemoteFolder(RemoteFolderPath.Create("Archive", '/'), [MailFolderSpecialUse.Archive]));
+        var mapping = MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("archive"), MailFolderSpecialUse.Archive);
+
+        // Act
+        var result = await context.Resolver.ResolveAsync(PrimaryAccount, mapping, RequiredTlsPolicy, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(MailFolderResolutionOutcome.AdvertisedFoldersAreAmbiguous, result.Outcome);
+        Assert.Null(result.Resolution);
+        await context.PersistenceSessionFactory.DidNotReceive().BeginSessionAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Naming the path is the remedy for an ambiguous role, so it must still resolve one folder.</summary>
+    [Fact]
+    public async Task ResolveAsync_ExplicitPathAmongFoldersSharingARole_ResolvesTheNamedFolder()
+    {
+        // Arrange
+        var context = new ResolverContext(
+            new RemoteFolder(RemoteFolderPath.Create("Archief", '/'), [MailFolderSpecialUse.Archive]),
+            new RemoteFolder(RemoteFolderPath.Create("Archive", '/'), [MailFolderSpecialUse.Archive]));
+        var mapping = MailFolderMapping.ToRemotePath(
+            MailFolderAlias.Create("archive"),
+            RemoteFolderPath.Create("Archive"));
+
+        // Act
+        var result = await context.Resolver.ResolveAsync(PrimaryAccount, mapping, RequiredTlsPolicy, CancellationToken.None);
+
+        // Assert
+        Assert.Equal("Archive", result.Resolution!.RemotePath.Value);
+    }
+
     [Fact]
     public async Task ResolveAsync_AliasMatchesNothingAdvertised_LeavesTheOtherAliasesOfTheAccountResolvable()
     {

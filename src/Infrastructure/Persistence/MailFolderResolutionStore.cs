@@ -52,12 +52,23 @@ internal sealed class MailFolderResolutionStore(MailMcpDbContext readContext) : 
             resolution.Id,
             cancellationToken);
 
-        if (existingBinding is not null)
+        if (existingBinding is null)
         {
+            await MailFolderEntityResolver.AddAsync(writeContext, accountId, resolution, cancellationToken);
+
             return;
         }
 
-        await MailFolderEntityResolver.AddAsync(writeContext, accountId, resolution, cancellationToken);
+        // A row already holding this generation is only this run's own binding when it names the same remote folder.
+        // Two overlapping runs that resolved the same alias from the same generation to different folders would
+        // otherwise both proceed: the loser would adopt the winner's row and store its own folder's occurrences and
+        // checkpoint under it, so one (alias, generation) would name two remote folders — exactly what the generation
+        // exists to make impossible. It is reported as a conflict, and the next run resolves against what is durable.
+        if (ToResolution(existingBinding) != resolution)
+        {
+            throw new PersistenceConcurrencyConflictException(
+                $"Folder alias {accountId.Value}/{resolution.Id} was bound to a different remote folder by another writer before this run recorded its own binding.");
+        }
     }
 
     private static MailFolderResolution ToResolution(MailFolderEntity entity) => new(

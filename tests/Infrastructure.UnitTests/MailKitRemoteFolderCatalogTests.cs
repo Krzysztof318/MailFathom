@@ -146,6 +146,87 @@ public sealed class MailKitRemoteFolderCatalogTests
         Assert.Equal(["INBOX", "Archive"], advertisedFolders.Select(folder => folder.Path.Value));
     }
 
+    /// <summary>A hierarchy container is not a mailbox, and binding an alias to one would fail every later selection.</summary>
+    [Fact]
+    public async Task ListFoldersAsync_ServerListsANoSelectContainer_LeavesItOutOfTheCatalog()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        await using var client = new FakeImapClient
+        {
+            InboxFolder = CreateAdvertisedFolder("INBOX", '/', FolderAttributes.Inbox),
+        };
+        client.FoldersByNamespace[client.PersonalNamespaces[0]] =
+        [
+            CreateAdvertisedFolder("Archive", '/', FolderAttributes.NoSelect),
+            CreateAdvertisedFolder("Archive/2026", '/', FolderAttributes.None),
+        ];
+        var catalog = CreateFolderCatalog(resilience, client);
+
+        // Act
+        var advertisedFolders = await catalog.ListFoldersAsync(
+            PrimaryAccount,
+            TlsOnConnectWithPlainPolicy,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["INBOX", "Archive/2026"], advertisedFolders.Select(folder => folder.Path.Value));
+    }
+
+    /// <summary>A delegated mailbox is a folder an operator may name, and the server will open it.</summary>
+    [Fact]
+    public async Task ListFoldersAsync_AccountReachesSharedAndOtherNamespaces_ListsThoseFoldersToo()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        await using var client = new FakeImapClient
+        {
+            InboxFolder = CreateAdvertisedFolder("INBOX", '/', FolderAttributes.Inbox),
+            OtherNamespaces = [new FolderNamespace('/', "Other Users/")],
+            SharedNamespaces = [new FolderNamespace('/', "Shared Folders/")],
+        };
+        client.FoldersByNamespace[client.PersonalNamespaces[0]] = [CreateAdvertisedFolder("Archive", '/', FolderAttributes.Archive)];
+        client.FoldersByNamespace[client.OtherNamespaces[0]] = [CreateAdvertisedFolder("Other Users/anna/INBOX", '/', FolderAttributes.None)];
+        client.FoldersByNamespace[client.SharedNamespaces[0]] = [CreateAdvertisedFolder("Shared Folders/Support", '/', FolderAttributes.None)];
+        var catalog = CreateFolderCatalog(resilience, client);
+
+        // Act
+        var advertisedFolders = await catalog.ListFoldersAsync(
+            PrimaryAccount,
+            TlsOnConnectWithPlainPolicy,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            ["INBOX", "Archive", "Other Users/anna/INBOX", "Shared Folders/Support"],
+            advertisedFolders.Select(folder => folder.Path.Value));
+    }
+
+    /// <summary>The folder tree is a remote answer, so what one listing retains has to be bounded like any other.</summary>
+    [Fact]
+    public async Task ListFoldersAsync_ServerAdvertisesAnImplausibleFolderTree_FailsInsteadOfRetainingItAll()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        await using var client = new FakeImapClient
+        {
+            InboxFolder = CreateAdvertisedFolder("INBOX", '/', FolderAttributes.Inbox),
+        };
+        client.FoldersByNamespace[client.PersonalNamespaces[0]] =
+        [
+            .. Enumerable.Range(0, 10_001).Select(index =>
+                CreateAdvertisedFolder($"Folder{index}", '/', FolderAttributes.None)),
+        ];
+        var catalog = CreateFolderCatalog(resilience, client);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => catalog.ListFoldersAsync(PrimaryAccount, TlsOnConnectWithPlainPolicy, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Contains("10000", failure.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>Discovery precedes every folder selection, so nothing it does may be able to touch a message flag.</summary>
     [Fact]
     public async Task ListFoldersAsync_Always_SelectsNoFolderAndRequestsNoFlagUpdate()

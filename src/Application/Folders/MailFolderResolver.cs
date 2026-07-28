@@ -44,7 +44,7 @@ public sealed class MailFolderResolver
     /// <param name="mapping">What configuration says the alias names.</param>
     /// <param name="transportSecurityPolicy">The connection and authentication policy discovery must obey.</param>
     /// <param name="cancellationToken">Cancels discovery and the write that records a new binding.</param>
-    /// <returns>The durable binding, or the reason no advertised folder matched.</returns>
+    /// <returns>The durable binding, or the reason the alias resolved to no single advertised folder.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="mapping" /> is <see langword="null" />.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when a competing writer recorded a binding for the same alias first.</exception>
     /// <remarks>
@@ -65,10 +65,18 @@ public sealed class MailFolderResolver
             transportSecurityPolicy,
             cancellationToken);
 
-        if (SelectAdvertisedFolder(mapping, advertisedFolders) is not { } advertisedPath)
+        var matchedFolders = FindAdvertisedMatches(mapping, advertisedFolders);
+        if (matchedFolders.Count == 0)
         {
             return MailFolderResolutionResult.NoAdvertisedFolderMatched();
         }
+
+        if (matchedFolders.Count > 1)
+        {
+            return MailFolderResolutionResult.AdvertisedFoldersAreAmbiguous();
+        }
+
+        var advertisedPath = matchedFolders[0].Path;
 
         var currentResolution =
             await this.resolutionStore.GetCurrentResolutionAsync(accountId, mapping.Alias, cancellationToken);
@@ -87,40 +95,42 @@ public sealed class MailFolderResolver
         return MailFolderResolutionResult.Resolved(newResolution);
     }
 
-    /// <summary>Picks the advertised folder a mapping names, in the order the server listed them.</summary>
+    /// <summary>Finds every advertised folder a mapping names, so an alias that names more than one is answerable.</summary>
     /// <remarks>
-    /// A server that reports no special-use attribute at all still has an inbox, because RFC 3501 requires the name
+    /// Every match is collected rather than the first one taken, because IMAP <c>LIST</c> ordering is a response
+    /// order and not an identity contract. Picking the first of several would let a reordered response repoint the
+    /// alias, start a generation, and resynchronize a different folder with no configuration having changed.
+    /// </remarks>
+    private static IReadOnlyList<RemoteFolder> FindAdvertisedMatches(
+        MailFolderMapping mapping,
+        IReadOnlyList<RemoteFolder> advertisedFolders) => mapping switch
+        {
+            // Paths are compared by their advertised text rather than as whole values, because configuration supplies
+            // a path without the server's hierarchy delimiter and the match must still be the advertised folder,
+            // delimiter included, so a later run compares the same value against the same binding.
+            { Target: MailFolderMappingTarget.RemotePath, RemotePath: { } configuredPath } =>
+                [.. advertisedFolders.Where(folder => folder.Path.Value == configuredPath.Value)],
+            { SpecialUse: { } role } => FindFoldersCarryingRole(role, advertisedFolders),
+            _ => [],
+        };
+
+    /// <summary>Finds the folders carrying a role, falling back to the mandated inbox name when the server reports no role at all.</summary>
+    /// <remarks>
+    /// A server that reports no special-use attribute still has an inbox, because RFC 3501 requires the name
     /// <c>INBOX</c> to exist and to be case-insensitive. That fallback covers only the inbox: every other role exists
     /// solely as an advertised attribute, and guessing at a name for it would bind an alias to a folder the operator
     /// never named.
     /// </remarks>
-    private static RemoteFolderPath? SelectAdvertisedFolder(
-        MailFolderMapping mapping,
-        IReadOnlyList<RemoteFolder> advertisedFolders)
-    {
-        // Paths are compared by their advertised text rather than as whole values, because configuration supplies a
-        // path without the server's hierarchy delimiter and the match must still be the advertised folder, delimiter
-        // included, so a later run compares the same value against the same binding.
-        var advertisedFolder = mapping switch
-        {
-            { Target: MailFolderMappingTarget.RemotePath, RemotePath: { } configuredPath } =>
-                advertisedFolders.FirstOrDefault(folder => folder.Path.Value == configuredPath.Value),
-            { SpecialUse: { } role } => FindFolderCarryingRole(role, advertisedFolders),
-            _ => null,
-        };
-
-        return advertisedFolder?.Path;
-    }
-
-    private static RemoteFolder? FindFolderCarryingRole(
+    private static IReadOnlyList<RemoteFolder> FindFoldersCarryingRole(
         MailFolderSpecialUse role,
         IReadOnlyList<RemoteFolder> advertisedFolders)
     {
-        var folderCarryingTheRole = advertisedFolders.FirstOrDefault(folder => folder.SpecialUses.Contains(role));
+        IReadOnlyList<RemoteFolder> foldersCarryingTheRole =
+            [.. advertisedFolders.Where(folder => folder.SpecialUses.Contains(role))];
 
-        return folderCarryingTheRole is not null || role != MailFolderSpecialUse.Inbox
-            ? folderCarryingTheRole
-            : advertisedFolders.FirstOrDefault(folder => folder.Path.Value == MandatoryInboxPath);
+        return foldersCarryingTheRole.Count > 0 || role != MailFolderSpecialUse.Inbox
+            ? foldersCarryingTheRole
+            : [.. advertisedFolders.Where(folder => folder.Path.Value == MandatoryInboxPath)];
     }
 
     private async Task RecordNewBindingAsync(

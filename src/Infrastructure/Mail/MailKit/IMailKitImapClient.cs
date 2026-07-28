@@ -50,6 +50,12 @@ internal interface IMailKitImapClient : IAsyncDisposable
     /// <summary>Gets the namespaces the server assigns to the authenticated user's own folders.</summary>
     IReadOnlyList<FolderNamespace> PersonalNamespaces { get; }
 
+    /// <summary>Gets the namespaces holding other users' folders the account has been granted access to.</summary>
+    IReadOnlyList<FolderNamespace> OtherNamespaces { get; }
+
+    /// <summary>Gets the namespaces holding folders shared across accounts.</summary>
+    IReadOnlyList<FolderNamespace> SharedNamespaces { get; }
+
     /// <summary>Gets the mailbox every IMAP server exposes for incoming mail.</summary>
     /// <remarks>Listing a namespace does not always cover it, so discovery reads it separately rather than assuming.</remarks>
     IMailFolder Inbox { get; }
@@ -106,6 +112,12 @@ internal sealed class MailKitImapClientAdapter(ImapClient client) : IMailKitImap
 
     /// <inheritdoc />
     public IReadOnlyList<FolderNamespace> PersonalNamespaces => [.. client.PersonalNamespaces];
+
+    /// <inheritdoc />
+    public IReadOnlyList<FolderNamespace> OtherNamespaces => [.. client.OtherNamespaces];
+
+    /// <inheritdoc />
+    public IReadOnlyList<FolderNamespace> SharedNamespaces => [.. client.SharedNamespaces];
 
     /// <inheritdoc />
     public IMailFolder Inbox => client.Inbox;

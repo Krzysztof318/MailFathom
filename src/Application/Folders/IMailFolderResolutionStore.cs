@@ -29,9 +29,14 @@ public interface IMailFolderResolutionStore
     /// <param name="resolution">The binding to stage.</param>
     /// <param name="cancellationToken">Cancels the lookup before anything is staged.</param>
     /// <returns>A task that completes once the binding is staged in the caller's session.</returns>
+    /// <exception cref="PersistenceConcurrencyConflictException">
+    /// Thrown when the generation is already held by a binding naming a different remote folder, which means a
+    /// competing run resolved the same alias elsewhere first. Nothing is staged, because adopting that binding would
+    /// let one alias generation name two remote folders.
+    /// </exception>
     /// <remarks>
-    /// Staging a binding that is already durable is a no-op rather than a conflict, so a run that resolves the same
-    /// alias to the same remote folder writes nothing.
+    /// Staging a binding that is already durable and identical is a no-op rather than a conflict, so a run that
+    /// resolves the same alias to the same remote folder writes nothing.
     /// </remarks>
     Task SaveResolutionAsync(
         IPersistenceSession session,

@@ -94,7 +94,7 @@ public sealed class MailboxSynchronizer
 
         if (resolutionResult.Resolution is not { } folder)
         {
-            return MailboxSynchronizationResult.FolderAliasUnresolved();
+            return MailboxSynchronizationResult.FolderNotResolved(resolutionResult.Outcome);
         }
 
         return await this.SynchronizeResolvedFolderAsync(
@@ -266,6 +266,9 @@ public enum MailboxSynchronizationOutcome
 
     /// <summary>The server advertised no folder matching the alias, so this folder was not synchronized.</summary>
     FolderAliasUnresolved = 1,
+
+    /// <summary>Several advertised folders matched the alias, so this folder was not synchronized until the operator says which one it means.</summary>
+    FolderAliasAmbiguous = 2,
 }
 
 /// <summary>Summarizes one mailbox synchronization run.</summary>
@@ -294,8 +297,26 @@ public sealed record MailboxSynchronizationResult(
         SynchronizationCheckpoint checkpoint) =>
         new(MailboxSynchronizationOutcome.Synchronized, storedEmailCount, skippedOversizedEmailCount, hasMoreEmails, checkpoint);
 
-    /// <summary>Reports a configured alias the server advertised no folder for.</summary>
-    /// <returns>An unresolved result, which describes no progress because none was attempted.</returns>
-    public static MailboxSynchronizationResult FolderAliasUnresolved() =>
-        new(MailboxSynchronizationOutcome.FolderAliasUnresolved, 0, 0, HasMoreEmails: false, Checkpoint: null);
+    /// <summary>Reports a configured alias that named no single advertised folder.</summary>
+    /// <param name="resolutionOutcome">Why resolution produced no binding.</param>
+    /// <returns>An unsynchronized result, which describes no progress because none was attempted.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="resolutionOutcome" /> reports a binding that this result cannot describe.</exception>
+    /// <remarks>
+    /// The two reasons stay distinct all the way to the worker's log, because they ask the operator for different
+    /// things: one to correct an alias that names nothing, the other to name a path where a role is not unique.
+    /// </remarks>
+    public static MailboxSynchronizationResult FolderNotResolved(MailFolderResolutionOutcome resolutionOutcome)
+    {
+        var outcome = resolutionOutcome switch
+        {
+            MailFolderResolutionOutcome.NoAdvertisedFolderMatched => MailboxSynchronizationOutcome.FolderAliasUnresolved,
+            MailFolderResolutionOutcome.AdvertisedFoldersAreAmbiguous => MailboxSynchronizationOutcome.FolderAliasAmbiguous,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(resolutionOutcome),
+                resolutionOutcome,
+                "A resolved folder is reported through Synchronized rather than as an unresolved alias."),
+        };
+
+        return new MailboxSynchronizationResult(outcome, 0, 0, HasMoreEmails: false, Checkpoint: null);
+    }
 }

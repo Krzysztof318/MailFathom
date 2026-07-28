@@ -40,7 +40,12 @@ account's folders through `IRemoteFolderCatalog` and matches the mapping against
 | Mapping | Matches |
 | --- | --- |
 | `RemotePath` | The advertised folder whose path is the configured text. |
-| `SpecialUse` | The first advertised folder carrying that RFC 6154 role. |
+| `SpecialUse` | The advertised folder carrying that RFC 6154 role. |
+
+A role several folders carry does **not** resolve to whichever the server listed first. `LIST` ordering is a response
+order rather than an identity contract, so taking the first would let a reordered response repoint the alias, start a
+generation, and resynchronize a different folder with no configuration having changed. The alias is reported ambiguous
+instead, and the log names the remedy: configure its `RemotePath`.
 
 A `SpecialUse: Inbox` mapping additionally falls back to the folder named `INBOX` when the server advertises no
 special-use attribute at all, because RFC 3501 mandates that name and makes it case-insensitive. That fallback exists
@@ -48,10 +53,10 @@ for the inbox alone: every other role exists only as an advertised attribute, an
 alias to a folder nobody named. An account whose server presents the inbox under a localized name therefore needs no
 folder configuration, which is also why the post-binding default is the inbox *role* rather than the path `INBOX`.
 
-An alias that matches nothing ends that one folder's run and no other. It is reported as
-`MailboxSynchronizationOutcome.FolderAliasUnresolved`, logged as a warning naming the alias, and the account's
-remaining folders continue — a mistyped alias is a configuration mistake, not a mail-server failure, and the two are
-logged as different things.
+An alias that resolves to no single folder ends that one folder's run and no other. It is reported as
+`FolderAliasUnresolved` or `FolderAliasAmbiguous`, logged as a warning naming the alias, and the account's remaining
+folders continue — a mistyped alias is a configuration mistake, not a mail-server failure, and the three are logged as
+different things because each asks the operator for something different.
 
 ### Why a binding carries a generation
 
@@ -67,19 +72,28 @@ remote path commits a new generation, which has its own `mail_folders` row and t
 folder is synchronized from its first UID whatever UIDVALIDITY it reports. Occurrences stored under the previous
 generation are kept and stay attributable to the folder they actually came from. A binding is committed before
 anything is synchronized under it; the write paths require the row rather than creating one, so occurrences can never
-be attached to a generation nothing recorded.
+be attached to a generation nothing recorded. A generation already held by a binding naming a *different* remote
+folder is refused as a concurrency conflict rather than adopted, so two overlapping runs that resolved the same alias
+elsewhere cannot end with one `(alias, generation)` naming two remote folders.
 
 Every binding change is an auditable event carrying the alias, both remote paths, and the new generation.
 `LoggedMailFolderMappingChangeAuditor` writes it to the structured log — a first binding at `Information`, a
 repointing at `Warning` — and that record is the only place a remote folder path is written outside the database,
 because a folder path can itself carry personal or organizational information. Every other log line names the alias.
 
+The listing covers the personal, other-user, and shared namespaces the account can reach, so a delegated mailbox is a
+folder an operator may name. It keeps the server's advertised path exactly, including surrounding whitespace, because
+IMAP permits a quoted mailbox name that begins or ends with a space and trimming one would persist a path that selects
+a different mailbox or none at all. Trimming padding belongs to configured paths alone. What one listing retains is
+bounded at 10 000 folders, checked as each namespace is read; a server whose answer exceeds that fails discovery
+naming the limit rather than growing without one.
+
 Discovery is read-only by contract as well as by implementation. `IRemoteFolderCatalog` exposes no operation that
-creates, renames, subscribes to, or deletes a folder; the adapter issues an IMAP `LIST`, which selects no folder, over
-a connection that pins none; and folders the server lists as `\NonExistent` are left out of the catalog because they
-hold no mail. A listed entry that names no folder at all, such as a namespace root with an empty path, is left out
-the same way: it costs that entry rather than the account's whole listing, which would take every usable folder with
-it.
+creates, renames, subscribes to, or deletes a folder, and the adapter issues an IMAP `LIST`, which selects no folder,
+over a connection that pins none. Three kinds of entry are left out of the catalog: `\NonExistent` and `\NoSelect`
+ones, because neither is a mailbox that can be opened and binding an alias to one would commit a generation every
+later run then fails to select; and an entry that names no folder at all, such as a namespace root with an empty path.
+Each exclusion costs that entry rather than the account's whole listing, which would take every usable folder with it.
 
 ## Session resilience
 

@@ -148,6 +148,41 @@ public sealed class MailSynchronizationWorkerTests
             message => message.Contains("Folder alias primary/ARCHIVE matched no folder", StringComparison.Ordinal));
     }
 
+    /// <summary>An ambiguous role and an alias that matches nothing need different remedies, so they are logged as different things.</summary>
+    [Fact]
+    public async Task ExecuteAsync_AliasMatchesSeveralAdvertisedFolders_LogsTheAmbiguityAndTheRemedy()
+    {
+        // Arrange
+        var listingRequested = new TaskCompletionSource();
+        var catalog = Substitute.For<IRemoteFolderCatalog>();
+        catalog
+            .ListFoldersAsync(Arg.Any<MailAccountId>(), Arg.Any<MailTransportSecurityPolicy>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                listingRequested.TrySetResult();
+
+                return Task.FromResult<IReadOnlyList<RemoteFolder>>(
+                [
+                    new RemoteFolder(RemoteFolderPath.Create("Archief", '/'), [MailFolderSpecialUse.Archive]),
+                    new RemoteFolder(RemoteFolderPath.Create("Archive", '/'), [MailFolderSpecialUse.Archive]),
+                ]);
+            });
+        var options = CreateOptions(enabled: true);
+        options.Accounts[0].Folders = [new MailFolderMappingOptions { Alias = "archive", SpecialUse = "Archive" }];
+        using var worker = CreateWorker(options, Substitute.For<IMailboxSessionFactory>(), out var logger, catalog);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await listingRequested.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await worker.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Contains(
+            logger.Messages,
+            message => message.Contains("primary/ARCHIVE matched several folders", StringComparison.Ordinal)
+                && message.Contains("configure its RemotePath", StringComparison.Ordinal));
+    }
+
     /// <summary>Options validation should have caught it, but a folder that reaches the worker unusable must not end the loop.</summary>
     [Fact]
     public async Task ExecuteAsync_ConfiguredFolderCannotBecomeAMapping_FailsThatFolderAndContinues()
@@ -307,6 +342,7 @@ public sealed class MailSynchronizationWorkerTests
         MailSynchronizationOptions options,
         IMailboxSessionFactory sessionFactory,
         out RecordingLogger<MailSynchronizationWorker> logger,
+        IRemoteFolderCatalog? remoteFolderCatalog = null,
         params string[] unadvertisedAliases)
     {
         logger = new RecordingLogger<MailSynchronizationWorker>();
@@ -324,7 +360,7 @@ public sealed class MailSynchronizationWorkerTests
         services.AddSingleton(new MailboxSynchronizationOptions());
 
         var (catalog, resolutionStore) = CreateResolvedFolders(options, unadvertisedAliases);
-        services.AddSingleton(catalog);
+        services.AddSingleton(remoteFolderCatalog ?? catalog);
         services.AddSingleton(resolutionStore);
         services.AddSingleton(Substitute.For<IMailFolderMappingChangeAuditor>());
         services.AddScoped<MailFolderResolver>();

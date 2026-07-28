@@ -103,6 +103,35 @@ public sealed class MailFolderTests
         Assert.Equal(expectedToBeUsable ? advertised : null, isUsable ? path.Value : null);
     }
 
+    /// <summary>
+    /// IMAP permits a quoted mailbox name that begins or ends with a space. Trimming one would persist a path that
+    /// selects a different mailbox or none at all, so the folder could never be synchronized.
+    /// </summary>
+    [Theory]
+    [InlineData(" Archive")]
+    [InlineData("Archive ")]
+    [InlineData("Shared Mailboxes/ Team ")]
+    public void TryCreate_AdvertisedPathSurroundedByWhitespace_KeepsTheServersTextExactly(string advertised)
+    {
+        // Arrange, Act
+        var isUsable = RemoteFolderPath.TryCreate(advertised, '/', out var path);
+
+        // Assert
+        Assert.True(isUsable);
+        Assert.Equal(advertised, path.Value);
+    }
+
+    /// <summary>Padding an operator typed into a configuration file is not part of the name they meant.</summary>
+    [Fact]
+    public void Create_ConfiguredPathSurroundedByWhitespace_TrimsIt()
+    {
+        // Arrange, Act
+        var path = RemoteFolderPath.Create("  Archive  ", '/');
+
+        // Assert
+        Assert.Equal("Archive", path.Value);
+    }
+
     [Fact]
     public void ToSpecialUse_RoleThatDoesNotExist_ThrowsArgumentOutOfRangeException()
     {

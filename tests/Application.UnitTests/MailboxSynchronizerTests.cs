@@ -857,6 +857,64 @@ public sealed class MailboxSynchronizerTests
         await sessionFactory.Received(1).OpenReadOnlyAsync(accountId, folder, accountPolicy, CancellationToken.None);
     }
 
+    /// <summary>Each reason an alias resolves to no folder must reach the caller as its own outcome, and none may open a mailbox.</summary>
+    [Theory]
+    [InlineData(0, MailboxSynchronizationOutcome.FolderAliasUnresolved)]
+    [InlineData(2, MailboxSynchronizationOutcome.FolderAliasAmbiguous)]
+    public async Task SynchronizeAsync_AliasResolvesToNoSingleFolder_ReportsWhyAndOpensNoSession(
+        int foldersCarryingTheInboxRole,
+        MailboxSynchronizationOutcome expectedOutcome)
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var persistenceSessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 28, 12, 0, 0, TimeSpan.Zero));
+        var synchronizer = CreateSynchronizer(
+            sessionFactory,
+            Substitute.For<ISynchronizationCheckpointStore>(),
+            persistenceSessionFactory,
+            Substitute.For<IEmailMetadataRepository>(),
+            Substitute.For<IEmailContentStore>(),
+            clock,
+            new MailboxSynchronizationOptions(),
+            folderResolver: CreateFolderResolverOverAdvertisedInboxes(
+                foldersCarryingTheInboxRole,
+                persistenceSessionFactory,
+                clock));
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(expectedOutcome, result.Outcome);
+        Assert.Null(result.Checkpoint);
+        await sessionFactory.DidNotReceiveWithAnyArgs().OpenReadOnlyAsync(default!, default!, default!, CancellationToken.None);
+    }
+
+    /// <summary>Builds a resolver over a server advertising a chosen number of folders that all carry the inbox role.</summary>
+    private static MailFolderResolver CreateFolderResolverOverAdvertisedInboxes(
+        int foldersCarryingTheInboxRole,
+        IPersistenceSessionFactory persistenceSessionFactory,
+        TimeProvider timeProvider)
+    {
+        var remoteFolderCatalog = Substitute.For<IRemoteFolderCatalog>();
+        remoteFolderCatalog
+            .ListFoldersAsync(Arg.Any<MailAccountId>(), Arg.Any<MailTransportSecurityPolicy>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<RemoteFolder>>(
+            [
+                .. Enumerable.Range(0, foldersCarryingTheInboxRole).Select(index =>
+                    new RemoteFolder(RemoteFolderPath.Create($"Inbox{index}", '/'), [MailFolderSpecialUse.Inbox])),
+            ]));
+
+        return new MailFolderResolver(
+            remoteFolderCatalog,
+            Substitute.For<IMailFolderResolutionStore>(),
+            Substitute.For<IMailFolderMappingChangeAuditor>(),
+            persistenceSessionFactory,
+            timeProvider);
+    }
+
     /// <summary>Builds a resolver whose alias is already bound to the folder the server advertises, so no run rebinds it.</summary>
     /// <remarks>
     /// These tests are about what synchronization does once a folder is known. Resolution has tests of its own, and
@@ -902,9 +960,10 @@ public sealed class MailboxSynchronizerTests
         IEmailContentStore contentStore,
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options,
-        IMailTransportSecurityPolicyReader? transportSecurityPolicyReader = null) =>
+        IMailTransportSecurityPolicyReader? transportSecurityPolicyReader = null,
+        MailFolderResolver? folderResolver = null) =>
         new(
-            CreateFolderResolverBoundToInbox(persistenceSessionFactory, timeProvider),
+            folderResolver ?? CreateFolderResolverBoundToInbox(persistenceSessionFactory, timeProvider),
             mailboxSessionFactory,
             transportSecurityPolicyReader ?? CreateTransportSecurityPolicyReader(RequiredTlsPolicy),
             checkpointStore,
