@@ -2,6 +2,7 @@
 
 using MailKit.Net.Imap;
 using MailMcp.Application.EmailContent;
+using MailMcp.Application.Emails;
 using MailMcp.Application.Folders;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Resilience;
@@ -11,6 +12,7 @@ using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Folders;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Mail.MailKit;
+using MailMcp.Infrastructure.Mail.Mime;
 using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Resilience;
 using MailMcp.Infrastructure.Secrets;
@@ -121,6 +123,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();
+        // MimeKit arrives with MailKit, so message parsing needs no dependency of its own; the adapter keeps its types
+        // out of Application the same way the IMAP adapter keeps MailKit's out.
+        services.AddScoped<IEmailMimeReader>(provider => new MimeKitEmailMimeReader(
+            provider.GetRequiredService<EmailMimeExtractionOptions>()));
         services.AddScoped<IMailFolderResolutionStore, MailFolderResolutionStore>();
         services.AddScoped<IMailFolderMappingChangeAuditor, LoggedMailFolderMappingChangeAuditor>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();

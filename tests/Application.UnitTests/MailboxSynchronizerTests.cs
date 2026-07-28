@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Application.EmailContent;
+using MailMcp.Application.Emails;
 using MailMcp.Application.Folders;
 using MailMcp.Application.Mail;
 using MailMcp.Application.Persistence;
@@ -892,6 +893,171 @@ public sealed class MailboxSynchronizerTests
         await sessionFactory.DidNotReceiveWithAnyArgs().OpenReadOnlyAsync(default!, default!, default!, CancellationToken.None);
     }
 
+    /// <summary>Enrichment must read the payload the run already fetched, never a second copy from the mail server.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_StoredMessage_EnrichesTheFetchedContentWithoutASecondRemoteRead()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var folder = InboxFolder;
+        var uidValidity = ImapUidValidity.Create(5);
+        var uid = ImapUid.Create(10);
+        var occurrence = EmailOccurrenceId.Create(accountId, folder.Id, uidValidity, uid);
+        var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
+        var persistenceSessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        persistenceSessionFactory.BeginSessionAsync(CancellationToken.None).Returns(Substitute.For<IPersistenceSession>());
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var session = Substitute.For<IMailboxSession>();
+        var mimeReader = CreateMimeReaderThatExtractsEverything();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 28, 12, 0, 0, TimeSpan.Zero));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var synchronizer = CreateSynchronizer(
+            sessionFactory,
+            checkpointStore,
+            persistenceSessionFactory,
+            Substitute.For<IEmailMetadataRepository>(),
+            Substitute.For<IEmailContentStore>(),
+            clock,
+            options,
+            mimeReader: mimeReader);
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", null, 128);
+        var content = new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
+        checkpointStore.GetCheckpointAsync(accountId, folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
+        sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
+        session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        session.GetEmailBatchAfterAsync(null, 25, CancellationToken.None).Returns(new RemoteEmailMetadataBatch([metadata], uid, HasMore: false));
+        session.FetchEmailContentWithoutSettingSeenAsync(occurrence, 1024, CancellationToken.None).Returns(content);
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(0, result.UnreadableMimeEmailCount);
+        await mimeReader.Received(1).ReadMetadataAsync(content, CancellationToken.None);
+        await session.Received(1).FetchEmailContentWithoutSettingSeenAsync(occurrence, 1024, CancellationToken.None);
+    }
+
+    /// <summary>A message nobody can parse is counted and stepped over: it stops neither the batch nor the checkpoint.</summary>
+    [Theory]
+    [InlineData(EmailMimeExtractionOutcome.MalformedContent)]
+    [InlineData(EmailMimeExtractionOutcome.PartCountLimitExceeded)]
+    [InlineData(EmailMimeExtractionOutcome.NestingDepthLimitExceeded)]
+    public async Task SynchronizeAsync_MessageWhoseMimeCannotBeRead_CountsItAndKeepsTheBatchAndCheckpointGoing(
+        EmailMimeExtractionOutcome unreadableOutcome)
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var folder = InboxFolder;
+        var uidValidity = ImapUidValidity.Create(5);
+        var unreadableOccurrence = EmailOccurrenceId.Create(accountId, folder.Id, uidValidity, ImapUid.Create(10));
+        var readableOccurrence = EmailOccurrenceId.Create(accountId, folder.Id, uidValidity, ImapUid.Create(11));
+        var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
+        var metadataRepository = Substitute.For<IEmailMetadataRepository>();
+        var persistenceSessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        persistenceSessionFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
+        var contentStore = Substitute.For<IEmailContentStore>();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var session = Substitute.For<IMailboxSession>();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 28, 12, 0, 0, TimeSpan.Zero));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var unreadableContent = new RemoteEmailContent(unreadableOccurrence, new ReadOnlyMemory<byte>([1]));
+        var readableContent = new RemoteEmailContent(readableOccurrence, new ReadOnlyMemory<byte>([2]));
+        var mimeReader = CreateMimeReaderThatExtractsEverything();
+        mimeReader
+            .ReadMetadataAsync(unreadableContent, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(CreateFailedExtraction(unreadableOutcome)));
+        var synchronizer = CreateSynchronizer(
+            sessionFactory,
+            checkpointStore,
+            persistenceSessionFactory,
+            metadataRepository,
+            contentStore,
+            clock,
+            options,
+            mimeReader: mimeReader);
+        checkpointStore.GetCheckpointAsync(accountId, folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
+        sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
+        session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        session.GetEmailBatchAfterAsync(null, 25, CancellationToken.None).Returns(new RemoteEmailMetadataBatch(
+            [
+                new RemoteEmailMetadata(unreadableOccurrence, "message-1@example.test", "Subject", null, 128),
+                new RemoteEmailMetadata(readableOccurrence, "message-2@example.test", "Subject", null, 128),
+            ],
+            ImapUid.Create(11),
+            HasMore: false));
+        session.FetchEmailContentWithoutSettingSeenAsync(unreadableOccurrence, 1024, CancellationToken.None).Returns(unreadableContent);
+        session.FetchEmailContentWithoutSettingSeenAsync(readableOccurrence, 1024, CancellationToken.None).Returns(readableContent);
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, result.StoredEmailCount);
+        Assert.Equal(1, result.UnreadableMimeEmailCount);
+        await contentStore.Received(2).SaveContentAsync(persistenceSession, Arg.Any<StoredEmailId>(), Arg.Any<RemoteEmailContent>(), CancellationToken.None);
+        await checkpointStore.Received(1).SaveCheckpointAsync(
+            persistenceSession,
+            accountId,
+            folder.Id,
+            Arg.Any<SynchronizationCheckpoint?>(),
+            Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == ImapUid.Create(11)),
+            CancellationToken.None);
+    }
+
+    /// <summary>An occurrence stored without its content has no MIME to read, so nothing may be asked to read one.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_OversizedMessage_ReadsNoMimeAndCountsNoneUnreadable()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var folder = InboxFolder;
+        var uidValidity = ImapUidValidity.Create(5);
+        var uid = ImapUid.Create(10);
+        var occurrence = EmailOccurrenceId.Create(accountId, folder.Id, uidValidity, uid);
+        var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
+        var persistenceSessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        persistenceSessionFactory.BeginSessionAsync(CancellationToken.None).Returns(Substitute.For<IPersistenceSession>());
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var session = Substitute.For<IMailboxSession>();
+        var mimeReader = CreateMimeReaderThatExtractsEverything();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 28, 12, 0, 0, TimeSpan.Zero));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var synchronizer = CreateSynchronizer(
+            sessionFactory,
+            checkpointStore,
+            persistenceSessionFactory,
+            Substitute.For<IEmailMetadataRepository>(),
+            Substitute.For<IEmailContentStore>(),
+            clock,
+            options,
+            mimeReader: mimeReader);
+        checkpointStore.GetCheckpointAsync(accountId, folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
+        sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
+        session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        session.GetEmailBatchAfterAsync(null, 25, CancellationToken.None).Returns(new RemoteEmailMetadataBatch(
+            [new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", null, 2048)],
+            uid,
+            HasMore: false));
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.SkippedOversizedEmailCount);
+        Assert.Equal(0, result.UnreadableMimeEmailCount);
+        await mimeReader.DidNotReceiveWithAnyArgs().ReadMetadataAsync(default!, CancellationToken.None);
+    }
+
+    private static EmailMimeExtractionResult CreateFailedExtraction(EmailMimeExtractionOutcome outcome) => outcome switch
+    {
+        EmailMimeExtractionOutcome.MalformedContent => EmailMimeExtractionResult.MalformedContent(),
+        EmailMimeExtractionOutcome.PartCountLimitExceeded => EmailMimeExtractionResult.PartCountLimitExceeded(),
+        EmailMimeExtractionOutcome.NestingDepthLimitExceeded => EmailMimeExtractionResult.NestingDepthLimitExceeded(),
+        _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Only failures are built here."),
+    };
+
     /// <summary>Builds a resolver over a server advertising a chosen number of folders that all carry the inbox role.</summary>
     private static MailFolderResolver CreateFolderResolverOverAdvertisedInboxes(
         int foldersCarryingTheInboxRole,
@@ -961,7 +1127,8 @@ public sealed class MailboxSynchronizerTests
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options,
         IMailTransportSecurityPolicyReader? transportSecurityPolicyReader = null,
-        MailFolderResolver? folderResolver = null) =>
+        MailFolderResolver? folderResolver = null,
+        IEmailMimeReader? mimeReader = null) =>
         new(
             folderResolver ?? CreateFolderResolverBoundToInbox(persistenceSessionFactory, timeProvider),
             mailboxSessionFactory,
@@ -970,12 +1137,34 @@ public sealed class MailboxSynchronizerTests
             persistenceSessionFactory,
             metadataRepository,
             contentStore,
+            mimeReader ?? CreateMimeReaderThatExtractsEverything(),
             new OptimisticConcurrencyRetryPolicy(
                 persistenceSessionFactory,
                 new PersistenceConcurrencyOptions(),
                 timeProvider),
             timeProvider,
             options);
+
+    /// <summary>Builds a reader whose messages all parse, which is the case every other behavior here is about.</summary>
+    private static IEmailMimeReader CreateMimeReaderThatExtractsEverything()
+    {
+        var mimeReader = Substitute.For<IEmailMimeReader>();
+        mimeReader
+            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(
+                EmailMimeExtractionResult.Extracted(CreateExtractedMetadata(call.Arg<RemoteEmailContent>()!.OccurrenceId))));
+
+        return mimeReader;
+    }
+
+    private static ExtractedEmailMetadata CreateExtractedMetadata(EmailOccurrenceId occurrenceId) => new(
+        occurrenceId,
+        Subject: "Subject",
+        SentAt: null,
+        ReceivedAt: null,
+        Participants: [],
+        EmailThreadReferences.None,
+        EmailAttachmentSummary.None);
 
     private sealed class TrackingSession : IPersistenceSession
     {

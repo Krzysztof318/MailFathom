@@ -1,0 +1,314 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+
+using System.Text.RegularExpressions;
+using MailMcp.Application.Emails;
+using MailMcp.Domain.Emails;
+using MimeKit;
+using MimeKit.Tnef;
+
+namespace MailMcp.Infrastructure.Mail.Mime;
+
+/// <summary>Decides what each part of a message is, in the order that decides it correctly.</summary>
+/// <remarks>
+/// <para>
+/// The rules run as: the cryptographic envelope, then cryptographic leaf parts, then the body branch, then inline
+/// resources an HTML body embeds, and everything left over is an attachment. The order is the specification rather than
+/// an implementation detail, because several ordinary parts satisfy more than one rule at once — an <c>smime.p7s</c>
+/// part arrives with <c>Content-Disposition: attachment</c>, and a <c>text/plain</c> body inside a
+/// <c>multipart/mixed</c> is a part with no disposition at all.
+/// </para>
+/// <para>
+/// The walk runs before any inline decision, because whether a part is an embedded resource depends on what the body
+/// branch turned out to be: only an HTML part that the walk selected as body can make a <c>cid:</c> reference count.
+/// </para>
+/// </remarks>
+internal sealed partial class MimeAttachmentClassifier
+{
+    private static readonly string[] CryptographicMediaTypes =
+    [
+        "application/pkcs7-signature",
+        "application/pgp-signature",
+        "application/pkcs7-mime",
+        "application/pgp-encrypted",
+    ];
+
+    private readonly List<MimeEntity> bodyBranchLeaves = [];
+    private readonly List<MimeEntity> unclassifiedEntities = [];
+    private bool isEncrypted;
+    private bool carriesUnverifiedSignature;
+    private bool containsUnexpandedTnefPart;
+
+    /// <summary>Classifies one message's parts and measures the attachments among them.</summary>
+    /// <param name="message">The parsed message.</param>
+    /// <param name="cancellationToken">Cancels the measurement.</param>
+    /// <returns>What the message carries besides its body.</returns>
+    public static async Task<EmailAttachmentSummary> ClassifyAsync(MimeMessage message, CancellationToken cancellationToken)
+    {
+        var classifier = new MimeAttachmentClassifier();
+        classifier.WalkEntity(message.Body, isInBodyBranch: true);
+
+        return await classifier.SummarizeAsync(cancellationToken);
+    }
+
+    [GeneratedRegex("""cid:(?<contentId>[^"'\s>)\\]+)""", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex ContentIdReference();
+
+    private void WalkEntity(MimeEntity? entity, bool isInBodyBranch)
+    {
+        if (entity is null)
+        {
+            return;
+        }
+
+        if (entity is Multipart envelope && this.TryWalkCryptographicEnvelope(envelope, isInBodyBranch))
+        {
+            return;
+        }
+
+        if (this.IsCryptographicLeafPart(entity))
+        {
+            return;
+        }
+
+        if (isInBodyBranch)
+        {
+            this.WalkBodyBranch(entity);
+
+            return;
+        }
+
+        if (entity is Multipart container)
+        {
+            foreach (var child in container)
+            {
+                this.WalkEntity(child, isInBodyBranch: false);
+            }
+
+            return;
+        }
+
+        // A nested message/rfc822 is one part and is deliberately not recursed into, so a forwarded thread reports one
+        // attachment rather than the attachment count of every message inside it.
+        this.unclassifiedEntities.Add(entity);
+    }
+
+    /// <summary>Recognizes a cryptographic container from the container itself rather than from what it holds.</summary>
+    /// <remarks>
+    /// Matching on child media types is what breaks PGP/MIME: the envelope holds an <c>application/pgp-encrypted</c>
+    /// control part next to ciphertext that is usually typed <c>application/octet-stream</c>, so a child-driven rule
+    /// catches the control part and lets the ciphertext through as an attachment with a file name that does not exist.
+    /// </remarks>
+    private bool TryWalkCryptographicEnvelope(Multipart envelope, bool isInBodyBranch)
+    {
+        if (envelope.ContentType.IsMimeType("multipart", "encrypted"))
+        {
+            this.isEncrypted = true;
+
+            return true;
+        }
+
+        if (!envelope.ContentType.IsMimeType("multipart", "signed"))
+        {
+            return false;
+        }
+
+        this.carriesUnverifiedSignature = true;
+
+        // The signed content is the first child and is classified as though the envelope were not there; the detached
+        // signature that follows it is not classified at all.
+        this.WalkEntity(envelope.FirstOrDefault(), isInBodyBranch);
+
+        return true;
+    }
+
+    /// <summary>Recognizes a cryptographic leaf before any disposition is read.</summary>
+    /// <remarks>
+    /// This precedes disposition on purpose: an <c>smime.p7s</c> part almost always declares itself an attachment, so a
+    /// rule that honored disposition first would count exactly the part these rules exist to stop counting.
+    /// </remarks>
+    private bool IsCryptographicLeafPart(MimeEntity entity)
+    {
+        if (!CryptographicMediaTypes.Contains(entity.ContentType.MimeType, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (entity.ContentType.IsMimeType("application", "pkcs7-signature")
+            || entity.ContentType.IsMimeType("application", "pgp-signature"))
+        {
+            this.carriesUnverifiedSignature = true;
+        }
+
+        return true;
+    }
+
+    /// <summary>Resolves the body branch recursively, which is what keeps an ordinary attachment count correct.</summary>
+    /// <remarks>
+    /// In a <c>multipart/mixed</c> the body is the first child, resolved again by these same rules; in a
+    /// <c>multipart/related</c> it is the root part the <c>start</c> parameter names, or the first child when the
+    /// parameter is absent; in a <c>multipart/alternative</c> every member is a representation of the body. Resolving
+    /// only at the message root would classify the <c>text/plain</c> body of a mixed message as an attachment.
+    /// </remarks>
+    private void WalkBodyBranch(MimeEntity entity)
+    {
+        if (entity is not Multipart multipart)
+        {
+            this.bodyBranchLeaves.Add(entity);
+
+            return;
+        }
+
+        if (multipart.ContentType.IsMimeType("multipart", "alternative"))
+        {
+            foreach (var alternative in multipart)
+            {
+                this.WalkEntity(alternative, isInBodyBranch: true);
+            }
+
+            return;
+        }
+
+        var bodyChild = multipart.ContentType.IsMimeType("multipart", "related")
+            ? FindRelatedRootPart(multipart)
+            : multipart.FirstOrDefault();
+
+        foreach (var child in multipart)
+        {
+            this.WalkEntity(child, isInBodyBranch: ReferenceEquals(child, bodyChild));
+        }
+    }
+
+    private static MimeEntity? FindRelatedRootPart(Multipart multipart)
+    {
+        var startContentId = NormalizeContentId(multipart.ContentType.Parameters["start"]);
+        if (startContentId is null)
+        {
+            return multipart.FirstOrDefault();
+        }
+
+        return multipart.FirstOrDefault(child =>
+            string.Equals(NormalizeContentId(child.ContentId), startContentId, StringComparison.OrdinalIgnoreCase))
+            ?? multipart.FirstOrDefault();
+    }
+
+    private async Task<EmailAttachmentSummary> SummarizeAsync(CancellationToken cancellationToken)
+    {
+        var embeddedContentIds = this.FindContentIdsTheHtmlBodyReferences();
+        var attachments = new List<ExtractedEmailAttachment>();
+        var inlineResourceCount = 0;
+
+        foreach (var entity in this.unclassifiedEntities)
+        {
+            if (IsEmbeddedResource(entity, embeddedContentIds))
+            {
+                inlineResourceCount++;
+
+                continue;
+            }
+
+            if (entity is TnefPart)
+            {
+                this.containsUnexpandedTnefPart = true;
+            }
+
+            attachments.Add(await DescribeAttachmentAsync(entity, cancellationToken));
+        }
+
+        return EmailAttachmentSummary.Create(
+            attachments,
+            inlineResourceCount,
+            this.isEncrypted,
+            this.carriesUnverifiedSignature,
+            this.containsUnexpandedTnefPart);
+    }
+
+    /// <summary>Collects the identifiers an HTML body embeds, which is what makes a part a resource rather than a file.</summary>
+    private HashSet<string> FindContentIdsTheHtmlBodyReferences()
+    {
+        var referencedContentIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var htmlBody in this.bodyBranchLeaves.OfType<TextPart>().Where(part => part.IsHtml))
+        {
+            foreach (Match reference in ContentIdReference().Matches(htmlBody.Text))
+            {
+                referencedContentIds.Add(reference.Groups["contentId"].Value);
+            }
+        }
+
+        return referencedContentIds;
+    }
+
+    /// <summary>Decides whether a part is a resource the body embeds.</summary>
+    /// <remarks>
+    /// A missing <c>Content-Disposition</c> counts as inline, because senders routinely omit the header on embedded
+    /// images and requiring it would make the classification depend on which client wrote the message. An explicit
+    /// <c>attachment</c> disposition wins, because there the sender has said what the part is.
+    /// </remarks>
+    private static bool IsEmbeddedResource(MimeEntity entity, HashSet<string> embeddedContentIds)
+    {
+        var disposition = entity.ContentDisposition?.Disposition;
+        if (string.Equals(disposition, ContentDisposition.Attachment, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var contentId = NormalizeContentId(entity.ContentId);
+
+        return contentId is not null && embeddedContentIds.Contains(contentId);
+    }
+
+    private static async Task<ExtractedEmailAttachment> DescribeAttachmentAsync(
+        MimeEntity entity,
+        CancellationToken cancellationToken)
+    {
+        var fileName = AttachmentFileName.TryNormalize(ReadDeclaredFileName(entity), out var normalizedFileName)
+            ? normalizedFileName
+            : (AttachmentFileName?)null;
+
+        return new ExtractedEmailAttachment(
+            fileName,
+            entity.ContentType.MimeType,
+            await MeasureDecodedOctetsAsync(entity, cancellationToken));
+    }
+
+    /// <summary>Reads the name the message declared, already decoded from its RFC 2047 or RFC 2231 form.</summary>
+    private static string? ReadDeclaredFileName(MimeEntity entity) => entity switch
+    {
+        MimePart part => part.FileName,
+        _ => entity.ContentDisposition?.FileName ?? entity.ContentType.Name,
+    };
+
+    /// <summary>Measures a part by streaming it through a counter, so no attachment content is ever retained.</summary>
+    private static async Task<long> MeasureDecodedOctetsAsync(MimeEntity entity, CancellationToken cancellationToken)
+    {
+        await using var counter = new DecodedOctetCountingStream();
+
+        switch (entity)
+        {
+            case MimePart { Content: { } content }:
+                await content.DecodeToAsync(counter, cancellationToken);
+                break;
+
+            case MessagePart { Message: { } nestedMessage }:
+                await nestedMessage.WriteToAsync(counter, cancellationToken);
+                break;
+
+            default:
+                return 0;
+        }
+
+        return counter.WrittenOctets;
+    }
+
+    private static string? NormalizeContentId(string? contentId)
+    {
+        if (contentId is null)
+        {
+            return null;
+        }
+
+        var trimmed = contentId.Trim().Trim('<', '>').Trim();
+
+        return trimmed.Length == 0 ? null : trimmed;
+    }
+}

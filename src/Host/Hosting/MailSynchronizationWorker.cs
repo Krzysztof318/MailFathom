@@ -127,20 +127,23 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
             folderAlias,
             result.StoredEmailCount,
             result.SkippedOversizedEmailCount,
+            result.UnreadableMimeEmailCount,
             result.HasMoreEmails);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "IMAP synchronization worker is disabled.")]
     private partial void LogSynchronizationDisabled();
 
+    /// <summary>Reports the counts a run produced; the unreadable count is how a malformed message stays visible without its content being logged.</summary>
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Synchronized IMAP folder {AccountId}/{FolderAlias}; stored {StoredEmailCount} messages, skipped {SkippedOversizedEmailCount} oversized messages, and has more work: {HasMoreEmails}.")]
+        Message = "Synchronized IMAP folder {AccountId}/{FolderAlias}; stored {StoredEmailCount} messages, skipped {SkippedOversizedEmailCount} oversized messages, could not read the MIME of {UnreadableMimeEmailCount} stored messages, and has more work: {HasMoreEmails}.")]
     private partial void LogFolderSynchronized(
         string accountId,
         string folderAlias,
         int storedEmailCount,
         int skippedOversizedEmailCount,
+        int unreadableMimeEmailCount,
         bool hasMoreEmails);
 
     /// <summary>Separates a folder the server does not advertise from a folder that failed, because only one of them is the operator's to fix in configuration.</summary>

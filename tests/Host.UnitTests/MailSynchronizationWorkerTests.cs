@@ -1,11 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Application.EmailContent;
+using MailMcp.Application.Emails;
 using MailMcp.Application.Folders;
 using MailMcp.Application.Mail;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Transport;
 using MailMcp.Host.Configuration;
@@ -338,6 +340,24 @@ public sealed class MailSynchronizationWorkerTests
         }
     }
 
+    /// <summary>Builds a reader whose messages all parse, because these tests are about how the worker isolates folders.</summary>
+    private static IEmailMimeReader CreateMimeReaderThatExtractsEverything()
+    {
+        var mimeReader = Substitute.For<IEmailMimeReader>();
+        mimeReader
+            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
+                call.Arg<RemoteEmailContent>()!.OccurrenceId,
+                Subject: null,
+                SentAt: null,
+                ReceivedAt: null,
+                Participants: [],
+                EmailThreadReferences.None,
+                EmailAttachmentSummary.None))));
+
+        return mimeReader;
+    }
+
     private static MailSynchronizationWorker CreateWorker(
         MailSynchronizationOptions options,
         IMailboxSessionFactory sessionFactory,
@@ -356,6 +376,7 @@ public sealed class MailSynchronizationWorkerTests
         services.AddSingleton(Substitute.For<IPersistenceSessionFactory>());
         services.AddSingleton(Substitute.For<IEmailMetadataRepository>());
         services.AddSingleton(Substitute.For<IEmailContentStore>());
+        services.AddSingleton(CreateMimeReaderThatExtractsEverything());
         services.AddSingleton(new PersistenceConcurrencyOptions());
         services.AddSingleton(new MailboxSynchronizationOptions());
 

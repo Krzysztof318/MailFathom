@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Application.EmailContent;
+using MailMcp.Application.Emails;
 using MailMcp.Application.Folders;
 using MailMcp.Application.Mail;
 using MailMcp.Application.Persistence;
@@ -22,6 +23,7 @@ public sealed class MailboxSynchronizer
     private readonly IPersistenceSessionFactory persistenceSessionFactory;
     private readonly IEmailMetadataRepository metadataRepository;
     private readonly IEmailContentStore contentStore;
+    private readonly IEmailMimeReader mimeReader;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly TimeProvider timeProvider;
     private readonly MailboxSynchronizationOptions options;
@@ -35,6 +37,7 @@ public sealed class MailboxSynchronizer
         IPersistenceSessionFactory persistenceSessionFactory,
         IEmailMetadataRepository metadataRepository,
         IEmailContentStore contentStore,
+        IEmailMimeReader mimeReader,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options)
@@ -46,6 +49,7 @@ public sealed class MailboxSynchronizer
         this.persistenceSessionFactory = persistenceSessionFactory;
         this.metadataRepository = metadataRepository;
         this.contentStore = contentStore;
+        this.mimeReader = mimeReader;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.timeProvider = timeProvider;
         this.options = options;
@@ -126,6 +130,7 @@ public sealed class MailboxSynchronizer
 
         var storedCount = 0;
         var skippedOversizedCount = 0;
+        var unreadableMimeCount = 0;
         var hasMore = true;
         var inspectedBatchCount = 0;
 
@@ -136,14 +141,19 @@ public sealed class MailboxSynchronizer
             var batch = await mailboxSession.GetEmailBatchAfterAsync(checkpoint.LastSeenUid, this.options.MaxMetadataBatchSize, cancellationToken);
             foreach (var metadata in batch.Emails.OrderBy(email => email.OccurrenceId.Uid.Value))
             {
-                var availability = await this.StoreOccurrenceAsync(mailboxSession, metadata, cancellationToken);
-                if (availability == StoredEmailContentAvailability.Available)
+                var occurrence = await this.StoreOccurrenceAsync(mailboxSession, metadata, cancellationToken);
+                if (occurrence.Availability == StoredEmailContentAvailability.Available)
                 {
                     storedCount++;
                 }
                 else
                 {
                     skippedOversizedCount++;
+                }
+
+                if (occurrence.MimeCouldNotBeRead)
+                {
+                    unreadableMimeCount++;
                 }
             }
 
@@ -167,11 +177,12 @@ public sealed class MailboxSynchronizer
         return MailboxSynchronizationResult.Synchronized(
             storedCount,
             skippedOversizedCount,
+            unreadableMimeCount,
             hasMore,
             checkpoint);
     }
 
-    private async Task<StoredEmailContentAvailability> StoreOccurrenceAsync(
+    private async Task<OccurrenceSynchronizationOutcome> StoreOccurrenceAsync(
         IMailboxSession mailboxSession,
         RemoteEmailMetadata metadata,
         CancellationToken cancellationToken)
@@ -193,6 +204,11 @@ public sealed class MailboxSynchronizer
             return await this.RecordOversizedOccurrenceAsync(metadata, cancellationToken);
         }
 
+        // Enrichment reads the payload this run already fetched, so it costs no second IMAP round trip and cannot reach
+        // the remote \Seen flag. A message nobody can parse is counted and stepped over: the occurrence is stored and
+        // the folder checkpoint still advances past it. Persisting what was extracted is specification 07's work.
+        var extraction = await this.mimeReader.ReadMetadataAsync(content, cancellationToken);
+
         await this.concurrencyRetryPolicy.CommitAsync(
             async (persistenceSession, attemptCancellationToken) =>
             {
@@ -209,10 +225,12 @@ public sealed class MailboxSynchronizer
             },
             cancellationToken);
 
-        return StoredEmailContentAvailability.Available;
+        return new OccurrenceSynchronizationOutcome(
+            StoredEmailContentAvailability.Available,
+            extraction.Outcome != EmailMimeExtractionOutcome.Extracted);
     }
 
-    private async Task<StoredEmailContentAvailability> RecordOversizedOccurrenceAsync(
+    private async Task<OccurrenceSynchronizationOutcome> RecordOversizedOccurrenceAsync(
         RemoteEmailMetadata metadata,
         CancellationToken cancellationToken)
     {
@@ -227,7 +245,11 @@ public sealed class MailboxSynchronizer
             },
             cancellationToken);
 
-        return StoredEmailContentAvailability.ExceededSizeLimit;
+        // An occurrence whose content was never retrieved has no MIME to read, so it is neither enriched nor counted as
+        // unreadable.
+        return new OccurrenceSynchronizationOutcome(
+            StoredEmailContentAvailability.ExceededSizeLimit,
+            MimeCouldNotBeRead: false);
     }
 
     // A checkpoint advance is attempted once rather than retried: the intended progress was derived from the state read
@@ -256,6 +278,13 @@ public sealed class MailboxSynchronizer
                 $"Synchronization progress for folder {folder.Alias.Value} was changed by another writer before this run committed its advance.");
         }
     }
+
+    /// <summary>States what one occurrence's turn through the run produced.</summary>
+    /// <param name="Availability">Whether the occurrence was stored with its content or as metadata only.</param>
+    /// <param name="MimeCouldNotBeRead">Whether enrichment refused the payload that was stored.</param>
+    private readonly record struct OccurrenceSynchronizationOutcome(
+        StoredEmailContentAvailability Availability,
+        bool MimeCouldNotBeRead);
 }
 
 /// <summary>States whether a synchronization run reached its folder at all.</summary>
@@ -275,27 +304,37 @@ public enum MailboxSynchronizationOutcome
 /// <param name="Outcome">Whether the run reached a folder.</param>
 /// <param name="StoredEmailCount">How many occurrences were stored with their content.</param>
 /// <param name="SkippedOversizedEmailCount">How many occurrences were stored as metadata only.</param>
+/// <param name="UnreadableMimeEmailCount">How many stored occurrences carried MIME that enrichment could not read.</param>
 /// <param name="HasMoreEmails">Whether the folder still held unprocessed emails when the run's batch budget ran out.</param>
 /// <param name="Checkpoint">The progress the run ended on, which is present exactly when <paramref name="Outcome" /> is <see cref="MailboxSynchronizationOutcome.Synchronized" />.</param>
 public sealed record MailboxSynchronizationResult(
     MailboxSynchronizationOutcome Outcome,
     int StoredEmailCount,
     int SkippedOversizedEmailCount,
+    int UnreadableMimeEmailCount,
     bool HasMoreEmails,
     SynchronizationCheckpoint? Checkpoint)
 {
     /// <summary>Reports a run that reached its folder.</summary>
     /// <param name="storedEmailCount">How many occurrences were stored with their content.</param>
     /// <param name="skippedOversizedEmailCount">How many occurrences were stored as metadata only.</param>
+    /// <param name="unreadableMimeEmailCount">How many stored occurrences carried unreadable MIME.</param>
     /// <param name="hasMoreEmails">Whether unprocessed emails remain.</param>
     /// <param name="checkpoint">The progress the run ended on.</param>
     /// <returns>A synchronized result.</returns>
     public static MailboxSynchronizationResult Synchronized(
         int storedEmailCount,
         int skippedOversizedEmailCount,
+        int unreadableMimeEmailCount,
         bool hasMoreEmails,
         SynchronizationCheckpoint checkpoint) =>
-        new(MailboxSynchronizationOutcome.Synchronized, storedEmailCount, skippedOversizedEmailCount, hasMoreEmails, checkpoint);
+        new(
+            MailboxSynchronizationOutcome.Synchronized,
+            storedEmailCount,
+            skippedOversizedEmailCount,
+            unreadableMimeEmailCount,
+            hasMoreEmails,
+            checkpoint);
 
     /// <summary>Reports a configured alias that named no single advertised folder.</summary>
     /// <param name="resolutionOutcome">Why resolution produced no binding.</param>
@@ -317,6 +356,6 @@ public sealed record MailboxSynchronizationResult(
                 "A resolved folder is reported through Synchronized rather than as an unresolved alias."),
         };
 
-        return new MailboxSynchronizationResult(outcome, 0, 0, HasMoreEmails: false, Checkpoint: null);
+        return new MailboxSynchronizationResult(outcome, 0, 0, 0, HasMoreEmails: false, Checkpoint: null);
     }
 }
