@@ -1,5 +1,12 @@
 # Agent Workflow Optimization Design
 
+> **Partly superseded on 2026-07-28.** `scripts/verify-full.sh` now fetches
+> `origin main` into `refs/remotes/origin/main` and rejects a branch that does
+> not contain that base, before the workflow contract suite. The final-gate step
+> list and the "no hidden mutation" statement below therefore no longer describe
+> the script; see [Agent workflow](../../operations/agent-workflow.md) for the
+> current contract.
+
 ## Goal
 
 Reduce repeated repository discovery, verification mistakes, and always-on

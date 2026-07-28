@@ -294,28 +294,30 @@ verify_full_stops_when_the_remote_is_unreachable() {
   assert_file_content '' "$workflow_invocation_log"
 }
 
-verify_full_stops_when_the_fetch_leaves_no_remote_tracking_base() {
-  local missing_base_output="$test_directory/missing-remote-tracking-base-output"
+verify_full_stops_when_a_stale_tracking_ref_hides_remote_movement() {
+  local stale_base_output="$test_directory/stale-tracking-ref-output"
   local script_status=0
 
   : > "$invocation_log"
   git -C "$repository_root" config --unset remote.origin.fetch
-  git -C "$repository_root" update-ref -d refs/remotes/origin/main
+  git -C "$repository_root" update-ref refs/remotes/origin/main HEAD
+  git -C "$remote_repository_root" commit --quiet --allow-empty -m 'remote main moved past the stale tracking ref'
 
   (
     cd "$repository_root"
     "$scripts_directory/verify-full.sh"
-  ) > "$missing_base_output" 2>&1 || script_status=$?
+  ) > "$stale_base_output" 2>&1 || script_status=$?
 
+  git -C "$remote_repository_root" reset --quiet --hard HEAD~1
   git -C "$repository_root" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
-  git -C "$repository_root" fetch --quiet origin main
+  git -C "$repository_root" fetch --quiet --force origin main
 
   if ((script_status == 0)); then
-    printf 'verify-full.sh continued without a remote-tracking base\n' >&2
+    printf 'verify-full.sh accepted a stale remote-tracking ref\n' >&2
     return 1
   fi
 
-  assert_contains 'Fetching origin main left no refs/remotes/origin/main.' "$missing_base_output"
+  assert_contains 'HEAD does not contain the current origin/main.' "$stale_base_output"
   assert_file_content '' "$invocation_log"
 }
 
@@ -405,7 +407,7 @@ run_test verify_full_rejects_untracked_files
 run_test verify_full_fetches_the_remote_base_before_verifying
 run_test verify_full_stops_when_head_is_behind_origin_main
 run_test verify_full_stops_when_the_remote_is_unreachable
-run_test verify_full_stops_when_the_fetch_leaves_no_remote_tracking_base
+run_test verify_full_stops_when_a_stale_tracking_ref_hides_remote_movement
 run_test verification_stops_after_first_failure
 run_test workspace_inspection_is_read_only_and_labeled
 run_test workspace_inspection_reports_unavailable_sdk

@@ -39,8 +39,12 @@ The base check runs before any `dotnet` invocation, so a branch cut from a
 `main` that has since moved fails in seconds rather than after the Release build
 and coverage run. It fetches rather than trusting the local remote-tracking ref,
 because a ref left behind by an earlier fetch describes the base as it was, not
-as it is. An unreachable remote is a failure and never degrades into verifying
-against the stale ref.
+as it is. The fetch names its destination explicitly as
+`+refs/heads/main:refs/remotes/origin/main`: a bare `git fetch origin main` only
+writes `FETCH_HEAD`, so a repository with a missing or remapped
+`remote.origin.fetch` would keep a stale `refs/remotes/origin/main` and satisfy
+the base check against it. An unreachable remote is a failure and never degrades
+into verifying against the stale ref.
 
 ## Skills
 

@@ -15,13 +15,12 @@ if ((${#untracked_files[@]} > 0)); then
   exit 1
 fi
 
-if ! git fetch --quiet origin main; then
+# The explicit destination refspec is what makes the next check meaningful. A bare
+# `git fetch origin main` only writes FETCH_HEAD, so a repository whose
+# remote.origin.fetch is missing or remapped would keep a stale
+# refs/remotes/origin/main and pass the base check against it.
+if ! git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main'; then
   printf 'verify-full.sh cannot fetch origin main. Restore access to the remote instead of verifying against a stale base.\n' >&2
-  exit 1
-fi
-
-if ! git show-ref --verify --quiet refs/remotes/origin/main; then
-  printf 'Fetching origin main left no refs/remotes/origin/main. Restore the standard origin fetch refspec so the remote-tracking base exists.\n' >&2
   exit 1
 fi
 
