@@ -67,6 +67,11 @@ git -C "$repository_root" fetch --quiet origin main
 # The fixture therefore works from a branch shaped like a real task branch, and the refusal itself
 # is exercised by the tests that check it out deliberately.
 git -C "$repository_root" checkout --quiet -b "$fixture_branch"
+# The fast loop formats the C# files the branch changed, so the fixture branch carries one. Keeping
+# it committed rather than dirty leaves the working tree clean for the contracts that require it.
+printf 'namespace Fixture;\n' > "$repository_root/src/Sample.cs"
+git -C "$repository_root" add src/Sample.cs
+git -C "$repository_root" commit --quiet -m 'fixture C# file'
 
 export FAKE_DOTNET_LOG="$invocation_log"
 export FAKE_WORKFLOW_LOG="$workflow_invocation_log"
@@ -122,7 +127,7 @@ verify_fast_runs_restore_build_tests_and_formatting() {
   )
 
   assert_file_content \
-    $'restore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic' \
+    $'restore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build\nformat MailMcp.slnx --no-restore --include src/Sample.cs\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic --include src/Sample.cs' \
     "$invocation_log"
 }
 
@@ -394,7 +399,30 @@ verify_fast_accepts_a_detached_head() {
   fi
 
   assert_file_content \
-    $'restore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic' \
+    $'restore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build\nformat MailMcp.slnx --no-restore --include src/Sample.cs\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic --include src/Sample.cs' \
+    "$invocation_log"
+}
+
+verify_fast_skips_formatting_when_no_csharp_file_changed() {
+  local script_status=0
+
+  : > "$invocation_log"
+  git -C "$repository_root" checkout --quiet --detach origin/main
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  ) > /dev/null 2>&1 || script_status=$?
+
+  git -C "$repository_root" checkout --quiet "$fixture_branch"
+
+  if ((script_status != 0)); then
+    printf 'verify-fast.sh failed with nothing to format\n' >&2
+    return 1
+  fi
+
+  assert_file_content \
+    $'restore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build' \
     "$invocation_log"
 }
 
@@ -488,6 +516,7 @@ run_test verify_full_stops_when_a_stale_tracking_ref_hides_remote_movement
 run_test verify_fast_refuses_the_main_branch
 run_test verify_full_refuses_the_master_branch
 run_test verify_fast_accepts_a_detached_head
+run_test verify_fast_skips_formatting_when_no_csharp_file_changed
 run_test verification_stops_after_first_failure
 run_test workspace_inspection_is_read_only_and_labeled
 run_test workspace_inspection_reports_unavailable_sdk

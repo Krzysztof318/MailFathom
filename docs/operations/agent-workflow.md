@@ -18,6 +18,29 @@ Use the fast loop while implementing:
 bash scripts/verify-fast.sh
 ```
 
+The fast loop restores, builds Release, runs the unit tests, and then formats the
+C# files the branch changed: everything committed since `origin/main`, staged,
+modified, or newly added. It is the only workflow script that rewrites source
+files, and it does so twice over that scope. The repairing `dotnet format` pass
+applies every available code fix, and the following `--verify-no-changes` pass
+reports by file and line what had none, because the repairing pass exits `0` and
+identifies no file when a diagnostic such as `IDE0060` cannot be fixed
+automatically. Formatting is skipped when the branch changed no C# file.
+
+Nobody runs `dotnet format` by hand. Both of its modes already run where they
+belong, so a hand-run pass either repeats about 30 seconds of workspace loading
+and analysis to reproduce what the loop just reported, or, over the whole
+solution, spends 70 seconds and can rewrite files the change never touched. Fix
+what the loop reported and run it again.
+
+Scoping the loop is what makes running `dotnet format` twice cheaper than
+running it once over the solution. Each invocation reloads the MSBuild
+workspace, which costs roughly 15 seconds regardless of scope, and the analysis
+that follows scales with the files in scope: about 70 seconds for the whole
+solution against about 30 for a handful of files. Splitting the run into the
+`whitespace`, `style`, and `analyzers` subcommands is slower still, because it
+pays the workspace load three times for work one invocation already does.
+
 Run the complete gate before committing:
 
 ```bash
@@ -71,7 +94,8 @@ The canonical skills are:
   task, then loads the applicable specification, documentation, and ADR context
   before edits;
 - `review-change` performs a findings-first diff review and records verification
-  status and residual risks;
+  status and residual risks, and reruns the fast loop only when something has
+  invalidated its last green run;
 - `check-docs-licenses` is the mandatory documentation and licensing gate;
 - `finish-change` stages only the task files, requires the documentation and
   licensing gate, runs full verification, checks the final diff, creates a

@@ -18,6 +18,39 @@ if [[ "$current_branch" == 'main' || "$current_branch" == 'master' ]]; then
   exit 1
 fi
 
+# The branch base, preferred as the remote-tracking ref and falling back to the local branch, so the
+# loop keeps working offline. Printing nothing when neither exists widens the scope below to the
+# uncommitted work alone rather than failing the run.
+resolve_branch_base() {
+  local candidate_ref
+
+  for candidate_ref in 'refs/remotes/origin/main' 'refs/heads/main'; do
+    if git rev-parse --verify --quiet "$candidate_ref" > /dev/null; then
+      printf '%s\n' "$candidate_ref"
+      return 0
+    fi
+  done
+}
+
+# Every path this branch touches: committed since the base, staged, modified, or newly added.
+# Deletions are filtered out because a removed file cannot be formatted. Each command reports its
+# own failure, because errexit does not apply to a function called in a condition and the caller
+# would otherwise read a truncated list as "nothing to format": a shallow clone whose merge base
+# with origin/main is unavailable fails exactly that way, and the loop would silently format
+# nothing rather than saying it could not tell what changed.
+list_changed_paths() {
+  local branch_base
+
+  branch_base="$(resolve_branch_base)"
+
+  git diff --name-only --diff-filter=ACMR HEAD || return 1
+  git ls-files --others --exclude-standard || return 1
+
+  if [[ -n "$branch_base" ]]; then
+    git diff --name-only --diff-filter=ACMR "$branch_base...HEAD" || return 1
+  fi
+}
+
 dotnet restore MailMcp.slnx
 dotnet build MailMcp.slnx --configuration Release --no-restore
 dotnet test --solution MailMcp.slnx --configuration Release --no-build
@@ -25,4 +58,24 @@ dotnet test --solution MailMcp.slnx --configuration Release --no-build
 # Formatting runs in the fast loop as well as the final gate. Style diagnostics such as IDE0005 are
 # reported by `dotnet format` rather than by the build, so leaving them to full verification means
 # discovering them only after tool restore and the whole coverage collection have already run.
-dotnet format MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic
+#
+# The loop formats only what the branch changed. `dotnet format` reloads the MSBuild workspace on
+# every invocation and analyzes whatever is in scope, so the whole solution costs about 70 seconds
+# here while a handful of files costs about 30. Splitting the run into the `whitespace`, `style`,
+# and `analyzers` subcommands does not help: it pays that workspace load three times. The final gate
+# still formats the whole solution, so a defect outside the changed files cannot merge.
+if ! changed_paths="$(list_changed_paths)"; then
+  printf 'verify-fast.sh cannot determine which files the branch changed. Formatting the wrong scope proves nothing, so fix the repository state instead.\n' >&2
+  exit 1
+fi
+
+mapfile -t changed_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '\.cs$' | sort --unique)
+
+if ((${#changed_csharp_files[@]} > 0)); then
+  # Two passes, because neither reports what the other does. The first rewrites everything that has
+  # a code fix, but exits 0 and names no file when a diagnostic has none. The second turns whatever
+  # survived into the `file(line,col): error IDEnnnn` the loop can act on, and fails the run.
+  dotnet format MailMcp.slnx --no-restore --include "${changed_csharp_files[@]}"
+  dotnet format MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic \
+    --include "${changed_csharp_files[@]}"
+fi

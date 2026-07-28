@@ -21,7 +21,30 @@
     <Error Condition="'@(UnitTestProject)' == ''"
            Text="No unit-test projects were found under $(RepositoryRoot)tests." />
 
-    <Exec Command="dotnet test --project &quot;%(UnitTestProject.Identity)&quot; --configuration $(Configuration) --no-build --results-directory &quot;$(RawCoverageDirectory)&quot; -- --report-xunit-trx --coverlet --coverlet-file-prefix &quot;%(UnitTestProject.Filename)&quot;" />
+    <!-- The item above discovers what exists on disk; the run below executes what the solution
+         lists. A test project missing from MailMcp.slnx would disappear from the gate silently and
+         take its coverage with it, so the mismatch fails here instead. Project file names are
+         compared rather than paths, because a solution cannot hold two projects of the same name
+         and the comparison then survives the directory-separator differences between the recorded
+         solution paths and the globbed item identities. -->
+    <XmlPeek XmlInputPath="$(RepositoryRoot)MailMcp.slnx" Query="//Project/@Path">
+      <Output TaskParameter="Result" ItemName="SolutionProjectPath" />
+    </XmlPeek>
+
+    <ItemGroup>
+      <SolutionProjectFileName Include="@(SolutionProjectPath->'%(Filename)%(Extension)')" />
+      <UnlistedUnitTestProject Include="@(UnitTestProject->'%(Filename)%(Extension)')"
+                               Exclude="@(SolutionProjectFileName)" />
+    </ItemGroup>
+
+    <Error Condition="'@(UnlistedUnitTestProject)' != ''"
+           Text="These unit-test projects exist under $(RepositoryRoot)tests but are missing from MailMcp.slnx, so the solution-wide run would skip them and their coverage: @(UnlistedUnitTestProject, ', ')." />
+
+    <!-- One solution-wide run rather than an Exec batched over the test projects, which MSBuild
+         executes one item at a time: eight sequential processes cost about 50 seconds here against
+         about 11 for the single run that starts them together. Coverlet timestamps each Cobertura
+         file, so the reports stay distinct without the per-project prefix the batch supplied. -->
+    <Exec Command="dotnet test --solution &quot;$(RepositoryRoot)MailMcp.slnx&quot; --configuration $(Configuration) --no-build --results-directory &quot;$(RawCoverageDirectory)&quot; -- --report-xunit-trx --coverlet" />
     <CallTarget Targets="GenerateAndEnforceReport" />
   </Target>
 
