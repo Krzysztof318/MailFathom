@@ -89,7 +89,7 @@ Neither file nor user secrets is a production secret store. User secrets are sto
 
 ## Command-line tooling
 
-The repository provisions no development environment, so install the SDK and any command-line tools on the developer machine. Repository-local tools declared in `.config/dotnet-tools.json` come from `dotnet tool restore` and are limited to what the coverage gate needs: `reportgenerator` merges the per-project Cobertura reports.
+The repository provisions no development environment, so install the SDK and any command-line tools on the developer machine. Repository-local tools declared in `.config/dotnet-tools.json` come from `dotnet tool restore` and are limited to what the coverage gate needs: `reportgenerator` merges the per-assembly Cobertura reports the coverage run produces.
 
 Three tools are installed globally when their workflows are needed:
 
@@ -137,7 +137,7 @@ dotnet tool restore
 dotnet msbuild .config/CodeCoverage.proj -t:Collect
 ```
 
-The command produces one uniquely prefixed Cobertura report per unit-test project, merges the reports, and requires at least 85% aggregate line coverage across `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`. The result always represents the whole configured scope, not only changed lines. `Host` and `AppHost` are excluded as thin executable composition roots.
+The command runs the whole solution in one test invocation, which produces one uniquely named Cobertura report per unit-test assembly, merges the reports, and requires at least 85% aggregate line coverage across `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`. The result always represents the whole configured scope, not only changed lines. `Host` and `AppHost` are excluded as thin executable composition roots.
 
 Two attributes take code out of that denominator, and `testconfig.json` configures the collector to honor both. `[ExcludeFromCodeCoverage]` marks code that should never participate in coverage. `[RequiresIntegrationCoverage]`, declared in `src/shared/RequiresIntegrationCoverageAttribute.cs`, marks code whose verification needs a real database, a real mail server, or a composed host: the EF Core context and its entities, the persistence stores, the MailKit client adapter, the file-system and environment secret readers, and the infrastructure registration extensions carry it today. Integration tests will prove that code once they exist, and they will collect no coverage, so a marked class is measured by neither run. Removing the marker from a class puts every line of it back into the denominator, which is how to check that the exclusion is still earned.
 
@@ -151,5 +151,7 @@ Pull requests targeting `main` run two GitHub Actions checks after they are mark
 - `dotnet format` restores `MailMcp.slnx` and verifies repository formatting without applying changes.
 
 The `main` branch protection rule requires a pull request and the `Build and unit test` check, requires the branch to be current with `main`, applies to administrators, and requires review conversations to be resolved. It does not require an approving review because the repository currently has one maintainer. Force-pushes and deletion of `main` are disabled. The GitHub repository coverage rule must remain disabled because GitHub Code Quality coverage uploads are unavailable for this user-owned repository; the required repository-owned check enforces the same 85% minimum against the complete configured code scope.
+
+Both workflows restore from a cached `~/.nuget/packages` keyed on `Directory.Packages.props`, `global.json`, and `.config/dotnet-tools.json`. Because every version is pinned centrally, those three files decide what restore downloads, so a changed pin misses the cache rather than resolving against a stale package set.
 
 Both workflows use the SDK pinned in `global.json`, cancel superseded runs for the same pull request, request read-only repository permissions, and avoid credentials or service-specific secrets. A job-level draft guard skips both jobs unless a pull request is non-draft or the workflow was manually dispatched. The formatting workflow remains limited to `src/**` and `tests/**` and is not a required status check.

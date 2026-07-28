@@ -53,6 +53,14 @@ jobs:
         with:
           global-json-file: global.json
 
+      # Versions are pinned centrally, so the cache key covers every file that can change what
+      # restore downloads. A partial key would serve a stale package set for a changed pin.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '.config/dotnet-tools.json') }}
+
       - name: Restore dependencies
         run: dotnet restore MailMcp.slnx
 

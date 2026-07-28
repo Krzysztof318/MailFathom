@@ -21,7 +21,11 @@
     <Error Condition="'@(UnitTestProject)' == ''"
            Text="No unit-test projects were found under $(RepositoryRoot)tests." />
 
-    <Exec Command="dotnet test --project &quot;%(UnitTestProject.Identity)&quot; --configuration $(Configuration) --no-build --results-directory &quot;$(RawCoverageDirectory)&quot; -- --report-xunit-trx --coverlet --coverlet-file-prefix &quot;%(UnitTestProject.Filename)&quot;" />
+    <!-- One solution-wide run rather than an Exec batched over the test projects, which MSBuild
+         executes one item at a time: eight sequential processes cost about 50 seconds here against
+         about 11 for the single run that starts them together. Coverlet timestamps each Cobertura
+         file, so the reports stay distinct without the per-project prefix the batch supplied. -->
+    <Exec Command="dotnet test --solution &quot;$(RepositoryRoot)MailMcp.slnx&quot; --configuration $(Configuration) --no-build --results-directory &quot;$(RawCoverageDirectory)&quot; -- --report-xunit-trx --coverlet" />
     <CallTarget Targets="GenerateAndEnforceReport" />
   </Target>
 
