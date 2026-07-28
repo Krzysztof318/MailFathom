@@ -41,12 +41,12 @@ public sealed class FakeHttpMessageHandlerTests
     }
 
     /// <summary>
-    /// The recorded state is the reason this handler exists in its current shape: <see cref="HttpClient" /> owns the
-    /// request message and tears it down once the response completes, so a double that kept the message itself would
-    /// hand assertions state that is already disposed.
+    /// The recorded state is the reason this handler exists in its current shape. The caller keeps ownership of the
+    /// request message — <see cref="HttpClient" /> leaves it alive after the response completes — so a double that kept
+    /// the message itself would hand assertions state the code under test is free to dispose or mutate first.
     /// </summary>
     [Fact]
-    public async Task RecordedRequests_RequestMessageDisposedAfterSending_RemainReadable()
+    public async Task RecordedRequests_RequestMessageDisposedByTheCallerAfterSending_RemainReadable()
     {
         // Arrange
         using var handler = FakeHttpMessageHandler.AlwaysResponding(() => new HttpResponseMessage(HttpStatusCode.OK));
@@ -241,6 +241,81 @@ public sealed class FakeHttpMessageHandlerTests
         Assert.Equal(2, handler.RecordedRequests.Count);
     }
 
+    /// <summary>
+    /// A real transport associates a response with the request that produced it, and <see cref="HttpClient" /> fills
+    /// that in only for its own stack. Code that reads it — a retry policy logging the failed target, a redirect
+    /// follower — would otherwise see <see langword="null" /> against the double and behave differently.
+    /// </summary>
+    [Fact]
+    public async Task SendAsync_ResponseWithoutARequestMessage_AssociatesTheRequestThatProducedIt()
+    {
+        // Arrange
+        using var handler = FakeHttpMessageHandler.AlwaysResponding(() => new HttpResponseMessage(HttpStatusCode.OK));
+        using var client = new HttpClient(handler, disposeHandler: false);
+        using var request = new HttpRequestMessage(HttpMethod.Get, RequestUri);
+
+        // Act
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Same(request, response.RequestMessage);
+    }
+
+    [Fact]
+    public async Task SendAsync_ResponderSuppliedARequestMessage_LeavesItAsTheResponderSetIt()
+    {
+        // Arrange
+        using var originatingRequest = new HttpRequestMessage(HttpMethod.Get, new Uri("https://mail.test/redirected"));
+        using var handler = new FakeHttpMessageHandler((_, _) => Task.FromResult(
+            new HttpResponseMessage(HttpStatusCode.OK) { RequestMessage = originatingRequest }));
+        using var client = new HttpClient(handler, disposeHandler: false);
+
+        // Act
+        using var response = await client.GetAsync(RequestUri, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Same(originatingRequest, response.RequestMessage);
+    }
+
+    /// <summary>
+    /// Recording after the body is read would order requests by how long each body took to capture. A test asserting
+    /// dispatch or retry order would then see an inverted sequence whenever the first request carried the larger body.
+    /// </summary>
+    [Fact]
+    public async Task RecordedRequests_FirstRequestBodyCapturedLast_KeepArrivalOrder()
+    {
+        // Arrange
+        var slowUri = new Uri("https://mail.test/slow");
+        var fastUri = new Uri("https://mail.test/fast");
+        using var handler = FakeHttpMessageHandler.AlwaysResponding(() => new HttpResponseMessage(HttpStatusCode.OK));
+        using var client = new HttpClient(handler, disposeHandler: false);
+        var gatedContent = new GatedHttpContent();
+
+        // Act
+        using (var slowRequest = new HttpRequestMessage(HttpMethod.Post, slowUri) { Content = gatedContent })
+        using (var fastRequest = new HttpRequestMessage(HttpMethod.Post, fastUri)
+        {
+            Content = new StringContent("fast", Encoding.UTF8, "text/plain"),
+        })
+        {
+            // CA2025 cannot see that the send is awaited below, before the request it uses leaves scope. Holding the
+            // send unawaited is the point of the test: it is what keeps the first request inside capture.
+#pragma warning disable CA2025
+            var slowSend = client.SendAsync(slowRequest, TestContext.Current.CancellationToken);
+#pragma warning restore CA2025
+
+            await gatedContent.CaptureStarted;
+
+            using var fastResponse = await client.SendAsync(fastRequest, TestContext.Current.CancellationToken);
+            gatedContent.ReleaseBody();
+
+            using var slowResponse = await slowSend;
+        }
+
+        // Assert
+        Assert.Equal([slowUri, fastUri], handler.RecordedRequests.Select(recorded => recorded.RequestUri));
+    }
+
     [Fact]
     public void RespondingInSequence_NoResponses_RejectsTheEmptyScript()
     {
@@ -274,5 +349,40 @@ public sealed class FakeHttpMessageHandlerTests
         // Assert
         await Assert.ThrowsAsync<ObjectDisposedException>(
             () => unsentResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Content whose body cannot finish being read until the test says so, which is how one request is held inside
+    /// capture while a later one completes without a sleep or a timing assumption.
+    /// </summary>
+    private sealed class GatedHttpContent : HttpContent
+    {
+        private readonly TaskCompletionSource captureStarted =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private readonly TaskCompletionSource bodyReleased =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Completes once the handler has begun reading this body.</summary>
+        public Task CaptureStarted => this.captureStarted.Task;
+
+        /// <summary>Lets the body finish being read.</summary>
+        public void ReleaseBody() => this.bodyReleased.TrySetResult();
+
+        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+        {
+            this.captureStarted.TrySetResult();
+
+            await this.bodyReleased.Task;
+
+            await stream.WriteAsync("gated"u8.ToArray());
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+
+            return false;
+        }
     }
 }

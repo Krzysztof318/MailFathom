@@ -27,8 +27,8 @@ namespace MailMcp.TestSupport;
 /// </para>
 /// <para>
 /// Recording is safe under concurrent sends, so a test covering bounded concurrency can assert against
-/// <see cref="RecordedRequests" /> once its requests have completed. The recorded order is the order in which
-/// requests reached the handler, which under concurrency is not the order they were started in.
+/// <see cref="RecordedRequests" /> once its requests have completed. Requests are ordered by when they reached the
+/// handler, not by how long each body took to capture.
 /// </para>
 /// </remarks>
 internal sealed class FakeHttpMessageHandler : HttpMessageHandler
@@ -38,10 +38,11 @@ internal sealed class FakeHttpMessageHandler : HttpMessageHandler
 
     private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respondToRequest;
     private readonly HttpResponseMessage[] scriptedResponses;
-    private readonly List<RecordedHttpRequest> recordedRequests = [];
+    private readonly Dictionary<int, RecordedHttpRequest> recordedRequestsByArrival = [];
     private readonly Lock recordingGuard = new();
 
     private int scriptedResponseCursor;
+    private int arrivalCursor;
 
     /// <summary>
     /// Initializes a handler that answers every request through <paramref name="respondToRequest" />.
@@ -68,15 +69,24 @@ internal sealed class FakeHttpMessageHandler : HttpMessageHandler
     }
 
     /// <summary>
-    /// Gets the requests observed so far, oldest first, as an independent snapshot.
+    /// Gets the requests captured so far in the order they reached the handler, as an independent snapshot.
     /// </summary>
+    /// <remarks>
+    /// A request appears once its body has been read, so a snapshot taken while sends are still in flight can omit an
+    /// earlier request whose body is still being captured. Read it after the sends complete.
+    /// </remarks>
     public IReadOnlyList<RecordedHttpRequest> RecordedRequests
     {
         get
         {
             lock (this.recordingGuard)
             {
-                return [.. this.recordedRequests];
+                return
+                [
+                    .. this.recordedRequestsByArrival
+                        .OrderBy(capture => capture.Key)
+                        .Select(capture => capture.Value),
+                ];
             }
         }
     }
@@ -127,14 +137,24 @@ internal sealed class FakeHttpMessageHandler : HttpMessageHandler
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        // The ordinal is taken before the body is read so that concurrent sends record in the order they arrived.
+        // Appending after the await would order them by how long each body took to capture instead.
+        var arrivalOrdinal = Interlocked.Increment(ref this.arrivalCursor) - 1;
+
         var recordedRequest = await CaptureAsync(request, cancellationToken);
 
         lock (this.recordingGuard)
         {
-            this.recordedRequests.Add(recordedRequest);
+            this.recordedRequestsByArrival[arrivalOrdinal] = recordedRequest;
         }
 
-        return await this.respondToRequest(request, cancellationToken);
+        var response = await this.respondToRequest(request, cancellationToken);
+
+        // A real transport associates the response with the request that produced it, and HttpClient does not do this
+        // for a custom handler. Code that reads HttpResponseMessage.RequestMessage must not behave differently here.
+        response.RequestMessage ??= request;
+
+        return response;
     }
 
     /// <inheritdoc />

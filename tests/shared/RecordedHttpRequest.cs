@@ -8,10 +8,11 @@ namespace MailMcp.TestSupport;
 /// An immutable snapshot of one request observed by <see cref="FakeHttpMessageHandler" />.
 /// </summary>
 /// <remarks>
-/// The snapshot exists because <see cref="HttpClient" /> disposes an <see cref="HttpRequestMessage" /> once its
-/// response completes. A test double that kept the message itself, or its header collections, would hand assertions
-/// state that the client is free to tear down before the assertion runs. Every value here is copied at send time,
-/// so a recorded request stays readable for the whole test.
+/// The snapshot exists because the caller owns the <see cref="HttpRequestMessage" />: <see cref="HttpClient" /> leaves
+/// it alive after the response completes, so the code under test is free to dispose it, mutate its headers, or reuse
+/// it before an assertion runs. A double that kept the message itself, or its header collections, would hand
+/// assertions state that changed underneath them. Every value here is copied at send time, so a recorded request
+/// stays readable and unchanged for the whole test.
 /// <para>
 /// Assert against the members, not against a whole instance. The compiler-generated equality compares the header
 /// dictionaries and the payload by reference, so two snapshots holding equal values are not equal to each other.
