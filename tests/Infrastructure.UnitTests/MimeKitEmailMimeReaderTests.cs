@@ -202,6 +202,37 @@ public sealed class MimeKitEmailMimeReaderTests
         Assert.False(attachments.CarriesUnverifiedSignature);
     }
 
+    /// <summary>An envelope is what its protocol parameter says it is, so a container declaring none must not hide a file.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_EncryptedContainerDeclaringNoProtocol_KeepsItsChildrenInTheSummary()
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "From: anna@example.test",
+            "Content-Type: multipart/encrypted; boundary=\"encrypted\"",
+            string.Empty,
+            "--encrypted",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body",
+            "--encrypted",
+            "Content-Type: application/pdf; name=\"report.pdf\"",
+            "Content-Disposition: attachment; filename=\"report.pdf\"",
+            "Content-Transfer-Encoding: base64",
+            string.Empty,
+            "SGVsbG8sIHdvcmxkIQ==",
+            "--encrypted--");
+
+        // Act
+        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var attachments = AssertExtracted(result).Attachments;
+        Assert.False(attachments.IsEncrypted);
+        var attachment = Assert.Single(attachments.Attachments);
+        Assert.Equal("report.pdf", attachment.FileName?.Value);
+    }
+
     /// <summary>An opaque S/MIME part replaces the body, so the record must say what happened to it rather than look empty.</summary>
     [Theory]
     [InlineData("enveloped-data", true, false)]

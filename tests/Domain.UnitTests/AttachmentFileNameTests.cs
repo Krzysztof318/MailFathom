@@ -72,6 +72,22 @@ public sealed class AttachmentFileNameTests
         Assert.True(fileName.WasNormalized);
     }
 
+    /// <summary>A formatting character outside the Basic Multilingual Plane is as invisible as U+202E and is removed too.</summary>
+    [Fact]
+    public void TryNormalize_NameCarryingSupplementaryPlaneFormattingCharacter_RemovesIt()
+    {
+        // Arrange
+        const string taggedName = "invoice\U000E0001\U000E0074.pdf";
+
+        // Act
+        var normalized = AttachmentFileName.TryNormalize(taggedName, out var fileName);
+
+        // Assert
+        Assert.True(normalized);
+        Assert.Equal("invoice.pdf", fileName.Value);
+        Assert.True(fileName.WasNormalized);
+    }
+
     /// <summary>An unbounded name is bounded, because nothing downstream should have to guess how long one can be.</summary>
     [Fact]
     public void TryNormalize_OverLongName_BoundsItsLength()

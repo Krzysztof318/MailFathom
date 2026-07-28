@@ -103,14 +103,14 @@ internal sealed partial class MimeAttachmentClassifier
     /// </remarks>
     private bool TryWalkCryptographicEnvelope(Multipart envelope, bool isInBodyBranch)
     {
-        if (envelope.ContentType.IsMimeType("multipart", "encrypted"))
+        if (envelope.ContentType.IsMimeType("multipart", "encrypted") && DeclaresSecurityProtocol(envelope))
         {
             this.isEncrypted = true;
 
             return true;
         }
 
-        if (!envelope.ContentType.IsMimeType("multipart", "signed"))
+        if (!envelope.ContentType.IsMimeType("multipart", "signed") || !DeclaresSecurityProtocol(envelope))
         {
             return false;
         }
@@ -133,6 +133,18 @@ internal sealed partial class MimeAttachmentClassifier
 
         return true;
     }
+
+    /// <summary>Decides whether a container declared the security protocol that makes it an envelope.</summary>
+    /// <remarks>
+    /// RFC 1847 requires the <c>protocol</c> parameter on both container types, and these rules read the container
+    /// precisely because the container is what states the parts' role. A container that names no protocol has stated
+    /// nothing, so honoring it would let a bare <c>Content-Type: multipart/encrypted</c> line with no cryptography
+    /// behind it take an ordinary file out of the attachment summary and out of every filter built on it. Such a
+    /// container is classified as the ordinary multipart it turned out to be, which keeps its children visible; a
+    /// genuine signature or ciphertext part among them is still caught by the cryptographic leaf rule.
+    /// </remarks>
+    private static bool DeclaresSecurityProtocol(Multipart envelope) =>
+        !string.IsNullOrWhiteSpace(envelope.ContentType.Parameters["protocol"]);
 
     /// <summary>Recognizes a cryptographic leaf before any disposition is read.</summary>
     /// <remarks>

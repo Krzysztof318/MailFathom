@@ -190,7 +190,11 @@ rule — several ordinary parts satisfy more than one of these at once:
    classified at all**. A `multipart/signed` container marks an unverified signature, classifies its signed content
    normally, and classifies the detached signature not at all. Both are recognized from the container, never from a
    child's media type: PGP/MIME ciphertext is usually typed `application/octet-stream`, so a child-driven rule would
-   report a file that does not exist. RFC 1847 gives a signed container exactly two children; one carrying more is
+   report a file that does not exist. Recognition requires the `protocol` parameter RFC 1847 mandates on both
+   containers, because a container that names no protocol has stated nothing about its children: honoring a bare
+   `multipart/encrypted` header would let anyone take a file out of the summary by writing one line. Such a container
+   is classified as the ordinary multipart it is, and a real signature or ciphertext part inside it is still caught by
+   the cryptographic leaf rule. RFC 1847 gives a signed container exactly two children; one carrying more is
    malformed, and its extra children are still classified rather than dropped, so a part smuggled past the signature
    cannot disappear from the summary and from every filter built on it.
 2. **Cryptographic leaf parts** — `application/pkcs7-signature`, `application/pgp-signature`,
@@ -223,18 +227,22 @@ authenticity result that was never established. Decryption and verification are 
 
 Size is the **decoded** octet count, measured by streaming the part through a counter that discards the bytes. MIME
 declares no per-part length, so this is measured rather than read, and the sum over a message's attachments does not
-equal the message size IMAP reports.
+equal the message size IMAP reports. The parse itself is persistent: part content stays in the fetched raw MIME and is
+read from there when a part is measured, rather than being copied into a second buffer the parser owns, so a message
+near `MaxRawMimeBytes` is held once. A forwarded `message/rfc822` part is measured as the parsed message writes itself,
+which matches its transmitted octets for the CRLF line endings mail transport requires.
 
 ### File names are untrusted input
 
 A file name arrives RFC 2047 encoded-word or RFC 2231 continuation encoded, and after decoding can carry path
 separators and traversal segments, control characters and line breaks, unbounded length, and bidirectional overrides
 that make a name render as something other than what it is. `AttachmentFileName` decodes nothing itself — the adapter
-hands it the decoded name — and then removes control and Unicode formatting characters, keeps only the segment after
-the last `/`, `\`, or `:` so a result can never be a path, trims, and bounds the length at 200 characters. The bound
-falls on a text-element boundary rather than on a count of UTF-16 code units, so a name ending in an emoji or a
-combining sequence is never cut through the middle of a character and left as a string a JSON writer would have to
-replace or reject. When any of that changed the name the record says so, so a caller can tell a plain name from a
+hands it the decoded name — and then removes control and Unicode formatting characters, scalar by scalar rather than
+code unit by code unit so that a formatting character written as a surrogate pair is removed like any other, keeps only
+the segment after the last `/`, `\`, or `:` so a result can never be a path, trims, and bounds the length at 200
+characters. The bound falls on a text-element boundary rather than on a count of UTF-16 code units, so a name ending in
+an emoji or a combining sequence is never cut through the middle of a character and left as a string a JSON writer
+would have to replace or reject. When any of that changed the name the record says so, so a caller can tell a plain name from a
 repaired one. A part left with nothing usable is recorded as **unnamed** rather than given a synthetic name, which
 would be indistinguishable from one the sender wrote.
 

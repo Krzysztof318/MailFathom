@@ -10,7 +10,9 @@ namespace MailMcp.Application.Emails;
 /// <param name="DecodedSizeOctets">
 /// How many octets the part holds after its transfer encoding is decoded, measured by streaming and discarding the
 /// content. MIME declares no per-part length, so this is measured rather than read from a header, and the sum over a
-/// message's attachments does not equal the message size IMAP reports.
+/// message's attachments does not equal the message size IMAP reports. A forwarded <c>message/rfc822</c> part is
+/// measured as the parsed message writes itself, which matches the octets it arrived as while the sender used the CRLF
+/// line endings mail transport requires.
 /// </param>
 public sealed record ExtractedEmailAttachment(
     AttachmentFileName? FileName,

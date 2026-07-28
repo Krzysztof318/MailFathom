@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using System.Globalization;
+using System.Text;
 
 namespace MailMcp.Domain.Emails;
 
@@ -82,13 +83,22 @@ public readonly record struct AttachmentFileName
 
     /// <summary>Drops what would let a name misrepresent itself or break the line it is written on.</summary>
     /// <remarks>
+    /// <para>
     /// Formatting characters are removed alongside control characters because the bidirectional overrides are in that
     /// category: a name written as <c>invoice</c>, U+202E, <c>gnp.exe</c> renders as <c>invoiceexe.png</c> while
     /// remaining an executable name.
+    /// </para>
+    /// <para>
+    /// The name is examined as Unicode scalars rather than as UTF-16 code units, because the formatting characters
+    /// outside the Basic Multilingual Plane — the language tag characters at U+E0001 and the musical formatting
+    /// controls among them — are surrogate pairs. Each half of such a pair categorizes as <c>Surrogate</c> and not as
+    /// <c>Format</c>, so a per-character test would keep exactly the invisible character it exists to drop. Enumerating
+    /// scalars additionally replaces an unpaired surrogate with U+FFFD, which leaves a value every consumer can write.
+    /// </para>
     /// </remarks>
     private static string RemoveControlAndFormattingCharacters(string fileName) =>
-        new([.. fileName.Where(character =>
-            !char.IsControl(character) && char.GetUnicodeCategory(character) != UnicodeCategory.Format)]);
+        string.Concat(fileName.EnumerateRunes().Where(scalar =>
+            !Rune.IsControl(scalar) && Rune.GetUnicodeCategory(scalar) != UnicodeCategory.Format));
 
     /// <summary>Cuts an over-long name at a boundary that leaves it a valid string.</summary>
     /// <remarks>

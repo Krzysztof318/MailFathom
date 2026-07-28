@@ -25,8 +25,9 @@ internal delegate Task<MimeMessage> ParsedMimeMessageLoader(Stream rawMime, Canc
 /// <remarks>
 /// Extraction runs in two passes over the same bytes. The first is a forward-only structural read that abandons a
 /// message declaring more parts or deeper nesting than the configured limits; only a message that survives it is parsed
-/// into an object tree. Attachment content is never materialized: each attachment's size is measured by decoding the
-/// part into a counter that discards what it is given.
+/// into an object tree. Attachment content is never materialized: the parse reads part content out of the raw MIME in
+/// place instead of copying it, and each attachment's size is measured by decoding the part into a counter that
+/// discards what it is given.
 /// </remarks>
 internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
 {
@@ -37,7 +38,7 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
     /// <param name="options">The configured structural limits.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options" /> is <see langword="null" />.</exception>
     public MimeKitEmailMimeReader(EmailMimeExtractionOptions options)
-        : this(options, (rawMime, cancellationToken) => MimeMessage.LoadAsync(rawMime, cancellationToken))
+        : this(options, LoadWithoutCopyingContentAsync)
     {
     }
 
@@ -98,6 +99,17 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
             return EmailMimeExtractionResult.MalformedContent();
         }
     }
+
+    /// <summary>Parses against the raw MIME in place rather than into parser-owned copies of every part.</summary>
+    /// <remarks>
+    /// A non-persistent parse copies each part's content into buffers the parser owns, so a message already bounded by
+    /// <c>MaxRawMimeBytes</c> would be held twice for as long as extraction runs, which is the allocation the bound
+    /// exists to refuse. Persistent parsing leaves the content in the stream and reads it when a part is decoded. That
+    /// is safe here and only here: the stream is seekable, nothing else reads it, and it is disposed after the message
+    /// that reads through it.
+    /// </remarks>
+    private static Task<MimeMessage> LoadWithoutCopyingContentAsync(Stream rawMime, CancellationToken cancellationToken) =>
+        MimeMessage.LoadAsync(ParserOptions.Default, rawMime, persistent: true, cancellationToken);
 
     /// <summary>Reads the raw MIME without copying it, so neither pass duplicates the payload.</summary>
     private static MemoryStream OpenRawMime(RemoteEmailContent content) =>
