@@ -7,20 +7,46 @@ namespace MailMcp.Domain.UnitTests;
 
 public sealed class EmailThreadReferencesTests
 {
-    /// <summary>Angle brackets and header folding are transport, so an ancestor written either way is one identifier.</summary>
+    /// <summary>Angle brackets and the whitespace around them are transport, so either writing is one identifier.</summary>
     [Fact]
-    public void Create_IdentifiersWrittenWithBracketsAndFolding_NormalizesThemToOneForm()
+    public void Create_IdentifiersWrittenWithBracketsAndSurroundingWhitespace_NormalizesThemToOneForm()
     {
         // Act
         var references = EmailThreadReferences.Create(
             "<root@example.test>",
             "parent@example.test",
-            ["<root@example.test>", "<parent@\r\n example.test>"]);
+            ["<root@example.test>", " <parent@example.test> "]);
 
         // Assert
         Assert.Equal("root@example.test", references.MessageId);
         Assert.Equal("parent@example.test", references.InReplyTo);
         Assert.Equal(["root@example.test", "parent@example.test"], references.References);
+    }
+
+    /// <summary>The identifier itself is opaque, so a space a quoted left half carries is content rather than folding.</summary>
+    [Fact]
+    public void Create_IdentifierWithQuotedLeftHalf_KeepsTheSpaceInsideIt()
+    {
+        // Act
+        var references = EmailThreadReferences.Create("<\"a b\"@example.test>", inReplyTo: null, references: null);
+
+        // Assert
+        Assert.Equal("\"a b\"@example.test", references.MessageId);
+    }
+
+    /// <summary>An identifier no parser could have produced is refused rather than repaired into a thread key.</summary>
+    [Fact]
+    public void Create_IdentifierCarryingAControlCharacter_RefusesIt()
+    {
+        // Act
+        var references = EmailThreadReferences.Create(
+            "<root\u0007@example.test>",
+            inReplyTo: null,
+            references: ["<parent\u0001@example.test>", "<ancestor@example.test>"]);
+
+        // Assert
+        Assert.Null(references.MessageId);
+        Assert.Equal(["ancestor@example.test"], references.References);
     }
 
     /// <summary>The header's order is the path from the root, so it is kept while repeated ancestors collapse.</summary>

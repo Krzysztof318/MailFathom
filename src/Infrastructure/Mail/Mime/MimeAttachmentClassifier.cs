@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using MailMcp.Application.Emails;
 using MailMcp.Domain.Emails;
 using MimeKit;
+using MimeKit.Text;
 using MimeKit.Tnef;
 
 namespace MailMcp.Infrastructure.Mail.Mime;
@@ -283,17 +284,58 @@ internal sealed partial class MimeAttachmentClassifier
 
         foreach (var htmlBody in this.bodyBranchLeaves.OfType<TextPart>().Where(part => part.IsHtml))
         {
-            foreach (Match reference in ContentIdReference().Matches(htmlBody.Text))
-            {
-                // RFC 2392 builds a cid URL by removing the angle brackets and percent-encoding whatever cannot appear
-                // literally in a URL, so "<logo/dark@example.test>" is written "cid:logo%2Fdark@example.test". Comparing
-                // the encoded form would miss the part and report an embedded resource as a file.
-                referencedContentIds.Add(DecodeContentIdReference(reference.Groups["contentId"].Value));
-            }
+            CollectContentIdsReferencedBy(htmlBody.Text, referencedContentIds);
         }
 
         return referencedContentIds;
     }
+
+    /// <summary>Reads the <c>cid:</c> URLs a body points at, rather than every occurrence of that text in its source.</summary>
+    /// <remarks>
+    /// A reference counts only where a renderer would follow it: an attribute value, or the style sheet a
+    /// <c>&lt;style&gt;</c> element carries. Scanning the whole source instead would let a crafted message hide a real
+    /// file by naming its <c>Content-ID</c> in visible text, in a comment, or in script data — the part would be
+    /// recorded as an embedded resource and disappear from the attachment summary and from every filter built on it.
+    /// The body is tokenized rather than pattern-matched because only a tokenizer can tell those contexts apart.
+    /// </remarks>
+    private static void CollectContentIdsReferencedBy(string html, HashSet<string> referencedContentIds)
+    {
+        using var htmlReader = new StringReader(html);
+        var tokenizer = new HtmlTokenizer(htmlReader);
+        var isInsideStyleElement = false;
+
+        while (tokenizer.ReadNextToken(out var token))
+        {
+            if (token is HtmlTagToken tag)
+            {
+                // A style element holds character data rather than markup, so its start tag is the only thing that can
+                // announce the style sheet the next data token carries.
+                isInsideStyleElement = tag.Id == HtmlTagId.Style && !tag.IsEndTag && !tag.IsEmptyElement;
+
+                referencedContentIds.UnionWith(
+                    tag.Attributes.SelectMany(attribute => ReadContentIdReferences(attribute.Value)));
+
+                continue;
+            }
+
+            if (isInsideStyleElement && token is HtmlDataToken styleSheet)
+            {
+                referencedContentIds.UnionWith(ReadContentIdReferences(styleSheet.Data));
+            }
+        }
+    }
+
+    /// <summary>Reads every identifier one reference context names.</summary>
+    private static IEnumerable<string> ReadContentIdReferences(string? referenceContext) =>
+        referenceContext is null
+            ? []
+            : ContentIdReference()
+                .Matches(referenceContext)
+
+                // RFC 2392 builds a cid URL by removing the angle brackets and percent-encoding whatever cannot appear
+                // literally in a URL, so "<logo/dark@example.test>" is written "cid:logo%2Fdark@example.test". Comparing
+                // the encoded form would miss the part and report an embedded resource as a file.
+                .Select(reference => DecodeContentIdReference(reference.Groups["contentId"].Value));
 
     /// <summary>Decides whether a part is a resource the body embeds.</summary>
     /// <remarks>

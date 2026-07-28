@@ -160,7 +160,7 @@ write. Nothing is fetched twice, and no extraction path can select a folder or s
 | Sent timestamp | `Date` | UTC. Absent or unparseable yields nothing rather than a guess. |
 | Received timestamp | topmost `Received` | UTC, taken from the trace after the header's final semicolon. |
 | Subject | `Subject` | Decoded; control characters removed so it cannot span lines it never spanned. |
-| Thread identifiers | `Message-ID`, `In-Reply-To`, `References` | Angle brackets and folding removed; `References` keeps header order and collapses duplicates. |
+| Thread identifiers | `Message-ID`, `In-Reply-To`, `References` | Angle brackets and the whitespace around them removed; `References` keeps header order and collapses duplicates. |
 | Attachment summary | the message structure | Counts, total decoded size, inline-resource count, three markers, and one record per attachment. |
 
 An address is normalized to an upper-cased comparison form and keeps what the message wrote alongside it, and that
@@ -169,6 +169,14 @@ sender chose, are one participant in any `Distinct`, set, or dictionary. What th
 `"John Smith"@example.com` is a valid mailbox whose space belongs to it, and the domain is taken as whatever follows
 the *last* at-sign, because a quoted local part is allowed to contain one. Unfolding is the mail parser's job and has
 already happened before an address reaches the domain type.
+
+Only what surrounds a message identifier is removed. What the identifier itself holds is kept, including interior
+whitespace: the mail parser resolves header folding long before a value reaches the domain type, so a space that
+survives that far is content rather than leftover folding, and `"a b"@example.test` is an identifier a message may
+legitimately carry. Deleting its space would record an identifier nobody minted and merge the message into a
+conversation it does not belong to. An identifier still carrying a control character after the surrounding transport
+is stripped is refused rather than repaired, because no parser produces one and a repaired identifier would be a thread
+key nobody wrote.
 
 Case is *not* normalized in a message identifier, on either half. An identifier is an opaque token that the mail
 ecosystem compares octet for octet, and a client places an ancestor in `References` by copying the identifier it
@@ -211,7 +219,11 @@ rule — several ordinary parts satisfy more than one of these at once:
    or absent. The absent case carries the weight, because senders routinely omit the header on embedded images. An
    explicit `attachment` disposition overrides it, since there the sender has said what the part is. A `cid:` URL is
    percent-decoded before it is compared, because RFC 2392 escapes whatever cannot appear literally in a URL, so
-   `<logo/dark@example.test>` is referenced as `cid:logo%2Fdark@example.test`.
+   `<logo/dark@example.test>` is referenced as `cid:logo%2Fdark@example.test`. A reference counts only where a renderer
+   would follow it — an attribute value, or the style sheet a `<style>` element carries — so the body is tokenized
+   rather than scanned as text. Matching every occurrence in the source would let a crafted message hide a real file by
+   naming its `Content-ID` in visible text, in a comment, or in script data, taking the part out of the summary and out
+   of every filter built on it.
 5. **Everything else is an attachment.**
 
 Three cases follow from the ordering and are worth naming. A nested `message/rfc822` is one attachment and is not
@@ -229,8 +241,9 @@ Size is the **decoded** octet count, measured by streaming the part through a co
 declares no per-part length, so this is measured rather than read, and the sum over a message's attachments does not
 equal the message size IMAP reports. The parse itself is persistent: part content stays in the fetched raw MIME and is
 read from there when a part is measured, rather than being copied into a second buffer the parser owns, so a message
-near `MaxRawMimeBytes` is held once. A forwarded `message/rfc822` part is measured as the parsed message writes itself,
-which matches its transmitted octets for the CRLF line endings mail transport requires.
+near `MaxRawMimeBytes` is held once. A forwarded `message/rfc822` part that arrived under a transfer encoding is
+decoded like any other part, so its own formatting is what gets measured; one that arrived unencoded is measured as the
+parsed message writes itself, which matches its transmitted octets for the CRLF line endings mail transport requires.
 
 ### File names are untrusted input
 

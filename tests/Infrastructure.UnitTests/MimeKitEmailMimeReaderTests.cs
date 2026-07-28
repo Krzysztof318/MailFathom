@@ -325,6 +325,42 @@ public sealed class MimeKitEmailMimeReaderTests
         Assert.Equal(1, attachments.InlineResourceCount);
     }
 
+    /// <summary>A style sheet points at a resource the same way an attribute does, so its <c>url()</c> counts.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_ContentIdReferencedByAStyleSheet_ReportsAnEmbeddedResource()
+    {
+        // Arrange
+        var content = CreateRelatedMessageWithHtmlBody(
+            "<html><head><style>.header{background:url(cid:logo@example.test)}</style></head><body></body></html>");
+
+        // Act
+        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var attachments = AssertExtracted(result).Attachments;
+        Assert.Empty(attachments.Attachments);
+        Assert.Equal(1, attachments.InlineResourceCount);
+    }
+
+    /// <summary>Text and comments render nothing, so naming a Content-ID there cannot take a file out of the summary.</summary>
+    [Theory]
+    [InlineData("<html><body>Write to cid:logo@example.test for a copy.</body></html>")]
+    [InlineData("<html><body><!-- cid:logo@example.test --></body></html>")]
+    [InlineData("<html><body><script>var source = 'cid:logo@example.test';</script></body></html>")]
+    public async Task ReadMetadataAsync_ContentIdNamedOutsideAReferenceContext_StillReportsTheAttachment(string htmlBody)
+    {
+        // Arrange
+        var content = CreateRelatedMessageWithHtmlBody(htmlBody);
+
+        // Act
+        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var attachments = AssertExtracted(result).Attachments;
+        Assert.Equal(0, attachments.InlineResourceCount);
+        Assert.Equal("logo.png", Assert.Single(attachments.Attachments).FileName?.Value);
+    }
+
     /// <summary>A quoted local part reaches the record with its space intact, because the space is part of the mailbox.</summary>
     [Fact]
     public async Task ReadMetadataAsync_QuotedLocalPart_KeepsTheAddressTheSenderWrote()
@@ -413,6 +449,36 @@ public sealed class MimeKitEmailMimeReaderTests
         // Assert
         var attachments = AssertExtracted(result).Attachments;
         Assert.Equal("forwarded.eml", Assert.Single(attachments.Attachments).FileName?.Value);
+    }
+
+    /// <summary>An encoded forwarded message is decoded like any other part, so its own formatting is what gets measured.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_TransferEncodedForwardedMessage_MeasuresTheOctetsItArrivedAs()
+    {
+        // Arrange
+        var forwardedMessage = Encoding.UTF8.GetBytes("From: bob@example.test\nSubject: Inner\n\nInner body\n");
+        var content = MimeFixtures.Message(
+            "From: anna@example.test",
+            "Content-Type: multipart/mixed; boundary=\"outer\"",
+            string.Empty,
+            "--outer",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Forwarding this.",
+            "--outer",
+            "Content-Type: message/rfc822",
+            "Content-Disposition: attachment; filename=\"forwarded.eml\"",
+            "Content-Transfer-Encoding: base64",
+            string.Empty,
+            Convert.ToBase64String(forwardedMessage),
+            "--outer--");
+
+        // Act
+        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var attachments = AssertExtracted(result).Attachments;
+        Assert.Equal(forwardedMessage.Length, Assert.Single(attachments.Attachments).DecodedSizeOctets);
     }
 
     /// <summary>A TNEF part is recorded as one attachment and marked unexpanded, because expanding it is a separate decision.</summary>
@@ -721,6 +787,22 @@ public sealed class MimeKitEmailMimeReaderTests
                 "SGVsbG8sIHdvcmxkIQ==",
                 "--related--",
             ]);
+
+    private static Application.EmailContent.RemoteEmailContent CreateRelatedMessageWithHtmlBody(string htmlBody) =>
+        MimeFixtures.Message(
+            "From: anna@example.test",
+            "Content-Type: multipart/related; type=\"text/html\"; boundary=\"related\"",
+            string.Empty,
+            "--related",
+            "Content-Type: text/html; charset=utf-8",
+            string.Empty,
+            htmlBody,
+            "--related",
+            "Content-Type: image/png; name=\"logo.png\"",
+            "Content-Id: <logo@example.test>",
+            string.Empty,
+            "image",
+            "--related--");
 
     private static Application.EmailContent.RemoteEmailContent CreateDeeplyNestedMessage(int nestingDepth) =>
         MimeFixtures.Message(

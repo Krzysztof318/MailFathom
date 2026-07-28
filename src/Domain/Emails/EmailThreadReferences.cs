@@ -73,12 +73,25 @@ public sealed record EmailThreadReferences
 
     /// <summary>Reduces one written identifier to the form everything compares on.</summary>
     /// <remarks>
-    /// Only transport is removed — angle brackets and the whitespace a folded header introduced. Case is preserved on
-    /// both halves, deliberately and including the domain: a message identifier is an opaque token that the mail
-    /// ecosystem compares octet for octet, and a client places an ancestor in <c>References</c> by copying the
-    /// identifier it received rather than by rewriting it. Case-folding the domain would therefore not repair a
-    /// difference that arises in practice, while it would merge two identifiers that every other mail client keeps
-    /// apart — and merging is the direction that joins unrelated conversations.
+    /// <para>
+    /// Only what surrounds the identifier is removed — the angle brackets and the whitespace around them. What the
+    /// identifier itself holds is kept: a mail parser resolves header folding long before a value reaches this type, so
+    /// interior whitespace is content rather than leftover folding, and <c>"a b"@example.test</c> is an identifier a
+    /// message may legitimately carry. Deleting its space would record an identifier nobody minted and merge this
+    /// message into a conversation it does not belong to.
+    /// </para>
+    /// <para>
+    /// Case is preserved on both halves, deliberately and including the domain: a message identifier is an opaque
+    /// token that the mail ecosystem compares octet for octet, and a client places an ancestor in <c>References</c> by
+    /// copying the identifier it received rather than by rewriting it. Case-folding the domain would therefore not
+    /// repair a difference that arises in practice, while it would merge two identifiers that every other mail client
+    /// keeps apart — and merging is the direction that joins unrelated conversations.
+    /// </para>
+    /// <para>
+    /// An identifier still carrying a control character after that is refused rather than repaired. No parser produces
+    /// one, so the value came from a header nothing could read, and a repaired identifier would be a thread key nobody
+    /// wrote.
+    /// </para>
     /// </remarks>
     private static string? NormalizeIdentifier(string? identifier)
     {
@@ -87,9 +100,10 @@ public sealed record EmailThreadReferences
             return null;
         }
 
-        var withoutWhitespace = new string([.. identifier.Where(character => !char.IsWhiteSpace(character) && !char.IsControl(character))]);
-        var withoutBrackets = withoutWhitespace.Trim('<', '>');
+        var withoutSurroundingTransport = identifier.Trim().Trim('<', '>').Trim();
 
-        return withoutBrackets.Length == 0 ? null : withoutBrackets;
+        return withoutSurroundingTransport.Length == 0 || withoutSurroundingTransport.Any(char.IsControl)
+            ? null
+            : withoutSurroundingTransport;
     }
 }
