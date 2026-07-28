@@ -1,0 +1,23 @@
+; Symbols this repository forbids, enforced by Microsoft.CodeAnalysis.BannedApiAnalyzers as RS0030.
+; Each entry replaces a rule that root AGENTS.md would otherwise state as prose and reviewers would
+; have to check by hand. Format: {SymbolKind}:{DocumentationCommentId};{Message}.
+
+; Ambient clocks. AGENTS.md requires DateTimeOffset timestamps produced through an injected
+; TimeProvider, so behavior stays testable and a test never depends on the wall clock.
+P:System.DateTime.Now;Inject TimeProvider and call GetUtcNow(); see root AGENTS.md.
+P:System.DateTime.UtcNow;Inject TimeProvider and call GetUtcNow(); see root AGENTS.md.
+P:System.DateTime.Today;Inject TimeProvider and call GetUtcNow(); see root AGENTS.md.
+P:System.DateTimeOffset.Now;Inject TimeProvider and call GetUtcNow(); see root AGENTS.md.
+P:System.DateTimeOffset.UtcNow;Inject TimeProvider and call GetUtcNow(); see root AGENTS.md.
+
+; Blocking sleeps. Mail synchronization and delivery are asynchronous end to end, and a delay that
+; must be observable in a test belongs to TimeProvider.Delay. An entry binds one signature, so both
+; overloads are listed; naming the method alone would leave the other one callable.
+M:System.Threading.Thread.Sleep(System.Int32);Await TimeProvider.Delay so the wait is cancellable and testable.
+M:System.Threading.Thread.Sleep(System.TimeSpan);Await TimeProvider.Delay so the wait is cancellable and testable.
+
+; The BCL mail stack. MailMcp speaks IMAP and SMTP through MailKit inside the transport adapter, and
+; System.Net.Mail.MailMessage is the name collision root AGENTS.md forbids for the mail artifact.
+; The whole namespace is banned rather than the two obvious types, so MailAddress, Attachment, and
+; the rest cannot reintroduce the second mail stack one type at a time.
+N:System.Net.Mail;Use MailKit through the transport adapter and the domain Email types; see root AGENTS.md.

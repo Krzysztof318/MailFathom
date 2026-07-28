@@ -17,13 +17,16 @@ git add <task-files>
 bash scripts/verify-full.sh
 ```
 
-The fast script restores the solution, builds it in Release configuration, and
-runs all unit tests without rebuilding. The full script additionally restores
-repository tools, runs the workflow contract suite, executes the aggregate
-coverage gate, verifies formatting, and checks the Git diff. It rejects
-remaining untracked files, so inspect the staged diff before running it. See
-[Agent workflow](agent-workflow.md) for the workspace inspection command and
-shared skills.
+The fast script restores the solution, builds it in Release configuration, runs
+all unit tests without rebuilding, and verifies formatting. Formatting runs in
+both scripts on purpose: style diagnostics such as `IDE0005` come from
+`dotnet format` rather than from the build, and leaving them to the final gate
+means discovering them only after tool restore and the whole coverage
+collection have run. The full script additionally restores repository tools,
+runs the workflow contract suite, executes the aggregate coverage gate, and
+checks the Git diff. It rejects remaining untracked files, so inspect the
+staged diff before running it. See [Agent workflow](agent-workflow.md) for the
+workspace inspection command and shared skills.
 
 The full script fetches `origin main` and refuses to continue when the branch
 does not contain that base, so it needs access to the remote and cannot run
@@ -67,16 +70,19 @@ Neither file nor user secrets is a production secret store. User secrets are sto
 
 ## Command-line tooling
 
-The repository provisions no development environment, so install the SDK and any command-line tools on the developer machine. Repository-local tools declared in `.config/dotnet-tools.json` come from `dotnet tool restore` and are limited to what the coverage gate needs.
+The repository provisions no development environment, so install the SDK and any command-line tools on the developer machine. Repository-local tools declared in `.config/dotnet-tools.json` come from `dotnet tool restore` and are limited to what the coverage gate needs: `reportgenerator` merges the per-project Cobertura reports.
 
-Two tools are installed globally when their workflows are needed:
+Three tools are installed globally when their workflows are needed:
 
 ```bash
 dotnet tool install --global dotnet-ef --version 10.0.10
 dotnet tool install --global Aspire.Cli --version 13.4.6
+dotnet tool install --global csharp-ls --version 0.26.0
 ```
 
-`dotnet ef` runs EF Core migrations and design-time commands. `aspire` is only required for Aspire CLI workflows against the AppHost. Both versions are recorded in `LICENSES.md`; keep the register aligned when you move to a newer one.
+`dotnet ef` runs EF Core migrations and design-time commands. `aspire` is only required for Aspire CLI workflows against the AppHost. `csharp-ls` is the C# language server that editors and agent tooling launch to resolve symbols before editing, instead of discovering a misspelled type at build time.
+
+`csharp-ls` is installed globally rather than pinned in `.config/dotnet-tools.json` because a manifest-local tool is only reachable as `dotnet tool run csharp-ls`; it never lands on `PATH`, so a client that launches the bare `csharp-ls` executable still fails with `ENOENT`. A global install puts it in `~/.dotnet/tools`, which is on `PATH`, and keeps the language server out of the `dotnet tool restore` that continuous integration runs for the coverage gate. All three versions are recorded in `LICENSES.md`; keep the register aligned when you move to a newer one.
 
 ### EF Core design-time commands
 

@@ -1,0 +1,10 @@
+# Gitignored files copied into every worktree Claude Code creates.
+# Uses .gitignore syntax; only paths that are also gitignored are copied.
+
+.env
+.env.local
+
+# Claude Code already resolves .claude/settings.local.json to the main checkout, so a worktree sees
+# the same permissions without this line. It is listed anyway so the file is present on disk for
+# tooling that reads it directly; the main checkout stays the copy to edit.
+.claude/settings.local.json

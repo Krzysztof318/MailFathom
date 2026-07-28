@@ -35,6 +35,9 @@ dotnet restore MailMcp.slnx
 dotnet build MailMcp.slnx --configuration Release --no-restore
 dotnet msbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release
 dotnet format MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic
-git diff --check origin/main...HEAD
+# Two dots, not three. The ancestor check above already proves origin/main is reachable from HEAD,
+# so the two forms agree today; three dots would diff from the merge base and silently keep agreeing
+# if that check were ever relaxed, which is exactly the drift this gate exists to catch.
+git diff --check origin/main..HEAD
 git diff --cached --check
 git diff --check

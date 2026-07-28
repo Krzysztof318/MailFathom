@@ -228,7 +228,7 @@ public sealed class MailboxSynchronizerTests
             contentStore,
             clock,
             options);
-        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", DateTimeOffset.UtcNow, 128);
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", clock.GetUtcNow(), 128);
         var content = new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
         var contentFetched = false;
         checkpointStore.GetCheckpointAsync(accountId, folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));

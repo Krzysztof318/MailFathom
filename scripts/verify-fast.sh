@@ -11,3 +11,8 @@ cd "$repository_root"
 dotnet restore MailMcp.slnx
 dotnet build MailMcp.slnx --configuration Release --no-restore
 dotnet test --solution MailMcp.slnx --configuration Release --no-build
+
+# Formatting runs in the fast loop as well as the final gate. Style diagnostics such as IDE0005 are
+# reported by `dotnet format` rather than by the build, so leaving them to full verification means
+# discovering them only after tool restore and the whole coverage collection have already run.
+dotnet format MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic

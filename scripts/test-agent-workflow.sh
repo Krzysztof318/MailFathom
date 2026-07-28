@@ -108,7 +108,7 @@ run_test() {
   fi
 }
 
-verify_fast_runs_restore_build_and_tests() {
+verify_fast_runs_restore_build_tests_and_formatting() {
   : > "$invocation_log"
 
   (
@@ -117,7 +117,7 @@ verify_fast_runs_restore_build_and_tests() {
   )
 
   assert_file_content \
-    $'restore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build' \
+    $'restore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic' \
     "$invocation_log"
 }
 
@@ -398,7 +398,7 @@ workflow_scripts_use_flat_manual_layout() {
   [[ ! -e "$source_repository_root/eng/agent-workflow" ]]
 }
 
-run_test verify_fast_runs_restore_build_and_tests
+run_test verify_fast_runs_restore_build_tests_and_formatting
 run_test verify_full_runs_tests_once_through_coverage
 run_test verify_full_runs_workflow_contracts
 run_test verify_full_stops_when_workflow_contracts_fail
