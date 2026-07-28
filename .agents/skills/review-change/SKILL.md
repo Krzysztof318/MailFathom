@@ -17,7 +17,8 @@ description: Use when reviewing a working-tree diff, pull-request patch, or comp
    - unit-test, documentation, and third-party license impact;
    - unrelated edits, generated files, and secrets.
 4. Apply the recurring-findings checklist below to the changed code.
-5. Run `scripts/verify-fast.sh` when executable or test code changed. If it cannot run, state why.
+5. Run `scripts/verify-fast.sh` when executable or test code changed since its last successful run. A green run that nothing has invalidated is already evidence; repeating it costs a Release build, the whole test suite, and two formatting passes to reprove the same thing. Report the run you are relying on. If it cannot run, state why.
+6. Never invoke `dotnet format` directly to act on a finding. The fast loop repairs the changed files and reports what has no code fix; fix that and rerun the loop.
 
 ## Recurring findings
 

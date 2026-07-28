@@ -27,6 +27,12 @@ reports by file and line what had none, because the repairing pass exits `0` and
 identifies no file when a diagnostic such as `IDE0060` cannot be fixed
 automatically. Formatting is skipped when the branch changed no C# file.
 
+Nobody runs `dotnet format` by hand. Both of its modes already run where they
+belong, so a hand-run pass either repeats about 30 seconds of workspace loading
+and analysis to reproduce what the loop just reported, or, over the whole
+solution, spends 70 seconds and can rewrite files the change never touched. Fix
+what the loop reported and run it again.
+
 Scoping the loop is what makes running `dotnet format` twice cheaper than
 running it once over the solution. Each invocation reloads the MSBuild
 workspace, which costs roughly 15 seconds regardless of scope, and the analysis
@@ -88,7 +94,8 @@ The canonical skills are:
   task, then loads the applicable specification, documentation, and ADR context
   before edits;
 - `review-change` performs a findings-first diff review and records verification
-  status and residual risks;
+  status and residual risks, and reruns the fast loop only when something has
+  invalidated its last green run;
 - `check-docs-licenses` is the mandatory documentation and licensing gate;
 - `finish-change` stages only the task files, requires the documentation and
   licensing gate, runs full verification, checks the final diff, creates a
