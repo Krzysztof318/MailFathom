@@ -88,6 +88,38 @@ public sealed class MailSynchronizationWorkerTests
         Assert.Contains(logger.Messages, message => message.Contains("Deferred IMAP folder synchronization for primary/INBOX", StringComparison.Ordinal));
     }
 
+    /// <summary>A struggling mail server and a host that is shutting down must not read as the same event.</summary>
+    [Fact]
+    public async Task ExecuteAsync_MailServerRefusesTheFolder_LogsItAsAServerDeferralAndContinues()
+    {
+        // Arrange
+        var attemptedFolders = new List<string>();
+        var lastFolderAttempted = new TaskCompletionSource();
+        var sessionFactory = CreateFailingSessionFactory(
+            attemptedFolders,
+            lastFolderAttempted,
+            expectedFolderCount: 2,
+            folderName => folderName == "INBOX"
+                ? new MailboxUnavailableException(
+                    MailAccountId.Create("primary"),
+                    MailFolderName.Create("INBOX"),
+                    new TimeoutException("The server stopped answering."))
+                : new InvalidOperationException("connect failed"));
+        var options = CreateOptions(enabled: true, "INBOX", "Archive");
+        using var worker = CreateWorker(options, sessionFactory, out var logger);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await lastFolderAttempted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await worker.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(["INBOX", "Archive"], attemptedFolders);
+        Assert.Contains(
+            logger.Messages,
+            message => message.Contains("primary/INBOX because the mail server did not serve it", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task ExecuteAsync_FolderFails_LogsNeitherTheUserNameNorTheSecretReference()
     {

@@ -1,7 +1,5 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-using System.Net.Security;
-using System.Security.Cryptography.X509Certificates;
 using MailKit;
 using MailKit.Search;
 using MailKit.Security;
@@ -11,18 +9,14 @@ using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Mail.MailKit;
-using MailMcp.Infrastructure.Secrets;
 using NSubstitute;
 using Xunit;
+using static MailMcp.Infrastructure.UnitTests.MailKitImapSessionTestContext;
 
 namespace MailMcp.Infrastructure.UnitTests;
 
 public sealed class MailKitImapMailboxSessionTests
 {
-    private static readonly MailTransportSecurityPolicy TlsOnConnectWithPlainPolicy =
-        CreatePolicy(MailConnectionSecurity.TlsOnConnect, MailAuthenticationMechanism.Plain);
-
     [Theory]
     [InlineData(MailConnectionSecurity.Auto, SecureSocketOptions.Auto)]
     [InlineData(MailConnectionSecurity.TlsOnConnect, SecureSocketOptions.SslOnConnect)]
@@ -34,15 +28,15 @@ public sealed class MailKitImapMailboxSessionTests
         SecureSocketOptions expectedSocketOptions)
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
-        var factory = CreateFactory(client, folder);
+        var factory = CreateFactory(resilience, client, CreateSelectedFolder());
         client.AuthenticationMechanisms.Add("SCRAM-SHA-256");
 
         // Act
         await using var session = await factory.OpenReadOnlyAsync(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
+            PrimaryAccount,
+            InboxFolder,
             CreatePolicy(connectionSecurity, MailAuthenticationMechanism.ScramSha256),
             CancellationToken.None);
 
@@ -54,17 +48,17 @@ public sealed class MailKitImapMailboxSessionTests
     public async Task OpenReadOnlyAsync_ServerAdvertisesMechanismsOutsideThePolicy_RemovesThemBeforeAuthenticating()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
-        var factory = CreateFactory(client, folder);
+        var factory = CreateFactory(resilience, client, CreateSelectedFolder());
         client.AuthenticationMechanisms.Add("PLAIN");
         client.AuthenticationMechanisms.Add("LOGIN");
         client.AuthenticationMechanisms.Add("SCRAM-SHA-256");
 
         // Act
         await using var session = await factory.OpenReadOnlyAsync(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
+            PrimaryAccount,
+            InboxFolder,
             CreatePolicy(MailConnectionSecurity.TlsOnConnect, MailAuthenticationMechanism.ScramSha256),
             CancellationToken.None);
 
@@ -76,16 +70,15 @@ public sealed class MailKitImapMailboxSessionTests
     public async Task OpenReadOnlyAsync_ServerAdvertisesNoPermittedMechanism_FailsWithoutAuthenticatingOrWideningTheSet()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
-        var factory = CreateFactory(client, folder);
-        client.IsConnected = true;
+        var factory = CreateFactory(resilience, client, CreateSelectedFolder());
         client.AuthenticationMechanisms.Add("LOGIN");
 
         // Act
         var exception = await Assert.ThrowsAsync<MailAuthenticationMechanismUnavailableException>(() => factory.OpenReadOnlyAsync(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
+            PrimaryAccount,
+            InboxFolder,
             CreatePolicy(MailConnectionSecurity.TlsOnConnect, MailAuthenticationMechanism.ScramSha256),
             CancellationToken.None));
 
@@ -101,15 +94,11 @@ public sealed class MailKitImapMailboxSessionTests
     public async Task GetEmailBatchAfterAsync_EmptyFolder_DoesNotCheckpointFutureUid()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
-        folder.UidValidity.Returns(7U);
+        var folder = CreateSelectedFolder();
         folder.UidNext.Returns(new UniqueId(1));
-        await using var session = new MailKitImapMailboxSession(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
-            client,
-            folder);
+        await using var session = await OpenSessionAsync(resilience, client, folder);
 
         // Act
         var batch = await session.GetEmailBatchAfterAsync(null, 100, CancellationToken.None);
@@ -117,15 +106,16 @@ public sealed class MailKitImapMailboxSessionTests
         // Assert
         Assert.Null(batch.InspectedThroughUid);
         Assert.False(batch.HasMore);
-        await folder.DidNotReceive().SearchAsync(Arg.Any<SearchQuery>(), CancellationToken.None);
+        await folder.DidNotReceive().SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task GetEmailBatchAfterAsync_NonUtcEnvelopeDate_NormalizesSentAtToUtc()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
+        var folder = CreateSelectedFolder();
         var summary = Substitute.For<IMessageSummary>();
         var uid = new UniqueId(10);
         summary.UniqueId.Returns(uid);
@@ -136,18 +126,13 @@ public sealed class MailKitImapMailboxSessionTests
             Subject = "Subject",
         });
         summary.Size.Returns(123U);
-        folder.UidValidity.Returns(7U);
         folder.UidNext.Returns(new UniqueId(11));
-        folder.SearchAsync(Arg.Any<SearchQuery>(), CancellationToken.None).Returns([uid]);
+        folder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>()).Returns([uid]);
         folder.FetchAsync(
             Arg.Any<IList<UniqueId>>(),
             Arg.Any<IFetchRequest>(),
-            CancellationToken.None).Returns([summary]);
-        await using var session = new MailKitImapMailboxSession(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
-            client,
-            folder);
+            Arg.Any<CancellationToken>()).Returns([summary]);
+        await using var session = await OpenSessionAsync(resilience, client, folder);
 
         // Act
         var batch = await session.GetEmailBatchAfterAsync(null, 100, CancellationToken.None);
@@ -158,59 +143,54 @@ public sealed class MailKitImapMailboxSessionTests
         Assert.Equal(new DateTimeOffset(2026, 7, 24, 6, 30, 0, TimeSpan.Zero), metadata.SentAt);
     }
 
+    /// <summary>A half-established connection is unusable, so it is closed rather than asked for a graceful logout it may never answer.</summary>
     [Fact]
-    public async Task OpenReadOnlyAsync_FolderOpenFails_DisposesClientBeforeRethrowing()
+    public async Task OpenReadOnlyAsync_FolderOpenFails_AbandonsTheConnectionWithoutASecondCommand()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
-        var settingsProvider = CreateSettingsProvider();
-        client.IsConnected = true;
+        var folder = CreateSelectedFolder();
+        var factory = CreateFactory(resilience, client, folder);
         client.AuthenticationMechanisms.Add("PLAIN");
-        client.Folder = folder;
-        folder.OpenAsync(FolderAccess.ReadOnly, CancellationToken.None).Returns<Task>(_ => throw new InvalidOperationException("missing folder"));
-        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
+        folder.OpenAsync(FolderAccess.ReadOnly, Arg.Any<CancellationToken>()).Returns<Task>(_ => throw new InvalidOperationException("missing folder"));
 
         // Act
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => factory.OpenReadOnlyAsync(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
+            PrimaryAccount,
+            InboxFolder,
             TlsOnConnectWithPlainPolicy,
             CancellationToken.None));
 
         // Assert
         Assert.Equal("missing folder", exception.Message);
         Assert.Equal(1, client.GetFolderAsyncCount);
-        Assert.Equal(1, client.DisconnectCount);
+        Assert.Equal(0, client.DisconnectCount);
         Assert.Equal(1, client.DisposeCount);
     }
 
     [Fact]
-    public async Task OpenReadOnlyAsync_FolderOpenAndCleanupFail_PreservesFolderOpenExceptionAndAttemptsAllCleanup()
+    public async Task OpenReadOnlyAsync_FolderOpenAndCleanupFail_PreservesTheFolderOpenFailure()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
-        var settingsProvider = CreateSettingsProvider();
+        var folder = CreateSelectedFolder();
+        var factory = CreateFactory(resilience, client, folder);
         var folderOpenException = new InvalidOperationException("folder open failed");
-        client.IsConnected = true;
         client.AuthenticationMechanisms.Add("PLAIN");
-        client.Folder = folder;
-        client.DisconnectException = new IOException("disconnect failed");
         client.DisposeException = new IOException("dispose failed");
-        folder.OpenAsync(FolderAccess.ReadOnly, CancellationToken.None).Returns<Task>(_ => throw folderOpenException);
-        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
+        folder.OpenAsync(FolderAccess.ReadOnly, Arg.Any<CancellationToken>()).Returns<Task>(_ => throw folderOpenException);
 
         // Act
         var observedException = await Assert.ThrowsAsync<InvalidOperationException>(() => factory.OpenReadOnlyAsync(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
+            PrimaryAccount,
+            InboxFolder,
             TlsOnConnectWithPlainPolicy,
             CancellationToken.None));
 
         // Assert
         Assert.Same(folderOpenException, observedException);
-        Assert.Equal(1, client.DisconnectCount);
         Assert.Equal(1, client.DisposeCount);
         client.DisposeException = null;
     }
@@ -219,17 +199,10 @@ public sealed class MailKitImapMailboxSessionTests
     public async Task DisposeAsync_DisconnectFails_StillDisposesClientAndPreservesDisconnectFailure()
     {
         // Arrange
-        await using var client = new FakeImapClient
-        {
-            IsConnected = true,
-            DisconnectException = new IOException("disconnect failed"),
-        };
-        var folder = Substitute.For<IMailFolder>();
-        await using var session = new MailKitImapMailboxSession(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
-            client,
-            folder);
+        using var resilience = CreateSingleAttemptResilience();
+        await using var client = new FakeImapClient();
+        var session = await OpenSessionAsync(resilience, client, CreateSelectedFolder());
+        client.DisconnectException = new IOException("disconnect failed");
 
         // Act
         var observedException = await Assert.ThrowsAsync<IOException>(() => session.DisposeAsync().AsTask());
@@ -251,14 +224,10 @@ public sealed class MailKitImapMailboxSessionTests
         uint occurrenceUidValidity)
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
-        folder.UidValidity.Returns(7U);
-        await using var session = new MailKitImapMailboxSession(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
-            client,
-            folder);
+        var folder = CreateSelectedFolder();
+        await using var session = await OpenSessionAsync(resilience, client, folder);
         var foreignOccurrence = EmailOccurrenceId.Create(
             MailAccountId.Create(occurrenceAccountId),
             MailFolderName.Create(occurrenceFolderName),
@@ -273,29 +242,22 @@ public sealed class MailKitImapMailboxSessionTests
 
         // Assert
         Assert.Equal("occurrenceId", exception.ParamName);
-        await folder.DidNotReceive().GetStreamAsync(Arg.Any<UniqueId>(), CancellationToken.None);
+        await folder.DidNotReceive().GetStreamAsync(Arg.Any<UniqueId>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task OpenReadOnlyAsync_Always_SelectsFolderWithReadOnlyAccess()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
-        var settingsProvider = CreateSettingsProvider();
-        client.AuthenticationMechanisms.Add("PLAIN");
-        client.Folder = folder;
-        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
+        var folder = CreateSelectedFolder();
 
         // Act
-        await using var session = await factory.OpenReadOnlyAsync(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
-            TlsOnConnectWithPlainPolicy,
-            CancellationToken.None);
+        await using var session = await OpenSessionAsync(resilience, client, folder);
 
         // Assert
-        await folder.Received(1).OpenAsync(FolderAccess.ReadOnly, CancellationToken.None);
+        await folder.Received(1).OpenAsync(FolderAccess.ReadOnly, Arg.Any<CancellationToken>());
         await folder.DidNotReceive().OpenAsync(FolderAccess.ReadWrite, Arg.Any<CancellationToken>());
     }
 
@@ -303,17 +265,17 @@ public sealed class MailKitImapMailboxSessionTests
     public async Task OpenReadOnlyAsync_FolderOpened_ErasesTheResolvedPasswordMaterial()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
         var settingsProvider = CreateSettingsProvider(out var resolvedMaterial);
         client.AuthenticationMechanisms.Add("PLAIN");
-        client.Folder = folder;
-        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
+        client.Folder = CreateSelectedFolder();
+        var factory = CreateFactory(resilience, () => client, settingsProvider);
 
         // Act
         await using var session = await factory.OpenReadOnlyAsync(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
+            PrimaryAccount,
+            InboxFolder,
             TlsOnConnectWithPlainPolicy,
             CancellationToken.None);
 
@@ -326,19 +288,19 @@ public sealed class MailKitImapMailboxSessionTests
     public async Task OpenReadOnlyAsync_AccountTrustingAnAdditionalAuthority_InstallsTheTrustDecisionBeforeConnecting()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
         using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
         using var anchor = TestCertificates.WithoutPrivateKey(authority);
         var settingsProvider = CreateSettingsProvider(out _, anchor);
         client.AuthenticationMechanisms.Add("PLAIN");
-        client.Folder = folder;
-        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
+        client.Folder = CreateSelectedFolder();
+        var factory = CreateFactory(resilience, () => client, settingsProvider);
 
         // Act
         await using var session = await factory.OpenReadOnlyAsync(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
+            PrimaryAccount,
+            InboxFolder,
             TlsOnConnectWithPlainPolicy,
             CancellationToken.None);
 
@@ -351,17 +313,11 @@ public sealed class MailKitImapMailboxSessionTests
     public async Task OpenReadOnlyAsync_AccountTrustingTheSystemStore_LeavesTheClientValidationUntouched()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
-        var factory = CreateFactory(client, folder);
-        client.AuthenticationMechanisms.Add("PLAIN");
 
         // Act
-        await using var session = await factory.OpenReadOnlyAsync(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
-            TlsOnConnectWithPlainPolicy,
-            CancellationToken.None);
+        await using var session = await OpenSessionAsync(resilience, client, CreateSelectedFolder());
 
         // Assert
         Assert.Null(client.ValidationCallbackWhenConnected);
@@ -371,15 +327,16 @@ public sealed class MailKitImapMailboxSessionTests
     public async Task OpenReadOnlyAsync_ConnectionFails_StillErasesTheResolvedPasswordMaterial()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
         var settingsProvider = CreateSettingsProvider(out var resolvedMaterial);
         client.ConnectException = new IOException("connect failed");
-        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
+        var factory = CreateFactory(resilience, () => client, settingsProvider);
 
         // Act
-        await Assert.ThrowsAsync<IOException>(() => factory.OpenReadOnlyAsync(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
+        await Assert.ThrowsAsync<MailboxUnavailableException>(() => factory.OpenReadOnlyAsync(
+            PrimaryAccount,
+            InboxFolder,
             TlsOnConnectWithPlainPolicy,
             CancellationToken.None));
 
@@ -392,21 +349,13 @@ public sealed class MailKitImapMailboxSessionTests
     public async Task FetchEmailContentWithoutSettingSeenAsync_ValidOccurrence_ReturnsContentWithoutRequestingAnySeenSettingOperation()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
+        var folder = CreateSelectedFolder();
         var rawMime = "From: sender@example.test\r\nSubject: Subject\r\n\r\nBody"u8.ToArray();
-        folder.UidValidity.Returns(7U);
-        folder.GetStreamAsync(new UniqueId(10), CancellationToken.None).Returns(_ => new MemoryStream(rawMime));
-        await using var session = new MailKitImapMailboxSession(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
-            client,
-            folder);
-        var occurrenceId = EmailOccurrenceId.Create(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
-            ImapUidValidity.Create(7),
-            ImapUid.Create(10));
+        folder.GetStreamAsync(new UniqueId(10), Arg.Any<CancellationToken>()).Returns(_ => new MemoryStream(rawMime));
+        await using var session = await OpenSessionAsync(resilience, client, folder);
+        var occurrenceId = CreateOccurrenceId(10);
 
         // Act
         var content = await session.FetchEmailContentWithoutSettingSeenAsync(occurrenceId, 1024, CancellationToken.None);
@@ -417,7 +366,7 @@ public sealed class MailKitImapMailboxSessionTests
 
         // GetStreamAsync(uid) is MailKit's BODY.PEEK[] retrieval; StoreAsync is the only IMailFolder member able to change
         // flags, and a read-write reselection would let the server set \Seen implicitly.
-        await folder.Received(1).GetStreamAsync(new UniqueId(10), CancellationToken.None);
+        await folder.Received(1).GetStreamAsync(new UniqueId(10), Arg.Any<CancellationToken>());
         await folder.DidNotReceive().StoreAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IStoreFlagsRequest>(), Arg.Any<CancellationToken>());
         await folder.DidNotReceive().OpenAsync(FolderAccess.ReadWrite, Arg.Any<CancellationToken>());
     }
@@ -426,20 +375,12 @@ public sealed class MailKitImapMailboxSessionTests
     public async Task FetchEmailContentWithoutSettingSeenAsync_ContentStreamExceedsLimit_ThrowsMessageContentTooLarge()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
-        folder.UidValidity.Returns(7U);
-        folder.GetStreamAsync(new UniqueId(10), CancellationToken.None).Returns(_ => new MemoryStream(new byte[2048]));
-        await using var session = new MailKitImapMailboxSession(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
-            client,
-            folder);
-        var occurrenceId = EmailOccurrenceId.Create(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
-            ImapUidValidity.Create(7),
-            ImapUid.Create(10));
+        var folder = CreateSelectedFolder();
+        folder.GetStreamAsync(new UniqueId(10), Arg.Any<CancellationToken>()).Returns(_ => new MemoryStream(new byte[2048]));
+        await using var session = await OpenSessionAsync(resilience, client, folder);
+        var occurrenceId = CreateOccurrenceId(10);
 
         // Act
         var exception = await Assert.ThrowsAsync<EmailContentTooLargeException>(() => session.FetchEmailContentWithoutSettingSeenAsync(
@@ -457,15 +398,11 @@ public sealed class MailKitImapMailboxSessionTests
     public async Task GetEmailBatchAfterAsync_CheckpointAtHighestPossibleUid_StopsWithoutSearchingBeyondTheUidSpace()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
-        folder.UidValidity.Returns(7U);
+        var folder = CreateSelectedFolder();
         folder.UidNext.Returns(new UniqueId(uint.MaxValue));
-        await using var session = new MailKitImapMailboxSession(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
-            client,
-            folder);
+        await using var session = await OpenSessionAsync(resilience, client, folder);
         var exhaustedUid = ImapUid.Create(uint.MaxValue);
 
         // Act
@@ -482,14 +419,9 @@ public sealed class MailKitImapMailboxSessionTests
     public async Task GetUidValidityAsync_OpenFolder_ReturnsSelectedFolderUidValidity()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
-        folder.UidValidity.Returns(7U);
-        await using var session = new MailKitImapMailboxSession(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
-            client,
-            folder);
+        await using var session = await OpenSessionAsync(resilience, client, CreateSelectedFolder());
 
         // Act
         var uidValidity = await session.GetUidValidityAsync(CancellationToken.None);
@@ -502,20 +434,16 @@ public sealed class MailKitImapMailboxSessionTests
     public async Task GetEmailBatchAfterAsync_SparseUidsExceedingBatchSize_BoundsBatchByMessageCountAndCheckpointsLastFetchedUid()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
-        folder.UidValidity.Returns(7U);
+        var folder = CreateSelectedFolder();
         folder.UidNext.Returns(new UniqueId(1001));
-        folder.SearchAsync(Arg.Any<SearchQuery>(), CancellationToken.None).Returns([new UniqueId(100), new UniqueId(400), new UniqueId(900)]);
+        folder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>()).Returns([new UniqueId(100), new UniqueId(400), new UniqueId(900)]);
         folder.FetchAsync(
             Arg.Any<IList<UniqueId>>(),
             Arg.Any<IFetchRequest>(),
-            CancellationToken.None).Returns(callInfo => CreateSummaries(callInfo.Arg<IList<UniqueId>>() ?? []));
-        await using var session = new MailKitImapMailboxSession(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
-            client,
-            folder);
+            Arg.Any<CancellationToken>()).Returns(callInfo => CreateSummaries(callInfo.Arg<IList<UniqueId>>() ?? []));
+        await using var session = await OpenSessionAsync(resilience, client, folder);
 
         // Act
         var batch = await session.GetEmailBatchAfterAsync(null, 2, CancellationToken.None);
@@ -530,20 +458,16 @@ public sealed class MailKitImapMailboxSessionTests
     public async Task GetEmailBatchAfterAsync_FewerMatchesThanBatchSize_CheckpointsThroughHighestAssignedUid()
     {
         // Arrange
+        using var resilience = CreateSingleAttemptResilience();
         await using var client = new FakeImapClient();
-        var folder = Substitute.For<IMailFolder>();
-        folder.UidValidity.Returns(7U);
+        var folder = CreateSelectedFolder();
         folder.UidNext.Returns(new UniqueId(1001));
-        folder.SearchAsync(Arg.Any<SearchQuery>(), CancellationToken.None).Returns([new UniqueId(900)]);
+        folder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>()).Returns([new UniqueId(900)]);
         folder.FetchAsync(
             Arg.Any<IList<UniqueId>>(),
             Arg.Any<IFetchRequest>(),
-            CancellationToken.None).Returns(callInfo => CreateSummaries(callInfo.Arg<IList<UniqueId>>() ?? []));
-        await using var session = new MailKitImapMailboxSession(
-            MailAccountId.Create("primary"),
-            MailFolderName.Create("INBOX"),
-            client,
-            folder);
+            Arg.Any<CancellationToken>()).Returns(callInfo => CreateSummaries(callInfo.Arg<IList<UniqueId>>() ?? []));
+        await using var session = await OpenSessionAsync(resilience, client, folder);
 
         // Act
         var batch = await session.GetEmailBatchAfterAsync(ImapUid.Create(400), 2, CancellationToken.None);
@@ -576,142 +500,6 @@ public sealed class MailKitImapMailboxSessionTests
         summary.Size.Returns(128U);
 
         return summary;
-    }
-
-    private static MailTransportSecurityPolicy CreatePolicy(
-        MailConnectionSecurity connectionSecurity,
-        MailAuthenticationMechanism permittedMechanism) => MailTransportSecurityPolicy.Create(
-            connectionSecurity,
-            MailAuthenticationPolicy.Create(
-                [permittedMechanism],
-                allowInsecureConnection: !MailTransportSecurityPolicy.GuaranteesEncryptedChannel(connectionSecurity),
-                allowClearTextAuthenticationOverUnencryptedConnection: permittedMechanism.TransmitsCredentialsInClearText),
-            MailServerCertificateTrust.SystemTrustStore,
-            trustedCertificateAuthorityReference: null);
-
-    private static MailKitImapMailboxSessionFactory CreateFactory(FakeImapClient client, IMailFolder folder)
-    {
-        var settingsProvider = CreateSettingsProvider();
-        client.Folder = folder;
-
-        return new MailKitImapMailboxSessionFactory(() => client, settingsProvider);
-    }
-
-    private static IImapAccountSettingsProvider CreateSettingsProvider() => CreateSettingsProvider(out _);
-
-    private static IImapAccountSettingsProvider CreateSettingsProvider(out List<MailAccountConnectionMaterial> resolvedMaterial) =>
-        CreateSettingsProvider(out resolvedMaterial, trustedCertificateAuthority: null);
-
-    private static IImapAccountSettingsProvider CreateSettingsProvider(
-        out List<MailAccountConnectionMaterial> resolvedMaterial,
-        X509Certificate2? trustedCertificateAuthority)
-    {
-        var issuedMaterial = new List<MailAccountConnectionMaterial>();
-        var settingsProvider = Substitute.For<IImapAccountSettingsProvider>();
-        settingsProvider.GetSettingsAsync("primary", Arg.Any<CancellationToken>()).Returns(_ =>
-        {
-            var material = new MailAccountConnectionMaterial(
-                ResolvedSecret.FromText("password"),
-                trustedCertificateAuthority);
-            issuedMaterial.Add(material);
-
-            return Task.FromResult(new ImapAccountSettings("primary", "imap.example.test", 993, "user", material));
-        });
-
-        resolvedMaterial = issuedMaterial;
-
-        return settingsProvider;
-    }
-
-    private sealed class FakeImapClient : IMailKitImapClient
-    {
-        public bool IsConnected { get; set; }
-
-        public ISet<string> AuthenticationMechanisms { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        public RemoteCertificateValidationCallback? ServerCertificateValidationCallback { get; set; }
-
-        public IReadOnlyList<string> MechanismsWhenAuthenticated { get; private set; } = [];
-
-        public bool AuthenticateCalled { get; private set; }
-
-        public IMailFolder? Folder { get; set; }
-
-        public int DisconnectCount { get; private set; }
-
-        public int DisposeCount { get; private set; }
-
-        public int GetFolderAsyncCount { get; private set; }
-
-        public Exception? ConnectException { get; set; }
-
-        public Exception? DisconnectException { get; set; }
-
-        public Exception? DisposeException { get; set; }
-
-        public SecureSocketOptions? ConnectSocketOptions { get; private set; }
-
-        public RemoteCertificateValidationCallback? ValidationCallbackWhenConnected { get; private set; }
-
-        public Task ConnectAsync(
-            string host,
-            int port,
-            SecureSocketOptions options,
-            CancellationToken cancellationToken)
-        {
-            this.ValidationCallbackWhenConnected = this.ServerCertificateValidationCallback;
-            this.ConnectSocketOptions = options;
-            if (this.ConnectException is not null)
-            {
-                throw this.ConnectException;
-            }
-
-            return Task.CompletedTask;
-        }
-
-        public Task AuthenticateAsync(
-            string userName,
-            string password,
-            CancellationToken cancellationToken)
-        {
-            this.AuthenticateCalled = true;
-            this.MechanismsWhenAuthenticated = [.. this.AuthenticationMechanisms.Order(StringComparer.Ordinal)];
-
-            return Task.CompletedTask;
-        }
-
-        public Task<IMailFolder> GetFolderAsync(
-            string path,
-            CancellationToken cancellationToken)
-        {
-            this.GetFolderAsyncCount++;
-            return Task.FromResult(this.Folder ?? throw new InvalidOperationException("No test folder configured."));
-        }
-
-        public Task DisconnectAsync(
-            bool quit,
-            CancellationToken cancellationToken)
-        {
-            this.DisconnectCount++;
-            if (this.DisconnectException is not null)
-            {
-                throw this.DisconnectException;
-            }
-
-            this.IsConnected = false;
-            return Task.CompletedTask;
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            this.DisposeCount++;
-            if (this.DisposeException is not null)
-            {
-                throw this.DisposeException;
-            }
-
-            return ValueTask.CompletedTask;
-        }
     }
 
 }

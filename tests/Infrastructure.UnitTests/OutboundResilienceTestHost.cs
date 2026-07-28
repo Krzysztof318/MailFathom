@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailMcp.Application.Resilience;
 using MailMcp.Infrastructure.Resilience;
 using MailMcp.TestSupport;
 using Microsoft.Extensions.Configuration;
@@ -49,6 +50,8 @@ internal sealed class OutboundResilienceTestHost : IDisposable
     internal IServiceProvider Services => this.services;
 
     internal OutboundOperationExecutor Executor => this.services.GetRequiredService<OutboundOperationExecutor>();
+
+    internal ITransientFailureClassifier TransientFailureClassifier => this.services.GetRequiredService<ITransientFailureClassifier>();
 
     /// <summary>Builds a host whose configuration overrides the named settings, given as <c>Dependency:Setting</c> pairs.</summary>
     internal static OutboundResilienceTestHost WithConfiguredSettings(params (string SettingPath, string Value)[] configuredSettings) =>

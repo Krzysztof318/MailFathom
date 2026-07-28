@@ -15,6 +15,7 @@ public interface IMailboxSessionFactory
     /// <param name="transportSecurityPolicy">The connection and authentication policy the implementation must obey.</param>
     /// <param name="cancellationToken">Cancels connecting, authenticating, and selecting the folder.</param>
     /// <returns>An open read-only mailbox session the caller owns and must dispose.</returns>
+    /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not accept the session within its configured resilience budget.</exception>
     /// <remarks>
     /// The policy is an input rather than something the implementation resolves, so an adapter cannot widen the
     /// permitted authentication mechanisms or downgrade the connection on its own.

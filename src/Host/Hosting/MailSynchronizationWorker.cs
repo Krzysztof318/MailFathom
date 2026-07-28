@@ -93,6 +93,10 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
             {
                 this.LogFolderSynchronizationDeferredAfterConcurrencyConflict(exception, accountId, folderName);
             }
+            catch (MailboxUnavailableException exception)
+            {
+                this.LogFolderSynchronizationDeferredAfterMailServerUnavailable(exception, accountId, folderName);
+            }
             catch (Exception exception)
             {
                 this.LogFolderSynchronizationFailed(exception, accountId, folderName);
@@ -125,6 +129,15 @@ internal sealed partial class MailSynchronizationWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "Deferred IMAP folder synchronization for {AccountId}/{FolderName} after an unresolved optimistic concurrency conflict; the next interval will retry from the persisted checkpoint.")]
     private partial void LogFolderSynchronizationDeferredAfterConcurrencyConflict(
+        Exception exception,
+        string accountId,
+        string folderName);
+
+    /// <summary>Separates a mail server that is refusing work from a host that is shutting down, which cancellation already reports.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Deferred IMAP folder synchronization for {AccountId}/{FolderName} because the mail server did not serve it within its configured resilience budget; the next interval will retry from the persisted checkpoint.")]
+    private partial void LogFolderSynchronizationDeferredAfterMailServerUnavailable(
         Exception exception,
         string accountId,
         string folderName);

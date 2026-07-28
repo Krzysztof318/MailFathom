@@ -16,7 +16,8 @@ MailMcp now includes the first vertical slice for read-only IMAP synchronization
 - Mutable tracked email metadata and synchronization checkpoints carry an infrastructure-only `ConcurrencyVersion`. It is a `uint` row version, which is how Npgsql maps a property onto the PostgreSQL `xmin` system column, so the token is server-generated and no concurrency column exists in either table. A stale tracked update is translated from `DbUpdateConcurrencyException` into an application-owned commit result at the session boundary, which is the only place a conflict is an ordinary branch: its consumer is the retry policy's loop. Synchronization retries a complete idempotent metadata/content write in a fresh persistence session, never repeats the preceding IMAP fetch, and uses cancellation-aware exponential backoff with jitter between bounded attempts. Checkpoint writes are attempted once and only when their durable UIDVALIDITY and last-seen UID still equal the progress read at the start of the run; timestamp precision differences are ignored, while the later synchronization timestamp is retained. `xmin` detects a later race before commit, and a concurrent first-checkpoint primary-key collision is treated narrowly as the same conflict.
 - Once bounded attempts are spent, or a checkpoint moved under the run, the conflict leaves `SynchronizeAsync` as `PersistenceConcurrencyConflictException` instead of being restated as a result value by each layer it passes. Progress the run already committed stays durable. The worker catches it per folder, logs a deferral with the reason, and continues with the remaining folders; the next interval rereads the last committed checkpoint. The attempt bound is one deployment-wide setting, not a synchronization option, because writers compete for shared rows rather than for anything a single service owns.
 - The MailKit adapter resolves folders asynchronously, caps UID progress with the opened folder UIDNEXT value, normalizes email sent dates to UTC before persistence, and rejects occurrence identities that do not belong to the open account, folder, and UIDVALIDITY scope.
-- Failed MailKit session setup attempts both disconnect and disposal without replacing the primary setup failure. Normal session disposal also attempts both operations and reports the first cleanup failure.
+- A connection the adapter has declared unusable — a failed setup, or one being replaced after a transient failure — is closed rather than asked for a graceful logout. A logout is a command, and a server that stopped answering can hold it far past the attempt budget on a call no cancellation reaches, while the pipeline starts the next attempt against the same connection object. Its cleanup failure never replaces the failure being retried. Orderly session disposal still disconnects and disposes, and reports the first cleanup failure.
+- A mailbox session survives a mail server that drops its connection. `MailKitImapConnection` owns the client, and no hand-written retry loop exists anywhere in the adapter: the [outbound resilience pipelines](../architecture/outbound-resilience.md) do the repeating, and the adapter only decides what is safe to repeat and how the session recovers. The applied pipelines and the failure classification are documented in the next section.
 - `Domain` owns the mail transport security policy: the five connection-security modes, the ordered SASL allow-list, the two opt-ins that permit weakening transport protection, and the trust-anchor selection. The rules that reject an unsafe combination live in `MailTransportSecurityPolicy` rather than in a configuration validator, so a future command-line or MCP entry point cannot reach a transport adapter with a policy that host startup would have refused.
 - A permitted mechanism is a domain value object rather than an enum, so its registered SASL name, its clear-text classification, and its JSON form travel with the value instead of living in a separate mapping table that could drift. It serializes as that SASL name, which is also the name configuration accepts and the name matched against a server's advertised set.
 - The policy is an input to `IMailboxSessionFactory.OpenReadOnlyAsync`, not something the adapter resolves. `MailboxSynchronizer` reads it per run through `IMailTransportSecurityPolicyReader`, which is why an adapter can only narrow what it is handed.
@@ -25,6 +26,52 @@ MailMcp now includes the first vertical slice for read-only IMAP synchronization
 - `MailServerCertificateValidator` decides trust for an account that names an additional authority, by rebuilding the chain against the configured anchor rather than by forgiving what the platform reported. Nothing anywhere can switch validation off.
 - Secrets are re-resolved per operation rather than cached, and the configuration snapshot that names them is republished only after every reference in it has resolved. A rotated credential, trust anchor, or database password therefore reaches the next operation without a restart, and a reload that cannot resolve leaves the previous snapshot active. [Secret rotation](../operations/secret-rotation.md) is the operator procedure.
 - `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, secret resolution and trust anchor loading before any hosted service starts, a validated snapshot every consumer reads instead of the raw bound one, and a periodic scoped background worker that isolates failures per account/folder work unit.
+
+## Session resilience
+
+Two dependency classes cover an IMAP session, and each one is resolved for the account it belongs to, so one
+unreachable server opens a circuit for its own account and leaves every other account reading.
+
+| Class | Covers | Repeated? |
+| --- | --- | --- |
+| `MailboxSessionEstablishment` | Connecting, negotiating TLS, authenticating, and selecting the folder read-only | Only a transport-level failure |
+| `MailboxDataRetrieval` | UID search, envelope batches, and the `BODY.PEEK` content fetch | Yes; both reads are repeatable by construction |
+
+Failure classification is explicit rather than inherited from a library's guess:
+
+- **Terminal.** A rejected credential, an unusable TLS handshake, an authentication mechanism the operator's allow-list
+  refused, and any IMAP command the server refused. Repeating a rejected credential against a mail server is how an
+  account gets locked, which is exactly why establishment is a separate class from retrieval. Anything unrecognized is
+  terminal too.
+- **Transient.** A dropped socket, a server-initiated disconnect, a desynchronized protocol stream, and an attempt the
+  pipeline abandoned at its per-attempt timeout.
+- **Neither.** The caller's own cancellation. It stays an `OperationCanceledException` so the worker can tell a host
+  shutting down from a mail server that stopped answering; the latter reaches it as `MailboxUnavailableException` and
+  is logged as a deferral naming the account and folder.
+
+Two outcomes produce that `MailboxUnavailableException`: a limit the pipeline imposed, and a transient failure that
+survived every attempt. The second needs saying because a retry strategy that runs out of attempts rethrows the last
+failure rather than a rejection, so without the translation the most ordinary exhaustion — three dropped connections in
+a row — would bypass the worker's deferral branch and put a mail-library exception through an application port.
+Terminal failures still surface as themselves, because a rejected credential is the operator's to see.
+
+A retried read re-establishes the session when the previous attempt lost the connection. It also re-establishes when
+the previous attempt failed on anything worth repeating while the client still claimed to be connected: nothing in an
+exception says the command stream is still synchronized, and `IsConnected` only reports a socket. Retrying on such a
+connection would spend the whole budget on one unusable session. Every establishment — the
+first one and every recovery — resolves the account's secret material again, connects a new client, and selects the
+folder with `FolderAccess.ReadOnly`. There is no other selection path in the adapter, so recovery cannot become the
+route by which a folder is opened read-write and a fetch sets the remote `\Seen` flag. A regression test drops the
+connection during a content fetch and asserts that the recovered session reselected read-only, retrieved through the
+peeking fetch, and requested no flag update on either folder.
+
+A recovered connection re-selects the folder, and a server may answer with a new UIDVALIDITY. That folder is not the
+one the run started on — its UIDs name different emails — so the session refuses it with
+`MailboxFolderRecreatedException` instead of attaching the recovered folder's emails to the previous folder's
+checkpoint. The worker logs the failure and the next run starts the folder over from an empty checkpoint.
+
+Budgets are the operator settings described in [outbound resilience](../architecture/outbound-resilience.md) and are
+bound from `Resilience:MailboxSessionEstablishment` and `Resilience:MailboxDataRetrieval`.
 
 ## Configuration
 
@@ -166,7 +213,7 @@ Secret resolution is the one rule that cannot join `ValidateOnStart`, because op
 
 ## Safety assumptions
 
-The application layer exposes only `FetchEmailContentWithoutSettingSeenAsync` for content retrieval during synchronization. This name is part of the contract: implementations must use IMAP read-only selection and BODY.PEEK-equivalent behavior so remote `\Seen` flags are not changed. The MailKit adapter satisfies both halves — it selects the folder with `FolderAccess.ReadOnly` and retrieves content through `GetStreamAsync(uid)`, which issues `UID FETCH <uid> (BODY.PEEK[])`. A regression test exercises a successful fetch and asserts that neither `StoreAsync`, the only `IMailFolder` member able to change flags, nor a read-write reselection was requested. Metadata requests are bounded by `MaxMetadataBatchSize`, each run is bounded by `MaxMetadataBatchesPerRun`, empty unassigned UID ranges are not checkpointed speculatively, and raw MIME above `MaxRawMimeBytes` is recorded as metadata-only. Logs record counts and account/folder identifiers only; raw MIME, email bodies, attachments, credentials, and tokens remain sensitive and must not be logged.
+The application layer exposes only `FetchEmailContentWithoutSettingSeenAsync` for content retrieval during synchronization. This name is part of the contract: implementations must use IMAP read-only selection and BODY.PEEK-equivalent behavior so remote `\Seen` flags are not changed. The MailKit adapter satisfies both halves — it selects the folder with `FolderAccess.ReadOnly` and retrieves content through `GetStreamAsync(uid)`, which issues `UID FETCH <uid> (BODY.PEEK[])`. Regression tests exercise both a successful fetch and a fetch retried after a dropped connection, and assert that neither `StoreAsync`, the only `IMailFolder` member able to change flags, nor a read-write reselection was requested on either path. Metadata requests are bounded by `MaxMetadataBatchSize`, each run is bounded by `MaxMetadataBatchesPerRun`, empty unassigned UID ranges are not checkpointed speculatively, and raw MIME above `MaxRawMimeBytes` is recorded as metadata-only. Logs record counts and account/folder identifiers only; raw MIME, email bodies, attachments, credentials, and tokens remain sensitive and must not be logged.
 
 ### Reloading a rotated reference
 

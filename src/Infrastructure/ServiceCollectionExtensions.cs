@@ -3,12 +3,14 @@
 using MailKit.Net.Imap;
 using MailMcp.Application.EmailContent;
 using MailMcp.Application.Persistence;
+using MailMcp.Application.Resilience;
 using MailMcp.Application.Synchronization;
 using MailMcp.CodeCoverage;
 using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Mail.MailKit;
 using MailMcp.Infrastructure.Persistence;
+using MailMcp.Infrastructure.Resilience;
 using MailMcp.Infrastructure.Secrets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -121,7 +123,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(
             static () => new MailKitImapClientAdapter(new ImapClient()),
-            provider.GetRequiredService<IImapAccountSettingsProvider>()));
+            provider.GetRequiredService<IImapAccountSettingsProvider>(),
+            provider.GetRequiredService<OutboundOperationExecutor>(),
+            provider.GetRequiredService<ITransientFailureClassifier>()));
 
         return services;
     }

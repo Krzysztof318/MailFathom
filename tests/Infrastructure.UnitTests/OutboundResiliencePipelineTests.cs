@@ -197,12 +197,16 @@ public sealed class OutboundResiliencePipelineTests
         using var host = BuildHostWithCircuitBreakerOnly();
         await FailUntilTheCircuitOpensAsync(host);
 
-        // Act, Assert
-        await Assert.ThrowsAsync<BrokenCircuitException>(
+        // Act
+        var rejection = await Assert.ThrowsAsync<OutboundDependencyUnavailableException>(
             () => host.Executor.ExecuteAsync(
                 OutboundDependency.DatabaseCommandExecution,
                 _ => Task.FromResult(1),
                 TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(OutboundDependency.DatabaseCommandExecution, rejection.Dependency);
+        Assert.IsType<BrokenCircuitException>(rejection.InnerException);
     }
 
     [Fact]
@@ -247,11 +251,12 @@ public sealed class OutboundResiliencePipelineTests
             TestContext.Current.CancellationToken);
 
         // Act, Assert
-        await Assert.ThrowsAsync<RateLimiterRejectedException>(
+        var rejection = await Assert.ThrowsAsync<OutboundDependencyUnavailableException>(
             () => host.Executor.ExecuteAsync(
                 OutboundDependency.MailboxSessionEstablishment,
                 _ => Task.FromResult(2),
                 TestContext.Current.CancellationToken));
+        Assert.IsType<RateLimiterRejectedException>(rejection.InnerException);
 
         occupied.SetResult();
         Assert.Equal(1, await occupyingExecution);
@@ -327,6 +332,76 @@ public sealed class OutboundResiliencePipelineTests
                 (OutboundDependency)99,
                 _ => Task.FromResult(1),
                 TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>One unreachable mail server must not open a circuit that every healthy account then runs into.</summary>
+    [Fact]
+    public async Task ExecuteAsync_CircuitOpenedForOneInstance_LeavesEveryOtherInstanceServing()
+    {
+        // Arrange
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings(
+            ("MailboxDataRetrieval:MaxAttempts", "1"),
+            ("MailboxDataRetrieval:CircuitBreakerMinimumThroughput", "2"),
+            ("MailboxDataRetrieval:CircuitBreakerFailureRatio", "0.5"),
+            ("MailboxDataRetrieval:CircuitBreakerSamplingDuration", "00:00:30"),
+            ("MailboxDataRetrieval:CircuitBreakerBreakDuration", "00:00:10"));
+        var unreachableAccount = new OutboundPipelineKey(OutboundDependency.MailboxDataRetrieval, "unreachable-account");
+        var healthyAccount = new OutboundPipelineKey(OutboundDependency.MailboxDataRetrieval, "healthy-account");
+
+        for (var failure = 0; failure < 2; failure++)
+        {
+            await Assert.ThrowsAsync<ImapProtocolException>(
+                () => host.Executor.ExecuteAsync(
+                    unreachableAccount,
+                    "INBOX",
+                    Task<int> (CancellationToken _) => throw new ImapProtocolException("The server closed the stream."),
+                    TestContext.Current.CancellationToken));
+        }
+
+        // Act
+        var servedByTheHealthyAccount = await host.Executor.ExecuteAsync(
+            healthyAccount,
+            "INBOX",
+            _ => Task.FromResult(1),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, servedByTheHealthyAccount);
+        var rejection = await Assert.ThrowsAsync<OutboundDependencyUnavailableException>(
+            () => host.Executor.ExecuteAsync(
+                unreachableAccount,
+                "INBOX",
+                _ => Task.FromResult(2),
+                TestContext.Current.CancellationToken));
+        Assert.IsType<BrokenCircuitException>(rejection.InnerException);
+    }
+
+    /// <summary>An operator reading a retry record has to see which account and which folder degraded.</summary>
+    [Fact]
+    public async Task ExecuteAsync_RetriedInstanceOperation_RecordsTheAccountAndFolderItWasServing()
+    {
+        // Arrange
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings(
+            ("MailboxDataRetrieval:MaxAttempts", "2"),
+            ("MailboxDataRetrieval:BaseDelay", "00:00:01"),
+            ("MailboxDataRetrieval:MaxDelay", "00:00:02"),
+            ("MailboxDataRetrieval:TotalTimeout", UnreachableTotalTimeout));
+
+        // Act
+        var execution = host.Executor.ExecuteAsync(
+            new OutboundPipelineKey(OutboundDependency.MailboxDataRetrieval, "primary"),
+            "INBOX",
+            Task<int> (CancellationToken _) => throw new ImapProtocolException("The server closed the stream."),
+            TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<ImapProtocolException>(
+            () => host.CompleteOnVirtualTimeAsync(execution, FineAdvanceStep));
+
+        // Assert
+        Assert.Contains(
+            host.Logs.Records,
+            record => record.Message.Contains("primary", StringComparison.Ordinal)
+                && record.Message.Contains("INBOX", StringComparison.Ordinal));
     }
 
     /// <summary>A mail server puts the rejected recipient into its error text, which must not reach a log record.</summary>
