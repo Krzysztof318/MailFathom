@@ -24,6 +24,7 @@ remote_repository_root="$test_directory/remote"
 fake_bin_directory="$test_directory/bin"
 invocation_log="$test_directory/dotnet-invocations.log"
 workflow_invocation_log="$test_directory/workflow-invocations.log"
+fixture_branch='agent/workflow-fixture'
 passed_count=0
 failed_count=0
 
@@ -62,6 +63,10 @@ git -C "$remote_repository_root" config user.email agent-workflow@example.invali
 git -C "$remote_repository_root" config user.name 'Agent Workflow Tests'
 git -C "$repository_root" remote add origin "$remote_repository_root"
 git -C "$repository_root" fetch --quiet origin main
+# Every contract below runs the verification scripts, and they now refuse the integration branch.
+# The fixture therefore works from a branch shaped like a real task branch, and the refusal itself
+# is exercised by the tests that check it out deliberately.
+git -C "$repository_root" checkout --quiet -b "$fixture_branch"
 
 export FAKE_DOTNET_LOG="$invocation_log"
 export FAKE_WORKFLOW_LOG="$workflow_invocation_log"
@@ -321,6 +326,78 @@ verify_full_stops_when_a_stale_tracking_ref_hides_remote_movement() {
   assert_file_content '' "$invocation_log"
 }
 
+verify_fast_refuses_the_main_branch() {
+  local refusal_output="$test_directory/verify-fast-on-main-output"
+  local script_status=0
+
+  : > "$invocation_log"
+  git -C "$repository_root" checkout --quiet main
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  ) > "$refusal_output" 2>&1 || script_status=$?
+
+  git -C "$repository_root" checkout --quiet "$fixture_branch"
+
+  if ((script_status == 0)); then
+    printf 'verify-fast.sh accepted a run on main\n' >&2
+    return 1
+  fi
+
+  assert_contains 'verify-fast.sh must not run on main.' "$refusal_output"
+  assert_file_content '' "$invocation_log"
+}
+
+verify_full_refuses_the_master_branch() {
+  local refusal_output="$test_directory/verify-full-on-master-output"
+  local script_status=0
+
+  : > "$invocation_log"
+  : > "$workflow_invocation_log"
+  git -C "$repository_root" checkout --quiet -B master
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  ) > "$refusal_output" 2>&1 || script_status=$?
+
+  git -C "$repository_root" checkout --quiet "$fixture_branch"
+  git -C "$repository_root" branch --quiet -D master
+
+  if ((script_status == 0)); then
+    printf 'verify-full.sh accepted a run on master\n' >&2
+    return 1
+  fi
+
+  assert_contains 'verify-full.sh must not run on master.' "$refusal_output"
+  assert_file_content '' "$invocation_log"
+  assert_file_content '' "$workflow_invocation_log"
+}
+
+verify_fast_accepts_a_detached_head() {
+  local script_status=0
+
+  : > "$invocation_log"
+  git -C "$repository_root" checkout --quiet --detach HEAD
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  ) > /dev/null 2>&1 || script_status=$?
+
+  git -C "$repository_root" checkout --quiet "$fixture_branch"
+
+  if ((script_status != 0)); then
+    printf 'verify-fast.sh refused a detached HEAD\n' >&2
+    return 1
+  fi
+
+  assert_file_content \
+    $'restore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic' \
+    "$invocation_log"
+}
+
 verification_stops_after_first_failure() {
   : > "$invocation_log"
 
@@ -408,6 +485,9 @@ run_test verify_full_fetches_the_remote_base_before_verifying
 run_test verify_full_stops_when_head_is_behind_origin_main
 run_test verify_full_stops_when_the_remote_is_unreachable
 run_test verify_full_stops_when_a_stale_tracking_ref_hides_remote_movement
+run_test verify_fast_refuses_the_main_branch
+run_test verify_full_refuses_the_master_branch
+run_test verify_fast_accepts_a_detached_head
 run_test verification_stops_after_first_failure
 run_test workspace_inspection_is_read_only_and_labeled
 run_test workspace_inspection_reports_unavailable_sdk
