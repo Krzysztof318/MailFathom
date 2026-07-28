@@ -35,6 +35,22 @@ test, coverage, and formatting can create ignored local artifacts, and the fetch
 updates `refs/remotes/origin/main`, but the scripts do not commit, push, or
 change branches.
 
+Both scripts refuse to run on `main` or `master`, before the fetch and before
+any `dotnet` invocation. The integration branch is never the subject of a
+change, so a gate reporting success there describes code nobody is about to
+modify, and the base check cannot notice: `origin/main` is trivially its own
+ancestor, so `git merge-base --is-ancestor origin/main HEAD` passes whenever
+`HEAD` *is* `origin/main`. The refusal names the branch it rejected. A detached
+`HEAD` and every other branch name still verify, and running from the primary
+checkout remains supported, because the hazard is the branch rather than the
+kind of worktree.
+
+The opening guard in each script reports only whether the working directory sits
+inside a Git repository. It cannot establish worktree isolation: in Git
+terminology the primary working tree is also a worktree, and
+`git rev-parse --show-toplevel` succeeds in every checkout, so only
+`git worktree add` produces the *linked* worktree that `start-task` requires.
+
 The base check runs before any `dotnet` invocation, so a branch cut from a
 `main` that has since moved fails in seconds rather than after the Release build
 and coverage run. It fetches rather than trusting the local remote-tracking ref,
@@ -93,6 +109,10 @@ to test code. Each nested `CLAUDE.md` imports its sibling `AGENTS.md`.
   `git status --short --untracked-files=all` has identified every existing path
   and the user has approved a preservation plan. Never assume pre-existing
   changes are unrelated.
+- `verify-fast.sh must not run on main` (or `master`, or the same message from
+  `verify-full.sh`) means verification was started on the integration branch.
+  Check out the branch that carries the change and rerun; the scripts never
+  change branches themselves.
 - `HEAD does not contain the current origin/main` means `main` moved after the
   branch was cut. Rebase onto the fetched base, resolve any conflicts, and rerun
   the complete gate; earlier passing results describe a base that no longer
