@@ -25,13 +25,22 @@ git add <task-files>
 bash scripts/verify-full.sh
 ```
 
-The full gate rejects remaining untracked files, runs the workflow contract
-suite, restores repository tools and the solution, builds Release, executes all
-unit tests through the aggregate 85% coverage target, verifies formatting, and
-checks committed branch changes, staged changes, and unstaged changes for
-whitespace errors. It stops at the first failure. Restore, build, test,
-coverage, and formatting can create ignored local artifacts but the scripts do
-not commit, push, or change branches.
+The full gate rejects remaining untracked files, fetches `origin main` and
+requires the branch to contain that freshly fetched base, runs the workflow
+contract suite, restores repository tools and the solution, builds Release,
+executes all unit tests through the aggregate 85% coverage target, verifies
+formatting, and checks committed branch changes, staged changes, and unstaged
+changes for whitespace errors. It stops at the first failure. Restore, build,
+test, coverage, and formatting can create ignored local artifacts, and the fetch
+updates `refs/remotes/origin/main`, but the scripts do not commit, push, or
+change branches.
+
+The base check runs before any `dotnet` invocation, so a branch cut from a
+`main` that has since moved fails in seconds rather than after the Release build
+and coverage run. It fetches rather than trusting the local remote-tracking ref,
+because a ref left behind by an earlier fetch describes the base as it was, not
+as it is. An unreachable remote is a failure and never degrades into verifying
+against the stale ref.
 
 ## Skills
 
@@ -80,6 +89,13 @@ to test code. Each nested `CLAUDE.md` imports its sibling `AGENTS.md`.
   `git status --short --untracked-files=all` has identified every existing path
   and the user has approved a preservation plan. Never assume pre-existing
   changes are unrelated.
+- `HEAD does not contain the current origin/main` means `main` moved after the
+  branch was cut. Rebase onto the fetched base, resolve any conflicts, and rerun
+  the complete gate; earlier passing results describe a base that no longer
+  exists.
+- `verify-full.sh cannot fetch origin main` means the remote is unreachable or
+  the credentials failed. Restore access and rerun. Do not work around it by
+  verifying against the local remote-tracking ref.
 - `Untracked files must be staged or removed before full verification` means
   the focused task files have not all entered the index. Stage only those task
   files, inspect the staged diff, and rerun the complete gate.
