@@ -1,14 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-using MailMcp.TestSupport;
 using Microsoft.Extensions.Logging;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailMcp.TestSupport;
 
 /// <summary>A logging pipeline a test can hand to an owner and then prove was released.</summary>
 /// <remarks>
-/// Capture itself belongs to <see cref="RecordingLoggerProvider" /> in <c>tests/shared/</c>, which this type delegates
-/// to rather than reimplementing. What it adds is the one thing an <see cref="ILoggerProvider" /> cannot express: a
+/// Capture itself belongs to <see cref="RecordingLoggerProvider" />, which this type delegates to rather than
+/// reimplementing. What it adds is the one thing an <see cref="ILoggerProvider" /> cannot express: a
 /// factory whose disposal is observable. Ownership of a logging pipeline is a contract wherever a type builds one
 /// outside the container, and a test can only hold it to that contract by watching the factory it handed over.
 /// </remarks>

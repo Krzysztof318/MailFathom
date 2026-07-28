@@ -20,6 +20,12 @@ namespace MailMcp.Host.Observability;
 /// which makes delivery independent of process teardown; three records per process make the cost irrelevant.
 /// </para>
 /// <para>
+/// The pipeline is composed before <c>WebApplication.CreateBuilder</c>, which is where a malformed
+/// <c>appsettings.json</c> or a failing configuration provider throws. That places configuration loading inside the
+/// reported window and is why <see cref="BootstrapLoggingSettings" /> reads the environment rather than
+/// <see cref="IConfiguration" />: the pipeline cannot depend on the thing whose failure it exists to report.
+/// </para>
+/// <para>
 /// The instance takes ownership of the <see cref="ILoggerFactory" /> it is constructed with and disposes it. It is
 /// deliberately absent from the container: it has to be usable before the container exists, and a container that
 /// disposed it would take the pipeline away exactly when a shutdown failure needs reporting.
@@ -49,14 +55,11 @@ internal sealed partial class BootstrapLogger : IDisposable
         this.logger = loggerFactory.CreateLogger(LogCategory);
     }
 
-    /// <summary>Composes the bootstrap logging pipeline for the host that is starting.</summary>
-    /// <param name="configuration">The configuration of the host being composed.</param>
-    /// <param name="environment">The environment of the host being composed.</param>
+    /// <summary>Composes the bootstrap logging pipeline from the process environment.</summary>
     /// <returns>A bootstrap logger owning the composed pipeline, which the caller disposes.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> or <paramref name="environment" /> is <see langword="null" />.</exception>
-    public static BootstrapLogger Create(IConfiguration configuration, IHostEnvironment environment)
+    public static BootstrapLogger CreateFromEnvironment()
     {
-        var settings = BootstrapLoggingSettings.From(configuration, environment);
+        var settings = BootstrapLoggingSettings.FromEnvironment();
 
         return new BootstrapLogger(CreateLoggerFactory(settings), settings);
     }
@@ -99,8 +102,13 @@ internal sealed partial class BootstrapLogger : IDisposable
             {
                 openTelemetry.IncludeFormattedMessage = true;
                 openTelemetry.IncludeScopes = true;
-                openTelemetry.SetResourceBuilder(ResourceBuilder.CreateDefault()
-                    .AddService(settings.ServiceName, serviceVersion: settings.ServiceVersion));
+
+                // The resource is left exactly as the SDK resolves it, with no AddService call, because that is what
+                // the container pipeline does too. Naming the service here would agree with it only while
+                // OTEL_SERVICE_NAME is set and would otherwise report this process under a second identity, since the
+                // SDK's own fallback is unknown_service:{processName}. The application name and version stay where
+                // they are already useful and cannot disagree with anything: the properties of the records below.
+                openTelemetry.SetResourceBuilder(ResourceBuilder.CreateDefault());
 
                 if (settings.ExportsToCollector)
                 {

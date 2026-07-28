@@ -12,15 +12,16 @@ using MailMcp.Infrastructure.Resilience;
 using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.Options;
 
-var builder = WebApplication.CreateBuilder(args);
-
-// Composed before anything else so that a failure in composition, in Build, or in host startup is reported rather
-// than only printed. The pipeline the container owns does not exist yet, and on a startup failure it never flushes.
-using var bootstrapLogger = BootstrapLogger.Create(builder.Configuration, builder.Environment);
+// Composed before anything else, CreateBuilder included, so that a malformed appsettings.json, a failure during
+// composition, and a failed host start are all reported rather than only printed. The pipeline the container owns
+// does not exist until Build has returned, and on a startup failure it never flushes.
+using var bootstrapLogger = BootstrapLogger.CreateFromEnvironment();
 bootstrapLogger.RecordHostStarting();
 
 try
 {
+    var builder = WebApplication.CreateBuilder(args);
+
     builder.AddServiceDefaults();
     builder.Services.AddProblemDetails();
     builder.Services.AddSingleton(TimeProvider.System);

@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Host.Observability;
+using MailMcp.TestSupport;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
