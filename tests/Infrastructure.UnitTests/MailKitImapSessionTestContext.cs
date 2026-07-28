@@ -21,7 +21,9 @@ internal static class MailKitImapSessionTestContext
 
     internal static MailAccountId SecondaryAccount { get; } = MailAccountId.Create("secondary");
 
-    internal static MailFolderName InboxFolder { get; } = MailFolderName.Create("INBOX");
+    internal static MailFolderResolution InboxFolder { get; } = MailFolderResolution.FirstBindingOf(
+        MailFolderAlias.Create("inbox"),
+        RemoteFolderPath.Create("INBOX", '/'));
 
     internal static MailTransportSecurityPolicy TlsOnConnectWithPlainPolicy { get; } =
         CreatePolicy(MailConnectionSecurity.TlsOnConnect, MailAuthenticationMechanism.Plain);
@@ -55,9 +57,23 @@ internal static class MailKitImapSessionTestContext
 
     internal static EmailOccurrenceId CreateOccurrenceId(uint uid, uint uidValidity = 7U) => EmailOccurrenceId.Create(
         PrimaryAccount,
-        InboxFolder,
+        InboxFolder.Id,
         ImapUidValidity.Create(uidValidity),
         ImapUid.Create(uid));
+
+    /// <summary>Builds a catalog over one scripted connection, so a discovery test scripts the same server a session test does.</summary>
+    internal static MailKitRemoteFolderCatalog CreateFolderCatalog(
+        OutboundResilienceTestHost resilience,
+        FakeImapClient client)
+    {
+        client.AuthenticationMechanisms.Add("PLAIN");
+
+        return new MailKitRemoteFolderCatalog(
+            () => client,
+            CreateSettingsProvider(),
+            resilience.Executor,
+            resilience.TransientFailureClassifier);
+    }
 
     /// <summary>Opens a session over one scripted connection that authenticates with the default permitted mechanism.</summary>
     internal static Task<IMailboxSession> OpenSessionAsync(

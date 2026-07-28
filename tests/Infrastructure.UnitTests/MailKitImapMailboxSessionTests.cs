@@ -214,13 +214,16 @@ public sealed class MailKitImapMailboxSessionTests
         client.DisconnectException = null;
     }
 
+    /// <summary>A previous generation of the same alias is as foreign as another account, which is the whole point of the generation.</summary>
     [Theory]
-    [InlineData("secondary", "INBOX", 7U)]
-    [InlineData("primary", "Archive", 7U)]
-    [InlineData("primary", "INBOX", 8U)]
+    [InlineData("secondary", "inbox", 1, 7U)]
+    [InlineData("primary", "archive", 1, 7U)]
+    [InlineData("primary", "inbox", 2, 7U)]
+    [InlineData("primary", "inbox", 1, 8U)]
     public async Task FetchEmailContentWithoutSettingSeenAsync_ForeignOccurrence_RejectsBeforeRemoteFetch(
         string occurrenceAccountId,
-        string occurrenceFolderName,
+        string occurrenceFolderAlias,
+        int occurrenceGeneration,
         uint occurrenceUidValidity)
     {
         // Arrange
@@ -230,7 +233,9 @@ public sealed class MailKitImapMailboxSessionTests
         await using var session = await OpenSessionAsync(resilience, client, folder);
         var foreignOccurrence = EmailOccurrenceId.Create(
             MailAccountId.Create(occurrenceAccountId),
-            MailFolderName.Create(occurrenceFolderName),
+            new MailFolderResolutionId(
+                MailFolderAlias.Create(occurrenceFolderAlias),
+                MailFolderResolutionGeneration.Create(occurrenceGeneration)),
             ImapUidValidity.Create(occurrenceUidValidity),
             ImapUid.Create(10));
 

@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Folders;
 using MailMcp.Domain.Transport;
 using MailMcp.Host.Configuration;
 using MailMcp.Infrastructure.Certificates;
@@ -130,31 +131,56 @@ public sealed class MailSynchronizationOptionsTests
     }
 
     [Fact]
-    public void ValidateForSynchronization_DuplicateFolderNamesAfterNormalization_ReportsThem()
+    public void ValidateForSynchronization_DuplicateFolderAliasesAfterNormalization_ReportsThem()
     {
         // Arrange
         var account = CreateAccount("primary");
-        account.Folders = ["INBOX", "  INBOX  "];
+        account.Folders =
+        [
+            new MailFolderMappingOptions { Alias = "inbox", SpecialUse = "Inbox" },
+            new MailFolderMappingOptions { Alias = "  INBOX  ", RemotePath = "INBOX" },
+        ];
         var options = new MailSynchronizationOptions { Accounts = [account] };
 
         // Act
         var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
 
         // Assert
-        Assert.Contains(messages, message => message!.Contains("Configured folder names must be unique", StringComparison.Ordinal));
+        Assert.Contains(messages, message => message!.Contains("Configured folder aliases must be unique", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("INBOX", "Inbox")]
+    [InlineData(null, "NotARole")]
+    public void ValidateForSynchronization_FolderNamingNeitherOrBothTargets_ReportsIt(string? remotePath, string? specialUse)
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.Folders = [new MailFolderMappingOptions { Alias = "inbox", RemotePath = remotePath, SpecialUse = specialUse }];
+        var options = new MailSynchronizationOptions { Accounts = [account] };
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        Assert.Contains(messages, message => message!.Contains("Folder alias 'inbox'", StringComparison.Ordinal));
+    }
+
+    /// <summary>The default names the inbox by role, so a server that calls it something else still synchronizes.</summary>
     [Fact]
-    public void EffectiveFolders_FoldersOmitted_AppliesThePostBindingDefault()
+    public void EffectiveFolders_FoldersOmitted_AppliesThePostBindingInboxRoleDefault()
     {
         // Arrange
         var account = new MailSynchronizationAccountOptions();
 
         // Act
-        var folders = account.EffectiveFolders;
+        var mapping = Assert.Single(account.EffectiveFolders).CreateMapping();
 
         // Assert
-        Assert.Equal(["INBOX"], folders);
+        Assert.Equal("INBOX", mapping.Alias.Value);
+        Assert.Equal(MailFolderSpecialUse.Inbox, mapping.SpecialUse);
+        Assert.Null(mapping.RemotePath);
     }
 
     [Fact]

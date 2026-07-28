@@ -93,8 +93,40 @@ internal sealed class FakeImapClient : IMailKitImapClient
         CancellationToken cancellationToken)
     {
         this.GetFolderAsyncCount++;
+        this.RequestedFolderPaths.Add(path);
 
         return Task.FromResult(this.Folder ?? throw new InvalidOperationException("No test folder configured."));
+    }
+
+    public IReadOnlyList<FolderNamespace> PersonalNamespaces { get; set; } = [new FolderNamespace('/', string.Empty)];
+
+    public IMailFolder? InboxFolder { get; set; }
+
+    public IMailFolder Inbox =>
+        this.InboxFolder ?? throw new InvalidOperationException("No test inbox configured.");
+
+    /// <summary>Gets the folders each listed namespace advertises, so a test can model a server with several of them.</summary>
+    public Dictionary<FolderNamespace, IReadOnlyList<IMailFolder>> FoldersByNamespace { get; } = [];
+
+    public Exception? GetFoldersException { get; set; }
+
+    public int GetFoldersAsyncCount { get; private set; }
+
+    public List<string> RequestedFolderPaths { get; } = [];
+
+    public Task<IReadOnlyList<IMailFolder>> GetFoldersAsync(
+        FolderNamespace folderNamespace,
+        CancellationToken cancellationToken)
+    {
+        this.GetFoldersAsyncCount++;
+
+        if (this.GetFoldersException is not null)
+        {
+            throw this.GetFoldersException;
+        }
+
+        return Task.FromResult(
+            this.FoldersByNamespace.TryGetValue(folderNamespace, out var folders) ? folders : []);
     }
 
     public Task DisconnectAsync(

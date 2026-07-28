@@ -23,21 +23,24 @@ internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider) :
 
         var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
         var occurrenceId = metadata.OccurrenceId;
+        var alias = occurrenceId.FolderResolutionId.Alias.Value;
+        var generation = occurrenceId.FolderResolutionId.Generation.Value;
         var entity = await TrackedEntityLookup.SinglePendingOrPersistedAsync(
             dbContext.StoredEmails,
             dbContext.StoredEmails.Include(candidate => candidate.MailFolder),
             candidate => candidate.MailFolder.MailboxAccountId == occurrenceId.AccountId.Value
-                && candidate.MailFolder.RemoteName == occurrenceId.FolderName.Value
+                && candidate.MailFolder.Alias == alias
+                && candidate.MailFolder.ResolutionGeneration == generation
                 && candidate.UidValidity == occurrenceId.UidValidity.Value
                 && candidate.Uid == occurrenceId.Uid.Value,
             cancellationToken);
 
         if (entity is null)
         {
-            var folder = await MailFolderEntityResolver.GetOrAddAsync(
+            var folder = await MailFolderEntityResolver.GetRequiredAsync(
                 dbContext,
                 occurrenceId.AccountId,
-                occurrenceId.FolderName,
+                occurrenceId.FolderResolutionId,
                 cancellationToken);
 
             entity = new StoredEmailEntity

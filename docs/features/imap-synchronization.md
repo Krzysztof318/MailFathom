@@ -4,18 +4,18 @@ MailMcp now includes the first vertical slice for read-only IMAP synchronization
 
 ## Implemented behavior
 
-- `Domain` models stable IMAP email occurrence identity as `EmailOccurrenceId`, keyed by `(account, folder, UIDVALIDITY, UID)`. `Email` is the repository-wide term for the mail artifact; `Message` is reserved so it stays unambiguous once AI conversation types exist.
-- `Application` owns IMAP, metadata repository, content store, and checkpoint ports, plus the `IPersistenceSession` write-transaction port in `MailMcp.Application.Persistence`. The persistence session is named separately from `IMailboxSession` because both would otherwise be "the session" at a call site.
-- `MailboxSynchronizer` opens folders through a read-only session port and requests bounded metadata batches. It retains at most one fetched MIME payload at a time: each seen-preserving remote fetch finishes before a short local session atomically upserts that occurrence's metadata, uses the returned local stored-email identifier for its content, and commits and disposes before the next remote fetch starts. After the inspected batch finishes, a separate short session advances the checkpoint only when the mailbox adapter reports a non-speculative UID cursor known safe from the opened folder state.
+- `Domain` models stable IMAP email occurrence identity as `EmailOccurrenceId`, keyed by `(account, folder, UIDVALIDITY, UID)`. The folder component is a `MailFolderResolutionId` — an alias together with the generation it was bound under — rather than a folder name, for the reason [folder aliases and discovery](#folder-aliases-and-discovery) explains. `Email` is the repository-wide term for the mail artifact; `Message` is reserved so it stays unambiguous once AI conversation types exist.
+- `Application` owns IMAP, metadata repository, content store, and checkpoint ports, the folder-discovery, binding-store, and mapping-audit ports in `MailMcp.Application.Folders`, plus the `IPersistenceSession` write-transaction port in `MailMcp.Application.Persistence`. The persistence session is named separately from `IMailboxSession` because both would otherwise be "the session" at a call site.
+- `MailboxSynchronizer` resolves the configured alias against the folders the server currently advertises before it reads anything, then opens folders through a read-only session port and requests bounded metadata batches. It retains at most one fetched MIME payload at a time: each seen-preserving remote fetch finishes before a short local session atomically upserts that occurrence's metadata, uses the returned local stored-email identifier for its content, and commits and disposes before the next remote fetch starts. After the inspected batch finishes, a separate short session advances the checkpoint only when the mailbox adapter reports a non-speculative UID cursor known safe from the opened folder state.
 - Batches are bounded by email count, not by UID-space width. The adapter searches the whole remaining assigned UID range — a UID SEARCH returns identifiers only — and then fetches envelopes for at most `MaxMetadataBatchSize` emails. A folder whose UIDs are sparse after deletions therefore still advances a full batch per iteration instead of crawling the UID space, which keeps an initial backfill practical.
 - An email that exceeds `MaxRawMimeBytes` is never silently dropped. Its occurrence metadata is committed with `ContentAvailability = ExceededSizeLimit` before the checkpoint moves past it, so the gap stays queryable and auditable instead of existing only as a counter in a log line. The same applies when the advertised size understated the payload and the bounded stream read rejects it mid-fetch.
 - Committing occurrences before the window checkpoint means a process failure may cause a later run to fetch an already stored occurrence again. Content and metadata writes use the stable remote occurrence identity and are idempotent, so this retry does not create duplicate stored emails.
-- `Infrastructure` maps the pre-migration PostgreSQL model to `mailbox_accounts`, `mail_folders`, `stored_emails`, `email_message_contents`, and separate `synchronization_checkpoints`. Each stored email has a local UUIDv7; its raw MIME row uses the same UUID as both primary key and foreign key and records byte length, SHA-256, and storage time. Each stored email also records a `ContentAvailability` value as text so a metadata-only occurrence is distinguishable from one whose raw MIME is present. Persistence sessions clear tracked state after cleanup so one scoped context does not retain MIME arrays between per-email transactions, and re-synchronizing an occurrence that is already stored overwrites its payload with a set-based update rather than reading the existing `bytea` back into the change tracker.
+- `Infrastructure` maps the pre-migration PostgreSQL model to `mailbox_accounts`, `mail_folders`, `stored_emails`, `email_message_contents`, and separate `synchronization_checkpoints`. A `mail_folders` row is one alias binding: it carries the alias, its resolution generation, the remote path, and the hierarchy delimiter the server advertised, and is unique on `(account, alias, generation)` rather than on `(account, alias)`. Each stored email has a local UUIDv7; its raw MIME row uses the same UUID as both primary key and foreign key and records byte length, SHA-256, and storage time. Each stored email also records a `ContentAvailability` value as text so a metadata-only occurrence is distinguishable from one whose raw MIME is present. Persistence sessions clear tracked state after cleanup so one scoped context does not retain MIME arrays between per-email transactions, and re-synchronizing an occurrence that is already stored overwrites its payload with a set-based update rather than reading the existing `bytea` back into the change tracker.
 - A write repository takes its EF Core context from the `IPersistenceSession` it is handed, and injects none of its own. The write is therefore always issued on that session's own context, whichever scope the session came from, so "this write joined the caller's transaction" is structurally true instead of being an effect of both objects happening to resolve from the same DI scope. A session backed by a different persistence provider cannot supply a context at all and is rejected outright. Read methods take no session and use the scoped context, because a read joins no transaction.
 - Lookups that must see an insert still pending in the open session use the change tracker before the database, since EF Core never flushes pending changes before a query. Primary-key lookups rely on `FindAsync`, which already does this; alternate-key lookups go through one shared two-pass helper driven by a single predicate expression. The one hand-written exception is the raw MIME row, where materializing the existing `bytea` is precisely the cost being avoided.
-- Mutable tracked email metadata and synchronization checkpoints carry an infrastructure-only `ConcurrencyVersion`. It is a `uint` row version, which is how Npgsql maps a property onto the PostgreSQL `xmin` system column, so the token is server-generated and no concurrency column exists in either table. A stale tracked update is translated from `DbUpdateConcurrencyException` into an application-owned commit result at the session boundary, which is the only place a conflict is an ordinary branch: its consumer is the retry policy's loop. Synchronization retries a complete idempotent metadata/content write in a fresh persistence session, never repeats the preceding IMAP fetch, and uses cancellation-aware exponential backoff with jitter between bounded attempts. Checkpoint writes are attempted once and only when their durable UIDVALIDITY and last-seen UID still equal the progress read at the start of the run; timestamp precision differences are ignored, while the later synchronization timestamp is retained. `xmin` detects a later race before commit, and a concurrent first-checkpoint primary-key collision is treated narrowly as the same conflict.
+- Mutable tracked email metadata and synchronization checkpoints carry an infrastructure-only `ConcurrencyVersion`. It is a `uint` row version, which is how Npgsql maps a property onto the PostgreSQL `xmin` system column, so the token is server-generated and no concurrency column exists in either table. A stale tracked update is translated from `DbUpdateConcurrencyException` into an application-owned commit result at the session boundary, which is the only place a conflict is an ordinary branch: its consumer is the retry policy's loop. Synchronization retries a complete idempotent metadata/content write in a fresh persistence session, never repeats the preceding IMAP fetch, and uses cancellation-aware exponential backoff with jitter between bounded attempts. Checkpoint writes are attempted once and only when their durable UIDVALIDITY and last-seen UID still equal the progress read at the start of the run; timestamp precision differences are ignored, while the later synchronization timestamp is retained. `xmin` detects a later race before commit, and two named unique violations are treated narrowly as the same conflict: a concurrent first checkpoint of a folder, and a concurrent first binding of an alias. Both mean another run got there first rather than that the data is wrong; every other unique violation stays a failure.
 - Once bounded attempts are spent, or a checkpoint moved under the run, the conflict leaves `SynchronizeAsync` as `PersistenceConcurrencyConflictException` instead of being restated as a result value by each layer it passes. Progress the run already committed stays durable. The worker catches it per folder, logs a deferral with the reason, and continues with the remaining folders; the next interval rereads the last committed checkpoint. The attempt bound is one deployment-wide setting, not a synchronization option, because writers compete for shared rows rather than for anything a single service owns.
-- The MailKit adapter resolves folders asynchronously, caps UID progress with the opened folder UIDNEXT value, normalizes email sent dates to UTC before persistence, and rejects occurrence identities that do not belong to the open account, folder, and UIDVALIDITY scope.
+- The MailKit adapter resolves folders asynchronously, caps UID progress with the opened folder UIDNEXT value, normalizes email sent dates to UTC before persistence, and rejects occurrence identities that do not belong to the open account, alias binding, and UIDVALIDITY scope. A previous generation of the same alias is as foreign there as another account.
 - A connection the adapter has declared unusable — a failed setup, or one being replaced after a transient failure — is closed rather than asked for a graceful logout. A logout is a command, and a server that stopped answering can hold it far past the attempt budget on a call no cancellation reaches, while the pipeline starts the next attempt against the same connection object. Its cleanup failure never replaces the failure being retried. Orderly session disposal still disconnects and disposes, and reports the first cleanup failure.
 - A mailbox session survives a mail server that drops its connection. `MailKitImapConnection` owns the client, and no hand-written retry loop exists anywhere in the adapter: the [outbound resilience pipelines](../architecture/outbound-resilience.md) do the repeating, and the adapter only decides what is safe to repeat and how the session recovers. The applied pipelines and the failure classification are documented in the next section.
 - `Domain` owns the mail transport security policy: the five connection-security modes, the ordered SASL allow-list, the two opt-ins that permit weakening transport protection, and the trust-anchor selection. The rules that reject an unsafe combination live in `MailTransportSecurityPolicy` rather than in a configuration validator, so a future command-line or MCP entry point cannot reach a transport adapter with a policy that host startup would have refused.
@@ -26,6 +26,60 @@ MailMcp now includes the first vertical slice for read-only IMAP synchronization
 - `MailServerCertificateValidator` decides trust for an account that names an additional authority, by rebuilding the chain against the configured anchor rather than by forgiving what the platform reported. Nothing anywhere can switch validation off.
 - Secrets are re-resolved per operation rather than cached, and the configuration snapshot that names them is republished only after every reference in it has resolved. A rotated credential, trust anchor, or database password therefore reaches the next operation without a restart, and a reload that cannot resolve leaves the previous snapshot active. [Secret rotation](../operations/secret-rotation.md) is the operator procedure.
 - `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, secret resolution and trust anchor loading before any hosted service starts, a validated snapshot every consumer reads instead of the raw bound one, and a periodic scoped background worker that isolates failures per account/folder work unit.
+
+## Folder aliases and discovery
+
+Configuration never names a remote folder path unless the operator chooses to. It names an **alias** — the stable
+operator-facing folder name MailMcp owns, which appears in configuration, in logs, and in future MCP filters, and
+which keeps its meaning when the server renames or recreates the folder behind it. Aliases are trimmed and
+upper-cased when they are read, so recasing one in configuration is not a second alias.
+
+What the alias points at is discovered rather than configured. Before every run, `MailFolderResolver` lists the
+account's folders through `IRemoteFolderCatalog` and matches the mapping against what the server advertised:
+
+| Mapping | Matches |
+| --- | --- |
+| `RemotePath` | The advertised folder whose path is the configured text. |
+| `SpecialUse` | The first advertised folder carrying that RFC 6154 role. |
+
+A `SpecialUse: Inbox` mapping additionally falls back to the folder named `INBOX` when the server advertises no
+special-use attribute at all, because RFC 3501 mandates that name and makes it case-insensitive. That fallback exists
+for the inbox alone: every other role exists only as an advertised attribute, and guessing a name for it would bind an
+alias to a folder nobody named. An account whose server presents the inbox under a localized name therefore needs no
+folder configuration, which is also why the post-binding default is the inbox *role* rather than the path `INBOX`.
+
+An alias that matches nothing ends that one folder's run and no other. It is reported as
+`MailboxSynchronizationOutcome.FolderAliasUnresolved`, logged as a warning naming the alias, and the account's
+remaining folders continue — a mistyped alias is a configuration mistake, not a mail-server failure, and the two are
+logged as different things.
+
+### Why a binding carries a generation
+
+The repository treats `(account, folder, UIDVALIDITY, UID)` as the stable remote occurrence identity, and that tuple
+is only stable while its folder component identifies one specific remote folder. UIDVALIDITY is unique *inside* one
+mailbox and says nothing across mailboxes, so two unrelated folders on the same server can advertise the same value.
+An alias repointed from one to the other while keeping a single persistence identity would let the previous folder's
+checkpoint apply to the new folder and skip every message below its last-seen UID — silently, permanently, and with
+nothing failing to reveal it.
+
+Each binding of an alias therefore runs under its own **resolution generation**. Resolving an alias to a different
+remote path commits a new generation, which has its own `mail_folders` row and therefore no checkpoint, so the new
+folder is synchronized from its first UID whatever UIDVALIDITY it reports. Occurrences stored under the previous
+generation are kept and stay attributable to the folder they actually came from. A binding is committed before
+anything is synchronized under it; the write paths require the row rather than creating one, so occurrences can never
+be attached to a generation nothing recorded.
+
+Every binding change is an auditable event carrying the alias, both remote paths, and the new generation.
+`LoggedMailFolderMappingChangeAuditor` writes it to the structured log — a first binding at `Information`, a
+repointing at `Warning` — and that record is the only place a remote folder path is written outside the database,
+because a folder path can itself carry personal or organizational information. Every other log line names the alias.
+
+Discovery is read-only by contract as well as by implementation. `IRemoteFolderCatalog` exposes no operation that
+creates, renames, subscribes to, or deletes a folder; the adapter issues an IMAP `LIST`, which selects no folder, over
+a connection that pins none; and folders the server lists as `\NonExistent` are left out of the catalog because they
+hold no mail. A listed entry that names no folder at all, such as a namespace root with an empty path, is left out
+the same way: it costs that entry rather than the account's whole listing, which would take every usable folder with
+it.
 
 ## Session resilience
 
@@ -101,7 +155,10 @@ Synchronization is disabled by default:
           "AllowClearTextAuthenticationOverUnencryptedConnection": false,
           "CertificateTrust": "SystemTrustStore"
         },
-        "Folders": [ "INBOX" ]
+        "Folders": [
+          { "Alias": "inbox", "SpecialUse": "Inbox" },
+          { "Alias": "archive", "RemotePath": "Archief/2026" }
+        ]
       }
     ]
   }
@@ -119,7 +176,7 @@ Optimistic concurrency is configured once for the whole deployment, outside the 
 }
 ```
 
-When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. If an account omits `Folders`, the worker applies the post-binding default `INBOX`; explicit folder lists replace that default.
+When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. Each entry of `Folders` names an alias and exactly one of `RemotePath` and `SpecialUse`; naming both, naming neither, or naming a role that does not exist fails startup with a message identifying the alias. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, and `Important`. If an account omits `Folders`, the worker applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
 
 ### Secrets
 
@@ -129,7 +186,7 @@ Secret resolution is not gated on `Enabled`, unlike the transport security rules
 
 [Secret provisioning](../operations/secret-provisioning.md) is the operator reference: the four schemes, the systemd, Compose, and Kubernetes provisioning paths, the three interpretation modes and why `ReferenceOnly` is the default, and the in-memory exposures that need operational rather than code-level mitigation.
 
-Account identifiers and folder names must be unique after domain normalization, IMAP ports must be between 1 and 65535, and `MaximumConcurrencyCommitAttempts` must be between 1 and 10. The default of two attempts covers the single lost race that a rare conflict represents; a folder deferred after that is retried by the next interval anyway.
+Account identifiers and folder aliases must be unique after domain normalization, IMAP ports must be between 1 and 65535, and `MaximumConcurrencyCommitAttempts` must be between 1 and 10. The default of two attempts covers the single lost race that a rare conflict represents; a folder deferred after that is retried by the next interval anyway.
 
 ### Transport security
 
@@ -229,6 +286,11 @@ A rejected reload is logged with the configuration path and the failure identity
 
 ## Pending work
 
+- Per-account discovery. Every folder currently resolves on its own short-lived connection, so a run costs one extra
+  IMAP login per configured folder on top of its synchronization session. The listing is the same for every folder of
+  an account, so the per-account synchronization supervisor is where one listing can serve them all.
+- A durable audit store for mapping changes. The log-backed sink cannot join the transaction that commits a binding,
+  so a sink failure loses the record of a change that already happened.
 - Adapters for external managed secret stores. Kubernetes and container deployments need none, because their secrets are files.
 - OAuth mailbox authentication. `XOAUTH2` and `OAUTHBEARER` are deliberately absent from the allow-list because no token source exists yet.
 - IMAP IDLE and NOTIFY support.

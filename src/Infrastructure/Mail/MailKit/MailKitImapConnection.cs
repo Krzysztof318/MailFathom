@@ -14,13 +14,17 @@ using MailMcp.Infrastructure.Resilience;
 
 namespace MailMcp.Infrastructure.Mail.MailKit;
 
-/// <summary>Keeps one account's folder selected read-only for as long as a mailbox session needs it.</summary>
+/// <summary>Keeps one account authenticated for as long as a mailbox session or a folder discovery needs it.</summary>
 /// <remarks>
 /// <para>
 /// The connection is what makes a retried read possible. A mail server that drops a socket mid-run leaves the client
-/// unusable, so an attempt that finds no live connection establishes a new one before it reads, and the folder is
-/// selected with <see cref="FolderAccess.ReadOnly" /> every single time. There is no code path that selects it any
-/// other way, which is what keeps the remote <c>\Seen</c> flag untouched across a recovery.
+/// unusable, so an attempt that finds no live connection establishes a new one before it reads. A connection opened
+/// for a folder selects it with <see cref="FolderAccess.ReadOnly" /> every single time. There is no code path that
+/// selects it any other way, which is what keeps the remote <c>\Seen</c> flag untouched across a recovery.
+/// </para>
+/// <para>
+/// A connection may also be opened for no folder at all, which is what folder discovery uses: an IMAP <c>LIST</c>
+/// selects nothing, so there is no folder to pin and no message whose flags could change.
 /// </para>
 /// <para>
 /// Establishment and retrieval run under different dependency classes, because a rejected credential must never be
@@ -34,12 +38,15 @@ namespace MailMcp.Infrastructure.Mail.MailKit;
 /// </remarks>
 internal sealed class MailKitImapConnection : IAsyncDisposable
 {
+    /// <summary>Names folder discovery in resilience telemetry, where a connection has no alias to name instead.</summary>
+    private const string FolderDiscoveryOperationKey = "folder-discovery";
+
     private readonly Func<IMailKitImapClient> clientFactory;
     private readonly IImapAccountSettingsProvider settingsProvider;
     private readonly OutboundOperationExecutor operationExecutor;
     private readonly ITransientFailureClassifier transientFailureClassifier;
     private readonly MailAccountId accountId;
-    private readonly MailFolderName folderName;
+    private readonly MailFolderResolution? folder;
     private readonly MailTransportSecurityPolicy transportSecurityPolicy;
 
     private IMailKitImapClient? client;
@@ -52,7 +59,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// <param name="operationExecutor">Runs establishment and retrieval under their configured pipelines.</param>
     /// <param name="transientFailureClassifier">Decides whether a failure left the connection worth keeping.</param>
     /// <param name="accountId">The account this connection belongs to, which also isolates its pipeline state.</param>
-    /// <param name="folderName">The folder every establishment selects read-only.</param>
+    /// <param name="folder">The alias binding every establishment selects read-only, or <see langword="null" /> for a connection that selects no folder.</param>
     /// <param name="transportSecurityPolicy">The connection and authentication policy each attempt must obey.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     internal MailKitImapConnection(
@@ -61,7 +68,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
         OutboundOperationExecutor operationExecutor,
         ITransientFailureClassifier transientFailureClassifier,
         MailAccountId accountId,
-        MailFolderName folderName,
+        MailFolderResolution? folder,
         MailTransportSecurityPolicy transportSecurityPolicy)
     {
         ArgumentNullException.ThrowIfNull(clientFactory);
@@ -75,59 +82,88 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
         this.operationExecutor = operationExecutor;
         this.transientFailureClassifier = transientFailureClassifier;
         this.accountId = accountId;
-        this.folderName = folderName;
+        this.folder = folder;
         this.transportSecurityPolicy = transportSecurityPolicy;
     }
+
+    /// <summary>Gets whether the established connection is still in the state its owner needs.</summary>
+    private bool IsUsable => this.client is { IsConnected: true }
+        && (this.folder is null || this.selectedFolder is { IsOpen: true });
+
+    /// <summary>Returns an authenticated client, establishing the session first when no usable one is open.</summary>
+    /// <param name="cancellationToken">Cancels connecting, authenticating, and selecting the folder.</param>
+    /// <returns>The client, authenticated and — when the connection is pinned to a folder — with that folder selected read-only.</returns>
+    /// <exception cref="MailboxUnavailableException">Thrown when the establishment pipeline stopped the attempt at a configured limit.</exception>
+    /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
+    internal Task<IMailKitImapClient> EnsureAuthenticatedClientAsync(CancellationToken cancellationToken) =>
+        this.IsUsable ? Task.FromResult(this.client!) : this.EstablishAsync(cancellationToken);
 
     /// <summary>Returns the selected folder, establishing the session first when no usable one is open.</summary>
     /// <param name="cancellationToken">Cancels connecting, authenticating, and selecting the folder.</param>
     /// <returns>The folder, selected read-only.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the connection was opened for no folder.</exception>
     /// <exception cref="MailboxUnavailableException">Thrown when the establishment pipeline stopped the attempt at a configured limit.</exception>
     /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
-    internal Task<IMailFolder> EnsureOpenFolderAsync(CancellationToken cancellationToken)
+    internal async Task<IMailFolder> EnsureOpenFolderAsync(CancellationToken cancellationToken)
     {
-        if (this.client is { IsConnected: true } && this.selectedFolder is { IsOpen: true } openFolder)
+        if (this.folder is null)
         {
-            return Task.FromResult(openFolder);
+            throw new InvalidOperationException("This connection was opened for folder discovery and selects no folder.");
         }
 
-        return this.EstablishSelectedFolderAsync(cancellationToken);
+        await this.EnsureAuthenticatedClientAsync(cancellationToken);
+
+        return this.selectedFolder!;
     }
 
     /// <summary>Runs a read against the selected folder under the mailbox retrieval pipeline.</summary>
     /// <typeparam name="TResult">The result the read produces.</typeparam>
-    /// <param name="retrieval">The read, which must be repeatable and must never change remote state.</param>
+    /// <param name="read">The read, which must be repeatable and must never change remote state.</param>
     /// <param name="cancellationToken">Cancels the read and every remaining attempt.</param>
     /// <returns>The result of the attempt that succeeded.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="retrieval" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="read" /> is <see langword="null" />.</exception>
     /// <exception cref="MailboxUnavailableException">Thrown when the retrieval pipeline stopped the read at a configured limit.</exception>
     /// <remarks>
     /// Every attempt starts by making sure a folder is selected, and an attempt that failed on something worth
     /// repeating hands the next one a connection to rebuild rather than the one it was just failing on.
     /// </remarks>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Every failed attempt is inspected for whether it left the connection usable; the failure itself is rethrown untouched.")]
-    internal Task<TResult> ExecuteRetrievalAsync<TResult>(
-        Func<IMailFolder, CancellationToken, Task<TResult>> retrieval,
+    internal Task<TResult> ExecuteFolderReadAsync<TResult>(
+        Func<IMailFolder, CancellationToken, Task<TResult>> read,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(retrieval);
+        ArgumentNullException.ThrowIfNull(read);
 
         return this.ExecuteUnderPipelineAsync(
             OutboundDependency.MailboxDataRetrieval,
             async attemptToken =>
             {
-                var folder = await this.EnsureOpenFolderAsync(attemptToken);
+                var openFolder = await this.EnsureOpenFolderAsync(attemptToken);
 
-                try
-                {
-                    return await retrieval(folder, attemptToken);
-                }
-                catch (Exception failure)
-                {
-                    await this.DiscardConnectionUnlessItSurvivedAsync(failure);
+                return await this.AttemptRepeatableReadAsync(() => read(openFolder, attemptToken));
+            },
+            cancellationToken);
+    }
 
-                    throw;
-                }
+    /// <summary>Runs a read against the authenticated client under the mailbox retrieval pipeline.</summary>
+    /// <typeparam name="TResult">The result the read produces.</typeparam>
+    /// <param name="read">The read, which must be repeatable and must never change remote state.</param>
+    /// <param name="cancellationToken">Cancels the read and every remaining attempt.</param>
+    /// <returns>The result of the attempt that succeeded.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="read" /> is <see langword="null" />.</exception>
+    /// <exception cref="MailboxUnavailableException">Thrown when the retrieval pipeline stopped the read at a configured limit.</exception>
+    internal Task<TResult> ExecuteClientReadAsync<TResult>(
+        Func<IMailKitImapClient, CancellationToken, Task<TResult>> read,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+
+        return this.ExecuteUnderPipelineAsync(
+            OutboundDependency.MailboxDataRetrieval,
+            async attemptToken =>
+            {
+                var authenticatedClient = await this.EnsureAuthenticatedClientAsync(attemptToken);
+
+                return await this.AttemptRepeatableReadAsync(() => read(authenticatedClient, attemptToken));
             },
             cancellationToken);
     }
@@ -145,7 +181,22 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
         }
     }
 
-    private async Task<IMailFolder> EstablishSelectedFolderAsync(CancellationToken cancellationToken)
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Every failed attempt is inspected for whether it left the connection usable; the failure itself is rethrown untouched.")]
+    private async Task<TResult> AttemptRepeatableReadAsync<TResult>(Func<Task<TResult>> read)
+    {
+        try
+        {
+            return await read();
+        }
+        catch (Exception failure)
+        {
+            await this.DiscardConnectionUnlessItSurvivedAsync(failure);
+
+            throw;
+        }
+    }
+
+    private async Task<IMailKitImapClient> EstablishAsync(CancellationToken cancellationToken)
     {
         await this.DiscardUnusableConnectionAsync();
 
@@ -155,7 +206,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
             cancellationToken);
     }
 
-    private async Task<IMailFolder> ConnectAuthenticateAndSelectFolderAsync(CancellationToken cancellationToken)
+    private async Task<IMailKitImapClient> ConnectAuthenticateAndSelectFolderAsync(CancellationToken cancellationToken)
     {
         var settings = await this.settingsProvider.GetSettingsAsync(this.accountId.Value, cancellationToken);
 
@@ -190,12 +241,11 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
                     settings.Material.Password.RevealAsString(),
                     cancellationToken);
 
-                var folder = await attemptClient.GetFolderAsync(this.folderName.Value, cancellationToken);
-                await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+                await this.AdoptSelectedFolderAsync(attemptClient, cancellationToken);
 
-                this.AdoptSelectedFolder(attemptClient, folder);
+                this.client = attemptClient;
 
-                return folder;
+                return attemptClient;
             }
             catch
             {
@@ -207,27 +257,36 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
         }
     }
 
-    /// <summary>Takes ownership of an established client, once its folder is confirmed to be the one the session started on.</summary>
+    /// <summary>Selects the pinned folder read-only, once it is confirmed to be the one the session started on.</summary>
     /// <remarks>
     /// A server answers a reselection with its current UIDVALIDITY, and a changed one means the UIDs already handed
     /// out name different emails now. Adopting such a folder would attach the recovered folder's emails to the
-    /// previous folder's checkpoint, so the session refuses it and lets the next run start the folder over.
+    /// previous folder's checkpoint, so the session refuses it and lets the next run start the folder over. A
+    /// connection opened for discovery pins no folder and selects nothing here.
     /// </remarks>
-    private void AdoptSelectedFolder(IMailKitImapClient establishedClient, IMailFolder folder)
+    private async Task AdoptSelectedFolderAsync(
+        IMailKitImapClient establishedClient,
+        CancellationToken cancellationToken)
     {
-        var reselectedUidValidity = ImapUidValidity.Create(folder.UidValidity);
+        if (this.folder is not { } pinnedFolder)
+        {
+            return;
+        }
 
+        var openedFolder = await establishedClient.GetFolderAsync(pinnedFolder.RemotePath.Value, cancellationToken);
+        await openedFolder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+
+        var reselectedUidValidity = ImapUidValidity.Create(openedFolder.UidValidity);
         if (this.sessionUidValidity is { } openedUidValidity && openedUidValidity != reselectedUidValidity)
         {
             throw new MailboxFolderRecreatedException(
                 this.accountId,
-                this.folderName,
+                pinnedFolder.Alias,
                 openedUidValidity,
                 reselectedUidValidity);
         }
 
-        this.client = establishedClient;
-        this.selectedFolder = folder;
+        this.selectedFolder = openedFolder;
         this.sessionUidValidity = reselectedUidValidity;
     }
 
@@ -250,19 +309,24 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
         {
             return await this.operationExecutor.ExecuteAsync(
                 new OutboundPipelineKey(dependency, this.accountId.Value),
-                this.folderName.Value,
+                this.folder?.Alias.Value ?? FolderDiscoveryOperationKey,
                 operation,
                 cancellationToken);
         }
         catch (OutboundDependencyUnavailableException rejection)
         {
-            throw new MailboxUnavailableException(this.accountId, this.folderName, rejection);
+            throw this.MailboxDidNotServeTheOperation(rejection);
         }
         catch (Exception exhaustedFailure) when (this.IsRepeatableFailure(dependency, exhaustedFailure))
         {
-            throw new MailboxUnavailableException(this.accountId, this.folderName, exhaustedFailure);
+            throw this.MailboxDidNotServeTheOperation(exhaustedFailure);
         }
     }
+
+    private MailboxUnavailableException MailboxDidNotServeTheOperation(Exception failure) =>
+        this.folder is { } pinnedFolder
+            ? new MailboxUnavailableException(this.accountId, pinnedFolder.Alias, failure)
+            : new MailboxUnavailableException(this.accountId, failure);
 
     /// <summary>Discards the connection unless the failure proves it is still able to carry the next command.</summary>
     /// <remarks>

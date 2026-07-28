@@ -34,19 +34,19 @@ public sealed class MailboxFolderRecreatedException : Exception
 
     /// <summary>Initializes a new recreated-folder failure naming both observed UIDVALIDITY values.</summary>
     /// <param name="accountId">The account whose folder was re-selected.</param>
-    /// <param name="folderName">The folder that was re-selected.</param>
+    /// <param name="folderAlias">The folder that was re-selected.</param>
     /// <param name="sessionUidValidity">The UIDVALIDITY the session opened with.</param>
     /// <param name="reselectedUidValidity">The UIDVALIDITY the server answered with after the connection recovered.</param>
     public MailboxFolderRecreatedException(
         MailAccountId accountId,
-        MailFolderName folderName,
+        MailFolderAlias folderAlias,
         ImapUidValidity sessionUidValidity,
         ImapUidValidity reselectedUidValidity)
         : base(
-            $"Folder {accountId.Value}/{folderName.Value} was reselected with UIDVALIDITY {reselectedUidValidity.Value} after the session opened with {sessionUidValidity.Value}, so the identities this session handed out no longer name the same emails.")
+            $"Folder {accountId.Value}/{folderAlias.Value} was reselected with UIDVALIDITY {reselectedUidValidity.Value} after the session opened with {sessionUidValidity.Value}, so the identities this session handed out no longer name the same emails.")
     {
         this.AccountId = accountId;
-        this.FolderName = folderName;
+        this.FolderAlias = folderAlias;
         this.SessionUidValidity = sessionUidValidity;
         this.ReselectedUidValidity = reselectedUidValidity;
     }
@@ -55,7 +55,7 @@ public sealed class MailboxFolderRecreatedException : Exception
     public MailAccountId? AccountId { get; }
 
     /// <summary>Gets the folder that was recreated, when available.</summary>
-    public MailFolderName? FolderName { get; }
+    public MailFolderAlias? FolderAlias { get; }
 
     /// <summary>Gets the UIDVALIDITY the session opened with, when available.</summary>
     public ImapUidValidity? SessionUidValidity { get; }

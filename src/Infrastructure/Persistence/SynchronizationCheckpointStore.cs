@@ -22,14 +22,18 @@ internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContex
     /// <inheritdoc />
     public async Task<SynchronizationCheckpoint?> GetCheckpointAsync(
         MailAccountId accountId,
-        MailFolderName folderName,
+        MailFolderResolutionId folderResolutionId,
         CancellationToken cancellationToken)
     {
+        var alias = folderResolutionId.Alias.Value;
+        var generation = folderResolutionId.Generation.Value;
+
         var entity = await readContext.SynchronizationCheckpoints
             .AsNoTracking()
             .SingleOrDefaultAsync(
                 checkpoint => checkpoint.MailFolder.MailboxAccountId == accountId.Value
-                    && checkpoint.MailFolder.RemoteName == folderName.Value,
+                    && checkpoint.MailFolder.Alias == alias
+                    && checkpoint.MailFolder.ResolutionGeneration == generation,
                 cancellationToken);
 
         if (entity is null)
@@ -47,7 +51,7 @@ internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContex
     public async Task SaveCheckpointAsync(
         IPersistenceSession session,
         MailAccountId accountId,
-        MailFolderName folderName,
+        MailFolderResolutionId folderResolutionId,
         SynchronizationCheckpoint? expectedCheckpoint,
         SynchronizationCheckpoint checkpoint,
         CancellationToken cancellationToken)
@@ -55,10 +59,10 @@ internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContex
         ArgumentNullException.ThrowIfNull(checkpoint);
 
         var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
-        var folder = await MailFolderEntityResolver.GetOrAddAsync(
+        var folder = await MailFolderEntityResolver.GetRequiredAsync(
             writeContext,
             accountId,
-            folderName,
+            folderResolutionId,
             cancellationToken);
 
         var entity = await FindCheckpointForAsync(writeContext, folder, cancellationToken);
@@ -67,7 +71,7 @@ internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContex
             if (expectedCheckpoint is not null)
             {
                 throw new PersistenceConcurrencyConflictException(
-                    $"Synchronization progress expected for folder {folderName.Value} no longer exists.");
+                    $"Synchronization progress expected for folder {folderResolutionId.Alias.Value} no longer exists.");
             }
 
             writeContext.SynchronizationCheckpoints.Add(new SynchronizationCheckpointEntity
@@ -88,7 +92,7 @@ internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContex
         if (!currentCheckpoint.RepresentsSameProgressAs(expectedCheckpoint))
         {
             throw new PersistenceConcurrencyConflictException(
-                $"Durable synchronization progress for folder {folderName.Value} no longer matches the progress this write was based on.");
+                $"Durable synchronization progress for folder {folderResolutionId.Alias.Value} no longer matches the progress this write was based on.");
         }
 
         entity.UidValidity = checkpoint.UidValidity.Value;

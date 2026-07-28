@@ -227,7 +227,7 @@ public sealed class MailKitImapSessionResilienceTests
 
         // Assert
         Assert.Equal(PrimaryAccount, failure.AccountId);
-        Assert.Equal(InboxFolder, failure.FolderName);
+        Assert.Equal(InboxFolder.Alias, failure.FolderAlias);
         Assert.Equal(3, client.ConnectCount);
     }
 

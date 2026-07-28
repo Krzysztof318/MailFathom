@@ -47,6 +47,22 @@ internal interface IMailKitImapClient : IAsyncDisposable
         string path,
         CancellationToken cancellationToken);
 
+    /// <summary>Gets the namespaces the server assigns to the authenticated user's own folders.</summary>
+    IReadOnlyList<FolderNamespace> PersonalNamespaces { get; }
+
+    /// <summary>Gets the mailbox every IMAP server exposes for incoming mail.</summary>
+    /// <remarks>Listing a namespace does not always cover it, so discovery reads it separately rather than assuming.</remarks>
+    IMailFolder Inbox { get; }
+
+    /// <summary>Lists every folder under one namespace, together with the attributes the server reports for each.</summary>
+    /// <remarks>
+    /// This is an IMAP <c>LIST</c>, which selects no folder and therefore cannot change a message flag. Nothing in
+    /// this port creates, renames, subscribes to, or deletes a folder.
+    /// </remarks>
+    Task<IReadOnlyList<IMailFolder>> GetFoldersAsync(
+        FolderNamespace folderNamespace,
+        CancellationToken cancellationToken);
+
     /// <summary>Closes the connection, optionally sending the protocol's logout command first.</summary>
     Task DisconnectAsync(
         bool quit,
@@ -87,6 +103,18 @@ internal sealed class MailKitImapClientAdapter(ImapClient client) : IMailKitImap
     public Task<IMailFolder> GetFolderAsync(
         string path,
         CancellationToken cancellationToken) => client.GetFolderAsync(path, cancellationToken);
+
+    /// <inheritdoc />
+    public IReadOnlyList<FolderNamespace> PersonalNamespaces => [.. client.PersonalNamespaces];
+
+    /// <inheritdoc />
+    public IMailFolder Inbox => client.Inbox;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<IMailFolder>> GetFoldersAsync(
+        FolderNamespace folderNamespace,
+        CancellationToken cancellationToken) =>
+        [.. await client.GetFoldersAsync(folderNamespace, subscribedOnly: false, cancellationToken)];
 
     /// <inheritdoc />
     public Task DisconnectAsync(

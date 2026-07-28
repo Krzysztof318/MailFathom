@@ -11,6 +11,8 @@ internal sealed class MailMcpDbContext : DbContext
 {
     internal const string SynchronizationCheckpointPrimaryKeyConstraintName = "pk_synchronization_checkpoints";
 
+    internal const string MailFolderBindingUniqueIndexName = "ix_mail_folders_account_alias_generation";
+
     /// <summary>Initializes a new MailMcp EF Core context.</summary>
     public MailMcpDbContext(DbContextOptions<MailMcpDbContext> options)
         : base(options)
@@ -47,8 +49,17 @@ internal sealed class MailMcpDbContext : DbContext
             entity.ToTable("mail_folders");
             entity.HasKey(folder => folder.Id);
             entity.Property(folder => folder.MailboxAccountId).HasMaxLength(128);
-            entity.Property(folder => folder.RemoteName).HasMaxLength(512);
-            entity.HasIndex(folder => new { folder.MailboxAccountId, folder.RemoteName }).IsUnique();
+            entity.Property(folder => folder.Alias).HasMaxLength(128);
+            entity.Property(folder => folder.RemotePath).HasMaxLength(512);
+            entity.Property(folder => folder.HierarchyDelimiter).HasMaxLength(1);
+
+            // The alias is unique per generation rather than per account, because every binding of an alias is kept:
+            // its occurrences stay attributable to the remote folder they were actually read from.
+            // The index is named, because a losing writer is recognized by the constraint its insert violated: two
+            // runs binding the same alias for the first time is a race to resolve, not a failure to report.
+            entity.HasIndex(folder => new { folder.MailboxAccountId, folder.Alias, folder.ResolutionGeneration })
+                .IsUnique()
+                .HasDatabaseName(MailFolderBindingUniqueIndexName);
             entity.HasOne(folder => folder.MailboxAccount)
                 .WithMany(account => account.MailFolders)
                 .HasForeignKey(folder => folder.MailboxAccountId)
