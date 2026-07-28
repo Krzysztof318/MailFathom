@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailKit;
+using MailKit.Net.Imap;
 using MailKit.Search;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Emails;
-using MailMcp.Infrastructure.Mail.MailKit;
 using NSubstitute;
 using Xunit;
 using static MailMcp.Infrastructure.UnitTests.MailKitImapSessionTestContext;
@@ -80,6 +80,101 @@ public sealed class MailKitImapSessionResilienceTests
         await droppedFolder.DidNotReceive().StoreAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IStoreFlagsRequest>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A desynchronized command stream is not something a client reports: it keeps answering that its socket is open.
+    /// Retrying on that connection would spend every attempt on the same unusable session.
+    /// </summary>
+    [Fact]
+    public async Task GetEmailBatchAfterAsync_TransientFailureLeavesTheClientReportingConnected_StillRebuildsTheSessionBeforeRetrying()
+    {
+        // Arrange
+        using var resilience = OutboundResilienceTestHost.WithConfiguredSettings();
+        await using var desynchronizedClient = new FakeImapClient();
+        await using var recoveredClient = new FakeImapClient();
+        var desynchronizedFolder = CreateSelectedFolder();
+        var recoveredFolder = CreateSelectedFolder();
+        var recoveredSummary = CreateSummary(new UniqueId(10));
+        desynchronizedFolder.UidNext.Returns(new UniqueId(11));
+        recoveredFolder.UidNext.Returns(new UniqueId(11));
+
+        // The client is deliberately left reporting a live connection, which is what MailKit's own state would do if it
+        // ever stopped tearing the engine down on a protocol error.
+        desynchronizedFolder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>())
+            .Returns<IList<UniqueId>>(_ => throw new ImapProtocolException("The server sent an unexpected token."));
+        recoveredFolder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>()).Returns([new UniqueId(10)]);
+        recoveredFolder.FetchAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IFetchRequest>(),
+            Arg.Any<CancellationToken>()).Returns([recoveredSummary]);
+        await using var session = await OpenScriptedSessionAsync(resilience, desynchronizedClient, desynchronizedFolder, recoveredClient, recoveredFolder);
+
+        // Act
+        var batch = await resilience.CompleteOnVirtualTimeAsync(
+            session.GetEmailBatchAfterAsync(null, 100, CancellationToken.None),
+            BackoffAdvanceStep);
+
+        // Assert
+        Assert.Equal([10U], batch.Emails.Select(email => email.OccurrenceId.Uid.Value));
+        Assert.Equal(1, recoveredClient.ConnectCount);
+        await recoveredFolder.Received(1).OpenAsync(FolderAccess.ReadOnly, Arg.Any<CancellationToken>());
+        await recoveredFolder.DidNotReceive().OpenAsync(FolderAccess.ReadWrite, Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A connection being replaced is unusable, so it is closed rather than asked for a logout that can block past the attempt budget.</summary>
+    [Fact]
+    public async Task GetEmailBatchAfterAsync_ConnectionReplacedAfterATransientFailure_ClosesItWithoutALogout()
+    {
+        // Arrange
+        using var resilience = OutboundResilienceTestHost.WithConfiguredSettings();
+        await using var desynchronizedClient = new FakeImapClient();
+        await using var recoveredClient = new FakeImapClient();
+        var desynchronizedFolder = CreateSelectedFolder();
+        var recoveredFolder = CreateSelectedFolder();
+        desynchronizedFolder.UidNext.Returns(new UniqueId(11));
+        recoveredFolder.UidNext.Returns(new UniqueId(1));
+        desynchronizedFolder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>())
+            .Returns<IList<UniqueId>>(_ => throw new ImapProtocolException("The server sent an unexpected token."));
+        await using var session = await OpenScriptedSessionAsync(resilience, desynchronizedClient, desynchronizedFolder, recoveredClient, recoveredFolder);
+
+        // Act
+        await resilience.CompleteOnVirtualTimeAsync(
+            session.GetEmailBatchAfterAsync(null, 100, CancellationToken.None),
+            BackoffAdvanceStep);
+
+        // Assert
+        Assert.Equal(0, desynchronizedClient.DisconnectCount);
+        Assert.Equal(1, desynchronizedClient.DisposeCount);
+    }
+
+    /// <summary>An exhausted retry budget rethrows the last transient failure, which must still reach the worker as mailbox unavailability.</summary>
+    [Fact]
+    public async Task GetEmailBatchAfterAsync_EveryAttemptFailsTransiently_ReportsTheMailboxUnavailableRatherThanTheMailLibraryFailure()
+    {
+        // Arrange
+        using var resilience = OutboundResilienceTestHost.WithConfiguredSettings();
+        var establishedClients = new List<FakeImapClient>();
+        var factory = CreateFactory(
+            resilience,
+            () => CreateAlwaysFailingConnection(establishedClients),
+            CreateSettingsProvider());
+        await using var session = await factory.OpenReadOnlyAsync(
+            PrimaryAccount,
+            InboxFolder,
+            TlsOnConnectWithPlainPolicy,
+            CancellationToken.None);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<MailboxUnavailableException>(
+            () => resilience.CompleteOnVirtualTimeAsync(
+                session.GetEmailBatchAfterAsync(null, 100, CancellationToken.None),
+                BackoffAdvanceStep));
+
+        // Assert
+        Assert.Equal(PrimaryAccount, failure.AccountId);
+        Assert.IsType<IOException>(failure.InnerException);
+        Assert.Equal(3, establishedClients.Count);
+    }
+
     /// <summary>Repeating a rejected credential is how a mailbox account gets locked, so the pipeline must not do it.</summary>
     [Fact]
     public async Task OpenReadOnlyAsync_ServerRejectsTheCredential_FailsOnTheFirstAttemptWithoutResolvingTheSecretAgain()
@@ -91,7 +186,7 @@ public sealed class MailKitImapSessionResilienceTests
         client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = CreateSelectedFolder();
         client.AuthenticateException = new MailKit.Security.AuthenticationException("the credential was rejected");
-        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider, resilience.Executor);
+        var factory = CreateFactory(resilience, () => client, settingsProvider);
 
         // Act
         await Assert.ThrowsAsync<MailKit.Security.AuthenticationException>(() => factory.OpenReadOnlyAsync(
@@ -118,7 +213,7 @@ public sealed class MailKitImapSessionResilienceTests
             ("MailboxSessionEstablishment:TotalTimeout", "1.00:00:00"));
         await using var client = new FakeImapClient();
         client.ConnectBehavior = attemptToken => Task.Delay(Timeout.InfiniteTimeSpan, attemptToken);
-        var factory = new MailKitImapMailboxSessionFactory(() => client, CreateSettingsProvider(), resilience.Executor);
+        var factory = CreateFactory(resilience, () => client, CreateSettingsProvider());
 
         // Act
         var execution = factory.OpenReadOnlyAsync(
@@ -149,7 +244,7 @@ public sealed class MailKitImapSessionResilienceTests
             await callerCancellation.CancelAsync();
             await Task.Delay(Timeout.InfiniteTimeSpan, attemptToken);
         };
-        var factory = new MailKitImapMailboxSessionFactory(() => client, CreateSettingsProvider(), resilience.Executor);
+        var factory = CreateFactory(resilience, () => client, CreateSettingsProvider());
 
         // Act
         var failure = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => factory.OpenReadOnlyAsync(
@@ -188,6 +283,21 @@ public sealed class MailKitImapSessionResilienceTests
         Assert.Equal(ImapUidValidity.Create(9), failure.ReselectedUidValidity);
     }
 
+    /// <summary>Builds a fresh connection whose folder always drops the read, and records it so a test can count the reconnections.</summary>
+    private static FakeImapClient CreateAlwaysFailingConnection(List<FakeImapClient> establishedClients)
+    {
+        var client = new FakeImapClient();
+        var folder = CreateSelectedFolder();
+        folder.UidNext.Returns(new UniqueId(11));
+        folder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>())
+            .Returns<IList<UniqueId>>(_ => throw client.DropConnection(new IOException("the server closed the connection")));
+        client.AuthenticationMechanisms.Add("PLAIN");
+        client.Folder = folder;
+        establishedClients.Add(client);
+
+        return client;
+    }
+
     private static IMessageSummary CreateSummary(UniqueId uid)
     {
         var summary = Substitute.For<IMessageSummary>();
@@ -211,10 +321,10 @@ public sealed class MailKitImapSessionResilienceTests
         recoveredClient.AuthenticationMechanisms.Add("PLAIN");
         recoveredClient.Folder = recoveredFolder;
 
-        var factory = new MailKitImapMailboxSessionFactory(
+        var factory = CreateFactory(
+            resilience,
             ConnectionSequence(firstClient, recoveredClient),
-            CreateSettingsProvider(),
-            resilience.Executor);
+            CreateSettingsProvider());
 
         return factory.OpenReadOnlyAsync(
             PrimaryAccount,

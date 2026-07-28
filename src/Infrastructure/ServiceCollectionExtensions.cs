@@ -3,6 +3,7 @@
 using MailKit.Net.Imap;
 using MailMcp.Application.EmailContent;
 using MailMcp.Application.Persistence;
+using MailMcp.Application.Resilience;
 using MailMcp.Application.Synchronization;
 using MailMcp.CodeCoverage;
 using MailMcp.Infrastructure.Certificates;
@@ -123,7 +124,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(
             static () => new MailKitImapClientAdapter(new ImapClient()),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),
-            provider.GetRequiredService<OutboundOperationExecutor>()));
+            provider.GetRequiredService<OutboundOperationExecutor>(),
+            provider.GetRequiredService<ITransientFailureClassifier>()));
 
         return services;
     }

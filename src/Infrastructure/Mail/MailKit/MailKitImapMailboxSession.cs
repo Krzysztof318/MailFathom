@@ -5,6 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailKit;
 using MailKit.Search;
 using MailMcp.Application.EmailContent;
+using MailMcp.Application.Resilience;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
@@ -18,7 +19,8 @@ namespace MailMcp.Infrastructure.Mail.MailKit;
 internal sealed class MailKitImapMailboxSessionFactory(
     Func<IMailKitImapClient> clientFactory,
     IImapAccountSettingsProvider settingsProvider,
-    OutboundOperationExecutor operationExecutor) : IMailboxSessionFactory
+    OutboundOperationExecutor operationExecutor,
+    ITransientFailureClassifier transientFailureClassifier) : IMailboxSessionFactory
 {
     /// <inheritdoc />
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the connection passes to the returned session; an establishment failure disposes it here instead.")]
@@ -32,6 +34,7 @@ internal sealed class MailKitImapMailboxSessionFactory(
             clientFactory,
             settingsProvider,
             operationExecutor,
+            transientFailureClassifier,
             accountId,
             folderName,
             transportSecurityPolicy);

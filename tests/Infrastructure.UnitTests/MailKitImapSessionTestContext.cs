@@ -82,8 +82,19 @@ internal static class MailKitImapSessionTestContext
     {
         client.Folder = folder;
 
-        return new MailKitImapMailboxSessionFactory(() => client, CreateSettingsProvider(), resilience.Executor);
+        return CreateFactory(resilience, () => client, CreateSettingsProvider());
     }
+
+    /// <summary>Builds a factory over a scripted connection sequence and the real classifier the adapter consults.</summary>
+    internal static MailKitImapMailboxSessionFactory CreateFactory(
+        OutboundResilienceTestHost resilience,
+        Func<IMailKitImapClient> clientFactory,
+        IImapAccountSettingsProvider settingsProvider) =>
+        new(
+            clientFactory,
+            settingsProvider,
+            resilience.Executor,
+            resilience.TransientFailureClassifier);
 
     /// <summary>Hands out one client per establishment attempt, in the order a test scripted the reconnections.</summary>
     /// <remarks>A request beyond the scripted sequence is a test asserting on a reconnection it did not intend, so it fails loudly.</remarks>

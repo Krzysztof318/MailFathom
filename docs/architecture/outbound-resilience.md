@@ -66,6 +66,12 @@ adapter maps this one type onto the failure its own application port documents, 
 `MailboxUnavailableException`. A caller's own cancellation is never translated; it stays an
 `OperationCanceledException`, so a host shutting down and a mail server refusing work never arrive as one failure.
 
+An exhausted attempt budget is not a rejection and is deliberately left untranslated here: retry rethrows the failure
+that ended the last attempt, and which exception that is remains information a caller may need. The database paths in
+particular depend on seeing the provider's own failure. An adapter that wants the two outcomes to read as one says so
+itself, which is what the IMAP adapter does — a transient failure that survived every attempt becomes
+`MailboxUnavailableException` alongside the rejections, while terminal failures keep passing through.
+
 The order is the one the standard HTTP resilience pipeline established, and each position follows from the one before
 it. Every limit is an operator setting bound from configuration, read once at startup, so a flaky dependency is tuned
 without a rebuild.

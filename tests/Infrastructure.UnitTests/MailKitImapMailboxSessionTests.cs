@@ -9,7 +9,6 @@ using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Mail.MailKit;
 using NSubstitute;
 using Xunit;
 using static MailMcp.Infrastructure.UnitTests.MailKitImapSessionTestContext;
@@ -144,8 +143,9 @@ public sealed class MailKitImapMailboxSessionTests
         Assert.Equal(new DateTimeOffset(2026, 7, 24, 6, 30, 0, TimeSpan.Zero), metadata.SentAt);
     }
 
+    /// <summary>A half-established connection is unusable, so it is closed rather than asked for a graceful logout it may never answer.</summary>
     [Fact]
-    public async Task OpenReadOnlyAsync_FolderOpenFails_DisposesClientBeforeRethrowing()
+    public async Task OpenReadOnlyAsync_FolderOpenFails_AbandonsTheConnectionWithoutASecondCommand()
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
@@ -165,12 +165,12 @@ public sealed class MailKitImapMailboxSessionTests
         // Assert
         Assert.Equal("missing folder", exception.Message);
         Assert.Equal(1, client.GetFolderAsyncCount);
-        Assert.Equal(1, client.DisconnectCount);
+        Assert.Equal(0, client.DisconnectCount);
         Assert.Equal(1, client.DisposeCount);
     }
 
     [Fact]
-    public async Task OpenReadOnlyAsync_FolderOpenAndCleanupFail_PreservesFolderOpenExceptionAndAttemptsAllCleanup()
+    public async Task OpenReadOnlyAsync_FolderOpenAndCleanupFail_PreservesTheFolderOpenFailure()
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
@@ -179,7 +179,6 @@ public sealed class MailKitImapMailboxSessionTests
         var factory = CreateFactory(resilience, client, folder);
         var folderOpenException = new InvalidOperationException("folder open failed");
         client.AuthenticationMechanisms.Add("PLAIN");
-        client.DisconnectException = new IOException("disconnect failed");
         client.DisposeException = new IOException("dispose failed");
         folder.OpenAsync(FolderAccess.ReadOnly, Arg.Any<CancellationToken>()).Returns<Task>(_ => throw folderOpenException);
 
@@ -192,7 +191,6 @@ public sealed class MailKitImapMailboxSessionTests
 
         // Assert
         Assert.Same(folderOpenException, observedException);
-        Assert.Equal(1, client.DisconnectCount);
         Assert.Equal(1, client.DisposeCount);
         client.DisposeException = null;
     }
@@ -272,7 +270,7 @@ public sealed class MailKitImapMailboxSessionTests
         var settingsProvider = CreateSettingsProvider(out var resolvedMaterial);
         client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = CreateSelectedFolder();
-        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider, resilience.Executor);
+        var factory = CreateFactory(resilience, () => client, settingsProvider);
 
         // Act
         await using var session = await factory.OpenReadOnlyAsync(
@@ -297,7 +295,7 @@ public sealed class MailKitImapMailboxSessionTests
         var settingsProvider = CreateSettingsProvider(out _, anchor);
         client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = CreateSelectedFolder();
-        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider, resilience.Executor);
+        var factory = CreateFactory(resilience, () => client, settingsProvider);
 
         // Act
         await using var session = await factory.OpenReadOnlyAsync(
@@ -333,10 +331,10 @@ public sealed class MailKitImapMailboxSessionTests
         await using var client = new FakeImapClient();
         var settingsProvider = CreateSettingsProvider(out var resolvedMaterial);
         client.ConnectException = new IOException("connect failed");
-        var factory = new MailKitImapMailboxSessionFactory(() => client, settingsProvider, resilience.Executor);
+        var factory = CreateFactory(resilience, () => client, settingsProvider);
 
         // Act
-        await Assert.ThrowsAsync<IOException>(() => factory.OpenReadOnlyAsync(
+        await Assert.ThrowsAsync<MailboxUnavailableException>(() => factory.OpenReadOnlyAsync(
             PrimaryAccount,
             InboxFolder,
             TlsOnConnectWithPlainPolicy,
