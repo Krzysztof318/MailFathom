@@ -109,6 +109,16 @@ dotnet tool install --global csharp-ls --version 0.26.0
 
 The pieces the tooling will need are already in place. `MailMcpDbContextDesignTimeFactory` gives EF Core a context without starting the host, which matters because the host composes its connection string during startup and design-time tooling never runs that. It resolves no secret: `migrations add` and `dbcontext script` need the model rather than a reachable server, and a deployment credential does not belong on a workstation. A command that does need a live database reads `MAILMCP_DESIGN_TIME_CONNECTION_STRING`, falling back to `Host=localhost;Database=mailmcp;Username=mailmcp`.
 
+Until that baseline migration exists, a developer creates the schema from the EF Core model instead. Turn it on in `appsettings.Development.json` or user secrets:
+
+```json
+{
+  "Persistence": { "CreateSchemaFromModelOnStartup": true }
+}
+```
+
+Startup then creates the tables in a database that has none. The setting is off by default, and turning it on in any environment other than Development fails startup rather than creating a schema nobody reviewed. It creates tables only in an empty database — it neither reconciles an existing one against the model nor drops anything — so recreate the database yourself after a model change. [Stored email schema](../architecture/stored-email-schema.md) describes what it creates, and specification 19 removes the setting together with the bootstrap it enables.
+
 `Infrastructure` is its own startup project for these commands. It owns the context, the factory, and the only reference to `Microsoft.EntityFrameworkCore.Design`; `Host` references that package nowhere, so naming it as the startup project fails.
 
 The GitHub CLI (`gh`) is installed separately through the operating system package manager and is required for the issue and pull-request workflow in root `AGENTS.md`. It needs the `project` scope on top of its default scopes so it can read and update the roadmap board.

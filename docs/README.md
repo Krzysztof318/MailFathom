@@ -5,6 +5,7 @@ This documentation set explains the durable design and operating model for MailM
 ## Sections
 
 - [Architecture](architecture/solution-structure.md) describes the clean-architecture boundaries and project layout.
+- [Stored email schema](architecture/stored-email-schema.md) documents the `stored_emails` table, its indexes, and the timeline ordering contract keyset pagination depends on.
 - [Features](features/initial-scope.md) summarizes the first scaffolded capability scope.
 - [Operations](operations/local-development.md) covers local .NET and Aspire development commands.
 - [Secret provisioning](operations/secret-provisioning.md) covers secret references, the systemd and container provisioning paths, and in-memory exposure.

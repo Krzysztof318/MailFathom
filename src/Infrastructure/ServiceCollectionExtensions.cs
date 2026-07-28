@@ -122,6 +122,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPersistenceSessionFactory, PersistenceSessionFactory>();
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
+        // Registered unconditionally while the host decides whether the bootstrap may run at all; specification 19
+        // removes this line together with the creator it registers.
+        services.AddScoped<IDevelopmentSchemaCreator, EfCoreDevelopmentSchemaCreator>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();
         // MimeKit arrives with MailKit, so message parsing needs no dependency of its own; the adapter keeps its types
         // out of Application the same way the IMAP adapter keeps MailKit's out.

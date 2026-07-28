@@ -205,8 +205,8 @@ public sealed class MailboxSynchronizer
         }
 
         // Enrichment reads the payload this run already fetched, so it costs no second IMAP round trip and cannot reach
-        // the remote \Seen flag. A message nobody can parse is counted and stepped over: the occurrence is stored and
-        // the folder checkpoint still advances past it. Persisting what was extracted is specification 07's work.
+        // the remote \Seen flag. A message nobody can parse is counted and stepped over: the occurrence is stored with
+        // only what the server's envelope reported, and the folder checkpoint still advances past it.
         var extraction = await this.mimeReader.ReadMetadataAsync(content, cancellationToken);
 
         await this.concurrencyRetryPolicy.CommitAsync(
@@ -215,6 +215,7 @@ public sealed class MailboxSynchronizer
                 var storedEmailId = await this.metadataRepository.UpsertMetadataAsync(
                     persistenceSession,
                     metadata,
+                    extraction.Metadata,
                     StoredEmailContentAvailability.Available,
                     attemptCancellationToken);
                 await this.contentStore.SaveContentAsync(
@@ -240,6 +241,7 @@ public sealed class MailboxSynchronizer
                 await this.metadataRepository.UpsertMetadataAsync(
                     persistenceSession,
                     metadata,
+                    extractedMetadata: null,
                     StoredEmailContentAvailability.ExceededSizeLimit,
                     attemptCancellationToken);
             },
