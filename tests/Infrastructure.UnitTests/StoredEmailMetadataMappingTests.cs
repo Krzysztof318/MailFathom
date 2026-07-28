@@ -351,7 +351,8 @@ public sealed class StoredEmailMetadataMappingTests
     private static ExtractedEmailMetadata CreateExtractedMetadata(
         IReadOnlyList<EmailParticipant>? participants = null,
         EmailThreadReferences? threadReferences = null,
-        EmailAttachmentSummary? attachments = null) =>
+        EmailAttachmentSummary? attachments = null,
+        ExtractedEmailText? text = null) =>
         new(
             OccurrenceId,
             "Quarterly report",
@@ -359,7 +360,8 @@ public sealed class StoredEmailMetadataMappingTests
             ReceivedAt,
             participants ?? [],
             threadReferences ?? EmailThreadReferences.None,
-            attachments ?? EmailAttachmentSummary.None);
+            attachments ?? EmailAttachmentSummary.None,
+            text ?? ExtractedEmailText.NoTextualBody);
 
     private static RemoteEmailMetadata CreateRemoteMetadata(string internetMessageId) =>
         new(OccurrenceId, internetMessageId, "Quarterly report", SentAt, SizeOctets: 4096);

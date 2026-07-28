@@ -62,6 +62,15 @@ internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider) :
         if (extractedMetadata is not null)
         {
             StoredEmailMetadataMapping.ApplyExtractedMetadata(entity, extractedMetadata);
+
+            // The search document is written from the same extraction in the same session, so an email's indexed text
+            // can never describe a different reading of its MIME than its own metadata columns do.
+            await EmailSearchDocumentWriter.SaveAsync(
+                dbContext,
+                entity,
+                extractedMetadata,
+                timeProvider.GetUtcNow(),
+                cancellationToken);
         }
 
         return StoredEmailId.Create(entity.Id);

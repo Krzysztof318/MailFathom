@@ -26,7 +26,9 @@ MailMcp now includes the first vertical slice for read-only IMAP synchronization
 - `MailServerCertificateValidator` decides trust for an account that names an additional authority, by rebuilding the chain against the configured anchor rather than by forgiving what the platform reported. Nothing anywhere can switch validation off.
 - Secrets are re-resolved per operation rather than cached, and the configuration snapshot that names them is republished only after every reference in it has resolved. A rotated credential, trust anchor, or database password therefore reaches the next operation without a restart, and a reload that cannot resolve leaves the previous snapshot active. [Secret rotation](../operations/secret-rotation.md) is the operator procedure.
 - Every message whose raw MIME was stored is also read for normalized metadata — participants by role, sent and received timestamps, subject, thread identifiers, and an attachment summary. The read happens on the payload the run already fetched, so enrichment costs no second IMAP round trip and cannot reach the remote `\Seen` flag. [MIME metadata extraction](#mime-metadata-extraction) describes what is extracted and how each part is classified, and [Stored email schema](../architecture/stored-email-schema.md) describes which of it the row keeps. A message whose MIME no reader could parse is still stored, carrying only what the server's envelope reported; the same holds for one whose payload was never fetched because it exceeded the size limit.
-- `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, secret resolution and trust anchor loading before any hosted service starts, a validated snapshot every consumer reads instead of the raw bound one, and a periodic scoped background worker that isolates failures per account/folder work unit.
+- The same read also derives the message's searchable text from its body and stores it, together with a bounded copy of the subject and of the normalized participant addresses, in a `email_search_documents` row whose PostgreSQL-generated `tsvector` column carries the GIN index lexical search will query. [Body text and the lexical index](#body-text-and-the-lexical-index) describes which part supplies the text, when a derivation is marked lossy, and what a message with no readable body records instead.
+- A bounded background backfill re-reads the raw MIME of messages stored before extraction existed, writes the classification markers and the text it finds, and records the position it reached so an interrupted run resumes rather than restarts. It reaches no mail server, and it ends itself once no stored message awaits extraction.
+- `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, secret resolution and trust anchor loading before any hosted service starts, a validated snapshot every consumer reads instead of the raw bound one, and a periodic scoped background worker that isolates failures per account/folder work unit. A second worker, configured under `MailExtractionBackfill`, runs the extraction backfill on the same scoped-work-unit terms.
 
 ## Folder aliases and discovery
 
@@ -282,6 +284,58 @@ written to a log — a file name is both mail content and attacker-controlled, s
 once. Extracted participant data is personal data by default, which constrains how specification 07 will persist and
 index it.
 
+## Body text and the lexical index
+
+Every message whose MIME is read also yields the searchable text of its body, on the same parse that produced the participants and the attachment summary. Running one walk for both answers is what keeps them consistent: a second walk under slightly different rules could classify a part as an attachment in one place and as the body in the other.
+
+### Which part supplies the text
+
+The text comes from the parts the attachment rules already resolved as the **body branch**, not from every textual part in the message. A `.txt` file attached to an HTML message is a `text/plain` part that is not the body, and indexing it would put a document's contents into the body text of the mail carrying it.
+
+Within that branch:
+
+1. A genuine `text/plain` part wins over every HTML alternative, because it is what the sender wrote rather than a reading of how it was displayed.
+2. Only when the message offered no plain-text alternative is text derived from the HTML body, and the result is **marked lossy** so a later chunking or ranking design can decide how much to trust it instead of re-deriving from the message which path produced the words it is holding.
+3. A message with neither records **no textual body**.
+
+Derivation uses `MimeKit.Text.HtmlTokenizer`, which arrives with MailKit, so this adds no dependency. That matters beyond convenience: specification 14 selects an HTML sanitizer that pins AngleSharp to an exact old version, so keeping this on MimeKit avoids trading one version conflict for another. Nothing in the derivation resolves a URL, loads a style sheet, follows a `src`, or expands an external entity — an HTML body cannot make extraction reach the network or the filesystem however it is written. Script, style, and head content is machinery rather than words and never reaches the index; block elements become line breaks, character references are decoded to what a reader saw, and source indentation collapses.
+
+### Encrypted and empty are different answers
+
+A message the MIME reader recorded as **encrypted** has a body that exists and cannot be read here, so it records *no extractable text, because it is encrypted* rather than an empty body. A message that genuinely said nothing records *no textual body*. Merging the two would turn a known gap in search into a silent one; decrypting is out of scope and tracked separately, and the backfill re-evaluates these messages if it is ever enabled.
+
+### Trimming quoted history and signatures
+
+Quoted history and signatures are removed from the **end** of the text and nowhere else. Trimming the end alone is the whole safety argument: a reply written above the message it answers keeps its own words, and a reply written inside or below a quoted block is untouched because the block does not reach the end.
+
+Three conventions are recognized, all only as a trailing region: a `-----Original Message-----` style separator, a run of `>`-prefixed lines together with the `On … wrote:` attribution line directly above it, and the RFC 3676 `--` signature separator when at most twenty lines follow it. An attribution pattern is anchored on both ends and length-bounded, so a sentence that merely ends in "wrote:" is prose and nothing after it is removed. If trimming would leave nothing — a message that is entirely a forwarded block — nothing is trimmed, because a message whose whole content is a quote is a message whose whole content is that quote.
+
+**The untrimmed text is retained beside the trimmed one.** Trimming is heuristic, and without the untrimmed reading an over-aggressive cut would be the only surviving one until somebody re-derived from the raw MIME. Only the trimmed form is indexed.
+
+### Attachment payloads are never opened
+
+Text comes from the message body only. A PDF, an office document, or an image contributes nothing, so a message whose information lives entirely in an attachment is found by its subject and participants alone. That is a limitation by design rather than an omission: attachment extraction is an unbounded-cost path, and document parsers are a far larger hostile-input surface than MIME parsing. It needs its own bounded-cost design and its own parser-hardening review.
+
+### The index
+
+The extracted text is bounded by `MaxExtractedTextCharacters` and cut on a text-element boundary, so it never ends in half a character. The bound is not about storage: a PostgreSQL `tsvector` cannot exceed one megabyte and the generated column is computed on every insert, so an unbounded body would not degrade search — it would make the row unwritable and stop the folder the message arrived in. What is cut is lost to search rather than lost outright, because the raw MIME stays stored beside it.
+
+The search vector is a **stored generated column**, so no code path, migration, or ad-hoc update can leave a row whose vector describes text the row no longer holds. [Stored email schema](../architecture/stored-email-schema.md#the-derived-search-document) describes the table and why the subject and participant addresses are copied into it.
+
+`Persistence:TextSearchConfiguration` names the PostgreSQL text search configuration the vector is built with. It is stated rather than inherited from the server's `default_text_search_config` for two reasons: it decides how every indexed word is stemmed and which are dropped as stop words, so it is part of the schema rather than of a query, and a value taken from a session setting could differ between the process that wrote a row and the one that queries it — a mismatch that shows up as missing results rather than as an error. PostgreSQL refuses the single-argument `to_tsvector` in a generated column for exactly that reason.
+
+The default is `simple`, which neither stems nor drops stop words. That is the honest default for a mailbox: the language of a message is not known when it is indexed, and a language-specific configuration applied to mail written in another one stems words into forms no query produces. A deployment whose mail is reliably in one language configures that language and gains its stemming. Only a configuration a stock PostgreSQL server ships is accepted, matched case-sensitively as PostgreSQL folds an unquoted identifier; anything else **fails startup** with the supported names, because the value is compiled into the generated column and an unknown one would either fail schema creation far from the mistake or index the whole mailbox under the wrong language.
+
+### Backfilling messages stored earlier
+
+Extraction runs on the payload the current run fetched, so messages stored before it existed have raw MIME and no derived text — and, for anything stored before MIME metadata extraction, no classification markers either. A background walk closes that gap.
+
+It selects stored messages that have raw MIME and no search document, re-reads each one, and writes the classification markers **before** deriving text from what that classification found. Reading a marker that was never written would leave every pre-existing encrypted message indistinguishable from an empty one, which is the exact gap the encrypted marker exists to close.
+
+Each batch commits its extractions together with the position it reached, so a committed position always describes committed work and a crash between the two cannot skip a message. The position is what makes the walk finite: selecting only messages without a search document would already be idempotent, but a message no reader can parse never gains one, so such a walk would return the same unreadable message forever and never reach the messages behind it. An unreadable message is counted, stepped over, and left with whatever the server's envelope reported.
+
+The walk reaches no mail server — every byte it reads was fetched and stored by an earlier synchronization run — so it cannot touch a remote `\Seen` flag however long it runs. A run is bounded by `BatchSize` and `MaxBatchesPerRun` and then yields; the worker ends itself once a run finds nothing left, because every message synchronized from then on is extracted as it is written. A failed run keeps the worker alive: the database being briefly unavailable says nothing about whether work remains, and the committed position means the next interval resumes.
+
 ## Configuration
 
 Synchronization is disabled by default:
@@ -296,6 +350,7 @@ Synchronization is disabled by default:
     "MaxMetadataBatchesPerRun": 10,
     "MaxMimePartCount": 1000,
     "MaxMimeNestingDepth": 30,
+    "MaxExtractedTextCharacters": 100000,
     "Accounts": [
       {
         "AccountId": "primary",
@@ -328,7 +383,21 @@ Optimistic concurrency is configured once for the whole deployment, outside the 
 {
   "Persistence": {
     "MaximumConcurrencyCommitAttempts": 2,
+    "TextSearchConfiguration": "simple",
     "Password": { "SecretReference": "file:/run/secrets/postgres-password" }
+  }
+}
+```
+
+The extraction backfill has a section of its own rather than a block inside the synchronization settings, because it reaches no mail server: it reads raw MIME an earlier run already stored, so it needs no account and must not be disabled with synchronization. It shares that feature's extraction limits, which are what decide how a message is read. It is on by default, since a deployment that stored mail before extraction existed would otherwise keep that mail out of search silently and indefinitely; a deployment with nothing to backfill pays one query, because the first run finds no work and the worker stops.
+
+```json
+{
+  "MailExtractionBackfill": {
+    "Enabled": true,
+    "Interval": "00:00:30",
+    "BatchSize": 50,
+    "MaxBatchesPerRun": 10
   }
 }
 ```
@@ -431,7 +500,7 @@ Secret resolution is the one rule that cannot join `ValidateOnStart`, because op
 
 ## Safety assumptions
 
-The application layer exposes only `FetchEmailContentWithoutSettingSeenAsync` for content retrieval during synchronization. This name is part of the contract: implementations must use IMAP read-only selection and BODY.PEEK-equivalent behavior so remote `\Seen` flags are not changed. The MailKit adapter satisfies both halves — it selects the folder with `FolderAccess.ReadOnly` and retrieves content through `GetStreamAsync(uid)`, which issues `UID FETCH <uid> (BODY.PEEK[])`. Regression tests exercise both a successful fetch and a fetch retried after a dropped connection, and assert that neither `StoreAsync`, the only `IMailFolder` member able to change flags, nor a read-write reselection was requested on either path. Metadata requests are bounded by `MaxMetadataBatchSize`, each run is bounded by `MaxMetadataBatchesPerRun`, empty unassigned UID ranges are not checkpointed speculatively, and raw MIME above `MaxRawMimeBytes` is recorded as metadata-only. Metadata extraction reads only the payload that fetch already produced and never materializes attachment content: each attachment's size is measured by decoding the part into a counter that keeps nothing. Logs record counts and account/folder identifiers only; raw MIME, email bodies, attachments, participant addresses, subjects, attachment file names, credentials, and tokens remain sensitive and must not be logged.
+The application layer exposes only `FetchEmailContentWithoutSettingSeenAsync` for content retrieval during synchronization. This name is part of the contract: implementations must use IMAP read-only selection and BODY.PEEK-equivalent behavior so remote `\Seen` flags are not changed. The MailKit adapter satisfies both halves — it selects the folder with `FolderAccess.ReadOnly` and retrieves content through `GetStreamAsync(uid)`, which issues `UID FETCH <uid> (BODY.PEEK[])`. Regression tests exercise both a successful fetch and a fetch retried after a dropped connection, and assert that neither `StoreAsync`, the only `IMailFolder` member able to change flags, nor a read-write reselection was requested on either path. Metadata requests are bounded by `MaxMetadataBatchSize`, each run is bounded by `MaxMetadataBatchesPerRun`, empty unassigned UID ranges are not checkpointed speculatively, and raw MIME above `MaxRawMimeBytes` is recorded as metadata-only. Metadata extraction reads only the payload that fetch already produced and never materializes attachment content: each attachment's size is measured by decoding the part into a counter that keeps nothing. Body text extraction reads the same already-fetched payload and opens no attachment payload at all, and the backfill reads only raw MIME an earlier run stored, so neither can reach a mail server. Logs record counts and account/folder identifiers only; raw MIME, email bodies, extracted and indexed text, attachments, participant addresses, subjects, attachment file names, credentials, and tokens remain sensitive and must not be logged, and no error message carries a fragment of them.
 
 ### Reloading a rotated reference
 
@@ -443,13 +512,12 @@ Snapshots are read once per operation, and one operation means one snapshot end 
 
 The database secrets reload on the same terms. `Persistence:Password` and `Persistence:ConnectionString` are read from their own published snapshot each time a physical connection needs a credential, so repointing a reference takes effect without a restart, and a reload whose reference does not resolve is rejected with the previous one left active. Two further checks run before that snapshot publishes, because resolving a reference proves less for a connection string than for a password: the material must parse as a PostgreSQL connection string and, when it is what supplies the credential, still carry one. Changing *which* setting supplies the credential is refused outright — the pool attaches its password provider once, so that change is restart-required and is reported as such instead of being adopted with no effect.
 
+`Persistence:TextSearchConfiguration` is refused on the same terms and for the same kind of reason. It is compiled into the search vector's generated column, so the schema already holds the value the model was built from and every indexed row was written under it. Publishing a different one would change nothing about the index and everything about what an operator believed it contained: queries would be stemmed one way and the stored lexemes another, which surfaces as missing results rather than as an error. Changing it is a schema change that rebuilds the search documents, so it is restart-required and reported as such.
+
 A rejected reload is logged with the configuration path and the failure identity. When a credential provider fails in a way no failure identity covers, only the exception's type is logged and its message and stack trace are deliberately withheld, because a provider exception routinely carries the target path, request URI, or credential identifier that the reload contract keeps out of diagnostics.
 
 ## Pending work
 
-- Re-extracting already stored messages. Enrichment runs on the payload of a message the current run fetched, so a
-  message stored before a reader improvement keeps the metadata the older reader produced. Backfilling those rows is a
-  concern that arrives with body-text extraction.
 - Per-account discovery. Every folder currently resolves on its own short-lived connection, so a run costs one extra
   IMAP login per configured folder on top of its synchronization session. The listing is the same for every folder of
   an account, so the per-account synchronization supervisor is where one listing can serve them all.

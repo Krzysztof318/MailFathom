@@ -77,8 +77,9 @@ public static class ServiceCollectionExtensions
     /// <summary>Registers EF Core persistence, MailKit mailbox access, and application synchronization services.</summary>
     /// <param name="services">The service collection.</param>
     /// <param name="currentConnectionSettings">Supplies where the PostgreSQL connection string and its password currently come from.</param>
+    /// <param name="textSearchConfiguration">The validated PostgreSQL text search configuration the lexical index is built with.</param>
     /// <returns>The service collection, for chaining.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> or <paramref name="currentConnectionSettings" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     /// <remarks>
     /// The settings arrive already read rather than as an <c>IConfiguration</c> this method reaches into, so which key
     /// holds them stays a host decision and this assembly gains no configuration dependency. They arrive as an
@@ -87,11 +88,17 @@ public static class ServiceCollectionExtensions
     /// </remarks>
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        Func<IServiceProvider, PostgresConnectionSettings> currentConnectionSettings)
+        Func<IServiceProvider, PostgresConnectionSettings> currentConnectionSettings,
+        PostgresTextSearchConfiguration textSearchConfiguration)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(currentConnectionSettings);
+        ArgumentNullException.ThrowIfNull(textSearchConfiguration);
 
+        // A value rather than an accessor, unlike the connection settings beside it: this one is compiled into the
+        // search vector's column definition, so it is fixed for a deployment's schema and a reload cannot adopt a new
+        // one without reindexing. Changing it is a migration, not a configuration reload.
+        services.AddSingleton(textSearchConfiguration);
         services.AddSingleton(provider => new PostgresConnectionStringProvider(
             () => currentConnectionSettings(provider),
             provider.GetRequiredService<ISecretReferenceResolver>(),
@@ -126,6 +133,7 @@ public static class ServiceCollectionExtensions
         // removes this line together with the creator it registers.
         services.AddScoped<IDevelopmentSchemaCreator, EfCoreDevelopmentSchemaCreator>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();
+        services.AddScoped<IStoredEmailExtractionBackfillStore, StoredEmailExtractionBackfillStore>();
         // MimeKit arrives with MailKit, so message parsing needs no dependency of its own; the adapter keeps its types
         // out of Application the same way the IMAP adapter keeps MailKit's out.
         services.AddScoped<IEmailMimeReader>(provider => new MimeKitEmailMimeReader(
@@ -135,6 +143,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<MailFolderResolver>();
         services.AddScoped<MailboxSynchronizer>();
+        services.AddScoped<StoredEmailExtractionBackfill>();
         services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(
             static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),

@@ -30,8 +30,14 @@ internal sealed class MailMcpDbContextDesignTimeFactory : IDesignTimeDbContextFa
     internal const string LocalDevelopmentConnectionString = "Host=localhost;Database=mailmcp;Username=mailmcp";
 
     /// <inheritdoc />
-    public MailMcpDbContext CreateDbContext(string[] args) => new(BuildOptions(
-        Environment.GetEnvironmentVariable(DesignTimeConnectionStringVariableName)));
+    /// <remarks>
+    /// The default text search configuration is used, because design time has no deployment to read one from. A
+    /// deployment that configures another one therefore differs from the generated migration in exactly one place —
+    /// the search vector's expression — and applying that migration is what fixes the configuration for its data.
+    /// </remarks>
+    public MailMcpDbContext CreateDbContext(string[] args) => new(
+        BuildOptions(Environment.GetEnvironmentVariable(DesignTimeConnectionStringVariableName)),
+        PostgresTextSearchConfiguration.Default);
 
     /// <summary>Builds the design-time options for a connection string that may be absent.</summary>
     /// <param name="configuredConnectionString">The value of the design-time environment variable, or <see langword="null" />.</param>

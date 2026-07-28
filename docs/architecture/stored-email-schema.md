@@ -1,6 +1,6 @@
 # Stored email schema
 
-`stored_emails` holds the normalized metadata a mailbox timeline is read from. Its raw MIME lives in a separate one-to-one table, `email_message_contents`, so nothing that lists or filters mail ever loads a `bytea` value or tracks one in the change tracker.
+`stored_emails` holds the normalized metadata a mailbox timeline is read from. Its raw MIME lives in a separate one-to-one table, `email_message_contents`, and the text derived from that MIME lives in a third, `email_search_documents`, so nothing that lists or filters mail ever loads a `bytea` value, a body's worth of text, or a search vector — let alone tracks one in the change tracker.
 
 This page describes the table as the EF Core model declares it today. No migration exists yet — [specification 19](../../specs/19-ef-core-migration-baseline-and-apply-policy.md) generates the reviewed baseline — so the schema a developer runs against comes from the Development-only bootstrap described at the end of this page, and PostgreSQL has not yet had the chance to disagree with any of it.
 
@@ -42,6 +42,16 @@ The row keeps the indexable part of what the MIME reader found and only that: `a
 
 **The per-attachment list of file names, media types, and sizes is deliberately not persisted.** The same reasoning as for recipient display names applies, and one more: a second representation of the attachment list can drift from the raw MIME it was derived from, and re-deriving it costs nothing in a pass a body reader is already making. The signature marker is named for presence rather than verification because nothing here verifies anything; a column called "signed" would be read as an authenticity result by every query that later touched it.
 
+## The derived search document
+
+`email_search_documents` is one-to-one with `stored_emails` and holds what lexical search reads: `subject_text`, `participant_addresses`, `body_text`, `body_text_before_trimming`, `text_source`, `extracted_at`, and the generated `search_vector`. [Body text and the lexical index](../features/imap-synchronization.md#body-text-and-the-lexical-index) describes how each of them is derived.
+
+It is a table of its own for the reason raw MIME is. The text is large, only search reads it, and a timeline query that materialized a stored-email row would otherwise carry a body and its search vector through the change tracker on the way to a view that shows neither. Deleting a message cascades to it, so everything derived from a message is erased with the message.
+
+`subject_text` and `participant_addresses` are bounded copies rather than references to the columns of the same name on `stored_emails`. A PostgreSQL generated column must be immutable and can only read its own row, and the array-to-text functions that would flatten the recipient arrays are merely stable — they call element output functions that need not be immutable. Copying the two values into this row at write time keeps the column's expression trivially immutable instead of requiring a custom SQL function, which no migration exists to create.
+
+The copies are bounded more tightly than the columns they come from: 2000 characters of subject and 64 participant addresses in total. A `tsvector` cannot exceed one megabyte, and the whole document — subject, addresses, and up to `MaxExtractedTextCharacters` of body — shares that budget. Exceeding it would not degrade search; it would make the row unwritable, because the generated column is computed on every insert.
+
 ## Indexes
 
 | Index | Columns | Purpose |
@@ -53,10 +63,11 @@ The row keeps the indexable part of what the MIME reader found and only that: `a
 | `ix_stored_emails_to_addresses` | `(to_addresses)`, GIN | Containment tests over the `To` recipients |
 | `ix_stored_emails_cc_addresses` | `(cc_addresses)`, GIN | Containment tests over the `Cc` recipients |
 | `ix_stored_emails_reply_to_addresses` | `(reply_to_addresses)`, GIN | Containment tests over the `Reply-To` addresses |
+| `ix_email_search_documents_search_vector` | `(search_vector)`, GIN | Lexical search over subject, participants, and body text |
 
-The recipient indexes are GIN rather than B-tree because a B-tree over an array column serves only equality against a whole array, which no query asks for. A GIN index is what turns a containment test into an index scan.
+The recipient and search-vector indexes are GIN rather than B-tree because both serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 
-Two indexes the architecture draft lists are deliberately absent. The full-text GIN index waits for [specification 08](../../specs/08-extracted-text-and-fulltext-index.md), which introduces the column it would cover, and the partial indexes excluding remotely deleted messages wait for specification 10, which introduces the state they would filter on.
+One index the architecture draft lists is still deliberately absent: the partial indexes excluding remotely deleted messages wait for specification 10, which introduces the state they would filter on.
 
 ## The timeline ordering contract
 
@@ -75,6 +86,8 @@ Unit tests pin the contract, including where an undated message lands. Whether P
 ## Privacy classification
 
 Participants, subject, and thread identifiers are personal data. They are stored because a timeline and a filter cannot work without them, and the columns above are the minimum that supports the planned queries — which is why display names other than the sender's, and the attachment list, are not among them. No projection introduced here selects raw MIME, and the content relationship stays unloaded by default so a mailbox query cannot pull a `bytea` value into the change tracker by accident.
+
+The derived search document is not a lesser classification of the same data. Body text, the copied subject and addresses, and the search vector built from them are mail content, and none of them is anonymous merely because it was derived; they inherit the retention, access, export, and erasure obligations of the message they came from. The cascade from `stored_emails` is what makes that structural rather than a rule somebody has to remember.
 
 ## The Development-only schema bootstrap
 

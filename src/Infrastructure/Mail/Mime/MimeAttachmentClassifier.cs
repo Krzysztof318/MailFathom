@@ -42,16 +42,18 @@ internal sealed partial class MimeAttachmentClassifier
     private bool carriesUnverifiedSignature;
     private bool containsUnexpandedTnefPart;
 
-    /// <summary>Classifies one message's parts and measures the attachments among them.</summary>
+    /// <summary>Classifies one message's parts, measures the attachments among them, and names its body text parts.</summary>
     /// <param name="message">The parsed message.</param>
     /// <param name="cancellationToken">Cancels the measurement.</param>
-    /// <returns>What the message carries besides its body.</returns>
-    public static async Task<EmailAttachmentSummary> ClassifyAsync(MimeMessage message, CancellationToken cancellationToken)
+    /// <returns>What the message carries besides its body, together with the textual parts that are its body.</returns>
+    public static async Task<MimeContentClassification> ClassifyAsync(MimeMessage message, CancellationToken cancellationToken)
     {
         var classifier = new MimeAttachmentClassifier();
         classifier.WalkEntity(message.Body, isInBodyBranch: true);
 
-        return await classifier.SummarizeAsync(cancellationToken);
+        return new MimeContentClassification(
+            await classifier.SummarizeAsync(cancellationToken),
+            [.. classifier.bodyBranchLeaves.OfType<TextPart>()]);
     }
 
     [GeneratedRegex("""cid:(?<contentId>[^"'\s>)\\]+)""", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]

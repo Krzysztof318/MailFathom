@@ -227,6 +227,46 @@ public sealed class SecretConfigurationStartupValidatorTests
         Assert.Contains(harness.ReportedMessages, message => message.Contains(nameof(SecretValueInterpretation.ReferenceOnly), StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The configuration is compiled into the search vector's generated column, so a snapshot naming another one
+    /// describes an index that does not exist. Adopting it would leave queries stemmed one way and the stored lexemes
+    /// another, which surfaces as missing results rather than as an error.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_TextSearchConfigurationOtherThanTheOneTheIndexWasBuiltWith_IsRefused()
+    {
+        // Arrange
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions { TextSearchConfiguration = "english" });
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("Persistence:TextSearchConfiguration", failure, StringComparison.Ordinal);
+        Assert.Contains("needs a schema change and a restart", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartingAsync_UnsupportedTextSearchConfiguration_IsRefusedAsUnsupportedRatherThanAsAChange()
+    {
+        // Arrange
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions { TextSearchConfiguration = "klingon" });
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.Contains("is not a PostgreSQL text search configuration MailMcp supports", failure, StringComparison.Ordinal);
+    }
+
     /// <summary>Every lifecycle stage other than the starting one is deliberately empty, because the check belongs before hosted services start.</summary>
     [Fact]
     public async Task RemainingLifecycleMembers_Always_CompleteWithoutResolvingAnything()
@@ -267,6 +307,7 @@ public sealed class SecretConfigurationStartupValidatorTests
                 new TrustAnchorLoader(resolver),
                 new DatabaseConnectionSettingsMapper(new ConfigurationBuilder().Build()),
                 connectionSettingsValidator,
+                PostgresTextSearchConfiguration.Default,
                 validationLogger),
             new SecretResolutionOptions(interpretation),
             startupLogger);

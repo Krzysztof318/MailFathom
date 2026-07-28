@@ -44,6 +44,14 @@ internal sealed class MailSynchronizationOptions : IValidatableObject, IMailTran
     [Range(1, 1000)]
     public int MaxMimeNestingDepth { get; set; } = 30;
 
+    /// <summary>Gets or sets the maximum number of characters one message's body contributes to its indexed text.</summary>
+    /// <remarks>
+    /// The upper bound of the range is what keeps the generated search vector inside PostgreSQL's one-megabyte limit
+    /// once the subject and the participant addresses sharing that document are counted too.
+    /// </remarks>
+    [Range(1_000, 500_000)]
+    public int MaxExtractedTextCharacters { get; set; } = 100_000;
+
     /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
 

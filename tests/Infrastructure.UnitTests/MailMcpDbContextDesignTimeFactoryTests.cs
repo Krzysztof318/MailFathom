@@ -16,7 +16,7 @@ public sealed class MailMcpDbContextDesignTimeFactoryTests
         var options = MailMcpDbContextDesignTimeFactory.BuildOptions(configuredConnectionString: null);
 
         // Assert
-        using var context = new MailMcpDbContext(options);
+        using var context = new MailMcpDbContext(options, PostgresTextSearchConfiguration.Default);
         Assert.Equal(
             MailMcpDbContextDesignTimeFactory.LocalDevelopmentConnectionString,
             context.Database.GetConnectionString());
@@ -29,7 +29,7 @@ public sealed class MailMcpDbContextDesignTimeFactoryTests
         var options = MailMcpDbContextDesignTimeFactory.BuildOptions("Host=db.test;Database=mailmcp;Username=dev");
 
         // Assert
-        using var context = new MailMcpDbContext(options);
+        using var context = new MailMcpDbContext(options, PostgresTextSearchConfiguration.Default);
         Assert.Equal("Host=db.test;Database=mailmcp;Username=dev", context.Database.GetConnectionString());
     }
 
