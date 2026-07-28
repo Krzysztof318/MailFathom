@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="xunit.v3.mtp-v2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Neither shared directory has a project of its own: both are compiled into every assembly that needs them, so
+         the only way to test them is to compile them here the same way a consumer does. -->
+    <Compile Include="..\..\src\shared\*.cs" LinkBase="src-shared" />
+    <Compile Include="..\shared\*.cs" LinkBase="tests-shared" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- RecordingLoggerProvider from tests/shared implements ILoggerProvider. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+</Project>
