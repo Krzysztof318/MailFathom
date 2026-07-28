@@ -18,6 +18,15 @@ internal sealed class PersistenceOptions
     [Range(1, 10)]
     public int MaximumConcurrencyCommitAttempts { get; set; } = 2;
 
+    /// <summary>Gets or sets whether startup creates the local schema from the EF Core model. Development only, and off unless an operator turns it on.</summary>
+    /// <remarks>
+    /// Temporary scaffolding for the window in which migrations do not exist yet: without it a developer has no way to
+    /// create the tables the host reads and writes. Turning it on in any environment other than Development fails
+    /// startup rather than creating a schema nobody reviewed. Specification 19 generates the reviewed baseline
+    /// migration and removes this setting together with the bootstrap it enables.
+    /// </remarks>
+    public bool CreateSchemaFromModelOnStartup { get; set; }
+
     /// <summary>Gets or sets the reference to a complete PostgreSQL connection string, or <see langword="null" /> when <c>ConnectionStrings:mailmcp</c> supplies it.</summary>
     /// <remarks>
     /// A connection string is more than a password, so a deployment backed by a secret store usually keeps it whole and

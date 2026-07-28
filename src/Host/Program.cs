@@ -108,6 +108,9 @@ try
     // next physical connection instead of waiting for a restart.
     builder.Services.AddInfrastructure(provider => provider.GetRequiredService<DatabaseConnectionSettingsMapper>()
         .Map(provider.GetRequiredService<ISettingsSnapshot<PersistenceOptions>>().Current));
+    // Ahead of the worker so a developer's first run finds the tables it reads, and after the infrastructure that
+    // registers the creator it resolves. Specification 19 removes this line with the rest of the bootstrap.
+    builder.Services.AddHostedService<MailMcp.Host.Hosting.DevelopmentSchemaBootstrap>();
     builder.Services.AddHostedService<MailMcp.Host.Hosting.MailSynchronizationWorker>();
 
     var app = builder.Build();

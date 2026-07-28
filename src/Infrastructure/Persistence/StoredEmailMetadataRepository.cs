@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailMcp.Application.Emails;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
 using MailMcp.CodeCoverage;
@@ -16,6 +17,7 @@ internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider) :
     public async Task<StoredEmailId> UpsertMetadataAsync(
         IPersistenceSession session,
         RemoteEmailMetadata metadata,
+        ExtractedEmailMetadata? extractedMetadata,
         StoredEmailContentAvailability contentAvailability,
         CancellationToken cancellationToken)
     {
@@ -46,25 +48,20 @@ internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider) :
             entity = new StoredEmailEntity
             {
                 Id = Guid.CreateVersion7(timeProvider.GetUtcNow()),
+                MailboxAccountId = folder.MailboxAccountId,
                 MailFolder = folder,
                 UidValidity = occurrenceId.UidValidity.Value,
                 Uid = occurrenceId.Uid.Value,
-                InternetMessageId = metadata.InternetMessageId,
-                Subject = metadata.Subject,
-                SentAt = metadata.SentAt,
-                SizeOctets = metadata.SizeOctets,
-                ContentAvailability = contentAvailability,
             };
 
             dbContext.StoredEmails.Add(entity);
         }
-        else
+
+        StoredEmailMetadataMapping.ApplyRemoteSummary(entity, metadata, contentAvailability);
+
+        if (extractedMetadata is not null)
         {
-            entity.InternetMessageId = metadata.InternetMessageId;
-            entity.Subject = metadata.Subject;
-            entity.SentAt = metadata.SentAt;
-            entity.SizeOctets = metadata.SizeOctets;
-            entity.ContentAvailability = contentAvailability;
+            StoredEmailMetadataMapping.ApplyExtractedMetadata(entity, extractedMetadata);
         }
 
         return StoredEmailId.Create(entity.Id);
