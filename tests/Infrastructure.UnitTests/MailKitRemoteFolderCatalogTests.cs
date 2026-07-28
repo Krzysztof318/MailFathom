@@ -16,7 +16,7 @@ public sealed class MailKitRemoteFolderCatalogTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient
+        var client = new FakeImapClient
         {
             InboxFolder = CreateAdvertisedFolder("INBOX", '/', FolderAttributes.Inbox),
         };
@@ -47,7 +47,7 @@ public sealed class MailKitRemoteFolderCatalogTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient
+        var client = new FakeImapClient
         {
             InboxFolder = CreateAdvertisedFolder("INBOX", '.', FolderAttributes.None),
         };
@@ -75,7 +75,7 @@ public sealed class MailKitRemoteFolderCatalogTests
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
         var inbox = CreateAdvertisedFolder("INBOX", '/', FolderAttributes.Inbox);
-        await using var client = new FakeImapClient { InboxFolder = inbox };
+        var client = new FakeImapClient { InboxFolder = inbox };
         client.FoldersByNamespace[client.PersonalNamespaces[0]] =
         [
             CreateAdvertisedFolder("INBOX", '/', FolderAttributes.Inbox),
@@ -99,7 +99,7 @@ public sealed class MailKitRemoteFolderCatalogTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient
+        var client = new FakeImapClient
         {
             InboxFolder = CreateAdvertisedFolder("INBOX", '/', FolderAttributes.Inbox),
         };
@@ -125,7 +125,7 @@ public sealed class MailKitRemoteFolderCatalogTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient
+        var client = new FakeImapClient
         {
             InboxFolder = CreateAdvertisedFolder("INBOX", '/', FolderAttributes.Inbox),
         };
@@ -152,7 +152,7 @@ public sealed class MailKitRemoteFolderCatalogTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient
+        var client = new FakeImapClient
         {
             InboxFolder = CreateAdvertisedFolder("INBOX", '/', FolderAttributes.Inbox),
         };
@@ -179,7 +179,7 @@ public sealed class MailKitRemoteFolderCatalogTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient
+        var client = new FakeImapClient
         {
             InboxFolder = CreateAdvertisedFolder("INBOX", '/', FolderAttributes.Inbox),
             OtherNamespaces = [new FolderNamespace('/', "Other Users/")],
@@ -208,7 +208,7 @@ public sealed class MailKitRemoteFolderCatalogTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient
+        var client = new FakeImapClient
         {
             InboxFolder = CreateAdvertisedFolder("INBOX", '/', FolderAttributes.Inbox),
         };
@@ -234,7 +234,7 @@ public sealed class MailKitRemoteFolderCatalogTests
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
         var archive = CreateAdvertisedFolder("Archive", '/', FolderAttributes.Archive);
-        await using var client = new FakeImapClient
+        var client = new FakeImapClient
         {
             InboxFolder = CreateAdvertisedFolder("INBOX", '/', FolderAttributes.Inbox),
         };
@@ -255,7 +255,7 @@ public sealed class MailKitRemoteFolderCatalogTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient
+        var client = new FakeImapClient
         {
             InboxFolder = CreateAdvertisedFolder("INBOX", '/', FolderAttributes.Inbox),
             GetFoldersException = new IOException("the server dropped the listing"),

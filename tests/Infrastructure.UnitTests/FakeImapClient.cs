@@ -2,62 +2,131 @@
 
 using System.Net.Security;
 using MailKit;
+using MailKit.Net.Imap;
 using MailKit.Security;
-using MailMcp.Infrastructure.Mail.MailKit;
+using NSubstitute;
+using NSubstitute.Core;
 
 namespace MailMcp.Infrastructure.UnitTests;
 
-/// <summary>Models one IMAP connection to a server a test scripts, including the ways that server misbehaves.</summary>
+/// <summary>Scripts one IMAP connection to a server a test describes, including the ways that server misbehaves.</summary>
 /// <remarks>
+/// <para>
+/// The client is a substitute of MailKit's own <see cref="IImapClient" /> rather than an implementation of a port
+/// this repository declared: the library publishes the interface, so restating it here would leave a copy to go stale
+/// the moment MailKit moves. What this type adds is the part a substitute cannot express on its own — connection
+/// state that changes as commands run, so a dropped socket is observable exactly as the adapter would observe it.
+/// </para>
+/// <para>
 /// A client is single-use, exactly as the real one is: the adapter creates one per establishment attempt and disposes
 /// it when the connection ends, so a test that expects a reconnection hands the factory a second instance.
+/// </para>
 /// </remarks>
-internal sealed class FakeImapClient : IMailKitImapClient
+internal sealed class FakeImapClient
 {
-    public bool IsConnected { get; set; }
+    private readonly HashSet<string> authenticationMechanisms = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<FolderNamespace, IReadOnlyList<IMailFolder>> foldersByNamespace = [];
 
-    public ISet<string> AuthenticationMechanisms { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private bool isConnected;
+    private RemoteCertificateValidationCallback? serverCertificateValidationCallback;
 
-    public RemoteCertificateValidationCallback? ServerCertificateValidationCallback { get; set; }
+    internal FakeImapClient()
+    {
+        this.Client = Substitute.For<IImapClient>();
 
-    public IReadOnlyList<string> MechanismsWhenAuthenticated { get; private set; } = [];
+        this.ScriptCertificateValidation();
+        this.ScriptConnect();
+        this.ScriptAuthenticate();
+        this.ScriptFolderAccess();
+        this.ScriptNamespaces();
+        this.ScriptDisconnectAndDispose();
+    }
 
-    public bool AuthenticateCalled { get; private set; }
+    /// <summary>Gets the client the adapter under test is handed.</summary>
+    internal IImapClient Client { get; }
 
-    public IMailFolder? Folder { get; set; }
+    /// <summary>Gets the mechanism set the server advertises, which the adapter narrows before authenticating.</summary>
+    internal ISet<string> AuthenticationMechanisms => this.authenticationMechanisms;
 
-    public int ConnectCount { get; private set; }
+    /// <summary>Gets the folders each namespace advertises, so a test can model a server with several of them.</summary>
+    internal IDictionary<FolderNamespace, IReadOnlyList<IMailFolder>> FoldersByNamespace => this.foldersByNamespace;
 
-    public int DisconnectCount { get; private set; }
+    internal IReadOnlyList<FolderNamespace> PersonalNamespaces { get; set; } = [new FolderNamespace('/', string.Empty)];
 
-    public int DisposeCount { get; private set; }
+    internal IReadOnlyList<FolderNamespace> OtherNamespaces { get; set; } = [];
 
-    public int GetFolderAsyncCount { get; private set; }
+    internal IReadOnlyList<FolderNamespace> SharedNamespaces { get; set; } = [];
 
-    public Exception? ConnectException { get; set; }
+    /// <summary>Gets or sets the folder the server answers a selection with.</summary>
+    internal IMailFolder? Folder { get; set; }
+
+    /// <summary>Gets or sets the folder the server answers as its inbox.</summary>
+    internal IMailFolder? InboxFolder { get; set; }
+
+    internal IReadOnlyList<string> MechanismsWhenAuthenticated { get; private set; } = [];
+
+    internal bool AuthenticateCalled { get; private set; }
+
+    internal int ConnectCount { get; private set; }
+
+    internal int DisconnectCount { get; private set; }
+
+    internal int DisposeCount { get; private set; }
+
+    internal int GetFolderAsyncCount { get; private set; }
+
+    internal int GetFoldersAsyncCount { get; private set; }
+
+    internal List<string> RequestedFolderPaths { get; } = [];
+
+    internal SecureSocketOptions? ConnectSocketOptions { get; private set; }
+
+    internal RemoteCertificateValidationCallback? ValidationCallbackWhenConnected { get; private set; }
+
+    internal Exception? ConnectException { get; set; }
 
     /// <summary>Replaces the connect step, so a test can model a server that accepts the socket and then never answers.</summary>
-    public Func<CancellationToken, Task>? ConnectBehavior { get; set; }
+    internal Func<CancellationToken, Task>? ConnectBehavior { get; set; }
 
-    public Exception? AuthenticateException { get; set; }
+    internal Exception? AuthenticateException { get; set; }
 
-    public Exception? DisconnectException { get; set; }
+    internal Exception? DisconnectException { get; set; }
 
-    public Exception? DisposeException { get; set; }
+    internal Exception? DisposeException { get; set; }
 
-    public SecureSocketOptions? ConnectSocketOptions { get; private set; }
+    internal Exception? GetFoldersException { get; set; }
 
-    public RemoteCertificateValidationCallback? ValidationCallbackWhenConnected { get; private set; }
+    /// <summary>Models the server closing the connection while the current command is in flight.</summary>
+    internal Exception DropConnection(Exception failure)
+    {
+        this.isConnected = false;
 
-    public async Task ConnectAsync(
-        string host,
-        int port,
-        SecureSocketOptions options,
-        CancellationToken cancellationToken)
+        return failure;
+    }
+
+    /// <summary>Backs the callback property with a field, because an unset delegate member of a substitute answers with a substitute rather than with null.</summary>
+    /// <remarks>
+    /// The distinction is the assertion of one test: an account trusting the system store must leave the client's own
+    /// validating default in place, which is only observable as the callback still being unset.
+    /// </remarks>
+    private void ScriptCertificateValidation()
+    {
+        this.Client.ServerCertificateValidationCallback.Returns(_ => this.serverCertificateValidationCallback);
+        this.Client
+            .When(client => client.ServerCertificateValidationCallback = Arg.Any<RemoteCertificateValidationCallback?>())
+            .Do(call => this.serverCertificateValidationCallback = call.Arg<RemoteCertificateValidationCallback?>());
+    }
+
+    private void ScriptConnect() =>
+        this.Client
+            .ConnectAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<SecureSocketOptions>(), Arg.Any<CancellationToken>())
+            .Returns(call => this.ConnectAsync(call));
+
+    private async Task ConnectAsync(CallInfo call)
     {
         this.ConnectCount++;
-        this.ValidationCallbackWhenConnected = this.ServerCertificateValidationCallback;
-        this.ConnectSocketOptions = options;
+        this.ValidationCallbackWhenConnected = this.serverCertificateValidationCallback;
+        this.ConnectSocketOptions = call.Arg<SecureSocketOptions>();
 
         if (this.ConnectException is not null)
         {
@@ -66,104 +135,104 @@ internal sealed class FakeImapClient : IMailKitImapClient
 
         if (this.ConnectBehavior is not null)
         {
-            await this.ConnectBehavior(cancellationToken);
+            await this.ConnectBehavior(call.Arg<CancellationToken>());
         }
 
-        this.IsConnected = true;
+        this.isConnected = true;
     }
 
-    public Task AuthenticateAsync(
-        string userName,
-        string password,
-        CancellationToken cancellationToken)
+    private void ScriptAuthenticate()
     {
-        this.AuthenticateCalled = true;
-        this.MechanismsWhenAuthenticated = [.. this.AuthenticationMechanisms.Order(StringComparer.Ordinal)];
+        this.Client.IsConnected.Returns(_ => this.isConnected);
+        this.Client.AuthenticationMechanisms.Returns(_ => this.authenticationMechanisms);
+        this.Client
+            .AuthenticateAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                this.AuthenticateCalled = true;
+                this.MechanismsWhenAuthenticated = [.. this.authenticationMechanisms.Order(StringComparer.Ordinal)];
 
-        if (this.AuthenticateException is not null)
+                return this.AuthenticateException is null
+                    ? Task.CompletedTask
+                    : throw this.AuthenticateException;
+            });
+    }
+
+    private void ScriptFolderAccess()
+    {
+        this.Client.Inbox.Returns(_ =>
+            this.InboxFolder ?? throw new InvalidOperationException("No test inbox configured."));
+        this.Client
+            .GetFolderAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                this.GetFolderAsyncCount++;
+                this.RequestedFolderPaths.Add(call.Arg<string>()!);
+
+                return Task.FromResult(
+                    this.Folder ?? throw new InvalidOperationException("No test folder configured."));
+            });
+    }
+
+    private void ScriptNamespaces()
+    {
+        this.Client.PersonalNamespaces.Returns(_ => ToNamespaceCollection(this.PersonalNamespaces));
+        this.Client.OtherNamespaces.Returns(_ => ToNamespaceCollection(this.OtherNamespaces));
+        this.Client.SharedNamespaces.Returns(_ => ToNamespaceCollection(this.SharedNamespaces));
+        this.Client
+            .GetFoldersAsync(Arg.Any<FolderNamespace>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                this.GetFoldersAsyncCount++;
+
+                if (this.GetFoldersException is not null)
+                {
+                    throw this.GetFoldersException;
+                }
+
+                IList<IMailFolder> folders = this.foldersByNamespace.TryGetValue(call.Arg<FolderNamespace>()!, out var advertised)
+                    ? [.. advertised]
+                    : [];
+
+                return Task.FromResult(folders);
+            });
+    }
+
+    private void ScriptDisconnectAndDispose()
+    {
+        this.Client
+            .DisconnectAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                this.DisconnectCount++;
+                if (this.DisconnectException is not null)
+                {
+                    throw this.DisconnectException;
+                }
+
+                this.isConnected = false;
+
+                return Task.CompletedTask;
+            });
+
+        this.Client.When(client => client.Dispose()).Do(_ =>
         {
-            throw this.AuthenticateException;
-        }
-
-        return Task.CompletedTask;
+            this.DisposeCount++;
+            if (this.DisposeException is not null)
+            {
+                throw this.DisposeException;
+            }
+        });
     }
 
-    public Task<IMailFolder> GetFolderAsync(
-        string path,
-        CancellationToken cancellationToken)
+    private static FolderNamespaceCollection ToNamespaceCollection(IReadOnlyList<FolderNamespace> namespaces)
     {
-        this.GetFolderAsyncCount++;
-        this.RequestedFolderPaths.Add(path);
-
-        return Task.FromResult(this.Folder ?? throw new InvalidOperationException("No test folder configured."));
-    }
-
-    public IReadOnlyList<FolderNamespace> PersonalNamespaces { get; set; } = [new FolderNamespace('/', string.Empty)];
-
-    public IReadOnlyList<FolderNamespace> OtherNamespaces { get; set; } = [];
-
-    public IReadOnlyList<FolderNamespace> SharedNamespaces { get; set; } = [];
-
-    public IMailFolder? InboxFolder { get; set; }
-
-    public IMailFolder Inbox =>
-        this.InboxFolder ?? throw new InvalidOperationException("No test inbox configured.");
-
-    /// <summary>Gets the folders each listed namespace advertises, so a test can model a server with several of them.</summary>
-    public Dictionary<FolderNamespace, IReadOnlyList<IMailFolder>> FoldersByNamespace { get; } = [];
-
-    public Exception? GetFoldersException { get; set; }
-
-    public int GetFoldersAsyncCount { get; private set; }
-
-    public List<string> RequestedFolderPaths { get; } = [];
-
-    public Task<IReadOnlyList<IMailFolder>> GetFoldersAsync(
-        FolderNamespace folderNamespace,
-        CancellationToken cancellationToken)
-    {
-        this.GetFoldersAsyncCount++;
-
-        if (this.GetFoldersException is not null)
+        var collection = new FolderNamespaceCollection();
+        foreach (var folderNamespace in namespaces)
         {
-            throw this.GetFoldersException;
+            collection.Add(folderNamespace);
         }
 
-        return Task.FromResult(
-            this.FoldersByNamespace.TryGetValue(folderNamespace, out var folders) ? folders : []);
-    }
-
-    public Task DisconnectAsync(
-        bool quit,
-        CancellationToken cancellationToken)
-    {
-        this.DisconnectCount++;
-        if (this.DisconnectException is not null)
-        {
-            throw this.DisconnectException;
-        }
-
-        this.IsConnected = false;
-
-        return Task.CompletedTask;
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        this.DisposeCount++;
-        if (this.DisposeException is not null)
-        {
-            throw this.DisposeException;
-        }
-
-        return ValueTask.CompletedTask;
-    }
-
-    /// <summary>Models the server closing the connection while the current command is in flight.</summary>
-    internal Exception DropConnection(Exception failure)
-    {
-        this.IsConnected = false;
-
-        return failure;
+        return collection;
     }
 }

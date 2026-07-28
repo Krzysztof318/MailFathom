@@ -29,7 +29,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var factory = CreateFactory(resilience, client, CreateSelectedFolder());
         client.AuthenticationMechanisms.Add("SCRAM-SHA-256");
 
@@ -49,7 +49,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var factory = CreateFactory(resilience, client, CreateSelectedFolder());
         client.AuthenticationMechanisms.Add("PLAIN");
         client.AuthenticationMechanisms.Add("LOGIN");
@@ -71,7 +71,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var factory = CreateFactory(resilience, client, CreateSelectedFolder());
         client.AuthenticationMechanisms.Add("LOGIN");
 
@@ -95,7 +95,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var folder = CreateSelectedFolder();
         folder.UidNext.Returns(new UniqueId(1));
         await using var session = await OpenSessionAsync(resilience, client, folder);
@@ -114,7 +114,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var folder = CreateSelectedFolder();
         var summary = Substitute.For<IMessageSummary>();
         var uid = new UniqueId(10);
@@ -149,7 +149,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var folder = CreateSelectedFolder();
         var factory = CreateFactory(resilience, client, folder);
         client.AuthenticationMechanisms.Add("PLAIN");
@@ -174,7 +174,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var folder = CreateSelectedFolder();
         var factory = CreateFactory(resilience, client, folder);
         var folderOpenException = new InvalidOperationException("folder open failed");
@@ -200,7 +200,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var session = await OpenSessionAsync(resilience, client, CreateSelectedFolder());
         client.DisconnectException = new IOException("disconnect failed");
 
@@ -228,7 +228,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var folder = CreateSelectedFolder();
         await using var session = await OpenSessionAsync(resilience, client, folder);
         var foreignOccurrence = EmailOccurrenceId.Create(
@@ -255,7 +255,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var folder = CreateSelectedFolder();
 
         // Act
@@ -271,11 +271,11 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var settingsProvider = CreateSettingsProvider(out var resolvedMaterial);
         client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = CreateSelectedFolder();
-        var factory = CreateFactory(resilience, () => client, settingsProvider);
+        var factory = CreateFactory(resilience, () => client.Client, settingsProvider);
 
         // Act
         await using var session = await factory.OpenReadOnlyAsync(
@@ -294,13 +294,13 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
         using var anchor = TestCertificates.WithoutPrivateKey(authority);
         var settingsProvider = CreateSettingsProvider(out _, anchor);
         client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = CreateSelectedFolder();
-        var factory = CreateFactory(resilience, () => client, settingsProvider);
+        var factory = CreateFactory(resilience, () => client.Client, settingsProvider);
 
         // Act
         await using var session = await factory.OpenReadOnlyAsync(
@@ -319,7 +319,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
 
         // Act
         await using var session = await OpenSessionAsync(resilience, client, CreateSelectedFolder());
@@ -333,10 +333,10 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var settingsProvider = CreateSettingsProvider(out var resolvedMaterial);
         client.ConnectException = new IOException("connect failed");
-        var factory = CreateFactory(resilience, () => client, settingsProvider);
+        var factory = CreateFactory(resilience, () => client.Client, settingsProvider);
 
         // Act
         await Assert.ThrowsAsync<MailboxUnavailableException>(() => factory.OpenReadOnlyAsync(
@@ -355,7 +355,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var folder = CreateSelectedFolder();
         var rawMime = "From: sender@example.test\r\nSubject: Subject\r\n\r\nBody"u8.ToArray();
         folder.GetStreamAsync(new UniqueId(10), Arg.Any<CancellationToken>()).Returns(_ => new MemoryStream(rawMime));
@@ -381,7 +381,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var folder = CreateSelectedFolder();
         folder.GetStreamAsync(new UniqueId(10), Arg.Any<CancellationToken>()).Returns(_ => new MemoryStream(new byte[2048]));
         await using var session = await OpenSessionAsync(resilience, client, folder);
@@ -404,7 +404,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var folder = CreateSelectedFolder();
         folder.UidNext.Returns(new UniqueId(uint.MaxValue));
         await using var session = await OpenSessionAsync(resilience, client, folder);
@@ -425,7 +425,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         await using var session = await OpenSessionAsync(resilience, client, CreateSelectedFolder());
 
         // Act
@@ -440,7 +440,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var folder = CreateSelectedFolder();
         folder.UidNext.Returns(new UniqueId(1001));
         folder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>()).Returns([new UniqueId(100), new UniqueId(400), new UniqueId(900)]);
@@ -464,7 +464,7 @@ public sealed class MailKitImapMailboxSessionTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var folder = CreateSelectedFolder();
         folder.UidNext.Returns(new UniqueId(1001));
         folder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>()).Returns([new UniqueId(900)]);

@@ -22,8 +22,8 @@ public sealed class MailKitImapSessionResilienceTests
     {
         // Arrange
         using var resilience = OutboundResilienceTestHost.WithConfiguredSettings();
-        await using var droppedClient = new FakeImapClient();
-        await using var recoveredClient = new FakeImapClient();
+        var droppedClient = new FakeImapClient();
+        var recoveredClient = new FakeImapClient();
         var droppedFolder = CreateSelectedFolder();
         var recoveredFolder = CreateSelectedFolder();
         var recoveredSummary = CreateSummary(new UniqueId(10));
@@ -56,8 +56,8 @@ public sealed class MailKitImapSessionResilienceTests
     {
         // Arrange
         using var resilience = OutboundResilienceTestHost.WithConfiguredSettings();
-        await using var droppedClient = new FakeImapClient();
-        await using var recoveredClient = new FakeImapClient();
+        var droppedClient = new FakeImapClient();
+        var recoveredClient = new FakeImapClient();
         var droppedFolder = CreateSelectedFolder();
         var recoveredFolder = CreateSelectedFolder();
         var rawMime = "From: sender@example.test\r\nSubject: Subject\r\n\r\nBody"u8.ToArray();
@@ -89,8 +89,8 @@ public sealed class MailKitImapSessionResilienceTests
     {
         // Arrange
         using var resilience = OutboundResilienceTestHost.WithConfiguredSettings();
-        await using var desynchronizedClient = new FakeImapClient();
-        await using var recoveredClient = new FakeImapClient();
+        var desynchronizedClient = new FakeImapClient();
+        var recoveredClient = new FakeImapClient();
         var desynchronizedFolder = CreateSelectedFolder();
         var recoveredFolder = CreateSelectedFolder();
         var recoveredSummary = CreateSummary(new UniqueId(10));
@@ -126,8 +126,8 @@ public sealed class MailKitImapSessionResilienceTests
     {
         // Arrange
         using var resilience = OutboundResilienceTestHost.WithConfiguredSettings();
-        await using var desynchronizedClient = new FakeImapClient();
-        await using var recoveredClient = new FakeImapClient();
+        var desynchronizedClient = new FakeImapClient();
+        var recoveredClient = new FakeImapClient();
         var desynchronizedFolder = CreateSelectedFolder();
         var recoveredFolder = CreateSelectedFolder();
         desynchronizedFolder.UidNext.Returns(new UniqueId(11));
@@ -181,12 +181,12 @@ public sealed class MailKitImapSessionResilienceTests
     {
         // Arrange
         using var resilience = OutboundResilienceTestHost.WithConfiguredSettings();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         var settingsProvider = CreateSettingsProvider(out var resolvedMaterial);
         client.AuthenticationMechanisms.Add("PLAIN");
         client.Folder = CreateSelectedFolder();
         client.AuthenticateException = new MailKit.Security.AuthenticationException("the credential was rejected");
-        var factory = CreateFactory(resilience, () => client, settingsProvider);
+        var factory = CreateFactory(resilience, () => client.Client, settingsProvider);
 
         // Act
         await Assert.ThrowsAsync<MailKit.Security.AuthenticationException>(() => factory.OpenReadOnlyAsync(
@@ -211,9 +211,9 @@ public sealed class MailKitImapSessionResilienceTests
             ("MailboxSessionEstablishment:BaseDelay", "00:00:01"),
             ("MailboxSessionEstablishment:MaxDelay", "00:00:02"),
             ("MailboxSessionEstablishment:TotalTimeout", "1.00:00:00"));
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         client.ConnectBehavior = attemptToken => Task.Delay(Timeout.InfiniteTimeSpan, attemptToken);
-        var factory = CreateFactory(resilience, () => client, CreateSettingsProvider());
+        var factory = CreateFactory(resilience, () => client.Client, CreateSettingsProvider());
 
         // Act
         var execution = factory.OpenReadOnlyAsync(
@@ -237,14 +237,14 @@ public sealed class MailKitImapSessionResilienceTests
     {
         // Arrange
         using var resilience = OutboundResilienceTestHost.WithConfiguredSettings();
-        await using var client = new FakeImapClient();
+        var client = new FakeImapClient();
         using var callerCancellation = new CancellationTokenSource();
         client.ConnectBehavior = async attemptToken =>
         {
             await callerCancellation.CancelAsync();
             await Task.Delay(Timeout.InfiniteTimeSpan, attemptToken);
         };
-        var factory = CreateFactory(resilience, () => client, CreateSettingsProvider());
+        var factory = CreateFactory(resilience, () => client.Client, CreateSettingsProvider());
 
         // Act
         var failure = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => factory.OpenReadOnlyAsync(
@@ -264,8 +264,8 @@ public sealed class MailKitImapSessionResilienceTests
     {
         // Arrange
         using var resilience = OutboundResilienceTestHost.WithConfiguredSettings();
-        await using var droppedClient = new FakeImapClient();
-        await using var recoveredClient = new FakeImapClient();
+        var droppedClient = new FakeImapClient();
+        var recoveredClient = new FakeImapClient();
         var droppedFolder = CreateSelectedFolder();
         var recreatedFolder = CreateSelectedFolder(uidValidity: 9U);
         droppedFolder.UidNext.Returns(new UniqueId(11));
@@ -284,7 +284,7 @@ public sealed class MailKitImapSessionResilienceTests
     }
 
     /// <summary>Builds a fresh connection whose folder always drops the read, and records it so a test can count the reconnections.</summary>
-    private static FakeImapClient CreateAlwaysFailingConnection(List<FakeImapClient> establishedClients)
+    private static IImapClient CreateAlwaysFailingConnection(List<FakeImapClient> establishedClients)
     {
         var client = new FakeImapClient();
         var folder = CreateSelectedFolder();
@@ -295,7 +295,7 @@ public sealed class MailKitImapSessionResilienceTests
         client.Folder = folder;
         establishedClients.Add(client);
 
-        return client;
+        return client.Client;
     }
 
     private static IMessageSummary CreateSummary(UniqueId uid)

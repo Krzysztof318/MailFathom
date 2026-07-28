@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailKit;
+using MailKit.Net.Imap;
 using MailMcp.Application.Folders;
 using MailMcp.Application.Resilience;
 using MailMcp.Domain.Accounts;
@@ -17,7 +18,7 @@ namespace MailMcp.Infrastructure.Mail.MailKit;
 /// command issued over it is an IMAP <c>LIST</c>, which selects nothing and cannot change a message flag.
 /// </remarks>
 internal sealed class MailKitRemoteFolderCatalog(
-    Func<IMailKitImapClient> clientFactory,
+    Func<IImapClient> clientFactory,
     IImapAccountSettingsProvider settingsProvider,
     OutboundOperationExecutor operationExecutor,
     ITransientFailureClassifier transientFailureClassifier) : IRemoteFolderCatalog
@@ -71,7 +72,7 @@ internal sealed class MailKitRemoteFolderCatalog(
     /// </para>
     /// </remarks>
     private static async Task<IReadOnlyList<RemoteFolder>> ListAdvertisedFoldersAsync(
-        IMailKitImapClient client,
+        IImapClient client,
         CancellationToken cancellationToken)
     {
         var advertisedFolders = new List<IMailFolder> { client.Inbox };
@@ -81,7 +82,7 @@ internal sealed class MailKitRemoteFolderCatalog(
 
         foreach (var reachableNamespace in reachableNamespaces)
         {
-            advertisedFolders.AddRange(await client.GetFoldersAsync(reachableNamespace, cancellationToken));
+            advertisedFolders.AddRange(await client.GetFoldersAsync(reachableNamespace, subscribedOnly: false, cancellationToken));
 
             EnsureListingStaysBounded(advertisedFolders.Count);
         }

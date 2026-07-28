@@ -127,12 +127,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailFolderResolver>();
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(
-            static () => new MailKitImapClientAdapter(new ImapClient()),
+            static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<ITransientFailureClassifier>()));
         services.AddScoped<IRemoteFolderCatalog>(provider => new MailKitRemoteFolderCatalog(
-            static () => new MailKitImapClientAdapter(new ImapClient()),
+            static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<ITransientFailureClassifier>()));

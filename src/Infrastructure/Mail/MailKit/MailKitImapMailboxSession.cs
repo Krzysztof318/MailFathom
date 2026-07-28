@@ -3,6 +3,7 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using MailKit;
+using MailKit.Net.Imap;
 using MailKit.Search;
 using MailMcp.Application.EmailContent;
 using MailMcp.Application.Resilience;
@@ -17,7 +18,7 @@ namespace MailMcp.Infrastructure.Mail.MailKit;
 
 /// <summary>MailKit-backed factory for authenticated read-only IMAP folder sessions.</summary>
 internal sealed class MailKitImapMailboxSessionFactory(
-    Func<IMailKitImapClient> clientFactory,
+    Func<IImapClient> clientFactory,
     IImapAccountSettingsProvider settingsProvider,
     OutboundOperationExecutor operationExecutor,
     ITransientFailureClassifier transientFailureClassifier) : IMailboxSessionFactory

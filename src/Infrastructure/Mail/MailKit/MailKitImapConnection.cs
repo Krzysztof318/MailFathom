@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography.X509Certificates;
 using MailKit;
+using MailKit.Net.Imap;
 using MailMcp.Application.Resilience;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
@@ -41,7 +42,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// <summary>Names folder discovery in resilience telemetry, where a connection has no alias to name instead.</summary>
     private const string FolderDiscoveryOperationKey = "folder-discovery";
 
-    private readonly Func<IMailKitImapClient> clientFactory;
+    private readonly Func<IImapClient> clientFactory;
     private readonly IImapAccountSettingsProvider settingsProvider;
     private readonly OutboundOperationExecutor operationExecutor;
     private readonly ITransientFailureClassifier transientFailureClassifier;
@@ -49,7 +50,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     private readonly MailFolderResolution? folder;
     private readonly MailTransportSecurityPolicy transportSecurityPolicy;
 
-    private IMailKitImapClient? client;
+    private IImapClient? client;
     private IMailFolder? selectedFolder;
     private ImapUidValidity? sessionUidValidity;
 
@@ -63,7 +64,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// <param name="transportSecurityPolicy">The connection and authentication policy each attempt must obey.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     internal MailKitImapConnection(
-        Func<IMailKitImapClient> clientFactory,
+        Func<IImapClient> clientFactory,
         IImapAccountSettingsProvider settingsProvider,
         OutboundOperationExecutor operationExecutor,
         ITransientFailureClassifier transientFailureClassifier,
@@ -95,7 +96,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// <returns>The client, authenticated and — when the connection is pinned to a folder — with that folder selected read-only.</returns>
     /// <exception cref="MailboxUnavailableException">Thrown when the establishment pipeline stopped the attempt at a configured limit.</exception>
     /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
-    internal Task<IMailKitImapClient> EnsureAuthenticatedClientAsync(CancellationToken cancellationToken) =>
+    internal Task<IImapClient> EnsureAuthenticatedClientAsync(CancellationToken cancellationToken) =>
         this.IsUsable ? Task.FromResult(this.client!) : this.EstablishAsync(cancellationToken);
 
     /// <summary>Returns the selected folder, establishing the session first when no usable one is open.</summary>
@@ -152,7 +153,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="read" /> is <see langword="null" />.</exception>
     /// <exception cref="MailboxUnavailableException">Thrown when the retrieval pipeline stopped the read at a configured limit.</exception>
     internal Task<TResult> ExecuteClientReadAsync<TResult>(
-        Func<IMailKitImapClient, CancellationToken, Task<TResult>> read,
+        Func<IImapClient, CancellationToken, Task<TResult>> read,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(read);
@@ -190,15 +191,15 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
         }
         catch (Exception failure)
         {
-            await this.DiscardConnectionUnlessItSurvivedAsync(failure);
+            this.DiscardConnectionUnlessItSurvived(failure);
 
             throw;
         }
     }
 
-    private async Task<IMailKitImapClient> EstablishAsync(CancellationToken cancellationToken)
+    private async Task<IImapClient> EstablishAsync(CancellationToken cancellationToken)
     {
-        await this.DiscardUnusableConnectionAsync();
+        this.DiscardUnusableConnection();
 
         return await this.ExecuteUnderPipelineAsync(
             OutboundDependency.MailboxSessionEstablishment,
@@ -206,7 +207,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
             cancellationToken);
     }
 
-    private async Task<IMailKitImapClient> ConnectAuthenticateAndSelectFolderAsync(CancellationToken cancellationToken)
+    private async Task<IImapClient> ConnectAuthenticateAndSelectFolderAsync(CancellationToken cancellationToken)
     {
         var settings = await this.settingsProvider.GetSettingsAsync(this.accountId.Value, cancellationToken);
 
@@ -251,7 +252,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
             {
                 // A half-established connection is unusable by definition, and this cleanup runs inside an attempt the
                 // pipeline may abandon, so it closes the socket rather than waiting on a logout the server owes it.
-                await AbandonAsync(attemptClient);
+                Abandon(attemptClient);
                 throw;
             }
         }
@@ -265,7 +266,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// connection opened for discovery pins no folder and selects nothing here.
     /// </remarks>
     private async Task AdoptSelectedFolderAsync(
-        IMailKitImapClient establishedClient,
+        IImapClient establishedClient,
         CancellationToken cancellationToken)
     {
         if (this.folder is not { } pinnedFolder)
@@ -331,12 +332,12 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// <summary>Discards the connection unless the failure proves it is still able to carry the next command.</summary>
     /// <remarks>
     /// Nothing in an exception states that the command stream is still synchronized, and a client that answers
-    /// <see cref="IMailKitImapClient.IsConnected" /> is only reporting a socket. A dropped connection, a
+    /// <see cref="IMailService.IsConnected" /> is only reporting a socket. A dropped connection, a
     /// desynchronized stream, and an attempt abandoned mid-command therefore all end this connection, so the next
     /// attempt starts from a session it established itself. A terminal failure ends the operation anyway and leaves
     /// the connection to its owner.
     /// </remarks>
-    private async Task DiscardConnectionUnlessItSurvivedAsync(Exception failure)
+    private void DiscardConnectionUnlessItSurvived(Exception failure)
     {
         var connectionSurvived = this.client is { IsConnected: true }
             && failure is not OperationCanceledException
@@ -344,14 +345,14 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
 
         if (!connectionSurvived)
         {
-            await this.DiscardUnusableConnectionAsync();
+            this.DiscardUnusableConnection();
         }
     }
 
     private bool IsRepeatableFailure(OutboundDependency dependency, Exception failure) =>
         this.transientFailureClassifier.IsTransientFailure(dependency, failure);
 
-    private async Task DiscardUnusableConnectionAsync()
+    private void DiscardUnusableConnection()
     {
         var discardedClient = this.client;
         this.client = null;
@@ -359,7 +360,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
 
         if (discardedClient is not null)
         {
-            await AbandonAsync(discardedClient);
+            Abandon(discardedClient);
         }
     }
 
@@ -370,7 +371,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// An account without a configured authority leaves the client's own validating default untouched.
     /// </remarks>
     private static void TrustConfiguredCertificateAuthority(
-        IMailKitImapClient client,
+        IImapClient client,
         X509Certificate2? trustedCertificateAuthority)
     {
         if (trustedCertificateAuthority is null)
@@ -397,11 +398,11 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A connection already being replaced must not have its cleanup failure replace the failure that is being retried.")]
     [SuppressMessage("Roslynator", "RCS1075:Avoid empty catch clause that catches System.Exception", Justification = "There is no second action to take: the connection is already unusable, and the caller is about to rethrow the failure that made it so.")]
-    private static async ValueTask AbandonAsync(IMailKitImapClient client)
+    private static void Abandon(IImapClient client)
     {
         try
         {
-            await client.DisposeAsync();
+            client.Dispose();
         }
         catch (Exception)
         {
@@ -409,7 +410,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Both cleanup operations must be attempted while the first cleanup failure remains observable.")]
-    private static async ValueTask DisconnectAndDisposeAsync(IMailKitImapClient client)
+    private static async ValueTask DisconnectAndDisposeAsync(IImapClient client)
     {
         Exception? firstCleanupException = null;
         try
@@ -426,7 +427,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
 
         try
         {
-            await client.DisposeAsync();
+            client.Dispose();
         }
         catch (Exception exception)
         {
