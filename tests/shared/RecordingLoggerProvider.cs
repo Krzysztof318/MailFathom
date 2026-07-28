@@ -20,6 +20,8 @@ namespace MailMcp.TestSupport;
 /// </remarks>
 internal sealed class RecordingLoggerProvider : ILoggerProvider
 {
+    private const string OriginalFormatPropertyName = "{OriginalFormat}";
+
     private readonly ConcurrentQueue<LogRecord> records = new();
 
     /// <summary>Gets a snapshot of everything logged so far, in the order it was written.</summary>
@@ -38,7 +40,17 @@ internal sealed class RecordingLoggerProvider : ILoggerProvider
     /// <param name="Level">The severity the record was written at.</param>
     /// <param name="Message">The formatted message.</param>
     /// <param name="Failure">The exception attached to the record, when one was.</param>
-    internal sealed record LogRecord(string Category, LogLevel Level, string Message, Exception? Failure);
+    /// <param name="Properties">
+    /// The named values the record carries, without the message template itself. A test that has to show a component
+    /// published exactly one set of facts asserts over this rather than searching the formatted text, because a
+    /// substring search proves that a value is absent from one rendering, not that it was never attached.
+    /// </param>
+    internal sealed record LogRecord(
+        string Category,
+        LogLevel Level,
+        string Message,
+        Exception? Failure,
+        IReadOnlyDictionary<string, object?> Properties);
 
     private sealed class RecordingLogger : ILogger
     {
@@ -65,7 +77,15 @@ internal sealed class RecordingLoggerProvider : ILoggerProvider
         {
             ArgumentNullException.ThrowIfNull(formatter);
 
-            this.records.Enqueue(new LogRecord(this.categoryName, logLevel, formatter(state, exception), exception));
+            // The message template arrives as a property of its own; dropping it leaves the values the record carries.
+            var properties = state is IReadOnlyList<KeyValuePair<string, object?>> namedValues
+                ? namedValues
+                    .Where(property => property.Key != OriginalFormatPropertyName)
+                    .ToDictionary(property => property.Key, property => property.Value)
+                : [];
+
+            this.records.Enqueue(
+                new LogRecord(this.categoryName, logLevel, formatter(state, exception), exception, properties));
         }
     }
 }

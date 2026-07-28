@@ -59,6 +59,54 @@ public sealed class RecordingLoggerProviderTests
         Assert.Single(provider.Records);
     }
 
+    /// <summary>
+    /// A test that asserts a component published exactly one set of facts reads this rather than the formatted text,
+    /// so the template itself must not arrive as one of them.
+    /// </summary>
+    [Fact]
+    public void Records_WrittenWithNamedValues_CaptureThemWithoutTheMessageTemplate()
+    {
+        // Arrange
+        using var provider = new RecordingLoggerProvider();
+        var logger = provider.CreateLogger(Category);
+        var state = NamedValues(
+            ("AttemptNumber", 3),
+            ("Dependency", "MailboxDataRetrieval"),
+            ("{OriginalFormat}", "Attempt {AttemptNumber} against {Dependency} failed."));
+
+        // Act
+        logger.Log(
+            LogLevel.Information,
+            new EventId(1),
+            state,
+            null,
+            (_, _) => "Attempt 3 against MailboxDataRetrieval failed.");
+
+        // Assert
+        var record = Assert.Single(provider.Records);
+        Assert.Equal(
+            [
+                KeyValuePair.Create("AttemptNumber", (object?)3),
+                KeyValuePair.Create("Dependency", (object?)"MailboxDataRetrieval"),
+            ],
+            record.Properties.OrderBy(property => property.Key, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Records_WrittenWithoutNamedValues_CarryNoProperties()
+    {
+        // Arrange
+        using var provider = new RecordingLoggerProvider();
+        var logger = provider.CreateLogger(Category);
+
+        // Act
+        logger.Log(LogLevel.Information, new EventId(1), "written", null, (state, _) => state);
+
+        // Assert
+        var record = Assert.Single(provider.Records);
+        Assert.Empty(record.Properties);
+    }
+
     [Fact]
     public void Records_ReadAroundAFurtherWrite_ReturnsAnIndependentSnapshot()
     {
@@ -100,4 +148,9 @@ public sealed class RecordingLoggerProviderTests
         var recordedMessages = provider.Records.Select(record => record.Message).OrderBy(message => message, StringComparer.Ordinal);
         Assert.Equal(expectedMessages.OrderBy(message => message, StringComparer.Ordinal), recordedMessages);
     }
+
+    /// <summary>Builds the state shape the logging source generator produces, template entry included.</summary>
+    private static IReadOnlyList<KeyValuePair<string, object?>> NamedValues(
+        params (string Name, object? Value)[] values) =>
+        [.. values.Select(value => KeyValuePair.Create(value.Name, value.Value))];
 }
