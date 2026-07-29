@@ -6,25 +6,25 @@ using Aspire.Hosting.Testing;
 using MailMcp.AppHost;
 using Xunit;
 
-namespace MailMcp.IntegrationTests;
+namespace MailMcp.IntegrationTests.Orchestration;
 
-/// <summary>The orchestrated PostgreSQL server and applied schema the whole suite runs against.</summary>
+/// <summary>The orchestrated PostgreSQL server, applied schema, and mail server the whole suite runs against.</summary>
 /// <remarks>
 /// <para>
 /// The suite starts the repository's own app model rather than a container topology of its own, so what it verifies is
-/// the orchestration a developer runs and a deployment mirrors. Starting it costs an image pull, a server start, and a
-/// migration run, so the application's lifetime is the assembly's: a test isolates itself through the data it writes,
+/// the orchestration a developer runs and a deployment mirrors. Starting it costs two image pulls, a server start, and
+/// a migration run, so the application's lifetime is the assembly's: a test isolates itself through the data it writes,
 /// never through a container of its own.
 /// </para>
 /// <para>
 /// The MailMcp host resource is present in the app model but never started, because the suite verifies classes against
-/// a real database rather than the composed host. Every test therefore owns the database exclusively; nothing
-/// synchronizes mail underneath it.
+/// real infrastructure rather than the composed host. Every test therefore owns the database and the mailbox
+/// exclusively; nothing synchronizes mail underneath it.
 /// </para>
 /// </remarks>
 public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
 {
-    /// <summary>Bounds the whole start-up, which on a cold machine includes pulling the image and building the migration project.</summary>
+    /// <summary>Bounds the whole start-up, which on a cold machine includes pulling the images and building the migration project.</summary>
     private static readonly TimeSpan StartupTimeout = TimeSpan.FromMinutes(10);
 
     private DistributedApplication? application;
@@ -32,11 +32,20 @@ public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
     /// <summary>Gets or sets the connection string once the orchestration issued it.</summary>
     private string? IssuedDatabaseConnectionString { get; set; }
 
+    /// <summary>Gets or sets the mail server endpoints once the orchestration published them.</summary>
+    private OrchestratedMailServerEndpoints? PublishedMailServerEndpoints { get; set; }
+
     /// <summary>Gets the connection string the orchestration issued for the migrated MailMcp database.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started yet.</exception>
     public string DatabaseConnectionString => this.IssuedDatabaseConnectionString
         ?? throw new InvalidOperationException(
             "The orchestrated database connection string is requested before the suite started the application.");
+
+    /// <summary>Gets the host and ports the orchestrated mail server accepts IMAP and SMTP on.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started yet.</exception>
+    public OrchestratedMailServerEndpoints MailServer => this.PublishedMailServerEndpoints
+        ?? throw new InvalidOperationException(
+            "The orchestrated mail server endpoints are requested before the suite started the application.");
 
     /// <inheritdoc />
     public async ValueTask InitializeAsync()
@@ -64,6 +73,13 @@ public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
             OrchestrationContract.PostgresResourceName,
             cancellationToken);
 
+        // Healthy rather than running, because the mail server's readiness endpoint is what states that its IMAP and
+        // SMTP listeners are accepting. A test that seeded mail against a merely started container would race the
+        // listener and fail as a connection refusal that says nothing about the behavior under test.
+        await this.application.ResourceNotifications.WaitForResourceHealthyAsync(
+            OrchestrationContract.MailServerResourceName,
+            cancellationToken);
+
         // The migration resource runs dotnet-ef once and finishes, so it reaches a terminal state rather than a healthy
         // one. Waiting for it here is what lets every test assume the baseline schema is already applied.
         await this.application.ResourceNotifications.WaitForResourceAsync(
@@ -76,6 +92,16 @@ public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
             cancellationToken)
             ?? throw new InvalidOperationException(
                 "The orchestration started without issuing a connection string for the MailMcp database.");
+
+        // Read once the resource is healthy, because the host port is allocated when the container starts rather than
+        // when the app model describes it.
+        this.PublishedMailServerEndpoints = new OrchestratedMailServerEndpoints(
+            this.application.GetEndpoint(
+                OrchestrationContract.MailServerResourceName,
+                OrchestrationContract.MailServerImapEndpointName),
+            this.application.GetEndpoint(
+                OrchestrationContract.MailServerResourceName,
+                OrchestrationContract.MailServerSmtpEndpointName));
     }
 
     /// <inheritdoc />

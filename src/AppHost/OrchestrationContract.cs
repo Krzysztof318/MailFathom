@@ -23,6 +23,40 @@ public static class OrchestrationContract
     /// <summary>The EF Core migration tool resource.</summary>
     public const string MigrationsResourceName = "mailmcp-migrations";
 
+    /// <summary>The IMAP and SMTP server the integration-test topology synchronizes against.</summary>
+    /// <remarks>
+    /// Present only under <see cref="IntegrationTestingArgument" />. A developer's orchestration synchronizes the
+    /// accounts that developer configured, and starting a mail server beside them would advertise a mailbox nothing
+    /// points at.
+    /// </remarks>
+    public const string MailServerResourceName = "mailserver";
+
+    /// <summary>The mail server endpoint the IMAP adapter connects to.</summary>
+    public const string MailServerImapEndpointName = "imap";
+
+    /// <summary>The mail server endpoint the suite seeds mail through.</summary>
+    public const string MailServerSmtpEndpointName = "smtp";
+
+    /// <summary>The mail server endpoint that answers whether the server is accepting mail yet.</summary>
+    public const string MailServerApiEndpointName = "api";
+
+    /// <summary>The IMAP and SMTP login of the one synthetic mailbox the integration-test topology serves.</summary>
+    public const string MailServerAccountUserName = "mailmcp";
+
+    /// <summary>The address mail is addressed to in order to reach <see cref="MailServerAccountUserName" />.</summary>
+    /// <remarks>The domain is reserved for testing, so nothing addressed here can leave the container it is delivered in.</remarks>
+    public const string MailServerAccountEmailAddress = "mailmcp@mailmcp.test";
+
+    /// <summary>The password of that synthetic mailbox.</summary>
+    /// <remarks>
+    /// A literal rather than a generated or referenced secret, and deliberately so. It authenticates one throwaway
+    /// mailbox on a container that exists for the duration of one test run, is reachable only from that run, and is
+    /// destroyed with it; there is no account it could also unlock. Declaring it here is what keeps the app model that
+    /// configures the server and the suite that logs into it reading one value, so a change cannot reach only one side
+    /// and surface as an authentication failure. Nothing outside the ephemeral topology may use it.
+    /// </remarks>
+    public const string MailServerAccountPassword = "integration-tests-only";
+
     /// <summary>The whole app host argument that selects the integration-test topology.</summary>
     /// <remarks>
     /// Matched against the argument list itself rather than read through <c>IDistributedApplicationBuilder.Configuration</c>,

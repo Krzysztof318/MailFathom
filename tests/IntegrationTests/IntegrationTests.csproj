@@ -5,6 +5,8 @@
          host so that infrastructure's hosted lifecycle events run, which is what makes the PostgreSQL connection string
          available to anything that opens a connection. -->
     <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="MailKit" />
+    <PackageReference Include="MimeKit" />
     <PackageReference Include="xunit.v3.mtp-v2" />
   </ItemGroup>
 

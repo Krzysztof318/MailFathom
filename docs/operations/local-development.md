@@ -177,7 +177,7 @@ dotnet msbuild .config/CodeCoverage.proj -t:Collect
 
 The command runs the whole solution in one test invocation, which produces one uniquely named Cobertura report per unit-test assembly, merges the reports, and requires at least 85% aggregate line coverage across `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`. The result always represents the whole configured scope, not only changed lines. `Host` and `AppHost` are excluded as thin executable composition roots.
 
-Two attributes take code out of that denominator, and `testconfig.json` configures the collector to honor both. `[ExcludeFromCodeCoverage]` marks code that should never participate in coverage. `[RequiresIntegrationCoverage]`, declared in `src/shared/RequiresIntegrationCoverageAttribute.cs`, marks code whose verification needs a real database, a real mail server, or a composed host: the EF Core context and its entities, the persistence stores, the MailKit client adapter, the file-system and environment secret readers, and the infrastructure registration extensions carry it today. Marked code is measured by the integration suite instead, in a separate report that enforces nothing — see [Integration tests](#integration-tests) below. The marker stays once the class is covered there: it records where the verification lives, not whether it has been written, and a class a unit test cannot reach stays unreachable afterwards. Remove it only when unit-testable logic enters the class, which puts every line back into this denominator and is how to check that the exclusion is still earned.
+Two attributes take code out of that denominator, and `testconfig.json` configures the collector to honor both. `[ExcludeFromCodeCoverage]` marks code that should never participate in coverage. `[RequiresIntegrationCoverage]`, declared in `src/shared/RequiresIntegrationCoverageAttribute.cs`, marks code whose verification needs a real database, a real mail server, or a composed host: the EF Core context and its entities, the persistence stores, the file-system and environment secret readers, and the infrastructure registration extensions carry it today. The MailKit adapter deliberately does not, even though the integration suite now exercises it against a real IMAP server, because MailKit publishes `IImapClient` and `IMailFolder` and the adapter is reachable from a unit test through them; it stays in the enforced denominator and the integration suite proves the wire behavior a substitute cannot. Marked code is measured by the integration suite instead, in a separate report that enforces nothing — see [Integration tests](#integration-tests) below. The marker stays once the class is covered there: it records where the verification lives, not whether it has been written, and a class a unit test cannot reach stays unreachable afterwards. Remove it only when unit-testable logic enters the class, which puts every line back into this denominator and is how to check that the exclusion is still earned.
 
 A third exclusion is applied by path rather than by attribute: `.config/CodeCoverage.proj` filters `**/Persistence/Migrations/*.cs` out of the merged report. EF Core generates those files and the `add-migration` workflow regenerates them, so they carry no attribute the generator would preserve, and no unit test may execute them — a migration is proven by applying it to a real PostgreSQL server and reviewing the resulting schema. Leaving them in put roughly a thousand uncoverable lines in the denominator and moved the aggregate by more than twenty points, which would have masked a real regression anywhere else.
 
@@ -185,7 +185,7 @@ Raw Cobertura reports and TRX files are written under `artifacts/coverage/raw/`.
 
 ## Integration tests
 
-`tests/IntegrationTests` verifies what a unit test structurally cannot: EF Core mappings, the baseline migration, database constraints, and the SQL PostgreSQL actually runs. It starts the repository's own app model through `Aspire.Hosting.Testing`, so the orchestration under test is the one `aspire run` starts rather than a second container topology maintained beside it.
+`tests/IntegrationTests` verifies what a unit test structurally cannot: EF Core mappings, the baseline migration, database constraints, the SQL PostgreSQL actually runs, and what MailKit puts on the wire against a real IMAP server. It starts the repository's own app model through `Aspire.Hosting.Testing`, so the orchestration under test is the one `aspire run` starts rather than a second container topology maintained beside it.
 
 Run it on request:
 
@@ -193,7 +193,7 @@ Run it on request:
 bash scripts/run-integration-tests.sh
 ```
 
-Arguments are forwarded to Microsoft Testing Platform, so `bash scripts/run-integration-tests.sh --filter '*Schema*'` narrows the run.
+Arguments are forwarded to Microsoft Testing Platform, so `bash scripts/run-integration-tests.sh --filter '*Seen*'` narrows the run to the flag-preservation tests.
 
 The suite needs a container runtime. The script uses `docker`; set `MAILMCP_CONTAINER_RUNTIME` to use another one.
 
@@ -204,7 +204,8 @@ It is deliberately not part of any other command. `scripts/verify-fast.sh` and `
 The app host is started with the argument `IntegrationTesting=true`, which selects a second topology in `src/AppHost/Program.cs`:
 
 - the PostgreSQL container is named `mailmcp-integrationtests-postgres` and its data volume `mailmcp-integrationtests-postgres-data`, rather than taking Aspire's random postfix and the path-derived volume name a developer's orchestration uses;
-- the `mailmcp-host` project resource is added to the model but never started, because the suite exercises classes against a real database and a running MailMcp would synchronize mail underneath the data a test is asserting on.
+- a `mailserver` container named `mailmcp-integrationtests-mailserver` is added, which a developer's orchestration never gets — it exists so the suite has a real IMAP server to synchronize against, and starting one beside a developer's own accounts would advertise a mailbox nothing points at;
+- the `mailmcp-host` project resource is added to the model but never started, because the suite exercises classes against real infrastructure and a running MailMcp would synchronize mail underneath the data a test is asserting on.
 
 Both names come from `OrchestrationContract` in `src/AppHost`, and nothing else in the repository uses that prefix. The script removes every container and volume carrying it before the run as well as after it: before, because the baseline migration is only proven to apply cleanly when it applies to an empty database; after, because nothing the suite creates is meant to outlive it. A run killed with `SIGKILL` skips the trap, and the next run's opening removal is what cleans up after it. To check by hand:
 
@@ -214,6 +215,19 @@ docker volume ls --filter name=mailmcp-integrationtests
 ```
 
 A developer's own orchestration is untouched by any of this: its container name and its volume name are derived from the AppHost project path and never carry the test prefix.
+
+### The mail server
+
+The `mailserver` resource is `greenmail/standalone:2.1.11`, configured through `GREENMAIL_OPTS` to start only SMTP on 3025, IMAP on 3143, and the API server on 8080. The API server is what the resource's health check polls — `/api/service/readiness` — so the suite waits for a server that is accepting rather than for a container that has started; without it the first test would race the listener and fail as a connection refusal that says nothing about the behavior under test.
+
+It serves one throwaway mailbox, `mailmcp` / `mailmcp@mailmcp.test`, whose credentials are constants in `OrchestrationContract`. They exist only in the ephemeral topology, unlock nothing outside the container, and are declared once so the app model that configures the server and the suite that logs into it cannot drift apart. GreenMail's own verbose logging stays off, because it transcribes the whole IMAP conversation — password included — into the orchestration log.
+
+Two behaviors of this server are worth knowing when reading a failure:
+
+- It advertises `AUTH=XOAUTH2` and nothing else, so both the adapter under test and the suite's own observations empty MailKit's advertised mechanism set and authenticate with the IMAP `LOGIN` command. That is a legal server shape, and `MailKitTransportSecurityMapping` permits the fallback exactly when the account's policy already allows a clear-text mechanism.
+- Each folder carries a real UIDVALIDITY, `System.currentTimeMillis() / 1000` at creation, so replacing a folder hands out a new one. That is how the suite produces a UIDVALIDITY change without simulating anything. Two consequences are built into `OrchestratedMailbox.RecreateFolderAsync`: it waits past the next whole second, because a folder replaced inside the same second is handed back the value it just had, and it retires the old folder by renaming it rather than deleting it. GreenMail 2.1.11 crashes on `DELETE` of a folder an earlier session had selected — it notifies the folder's listeners and dereferences a response object a disconnected session no longer holds — and every folder this suite replaces has been selected by a synchronization run.
+
+smtp4dev was evaluated first and rejected. It advertises no SASL mechanism at all, which is workable, but its INBOX reports a hard-coded UIDVALIDITY that can never change, so the specification's UIDVALIDITY scenario would have been unverifiable. Separately, a `UID SEARCH UID 1:*` against it exhausts the container's memory and kills the process; MailMcp never sends that shape, because it computes a concrete upper bound from `UIDNEXT`, but it is worth recording for anyone who reaches for that image again.
 
 ### Coverage
 
