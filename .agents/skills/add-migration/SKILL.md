@@ -85,13 +85,17 @@ the reason for it is in the other commit.
 ## When something is stuck
 
 - **`postgres` stays `Unhealthy` with `password authentication failed`.** The data volume was initialized with a
-  different generated password. Stop the orchestration, remove the volume, and start again:
+  different generated password. Find this checkout's volume, stop the orchestration, remove it, and start again:
 
   ```bash
+  docker volume ls --filter name=-postgres-data
   aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive
-  docker rm -f $(docker ps -aq --filter volume=mailmcp.apphost-9beaf2538a-postgres-data)
-  docker volume rm mailmcp.apphost-9beaf2538a-postgres-data
+  docker rm -f $(docker ps -aq --filter volume=<volume>)
+  docker volume rm <volume>
   ```
+
+  Aspire names the volume after the AppHost project's path, so each worktree owns its own and the name is read rather
+  than assumed. Removing another worktree's volume destroys a database this repair was not about.
 
 - **`dotnet build` hangs at "Determining projects to restore".** A previous orchestration is still holding the build
   output. `aspire stop` does not always reap it; `pkill -9 -f '/home/krzysiek/.aspire/versions'` and

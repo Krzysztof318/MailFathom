@@ -44,14 +44,16 @@ internal sealed partial class EfCoreDatabaseSchemaInspector(MailMcpDbContext dbC
     }
 
     /// <inheritdoc />
-    public async Task<string?> ReadSearchVectorTextSearchConfigurationAsync(CancellationToken cancellationToken)
+    public async Task<string> ReadSearchVectorTextSearchConfigurationAsync(CancellationToken cancellationToken)
     {
+        string?[] generationExpressions;
+
         try
         {
             // information_schema reports the expression PostgreSQL stored for the generated column, which is the
             // configuration the lexemes in that column were actually built with. Both identifiers are compile-time
             // constants of this assembly rather than anything a caller supplies.
-            var generationExpressions = await dbContext.Database
+            generationExpressions = await dbContext.Database
                 .SqlQueryRaw<string?>(
                     """
                     SELECT generation_expression AS "Value"
@@ -63,12 +65,6 @@ internal sealed partial class EfCoreDatabaseSchemaInspector(MailMcpDbContext dbC
                     SearchDocumentTableName,
                     SearchVectorColumnName)
                 .ToArrayAsync(cancellationToken);
-
-            var generationExpression = generationExpressions.FirstOrDefault();
-
-            return generationExpression is null
-                ? null
-                : ReadRegisteredConfigurationName(generationExpression);
         }
         catch (Exception exception) when (exception is DbException or InvalidOperationException)
         {
@@ -76,6 +72,21 @@ internal sealed partial class EfCoreDatabaseSchemaInspector(MailMcpDbContext dbC
                 "The PostgreSQL column catalogue could not be read, so the text search configuration the lexical index was built with is unknown. Check that the database is reachable and that the configured user may read the schema catalogue.",
                 exception);
         }
+
+        // An empty result means the column is absent, and a null expression means it exists without being generated.
+        // Either way this database is not one the migration produced, which the caller cannot tell from a name it
+        // simply did not learn.
+        var generationExpression = generationExpressions.FirstOrDefault();
+
+        if (string.IsNullOrWhiteSpace(generationExpression))
+        {
+            throw new DatabaseSchemaStateUnreadableException(
+                "The lexical email index carries no stored search vector expression: its generated column is absent, or the column exists without one. Every migration this build defines is applied, so the database is not the one those migrations produce. Recreate it from them rather than starting against it.");
+        }
+
+        return ReadRegisteredConfigurationName(generationExpression)
+            ?? throw new DatabaseSchemaStateUnreadableException(
+                "The lexical email index's stored search vector expression names no registered text search configuration, so the configuration its lexemes were built with cannot be identified. The expression was written by something other than this build's migration; recreate the database from that migration rather than starting against it.");
     }
 
     /// <summary>Extracts the configuration name from a stored <c>to_tsvector</c> expression.</summary>

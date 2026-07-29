@@ -79,8 +79,10 @@ internal sealed partial class DatabaseSchemaStartupGate : IHostedService
     /// A migration is generated for one text search configuration and freezes it into a stored generated column, while
     /// the migration identifier is the same whichever configuration produced it. Comparing identifiers therefore
     /// cannot see this, and the consequence of missing it is silent: queries stemmed one way against lexemes built
-    /// another return fewer results rather than an error. An absent expression is left alone rather than treated as a
-    /// mismatch, because a schema with no such column says nothing about which configuration it would use.
+    /// another return fewer results rather than an error. A schema that names no configuration at all is a failure
+    /// too, raised by the inspector: this runs only once every migration is applied, so a database with no generated
+    /// column, or one carrying an expression nothing recognizes, is not the database those migrations produce, and
+    /// treating an answer the host could not identify as agreement is the one reading that starts the workers anyway.
     /// </remarks>
     private async Task VerifyTheLexicalIndexMatchesTheConfigurationAsync(
         IDatabaseSchemaInspector inspector,
@@ -88,8 +90,7 @@ internal sealed partial class DatabaseSchemaStartupGate : IHostedService
     {
         var schemaConfiguration = await inspector.ReadSearchVectorTextSearchConfigurationAsync(cancellationToken);
 
-        if (string.IsNullOrWhiteSpace(schemaConfiguration)
-            || string.Equals(schemaConfiguration, this.configuredTextSearchConfiguration.Value, StringComparison.Ordinal))
+        if (string.Equals(schemaConfiguration, this.configuredTextSearchConfiguration.Value, StringComparison.Ordinal))
         {
             return;
         }

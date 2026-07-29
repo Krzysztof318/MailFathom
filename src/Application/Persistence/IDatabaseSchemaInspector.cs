@@ -33,8 +33,11 @@ public interface IDatabaseSchemaInspector
 
     /// <summary>Reads the text search configuration the database compiled into the search vector's generated column.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The configuration name the schema actually uses, or <see langword="null" /> when the column or its expression could not be identified.</returns>
-    /// <exception cref="DatabaseSchemaStateUnreadableException">Thrown when the schema catalogue cannot be read at all.</exception>
+    /// <returns>The configuration name the schema actually uses.</returns>
+    /// <exception cref="DatabaseSchemaStateUnreadableException">
+    /// Thrown when the catalogue cannot be read at all, and when it is read but identifies no configuration: the column
+    /// is absent, it carries no stored expression, or that expression names no registered configuration.
+    /// </exception>
     /// <remarks>
     /// <para>
     /// The name is part of the schema rather than of a query: it decides how every indexed word is stemmed and which
@@ -48,6 +51,12 @@ public interface IDatabaseSchemaInspector
     /// what PostgreSQL actually holds, so the answer does not depend on which configuration the migration was generated
     /// from or on whether anyone remembered to regenerate it.
     /// </para>
+    /// <para>
+    /// A caller reaches this only once every migration is applied, and the migration that creates the search document
+    /// table creates the generated column with it. A database that then reports no column, no expression, or an
+    /// expression naming no configuration is not one of ours, so it is unreadable rather than a name absent for a
+    /// benign reason. Returning nothing for it would hand the caller a state it could only treat as agreement.
+    /// </para>
     /// </remarks>
-    Task<string?> ReadSearchVectorTextSearchConfigurationAsync(CancellationToken cancellationToken);
+    Task<string> ReadSearchVectorTextSearchConfigurationAsync(CancellationToken cancellationToken);
 }

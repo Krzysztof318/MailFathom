@@ -73,9 +73,7 @@ public sealed class DatabaseSchemaStartupGateTests
     public async Task StartAsync_LexicalIndexBuiltWithAnotherTextSearchConfiguration_FailsStartupNamingBoth()
     {
         // Arrange
-        var inspector = CreateCurrentSchemaInspector();
-        inspector.ReadSearchVectorTextSearchConfigurationAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<string?>("simple"));
+        var inspector = CreateCurrentSchemaInspector("simple");
 
         // Act
         var exception = await Assert.ThrowsAsync<DatabaseSchemaTextSearchConfigurationMismatchException>(() =>
@@ -92,24 +90,24 @@ public sealed class DatabaseSchemaStartupGateTests
     public async Task StartAsync_LexicalIndexMatchesTheConfiguration_Starts()
     {
         // Arrange
-        var inspector = CreateCurrentSchemaInspector();
-        inspector.ReadSearchVectorTextSearchConfigurationAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<string?>("english"));
+        var inspector = CreateCurrentSchemaInspector("english");
 
         // Act, Assert
         await CreateGate(inspector, PostgresTextSearchConfiguration.Create("english")).StartAsync(CancellationToken.None);
     }
 
+    /// <summary>A schema the inspector cannot identify ends startup rather than being read as agreement.</summary>
     [Fact]
-    public async Task StartAsync_SchemaCarriesNoSearchVectorExpression_StartsBecauseNothingContradictsTheConfiguration()
+    public async Task StartAsync_SearchVectorConfigurationUnidentifiable_FailsStartupRatherThanStartingTheWorkers()
     {
         // Arrange
         var inspector = CreateCurrentSchemaInspector();
         inspector.ReadSearchVectorTextSearchConfigurationAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<string?>(null));
+            .ThrowsAsync(new DatabaseSchemaStateUnreadableException("The lexical email index carries no stored search vector expression."));
 
         // Act, Assert
-        await CreateGate(inspector).StartAsync(CancellationToken.None);
+        await Assert.ThrowsAsync<DatabaseSchemaStateUnreadableException>(() =>
+            CreateGate(inspector).StartAsync(CancellationToken.None));
     }
 
     [Fact]
@@ -128,11 +126,14 @@ public sealed class DatabaseSchemaStartupGateTests
         await inspector.DidNotReceive().ReadSearchVectorTextSearchConfigurationAsync(Arg.Any<CancellationToken>());
     }
 
-    private static IDatabaseSchemaInspector CreateCurrentSchemaInspector()
+    /// <summary>An inspector reporting a fully migrated schema whose lexical index names the given configuration.</summary>
+    private static IDatabaseSchemaInspector CreateCurrentSchemaInspector(string schemaTextSearchConfiguration = "simple")
     {
         var inspector = Substitute.For<IDatabaseSchemaInspector>();
         inspector.ReadPendingMigrationIdentifiersAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<string>>([]));
+        inspector.ReadSearchVectorTextSearchConfigurationAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(schemaTextSearchConfiguration));
 
         return inspector;
     }

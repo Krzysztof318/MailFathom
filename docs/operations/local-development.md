@@ -69,10 +69,13 @@ The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.2-pg17` image so
 That volume is why `src/AppHost/AppHost.csproj` declares a `UserSecretsId` and `src/AppHost/Properties/launchSettings.json` sets `DOTNET_ENVIRONMENT=Development`. Aspire generates the PostgreSQL password and keeps it stable by writing it to user secrets, which are only loaded in the Development environment. Without both, every run generates a new password while the volume keeps the one it was initialized with, and the container never becomes healthy. If it ever does report `password authentication failed`, the volume and the current password have diverged; remove the volume and start again:
 
 ```bash
+docker volume ls --filter name=-postgres-data
 aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive
-docker rm -f $(docker ps -aq --filter volume=mailmcp.apphost-9beaf2538a-postgres-data)
-docker volume rm mailmcp.apphost-9beaf2538a-postgres-data
+docker rm -f $(docker ps -aq --filter volume=<volume>)
+docker volume rm <volume>
 ```
+
+Aspire names that volume after the AppHost project's path, so every clone and every worktree owns a different one and the name has to be read rather than assumed. List them first and take the one belonging to the checkout being repaired; removing another one destroys a database the repair was not about.
 
 ## Development secrets
 

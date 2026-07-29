@@ -4,13 +4,19 @@ using MailMcp.Domain.Failures;
 
 namespace MailMcp.Application.Persistence;
 
-/// <summary>Indicates that the migration history could not be read, so the schema's shape is unknown.</summary>
+/// <summary>Indicates that the schema state could not be established, so the schema's shape is unknown.</summary>
 /// <remarks>
 /// <para>
 /// Unknown is deliberately its own failure rather than a third value folded into "pending" or "current". An
 /// unreachable server, a database that has never been created, and a user without rights on the history table all
 /// leave the same question unanswered, and answering it either way would let an instance start against a schema
 /// nothing inspected.
+/// </para>
+/// <para>
+/// A catalogue that answers without identifying anything is the same failure. A search vector column that is absent,
+/// carries no stored expression, or carries one naming no registered configuration leaves the running build unable to
+/// say which configuration its lexemes were built with, and it arrives once every migration is applied — so it
+/// describes a database those migrations did not produce rather than a fact that is merely unknown yet.
 /// </para>
 /// <para>
 /// The message names the migration history and the reason class only. The provider's own text can carry a host name, a
@@ -34,6 +40,18 @@ public sealed class DatabaseSchemaStateUnreadableException : MailMcpException
     /// <param name="innerException">The provider failure that prevented the read.</param>
     public DatabaseSchemaStateUnreadableException(string operatorSafeMessage, Exception innerException)
         : base(operatorSafeMessage, innerException)
+    {
+    }
+
+    /// <summary>Initializes a new unreadable-schema failure the catalogue reported rather than failed on.</summary>
+    /// <param name="operatorSafeMessage">A message naming which schema fact could not be established.</param>
+    /// <remarks>
+    /// There is no provider failure to preserve here: the query succeeded, and what it returned identifies no schema
+    /// this build recognizes. The message carries the whole diagnosis, which is why this overload exists rather than
+    /// an invented inner exception standing in for one.
+    /// </remarks>
+    public DatabaseSchemaStateUnreadableException(string operatorSafeMessage)
+        : base(operatorSafeMessage)
     {
     }
 
