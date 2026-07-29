@@ -5,11 +5,13 @@ using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Synchronization;
 using MailMcp.Infrastructure.Persistence;
+using MailMcp.IntegrationTests.Mailbox;
+using MailMcp.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace MailMcp.IntegrationTests;
+namespace MailMcp.IntegrationTests.Synchronization;
 
 /// <summary>Runs whole synchronizations against a real mail server and a real database, twice over the same folder.</summary>
 /// <remarks>

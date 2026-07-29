@@ -2,7 +2,7 @@
 
 using Xunit;
 
-namespace MailMcp.IntegrationTests;
+namespace MailMcp.IntegrationTests.Orchestration;
 
 /// <summary>Groups every test that runs against the one orchestrated database and the one orchestrated mailbox.</summary>
 /// <remarks>

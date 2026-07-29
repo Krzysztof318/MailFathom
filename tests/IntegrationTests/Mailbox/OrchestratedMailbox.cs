@@ -7,9 +7,10 @@ using MailKit.Net.Smtp;
 using MailKit.Security;
 using MailMcp.AppHost;
 using MailMcp.Domain.Emails;
+using MailMcp.IntegrationTests.Orchestration;
 using MimeKit;
 
-namespace MailMcp.IntegrationTests;
+namespace MailMcp.IntegrationTests.Mailbox;
 
 /// <summary>Seeds the orchestrated mailbox and observes it over connections the code under test knows nothing about.</summary>
 /// <remarks>
@@ -244,9 +245,3 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
         }
     }
 }
-
-/// <summary>One message as the server reports it, independently of anything MailMcp stored about it.</summary>
-/// <param name="Uid">The remote identifier within the folder's current UIDVALIDITY.</param>
-/// <param name="Subject">The subject the envelope carries, which is how a test recognizes the message it seeded.</param>
-/// <param name="IsSeen">Whether the server currently holds the <c>\Seen</c> flag for the message.</param>
-internal sealed record ObservedEmail(ImapUid Uid, string? Subject, bool IsSeen);

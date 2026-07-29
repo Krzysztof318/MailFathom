@@ -12,7 +12,7 @@ using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace MailMcp.IntegrationTests;
+namespace MailMcp.IntegrationTests.Orchestration;
 
 /// <summary>The production registrations, resolved against the orchestrated database and mail server.</summary>
 /// <remarks>

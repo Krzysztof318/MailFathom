@@ -6,7 +6,7 @@ using Aspire.Hosting.Testing;
 using MailMcp.AppHost;
 using Xunit;
 
-namespace MailMcp.IntegrationTests;
+namespace MailMcp.IntegrationTests.Orchestration;
 
 /// <summary>The orchestrated PostgreSQL server, applied schema, and mail server the whole suite runs against.</summary>
 /// <remarks>

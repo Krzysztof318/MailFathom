@@ -1,6 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-namespace MailMcp.IntegrationTests;
+namespace MailMcp.IntegrationTests.Orchestration;
 
 /// <summary>Where the orchestrated mail server accepts the two protocols this suite speaks.</summary>
 /// <param name="Imap">The endpoint the adapter under test connects to, and the one flag state is read back over.</param>

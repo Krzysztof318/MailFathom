@@ -8,7 +8,7 @@ using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Secrets;
 
-namespace MailMcp.IntegrationTests;
+namespace MailMcp.IntegrationTests.Orchestration;
 
 /// <summary>The one throwaway mailbox the orchestrated mail server serves, as the adapter's two ports see it.</summary>
 /// <remarks>

@@ -2,7 +2,7 @@
 
 using Xunit.Sdk;
 
-namespace MailMcp.IntegrationTests;
+namespace MailMcp.IntegrationTests.Mailbox;
 
 /// <summary>Reports a remote <c>\Seen</c> regression by naming the messages and the state observed.</summary>
 /// <remarks>

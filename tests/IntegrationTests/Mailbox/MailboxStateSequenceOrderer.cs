@@ -4,7 +4,7 @@ using System.Reflection;
 using Xunit.Sdk;
 using Xunit.v3;
 
-namespace MailMcp.IntegrationTests;
+namespace MailMcp.IntegrationTests.Mailbox;
 
 /// <summary>Runs the tests of one class in the order their <see cref="MailboxStateStepAttribute" /> states.</summary>
 /// <remarks>
@@ -35,17 +35,4 @@ public sealed class MailboxStateSequenceOrderer : ITestCaseOrderer
     private static int ReadStep(ITestCase testCase) => testCase.TestMethod is IXunitTestMethod testMethod
         ? testMethod.Method.GetCustomAttribute<MailboxStateStepAttribute>()?.Position ?? int.MaxValue
         : int.MaxValue;
-}
-
-/// <summary>Places one test within its class's mailbox-state sequence.</summary>
-/// <param name="position">The position, ascending, with lower positions running first.</param>
-/// <remarks>
-/// Apply this only where a later test genuinely reads state an earlier one produced. Everywhere else the tests stay
-/// order-independent, and adding a step to a test that does not need one hides that it could have run alone.
-/// </remarks>
-[AttributeUsage(AttributeTargets.Method)]
-public sealed class MailboxStateStepAttribute(int position) : Attribute
-{
-    /// <summary>Gets the position within the sequence.</summary>
-    public int Position { get; } = position;
 }

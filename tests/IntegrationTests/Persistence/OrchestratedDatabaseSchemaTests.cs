@@ -4,11 +4,12 @@ using MailMcp.Application.Persistence;
 using MailMcp.Infrastructure;
 using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
+using MailMcp.IntegrationTests.Orchestration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Xunit;
 
-namespace MailMcp.IntegrationTests;
+namespace MailMcp.IntegrationTests.Persistence;
 
 /// <summary>Proves the suite reaches a real, migrated PostgreSQL database through the production registration path.</summary>
 /// <remarks>

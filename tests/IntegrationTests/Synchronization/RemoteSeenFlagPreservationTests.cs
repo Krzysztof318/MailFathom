@@ -4,10 +4,12 @@ using MailMcp.Application.Mail;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
+using MailMcp.IntegrationTests.Mailbox;
+using MailMcp.IntegrationTests.Orchestration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace MailMcp.IntegrationTests;
+namespace MailMcp.IntegrationTests.Synchronization;
 
 /// <summary>Proves against a real IMAP server that reading mail never marks it read.</summary>
 /// <remarks>
