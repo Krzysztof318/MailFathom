@@ -33,14 +33,17 @@ public interface IMailboxSession : IAsyncDisposable
 
     /// <summary>Fetches raw MIME content with a BODY.PEEK-style operation that preserves the remote Seen flag.</summary>
     /// <param name="occurrenceId">The occurrence to fetch, which must belong to this session's account, folder, and UIDVALIDITY.</param>
-    /// <param name="maxRawMimeBytes">The size beyond which the payload is rejected rather than buffered.</param>
+    /// <param name="maxRawMimeBytes">The size beyond which the payload is abandoned rather than buffered.</param>
     /// <param name="cancellationToken">Cancels the fetch and every remaining attempt.</param>
-    /// <returns>The raw MIME content of the occurrence.</returns>
-    /// <exception cref="EmailContentTooLargeException">Thrown when the payload exceeds <paramref name="maxRawMimeBytes" />.</exception>
+    /// <returns>The raw MIME content of the occurrence, or the statement that it exceeded <paramref name="maxRawMimeBytes" />.</returns>
     /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the fetch within its configured resilience budget.</exception>
     /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
-    /// <remarks>The preservation guarantee holds on every attempt: an implementation that recovers a lost connection must reselect the folder read-only before it fetches again.</remarks>
-    Task<RemoteEmailContent> FetchEmailContentWithoutSettingSeenAsync(
+    /// <remarks>
+    /// An oversized payload is a result rather than a failure, because a caller records the occurrence and steps over it
+    /// instead of stopping the run. The preservation guarantee holds on every attempt: an implementation that recovers a
+    /// lost connection must reselect the folder read-only before it fetches again.
+    /// </remarks>
+    Task<RemoteEmailContentFetchResult> FetchEmailContentWithoutSettingSeenAsync(
         EmailOccurrenceId occurrenceId,
         long maxRawMimeBytes,
         CancellationToken cancellationToken);

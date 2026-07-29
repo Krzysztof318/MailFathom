@@ -2,6 +2,7 @@
 
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
+using MailMcp.Domain.Failures;
 using MailMcp.Domain.Folders;
 
 namespace MailMcp.Application.Synchronization;
@@ -13,25 +14,8 @@ namespace MailMcp.Application.Synchronization;
 /// attach the recovered folder's emails to the previous folder's checkpoint, so the run stops instead. Nothing is lost:
 /// the next run reads the new UIDVALIDITY from an empty checkpoint and re-synchronizes the folder from its start.
 /// </remarks>
-public sealed class MailboxFolderRecreatedException : Exception
+public sealed class MailboxFolderRecreatedException : MailMcpException
 {
-    /// <summary>Initializes a new recreated-folder failure.</summary>
-    public MailboxFolderRecreatedException()
-    {
-    }
-
-    /// <summary>Initializes a new recreated-folder failure with a safe message.</summary>
-    public MailboxFolderRecreatedException(string message)
-        : base(message)
-    {
-    }
-
-    /// <summary>Initializes a new recreated-folder failure with a safe message and inner exception.</summary>
-    public MailboxFolderRecreatedException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
-
     /// <summary>Initializes a new recreated-folder failure naming both observed UIDVALIDITY values.</summary>
     /// <param name="accountId">The account whose folder was re-selected.</param>
     /// <param name="folderAlias">The folder that was re-selected.</param>
@@ -51,15 +35,18 @@ public sealed class MailboxFolderRecreatedException : Exception
         this.ReselectedUidValidity = reselectedUidValidity;
     }
 
-    /// <summary>Gets the account whose folder was recreated, when available.</summary>
-    public MailAccountId? AccountId { get; }
+    /// <inheritdoc />
+    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.MailboxFolderRecreated;
 
-    /// <summary>Gets the folder that was recreated, when available.</summary>
-    public MailFolderAlias? FolderAlias { get; }
+    /// <summary>Gets the account whose folder was recreated.</summary>
+    public MailAccountId AccountId { get; }
 
-    /// <summary>Gets the UIDVALIDITY the session opened with, when available.</summary>
-    public ImapUidValidity? SessionUidValidity { get; }
+    /// <summary>Gets the folder that was recreated.</summary>
+    public MailFolderAlias FolderAlias { get; }
 
-    /// <summary>Gets the UIDVALIDITY observed after the connection recovered, when available.</summary>
-    public ImapUidValidity? ReselectedUidValidity { get; }
+    /// <summary>Gets the UIDVALIDITY the session opened with.</summary>
+    public ImapUidValidity SessionUidValidity { get; }
+
+    /// <summary>Gets the UIDVALIDITY observed after the connection recovered.</summary>
+    public ImapUidValidity ReselectedUidValidity { get; }
 }

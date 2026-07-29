@@ -6,6 +6,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\shared\ExceptionHierarchyAssertion.cs" Link="ExceptionHierarchyAssertion.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Application\Application.csproj" />
   </ItemGroup>
 </Project>

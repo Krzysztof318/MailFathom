@@ -3,6 +3,7 @@
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
+using MailMcp.Application.EmailContent;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Emails;
 using NSubstitute;
@@ -67,12 +68,13 @@ public sealed class MailKitImapSessionResilienceTests
         await using var session = await OpenScriptedSessionAsync(resilience, droppedClient, droppedFolder, recoveredClient, recoveredFolder);
 
         // Act
-        var content = await resilience.CompleteOnVirtualTimeAsync(
+        var fetch = await resilience.CompleteOnVirtualTimeAsync(
             session.FetchEmailContentWithoutSettingSeenAsync(CreateOccurrenceId(10), 1024, CancellationToken.None),
             BackoffAdvanceStep);
 
         // Assert
-        Assert.Equal(rawMime, content.RawMime.ToArray());
+        Assert.Equal(RemoteEmailContentFetchOutcome.Retrieved, fetch.Outcome);
+        Assert.Equal(rawMime, fetch.Content!.RawMime.ToArray());
         await recoveredFolder.Received(1).OpenAsync(FolderAccess.ReadOnly, Arg.Any<CancellationToken>());
         await recoveredFolder.Received(1).GetStreamAsync(new UniqueId(10), Arg.Any<CancellationToken>());
         await recoveredFolder.DidNotReceive().OpenAsync(FolderAccess.ReadWrite, Arg.Any<CancellationToken>());

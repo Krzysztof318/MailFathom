@@ -100,6 +100,7 @@ dotnet_diagnostic.IDE0161.severity = warning # Use file-scoped namespaces.
 
 dotnet_diagnostic.CA1002.severity = none # Do not expose generic lists.
 dotnet_diagnostic.CA1032.severity = none # Provide standard exception constructors; disabled in favor of focused exception design.
+dotnet_diagnostic.RCS1194.severity = none # Implement exception constructors; the Roslynator restatement of CA1032, disabled for the same reason.
 dotnet_diagnostic.CA1034.severity = none # Do not nest visible types.
 dotnet_diagnostic.CA1062.severity = none # Validate public method arguments; disabled because nullable flow covers most cases.
 dotnet_diagnostic.CA1303.severity = none # Do not pass literals as localized parameters.

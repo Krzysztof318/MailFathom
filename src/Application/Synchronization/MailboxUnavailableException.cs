@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Failures;
 using MailMcp.Domain.Folders;
 
 namespace MailMcp.Application.Synchronization;
@@ -19,25 +20,8 @@ namespace MailMcp.Application.Synchronization;
 /// stopping and the other says one mail server is struggling.
 /// </para>
 /// </remarks>
-public sealed class MailboxUnavailableException : Exception
+public sealed class MailboxUnavailableException : MailMcpException
 {
-    /// <summary>Initializes a new mailbox unavailability failure.</summary>
-    public MailboxUnavailableException()
-    {
-    }
-
-    /// <summary>Initializes a new mailbox unavailability failure with a safe message.</summary>
-    public MailboxUnavailableException(string message)
-        : base(message)
-    {
-    }
-
-    /// <summary>Initializes a new mailbox unavailability failure with a safe message and inner exception.</summary>
-    public MailboxUnavailableException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
-
     /// <summary>Initializes a new mailbox unavailability failure naming the account and folder alias it stopped.</summary>
     /// <param name="accountId">The account whose mail server did not serve the operation.</param>
     /// <param name="folderAlias">The folder the operation was working on.</param>
@@ -61,14 +45,16 @@ public sealed class MailboxUnavailableException : Exception
     public MailboxUnavailableException(MailAccountId accountId, Exception innerException)
         : base(
             $"The mail server for {accountId.Value} did not serve the operation within its configured resilience budget.",
-            innerException)
-    {
+            innerException) =>
         this.AccountId = accountId;
-    }
 
-    /// <summary>Gets the account whose mail server was unavailable, when available.</summary>
-    public MailAccountId? AccountId { get; }
+    /// <inheritdoc />
+    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.MailboxUnavailable;
 
-    /// <summary>Gets the folder the stopped operation was working on, when it worked on one.</summary>
+    /// <summary>Gets the account whose mail server was unavailable.</summary>
+    public MailAccountId AccountId { get; }
+
+    /// <summary>Gets the folder the stopped operation was working on, which is absent for an operation that works on no single folder.</summary>
+    /// <remarks>Absence is the account-wide constructor's meaning rather than an unsupplied value: folder discovery reaches the server on behalf of the account and no folder exists to name.</remarks>
     public MailFolderAlias? FolderAlias { get; }
 }
