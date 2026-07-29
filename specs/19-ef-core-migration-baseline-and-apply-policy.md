@@ -17,18 +17,20 @@ Draft section 22 lists migrations in stage 1. Scheduling them there would have p
 
 The `Infrastructure` project gains a design-time `DbContext` factory so `dotnet ef` can build the model without starting the host. One baseline migration is generated for the full schema — accounts, folders, stored emails, message contents, checkpoints, extracted text, the generated `tsvector` column, and every index and constraint from specifications 07 through 12 — and reviewed as SQL, not only as generated C#. The pgvector extension is enabled by this migration if and only if a vector column exists by then; otherwise it is left to the RAG stage that introduces one.
 
-Migrations are generated through Aspire so the command runs with the connection information from the app model rather than a hand-copied connection string:
+Migrations are generated through Aspire so the command runs with the connection information from the app model rather than a hand-copied connection string.
+
+**This section was written against `aspire exec`, which Aspire 13 does not have.** Earlier Aspire versions offered that command; the pinned CLI 13.4.6 does not, and its documentation is gone. The replacement is the `Aspire.Hosting.EntityFrameworkCore` package, which declares a migration resource in the app model. The AppHost adds it against the host project, points it at `src/Infrastructure` for the migrations, and calls `RunDatabaseUpdateOnStart`, so a local run applies pending migrations before the host starts. Commands are run against the resource:
 
 ```bash
-aspire exec --resource mailmcp-host -- \
-  dotnet ef migrations add <Name> --project src/Infrastructure --startup-project src/Host
+aspire resource mailmcp-migrations ef-migrations-add --apphost src/AppHost/AppHost.csproj --non-interactive -- --name Initial
+aspire resource mailmcp-migrations ef-database-update --apphost src/AppHost/AppHost.csproj --non-interactive
 ```
 
-The equivalent `aspire exec … -- dotnet ef database update` applies migrations locally. The exact resource name, working directory, and any required `--start-resource` for the PostgreSQL dependency are verified against the Aspire CLI documentation and recorded in the operations documentation as the single supported workflow.
+The package ships no stable build, so it is the repository's only prerelease pin. It is referenced by `AppHost` alone, so nothing it carries reaches a deployed assembly.
 
-Apply policy differs by environment, and the difference is a hard boundary rather than a setting an operator can cross.
+Apply policy is one rule rather than a per-environment pair, which is stricter than this specification originally described. **The host never applies migrations, in any environment, including Development.** It verifies at startup that the database carries every migration the running build defines and fails fast when any are pending, so an instance either serves traffic against a known schema or does not serve traffic at all. The Development branch this specification once allowed is unnecessary now that the orchestration applies migrations before the host starts, and it would have made two mechanisms own one concern, so that a given local schema could not be attributed to either. Outside Development, applying is an explicit deployment step, or the future `mcpmail` CLI when it exists.
 
-In Development the host may apply pending migrations at startup, which keeps the local loop convenient. Outside Development the host never applies migrations. It verifies at startup that the database schema matches the model's expected migration set and fails fast when migrations are pending, so an instance either serves traffic against a known schema or does not serve traffic at all. Applying them is an explicit deployment step run through `aspire exec … -- dotnet ef database update`, or through the future `mcpmail` CLI when it exists.
+While MailMcp is pre-release the baseline is regenerated rather than extended: a model change deletes `Initial` and recreates it, which destroys local data by design. The `add-migration` skill is that workflow. Making it additive is first-release work and is tracked separately.
 
 Draft section 17 currently states that the service applies pending migrations automatically at first-release startup, calling that an arbitrary initial policy. That conflicts with the repository rule forbidding automatic production migrations during ordinary host startup, and the repository rule wins: an application instance that mutates schema while starting can race a second instance, can apply a destructive change no one reviewed at deploy time, and gives the operator no point at which to take a backup. This specification updates the draft accordingly rather than implementing the weaker policy.
 
@@ -40,7 +42,9 @@ A schema mismatch is a fail-fast startup error, never a warning, because running
 
 ## Testing
 
-Unit tests cover the apply-policy decision table: Development applying pending migrations, every non-Development environment refusing to apply and failing startup when migrations are pending, a matching schema starting normally, and an unreadable or unknown migration history failing rather than defaulting to either branch. Verification that the baseline migration actually produces the expected PostgreSQL schema, constraints, and indexes is the responsibility of specification 20, which runs immediately after this one and whose checks are the real acceptance evidence.
+Unit tests cover the startup gate: a matching schema starting normally, pending migrations failing startup while naming them, an unreadable migration history failing rather than defaulting to either outcome, and cancellation reaching the inspector. There is no environment branch to cover, because the host applies nothing anywhere.
+
+Verification that the baseline migration actually produces the expected PostgreSQL schema, constraints, and indexes is the responsibility of specification 20, which runs immediately after this one and whose checks are the real acceptance evidence. Until then the evidence is a reviewed schema dump from the orchestrated database, produced by `scripts/dump-local-schema.sh`.
 
 ## Out of scope
 
@@ -50,8 +54,8 @@ Zero-downtime migration strategy, migration squashing after release, and moving 
 
 - One reviewed baseline migration reproduces the full schema on an empty database.
 - The Development-only bootstrap no longer exists.
-- The `aspire exec` workflow for adding and applying migrations is documented and is the only documented workflow.
-- No configuration setting exists that lets a non-Development host apply migrations at startup; pending migrations there fail startup instead.
+- The `mailmcp-migrations` workflow for adding and applying migrations is documented and is the only documented workflow.
+- No configuration setting exists that lets any host apply migrations at startup; pending migrations fail startup instead.
 - Draft section 17 is updated to match this policy.
 - `docs/operations/` documents the workflow and the per-environment policy.
 - `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

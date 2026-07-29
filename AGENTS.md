@@ -15,7 +15,9 @@ None of this relaxes the rest of these instructions. Pre-release is a reason to 
 ## Development environment
 
 - Development runs locally. The repository does not provision agent environments, so install the SDK pinned in `global.json` and any command-line tooling such as `dotnet-ef` or the Aspire CLI on the developer machine. `docs/operations/local-development.md` lists the commands that must work.
-- Never invoke `dotnet ef` directly. EF Core design-time and migration commands must run through `aspire exec`, so they see the orchestrated resources and the connection strings the AppHost issues rather than an ad-hoc local environment that can differ from every real one. That path is not wired up yet, so do not run EF Core tooling at all for now; work that needs a migration is blocked until it is, and the block is reported rather than worked around.
+- Never invoke `dotnet ef` directly. EF Core design-time and migration commands run through the AppHost's `mailmcp-migrations` resource — `aspire resource mailmcp-migrations <command>` — so they see the orchestrated resources and the connection string the AppHost issues rather than an ad-hoc local environment that can differ from every real one. Aspire 13 has no `aspire exec` command; the migration resource replaces it.
+- Use `$add-migration` for any model change that needs a migration. While MailMcp is pre-release the repository keeps exactly one migration, `Initial`, and a model change regenerates it rather than adding a second one, which destroys local data by design. Reviewing the resulting schema as SQL is part of that workflow, not an optional extra.
+- The host never applies migrations, in any environment. It verifies the migration history at startup and fails fast on a pending migration. Applying is the `mailmcp-migrations` resource locally and an explicit deployment step elsewhere; do not add a second mechanism that applies them.
 
 ## Critical repository rules
 

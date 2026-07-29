@@ -10,10 +10,12 @@ namespace MailMcp.Infrastructure.UnitTests;
 public sealed class MailMcpDbContextDesignTimeFactoryTests
 {
     [Fact]
-    public void BuildOptions_NoDesignTimeConnectionString_FallsBackToTheLocalDevelopmentDatabase()
+    public void BuildOptions_NoConnectionStringAtAll_FallsBackToTheLocalDevelopmentDatabase()
     {
         // Act
-        var options = MailMcpDbContextDesignTimeFactory.BuildOptions(configuredConnectionString: null);
+        var options = MailMcpDbContextDesignTimeFactory.BuildOptions(
+            orchestratedConnectionString: null,
+            designTimeConnectionString: null);
 
         // Assert
         using var context = new MailMcpDbContext(options, PostgresTextSearchConfiguration.Default);
@@ -22,15 +24,35 @@ public sealed class MailMcpDbContextDesignTimeFactoryTests
             context.Database.GetConnectionString());
     }
 
-    [Fact]
-    public void BuildOptions_ConfiguredDesignTimeConnectionString_UsesIt()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void BuildOptions_BlankOrchestratedConnectionString_UsesTheDesignTimeOverride(string? orchestrated)
     {
         // Act
-        var options = MailMcpDbContextDesignTimeFactory.BuildOptions("Host=db.test;Database=mailmcp;Username=dev");
+        var options = MailMcpDbContextDesignTimeFactory.BuildOptions(
+            orchestrated,
+            "Host=db.test;Database=mailmcp;Username=dev");
 
         // Assert
         using var context = new MailMcpDbContext(options, PostgresTextSearchConfiguration.Default);
         Assert.Equal("Host=db.test;Database=mailmcp;Username=dev", context.Database.GetConnectionString());
+    }
+
+    [Fact]
+    public void BuildOptions_OrchestrationIssuedAConnectionString_PrefersItOverTheDesignTimeOverride()
+    {
+        // Act
+        var options = MailMcpDbContextDesignTimeFactory.BuildOptions(
+            "Host=orchestrated;Database=mailmcp;Username=orchestrated",
+            "Host=stale;Database=mailmcp;Username=stale");
+
+        // Assert
+        using var context = new MailMcpDbContext(options, PostgresTextSearchConfiguration.Default);
+        Assert.Equal(
+            "Host=orchestrated;Database=mailmcp;Username=orchestrated",
+            context.Database.GetConnectionString());
     }
 
     [Fact]

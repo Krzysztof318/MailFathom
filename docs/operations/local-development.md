@@ -64,7 +64,15 @@ Run the Aspire orchestration host:
 dotnet run --project src/AppHost/AppHost.csproj
 ```
 
-The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.2-pg17` image so local development starts with a PostgreSQL server that can support the `vector` extension required by the RAG and embedding slices.
+The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.2-pg17` image so local development starts with a PostgreSQL server that can support the `vector` extension required by the RAG and embedding slices. It keeps its data in a named Docker volume, so synchronized mail survives a restart instead of costing a full IMAP synchronization every time the orchestration stops.
+
+That volume is why `src/AppHost/AppHost.csproj` declares a `UserSecretsId` and `src/AppHost/Properties/launchSettings.json` sets `DOTNET_ENVIRONMENT=Development`. Aspire generates the PostgreSQL password and keeps it stable by writing it to user secrets, which are only loaded in the Development environment. Without both, every run generates a new password while the volume keeps the one it was initialized with, and the container never becomes healthy. If it ever does report `password authentication failed`, the volume and the current password have diverged; remove the volume and start again:
+
+```bash
+aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive
+docker rm -f $(docker ps -aq --filter volume=mailmcp.apphost-9beaf2538a-postgres-data)
+docker volume rm mailmcp.apphost-9beaf2538a-postgres-data
+```
 
 ## Development secrets
 
@@ -105,21 +113,32 @@ dotnet tool install --global csharp-ls --version 0.26.0
 
 ### EF Core design-time commands
 
-**Do not invoke `dotnet ef` directly.** Design-time and migration commands must run through `aspire exec`, so they see the orchestrated resources and the connection strings the AppHost issues rather than a local environment that can differ from every real one. That path is not wired up yet, so EF Core tooling is not to be run at all for now, and work that needs a migration is blocked until it is.
+**Do not invoke `dotnet ef` directly.** Design-time and migration commands run through the AppHost's `mailmcp-migrations` resource, so they use the connection string the AppHost issues rather than a local environment that can differ from every real one.
 
-The pieces the tooling will need are already in place. `MailMcpDbContextDesignTimeFactory` gives EF Core a context without starting the host, which matters because the host composes its connection string during startup and design-time tooling never runs that. It resolves no secret: `migrations add` and `dbcontext script` need the model rather than a reachable server, and a deployment credential does not belong on a workstation. A command that does need a live database reads `MAILMCP_DESIGN_TIME_CONNECTION_STRING`, falling back to `Host=localhost;Database=mailmcp;Username=mailmcp`.
+Aspire 13 has no `aspire exec` command; earlier versions offered one, and it is gone. Its replacement is the `Aspire.Hosting.EntityFrameworkCore` package, which declares a migration resource in the app model. `src/AppHost/Program.cs` adds it against the host project, points it at `src/Infrastructure` for the migrations, and calls `RunDatabaseUpdateOnStart`, so a local run applies pending migrations before the host starts and the host waits for that to finish.
 
-Until that baseline migration exists, a developer creates the schema from the EF Core model instead. Turn it on in `appsettings.Development.json` or user secrets:
+Commands are executed against the resource:
 
-```json
-{
-  "Persistence": { "CreateSchemaFromModelOnStartup": true }
-}
+```bash
+aspire resource mailmcp-migrations ef-database-status --apphost src/AppHost/AppHost.csproj --non-interactive
+aspire resource mailmcp-migrations ef-database-update --apphost src/AppHost/AppHost.csproj --non-interactive
+aspire resource mailmcp-migrations ef-database-reset  --apphost src/AppHost/AppHost.csproj --non-interactive
+aspire resource mailmcp-migrations ef-migrations-add  --apphost src/AppHost/AppHost.csproj --non-interactive -- --name Initial
 ```
 
-Startup then creates the tables in a database that has none. The setting is off by default, and turning it on in any environment other than Development fails startup rather than creating a schema nobody reviewed. It creates tables only in an empty database — it neither reconciles an existing one against the model nor drops anything — so recreate the database yourself after a model change. [Stored email schema](../architecture/stored-email-schema.md) describes what it creates, and specification 19 removes the setting together with the bootstrap it enables.
+The same commands are available from the dashboard. `dotnet-ef` itself is fetched by the tool resource, so the global install is only needed by an editor that runs design-time commands of its own.
 
-`Infrastructure` is its own startup project for these commands. It owns the context, the factory, and the only reference to `Microsoft.EntityFrameworkCore.Design`; `Host` references that package nowhere, so naming it as the startup project fails.
+`Host` is the startup project, because it is the resource the orchestration issues the connection string to, and it therefore carries a design-time-only reference to `Microsoft.EntityFrameworkCore.Design`. `Infrastructure` owns the context, the design-time factory, and the migrations under `src/Infrastructure/Persistence/Migrations/`.
+
+`MailMcpDbContextDesignTimeFactory` gives EF Core a context without starting the host, which matters because the host composes its connection string during startup and design-time tooling never runs that. It reads `ConnectionStrings__mailmcp` when the orchestration supplies it, then `MAILMCP_DESIGN_TIME_CONNECTION_STRING` for a command run outside it, and falls back to `Host=localhost;Database=mailmcp;Username=mailmcp`. The orchestrated value wins so a stale override left in a shell cannot point a migration at a different database than the one being migrated.
+
+While MailMcp is pre-release the repository keeps exactly one migration, `Initial`, and a model change regenerates it rather than adding a second one. The `add-migration` skill is that workflow, including the database reset it needs and the SQL review it requires; `scripts/dump-local-schema.sh` produces the schema dump that review reads. Making the workflow additive, and deciding how a released instance applies migrations, is tracked for the first release.
+
+#### Apply policy
+
+The host never applies migrations, in any environment. It reads the migration history at startup and fails fast when the database has not applied every migration the running build defines, so an instance either serves traffic against a known schema or does not serve traffic at all. A schema mismatch reports error code `32001` and an unreadable migration history `32002`.
+
+Applying is one mechanism per environment: `mailmcp-migrations` locally, and an explicit deployment step elsewhere. A host that mutates schema while starting could race a second instance, could apply a destructive change nobody reviewed at deploy time, and would leave the operator no point at which to take a backup.
 
 The GitHub CLI (`gh`) is installed separately through the operating system package manager and is required for the issue and pull-request workflow in root `AGENTS.md`. It needs the `project` scope on top of its default scopes so it can read and update the roadmap board.
 
@@ -150,6 +169,8 @@ dotnet msbuild .config/CodeCoverage.proj -t:Collect
 The command runs the whole solution in one test invocation, which produces one uniquely named Cobertura report per unit-test assembly, merges the reports, and requires at least 85% aggregate line coverage across `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`. The result always represents the whole configured scope, not only changed lines. `Host` and `AppHost` are excluded as thin executable composition roots.
 
 Two attributes take code out of that denominator, and `testconfig.json` configures the collector to honor both. `[ExcludeFromCodeCoverage]` marks code that should never participate in coverage. `[RequiresIntegrationCoverage]`, declared in `src/shared/RequiresIntegrationCoverageAttribute.cs`, marks code whose verification needs a real database, a real mail server, or a composed host: the EF Core context and its entities, the persistence stores, the MailKit client adapter, the file-system and environment secret readers, and the infrastructure registration extensions carry it today. Integration tests will prove that code once they exist, and they will collect no coverage, so a marked class is measured by neither run. Removing the marker from a class puts every line of it back into the denominator, which is how to check that the exclusion is still earned.
+
+A third exclusion is applied by path rather than by attribute: `.config/CodeCoverage.proj` filters `**/Persistence/Migrations/*.cs` out of the merged report. EF Core generates those files and the `add-migration` workflow regenerates them, so they carry no attribute the generator would preserve, and no unit test may execute them — a migration is proven by applying it to a real PostgreSQL server and reviewing the resulting schema. Leaving them in put roughly a thousand uncoverable lines in the denominator and moved the aggregate by more than twenty points, which would have masked a real regression anywhere else.
 
 Raw Cobertura reports and TRX files are written under `artifacts/coverage/raw/`. The merged Cobertura and HTML reports are written under `artifacts/coverage/report/`.
 

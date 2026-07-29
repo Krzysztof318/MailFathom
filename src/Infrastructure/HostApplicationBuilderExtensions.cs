@@ -1,0 +1,60 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+
+using MailMcp.CodeCoverage;
+using MailMcp.Infrastructure.Persistence;
+using Microsoft.Extensions.Hosting;
+
+namespace MailMcp.Infrastructure;
+
+/// <summary>Infrastructure registration that needs the host builder rather than the service collection alone.</summary>
+[RequiresIntegrationCoverage]
+public static class HostApplicationBuilderExtensions
+{
+    /// <summary>The seconds a database command may run before it is cancelled, when no deployment configures another value.</summary>
+    public const int DefaultDatabaseCommandTimeoutSeconds = 30;
+
+    /// <summary>Makes the EF Core context report its health and publish database traces and metrics.</summary>
+    /// <param name="builder">The host application builder the context is already registered on.</param>
+    /// <param name="commandTimeout">How long a single database command may run before it is cancelled.</param>
+    /// <returns>The builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="commandTimeout" /> is not a positive duration.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the context has not been registered yet.</exception>
+    /// <remarks>
+    /// <para>
+    /// This is deliberately the enrichment half of the Aspire PostgreSQL EF Core integration rather than its
+    /// <c>AddNpgsqlDbContext</c> half. That method resolves a connection string from
+    /// <c>ConnectionStrings</c> at registration time and builds the context around it, which MailMcp cannot use: the
+    /// connection string is composed asynchronously during startup because resolving a secret reference is asynchronous,
+    /// and the password is supplied per physical connection so a rotated credential needs no restart. Enrichment layers
+    /// the health check, the tracing, and the metrics onto the context the infrastructure already registered, so a
+    /// deployment that runs without any orchestrator — reading <c>Persistence:ConnectionString</c> or
+    /// <c>Persistence:Password</c> from its own secret store — gets the same telemetry as one Aspire starts.
+    /// </para>
+    /// <para>
+    /// Retries stay off. A retrying execution strategy refuses the user-initiated transaction
+    /// <see cref="PersistenceSessionFactory" /> opens for every session, so enabling it would fail every write at
+    /// session start rather than merely leave it un-retried, and it would nest inside the outbound resilience pipeline
+    /// that already governs database command execution. Adopting retries instead means handing each unit of work to
+    /// <c>Database.CreateExecutionStrategy().ExecuteAsync</c> and dropping that pipeline from the same paths.
+    /// </para>
+    /// </remarks>
+    public static IHostApplicationBuilder AddDatabaseHealthAndTelemetry(
+        this IHostApplicationBuilder builder,
+        TimeSpan commandTimeout)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(commandTimeout, TimeSpan.Zero);
+
+        builder.EnrichNpgsqlDbContext<MailMcpDbContext>(settings =>
+        {
+            settings.DisableRetry = true;
+            settings.DisableHealthChecks = false;
+            settings.DisableTracing = false;
+            settings.DisableMetrics = false;
+            settings.CommandTimeout = (int)commandTimeout.TotalSeconds;
+        });
+
+        return builder;
+    }
+}

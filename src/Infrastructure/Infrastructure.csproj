@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <!-- The enrichment half of the Aspire PostgreSQL EF Core integration only. It layers the health check and the
+         OpenTelemetry wiring onto a context this project registers itself, so it adds no dependency on an orchestrator
+         being present at run time. -->
+    <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="MailKit" />
     <!-- Referenced directly rather than relied on through MailKit, because message parsing uses MimeKit's own API and
          the version that compiles must be pinned here instead of inherited from another package's dependency range. -->
