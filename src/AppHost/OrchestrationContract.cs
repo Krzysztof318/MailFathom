@@ -23,13 +23,16 @@ public static class OrchestrationContract
     /// <summary>The EF Core migration tool resource.</summary>
     public const string MigrationsResourceName = "mailmcp-migrations";
 
-    /// <summary>The app host argument that selects the integration-test topology, written as <c>IntegrationTesting=true</c>.</summary>
+    /// <summary>The whole app host argument that selects the integration-test topology.</summary>
     /// <remarks>
-    /// A configuration key rather than an environment variable, because the testing builder passes app host arguments
-    /// straight into the same command-line configuration provider a developer would use, and a key that only exists
-    /// while a test drives the model cannot be set by accident on a machine that runs <c>aspire run</c>.
+    /// Matched against the argument list itself rather than read through <c>IDistributedApplicationBuilder.Configuration</c>,
+    /// which also binds environment variables: an <c>IntegrationTesting</c> variable set on a developer or automation
+    /// machine would otherwise put an ordinary <c>aspire run</c> on the fixed-name ephemeral database and leave its
+    /// volume under the prefix <c>scripts/run-integration-tests.sh</c> deletes. Selecting the topology has to be
+    /// something only the caller starting the app model can do, and an argument is the only input ambient state cannot
+    /// supply.
     /// </remarks>
-    public const string IntegrationTestingConfigurationKey = "IntegrationTesting";
+    public const string IntegrationTestingArgument = "IntegrationTesting=true";
 
     /// <summary>The prefix every container and volume the integration-test topology creates is named with.</summary>
     /// <remarks>

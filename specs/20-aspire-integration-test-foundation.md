@@ -7,7 +7,9 @@
 
 ## Goal
 
-Introduce the integration-test suite the repository has been deferring, using Aspire orchestration in test mode to run the real host against real PostgreSQL, and pay off the verification debt that ADR 0001 and specifications 07, 08, 13, and 15 explicitly deferred.
+Introduce the integration-test harness the repository has been deferring, using Aspire orchestration in test mode to run against real PostgreSQL, so that the verification debt ADR 0001 and specifications 07, 08, 13, and 15 explicitly deferred finally has somewhere to be written.
+
+Paying that debt off is what this specification enables, not what it defines. The debt is not one specification's: ADR 0001 deferred it across the persistence layer, and the classes marked `[RequiresIntegrationCoverage]` are its inventory. It is therefore tracked outside this specification, under the *What this enables* section below, so that the harness can be finished, reviewed, and closed as the self-contained piece of work it is.
 
 ## Approach
 
@@ -19,21 +21,15 @@ The app model gains a second topology rather than a second app host. Started wit
 
 The suite runs on request and nowhere else. `IsTestingPlatformApplication` is `false` for the project, which is what a solution-wide `dotnet test` uses to discover test projects, so neither the fast loop nor the coverage gate finds it and neither can absorb its coverage; the project stays in `MailMcp.slnx`, so build, analyzers, and formatting still cover it. `scripts/run-integration-tests.sh` is what starts it, and the GitHub workflow is manual dispatch only.
 
-## Delivery
-
-The foundation and the verifications it enables are separate units of work. This specification's foundation — the app model's test topology, the project, the shared orchestration fixture, the run script, the manual workflow, the documentation, and one test proving the harness reaches a real migrated database through the production registration path — is issue #54. The verifications listed under *Approved scope* are written against that fixture afterwards and are tracked separately, together with the integration coverage owed by every class currently marked `[RequiresIntegrationCoverage]`.
-
 ## Approved scope
 
-The suite verifies what unit tests structurally cannot:
+The harness and nothing written with it:
 
-- The baseline migration from specification 19 applies cleanly to an empty database and produces the expected tables, constraints, and indexes.
-- The unique constraint on account, folder, UIDVALIDITY, and UID rejects a duplicate occurrence, which is the PostgreSQL-side idempotency guarantee ADR 0001 left unverified.
-- Raw MIME round-trips through the `bytea` content store with its recorded length and hash intact, including a value large enough to be stored out of line.
-- Keyset pagination from specification 13 visits every row exactly once across pages, including equal and null timestamps, against real data volume.
-- The full-text query from specification 15 uses the GIN index rather than a sequential scan, asserted from the query plan.
-- Search query text containing SQL metacharacters and full-text operators is treated as data end to end, confirming against real PostgreSQL what specification 15 asserts at the infrastructure level.
-- The migration policy from specification 19 behaves correctly against a real schema.
+- The app model's second topology, selected by argument, with ephemeral prefixed container and volume names and the MailMcp host project left unstarted.
+- The `tests/IntegrationTests` project and the assembly-scoped orchestration fixture every test draws its database from.
+- The exclusion from the unit-test gate, the run script, and the manually dispatched workflow.
+- The suite's own coverage report over the classes marked `[RequiresIntegrationCoverage]`, enforcing nothing.
+- One test proving the harness reaches a real migrated database through the production registration path, which is what makes the fixture's contract real rather than asserted.
 
 Whether the composed host itself is started under test is deliberately left open. The foundation keeps it unstarted, because a running MailMcp synchronizes mail underneath whatever a test is asserting on, and the host-level assertions above are reachable through the classes the host composes. Turning it on is a later decision with a stated reason, not a default.
 
@@ -49,7 +45,19 @@ Test fixtures use synthetic mail data only. No real mailbox, real credential, or
 
 The suite is the test. Its own acceptance is that it fails when the schema or an index is wrong, and that it does not run as part of the unit-test gate, so the fast inner loop stays fast. The GitHub workflow is a separate, manually dispatched one rather than a job on the pull-request build.
 
-It reports coverage of its own, over the classes marked `[RequiresIntegrationCoverage]` and nothing else, so the number reads as progress through the debt this suite exists to pay off. That report enforces no threshold and never merges into the aggregate the 85% gate reads: unit tests stay the only source of an enforced metric, so an expensive suite never has to run to know whether the gate passes and integration coverage can never mask missing unit coverage. The filter is derived from the marker rather than kept as a second list, and a class that gains real coverage loses its marker in the same change, leaving this report and rejoining the unit denominator.
+It reports coverage of its own, over the classes marked `[RequiresIntegrationCoverage]` and nothing else, so the number reads as progress through the debt this suite exists to pay off. That report enforces no threshold and never merges into the aggregate the 85% gate reads: unit tests stay the only source of an enforced metric, so an expensive suite never has to run to know whether the gate passes and integration coverage can never mask missing unit coverage. The filter is derived from the marker rather than kept as a second list. A covered class keeps its marker, because the marker records where a class's verification lives rather than whether it has been written: removing it would move structurally unreachable code into the enforced denominator at nearly zero, so writing an integration test would lower the aggregate and hide the coverage it just produced.
+
+## What this enables
+
+The verifications a unit test structurally cannot perform are written against this fixture afterwards, and are tracked outside this specification because they are not this specification's scope. ADR 0001 deferred them across the persistence layer and the classes marked `[RequiresIntegrationCoverage]` are their inventory, which is broader than anything one specification defines. They include:
+
+- The baseline migration from specification 19 applying cleanly to an empty database and producing the expected tables, constraints, and indexes, and its apply policy behaving correctly against a real schema.
+- The unique constraint on account, folder, UIDVALIDITY, and UID rejecting a duplicate occurrence, which is the PostgreSQL-side idempotency guarantee ADR 0001 left unverified.
+- Raw MIME round-tripping through the `bytea` content store with its recorded length and hash intact, including a value large enough to be stored out of line.
+- Keyset pagination from specification 13 visiting every row exactly once across pages, including equal and null timestamps, against real data volume.
+- The full-text query from specification 15 using the GIN index rather than a sequential scan, asserted from the query plan, and query text containing SQL metacharacters and full-text operators treated as data end to end.
+
+None of these is a condition of this specification being done. The harness is what this specification owes; the coverage report is how the work they belong to is measured.
 
 ## Out of scope
 
@@ -59,8 +67,9 @@ Polly's chaos strategies, raised as a follow-up to specification 03 on issue #54
 
 ## Definition of done
 
-- The suite runs against Aspire-orchestrated PostgreSQL with pgvector.
-- Every deferred ADR 0001 and specification-level verification listed above is covered.
+- The suite runs against Aspire-orchestrated PostgreSQL with pgvector, and one test proves it reaches the migrated database through the production registration path.
+- The suite is absent from the fast loop, the enforced coverage gate, and every pull-request workflow, and leaves no container or volume behind.
+- The coverage report exists, is scoped to the marked classes, and enforces nothing.
 - `tests/AGENTS.md` reflects the new integration-test boundary.
 - `LICENSES.md` records `Aspire.Hosting.Testing`.
 - `docs/operations/` documents how to run the suite locally and what it leaves behind.

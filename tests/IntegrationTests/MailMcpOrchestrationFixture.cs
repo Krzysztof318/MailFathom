@@ -41,13 +41,19 @@ public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
     /// <inheritdoc />
     public async ValueTask InitializeAsync()
     {
-        using var startupCancellation = new CancellationTokenSource(StartupTimeout);
+        // Linked rather than a bare timeout, so a run cancelled during the image pull, the server start, or the
+        // migration stops there instead of holding its container until the ten minutes elapse. The two reasons stay
+        // distinguishable: the run's own token reports cancellation, and only this source reports a timeout.
+        using var startupCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+        startupCancellation.CancelAfter(StartupTimeout);
+
         var cancellationToken = startupCancellation.Token;
 
-        // The argument reaches the app host's own command-line configuration, which is what selects the ephemeral
-        // container and volume names and leaves the host project unstarted.
+        // The one argument that selects the ephemeral container and volume names and leaves the host project unstarted.
+        // Deliberately an argument: the app model refuses to read it from ambient configuration.
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.AppHost>(
-            [$"{OrchestrationContract.IntegrationTestingConfigurationKey}=true"],
+            [OrchestrationContract.IntegrationTestingArgument],
             cancellationToken);
 
         this.application = await builder.BuildAsync(cancellationToken);

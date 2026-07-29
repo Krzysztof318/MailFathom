@@ -1,15 +1,16 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.AppHost;
-using Microsoft.Extensions.Configuration;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
 // The integration-test suite starts this same app model, so the two shapes are selected here rather than duplicated in
 // a second app host: a developer's orchestration keeps its data across restarts, and a test run keeps nothing.
-var runsIntegrationTests = builder.Configuration.GetValue(
-    OrchestrationContract.IntegrationTestingConfigurationKey,
-    false);
+//
+// Read from the argument list rather than from builder.Configuration, which also binds environment variables. An
+// IntegrationTesting variable left in a shell or a CI environment would otherwise put an ordinary run on the fixed-name
+// ephemeral database and leave its volume under the prefix the test script deletes.
+var runsIntegrationTests = args.Contains(OrchestrationContract.IntegrationTestingArgument, StringComparer.Ordinal);
 
 var postgres = builder.AddPostgres(OrchestrationContract.PostgresResourceName)
     .WithImage("pgvector/pgvector")
