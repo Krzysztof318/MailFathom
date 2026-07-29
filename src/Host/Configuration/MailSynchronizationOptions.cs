@@ -46,10 +46,22 @@ internal sealed class MailSynchronizationOptions : IValidatableObject, IMailTran
 
     /// <summary>Gets or sets the maximum number of characters one message's body contributes to its indexed text.</summary>
     /// <remarks>
+    /// <para>
     /// The upper bound of the range is what keeps the generated search vector inside PostgreSQL's one-megabyte limit
-    /// once the subject and the participant addresses sharing that document are counted too.
+    /// once the subject and the participant addresses sharing that document are counted too. It is a value the
+    /// arithmetic supports rather than a round number: a <c>tsvector</c> spends four bytes of entry header, the lexeme
+    /// itself, and four bytes of position data per distinct word, so text of single-character words separated by single
+    /// spaces — the shape that maximizes entries — costs about 4.5 bytes of vector per character of input. The subject
+    /// and participant copies take about 101,000 of the 1,048,575 available bytes at their own ceilings, which leaves
+    /// roughly 210,000 characters of body; 200,000 keeps a margin.
+    /// </para>
+    /// <para>
+    /// The bound matters because the vector is a generated column computed on every insert. Exceeding the limit would
+    /// not degrade search: it would make the row unwritable, exhaust the retry budget, and stop the folder the message
+    /// arrived in on every later run.
+    /// </para>
     /// </remarks>
-    [Range(1_000, 500_000)]
+    [Range(1_000, 200_000)]
     public int MaxExtractedTextCharacters { get; set; } = 100_000;
 
     /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>

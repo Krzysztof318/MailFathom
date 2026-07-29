@@ -163,6 +163,43 @@ public sealed class EmailBodyTextExtractionTests
         Assert.Null(text.OriginalText);
     }
 
+    /// <summary>
+    /// An encrypted attachment says nothing about whether this message's own body can be read. Reading the summary's
+    /// marker instead of the body's would discard a body its author wrote and can see.
+    /// </summary>
+    [Fact]
+    public async Task ReadMetadataAsync_EncryptedAttachmentBesideAReadableBody_StillExtractsTheBody()
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "From: anna@example.test",
+            "Subject: Forwarding a sealed message",
+            "Content-Type: multipart/mixed; boundary=\"mix\"",
+            string.Empty,
+            "--mix",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            "Here is the sealed message you asked for.",
+            "--mix",
+            "Content-Type: application/pkcs7-mime; smime-type=enveloped-data; name=\"smime.p7m\"",
+            "Content-Disposition: attachment; filename=\"smime.p7m\"",
+            string.Empty,
+            "MIIBsealed",
+            "--mix--");
+
+        // Act
+        var result = await CreateReader(new EmailMimeExtractionOptions())
+            .ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        Assert.NotNull(result.Metadata);
+        Assert.Equal(ExtractedEmailTextSource.PlainTextBodyPart, result.Metadata.Text.Source);
+        Assert.Equal("Here is the sealed message you asked for.", result.Metadata.Text.TrimmedText);
+
+        // The summary keeps its own meaning: the message does carry encrypted content, and a mailbox filter asks that.
+        Assert.True(result.Metadata.Attachments.IsEncrypted);
+    }
+
     /// <summary>A message whose body says nothing is a complete record, and it must not look like an encrypted one.</summary>
     [Fact]
     public async Task ReadMetadataAsync_MessageWithoutATextualBody_RecordsNoTextualBody()
@@ -256,6 +293,40 @@ public sealed class EmailBodyTextExtractionTests
         // Assert
         Assert.Equal("Please handle this one.", text.TrimmedText);
         Assert.Contains("The invoice is overdue.", text.OriginalText, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The topmost marker is the outermost one. Cutting at the innermost would index every forwarded message above it
+    /// as though its text belonged to this one.
+    /// </summary>
+    [Fact]
+    public async Task ReadMetadataAsync_ForwardedChain_TrimsFromTheOutermostMarker()
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "From: anna@example.test",
+            "Subject: FW: FW: Invoice",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            "Passing this along.",
+            string.Empty,
+            "-----Original Message-----",
+            "From: bob@example.test",
+            string.Empty,
+            "Bob forwarded this to me.",
+            string.Empty,
+            "-----Original Message-----",
+            "From: carol@example.test",
+            string.Empty,
+            "Carol wrote the invoice.");
+
+        // Act
+        var text = await ExtractTextAsync(content);
+
+        // Assert
+        Assert.Equal("Passing this along.", text.TrimmedText);
+        Assert.DoesNotContain("Bob forwarded this to me.", text.TrimmedText, StringComparison.Ordinal);
+        Assert.Contains("Carol wrote the invoice.", text.OriginalText, StringComparison.Ordinal);
     }
 
     /// <summary>A message that is nothing but a quoted block is a message whose whole content is that block.</summary>

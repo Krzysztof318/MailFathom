@@ -9,9 +9,16 @@ namespace MailMcp.Infrastructure.Mail.Mime;
 
 /// <summary>Derives the searchable text of one message from the parts its structure resolved as the body.</summary>
 /// <remarks>
+/// <para>
 /// A genuine <c>text/plain</c> part is preferred over every HTML alternative, because it is what the sender wrote
 /// rather than a reading of how it was displayed. HTML is used only when the message offered no plain-text alternative,
 /// and the result is marked lossy so nothing downstream treats the two as the same evidence.
+/// </para>
+/// <para>
+/// The character bound is applied while the text is accumulated rather than after it exists, so a message far below
+/// <c>MaxRawMimeBytes</c> but far above the text bound costs the bound rather than the body. One copy of each body part
+/// is still decoded by the MIME library before this sees it, which is what <c>MaxRawMimeBytes</c> bounds.
+/// </para>
 /// </remarks>
 internal static class EmailBodyTextExtractor
 {
@@ -27,17 +34,20 @@ internal static class EmailBodyTextExtractor
         // An encrypted body is present and unreadable rather than absent. Recording it as empty would make it
         // indistinguishable from a message that genuinely said nothing, and the difference is the whole reason the
         // marker exists: one is a complete record, the other a permanent gap in search.
-        if (classification.Attachments.IsEncrypted)
+        //
+        // The body-specific marker is read rather than the summary's, which also answers for an encrypted attachment.
+        // A readable message that forwards an encrypted one would otherwise have the body its author wrote discarded.
+        if (classification.BodyIsEncrypted)
         {
             return ExtractedEmailText.EncryptedBody;
         }
 
-        if (ReadPlainTextBody(classification.BodyTextParts) is { } plainText)
+        if (ReadPlainTextBody(classification.BodyTextParts, maxCharacters) is { } plainText)
         {
             return Build(plainText, maxCharacters, ExtractedEmailText.FromPlainTextBody);
         }
 
-        if (DeriveTextFromHtmlBody(classification.BodyTextParts) is { } derivedText)
+        if (DeriveTextFromHtmlBody(classification.BodyTextParts, maxCharacters) is { } derivedText)
         {
             return Build(derivedText, maxCharacters, ExtractedEmailText.DerivedFromHtmlBody);
         }
@@ -45,13 +55,14 @@ internal static class EmailBodyTextExtractor
         return ExtractedEmailText.NoTextualBody;
     }
 
-    /// <summary>Turns one source's raw text into the pair the index and a later reader each need.</summary>
+    /// <summary>Turns one source's accumulated text into the pair the index and a later reader each need.</summary>
     private static ExtractedEmailText Build(
-        string rawText,
+        string boundedText,
         int maxCharacters,
         Func<string, string, ExtractedEmailText> describe)
     {
-        var originalText = BoundLength(NormalizeForIndexing(rawText), maxCharacters);
+        // The accumulation already stopped at the bound, so this only cuts back to a text-element boundary.
+        var originalText = MailTextBounds.TruncateAtTextElementBoundary(boundedText, maxCharacters).TrimEnd();
         if (originalText.Length == 0)
         {
             return ExtractedEmailText.NoTextualBody;
@@ -61,55 +72,103 @@ internal static class EmailBodyTextExtractor
     }
 
     /// <summary>Reads the plain-text body, joining the parts when a message resolved several as its body.</summary>
-    private static string? ReadPlainTextBody(IReadOnlyList<TextPart> bodyTextParts)
+    private static string? ReadPlainTextBody(IReadOnlyList<TextPart> bodyTextParts, int maxCharacters)
     {
         var plainTextParts = bodyTextParts.Where(part => part.IsPlain).ToArray();
+        if (plainTextParts.Length == 0)
+        {
+            return null;
+        }
 
-        return plainTextParts.Length == 0
-            ? null
-            : string.Join('\n', plainTextParts.Select(part => part.Text));
+        var body = new StringBuilder();
+        foreach (var part in plainTextParts)
+        {
+            if (body.Length > 0 && !AppendNormalized(body, "\n", maxCharacters))
+            {
+                break;
+            }
+
+            if (!AppendNormalized(body, part.Text, maxCharacters))
+            {
+                break;
+            }
+        }
+
+        return body.ToString().Trim();
     }
 
     /// <summary>Derives text from the HTML body parts, which is only reached when no plain-text alternative exists.</summary>
-    private static string? DeriveTextFromHtmlBody(IReadOnlyList<TextPart> bodyTextParts)
+    private static string? DeriveTextFromHtmlBody(IReadOnlyList<TextPart> bodyTextParts, int maxCharacters)
     {
         var htmlParts = bodyTextParts.Where(part => part.IsHtml).ToArray();
+        if (htmlParts.Length == 0)
+        {
+            return null;
+        }
 
-        return htmlParts.Length == 0
-            ? null
-            : string.Join('\n', htmlParts.Select(part => HtmlBodyTextReader.ReadDisplayedText(part.Text)));
+        var body = new StringBuilder();
+        foreach (var part in htmlParts)
+        {
+            if (body.Length > 0 && !AppendNormalized(body, "\n", maxCharacters))
+            {
+                break;
+            }
+
+            // The reader stops at the same bound, so the derivation never builds a string proportional to the markup.
+            if (!AppendNormalized(body, HtmlBodyTextReader.ReadDisplayedText(part.Text, maxCharacters), maxCharacters))
+            {
+                break;
+            }
+        }
+
+        return body.ToString().Trim();
     }
 
-    /// <summary>Reduces a body to the characters an index and a reader can both carry.</summary>
+    /// <summary>Appends what an index and a reader can both carry, and reports whether room is left for more.</summary>
     /// <remarks>
     /// Line endings are unified so the trimming rules see one line structure whichever platform wrote the message.
     /// Control characters other than the line break and the tab are removed rather than kept: no body displays them,
     /// PostgreSQL rejects a null byte in a text value outright, and a message could otherwise place one in the middle
-    /// of a word and make it unmatchable by any query.
+    /// of a word and make it unmatchable by any query. Normalizing during the append is what keeps the bound a bound on
+    /// work rather than only on the result.
     /// </remarks>
-    private static string NormalizeForIndexing(string bodyText)
+    private static bool AppendNormalized(StringBuilder body, string source, int maxCharacters)
     {
-        var unifiedLineEndings = bodyText
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n');
+        var previousWasCarriageReturn = false;
 
-        var normalized = new StringBuilder(unifiedLineEndings.Length);
-        foreach (var character in unifiedLineEndings)
+        foreach (var character in source)
         {
-            if (!char.IsControl(character) || character is '\n' or '\t')
+            if (body.Length >= maxCharacters)
             {
-                normalized.Append(character);
+                return false;
             }
+
+            switch (character)
+            {
+                case '\r':
+                    body.Append('\n');
+                    break;
+
+                case '\n' when previousWasCarriageReturn:
+                    break;
+
+                case '\n':
+                case '\t':
+                    body.Append(character);
+                    break;
+
+                default:
+                    if (!char.IsControl(character))
+                    {
+                        body.Append(character);
+                    }
+
+                    break;
+            }
+
+            previousWasCarriageReturn = character == '\r';
         }
 
-        return normalized.ToString().Trim();
+        return body.Length < maxCharacters;
     }
-
-    /// <summary>Cuts an over-long body at a boundary that leaves it a valid string.</summary>
-    /// <remarks>
-    /// What is cut is lost to search rather than lost outright, because the raw MIME the text came from stays stored
-    /// beside it and a later design can re-derive from it under a larger bound.
-    /// </remarks>
-    private static string BoundLength(string bodyText, int maxCharacters) =>
-        MailTextBounds.TruncateAtTextElementBoundary(bodyText, maxCharacters).TrimEnd();
 }

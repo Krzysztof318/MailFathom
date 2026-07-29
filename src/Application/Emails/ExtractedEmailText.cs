@@ -21,6 +21,15 @@ public enum ExtractedEmailTextSource
 
     /// <summary>The body arrived inside a cryptographic envelope, so no text could be read from it here.</summary>
     EncryptedBody = 3,
+
+    /// <summary>Extraction never ran for this message, so its body has contributed nothing either way.</summary>
+    /// <remarks>
+    /// This is the state of a message whose raw MIME was never stored because it exceeded the size limit, and of one
+    /// whose stored MIME no reader could parse. It is never the source of an <see cref="ExtractedEmailText" />, which
+    /// only ever describes a message something did read; it exists so such a message is still indexed on what its
+    /// envelope reported instead of being findable by nothing at all.
+    /// </remarks>
+    BodyNotExtracted = 4,
 }
 
 /// <summary>Carries the searchable text derived from one message's body, or the reason there is none.</summary>

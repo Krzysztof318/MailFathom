@@ -21,6 +21,15 @@ namespace MailMcp.Application.Emails;
 /// </remarks>
 public sealed class StoredEmailExtractionBackfill
 {
+    /// <summary>How many characters of extracted text one batch may hold before it commits what it has.</summary>
+    /// <remarks>
+    /// Roughly sixteen megabytes of UTF-16 once both the trimmed and the untrimmed reading of each message are counted.
+    /// It is a constant rather than a setting because it bounds this operation's memory rather than describing a
+    /// deployment: an operator tuning the batch size is choosing how much progress an interrupted run loses, and should
+    /// not have to know that the choice also multiplies with the text bound.
+    /// </remarks>
+    private const int MaximumRetainedTextCharactersPerBatch = 4_000_000;
+
     private readonly IStoredEmailExtractionBackfillStore backfillStore;
     private readonly IEmailContentStore contentStore;
     private readonly IEmailMimeReader mimeReader;
@@ -88,16 +97,20 @@ public sealed class StoredEmailExtractionBackfill
 
             var batchOutcome = await this.ReadBatchAsync(batch, cancellationToken);
 
-            await this.CommitBatchAsync(batchOutcome.Extractions, batch[^1].StoredEmailId, cancellationToken);
+            await this.CommitBatchAsync(
+                batchOutcome.Extractions,
+                batchOutcome.LastProcessedEmailId,
+                cancellationToken);
 
-            position = batch[^1].StoredEmailId;
+            position = batchOutcome.LastProcessedEmailId;
             extractedCount += batchOutcome.Extractions.Count;
             unreadableCount += batchOutcome.UnreadableEmailCount;
             missingContentCount += batchOutcome.MissingContentEmailCount;
 
-            // A short batch means the query found no more work behind this position, so the walk is complete even
-            // though this run still had batches left in its budget.
-            emailsRemain = batch.Count == this.options.BatchSize;
+            // A short batch means the query found no more work behind this position; a batch the text budget cut short
+            // leaves the rest of its own emails behind. Either way the walk continues only while something is left.
+            emailsRemain = batch.Count == this.options.BatchSize
+                || batchOutcome.ProcessedEmailCount < batch.Count;
             if (!emailsRemain)
             {
                 break;
@@ -111,7 +124,14 @@ public sealed class StoredEmailExtractionBackfill
             emailsRemain);
     }
 
-    /// <summary>Re-reads every email of one batch outside any transaction, so no session is held open across the reads.</summary>
+    /// <summary>Re-reads a batch's emails outside any transaction, stopping early once it is holding enough text.</summary>
+    /// <remarks>
+    /// The batch size bounds how many emails one commit covers; it does not bound how much text they hold, and the two
+    /// ceilings multiply. A batch of the largest permitted size whose emails all carry the largest permitted body would
+    /// otherwise be held in memory in full — twice over, because the untrimmed reading is retained beside the trimmed
+    /// one — before anything was committed. The character budget bounds that product without making either setting
+    /// depend on the other, and the emails it leaves behind are simply the next batch's.
+    /// </remarks>
     private async Task<BatchReadOutcome> ReadBatchAsync(
         IReadOnlyList<StoredEmailAwaitingExtraction> batch,
         CancellationToken cancellationToken)
@@ -119,9 +139,22 @@ public sealed class StoredEmailExtractionBackfill
         var extractions = new List<CompletedExtraction>(batch.Count);
         var missingContentCount = 0;
         var unreadableCount = 0;
+        var retainedCharacterCount = 0;
+        var processedCount = 0;
+        var lastProcessedEmailId = batch[0].StoredEmailId;
 
         foreach (var email in batch)
         {
+            // Checked before the read and never before the first one, so a single email larger than the whole budget
+            // still makes progress instead of stalling the walk on itself forever.
+            if (processedCount > 0 && retainedCharacterCount >= MaximumRetainedTextCharactersPerBatch)
+            {
+                break;
+            }
+
+            processedCount++;
+            lastProcessedEmailId = email.StoredEmailId;
+
             var rawMime = await this.contentStore.FindRawMimeAsync(email.StoredEmailId, cancellationToken);
             if (rawMime is not { } storedMime)
             {
@@ -139,6 +172,7 @@ public sealed class StoredEmailExtractionBackfill
             if (extraction.Metadata is { } metadata)
             {
                 extractions.Add(new CompletedExtraction(email.StoredEmailId, metadata));
+                retainedCharacterCount += RetainedCharacterCount(metadata);
             }
             else
             {
@@ -146,8 +180,17 @@ public sealed class StoredEmailExtractionBackfill
             }
         }
 
-        return new BatchReadOutcome(extractions, unreadableCount, missingContentCount);
+        return new BatchReadOutcome(
+            extractions,
+            unreadableCount,
+            missingContentCount,
+            processedCount,
+            lastProcessedEmailId);
     }
+
+    /// <summary>Counts the characters one completed extraction keeps alive until its batch commits.</summary>
+    private static int RetainedCharacterCount(ExtractedEmailMetadata metadata) =>
+        (metadata.Text.OriginalText?.Length ?? 0) + (metadata.Text.TrimmedText?.Length ?? 0);
 
     /// <summary>Commits one batch's extractions together with the position they reached.</summary>
     private Task CommitBatchAsync(
@@ -180,11 +223,15 @@ public sealed class StoredEmailExtractionBackfill
     /// <remarks>
     /// The two rejected counts stay apart because they ask the operator different questions: one is a message nobody
     /// can parse, the other a row whose raw MIME another operation removed while this run was walking towards it.
+    /// The last processed identity is carried rather than taken from the end of the batch, because the text budget can
+    /// stop a batch short and committing the batch's last identity would then step over emails nobody read.
     /// </remarks>
     private sealed record BatchReadOutcome(
         IReadOnlyList<CompletedExtraction> Extractions,
         int UnreadableEmailCount,
-        int MissingContentEmailCount);
+        int MissingContentEmailCount,
+        int ProcessedEmailCount,
+        StoredEmailId LastProcessedEmailId);
 }
 
 /// <summary>Summarizes one bounded run of the extraction backfill.</summary>

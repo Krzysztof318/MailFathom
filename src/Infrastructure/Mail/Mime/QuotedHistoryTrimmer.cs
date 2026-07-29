@@ -63,14 +63,15 @@ internal static partial class QuotedHistoryTrimmer
     [GeneratedRegex(@"^\s{0,8}(On|Am|Le|El|Il)\b.{0,300}\b(wrote|schrieb|a écrit|escribió|ha scritto)\s*:\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 200)]
     private static partial Regex QuoteAttributionLine();
 
-    /// <summary>Finds the first line of a trailing forwarded-message block, or nothing when the text carries none.</summary>
+    /// <summary>Finds the first line of the forwarded-message block, or nothing when the text carries none.</summary>
     /// <remarks>
-    /// Only the last such marker is honored, so a forwarded chain that carries several is cut once, at the outermost
-    /// one, and everything a person wrote above it survives.
+    /// The topmost marker is the outermost one, and it is the one honored: everything below it belongs to the messages
+    /// being forwarded rather than to this one. Honoring the last marker instead would cut only the innermost message
+    /// out of a forwarded chain and index every message above it as though its text were this message's own.
     /// </remarks>
     private static int? FindFirstOriginalMessageMarkerLine(string[] lines)
     {
-        var markerLine = LastIndexWhere(lines, line => OriginalMessageMarker().IsMatch(line));
+        var markerLine = FirstIndexWhere(lines, line => OriginalMessageMarker().IsMatch(line));
 
         return markerLine >= 0 ? markerLine : null;
     }
@@ -140,6 +141,15 @@ internal static partial class QuotedHistoryTrimmer
 
         return separatorLine;
     }
+
+    /// <summary>Reports the first position a predicate accepts, or <c>-1</c> when it accepts none.</summary>
+    private static int FirstIndexWhere(IEnumerable<string> lines, Func<string, bool> predicate) =>
+        lines
+            .Select((line, position) => (Line: line, Position: position))
+            .Where(candidate => predicate(candidate.Line))
+            .Select(candidate => candidate.Position)
+            .DefaultIfEmpty(-1)
+            .First();
 
     /// <summary>Reports the last position a predicate accepts, or <c>-1</c> when it accepts none.</summary>
     private static int LastIndexWhere(IEnumerable<string> lines, Func<string, bool> predicate) =>

@@ -53,11 +53,19 @@ internal static class HtmlBodyTextReader
 
     /// <summary>Reads the words an HTML body displays, with its block structure reduced to line breaks.</summary>
     /// <param name="html">The HTML body source.</param>
+    /// <param name="maxCharacters">The greatest number of characters to read out of the markup.</param>
     /// <returns>The derived text, which is empty when the body displayed nothing.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="html" /> is <see langword="null" />.</exception>
-    public static string ReadDisplayedText(string html)
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maxCharacters" /> is not positive.</exception>
+    /// <remarks>
+    /// The bound stops the tokenizer rather than trimming what it produced, so the work a crafted body can demand is
+    /// proportional to the bound instead of to the markup. It applies to the text as read, before the whitespace a
+    /// document's layout carries is collapsed, so heavily formatted markup yields somewhat less than the bound.
+    /// </remarks>
+    public static string ReadDisplayedText(string html, int maxCharacters)
     {
         ArgumentNullException.ThrowIfNull(html);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxCharacters);
 
         using var htmlReader = new StringReader(html);
         var tokenizer = new HtmlTokenizer(htmlReader)
@@ -70,7 +78,7 @@ internal static class HtmlBodyTextReader
         var derivedText = new StringBuilder();
         var suppressedElement = (HtmlTagId?)null;
 
-        while (tokenizer.ReadNextToken(out var token))
+        while (derivedText.Length < maxCharacters && tokenizer.ReadNextToken(out var token))
         {
             switch (token)
             {

@@ -170,6 +170,59 @@ public sealed class StoredEmailExtractionBackfillTests
         Assert.All(store.AppliedExtractions, extraction => Assert.Same(store.CommittedSessions[0], extraction.Session));
     }
 
+    /// <summary>
+    /// The batch size bounds emails and the extraction bound bounds characters; the two multiply, and a batch of the
+    /// largest permitted messages would be held whole before anything committed. The character budget cuts the batch
+    /// short instead, and what it leaves behind is simply the next batch's.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_BatchHoldingMoreTextThanTheBudget_CommitsWhatItHasAndLeavesTheRest()
+    {
+        // Arrange
+        var awaiting = EmailsAwaitingExtraction(4);
+        var store = new FakeBackfillStore(awaiting);
+        var contentStore = CreateContentStoreWithReadableMime();
+        var backfill = CreateBackfill(
+            store,
+            contentStore,
+            CreateReaderThatExtractsEverything(bodyText: new string('a', 2_000_001)),
+            batchSize: 4,
+            maxBatchesPerRun: 1);
+
+        // Act
+        var result = await backfill.RunAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.ExtractedEmailCount);
+        Assert.True(result.EmailsRemain);
+
+        // The position is the last email actually read, not the last the query offered, so nothing is stepped over.
+        Assert.Equal(awaiting[0].StoredEmailId, store.SavedResumePosition);
+    }
+
+    /// <summary>A single message larger than the whole budget still makes progress rather than stalling the walk.</summary>
+    [Fact]
+    public async Task RunAsync_SingleEmailLargerThanTheBudget_IsStillExtracted()
+    {
+        // Arrange
+        var awaiting = EmailsAwaitingExtraction(1);
+        var store = new FakeBackfillStore(awaiting);
+        var contentStore = CreateContentStoreWithReadableMime();
+        var backfill = CreateBackfill(
+            store,
+            contentStore,
+            CreateReaderThatExtractsEverything(bodyText: new string('a', 4_000_001)),
+            batchSize: 4);
+
+        // Act
+        var result = await backfill.RunAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.ExtractedEmailCount);
+        Assert.False(result.EmailsRemain);
+        Assert.Equal(awaiting[0].StoredEmailId, store.SavedResumePosition);
+    }
+
     /// <summary>A cancelled run stops rather than finishing the batch budget it was given.</summary>
     [Fact]
     public async Task RunAsync_CancelledCaller_StopsTheRun()
@@ -225,7 +278,7 @@ public sealed class StoredEmailExtractionBackfillTests
         return contentStore;
     }
 
-    private static IEmailMimeReader CreateReaderThatExtractsEverything()
+    private static IEmailMimeReader CreateReaderThatExtractsEverything(string bodyText = "Body")
     {
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
@@ -238,7 +291,7 @@ public sealed class StoredEmailExtractionBackfillTests
                 Participants: [],
                 EmailThreadReferences.None,
                 EmailAttachmentSummary.None,
-                ExtractedEmailText.FromPlainTextBody("Body", "Body")))));
+                ExtractedEmailText.FromPlainTextBody(bodyText, bodyText)))));
 
         return mimeReader;
     }
