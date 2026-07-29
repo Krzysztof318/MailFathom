@@ -91,8 +91,8 @@ The canonical skills are:
 
 - `start-task` requires a clean workspace or an explicitly approved inventory
   and preservation plan, identifies or creates the GitHub issue that governs the
-  task, then loads the applicable specification, documentation, and ADR context
-  before edits;
+  task and places it on the board, then loads the applicable specification,
+  documentation, and ADR context before edits;
 - `review-change` performs a findings-first diff review and records verification
   status and residual risks, and reruns the fast loop only when something has
   invalidated its last green run;
@@ -103,8 +103,11 @@ The canonical skills are:
   references its issue with `Closes #<issue>`.
 
 Root `AGENTS.md` holds the issue rules themselves: which work needs an issue,
-what an issue body contains, the labels, and which board transitions belong to
-the project automation rather than to an agent.
+what an issue body contains, the `type:*` label it carries, the `Track`, `Queue`
+and `Size` fields that place it on the board, the milestone that scopes it to a
+release, and which board transitions belong to the project automation rather
+than to an agent. Placing an issue is part of opening it, because the built-in
+workflows set `Status` and nothing else.
 
 Skills live under `.agents/skills/`. Claude Code consumes the same directory
 through the relative symlink `.claude/skills -> ../.agents/skills`; do not copy

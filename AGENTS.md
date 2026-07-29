@@ -167,7 +167,20 @@ Add a mechanically checkable rule to the mechanism, not to this file: a severity
 
 ## Issue tracking and the roadmap board
 
-Work is tracked as GitHub issues on the `MailMcp roadmap` project board, which is the owner's view of progress. The board reflects the repository; it never becomes a second source of truth. `specs/` remains authoritative for what a change must do, and an issue links to its specification instead of restating it.
+Work is tracked as GitHub issues on the `MailMcp roadmap` project board (project number `4`, owner `Krzysztof318`), which is the owner's view of progress. The board reflects the repository; it never becomes a second source of truth. `specs/` remains authoritative for what a change must do, and an issue links to its specification instead of restating it.
+
+This repository is worked by agents. Issues are opened, filled in, labeled, placed on the board, and closed by an agent rather than by a person, so the conventions below are the whole mechanism rather than a description of one. Nothing here is tidied up afterwards by hand: an issue that arrives without its label and its board fields simply stops being visible in the views the owner reads. Apply every rule in this section as part of opening the issue, decide the values from the rules given, and state in the task brief what was set. Ask the owner only where a rule below says the choice is theirs.
+
+### Four questions, four mechanisms
+
+Each question has exactly one owner, and no mechanism answers a question another one already answers. Adding a second mechanism for a question that already has one is the failure mode this structure exists to prevent.
+
+| Question | Mechanism | Decided by |
+|---|---|---|
+| What kind of work is this? | A `type:*` label | the rules under **Labels** |
+| Which release does it ship in? | The milestone | the rules under **Milestones** |
+| Where is it in its lifecycle? | The board's `Status` field | the built-in board workflows, never by hand |
+| What is being worked next, and what is deliberately not being worked? | The board's `Queue` field | the rules under **Board fields**, with `Next` reserved to the owner |
 
 ### The issue that governs a change
 
@@ -182,12 +195,53 @@ Work is tracked as GitHub issues on the `MailMcp roadmap` project board, which i
 - Every issue body carries two or three user stories and a condensed acceptance list. A specification issue additionally opens with a header block naming the roadmap group, the draft delivery stage, a link to the specification file, the issues it depends on, and the estimated change size.
 - Do not copy specification text into an issue. The specification is the contract, and a duplicated copy goes stale silently.
 - Express dependencies as issue references so the board shows them as links. Specification dependencies always point backwards to lower-numbered specifications.
-- Never add dates, day estimates, sprints, or iteration fields. The owner works alone at irregular times, so the board records order and status only.
+- Never add dates, day estimates, sprints, or iteration fields. The owner works alone at irregular times, so the board records order and status only. The `Size` field is not an exception: it estimates a diff, not a duration.
+- Use sub-issues only when the parent is itself a delivery gate that several issues have to clear, such as the first release checklist. Thematic grouping belongs to the `Track` field, so a parent issue opened only to group work creates a second hierarchy next to the roadmap.
 
 ### Labels
 
-- Label a specification issue `spec` plus its roadmap group, `roadmap:A` through `roadmap:E`.
-- Label an issue that records already-completed work `shipped`, and close it as completed when you create it.
+Every issue carries exactly one `type:*` label and nothing else is required. The type is a property of the work, so it is chosen when the issue is opened and then left alone; it does not track progress.
+
+| Label | Use it for |
+|---|---|
+| `type:spec` | Work backed by a numbered specification under `specs/` |
+| `type:feature` | A production-code change with no numbered specification: a feature, a refactor, or hardening |
+| `type:defect` | Something already implemented behaves incorrectly |
+| `type:decision` | Work that cannot be scoped until an ADR is written or a measurement is taken, so it waits on a decision rather than on effort |
+| `type:docs` | Documentation only: `docs/`, `README`, specification prose, ADR text |
+| `type:workflow` | Repository tooling, CI, verification scripts, the release process, and this workflow contract |
+| `type:infra` | Orchestration, database wiring, telemetry, build and packaging plumbing |
+
+`type:decision` is the one that carries weight. It marks work only the owner can unblock, and the `Decisions` view is read as a queue of debt. Do not apply it to an issue whose own deliverable is the decision — that work is actionable, and the label would hide it among the things that are not.
+
+The remaining labels are flags, applied only when they are true: `blocked` when an issue waits on something outside itself, `security` when a change needs a security review before it merges, and `good first issue` or `help wanted` once the repository is public. `shipped` is historical, marking the six issues written retrospectively for work that predates the roadmap; never apply it to new work.
+
+### Milestones
+
+A milestone answers which release an issue ships in, and nothing else. An issue with no milestone is deliberately outside the current release rather than merely unsorted, which is what makes the absence of one meaningful.
+
+`0.1.0 — first public release` is the release checklist under #112 and the read side that makes the product usable: mailbox query read models, the email content read model, lexical search, the three MCP tools, and one baseline migration on a settled schema. Assign it to a new issue when the release as described cannot ship without that issue, and leave it empty otherwise; both are decisions the rule already makes, so neither needs asking. Widening what `0.1.0` means is the owner's call, so raise it rather than assigning a milestone that stretches the definition. Do not open a further milestone in advance; the next one is created when the current release closes.
+
+### Board fields
+
+The board carries three single-select fields beyond `Status`. Set `Track` on every issue. Set `Queue` on every open issue. Leave `Size` empty until the work is planned.
+
+- **`Track`** groups every item, including work with no specification. `A` through `E` are the roadmap groups from `specs/README.md`. `Release` is work a public release cannot ship without, `Platform` is repository tooling and cross-cutting concerns that no roadmap group owns, and `Future capabilities` is beyond the current roadmap segment.
+- **`Queue`** is the ordering signal, and a new issue takes one of its three lower values without asking. `Later` is the default: accepted scope not yet started. `Needs decision` is correct when the issue's own scope cannot be written until an ADR or a measurement lands, and it pairs with `type:decision`. `Parked` records a review outcome or a side question that carries no commitment to act. `Next` is the owner's alone: it means ready to start now, at most five items hold it at once, and the limit is the point of the field, so a sixth candidate is a proposal about which of the five drops back to `Later`.
+- **`Size`** records the estimate the specification already states, in changed lines including tests and documentation: `S` under 300, `M` about 600, `L` about 1000, `XL` too large for one pull request and to be split before it starts.
+
+The built-in workflows set `Status` and nothing else, so a newly opened issue reaches the board with no `Track` and no `Queue` and surfaces in the `Triage` view. Setting both is part of opening the issue:
+
+```bash
+gh project field-list 4 --owner Krzysztof318 --format json   # field ids and option ids
+gh project item-list  4 --owner Krzysztof318 --format json   # item id for the issue
+gh project item-edit --project-id <project-id> --id <item-id> \
+  --field-id <field-id> --single-select-option-id <option-id>
+```
+
+### Views
+
+`Now` is `Queue: Next` grouped by `Status`, and it is the view the owner works from. `Roadmap` is everything open grouped by `Track`. `Release 0.1.0` is the milestone. `Decisions` is the open `type:decision` issues. `Triage` lists open items with no `Queue` value and is expected to be empty; an item sitting there means an issue was opened without being placed.
 
 ### Linking a pull request to its issue
 
@@ -201,8 +255,9 @@ Work is tracked as GitHub issues on the `MailMcp roadmap` project board, which i
 
 ### Status transitions
 
-- The board's `Status` field has `Todo`, `In progress`, and `Done`.
-- The board's built-in workflows own every transition: `Auto-add to project` and `Item added to project` place a newly opened issue in `Todo`, `Pull request linked to issue` moves it to `In progress`, and `Pull request merged`, `Auto-close issue`, and `Item closed` carry it to `Done`. Do not set those statuses by hand; a manual status that contradicts the automation hides the real state.
+- The board's `Status` field has `Todo`, `In Progress`, and `Done`.
+- The board's built-in workflows own every transition: `Auto-add to project` and `Auto-add sub-issues to project` place a newly opened issue on the board, `Item added to project` puts it in `Todo`, `Pull request linked to issue` moves it to `In Progress`, and `Pull request merged`, `Auto-close issue`, and `Item closed` carry it to `Done`. Do not set those statuses by hand; a manual status that contradicts the automation hides the real state.
+- `Status` records what has happened and `Queue` records what is intended, which is why neither substitutes for the other. Work that stalls keeps whatever `Status` the automation gave it and moves to `Later` or `Parked` in `Queue`.
 - Automation does not add an issue that is already closed when it is created. Add a retrospective `shipped` issue to the board explicitly and set it to `Done`.
 - When work stops without merging, say so on the issue and leave the status to the automation rather than moving the card.
 

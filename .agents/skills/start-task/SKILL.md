@@ -16,7 +16,8 @@ description: Use when beginning repository work that may edit files, change depe
 5. Classify the task as a numbered roadmap specification, maintenance outside the roadmap, or documentation-only work.
 6. Read the selected specification, affected implemented-behavior documentation, and relevant ADRs.
 7. Identify the GitHub issue that governs the task. Create it when none exists, following the issue rules in root `AGENTS.md`; its body draws on the specification read in the previous step. A change set that adds a numbered specification also creates that specification's issue.
-8. For dependency, CLI, protocol, service, or external API changes, consult current official documentation and flag licensing review.
+8. Place the issue. It carries exactly one `type:*` label, a `Track` and a `Queue` value on the board, a milestone when the rule in root `AGENTS.md` assigns one, and a `Size` value once the work is planned. Decide each from the rules rather than asking, except `Queue: Next`, which is the owner's. Verify the values landed, because the built-in workflows set `Status` and nothing else, and an unplaced issue disappears from the views the owner reads.
+9. For dependency, CLI, protocol, service, or external API changes, consult current official documentation and flag licensing review.
 
 Return:
 
@@ -24,6 +25,7 @@ Return:
 Workspace: <safe or blocked, branch, base>
 Scope: <specification or maintenance classification>
 Issue: <number and title, or created with reason>
+Placement: <type label, Track, Queue, milestone or none, Size or deferred>
 Required context: <files read>
 Assumptions or blockers: <none or explicit list>
 Verification: <fast loop and final gate>

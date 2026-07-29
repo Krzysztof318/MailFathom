@@ -24,6 +24,8 @@ Do not proceed while a gate fails.
 5. Create a draft pull request whose body contains `Closes #<issue>` for the issue the change completes. Never mark it ready unless the owner explicitly asks.
 6. Confirm the reference is present in the published body. `gh pr edit` fails against this repository with a Projects-classic GraphQL error and silently drops the edit, so correct a missing reference through `gh api repos/<owner>/<repo>/pulls/<number> -X PATCH -f body=...`.
 
+Confirm the issue is still placed: exactly one `type:*` label, a `Track` and a `Queue` value on the board, and a milestone if the release rule assigns one. A change that grew past what the issue described may have outgrown its placement too.
+
 Leave the board's `Status` field to the project automation. Set a status by hand only for an issue created already closed, which the automation does not add.
 
 Report:
@@ -37,6 +39,7 @@ Commit: <hash and subject>
 Push: <remote branch>
 Draft PR: <URL>
 Issue link: <Closes #N confirmed in the published body>
+Placement: <type label, Track, Queue, milestone or none>
 ```
 
 Never claim completion without fresh evidence for every line.
