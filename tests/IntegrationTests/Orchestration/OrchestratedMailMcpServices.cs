@@ -88,6 +88,28 @@ internal sealed class OrchestratedMailMcpServices : IAsyncDisposable
         return await work(scope.ServiceProvider, cancellationToken);
     }
 
+    /// <summary>Runs one write in its own scope and session, and commits it the way a use case does.</summary>
+    /// <param name="write">The repository calls that join the session.</param>
+    /// <param name="cancellationToken">Cancels the write and the commit.</param>
+    /// <returns>What the commit reported, so a caller can assert a conflict rather than only a success.</returns>
+    /// <remarks>
+    /// The session is disposed after the commit, which is the ordering a use case uses: a committed or conflicted
+    /// session rolls nothing back, and a write that threw is rolled back by that disposal.
+    /// </remarks>
+    internal Task<PersistenceCommitResult> CommitAsync(
+        Func<IServiceProvider, IPersistenceSession, CancellationToken, Task> write,
+        CancellationToken cancellationToken) => this.InScopeAsync(
+            async (scope, token) =>
+            {
+                await using var session = await scope.GetRequiredService<IPersistenceSessionFactory>()
+                    .BeginSessionAsync(token);
+
+                await write(scope, session, token);
+
+                return await session.CommitAsync(token);
+            },
+            cancellationToken);
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {

@@ -81,7 +81,7 @@ A message can carry no usable received timestamp, and PostgreSQL orders nulls fi
 
 The tiebreaker compares identifiers as the sixteen big-endian octets PostgreSQL orders a `uuid` column by, written out rather than delegated to `Guid.CompareTo`. That method agrees with the octet order on the current runtime, but it documents only that its result is suitable for sorting — not that it is the order a `uuid` column uses. A page boundary computed in memory is resumed from by a query the index plans, so the tiebreaker has to be the index's order by construction.
 
-Unit tests pin the contract, including where an undated message lands. Whether PostgreSQL then plans a timeline query against these indexes is an integration question that [specification 20](../../specs/20-aspire-integration-test-foundation.md) answers.
+Unit tests pin the contract, including where an undated message lands. That the server then returns rows in the same order, and plans a timeline query against the index rather than sorting the table, is verified against real PostgreSQL — see [What the integration suite proves](#what-the-integration-suite-proves) below.
 
 ## Privacy classification
 
@@ -96,3 +96,18 @@ One reviewed migration, `Initial`, creates all of it. There is no bootstrap that
 Locally the AppHost's `mailmcp-migrations` resource applies it before the host starts. Elsewhere applying it is an explicit deployment step. [Local development](../operations/local-development.md) documents both, and the `add-migration` skill documents how the baseline is regenerated while MailMcp is pre-release.
 
 `uid_validity` and `uid` are modelled as CLR `uint` because that is the IMAP wire type, and PostgreSQL has no native unsigned 32-bit integer. The generated migration maps both to `bigint`, which represents the whole unsigned 32-bit range exactly, so the unique index on `(mail_folder_id, uid_validity, uid)` and the checkpoint comparisons order the same way the IMAP values do.
+
+Table names are the snake_case ones above. Column names are not: the model renames tables and leaves columns as it names the properties, so the physical columns are `"UidValidity"`, `"ReceivedAt"`, and so on, and hand-written SQL against them has to quote that casing. The names in this page are the schema's concepts rather than a transcription of the DDL; the migration is the transcription.
+
+## What the integration suite proves
+
+Every claim on this page that is a claim about PostgreSQL rather than about the model is verified by `tests/IntegrationTests` against the orchestrated server, because a unit test cannot reach any of them. The classes involved carry `[RequiresIntegrationCoverage]` for exactly that reason, and [local development](../operations/local-development.md) describes how the suite runs.
+
+- The baseline migration applies to an empty database and leaves no migration pending, and the text search configuration the generated column was built with is read back out of PostgreSQL's own catalogue rather than from the model — which is what lets the startup gate refuse a database whose lexical index disagrees with the running host.
+- The unique index refuses a duplicate occurrence that neither writer could have seen, which is the PostgreSQL-side half of idempotent synchronization: two overlapping runs each stage an insert, and the database rather than the application decides that only one lands.
+- An occurrence identified by the largest UID IMAP can hand out round-trips through its `bigint` columns unchanged.
+- Raw MIME round-trips through `bytea` with its recorded length and SHA-256 intact, including a payload large enough that PostgreSQL stores it out of line, and re-storing an occurrence replaces the one existing row rather than reading its payload back into memory.
+- The transaction a persistence session opens covers SQL the provider had already executed: a set-based update issued and then abandoned without a commit leaves the earlier payload in place.
+- A losing writer is reported rather than raised where the constraint says a race happened — a second binding of the same alias generation, and a stored email whose `xmin` token another committed transaction made stale — and is raised where it says the data is already there.
+- The timeline indexes return rows in the order `EmailTimelinePosition.NewestFirst` describes, over data with shared and absent timestamps, and a keyset walk over that order visits every row exactly once. The `uuid` tiebreaker is the part only a server can settle.
+- The generated search vector is computed by PostgreSQL from the subject, participants, and body beside it; the GIN index serves the query shape search issues; and query text carrying SQL statements and `tsquery` operators is read as words, matching documents whose text holds those words and leaving the table intact.
