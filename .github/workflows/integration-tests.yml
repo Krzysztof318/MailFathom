@@ -53,16 +53,29 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json') }}
 
       # The same script a developer runs, so the suite has one way to be started rather than two that
-      # can drift. It restores, builds, removes anything a previous run left behind, and runs the
-      # suite. Docker is present on GitHub-hosted Ubuntu runners, which is what the orchestration
-      # needs; `dotnet-ef` is fetched by the migration resource itself and needs no install here.
+      # can drift. It restores tools and packages, builds, removes anything a previous run left behind,
+      # runs the suite, and reports coverage over the classes marked [RequiresIntegrationCoverage].
+      # Docker is present on GitHub-hosted Ubuntu runners, which is what the orchestration needs;
+      # `dotnet-ef` is fetched by the migration resource itself and needs no install here.
       - name: Run integration tests
-        run: bash scripts/run-integration-tests.sh --report-xunit-trx --results-directory artifacts/integration-tests
+        run: bash scripts/run-integration-tests.sh
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: integration-test-results
-          path: 'artifacts/integration-tests/**/*.trx'
+          path: 'artifacts/integration-tests/raw/**/*.trx'
+          if-no-files-found: ignore
+
+      # Uploaded, never enforced. The report says how far the suite has got through the classes that
+      # carry the marker; the only coverage threshold this repository has is the unit-test one.
+      - name: Upload integration coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-coverage
+          path: |
+            artifacts/integration-tests/raw/**/*.cobertura*.xml
+            artifacts/integration-tests/report/**
           if-no-files-found: ignore

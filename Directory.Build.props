@@ -75,14 +75,20 @@
     <TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --ignore-exit-code 8</TestingPlatformCommandLineArguments>
   </PropertyGroup>
 
+  <ItemGroup Condition="'$(IsIntegrationTestProject)' == 'true'">
+    <!-- The same collector as the unit suites, pointed at the opposite scope by the project's own testconfig.json. Its
+         report is informational and separate: it never merges into the aggregate the 85% gate reads, and it enforces no
+         threshold of its own. -->
+    <PackageReference Include="coverlet.MTP" PrivateAssets="all" />
+  </ItemGroup>
+
   <PropertyGroup Condition="'$(IsIntegrationTestProject)' == 'true'">
     <!-- A solution-wide `dotnet test` discovers its test projects by this property, which xunit.v3 otherwise sets, so
          opting out is what keeps a suite that needs Docker and a PostgreSQL container out of the fast loop and out of
-         the coverage gate. It is also what keeps that gate working at all: the collection run passes a Coverlet
-         argument to every discovered executable, and this one deliberately carries no collector, so being discovered
-         would fail the whole run on an unrecognized option. The project stays in the solution regardless, so it is
-         built, analyzed, and formatted by exactly the same gates as everything else; scripts/run-integration-tests.sh
-         is what runs it. -->
+         the coverage gate. Being discovered would also feed this suite's coverage into the aggregate that gate
+         enforces, which is exactly the mixing the two scopes exist to prevent. The project stays in the solution
+         regardless, so it is built, analyzed, and formatted by exactly the same gates as everything else;
+         scripts/run-integration-tests.sh is what runs it. -->
     <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
   </PropertyGroup>
 </Project>

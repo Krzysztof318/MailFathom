@@ -17,7 +17,7 @@ The test project targets xUnit v3 on Microsoft Testing Platform v2, matching the
 
 The app model gains a second topology rather than a second app host. Started with the argument `IntegrationTesting=true`, it names its container and volume with a shared `mailmcp-integrationtests` prefix instead of taking Aspire's random postfix and the path-derived volume name, so that a run killed rather than shut down leaves resources one filtered command removes; and it marks the MailMcp host project `WithExplicitStart`, so the resource stays in the model — the migration resource is defined on it and the connection string is issued to it — without a second MailMcp synchronizing mail underneath the data a test is asserting on.
 
-The suite runs on request and nowhere else. `IsTestingPlatformApplication` is `false` for the project, which is what a solution-wide `dotnet test` uses to discover test projects, so neither the fast loop nor the coverage gate finds it; the project stays in `MailMcp.slnx`, so build, analyzers, and formatting still cover it. `scripts/run-integration-tests.sh` is what starts it, and the GitHub workflow is manual dispatch only.
+The suite runs on request and nowhere else. `IsTestingPlatformApplication` is `false` for the project, which is what a solution-wide `dotnet test` uses to discover test projects, so neither the fast loop nor the coverage gate finds it and neither can absorb its coverage; the project stays in `MailMcp.slnx`, so build, analyzers, and formatting still cover it. `scripts/run-integration-tests.sh` is what starts it, and the GitHub workflow is manual dispatch only.
 
 ## Delivery
 
@@ -47,7 +47,9 @@ Test fixtures use synthetic mail data only. No real mailbox, real credential, or
 
 ## Testing
 
-The suite is the test. Its own acceptance is that it fails when the schema or an index is wrong, and that it does not run as part of the unit-test gate, so the fast inner loop stays fast. It collects no coverage at all: unit tests stay the only source of that metric, so an expensive suite never has to run to know whether the gate passes, and integration coverage can never mask missing unit coverage. The GitHub workflow is a separate, manually dispatched one rather than a job on the pull-request build.
+The suite is the test. Its own acceptance is that it fails when the schema or an index is wrong, and that it does not run as part of the unit-test gate, so the fast inner loop stays fast. The GitHub workflow is a separate, manually dispatched one rather than a job on the pull-request build.
+
+It reports coverage of its own, over the classes marked `[RequiresIntegrationCoverage]` and nothing else, so the number reads as progress through the debt this suite exists to pay off. That report enforces no threshold and never merges into the aggregate the 85% gate reads: unit tests stay the only source of an enforced metric, so an expensive suite never has to run to know whether the gate passes and integration coverage can never mask missing unit coverage. The filter is derived from the marker rather than kept as a second list, and a class that gains real coverage loses its marker in the same change, leaving this report and rejoining the unit denominator.
 
 ## Out of scope
 
