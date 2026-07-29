@@ -11,19 +11,20 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <UnitTestProject Include="$(RepositoryRoot)tests/**/*.csproj" />
+    <TestProject Include="$(RepositoryRoot)tests/**/*.csproj" />
   </ItemGroup>
 
   <Target Name="Collect">
     <RemoveDir Directories="$(CoverageArtifactsDirectory)" />
     <MakeDir Directories="$(RawCoverageDirectory)" />
 
-    <Error Condition="'@(UnitTestProject)' == ''"
-           Text="No unit-test projects were found under $(RepositoryRoot)tests." />
+    <Error Condition="'@(TestProject)' == ''"
+           Text="No test projects were found under $(RepositoryRoot)tests." />
 
     <!-- The item above discovers what exists on disk; the run below executes what the solution
-         lists. A test project missing from MailMcp.slnx would disappear from the gate silently and
-         take its coverage with it, so the mismatch fails here instead. Project file names are
+         lists. A test project missing from MailMcp.slnx would disappear from every gate silently —
+         from this one and its coverage for a unit suite, and from the build and formatting checks
+         for the integration suite — so the mismatch fails here instead. Project file names are
          compared rather than paths, because a solution cannot hold two projects of the same name
          and the comparison then survives the directory-separator differences between the recorded
          solution paths and the globbed item identities. -->
@@ -33,12 +34,12 @@
 
     <ItemGroup>
       <SolutionProjectFileName Include="@(SolutionProjectPath->'%(Filename)%(Extension)')" />
-      <UnlistedUnitTestProject Include="@(UnitTestProject->'%(Filename)%(Extension)')"
-                               Exclude="@(SolutionProjectFileName)" />
+      <UnlistedTestProject Include="@(TestProject->'%(Filename)%(Extension)')"
+                           Exclude="@(SolutionProjectFileName)" />
     </ItemGroup>
 
-    <Error Condition="'@(UnlistedUnitTestProject)' != ''"
-           Text="These unit-test projects exist under $(RepositoryRoot)tests but are missing from MailMcp.slnx, so the solution-wide run would skip them and their coverage: @(UnlistedUnitTestProject, ', ')." />
+    <Error Condition="'@(UnlistedTestProject)' != ''"
+           Text="These test projects exist under $(RepositoryRoot)tests but are missing from MailMcp.slnx, so the solution-wide run would skip them: @(UnlistedTestProject, ', ')." />
 
     <!-- One solution-wide run rather than an Exec batched over the test projects, which MSBuild
          executes one item at a time: eight sequential processes cost about 50 seconds here against

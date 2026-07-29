@@ -1,0 +1,14 @@
+{
+  "platformOptions": {
+    "Coverlet": {
+      "Include": "[MailMcp.*]*",
+      "Exclude": "[MailMcp.Host]*,[MailMcp.AppHost]*,[MailMcp.IntegrationTests]*,[coverlet.*]*,[xunit.*]*,[Microsoft.Testing.*]*,[Microsoft.TestPlatform.*]*,[Microsoft.VisualStudio.TestPlatform.*]*,[testhost*]*",
+      "ExcludeByAttribute": "ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,GeneratedCodeAttribute",
+      "ExcludeByFile": "**/Persistence/Migrations/*.cs",
+      "Format": "cobertura",
+      "IncludeTestAssembly": false,
+      "DeterministicReport": true,
+      "ExcludeAssembliesWithoutSources": "MissingAll"
+    }
+  }
+}
