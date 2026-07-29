@@ -1,21 +1,29 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using System.Data.Common;
+using System.Text.RegularExpressions;
 using MailMcp.Application.Persistence;
 using MailMcp.CodeCoverage;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailMcp.Infrastructure.Persistence;
 
-/// <summary>Reads the migration history through EF Core and compares it against the migrations this build defines.</summary>
+/// <summary>Reads the migration history and the schema facts a build cannot infer from its own model.</summary>
 /// <remarks>
-/// The comparison is between the assembly's compiled migration set and the rows in the history table, so it answers
-/// what this build expects rather than what the model currently describes. A model change with no migration behind it
-/// is therefore invisible here by design; catching that is the reviewer's job when the migration is generated.
+/// The migration comparison is between the assembly's compiled migration set and the rows in the history table, so it
+/// answers what this build expects rather than what the model currently describes. A model change with no migration
+/// behind it is therefore invisible there by design; catching that is the reviewer's job when the migration is
+/// generated. The text search configuration is read from the catalogue instead, because the identifiers are identical
+/// whichever configuration a migration was generated from.
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class EfCoreDatabaseSchemaInspector(MailMcpDbContext dbContext) : IDatabaseSchemaInspector
+internal sealed partial class EfCoreDatabaseSchemaInspector(MailMcpDbContext dbContext) : IDatabaseSchemaInspector
 {
+    /// <summary>The table and column the generated search vector lives in, as the model maps them.</summary>
+    private const string SearchDocumentTableName = "email_search_documents";
+
+    private const string SearchVectorColumnName = "SearchVector";
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<string>> ReadPendingMigrationIdentifiersAsync(CancellationToken cancellationToken)
     {
@@ -34,4 +42,57 @@ internal sealed class EfCoreDatabaseSchemaInspector(MailMcpDbContext dbContext) 
                 exception);
         }
     }
+
+    /// <inheritdoc />
+    public async Task<string?> ReadSearchVectorTextSearchConfigurationAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            // information_schema reports the expression PostgreSQL stored for the generated column, which is the
+            // configuration the lexemes in that column were actually built with. Both identifiers are compile-time
+            // constants of this assembly rather than anything a caller supplies.
+            var generationExpressions = await dbContext.Database
+                .SqlQueryRaw<string?>(
+                    """
+                    SELECT generation_expression AS "Value"
+                    FROM information_schema.columns
+                    WHERE table_schema = current_schema()
+                      AND table_name = {0}
+                      AND column_name = {1}
+                    """,
+                    SearchDocumentTableName,
+                    SearchVectorColumnName)
+                .ToArrayAsync(cancellationToken);
+
+            var generationExpression = generationExpressions.FirstOrDefault();
+
+            return generationExpression is null
+                ? null
+                : ReadRegisteredConfigurationName(generationExpression);
+        }
+        catch (Exception exception) when (exception is DbException or InvalidOperationException)
+        {
+            throw new DatabaseSchemaStateUnreadableException(
+                "The PostgreSQL column catalogue could not be read, so the text search configuration the lexical index was built with is unknown. Check that the database is reachable and that the configured user may read the schema catalogue.",
+                exception);
+        }
+    }
+
+    /// <summary>Extracts the configuration name from a stored <c>to_tsvector</c> expression.</summary>
+    /// <param name="generationExpression">The expression PostgreSQL reports for the generated column.</param>
+    /// <returns>The configuration name, or <see langword="null" /> when the expression names none.</returns>
+    /// <remarks>
+    /// PostgreSQL normalizes the first argument to a <c>regconfig</c> literal when it stores the expression, so the
+    /// name is matched from that literal rather than from whatever the migration wrote. An expression that carries no
+    /// such literal is reported as unknown rather than guessed at.
+    /// </remarks>
+    private static string? ReadRegisteredConfigurationName(string generationExpression)
+    {
+        var match = RegisteredConfigurationPattern().Match(generationExpression);
+
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
+    [GeneratedRegex("'([^']+)'::regconfig", RegexOptions.CultureInvariant)]
+    private static partial Regex RegisteredConfigurationPattern();
 }

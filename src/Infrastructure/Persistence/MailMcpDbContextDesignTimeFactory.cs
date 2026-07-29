@@ -37,17 +37,35 @@ internal sealed class MailMcpDbContextDesignTimeFactory : IDesignTimeDbContextFa
     /// <remarks>It carries no password, so a design-time default can never become a credential in source control.</remarks>
     internal const string LocalDevelopmentConnectionString = "Host=localhost;Database=mailmcp;Username=mailmcp";
 
-    /// <inheritdoc />
+    /// <summary>The environment variable the text search configuration a migration is generated for is read from.</summary>
     /// <remarks>
-    /// The default text search configuration is used, because design time has no deployment to read one from. A
-    /// deployment that configures another one therefore differs from the generated migration in exactly one place —
-    /// the search vector's expression — and applying that migration is what fixes the configuration for its data.
+    /// It is the double-underscore encoding of <c>Persistence:TextSearchConfiguration</c>, so a deployment that
+    /// configures a non-default configuration generates its migration by exporting the setting it already has rather
+    /// than by learning a second name for it.
     /// </remarks>
+    internal const string TextSearchConfigurationVariableName = "Persistence__TextSearchConfiguration";
+
+    /// <inheritdoc />
     public MailMcpDbContext CreateDbContext(string[] args) => new(
         BuildOptions(
             Environment.GetEnvironmentVariable(OrchestratedConnectionStringVariableName),
             Environment.GetEnvironmentVariable(DesignTimeConnectionStringVariableName)),
-        PostgresTextSearchConfiguration.Default);
+        ReadTextSearchConfiguration(Environment.GetEnvironmentVariable(TextSearchConfigurationVariableName)));
+
+    /// <summary>Resolves the text search configuration the generated migration compiles into the search vector.</summary>
+    /// <param name="configuredName">The configured name, or <see langword="null" /> when the variable is unset.</param>
+    /// <returns>The configured configuration, or the default when none is set.</returns>
+    /// <exception cref="ArgumentException">Thrown when a name is set but is not one MailMcp supports.</exception>
+    /// <remarks>
+    /// The value is compiled into a stored generated column, so a migration is generated for exactly one configuration
+    /// and cannot serve another. Reading it here is what lets a deployment that configures one produce a migration
+    /// that agrees with it; the host verifies the two against the live schema at startup regardless, because a
+    /// migration identifier is the same whichever configuration produced it.
+    /// </remarks>
+    internal static PostgresTextSearchConfiguration ReadTextSearchConfiguration(string? configuredName) =>
+        string.IsNullOrWhiteSpace(configuredName)
+            ? PostgresTextSearchConfiguration.Default
+            : PostgresTextSearchConfiguration.Create(configuredName);
 
     /// <summary>Builds the design-time options from the first connection string that is present.</summary>
     /// <param name="orchestratedConnectionString">What the orchestration issued, or <see langword="null" /> outside it.</param>

@@ -16,6 +16,16 @@ from `docs/operations/local-development.md`.
 ## Preconditions
 
 - Docker is running, and the model change is already saved and compiles.
+- A deployment that configures a non-default `Persistence:TextSearchConfiguration` exports it before step 5, because
+  the value is compiled into the search vector's stored generated column and the migration is generated for exactly
+  one configuration:
+
+  ```bash
+  export Persistence__TextSearchConfiguration=english
+  ```
+
+  The host compares the configured value against the live schema at startup and refuses to run on a mismatch, so
+  skipping this produces a startup failure rather than a silently wrong index.
 - Never run `dotnet ef` by hand. Every command below goes through the orchestration, so it uses the connection string
   the AppHost issues rather than one written by hand.
 - Work from the repository root.

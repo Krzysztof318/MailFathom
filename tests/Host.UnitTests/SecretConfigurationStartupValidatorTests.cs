@@ -3,6 +3,7 @@
 using MailMcp.Domain.Transport;
 using MailMcp.Host.Configuration;
 using MailMcp.Host.Hosting;
+using MailMcp.Infrastructure;
 using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
@@ -14,6 +15,9 @@ namespace MailMcp.Host.UnitTests;
 
 public sealed class SecretConfigurationStartupValidatorTests
 {
+    private static readonly DatabaseCommandTimeout DefaultCommandTimeout =
+        new(TimeSpan.FromSeconds(HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds));
+
     [Fact]
     public async Task StartingAsync_EveryReferenceResolvable_CompletesSoHostedServicesMayStart()
     {
@@ -250,6 +254,40 @@ public sealed class SecretConfigurationStartupValidatorTests
         Assert.Contains("needs a schema change and a restart", failure, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The timeout is written into the EF Core context options during composition and nothing reapplies it, so a
+    /// reloaded value would be reported as adopted while every command kept the bound the process started with.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_CommandTimeoutOtherThanTheOneCompositionUsed_IsRefused()
+    {
+        // Arrange
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions { CommandTimeoutSeconds = HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds + 1 });
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("Persistence:CommandTimeoutSeconds", failure, StringComparison.Ordinal);
+        Assert.Contains("needs a restart", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartingAsync_CommandTimeoutMatchingComposition_IsAccepted()
+    {
+        // Arrange
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions { CommandTimeoutSeconds = HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds });
+
+        // Act, Assert
+        await harness.Validator.StartingAsync(CancellationToken.None);
+    }
+
     [Fact]
     public async Task StartingAsync_UnsupportedTextSearchConfiguration_IsRefusedAsUnsupportedRatherThanAsAChange()
     {
@@ -308,6 +346,7 @@ public sealed class SecretConfigurationStartupValidatorTests
                 new DatabaseConnectionSettingsMapper(new ConfigurationBuilder().Build()),
                 connectionSettingsValidator,
                 PostgresTextSearchConfiguration.Default,
+                DefaultCommandTimeout,
                 validationLogger),
             new SecretResolutionOptions(interpretation),
             startupLogger);

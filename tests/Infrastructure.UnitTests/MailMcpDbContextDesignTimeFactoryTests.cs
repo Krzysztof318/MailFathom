@@ -56,6 +56,34 @@ public sealed class MailMcpDbContextDesignTimeFactoryTests
     }
 
     [Fact]
+    public void ReadTextSearchConfiguration_NoneConfigured_UsesTheDefaultTheModelWouldUse()
+    {
+        // Act
+        var configuration = MailMcpDbContextDesignTimeFactory.ReadTextSearchConfiguration(null);
+
+        // Assert
+        Assert.Equal(PostgresTextSearchConfiguration.Default.Value, configuration.Value);
+    }
+
+    [Fact]
+    public void ReadTextSearchConfiguration_DeploymentConfiguredOne_GeneratesTheMigrationForIt()
+    {
+        // Act
+        var configuration = MailMcpDbContextDesignTimeFactory.ReadTextSearchConfiguration("english");
+
+        // Assert
+        Assert.Equal("english", configuration.Value);
+    }
+
+    [Fact]
+    public void ReadTextSearchConfiguration_UnsupportedName_FailsRatherThanCompilingItIntoTheSchema()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() =>
+            MailMcpDbContextDesignTimeFactory.ReadTextSearchConfiguration("klingon"));
+    }
+
+    [Fact]
     public void CreateDbContext_DesignTimeTooling_ProducesAUsableModelWithoutAHost()
     {
         // Arrange

@@ -2,6 +2,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailMcp.Application.Persistence;
+using MailMcp.Infrastructure.Persistence;
 
 namespace MailMcp.Host.Hosting;
 
@@ -29,41 +30,77 @@ namespace MailMcp.Host.Hosting;
 internal sealed partial class DatabaseSchemaStartupGate : IHostedService
 {
     private readonly IServiceScopeFactory scopeFactory;
+    private readonly PostgresTextSearchConfiguration configuredTextSearchConfiguration;
     private readonly ILogger<DatabaseSchemaStartupGate> logger;
 
     /// <summary>Initializes a new database schema startup gate.</summary>
     /// <param name="scopeFactory">Creates the scope the inspector is resolved from.</param>
+    /// <param name="configuredTextSearchConfiguration">The configuration the EF Core model was built from.</param>
     /// <param name="logger">The startup logger.</param>
     public DatabaseSchemaStartupGate(
         IServiceScopeFactory scopeFactory,
+        PostgresTextSearchConfiguration configuredTextSearchConfiguration,
         ILogger<DatabaseSchemaStartupGate> logger)
     {
         this.scopeFactory = scopeFactory;
+        this.configuredTextSearchConfiguration = configuredTextSearchConfiguration;
         this.logger = logger;
     }
 
     /// <inheritdoc />
     /// <exception cref="DatabaseSchemaOutOfDateException">Thrown when the database has not applied every migration this build defines.</exception>
-    /// <exception cref="DatabaseSchemaStateUnreadableException">Thrown when the migration history could not be read at all.</exception>
+    /// <exception cref="DatabaseSchemaStateUnreadableException">Thrown when the schema state could not be read at all.</exception>
+    /// <exception cref="DatabaseSchemaTextSearchConfigurationMismatchException">Thrown when the lexical index was built with another text search configuration.</exception>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         await using var scope = this.scopeFactory.CreateAsyncScope();
 
-        var pendingMigrations = await scope.ServiceProvider
-            .GetRequiredService<IDatabaseSchemaInspector>()
-            .ReadPendingMigrationIdentifiersAsync(cancellationToken);
+        var inspector = scope.ServiceProvider.GetRequiredService<IDatabaseSchemaInspector>();
 
-        if (pendingMigrations.Count is 0)
+        var pendingMigrations = await inspector.ReadPendingMigrationIdentifiersAsync(cancellationToken);
+
+        if (pendingMigrations.Count is not 0)
         {
-            this.LogSchemaCurrent();
+            throw new DatabaseSchemaOutOfDateException(
+                $"The database has not applied {pendingMigrations.Count} migration(s) this build defines: {string.Join(", ", pendingMigrations)}. "
+                + "Apply them through the AppHost's mailmcp-migrations resource locally, or as an explicit deployment step, and start the host again.",
+                pendingMigrations);
+        }
 
+        // Only once the migration set matches, because the column this reads does not exist until the migration that
+        // creates it has been applied.
+        await this.VerifyTheLexicalIndexMatchesTheConfigurationAsync(inspector, cancellationToken);
+
+        this.LogSchemaCurrent();
+    }
+
+    /// <summary>Fails startup when the search vector was built with a configuration this process is not configured for.</summary>
+    /// <remarks>
+    /// A migration is generated for one text search configuration and freezes it into a stored generated column, while
+    /// the migration identifier is the same whichever configuration produced it. Comparing identifiers therefore
+    /// cannot see this, and the consequence of missing it is silent: queries stemmed one way against lexemes built
+    /// another return fewer results rather than an error. An absent expression is left alone rather than treated as a
+    /// mismatch, because a schema with no such column says nothing about which configuration it would use.
+    /// </remarks>
+    private async Task VerifyTheLexicalIndexMatchesTheConfigurationAsync(
+        IDatabaseSchemaInspector inspector,
+        CancellationToken cancellationToken)
+    {
+        var schemaConfiguration = await inspector.ReadSearchVectorTextSearchConfigurationAsync(cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(schemaConfiguration)
+            || string.Equals(schemaConfiguration, this.configuredTextSearchConfiguration.Value, StringComparison.Ordinal))
+        {
             return;
         }
 
-        throw new DatabaseSchemaOutOfDateException(
-            $"The database has not applied {pendingMigrations.Count} migration(s) this build defines: {string.Join(", ", pendingMigrations)}. "
-            + "Apply them through the AppHost's mailmcp-migrations resource locally, or as an explicit deployment step, and start the host again.",
-            pendingMigrations);
+        throw new DatabaseSchemaTextSearchConfigurationMismatchException(
+            $"The lexical email index was built with the '{schemaConfiguration}' text search configuration, but this host is configured for "
+            + $"'{this.configuredTextSearchConfiguration.Value}'. Searching would stem queries one way and read lexemes built another, which returns "
+            + $"fewer results rather than an error. Set Persistence:TextSearchConfiguration to '{schemaConfiguration}', or apply a migration generated "
+            + $"for '{this.configuredTextSearchConfiguration.Value}' and rebuild the search documents.",
+            schemaConfiguration,
+            this.configuredTextSearchConfiguration.Value);
     }
 
     /// <inheritdoc />

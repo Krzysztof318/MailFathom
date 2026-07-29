@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Transport;
 using MailMcp.Host.Configuration;
+using MailMcp.Infrastructure;
 using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
@@ -270,6 +271,7 @@ public sealed class ValidatedSettingsSnapshotTests
             new DatabaseConnectionSettingsMapper(new ConfigurationBuilder().Build()),
             new StubDatabaseConnectionSettingsValidator(),
             PostgresTextSearchConfiguration.Default,
+            new DatabaseCommandTimeout(TimeSpan.FromSeconds(HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds)),
             new RecordingLogger<SecretConfigurationValidator>());
 
         var settings = new ValidatedSettingsSnapshot<MailSynchronizationOptions>(

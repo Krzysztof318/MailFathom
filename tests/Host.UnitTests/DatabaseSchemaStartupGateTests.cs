@@ -2,6 +2,7 @@
 
 using MailMcp.Application.Persistence;
 using MailMcp.Host.Hosting;
+using MailMcp.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -17,9 +18,7 @@ public sealed class DatabaseSchemaStartupGateTests
     public async Task StartAsync_EveryMigrationApplied_StartsSoTheWorkersMayRun()
     {
         // Arrange
-        var inspector = Substitute.For<IDatabaseSchemaInspector>();
-        inspector.ReadPendingMigrationIdentifiersAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<string>>([]));
+        var inspector = CreateCurrentSchemaInspector();
 
         // Act, Assert
         await CreateGate(inspector).StartAsync(CancellationToken.None);
@@ -60,9 +59,7 @@ public sealed class DatabaseSchemaStartupGateTests
     public async Task StartAsync_CallerCancelled_PropagatesTheTokenToTheInspector()
     {
         // Arrange
-        var inspector = Substitute.For<IDatabaseSchemaInspector>();
-        inspector.ReadPendingMigrationIdentifiersAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<string>>([]));
+        var inspector = CreateCurrentSchemaInspector();
         using var cancellation = new CancellationTokenSource();
 
         // Act
@@ -72,13 +69,84 @@ public sealed class DatabaseSchemaStartupGateTests
         await inspector.Received(1).ReadPendingMigrationIdentifiersAsync(cancellation.Token);
     }
 
-    private static DatabaseSchemaStartupGate CreateGate(IDatabaseSchemaInspector inspector)
+    [Fact]
+    public async Task StartAsync_LexicalIndexBuiltWithAnotherTextSearchConfiguration_FailsStartupNamingBoth()
+    {
+        // Arrange
+        var inspector = CreateCurrentSchemaInspector();
+        inspector.ReadSearchVectorTextSearchConfigurationAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("simple"));
+
+        // Act
+        var exception = await Assert.ThrowsAsync<DatabaseSchemaTextSearchConfigurationMismatchException>(() =>
+            CreateGate(inspector, PostgresTextSearchConfiguration.Create("english")).StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Equal("simple", exception.SchemaConfiguration);
+        Assert.Equal("english", exception.ConfiguredConfiguration);
+        Assert.Contains("simple", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("english", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartAsync_LexicalIndexMatchesTheConfiguration_Starts()
+    {
+        // Arrange
+        var inspector = CreateCurrentSchemaInspector();
+        inspector.ReadSearchVectorTextSearchConfigurationAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("english"));
+
+        // Act, Assert
+        await CreateGate(inspector, PostgresTextSearchConfiguration.Create("english")).StartAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StartAsync_SchemaCarriesNoSearchVectorExpression_StartsBecauseNothingContradictsTheConfiguration()
+    {
+        // Arrange
+        var inspector = CreateCurrentSchemaInspector();
+        inspector.ReadSearchVectorTextSearchConfigurationAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>(null));
+
+        // Act, Assert
+        await CreateGate(inspector).StartAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StartAsync_MigrationsPending_DoesNotReadTheLexicalIndexBecauseItsColumnNeedNotExistYet()
+    {
+        // Arrange
+        var inspector = Substitute.For<IDatabaseSchemaInspector>();
+        inspector.ReadPendingMigrationIdentifiersAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(["20260729_Initial"]));
+
+        // Act
+        await Assert.ThrowsAsync<DatabaseSchemaOutOfDateException>(() =>
+            CreateGate(inspector).StartAsync(CancellationToken.None));
+
+        // Assert
+        await inspector.DidNotReceive().ReadSearchVectorTextSearchConfigurationAsync(Arg.Any<CancellationToken>());
+    }
+
+    private static IDatabaseSchemaInspector CreateCurrentSchemaInspector()
+    {
+        var inspector = Substitute.For<IDatabaseSchemaInspector>();
+        inspector.ReadPendingMigrationIdentifiersAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>([]));
+
+        return inspector;
+    }
+
+    private static DatabaseSchemaStartupGate CreateGate(
+        IDatabaseSchemaInspector inspector,
+        PostgresTextSearchConfiguration? textSearchConfiguration = null)
     {
         var services = new ServiceCollection();
         services.AddScoped(_ => inspector);
 
         return new DatabaseSchemaStartupGate(
             services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+            textSearchConfiguration ?? PostgresTextSearchConfiguration.Default,
             NullLogger<DatabaseSchemaStartupGate>.Instance);
     }
 }

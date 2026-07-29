@@ -67,6 +67,9 @@ public readonly record struct MailMcpErrorCode
     /// <summary>Gets subcategory 2, schema state: the migration history could not be read, so the schema is of unknown shape.</summary>
     public static MailMcpErrorCode DatabaseSchemaStateUnreadable { get; } = new(32002);
 
+    /// <summary>Gets subcategory 2, schema state: the lexical index was built with a different text search configuration than the one configured.</summary>
+    public static MailMcpErrorCode DatabaseSchemaTextSearchConfigurationMismatch { get; } = new(32003);
+
     #endregion
 
     #region Category 4 — Outbound resilience
@@ -87,6 +90,7 @@ public readonly record struct MailMcpErrorCode
         PersistenceConcurrencyConflict,
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,
+        DatabaseSchemaTextSearchConfigurationMismatch,
         OutboundDependencyUnavailable,
     ];
 

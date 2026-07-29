@@ -30,4 +30,24 @@ public interface IDatabaseSchemaInspector
     /// never actually inspected.
     /// </remarks>
     Task<IReadOnlyList<string>> ReadPendingMigrationIdentifiersAsync(CancellationToken cancellationToken);
+
+    /// <summary>Reads the text search configuration the database compiled into the search vector's generated column.</summary>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The configuration name the schema actually uses, or <see langword="null" /> when the column or its expression could not be identified.</returns>
+    /// <exception cref="DatabaseSchemaStateUnreadableException">Thrown when the schema catalogue cannot be read at all.</exception>
+    /// <remarks>
+    /// <para>
+    /// The name is part of the schema rather than of a query: it decides how every indexed word is stemmed and which
+    /// words are dropped, and it is frozen into a stored generated column when the table is created. A migration is
+    /// therefore generated for one configuration and cannot be reused for another, and a running deployment that is
+    /// configured for a second one would query with stemming the stored lexemes were never built with — which shows up
+    /// as missing search results, not as an error.
+    /// </para>
+    /// <para>
+    /// Comparing migration identifiers cannot catch that, because the identifiers are the same either way. This reads
+    /// what PostgreSQL actually holds, so the answer does not depend on which configuration the migration was generated
+    /// from or on whether anyone remembered to regenerate it.
+    /// </para>
+    /// </remarks>
+    Task<string?> ReadSearchVectorTextSearchConfigurationAsync(CancellationToken cancellationToken);
 }

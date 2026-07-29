@@ -2,6 +2,7 @@
 
 using MailMcp.CodeCoverage;
 using MailMcp.Infrastructure.Persistence;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 namespace MailMcp.Infrastructure;
@@ -45,6 +46,11 @@ public static class HostApplicationBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(commandTimeout, TimeSpan.Zero);
+
+        // Published so a reloaded candidate can be compared against the value the context was actually built with. It
+        // is written into the context options here and nothing reapplies it, so a reload that changed it would
+        // otherwise be reported as adopted while every command kept the old bound.
+        builder.Services.AddSingleton(new DatabaseCommandTimeout(commandTimeout));
 
         builder.EnrichNpgsqlDbContext<MailMcpDbContext>(settings =>
         {
