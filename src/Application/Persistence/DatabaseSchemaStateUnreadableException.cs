@@ -14,8 +14,17 @@ namespace MailMcp.Application.Persistence;
 /// </para>
 /// <para>
 /// The message names the migration history and the reason class only. The provider's own text can carry a host name, a
-/// user name, and a database name, so it is preserved as <see cref="Exception.InnerException" /> for a local operator
-/// rather than restated in a message a boundary may publish.
+/// user name, and a database name, so it is preserved as <see cref="Exception.InnerException" /> rather than restated
+/// in a message an MCP or HTTP boundary may publish.
+/// </para>
+/// <para>
+/// The inner exception is deliberate and does reach a log, including an exported one: this failure ends the process
+/// during startup, and which server was unreachable and as which user is the whole content of the diagnosis. That is
+/// the division <see cref="MailMcpException" /> defines — the message is what a boundary may publish, the inner
+/// exception is diagnostic detail for a log — and it is compatible with the repository's logging rule, which forbids
+/// credentials, tokens, message bodies, attachment content, and raw MIME. A connection endpoint is none of those, it
+/// is infrastructure topology the operator configured, and Npgsql does not put the password in its text. Dropping it
+/// would leave an unreachable database reported only as "unreadable".
 /// </para>
 /// </remarks>
 public sealed class DatabaseSchemaStateUnreadableException : MailMcpException
