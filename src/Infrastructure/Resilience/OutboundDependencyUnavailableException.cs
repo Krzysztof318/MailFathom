@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Application.Resilience;
+using MailMcp.Domain.Failures;
 
 namespace MailMcp.Infrastructure.Resilience;
 
@@ -18,36 +19,20 @@ namespace MailMcp.Infrastructure.Resilience;
 /// refusing work.
 /// </para>
 /// </remarks>
-public sealed class OutboundDependencyUnavailableException : Exception
+public sealed class OutboundDependencyUnavailableException : MailMcpException
 {
-    /// <summary>Initializes a new dependency unavailability failure.</summary>
-    public OutboundDependencyUnavailableException()
-    {
-    }
-
-    /// <summary>Initializes a new dependency unavailability failure with a safe message.</summary>
-    public OutboundDependencyUnavailableException(string message)
-        : base(message)
-    {
-    }
-
-    /// <summary>Initializes a new dependency unavailability failure with a safe message and inner exception.</summary>
-    public OutboundDependencyUnavailableException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
-
     /// <summary>Initializes a new dependency unavailability failure naming the class whose limit was reached.</summary>
     /// <param name="dependency">The dependency class whose pipeline declined the operation.</param>
     /// <param name="rejection">The rejection the pipeline produced.</param>
     public OutboundDependencyUnavailableException(OutboundDependency dependency, Exception rejection)
         : base(
             $"Outbound dependency {dependency} declined the operation because a configured resilience limit was reached.",
-            rejection)
-    {
+            rejection) =>
         this.Dependency = dependency;
-    }
 
-    /// <summary>Gets the dependency class whose pipeline declined the operation, when available.</summary>
-    public OutboundDependency? Dependency { get; }
+    /// <inheritdoc />
+    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.OutboundDependencyUnavailable;
+
+    /// <summary>Gets the dependency class whose pipeline declined the operation.</summary>
+    public OutboundDependency Dependency { get; }
 }

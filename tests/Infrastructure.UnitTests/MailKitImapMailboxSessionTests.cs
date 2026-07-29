@@ -3,6 +3,7 @@
 using MailKit;
 using MailKit.Search;
 using MailKit.Security;
+using MailMcp.Application.EmailContent;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
@@ -363,11 +364,12 @@ public sealed class MailKitImapMailboxSessionTests
         var occurrenceId = CreateOccurrenceId(10);
 
         // Act
-        var content = await session.FetchEmailContentWithoutSettingSeenAsync(occurrenceId, 1024, CancellationToken.None);
+        var fetch = await session.FetchEmailContentWithoutSettingSeenAsync(occurrenceId, 1024, CancellationToken.None);
 
         // Assert
-        Assert.Equal(occurrenceId, content.OccurrenceId);
-        Assert.Equal(rawMime, content.RawMime.ToArray());
+        Assert.Equal(RemoteEmailContentFetchOutcome.Retrieved, fetch.Outcome);
+        Assert.Equal(occurrenceId, fetch.Content!.OccurrenceId);
+        Assert.Equal(rawMime, fetch.Content.RawMime.ToArray());
 
         // GetStreamAsync(uid) is MailKit's BODY.PEEK[] retrieval; StoreAsync is the only IMailFolder member able to change
         // flags, and a read-write reselection would let the server set \Seen implicitly.
@@ -377,7 +379,7 @@ public sealed class MailKitImapMailboxSessionTests
     }
 
     [Fact]
-    public async Task FetchEmailContentWithoutSettingSeenAsync_ContentStreamExceedsLimit_ThrowsMessageContentTooLarge()
+    public async Task FetchEmailContentWithoutSettingSeenAsync_ContentStreamExceedsLimit_ReportsTheSizeLimitWithoutContent()
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
@@ -388,14 +390,11 @@ public sealed class MailKitImapMailboxSessionTests
         var occurrenceId = CreateOccurrenceId(10);
 
         // Act
-        var exception = await Assert.ThrowsAsync<EmailContentTooLargeException>(() => session.FetchEmailContentWithoutSettingSeenAsync(
-            occurrenceId,
-            1024,
-            CancellationToken.None));
+        var fetch = await session.FetchEmailContentWithoutSettingSeenAsync(occurrenceId, 1024, CancellationToken.None);
 
         // Assert
-        Assert.Equal(occurrenceId, exception.OccurrenceId);
-        Assert.Equal(1024, exception.MaxAllowedOctets);
+        Assert.Equal(RemoteEmailContentFetchOutcome.ExceededSizeLimit, fetch.Outcome);
+        Assert.Null(fetch.Content);
         await folder.DidNotReceive().StoreAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IStoreFlagsRequest>(), Arg.Any<CancellationToken>());
     }
 

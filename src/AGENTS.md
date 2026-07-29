@@ -13,6 +13,17 @@ These instructions apply under `src/` in addition to the repository root instruc
 - Make retryable commands idempotent and carry an idempotency identity where duplicate execution could cause an external side effect.
 - Keep authorization close to the use case as well as at the transport boundary so alternate entrypoints cannot bypass it.
 
+## Failures
+
+These rules implement [ADR 0003](../docs/decisions/0003-first-party-exception-hierarchy-and-stable-error-codes.md), which records why they exist.
+
+- Derive every exception this system publishes from `MailMcpException` and give it a `MailMcpErrorCode`. A concrete public exception outside that hierarchy carries no identity a boundary can report, and the per-assembly hierarchy tests fail on one.
+- Keep an exception internal only when it is a control-flow signal between one implementation and its own caller and reaches no boundary. It then carries no code, because a code names something a boundary publishes, and it documents why it does not escape in the `CA1064` suppression that making it internal already requires. `MimeStructureLimitReachedException` is the worked example.
+- Allocate the code as five digits, `C S NNN`: category, subcategory, then the failure's number within that subcategory. Categories are 1 configuration and transport security, 2 mail protocol, 3 persistence, 4 outbound resilience, 5 the MCP boundary. Allocate a number once and never reuse or renumber it, the same way an enum member's value is never reordered.
+- Write the message for an operator to read. It must never carry a credential, a token, a certificate, a host name, a remote folder path, the mechanisms a server advertised, message content, or any other personal data. An account alias, a folder alias, a rule identity, a size, and a limit are permitted, because they are MailMcp's own configured names for things.
+- Declare only the constructors callers use, and keep every payload non-nullable. `CA1032` and `RCS1194` are both disabled, so nothing mandates a parameterless or message-only overload, and one added anyway would leave the payload degenerate. A property is nullable only where absence has its own domain meaning, which the remarks then state.
+- Prefer a result type when the immediate caller acts on the failure and continues, and raise an exception when the fact must travel through code that cannot decide what it means. `RemoteEmailContentFetchResult` and `PersistenceConcurrencyConflictException` are the two worked examples; a new failure states which one it follows and why.
+
 ## Asynchronous return types
 
 - Return `Task` or `Task<TResult>` from every asynchronous method unless a rule below applies. A reference-typed task is a single field, composes directly with `Task.WhenAll` and `Task.WhenAny`, and can be awaited, stored, and awaited again without care.

@@ -1,5 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailMcp.Domain.Failures;
+
 namespace MailMcp.Application.Persistence;
 
 /// <summary>Indicates that a local write did not commit because another writer changed the same durable state.</summary>
@@ -15,28 +17,15 @@ namespace MailMcp.Application.Persistence;
 /// decide what a conflict means catch it at a named boundary; everything in between propagates it unchanged.
 /// </para>
 /// </remarks>
-public sealed class PersistenceConcurrencyConflictException : Exception
+public sealed class PersistenceConcurrencyConflictException : MailMcpException
 {
-    private const string DefaultMessage = "A local write did not commit because another writer changed the same durable state.";
-
-    /// <summary>Initializes a new persistence concurrency conflict.</summary>
-    public PersistenceConcurrencyConflictException()
-        : base(DefaultMessage)
-    {
-    }
-
     /// <summary>Initializes a new persistence concurrency conflict with a message that names the conflicting write.</summary>
-    /// <param name="message">A message free of provider details, tracked values, and personal data.</param>
-    public PersistenceConcurrencyConflictException(string message)
-        : base(message)
+    /// <param name="operatorSafeMessage">A message free of provider details, tracked values, and personal data.</param>
+    public PersistenceConcurrencyConflictException(string operatorSafeMessage)
+        : base(operatorSafeMessage)
     {
     }
 
-    /// <summary>Initializes a new persistence concurrency conflict with a safe message and inner exception.</summary>
-    /// <param name="message">A message free of provider details, tracked values, and personal data.</param>
-    /// <param name="innerException">The failure that revealed the conflict.</param>
-    public PersistenceConcurrencyConflictException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
+    /// <inheritdoc />
+    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.PersistenceConcurrencyConflict;
 }

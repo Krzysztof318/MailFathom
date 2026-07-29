@@ -97,7 +97,7 @@ internal sealed class MailKitImapMailboxSession(
     }
 
     /// <inheritdoc />
-    public Task<RemoteEmailContent> FetchEmailContentWithoutSettingSeenAsync(
+    public Task<RemoteEmailContentFetchResult> FetchEmailContentWithoutSettingSeenAsync(
         EmailOccurrenceId occurrenceId,
         long maxRawMimeBytes,
         CancellationToken cancellationToken)
@@ -153,7 +153,7 @@ internal sealed class MailKitImapMailboxSession(
         return new RemoteEmailMetadataBatch(messages, ImapUid.Create(inspectedThroughUid), hasMore);
     }
 
-    private async Task<RemoteEmailContent> FetchRawMimeWithPeekAsync(
+    private async Task<RemoteEmailContentFetchResult> FetchRawMimeWithPeekAsync(
         IMailFolder openFolder,
         EmailOccurrenceId occurrenceId,
         long maxRawMimeBytes,
@@ -173,9 +173,12 @@ internal sealed class MailKitImapMailboxSession(
         await using var stream = await openFolder.GetStreamAsync(new UniqueId(occurrenceId.Uid.Value), cancellationToken);
         using var memory = new MemoryStream();
 
-        await CopyToMemoryWithLimitAsync(occurrenceId, stream, memory, maxRawMimeBytes, cancellationToken);
+        if (!await TryCopyWithinLimitAsync(stream, memory, maxRawMimeBytes, cancellationToken))
+        {
+            return RemoteEmailContentFetchResult.ExceededSizeLimit();
+        }
 
-        return new RemoteEmailContent(occurrenceId, memory.ToArray());
+        return RemoteEmailContentFetchResult.Retrieved(new RemoteEmailContent(occurrenceId, memory.ToArray()));
     }
 
     private static uint? GetHighestAssignedUid(UniqueId? uidNext)
@@ -188,8 +191,9 @@ internal sealed class MailKitImapMailboxSession(
         return uidNext.Value.Id - 1U;
     }
 
-    private static async Task CopyToMemoryWithLimitAsync(
-        EmailOccurrenceId occurrenceId,
+    /// <summary>Copies the payload, stopping as soon as it grows past the limit rather than buffering the rest of it.</summary>
+    /// <returns><see langword="true" /> when the whole payload fit within <paramref name="maxRawMimeBytes" />; otherwise <see langword="false" />.</returns>
+    private static async Task<bool> TryCopyWithinLimitAsync(
         Stream source,
         MemoryStream destination,
         long maxRawMimeBytes,
@@ -207,11 +211,13 @@ internal sealed class MailKitImapMailboxSession(
                 totalBytes += read;
                 if (totalBytes > maxRawMimeBytes)
                 {
-                    throw new EmailContentTooLargeException(occurrenceId, totalBytes, maxRawMimeBytes);
+                    return false;
                 }
 
                 await destination.WriteAsync(buffer[..read], cancellationToken);
             }
+
+            return true;
         }
         finally
         {

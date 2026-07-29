@@ -186,7 +186,7 @@ public sealed class TransientFailureClassifierTests
     public void IsTransientFailure_ConcurrencyConflict_IsTerminalForThePipeline()
     {
         // Arrange
-        var failure = new PersistenceConcurrencyConflictException();
+        var failure = new PersistenceConcurrencyConflictException("A competing writer changed the same rows.");
 
         // Act, Assert
         Assert.False(this.classifier.IsTransientFailure(OutboundDependency.DatabaseCommandExecution, failure));

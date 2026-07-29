@@ -1,0 +1,128 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+
+using System.Text.Json;
+using MailMcp.Domain.Failures;
+using Xunit;
+
+namespace MailMcp.Domain.UnitTests;
+
+/// <summary>Covers the five-digit error-code contract a boundary publishes.</summary>
+public sealed class MailMcpErrorCodeTests
+{
+    /// <summary>Two failures sharing a code would be indistinguishable in every log and every error response.</summary>
+    [Fact]
+    public void All_CodesAreUnique()
+    {
+        // Act
+        var distinctValues = MailMcpErrorCode.All.Select(code => code.Value).Distinct().Count();
+
+        // Assert
+        Assert.Equal(MailMcpErrorCode.All.Count, distinctValues);
+    }
+
+    /// <summary>A code shorter or longer than five digits would not decompose into a category and a subcategory.</summary>
+    [Fact]
+    public void All_CodesAreFiveDigits()
+    {
+        // Act
+        var outsideTheRange = MailMcpErrorCode.All.Where(code => code.Value is < 10000 or > 99999).ToArray();
+
+        // Assert
+        Assert.Empty(outsideTheRange);
+    }
+
+    [Theory]
+    [InlineData(11001, 1, 1)]
+    [InlineData(21001, 2, 1)]
+    [InlineData(22001, 2, 2)]
+    [InlineData(23001, 2, 3)]
+    [InlineData(31001, 3, 1)]
+    [InlineData(41001, 4, 1)]
+    public void CategoryAndSubcategory_AreTheFirstTwoDigits(int allocatedValue, int expectedCategory, int expectedSubcategory)
+    {
+        // Arrange
+        var code = Assert.Single(MailMcpErrorCode.All, allocated => allocated.Value == allocatedValue);
+
+        // Assert
+        Assert.Equal(expectedCategory, code.Category);
+        Assert.Equal(expectedSubcategory, code.Subcategory);
+    }
+
+    [Fact]
+    public void TryParse_AllocatedNumber_ReturnsTheCode()
+    {
+        // Act
+        var parsed = MailMcpErrorCode.TryParse(22001, out var code);
+
+        // Assert
+        Assert.True(parsed);
+        Assert.Equal(MailMcpErrorCode.MailboxUnavailable, code);
+    }
+
+    /// <summary>A retired or mistyped number is unknown rather than reconstructed as a value nothing raises.</summary>
+    [Fact]
+    public void TryParse_UnallocatedNumber_ReportsUnspecified()
+    {
+        // Act
+        var parsed = MailMcpErrorCode.TryParse(99999, out var code);
+
+        // Assert
+        Assert.False(parsed);
+        Assert.False(code.IsSpecified);
+    }
+
+    [Fact]
+    public void Default_NamesNoFailure()
+    {
+        // Arrange
+        var code = default(MailMcpErrorCode);
+
+        // Assert
+        Assert.False(code.IsSpecified);
+        Assert.Equal("(unspecified)", code.ToString());
+        Assert.Throws<InvalidOperationException>(() => code.Category);
+        Assert.Throws<InvalidOperationException>(() => code.Subcategory);
+    }
+
+    /// <summary>A log or an error response records the number, not the structure that carries it.</summary>
+    [Fact]
+    public void ToString_IsTheFiveDigitNumber() =>
+        Assert.Equal("22001", MailMcpErrorCode.MailboxUnavailable.ToString());
+
+    [Fact]
+    public void JsonRoundTrip_PreservesTheCode()
+    {
+        // Act
+        var json = JsonSerializer.Serialize(MailMcpErrorCode.MailboxFolderRecreated);
+        var restored = JsonSerializer.Deserialize<MailMcpErrorCode>(json);
+
+        // Assert
+        Assert.Equal("23001", json);
+        Assert.Equal(MailMcpErrorCode.MailboxFolderRecreated, restored);
+    }
+
+    [Fact]
+    public void JsonRoundTrip_AsAPropertyName_PreservesTheCode()
+    {
+        // Arrange
+        var codes = new Dictionary<MailMcpErrorCode, string> { [MailMcpErrorCode.MailboxUnavailable] = "retry later" };
+
+        // Act
+        var json = JsonSerializer.Serialize(codes);
+        var restored = JsonSerializer.Deserialize<Dictionary<MailMcpErrorCode, string>>(json);
+
+        // Assert
+        Assert.Equal("{\"22001\":\"retry later\"}", json);
+        Assert.Equal("retry later", Assert.Single(restored!).Value);
+    }
+
+    [Theory]
+    [InlineData("\"22001\"")]
+    [InlineData("99999")]
+    public void JsonRead_TokenThatNamesNoAllocatedCode_IsRejected(string json) =>
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<MailMcpErrorCode>(json));
+
+    [Fact]
+    public void JsonWrite_UnspecifiedCode_IsRejected() =>
+        Assert.Throws<JsonException>(() => JsonSerializer.Serialize(default(MailMcpErrorCode)));
+}

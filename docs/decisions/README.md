@@ -23,3 +23,4 @@ For background on ADRs, see <https://adr.github.io/>.
 
 - [0001: Use application-owned repository ports for persistence access and keep EF Core behind infrastructure adapters](0001-application-owned-repositories-for-persistence-ports.md)
 - [0002: Use an application-owned configuration access layer for reading, mapping, and reloadable business settings](0002-configuration-reading-mapping-and-reload-boundary.md)
+- [0003: Give every first-party failure one base type and a five-digit stable error code](0003-first-party-exception-hierarchy-and-stable-error-codes.md)

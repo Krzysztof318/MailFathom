@@ -192,12 +192,8 @@ public sealed class MailboxSynchronizer
             return await this.RecordOversizedOccurrenceAsync(metadata, cancellationToken);
         }
 
-        RemoteEmailContent content;
-        try
-        {
-            content = await mailboxSession.FetchEmailContentWithoutSettingSeenAsync(metadata.OccurrenceId, this.options.MaxRawMimeBytes, cancellationToken);
-        }
-        catch (EmailContentTooLargeException)
+        var fetch = await mailboxSession.FetchEmailContentWithoutSettingSeenAsync(metadata.OccurrenceId, this.options.MaxRawMimeBytes, cancellationToken);
+        if (fetch is not { Outcome: RemoteEmailContentFetchOutcome.Retrieved, Content: { } content })
         {
             // The advertised size understated the payload, so the occurrence is recorded without content instead of
             // being silently skipped past by the checkpoint.
