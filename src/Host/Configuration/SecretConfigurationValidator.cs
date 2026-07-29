@@ -31,20 +31,27 @@ internal sealed partial class SecretConfigurationValidator
     private readonly TrustAnchorLoader trustAnchorLoader;
     private readonly DatabaseConnectionSettingsMapper connectionSettingsMapper;
     private readonly IDatabaseConnectionSettingsValidator connectionSettingsValidator;
+    private readonly PostgresTextSearchConfiguration schemaTextSearchConfiguration;
     private readonly ILogger<SecretConfigurationValidator> logger;
 
     /// <summary>Initializes a new secret configuration validator.</summary>
+    /// <remarks>
+    /// The text search configuration arrives as the value the EF Core model was actually built from, not as a setting
+    /// to be read again, because that is exactly what a reloaded candidate has to be compared against.
+    /// </remarks>
     public SecretConfigurationValidator(
         ISecretReferenceResolver secretReferenceResolver,
         TrustAnchorLoader trustAnchorLoader,
         DatabaseConnectionSettingsMapper connectionSettingsMapper,
         IDatabaseConnectionSettingsValidator connectionSettingsValidator,
+        PostgresTextSearchConfiguration schemaTextSearchConfiguration,
         ILogger<SecretConfigurationValidator> logger)
     {
         this.secretReferenceResolver = secretReferenceResolver;
         this.trustAnchorLoader = trustAnchorLoader;
         this.connectionSettingsMapper = connectionSettingsMapper;
         this.connectionSettingsValidator = connectionSettingsValidator;
+        this.schemaTextSearchConfiguration = schemaTextSearchConfiguration;
         this.logger = logger;
     }
 
@@ -68,6 +75,8 @@ internal sealed partial class SecretConfigurationValidator
         var errors = new List<string>(
             await this.FindSecretReferenceErrorsAsync(PersistenceConfigurationPath, candidate, cancellationToken));
 
+        errors.AddRange(this.FindTextSearchConfigurationErrors(candidate));
+
         var connectionFailures = await this.connectionSettingsValidator.FindConfigurationFailuresAsync(
             this.connectionSettingsMapper.Map(candidate),
             cancellationToken);
@@ -75,6 +84,30 @@ internal sealed partial class SecretConfigurationValidator
         errors.AddRange(connectionFailures.Select(DescribeConnectionFailure));
 
         return errors;
+    }
+
+    /// <summary>Refuses a reloaded text search configuration instead of adopting one that could not take effect.</summary>
+    /// <remarks>
+    /// The configuration is compiled into the search vector's generated column, so the schema already holds the value
+    /// the model was built from and every indexed row was written under it. Publishing a different one would change
+    /// nothing about the index and everything about what an operator believes the index contains: queries would be
+    /// stemmed one way and the stored lexemes another, which shows up as missing results rather than as an error.
+    /// Changing it is a schema change that rebuilds the search documents, so it is restart-required and reported as
+    /// such, exactly as changing which setting supplies the database credential is.
+    /// </remarks>
+    private IEnumerable<string> FindTextSearchConfigurationErrors(PersistenceOptions candidate)
+    {
+        if (!PostgresTextSearchConfiguration.IsSupported(candidate.TextSearchConfiguration))
+        {
+            yield return $"{PersistenceConfigurationPath}:{nameof(PersistenceOptions.TextSearchConfiguration)} — '{candidate.TextSearchConfiguration}' is not a PostgreSQL text search configuration MailMcp supports.";
+
+            yield break;
+        }
+
+        if (!string.Equals(candidate.TextSearchConfiguration, this.schemaTextSearchConfiguration.Value, StringComparison.Ordinal))
+        {
+            yield return $"{PersistenceConfigurationPath}:{nameof(PersistenceOptions.TextSearchConfiguration)} — the lexical index was built with '{this.schemaTextSearchConfiguration.Value}'; changing it needs a schema change and a restart rather than a configuration reload.";
+        }
     }
 
     /// <summary>Finds everything an operator must fix before a mail synchronization snapshot can be used.</summary>

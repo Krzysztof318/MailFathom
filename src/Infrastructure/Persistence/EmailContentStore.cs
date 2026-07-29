@@ -13,8 +13,26 @@ namespace MailMcp.Infrastructure.Persistence;
 
 /// <summary>EF Core raw MIME content store.</summary>
 [RequiresIntegrationCoverage]
-internal sealed class EmailContentStore(TimeProvider timeProvider) : IEmailContentStore
+internal sealed class EmailContentStore(MailMcpDbContext dbContext, TimeProvider timeProvider) : IEmailContentStore
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Projected to the single column rather than materialized as an entity, so the payload is neither tracked nor
+    /// kept alive by the change tracker after the caller is done with it.
+    /// </remarks>
+    public async Task<ReadOnlyMemory<byte>?> FindRawMimeAsync(
+        StoredEmailId storedEmailId,
+        CancellationToken cancellationToken)
+    {
+        var rawMime = await dbContext.EmailMessageContents
+            .AsNoTracking()
+            .Where(content => content.StoredEmailId == storedEmailId.Value)
+            .Select(content => content.RawMime)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return rawMime is null ? null : rawMime.AsMemory();
+    }
+
     /// <inheritdoc />
     public async Task SaveContentAsync(
         IPersistenceSession session,

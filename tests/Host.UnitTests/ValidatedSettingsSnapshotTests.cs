@@ -5,6 +5,7 @@ using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Transport;
 using MailMcp.Host.Configuration;
 using MailMcp.Infrastructure.Certificates;
+using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.Configuration;
 using Xunit;
@@ -268,6 +269,7 @@ public sealed class ValidatedSettingsSnapshotTests
             new TrustAnchorLoader(secretReferenceResolver),
             new DatabaseConnectionSettingsMapper(new ConfigurationBuilder().Build()),
             new StubDatabaseConnectionSettingsValidator(),
+            PostgresTextSearchConfiguration.Default,
             new RecordingLogger<SecretConfigurationValidator>());
 
         var settings = new ValidatedSettingsSnapshot<MailSynchronizationOptions>(

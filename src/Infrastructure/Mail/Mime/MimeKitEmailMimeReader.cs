@@ -83,7 +83,7 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
             using var message = await this.loadMessage(parsingPass, cancellationToken);
 
             return EmailMimeExtractionResult.Extracted(
-                await ExtractMetadataAsync(content.OccurrenceId, message, cancellationToken));
+                await this.ExtractMetadataAsync(content.OccurrenceId, message, cancellationToken));
         }
         catch (FormatException)
         {
@@ -117,12 +117,12 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
             ? new MemoryStream(buffer, segment.Offset, segment.Count, writable: false)
             : new MemoryStream(content.RawMime.ToArray(), writable: false);
 
-    private static async Task<ExtractedEmailMetadata> ExtractMetadataAsync(
+    private async Task<ExtractedEmailMetadata> ExtractMetadataAsync(
         EmailOccurrenceId occurrenceId,
         MimeMessage message,
         CancellationToken cancellationToken)
     {
-        var attachments = await MimeAttachmentClassifier.ClassifyAsync(message, cancellationToken);
+        var classification = await MimeAttachmentClassifier.ClassifyAsync(message, cancellationToken);
 
         return new ExtractedEmailMetadata(
             occurrenceId,
@@ -131,7 +131,8 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
             ReadHeaderDate(message, HeaderId.Received),
             ReadParticipants(message),
             EmailThreadReferences.Create(message.MessageId, message.InReplyTo, message.References),
-            attachments);
+            classification.Attachments,
+            EmailBodyTextExtractor.Extract(classification, this.options.MaxExtractedTextCharacters));
     }
 
     private static string? NormalizeSubject(string? subject)

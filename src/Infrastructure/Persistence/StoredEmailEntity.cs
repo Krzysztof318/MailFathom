@@ -119,4 +119,10 @@ internal sealed class StoredEmailEntity
     public uint ConcurrencyVersion { get; set; }
 
     public EmailMessageContentEntity? Content { get; set; }
+
+    /// <summary>
+    /// Gets or sets the derived text this email contributes to lexical search, which is absent until extraction has
+    /// run for it. Its absence on a row whose content is stored is what the extraction backfill selects on.
+    /// </summary>
+    public EmailSearchDocumentEntity? SearchDocument { get; set; }
 }

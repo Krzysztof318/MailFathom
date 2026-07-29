@@ -9,6 +9,7 @@ using MailMcp.Host.Configuration;
 using MailMcp.Host.Observability;
 using MailMcp.Infrastructure;
 using MailMcp.Infrastructure.Mail;
+using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Resilience;
 using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.Options;
@@ -46,6 +47,12 @@ try
     builder.Services.AddOptions<PersistenceOptions>()
         .Bind(
             builder.Configuration.GetSection("Persistence"),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+    builder.Services.AddOptions<MailExtractionBackfillOptions>()
+        .Bind(
+            builder.Configuration.GetSection("MailExtractionBackfill"),
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
@@ -91,6 +98,16 @@ try
         {
             MaxPartCount = synchronizationSettings.MaxMimePartCount,
             MaxNestingDepth = synchronizationSettings.MaxMimeNestingDepth,
+            MaxExtractedTextCharacters = synchronizationSettings.MaxExtractedTextCharacters,
+        };
+    });
+    builder.Services.AddScoped(provider =>
+    {
+        var backfillSettings = provider.GetRequiredService<IOptions<MailExtractionBackfillOptions>>().Value;
+        return new StoredEmailExtractionBackfillOptions
+        {
+            BatchSize = backfillSettings.BatchSize,
+            MaxBatchesPerRun = backfillSettings.MaxBatchesPerRun,
         };
     });
     builder.Services.AddSingleton(provider => new PersistenceConcurrencyOptions
@@ -106,12 +123,23 @@ try
     builder.Services.AddHostedService(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<PersistenceOptions>>());
     // The secret blocks come from the published snapshot on every read, so a reference an operator repoints reaches the
     // next physical connection instead of waiting for a restart.
-    builder.Services.AddInfrastructure(provider => provider.GetRequiredService<DatabaseConnectionSettingsMapper>()
-        .Map(provider.GetRequiredService<ISettingsSnapshot<PersistenceOptions>>().Current));
+    // The text search configuration is taken once, from configuration directly, because the EF Core model has to be
+    // described before the container that would resolve an options snapshot exists — and because the value is compiled
+    // into the schema, so adopting a reloaded one would leave the index describing the configuration it replaced. An
+    // unsupported name throws here and is recorded by the bootstrap logger; PersistenceOptions validates the same value
+    // on start, which is what reports the supported alternatives to an operator.
+    var configuredTextSearchConfiguration = builder.Configuration["Persistence:TextSearchConfiguration"];
+    builder.Services.AddInfrastructure(
+        provider => provider.GetRequiredService<DatabaseConnectionSettingsMapper>()
+            .Map(provider.GetRequiredService<ISettingsSnapshot<PersistenceOptions>>().Current),
+        string.IsNullOrWhiteSpace(configuredTextSearchConfiguration)
+            ? PostgresTextSearchConfiguration.Default
+            : PostgresTextSearchConfiguration.Create(configuredTextSearchConfiguration));
     // Ahead of the worker so a developer's first run finds the tables it reads, and after the infrastructure that
     // registers the creator it resolves. Specification 19 removes this line with the rest of the bootstrap.
     builder.Services.AddHostedService<MailMcp.Host.Hosting.DevelopmentSchemaBootstrap>();
     builder.Services.AddHostedService<MailMcp.Host.Hosting.MailSynchronizationWorker>();
+    builder.Services.AddHostedService<MailMcp.Host.Hosting.MailExtractionBackfillWorker>();
 
     var app = builder.Build();
 

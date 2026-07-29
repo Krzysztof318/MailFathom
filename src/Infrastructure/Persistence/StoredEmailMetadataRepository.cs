@@ -62,6 +62,27 @@ internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider) :
         if (extractedMetadata is not null)
         {
             StoredEmailMetadataMapping.ApplyExtractedMetadata(entity, extractedMetadata);
+
+            // The search document is written from the same extraction in the same session, so an email's indexed text
+            // can never describe a different reading of its MIME than its own metadata columns do.
+            await EmailSearchDocumentWriter.SaveAsync(
+                dbContext,
+                entity,
+                extractedMetadata,
+                timeProvider.GetUtcNow(),
+                cancellationToken);
+        }
+        else
+        {
+            // An occurrence whose body nothing read still gets a document, built from the envelope alone. Leaving it
+            // without one would make an oversized or unparseable message findable by nothing at all, which is the same
+            // silent gap the encrypted marker exists to close for a message whose body cannot be decrypted.
+            await EmailSearchDocumentWriter.SaveEnvelopeOnlyAsync(
+                dbContext,
+                entity,
+                metadata.Subject,
+                timeProvider.GetUtcNow(),
+                cancellationToken);
         }
 
         return StoredEmailId.Create(entity.Id);

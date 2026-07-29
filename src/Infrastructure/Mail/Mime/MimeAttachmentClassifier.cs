@@ -39,19 +39,23 @@ internal sealed partial class MimeAttachmentClassifier
     private readonly List<MimeEntity> bodyBranchLeaves = [];
     private readonly List<MimeEntity> unclassifiedEntities = [];
     private bool isEncrypted;
+    private bool bodyBranchIsEncrypted;
     private bool carriesUnverifiedSignature;
     private bool containsUnexpandedTnefPart;
 
-    /// <summary>Classifies one message's parts and measures the attachments among them.</summary>
+    /// <summary>Classifies one message's parts, measures the attachments among them, and names its body text parts.</summary>
     /// <param name="message">The parsed message.</param>
     /// <param name="cancellationToken">Cancels the measurement.</param>
-    /// <returns>What the message carries besides its body.</returns>
-    public static async Task<EmailAttachmentSummary> ClassifyAsync(MimeMessage message, CancellationToken cancellationToken)
+    /// <returns>What the message carries besides its body, together with the textual parts that are its body.</returns>
+    public static async Task<MimeContentClassification> ClassifyAsync(MimeMessage message, CancellationToken cancellationToken)
     {
         var classifier = new MimeAttachmentClassifier();
         classifier.WalkEntity(message.Body, isInBodyBranch: true);
 
-        return await classifier.SummarizeAsync(cancellationToken);
+        return new MimeContentClassification(
+            await classifier.SummarizeAsync(cancellationToken),
+            [.. classifier.bodyBranchLeaves.OfType<TextPart>()],
+            classifier.bodyBranchIsEncrypted);
     }
 
     [GeneratedRegex("""cid:(?<contentId>[^"'\s>)\\]+)""", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
@@ -69,7 +73,7 @@ internal sealed partial class MimeAttachmentClassifier
             return;
         }
 
-        if (this.IsCryptographicLeafPart(entity))
+        if (this.IsCryptographicLeafPart(entity, isInBodyBranch))
         {
             return;
         }
@@ -106,7 +110,7 @@ internal sealed partial class MimeAttachmentClassifier
     {
         if (envelope.ContentType.IsMimeType("multipart", "encrypted") && DeclaresSecurityProtocol(envelope))
         {
-            this.isEncrypted = true;
+            this.MarkEncrypted(isInBodyBranch);
 
             return true;
         }
@@ -135,6 +139,20 @@ internal sealed partial class MimeAttachmentClassifier
         return true;
     }
 
+    /// <summary>Records encrypted content, and separately whether it was the body that arrived encrypted.</summary>
+    /// <remarks>
+    /// The two answer different questions and only look the same on the common message. The summary marker says the
+    /// message carries encrypted content somewhere, which is what a filter over the mailbox asks. Body text extraction
+    /// asks something narrower: whether *this message's own body* is unreadable. A readable message that forwards an
+    /// encrypted one as an <c>application/pkcs7-mime</c> attachment satisfies the first and not the second, and reading
+    /// the summary marker there would discard a body a person wrote and can see.
+    /// </remarks>
+    private void MarkEncrypted(bool isInBodyBranch)
+    {
+        this.isEncrypted = true;
+        this.bodyBranchIsEncrypted |= isInBodyBranch;
+    }
+
     /// <summary>Decides whether a container declared the security protocol that makes it an envelope.</summary>
     /// <remarks>
     /// RFC 1847 requires the <c>protocol</c> parameter on both container types, and these rules read the container
@@ -152,7 +170,7 @@ internal sealed partial class MimeAttachmentClassifier
     /// This precedes disposition on purpose: an <c>smime.p7s</c> part almost always declares itself an attachment, so a
     /// rule that honored disposition first would count exactly the part these rules exist to stop counting.
     /// </remarks>
-    private bool IsCryptographicLeafPart(MimeEntity entity)
+    private bool IsCryptographicLeafPart(MimeEntity entity, bool isInBodyBranch)
     {
         if (!CryptographicMediaTypes.Contains(entity.ContentType.MimeType, StringComparer.OrdinalIgnoreCase))
         {
@@ -165,7 +183,7 @@ internal sealed partial class MimeAttachmentClassifier
             this.carriesUnverifiedSignature = true;
         }
 
-        this.MarkOpaqueSmimeBody(entity);
+        this.MarkOpaqueSmimeBody(entity, isInBodyBranch);
 
         return true;
     }
@@ -177,7 +195,7 @@ internal sealed partial class MimeAttachmentClassifier
     /// parts and no explanation — indistinguishable from an empty message, which is exactly the gap the encrypted
     /// marker exists to close for the <c>multipart/encrypted</c> shape.
     /// </remarks>
-    private void MarkOpaqueSmimeBody(MimeEntity entity)
+    private void MarkOpaqueSmimeBody(MimeEntity entity, bool isInBodyBranch)
     {
         if (!entity.ContentType.IsMimeType("application", "pkcs7-mime"))
         {
@@ -189,7 +207,7 @@ internal sealed partial class MimeAttachmentClassifier
         if (string.Equals(smimeType, "enveloped-data", StringComparison.OrdinalIgnoreCase)
             || string.Equals(smimeType, "authEnveloped-data", StringComparison.OrdinalIgnoreCase))
         {
-            this.isEncrypted = true;
+            this.MarkEncrypted(isInBodyBranch);
         }
         else if (string.Equals(smimeType, "signed-data", StringComparison.OrdinalIgnoreCase))
         {

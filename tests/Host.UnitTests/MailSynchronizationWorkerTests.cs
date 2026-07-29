@@ -353,7 +353,8 @@ public sealed class MailSynchronizationWorkerTests
                 ReceivedAt: null,
                 Participants: [],
                 EmailThreadReferences.None,
-                EmailAttachmentSummary.None))));
+                EmailAttachmentSummary.None,
+                ExtractedEmailText.NoTextualBody))));
 
         return mimeReader;
     }

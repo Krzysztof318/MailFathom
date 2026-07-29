@@ -1273,7 +1273,8 @@ public sealed class MailboxSynchronizerTests
         ReceivedAt: null,
         Participants: [],
         EmailThreadReferences.None,
-        EmailAttachmentSummary.None);
+        EmailAttachmentSummary.None,
+        ExtractedEmailText.NoTextualBody);
 
     private sealed class TrackingSession : IPersistenceSession
     {

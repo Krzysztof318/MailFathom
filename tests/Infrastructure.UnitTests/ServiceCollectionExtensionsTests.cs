@@ -81,7 +81,8 @@ public sealed class ServiceCollectionExtensionsTests
         services.AddInfrastructure(_ => new PostgresConnectionSettings(
             "Host=localhost;Database=mailmcp;Username=mailmcp",
             ConnectionStringSecret: null,
-            Password: null));
+            Password: null),
+            PostgresTextSearchConfiguration.Default);
 
         return services.BuildServiceProvider();
     }

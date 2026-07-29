@@ -2,6 +2,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
 
 namespace MailMcp.Host.Configuration;
@@ -12,11 +13,21 @@ namespace MailMcp.Host.Configuration;
 /// competes for the same PostgreSQL rows shares one operational limit.
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
-internal sealed class PersistenceOptions
+internal sealed class PersistenceOptions : IValidatableObject
 {
     /// <summary>Gets or sets the maximum number of complete local write attempts after concurrency conflicts, including the first attempt.</summary>
     [Range(1, 10)]
     public int MaximumConcurrencyCommitAttempts { get; set; } = 2;
+
+    /// <summary>Gets or sets the PostgreSQL text search configuration the lexical email index is built with.</summary>
+    /// <remarks>
+    /// It decides how every indexed word is stemmed and which words are dropped as stop words, so it is part of the
+    /// schema rather than of a query: changing it changes what the index contains and needs the search documents
+    /// rebuilt. Startup fails on a configuration a stock PostgreSQL server does not ship, because the value is
+    /// compiled into a generated column and a name that only fails at schema creation would report the mistake far
+    /// from where it was made.
+    /// </remarks>
+    public string TextSearchConfiguration { get; set; } = PostgresTextSearchConfiguration.Default.Value;
 
     /// <summary>Gets or sets whether startup creates the local schema from the EF Core model. Development only, and off unless an operator turns it on.</summary>
     /// <remarks>
@@ -43,4 +54,15 @@ internal sealed class PersistenceOptions
     /// password.
     /// </remarks>
     public ConfiguredSecret? Password { get; set; }
+
+    /// <inheritdoc />
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (!PostgresTextSearchConfiguration.IsSupported(this.TextSearchConfiguration))
+        {
+            yield return new ValidationResult(
+                $"'{this.TextSearchConfiguration}' is not a PostgreSQL text search configuration MailMcp supports. Supported configurations are: {string.Join(", ", PostgresTextSearchConfiguration.SupportedNames)}.",
+                [nameof(this.TextSearchConfiguration)]);
+        }
+    }
 }
