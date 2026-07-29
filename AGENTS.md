@@ -208,19 +208,21 @@ Each question has exactly one owner, and no mechanism answers a question another
 
 ### Labels
 
-Every issue carries exactly one `type:*` label and nothing else is required. The type is a property of the work, so it is chosen when the issue is opened and then left alone; it does not track progress.
+Every issue carries exactly one `type:*` label and nothing else is required. The type names what the work produces, which is a property of the work itself, so it is chosen when the issue is opened and then left alone; it does not track progress and it never changes because circumstances did.
+
+Several changes match more than one description — a defect in database wiring, a documentation-only change to this contract — so the table is a precedence list, not a menu. Read it top to bottom and take the first row that fits.
 
 | Label | Use it for |
 |---|---|
 | `type:spec` | Work backed by a numbered specification under `specs/` |
-| `type:feature` | A production-code change with no numbered specification: a feature, a refactor, or hardening |
-| `type:defect` | Something already implemented behaves incorrectly |
-| `type:decision` | Work that cannot be scoped until an ADR is written or a measurement is taken, so it waits on a decision rather than on effort |
-| `type:docs` | Documentation only: `docs/`, `README`, specification prose, ADR text |
+| `type:decision` | Work whose deliverable *is* a decision: an ADR, a policy, or a measurement that settles a question |
+| `type:defect` | Something already implemented behaves incorrectly, whatever part of the system it lives in |
+| `type:docs` | Documentation only, under `docs/`, `README`, or `specs/` prose. `AGENTS.md` and `.agents/skills/` are the workflow contract, not documentation, and belong to the next row |
 | `type:workflow` | Repository tooling, CI, verification scripts, the release process, and this workflow contract |
 | `type:infra` | Orchestration, database wiring, telemetry, build and packaging plumbing |
+| `type:feature` | Any remaining production-code change: a feature, a refactor, or hardening |
 
-`type:decision` is the one that carries weight. It marks work only the owner can unblock, and the `Decisions` view is read as a queue of debt. Do not apply it to an issue whose own deliverable is the decision — that work is actionable, and the label would hide it among the things that are not.
+`type:decision` marks work only the owner can settle, and the `Decisions` view is read as a queue of that debt. It says what the issue *produces*, so it belongs on the issue that decides, not on the issues waiting for the answer — those keep the type of what they will eventually build and say they are waiting through `Queue: Needs decision`. Encoding one state in both places would leave the type stale the moment the decision landed.
 
 The remaining labels are flags, applied only when they are true: `blocked` when an issue waits on something outside itself, `security` when a change needs a security review before it merges, and `good first issue` or `help wanted` once the repository is public. `shipped` is historical, marking the six issues written retrospectively for work that predates the roadmap; never apply it to new work.
 
@@ -234,12 +236,12 @@ A milestone answers which release an issue ships in, and nothing else. An issue 
 
 The board carries three single-select fields beyond `Status`, plus an informational one. Set `Track` on every issue. Set `Queue` on every open issue. Leave `Size` empty until the work is planned, and leave `Week` alone entirely.
 
-- **`Track`** groups every item, including work with no specification. `A` through `E` are the roadmap groups from `specs/README.md`. `Release` is work a public release cannot ship without, `Platform` is repository tooling and cross-cutting concerns that no roadmap group owns, and `Future capabilities` is beyond the current roadmap segment.
-- **`Queue`** is the ordering signal, and a new issue takes one of its three lower values without asking. `Later` is the default: accepted scope not yet started. `Needs decision` is correct when the issue's own scope cannot be written until an ADR or a measurement lands, and it pairs with `type:decision`. `Parked` records a review outcome or a side question that carries no commitment to act. `Next` is the owner's alone: it means ready to start now, at most five items hold it at once, and the limit is the point of the field, so a sixth candidate is a proposal about which of the five drops back to `Later`.
-- **`Size`** measures the pull request in changed lines, additions plus deletions, including tests and documentation: `S` under 1000, `M` up to 2500, `L` up to 5000, `XL` beyond that and to be split before it starts. Read a specification's own line estimate through a factor of five, because that is what the nine merged specification pull requests measured — a median of 5.0 against the estimate, ranging from 2.6 to 7.3, never below. A specification that says 600 lines is an `L`. `L` is the normal size of a specification here, so an `XL` is a genuine warning rather than a large-sounding label.
+- **`Track`** groups every item by the area of the system it belongs to, including work no specification backs. `A` through `E` are the roadmap groups from `specs/README.md`. `Release` is release-process and distribution work — licensing, versioning policy, branching, contributor entry points, packaging, publication — and it says nothing about which release ships it, because that is the milestone's question. `Platform` is repository tooling and cross-cutting concerns no roadmap group owns. `Future capabilities` is beyond the current roadmap segment.
+- **`Queue`** is the ordering signal, and a new issue takes one of its three lower values without asking. `Later` is the default: accepted scope not yet started. `Needs decision` says this issue waits on an answer rather than on effort; name the `type:decision` issue that produces the answer, or state that none exists yet. `Parked` records a review outcome or a side question that carries no commitment to act. `Next` is the owner's alone: it means ready to start now, and at most five **open** issues hold it. A closed issue keeps whatever `Queue` value it had and stops counting, which is why nothing has to clear it on merge and why every view that reads `Queue` filters `is:open`.
+- **`Size`** measures the pull request in changed lines, additions plus deletions, including tests and documentation. The ranges are contiguous and leave no gap: `S` under 1000, `M` from 1000 to 2499, `L` from 2500 to 4999, `XL` from 5000 up and to be split before it starts. Read a specification's own line estimate through a factor of five, because that is what the nine merged specification pull requests measured — a median of 5.0 against the estimate, ranging from 2.6 to 7.3, never below. A specification that says 600 lines is an `L`. `L` is the normal size of a specification here, so an `XL` is a genuine warning rather than a large-sounding label.
 - **`Week`** is informational and unused. It exists because a one-week grid is occasionally worth glancing at, not because anything depends on it. Do not set it, do not filter on it, and do not let a rule come to rest on it.
 
-The built-in workflows set `Status` and nothing else, so a newly opened issue reaches the board with no `Track` and no `Queue` and surfaces in the `Triage` view. Setting both is part of opening the issue:
+The built-in workflows set `Status` and nothing else, so a newly opened issue reaches the board with no `Track` and no `Queue`. Setting both is part of opening the issue:
 
 ```bash
 gh project field-list 4 --owner Krzysztof318 --format json   # field ids and option ids
@@ -248,9 +250,19 @@ gh project item-edit --project-id <project-id> --id <item-id> \
   --field-id <field-id> --single-select-option-id <option-id>
 ```
 
+Each field is a separate call, so one can land while another fails. A project view filters fields with `AND` and cannot ask for a missing `Track` *or* a missing `Queue` in one expression, which is why the `Triage` view catches only the untouched case. Audit both after placing an issue, and whenever the board is worth trusting:
+
+```bash
+gh project item-list 4 --owner Krzysztof318 --format json --limit 200 \
+  | jq -r '.items[] | select(.status != "Done") | select(.track == null or .queue == null)
+           | "\(.content.number) track=\(.track) queue=\(.queue)"'
+```
+
+A missing `Track` is also visible without running anything: the `Roadmap` view groups by `Track`, so an unplaced item sits in its own group at the end of the board.
+
 ### Views
 
-`Now` is `Queue: Next` grouped by `Status`, and it is the view the owner works from. `Roadmap` is everything open grouped by `Track`. `Release 0.1.0` is the milestone. `Decisions` is the open `type:decision` issues. `Triage` lists open items with no `Queue` value and is expected to be empty; an item sitting there means an issue was opened without being placed.
+`Now` is open issues with `Queue: Next`, grouped by `Status`, and it is the view the owner works from. `Roadmap` is everything open grouped by `Track`. `Release 0.1.0` is the milestone. `Decisions` is the open `type:decision` issues — the answers the owner owes, not the work waiting on them. `Triage` lists open items with no `Queue` value and is expected to be empty; an item sitting there means an issue was opened without being placed. Every view that reads `Queue` filters `is:open`, so a closed issue never occupies one of the five `Next` slots.
 
 ### Linking a pull request to its issue
 
