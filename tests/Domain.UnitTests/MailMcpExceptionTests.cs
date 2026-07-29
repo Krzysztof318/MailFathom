@@ -12,10 +12,14 @@ public sealed class MailMcpExceptionTests
 {
     /// <summary>A failure outside the hierarchy carries no code a boundary can report and obeys no stated message contract.</summary>
     [Fact]
-    public void DomainAssembly_EveryDeclaredException_DerivesFromMailMcpException() =>
-        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(
-            typeof(MailMcpException).Assembly,
-            typeof(MailMcpException));
+    public void DomainAssembly_EveryDeclaredException_DerivesFromMailMcpException()
+    {
+        // Arrange
+        var domainAssembly = typeof(MailMcpException).Assembly;
+
+        // Act, Assert
+        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(domainAssembly, typeof(MailMcpException));
+    }
 
     [Fact]
     public void ErrorCode_TransportSecurityPolicyViolation_IsTheCodeForThatFailure()

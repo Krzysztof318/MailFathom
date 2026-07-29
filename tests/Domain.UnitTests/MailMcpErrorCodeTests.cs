@@ -86,8 +86,14 @@ public sealed class MailMcpErrorCodeTests
 
     /// <summary>A log or an error response records the number, not the structure that carries it.</summary>
     [Fact]
-    public void ToString_IsTheFiveDigitNumber() =>
-        Assert.Equal("22001", MailMcpErrorCode.MailboxUnavailable.ToString());
+    public void ToString_IsTheFiveDigitNumber()
+    {
+        // Act
+        var recorded = MailMcpErrorCode.MailboxUnavailable.ToString();
+
+        // Assert
+        Assert.Equal("22001", recorded);
+    }
 
     [Fact]
     public void JsonRoundTrip_PreservesTheCode()
@@ -119,10 +125,28 @@ public sealed class MailMcpErrorCodeTests
     [Theory]
     [InlineData("\"22001\"")]
     [InlineData("99999")]
-    public void JsonRead_TokenThatNamesNoAllocatedCode_IsRejected(string json) =>
+    public void JsonRead_TokenThatNamesNoAllocatedCode_IsRejected(string json)
+    {
+        // Act, Assert
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<MailMcpErrorCode>(json));
+    }
+
+    /// <summary>A key the converter never writes must not read back as a code, or two spellings would name one failure.</summary>
+    [Theory]
+    [InlineData("{\"022001\":\"padded\"}")]
+    [InlineData("{\"2201\":\"too short\"}")]
+    [InlineData("{\"+22001\":\"signed\"}")]
+    [InlineData("{\"22001 \":\"trailing space\"}")]
+    public void JsonRead_PropertyNameThatIsNotTheCanonicalFiveDigits_IsRejected(string json)
+    {
+        // Act, Assert
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Dictionary<MailMcpErrorCode, string>>(json));
+    }
 
     [Fact]
-    public void JsonWrite_UnspecifiedCode_IsRejected() =>
+    public void JsonWrite_UnspecifiedCode_IsRejected()
+    {
+        // Act, Assert
         Assert.Throws<JsonException>(() => JsonSerializer.Serialize(default(MailMcpErrorCode)));
+    }
 }

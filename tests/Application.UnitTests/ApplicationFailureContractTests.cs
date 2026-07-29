@@ -17,10 +17,14 @@ public sealed class ApplicationFailureContractTests
 {
     /// <summary>A failure outside the hierarchy carries no code a boundary can report and obeys no stated message contract.</summary>
     [Fact]
-    public void ApplicationAssembly_EveryDeclaredException_DerivesFromMailMcpException() =>
-        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(
-            typeof(MailboxSynchronizer).Assembly,
-            typeof(MailMcpException));
+    public void ApplicationAssembly_EveryDeclaredException_DerivesFromMailMcpException()
+    {
+        // Arrange
+        var applicationAssembly = typeof(MailboxSynchronizer).Assembly;
+
+        // Act, Assert
+        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(applicationAssembly, typeof(MailMcpException));
+    }
 
     [Fact]
     public void ErrorCode_PersistenceConcurrencyConflict_IsTheCodeForThatFailure()
@@ -96,6 +100,44 @@ public sealed class ApplicationFailureContractTests
         Assert.Equal(reselectedUidValidity, failure.ReselectedUidValidity);
     }
 
+    /// <summary>The message names the configured alias, never the remote path, which can carry personal information.</summary>
+    [Fact]
+    public void MailboxFolderRecreatedException_Message_NamesTheAliasAndBothUidValidityValues()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var alias = MailFolderAlias.Create("Archive");
+
+        // Act
+        var failure = new MailboxFolderRecreatedException(
+            accountId,
+            alias,
+            ImapUidValidity.Create(5),
+            ImapUidValidity.Create(9));
+
+        // Assert
+        Assert.Contains($"{accountId.Value}/{alias.Value}", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("5", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("9", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>An inner exception is diagnostic detail for a log; copying its text would put a provider payload into an operator-facing message.</summary>
+    [Fact]
+    public void MailboxUnavailableException_Message_DoesNotRepeatTheInnerFailureText()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var rejection = new InvalidOperationException("host mail.example.test rejected user@example.test");
+
+        // Act
+        var failure = new MailboxUnavailableException(accountId, MailFolderAlias.Create("INBOX"), rejection);
+
+        // Assert
+        Assert.DoesNotContain(rejection.Message, failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("mail.example.test", failure.Message, StringComparison.Ordinal);
+        Assert.Same(rejection, failure.InnerException);
+    }
+
     [Fact]
     public void RemoteEmailContentFetchResult_Retrieved_CarriesTheContent()
     {
@@ -127,6 +169,9 @@ public sealed class ApplicationFailureContractTests
     }
 
     [Fact]
-    public void RemoteEmailContentFetchResult_RetrievedWithoutContent_IsRejected() =>
+    public void RemoteEmailContentFetchResult_RetrievedWithoutContent_IsRejected()
+    {
+        // Act, Assert
         Assert.Throws<ArgumentNullException>(() => RemoteEmailContentFetchResult.Retrieved(null!));
+    }
 }

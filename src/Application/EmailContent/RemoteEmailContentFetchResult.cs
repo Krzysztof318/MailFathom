@@ -1,5 +1,8 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailMcp.Application.Emails;
+using MailMcp.Domain.Emails;
+
 namespace MailMcp.Application.EmailContent;
 
 /// <summary>States whether a seen-preserving fetch returned raw MIME, and what stopped it when it did not.</summary>
@@ -15,9 +18,9 @@ public enum RemoteEmailContentFetchOutcome
 /// <summary>Carries the raw MIME a fetch returned, or the reason none was returned.</summary>
 /// <remarks>
 /// An oversized email is a result rather than an exception because the caller acts on it directly: the occurrence is
-/// recorded as <see cref="Domain.Emails.StoredEmailContentAvailability.ExceededSizeLimit" /> and stepped over, leaving
-/// the batch and the folder checkpoint to continue, exactly as <see cref="Emails.EmailMimeExtractionResult" /> does one
-/// step later for an email nobody can parse.
+/// recorded as <see cref="StoredEmailContentAvailability.ExceededSizeLimit" /> and stepped over, leaving the batch and
+/// the folder checkpoint to continue, exactly as <see cref="EmailMimeExtractionResult" /> does one step later for an
+/// email nobody can parse.
 /// <para>
 /// The limit is reached while the stream is being read, so it catches a server whose advertised size understated the
 /// payload as well as one that reported it honestly.

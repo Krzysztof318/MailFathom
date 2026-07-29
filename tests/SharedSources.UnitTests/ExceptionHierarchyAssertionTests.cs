@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Reflection;
 using MailMcp.TestSupport;
 using Xunit;
 
@@ -12,7 +13,7 @@ namespace MailMcp.SharedSources.UnitTests;
 /// </remarks>
 public sealed class ExceptionHierarchyAssertionTests
 {
-    private static readonly System.Reflection.Assembly SampleAssembly = typeof(SampleBaseException).Assembly;
+    private static readonly Assembly SampleAssembly = typeof(SampleBaseException).Assembly;
 
     [Fact]
     public void AssertEveryDeclaredExceptionDerivesFrom_ConcreteExceptionOutsideTheHierarchy_FailsAndNamesOnlyThatType()

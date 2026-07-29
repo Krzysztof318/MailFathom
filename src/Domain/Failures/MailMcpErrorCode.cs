@@ -166,9 +166,14 @@ public sealed class MailMcpErrorCodeJsonConverter : JsonConverter<MailMcpErrorCo
     {
         var propertyName = reader.GetString();
 
-        return int.TryParse(propertyName, NumberStyles.None, CultureInfo.InvariantCulture, out var value)
-            ? ParseOrThrow(value)
-            : throw new JsonException($"'{propertyName}' is not a five-digit error code.");
+        // Parsing the number first would reduce "022001" to 22001 and accept a spelling this converter never writes,
+        // so two keys could name one code and a round trip would not return the document it read.
+        if (propertyName is not { Length: 5 } || !propertyName.All(char.IsAsciiDigit))
+        {
+            throw new JsonException($"'{propertyName}' is not a five-digit error code.");
+        }
+
+        return ParseOrThrow(int.Parse(propertyName, NumberStyles.None, CultureInfo.InvariantCulture));
     }
 
     /// <inheritdoc />

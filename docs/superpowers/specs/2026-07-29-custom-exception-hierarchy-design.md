@@ -109,13 +109,23 @@ and omitted by five.
 The base constructor's parameter is named `operatorSafeMessage`, so every derived type meets the rule where the message
 is written rather than in prose elsewhere.
 
-A shared test helper in `tests/shared/` asserts that every non-abstract type deriving from `Exception` in a production
-assembly derives from `MailMcpException`. `Domain.UnitTests`, `Application.UnitTests`, and `Infrastructure.UnitTests`
-each call it for their own assembly. The helper reads types reflectively, which the repository otherwise avoids; the
+A shared test helper in `tests/shared/` asserts that every non-abstract, externally visible type deriving from
+`Exception` in a production assembly derives from `MailMcpException`. Every unit-test project calls it for its own
+production assembly, so `Domain`, `Application`, `Infrastructure`, `AI`, `Mcp`, and `Host` are all covered rather than
+only the three that declare an exception today. `AI` and `Mcp` hold no type yet to anchor a `typeof` on, so those two
+load the assembly by name. The helper reads types reflectively, which the repository otherwise avoids; the
 justification is that the guarantee it enforces — that a future exception cannot leave the hierarchy and so cannot
 escape the code and message contract — cannot be stated any other way, and it costs no package and no production code.
 
-Per-type tests assert that each message names only the values its contract permits.
+An exception that stays internal is exempt, because it is a control-flow signal between one implementation and its own
+caller and reaches no boundary. `MimeStructureLimitReachedException` is the one such type today.
+
+Message assertions cover the three types that compose a message from data: the transport-policy violation names its
+violated rules, the unavailable-mechanism failure names the permitted mechanisms and not the advertised ones, and the
+recreated-folder failure names the alias rather than the remote path. The two that wrap an inner exception,
+`MailboxUnavailableException` and `OutboundDependencyUnavailableException`, are additionally asserted not to repeat the
+inner failure's text. `PersistenceConcurrencyConflictException` composes nothing: its message is the caller's, and the
+rule binds the call sites rather than the type.
 
 ## Out of scope
 
@@ -123,5 +133,9 @@ Per-type tests assert that each message names only the values its contract permi
 which is a different question from which code a boundary reports, and merging the two would tie retry policy to
 protocol vocabulary.
 
-No ADR is written or modified. No exception-handling or error-modelling package is added. The MCP translation layer
-itself is delivered by issues 50, 51, and 52; this change settles the contract that layer consumes.
+No exception-handling or error-modelling package is added. The MCP translation layer itself is delivered by issues 50,
+51, and 52; this change settles the contract that layer consumes.
+
+This note was written before the owner asked for the decision to be recorded as an ADR. ADR 0003 now holds the
+decision and its reasoning, and this note keeps only the evidence behind the `RCS1194` finding and the working detail
+of the change.

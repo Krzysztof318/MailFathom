@@ -14,10 +14,14 @@ public sealed class InfrastructureFailureContractTests
 {
     /// <summary>A failure outside the hierarchy carries no code a boundary can report and obeys no stated message contract.</summary>
     [Fact]
-    public void InfrastructureAssembly_EveryDeclaredException_DerivesFromMailMcpException() =>
-        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(
-            typeof(OutboundDependencyUnavailableException).Assembly,
-            typeof(MailMcpException));
+    public void InfrastructureAssembly_EveryDeclaredException_DerivesFromMailMcpException()
+    {
+        // Arrange
+        var infrastructureAssembly = typeof(OutboundDependencyUnavailableException).Assembly;
+
+        // Act, Assert
+        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(infrastructureAssembly, typeof(MailMcpException));
+    }
 
     [Fact]
     public void ErrorCode_OutboundDependencyUnavailable_IsTheCodeAndKeepsTheRejection()
@@ -32,6 +36,22 @@ public sealed class InfrastructureFailureContractTests
         Assert.Equal(MailMcpErrorCode.OutboundDependencyUnavailable, failure.ErrorCode);
         Assert.Equal(OutboundDependency.MailboxDataRetrieval, failure.Dependency);
         Assert.Same(rejection, failure.InnerException);
+    }
+
+    /// <summary>An inner exception is diagnostic detail for a log; copying its text would put a provider payload into an operator-facing message.</summary>
+    [Fact]
+    public void OutboundDependencyUnavailableException_Message_NamesOnlyTheDependencyClass()
+    {
+        // Arrange
+        var rejection = new InvalidOperationException("host mail.example.test refused the connection");
+
+        // Act
+        var failure = new OutboundDependencyUnavailableException(OutboundDependency.MailboxDataRetrieval, rejection);
+
+        // Assert
+        Assert.Contains(nameof(OutboundDependency.MailboxDataRetrieval), failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(rejection.Message, failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("mail.example.test", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]

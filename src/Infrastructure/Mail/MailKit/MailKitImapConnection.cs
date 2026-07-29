@@ -5,6 +5,7 @@ using System.Runtime.ExceptionServices;
 using System.Security.Cryptography.X509Certificates;
 using MailKit;
 using MailKit.Net.Imap;
+using MailMcp.Application.EmailContent;
 using MailMcp.Application.Resilience;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
@@ -298,8 +299,10 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// arrives as itself, because a retry strategy that runs out of attempts rethrows the last failure rather than a
     /// rejection. Both say the mail server did not serve this operation and the work belongs to a later run, so both
     /// become <see cref="MailboxUnavailableException" /> and neither lets a mail-library type past an application
-    /// port. A terminal failure — a rejected credential, a refused command, an oversized payload — is the operator's
-    /// to see and passes through untouched, as does the caller's own cancellation.
+    /// port. A terminal failure — a rejected credential, a refused command — is the operator's to see and passes
+    /// through untouched, as does the caller's own cancellation. An oversized payload reaches no failure path at all:
+    /// the session reports it as a <see cref="RemoteEmailContentFetchResult" /> outcome, so it returns through this
+    /// method as an ordinary result and never meets the retry or translation branches below.
     /// </remarks>
     private async Task<TResult> ExecuteUnderPipelineAsync<TResult>(
         OutboundDependency dependency,
