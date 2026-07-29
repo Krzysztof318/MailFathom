@@ -61,6 +61,15 @@ public readonly record struct MailMcpErrorCode
     /// <summary>Gets subcategory 1, concurrent writes: a local write did not commit because another writer changed the same durable state.</summary>
     public static MailMcpErrorCode PersistenceConcurrencyConflict { get; } = new(31001);
 
+    /// <summary>Gets subcategory 2, schema state: the database does not carry every migration the running build was compiled against.</summary>
+    public static MailMcpErrorCode DatabaseSchemaOutOfDate { get; } = new(32001);
+
+    /// <summary>Gets subcategory 2, schema state: the migration history could not be read, so the schema is of unknown shape.</summary>
+    public static MailMcpErrorCode DatabaseSchemaStateUnreadable { get; } = new(32002);
+
+    /// <summary>Gets subcategory 2, schema state: the lexical index was built with a different text search configuration than the one configured.</summary>
+    public static MailMcpErrorCode DatabaseSchemaTextSearchConfigurationMismatch { get; } = new(32003);
+
     #endregion
 
     #region Category 4 — Outbound resilience
@@ -79,6 +88,9 @@ public readonly record struct MailMcpErrorCode
         MailboxUnavailable,
         MailboxFolderRecreated,
         PersistenceConcurrencyConflict,
+        DatabaseSchemaOutOfDate,
+        DatabaseSchemaStateUnreadable,
+        DatabaseSchemaTextSearchConfigurationMismatch,
         OutboundDependencyUnavailable,
     ];
 

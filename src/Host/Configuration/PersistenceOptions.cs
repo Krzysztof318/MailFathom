@@ -2,6 +2,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using MailMcp.Infrastructure;
 using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
 
@@ -29,14 +30,15 @@ internal sealed class PersistenceOptions : IValidatableObject
     /// </remarks>
     public string TextSearchConfiguration { get; set; } = PostgresTextSearchConfiguration.Default.Value;
 
-    /// <summary>Gets or sets whether startup creates the local schema from the EF Core model. Development only, and off unless an operator turns it on.</summary>
+    /// <summary>Gets or sets how many seconds a single database command may run before it is cancelled.</summary>
     /// <remarks>
-    /// Temporary scaffolding for the window in which migrations do not exist yet: without it a developer has no way to
-    /// create the tables the host reads and writes. Turning it on in any environment other than Development fails
-    /// startup rather than creating a schema nobody reviewed. Specification 19 generates the reviewed baseline
-    /// migration and removes this setting together with the bootstrap it enables.
+    /// Configured rather than left at the provider's default so that the bound on a database command is a stated
+    /// deployment decision, visible next to the connection settings, rather than whichever value the driver ships. It
+    /// governs one command, not one unit of work: a session that issues several commands is bounded by the caller's
+    /// cancellation token instead.
     /// </remarks>
-    public bool CreateSchemaFromModelOnStartup { get; set; }
+    [Range(1, 600)]
+    public int CommandTimeoutSeconds { get; set; } = HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds;
 
     /// <summary>Gets or sets the reference to a complete PostgreSQL connection string, or <see langword="null" /> when <c>ConnectionStrings:mailmcp</c> supplies it.</summary>
     /// <remarks>

@@ -32,12 +32,13 @@ internal sealed partial class SecretConfigurationValidator
     private readonly DatabaseConnectionSettingsMapper connectionSettingsMapper;
     private readonly IDatabaseConnectionSettingsValidator connectionSettingsValidator;
     private readonly PostgresTextSearchConfiguration schemaTextSearchConfiguration;
+    private readonly DatabaseCommandTimeout composedCommandTimeout;
     private readonly ILogger<SecretConfigurationValidator> logger;
 
     /// <summary>Initializes a new secret configuration validator.</summary>
     /// <remarks>
-    /// The text search configuration arrives as the value the EF Core model was actually built from, not as a setting
-    /// to be read again, because that is exactly what a reloaded candidate has to be compared against.
+    /// The text search configuration and the command timeout both arrive as the values composition actually used, not
+    /// as settings to be read again, because that is exactly what a reloaded candidate has to be compared against.
     /// </remarks>
     public SecretConfigurationValidator(
         ISecretReferenceResolver secretReferenceResolver,
@@ -45,6 +46,7 @@ internal sealed partial class SecretConfigurationValidator
         DatabaseConnectionSettingsMapper connectionSettingsMapper,
         IDatabaseConnectionSettingsValidator connectionSettingsValidator,
         PostgresTextSearchConfiguration schemaTextSearchConfiguration,
+        DatabaseCommandTimeout composedCommandTimeout,
         ILogger<SecretConfigurationValidator> logger)
     {
         this.secretReferenceResolver = secretReferenceResolver;
@@ -52,6 +54,7 @@ internal sealed partial class SecretConfigurationValidator
         this.connectionSettingsMapper = connectionSettingsMapper;
         this.connectionSettingsValidator = connectionSettingsValidator;
         this.schemaTextSearchConfiguration = schemaTextSearchConfiguration;
+        this.composedCommandTimeout = composedCommandTimeout;
         this.logger = logger;
     }
 
@@ -76,6 +79,8 @@ internal sealed partial class SecretConfigurationValidator
             await this.FindSecretReferenceErrorsAsync(PersistenceConfigurationPath, candidate, cancellationToken));
 
         errors.AddRange(this.FindTextSearchConfigurationErrors(candidate));
+
+        errors.AddRange(this.FindCommandTimeoutErrors(candidate));
 
         var connectionFailures = await this.connectionSettingsValidator.FindConfigurationFailuresAsync(
             this.connectionSettingsMapper.Map(candidate),
@@ -107,6 +112,22 @@ internal sealed partial class SecretConfigurationValidator
         if (!string.Equals(candidate.TextSearchConfiguration, this.schemaTextSearchConfiguration.Value, StringComparison.Ordinal))
         {
             yield return $"{PersistenceConfigurationPath}:{nameof(PersistenceOptions.TextSearchConfiguration)} — the lexical index was built with '{this.schemaTextSearchConfiguration.Value}'; changing it needs a schema change and a restart rather than a configuration reload.";
+        }
+    }
+
+    /// <summary>Refuses a reloaded command timeout instead of adopting one that could not take effect.</summary>
+    /// <remarks>
+    /// The timeout is written into the EF Core context options during composition and nothing reapplies it afterwards,
+    /// so a reloaded value would be published as adopted while every database command kept the bound the process
+    /// started with. That gap is worse than refusing the change: an operator who raised the timeout to stop a report
+    /// timing out would see the setting take and the timeouts continue. It is restart-required for the same reason the
+    /// text search configuration and the credential source are.
+    /// </remarks>
+    private IEnumerable<string> FindCommandTimeoutErrors(PersistenceOptions candidate)
+    {
+        if (candidate.CommandTimeoutSeconds != (int)this.composedCommandTimeout.Value.TotalSeconds)
+        {
+            yield return $"{PersistenceConfigurationPath}:{nameof(PersistenceOptions.CommandTimeoutSeconds)} — database commands were composed with a {(int)this.composedCommandTimeout.Value.TotalSeconds}s timeout; changing it needs a restart rather than a configuration reload.";
         }
     }
 

@@ -135,9 +135,16 @@ try
         string.IsNullOrWhiteSpace(configuredTextSearchConfiguration)
             ? PostgresTextSearchConfiguration.Default
             : PostgresTextSearchConfiguration.Create(configuredTextSearchConfiguration));
-    // Ahead of the worker so a developer's first run finds the tables it reads, and after the infrastructure that
-    // registers the creator it resolves. Specification 19 removes this line with the rest of the bootstrap.
-    builder.Services.AddHostedService<MailMcp.Host.Hosting.DevelopmentSchemaBootstrap>();
+    // After the context is registered, because enrichment layers onto an existing registration rather than creating
+    // one, and read from configuration directly for the same reason the text search configuration is: the value has to
+    // be known before the container that would resolve an options snapshot exists. PersistenceOptions validates the
+    // same key on start, which is what reports an out-of-range value to an operator.
+    builder.AddDatabaseHealthAndTelemetry(TimeSpan.FromSeconds(builder.Configuration.GetValue(
+        "Persistence:CommandTimeoutSeconds",
+        HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds)));
+    // Ahead of the workers so no unit of work reads or writes mail before the schema this build expects is proven, and
+    // after the infrastructure that registers the inspector it resolves.
+    builder.Services.AddHostedService<MailMcp.Host.Hosting.DatabaseSchemaStartupGate>();
     builder.Services.AddHostedService<MailMcp.Host.Hosting.MailSynchronizationWorker>();
     builder.Services.AddHostedService<MailMcp.Host.Hosting.MailExtractionBackfillWorker>();
 

@@ -76,6 +76,13 @@ internal sealed class MailMcpDbContext : DbContext
     // the checkpoint comparisons still order correctly under whichever column type is chosen.
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Declared before any entity so the baseline migration emits CREATE EXTENSION ahead of the tables. The image
+        // ships pgvector, which makes the extension installable but not installed: without this, the first vector
+        // column would fail on a type PostgreSQL does not know. Enabling it here rather than in the migration that
+        // introduces that column keeps the RAG stage from needing a migration whose only content is this statement,
+        // and costs an empty database one catalogue entry.
+        modelBuilder.HasPostgresExtension("vector");
+
         modelBuilder.Entity<MailboxAccountEntity>(entity =>
         {
             entity.ToTable("mailbox_accounts");

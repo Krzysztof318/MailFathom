@@ -2,7 +2,7 @@
 
 `stored_emails` holds the normalized metadata a mailbox timeline is read from. Its raw MIME lives in a separate one-to-one table, `email_message_contents`, and the text derived from that MIME lives in a third, `email_search_documents`, so nothing that lists or filters mail ever loads a `bytea` value, a body's worth of text, or a search vector — let alone tracks one in the change tracker.
 
-This page describes the table as the EF Core model declares it today. No migration exists yet — [specification 19](../../specs/19-ef-core-migration-baseline-and-apply-policy.md) generates the reviewed baseline — so the schema a developer runs against comes from the Development-only bootstrap described at the end of this page, and PostgreSQL has not yet had the chance to disagree with any of it.
+This page describes the table as the EF Core model declares it and as the reviewed baseline migration creates it. [Specification 19](../../specs/19-ef-core-migration-baseline-and-apply-policy.md) generated that migration, so PostgreSQL has now had its say: the types, constraints, and indexes below are the ones a schema dump reports rather than the ones a model was hoped to produce. How the schema reaches a database is at the end of this page.
 
 ## What a row records
 
@@ -89,14 +89,10 @@ Participants, subject, and thread identifiers are personal data. They are stored
 
 The derived search document is not a lesser classification of the same data. Body text, the copied subject and addresses, and the search vector built from them are mail content, and none of them is anonymous merely because it was derived; they inherit the retention, access, export, and erasure obligations of the message they came from. The cascade from `stored_emails` is what makes that structural rather than a rule somebody has to remember.
 
-## The Development-only schema bootstrap
+## How this schema reaches a database
 
-Migrations are deliberately deferred until the schema that specifications 07 through 12 grow has settled, which would otherwise leave a developer with no way to create the tables the host reads and writes at all. `Persistence:CreateSchemaFromModelOnStartup` closes that gap: when it is on and the environment is Development, startup creates the schema from the EF Core model.
+One reviewed migration, `Initial`, creates all of it. There is no bootstrap that builds the schema from the model at startup any more: the host reads the migration history, and refuses to start when the database has not applied every migration the running build defines.
 
-It is off by default, and turning it on in any other environment **fails startup** rather than creating anything. The environment is checked rather than trusted to deployment discipline, because the failure it guards against is silent: a schema created from whatever the model happened to say that day looks like a working database until the first migration tries to reconcile with it.
+Locally the AppHost's `mailmcp-migrations` resource applies it before the host starts. Elsewhere applying it is an explicit deployment step. [Local development](../operations/local-development.md) documents both, and the `add-migration` skill documents how the baseline is regenerated while MailMcp is pre-release.
 
-The underlying call creates tables only in a database that has none. It does not compare an existing database against the model and it drops nothing, so a developer whose database predates a model change recreates it themselves.
-
-This is temporary scaffolding with a single owner. Specification 19 generates the reviewed baseline migration and removes the setting, the hosted service, the `IDevelopmentSchemaCreator` port, and its implementation together.
-
-One open item belongs to that same review: `uid_validity` and `uid` are modelled as CLR `uint` because that is the IMAP wire type, and PostgreSQL has no native unsigned 32-bit integer. The mapping has never been validated against a real database. Specification 19 confirms it when the first migration is generated, and the same review has to confirm that the unique index on `(mail_folder_id, uid_validity, uid)` and the checkpoint comparisons still order correctly under whichever column type is chosen.
+`uid_validity` and `uid` are modelled as CLR `uint` because that is the IMAP wire type, and PostgreSQL has no native unsigned 32-bit integer. The generated migration maps both to `bigint`, which represents the whole unsigned 32-bit range exactly, so the unique index on `(mail_folder_id, uid_validity, uid)` and the checkpoint comparisons order the same way the IMAP values do.
