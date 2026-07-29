@@ -56,6 +56,75 @@ public sealed class MailKitTransportSecurityMappingTests
     }
 
     [Fact]
+    public void RestrictAdvertisedMechanisms_ServerAdvertisesNothingAndClearTextIsPermitted_LeavesTheSetEmptyForTheLoginCommand()
+    {
+        // Arrange
+        var advertisedMechanisms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var authentication = MailAuthenticationPolicy.Create(
+            [MailAuthenticationMechanism.Login],
+            allowInsecureConnection: true,
+            allowClearTextAuthenticationOverUnencryptedConnection: true);
+
+        // Act
+        MailKitTransportSecurityMapping.RestrictAdvertisedMechanisms(advertisedMechanisms, authentication, "primary");
+
+        // Assert
+        Assert.Empty(advertisedMechanisms);
+    }
+
+    [Fact]
+    public void RestrictAdvertisedMechanisms_NoAdvertisedMechanismIsPermittedAndClearTextIsPermitted_LeavesTheSetEmptyForTheLoginCommand()
+    {
+        // Arrange
+        var advertisedMechanisms = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "XOAUTH2" };
+        var authentication = MailAuthenticationPolicy.Create(
+            [MailAuthenticationMechanism.Plain, MailAuthenticationMechanism.Login],
+            allowInsecureConnection: true,
+            allowClearTextAuthenticationOverUnencryptedConnection: true);
+
+        // Act
+        MailKitTransportSecurityMapping.RestrictAdvertisedMechanisms(advertisedMechanisms, authentication, "primary");
+
+        // Assert
+        Assert.Empty(advertisedMechanisms);
+    }
+
+    [Fact]
+    public void RestrictAdvertisedMechanisms_NoAdvertisedMechanismIsPermittedAndOnlyChallengeResponseIsPermitted_Throws()
+    {
+        // Arrange
+        var advertisedMechanisms = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "XOAUTH2" };
+        var authentication = MailAuthenticationPolicy.Create(
+            [MailAuthenticationMechanism.ScramSha256],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Act
+        var exception = Assert.Throws<MailAuthenticationMechanismUnavailableException>(
+            () => MailKitTransportSecurityMapping.RestrictAdvertisedMechanisms(advertisedMechanisms, authentication, "primary"));
+
+        // Assert
+        Assert.Equal(["SCRAM-SHA-256"], exception.PermittedMechanismNames);
+    }
+
+    [Fact]
+    public void RestrictAdvertisedMechanisms_ClearTextIsPermittedAndTheServerAdvertisesIt_KeepsTheMechanismInsteadOfFallingBack()
+    {
+        // Arrange
+        var advertisedMechanisms = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "PLAIN", "XOAUTH2" };
+        var authentication = MailAuthenticationPolicy.Create(
+            [MailAuthenticationMechanism.Plain],
+            allowInsecureConnection: true,
+            allowClearTextAuthenticationOverUnencryptedConnection: true);
+
+        // Act
+        MailKitTransportSecurityMapping.RestrictAdvertisedMechanisms(advertisedMechanisms, authentication, "primary");
+
+        // Assert
+        Assert.Equal(["PLAIN"], advertisedMechanisms);
+    }
+
+    [Fact]
     public void RestrictAdvertisedMechanisms_NoAdvertisedMechanismSet_Throws()
     {
         // Arrange

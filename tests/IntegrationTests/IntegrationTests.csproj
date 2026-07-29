@@ -5,6 +5,11 @@
          host so that infrastructure's hosted lifecycle events run, which is what makes the PostgreSQL connection string
          available to anything that opens a connection. -->
     <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <!-- Referenced directly rather than taken transitively through Infrastructure, because the suite speaks IMAP and
+         SMTP itself: it seeds the mailbox and reads flag state back over its own connections, so that what it observes
+         is the server's answer rather than the adapter's belief about it. -->
+    <PackageReference Include="MailKit" />
+    <PackageReference Include="MimeKit" />
     <PackageReference Include="xunit.v3.mtp-v2" />
   </ItemGroup>
 

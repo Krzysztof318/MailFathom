@@ -35,5 +35,9 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="MailMcp.Infrastructure.UnitTests" />
+    <!-- The integration suite reads back what a synchronization run persisted, and the EF Core model it has to read is
+         internal by design: the entities are a persistence detail no application boundary exposes. Asserting through
+         the repositories instead would only report what the write path believes it wrote. -->
+    <InternalsVisibleTo Include="MailMcp.IntegrationTests" />
   </ItemGroup>
 </Project>

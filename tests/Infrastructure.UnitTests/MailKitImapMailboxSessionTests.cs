@@ -92,6 +92,27 @@ public sealed class MailKitImapMailboxSessionTests
     }
 
     [Fact]
+    public async Task OpenReadOnlyAsync_ServerAdvertisesNoPermittedMechanismButClearTextIsPermitted_AuthenticatesWithAnEmptySet()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient();
+        var factory = CreateFactory(resilience, client, CreateSelectedFolder());
+        client.AuthenticationMechanisms.Add("XOAUTH2");
+
+        // Act
+        await using var session = await factory.OpenReadOnlyAsync(
+            PrimaryAccount,
+            InboxFolder,
+            CreatePolicy(MailConnectionSecurity.TlsOnConnect, MailAuthenticationMechanism.Login),
+            CancellationToken.None);
+
+        // Assert
+        Assert.True(client.AuthenticateCalled);
+        Assert.Empty(client.MechanismsWhenAuthenticated);
+    }
+
+    [Fact]
     public async Task GetEmailBatchAfterAsync_EmptyFolder_DoesNotCheckpointFutureUid()
     {
         // Arrange

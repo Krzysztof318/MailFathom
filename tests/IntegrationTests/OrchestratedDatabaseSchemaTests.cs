@@ -17,6 +17,7 @@ namespace MailMcp.IntegrationTests;
 /// against the database the orchestration issued. The schema, constraint, index, and query-plan verification that
 /// specification 20 lists is written against this same fixture and is tracked separately.
 /// </remarks>
+[Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 public sealed class OrchestratedDatabaseSchemaTests(MailMcpOrchestrationFixture orchestration)
 {
     [Fact]

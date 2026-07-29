@@ -35,6 +35,39 @@ else
     postgres.WithDataVolume();
 }
 
+if (runsIntegrationTests)
+{
+    // A real IMAP server, because the claim the suite exists to prove — that synchronization never marks mail as read —
+    // is about what MailKit puts on the wire, and a substituted port cannot observe a server's flag state. GreenMail is
+    // built for this: it is Apache-2.0, it seeds through ordinary SMTP delivery, and it answers UID SEARCH, BODY.PEEK,
+    // STORE, EXPUNGE, and folder creation, so the flag can be read back over a second connection the adapter knows
+    // nothing about. Its ports are GreenMail's own test offsets, and the container is named under the ephemeral prefix
+    // for the same reason the PostgreSQL one is.
+    //
+    // Only the two protocols the suite speaks are started, plus the API server, whose readiness endpoint is what makes
+    // this resource reach Healthy instead of merely Running. Without it a test would race the server's first listener.
+    builder.AddContainer(OrchestrationContract.MailServerResourceName, "greenmail/standalone", "2.1.11")
+        .WithContainerName($"{OrchestrationContract.EphemeralResourceNamePrefix}-mailserver")
+        .WithEnvironment(
+            "GREENMAIL_OPTS",
+            string.Join(
+                ' ',
+                "-Dgreenmail.smtp.hostname=0.0.0.0",
+                "-Dgreenmail.smtp.port=3025",
+                "-Dgreenmail.imap.hostname=0.0.0.0",
+                "-Dgreenmail.imap.port=3143",
+                "-Dgreenmail.api.hostname=0.0.0.0",
+                "-Dgreenmail.api.port=8080",
+                // One mailbox, whose login is the local part and whose delivery address is the whole string. Verbose
+                // logging stays off on purpose: it transcribes the IMAP conversation, password included, into the
+                // orchestration log.
+                $"-Dgreenmail.users={OrchestrationContract.MailServerAccountUserName}:{OrchestrationContract.MailServerAccountPassword}@mailmcp.test"))
+        .WithEndpoint(targetPort: 3143, scheme: "tcp", name: OrchestrationContract.MailServerImapEndpointName)
+        .WithEndpoint(targetPort: 3025, scheme: "tcp", name: OrchestrationContract.MailServerSmtpEndpointName)
+        .WithHttpEndpoint(targetPort: 8080, name: OrchestrationContract.MailServerApiEndpointName)
+        .WithHttpHealthCheck("/api/service/readiness", endpointName: OrchestrationContract.MailServerApiEndpointName);
+}
+
 var database = postgres.AddDatabase(OrchestrationContract.DatabaseResourceName);
 
 var mailMcpHost = builder.AddProject<Projects.Host>(OrchestrationContract.HostResourceName)

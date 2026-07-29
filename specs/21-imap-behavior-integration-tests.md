@@ -31,6 +31,18 @@ The suite seeds a mailbox with known messages in known flag states and verifies:
 - The transport security policy from specification 01 rejects a clear-text mechanism on an unencrypted channel against a server that offers one.
 - Where the chosen server supports them, IDLE delivers a notification that triggers exactly one synchronization pass, and CONDSTORE reconciliation reaches the same end state as the full-window path.
 
+## Server selection outcome
+
+The evaluation this specification asks for was carried out against two candidates, both driven by hand before either was wired into the suite.
+
+`smtp4dev` (BSD-3-Clause) preserves `\Seen` under `BODY.PEEK`, sets it under a non-peek fetch even when the folder is selected read-only, and persists a `STORE`, so the invariant itself is observable against it. It was rejected on two other counts. Its INBOX reports a hard-coded UIDVALIDITY that nothing can change, which makes the UIDVALIDITY scenario below permanently unverifiable, and a `UID SEARCH UID 1:*` exhausts the container's memory and kills the process — a shape MailMcp never sends, because it derives a concrete upper bound from `UIDNEXT`, but one worth recording.
+
+`greenmail/standalone` (Apache-2.0) was selected. It satisfies every criterion the approach lists: PEEK preserves the flag and a non-peek fetch sets it, `STORE` persists and is read back, and it advertises UIDPLUS, IDLE, MOVE, and QUOTA. Each folder carries a real UIDVALIDITY derived from its creation, so replacing a folder produces a genuine change rather than a simulated one, and `EXPUNGE` removes a UID from the folder. It has one defect the suite works around rather than avoids: `DELETE` of a folder an earlier session had selected drops the connection, so a folder is retired by renaming it, which reaches the same end state.
+
+Neither server advertises a SASL mechanism from MailMcp's allow-list: smtp4dev advertises none at all and GreenMail advertises only `AUTH=XOAUTH2`. Both authenticate with the IMAP `LOGIN` command, which RFC 3501 leaves as the client's last resort, and which `MailKitTransportSecurityMapping` refused outright before this work. That refusal made every RFC-conformant server without an `AUTH=` capability unreachable, so the adapter now permits the fallback exactly when the account's policy already permits a clear-text mechanism — the same exposure, already opted into — and still refuses when the allow-list is challenge-response only.
+
+Two scoped scenarios stay unverified, and for reasons outside the server choice. Expunge detection waits on specification 10, which has not been implemented, and CONDSTORE reconciliation waits on specification 12; GreenMail advertises no CONDSTORE either. IDLE is available but not exercised, because specification 11 has not been implemented and GreenMail's IDLE notification is polled rather than immediate. SMTP is used to seed the mailbox and nothing about SMTP delivery is asserted, so the exclusion below stands.
+
 ## Safety and privacy
 
 The suite uses synthetic mailboxes and throwaway credentials defined in the test app model. No real account, host name, or credential appears in the repository. Nothing in this suite connects to an external network.
