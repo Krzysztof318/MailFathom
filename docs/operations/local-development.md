@@ -183,12 +183,50 @@ A third exclusion is applied by path rather than by attribute: `.config/CodeCove
 
 Raw Cobertura reports and TRX files are written under `artifacts/coverage/raw/`. The merged Cobertura and HTML reports are written under `artifacts/coverage/report/`.
 
+## Integration tests
+
+`tests/IntegrationTests` verifies what a unit test structurally cannot: EF Core mappings, the baseline migration, database constraints, and the SQL PostgreSQL actually runs. It starts the repository's own app model through `Aspire.Hosting.Testing`, so the orchestration under test is the one `aspire run` starts rather than a second container topology maintained beside it.
+
+Run it on request:
+
+```bash
+bash scripts/run-integration-tests.sh
+```
+
+Arguments are forwarded to Microsoft Testing Platform, so `bash scripts/run-integration-tests.sh --filter '*Schema*'` narrows the run.
+
+The suite needs a container runtime. The script uses `docker`; set `MAILMCP_CONTAINER_RUNTIME` to use another one.
+
+It is deliberately not part of any other command. `scripts/verify-fast.sh` and `scripts/verify-full.sh` never start it, the coverage gate never measures it, and no pull-request workflow runs it. The mechanism is one MSBuild property: `IsTestingPlatformApplication` is `false` for the project, which is what a solution-wide `dotnet test` uses to discover test projects, so neither the fast loop nor the coverage collection finds it. The project stays in `MailMcp.slnx` regardless, so it is built, analyzed, and formatted by exactly the same gates as everything else — a compile or style error in an integration test still fails an ordinary pull request.
+
+### Ephemeral resources
+
+The app host is started with the argument `IntegrationTesting=true`, which selects a second topology in `src/AppHost/Program.cs`:
+
+- the PostgreSQL container is named `mailmcp-integrationtests-postgres` and its data volume `mailmcp-integrationtests-postgres-data`, rather than taking Aspire's random postfix and the path-derived volume name a developer's orchestration uses;
+- the `mailmcp-host` project resource is added to the model but never started, because the suite exercises classes against a real database and a running MailMcp would synchronize mail underneath the data a test is asserting on.
+
+Both names come from `OrchestrationContract` in `src/AppHost`, and nothing else in the repository uses that prefix. The script removes every container and volume carrying it before the run as well as after it: before, because the baseline migration is only proven to apply cleanly when it applies to an empty database; after, because nothing the suite creates is meant to outlive it. A run killed with `SIGKILL` skips the trap, and the next run's opening removal is what cleans up after it. To check by hand:
+
+```bash
+docker ps --all --filter name=mailmcp-integrationtests
+docker volume ls --filter name=mailmcp-integrationtests
+```
+
+A developer's own orchestration is untouched by any of this: its container name and its volume name are derived from the AppHost project path and never carry the test prefix.
+
+### Continuous integration
+
+The `Integration tests` workflow runs the same script and is `workflow_dispatch` only, with an optional `ref` input. It is not a required status check and never runs on a pull request. Start it from the Actions tab when a change is one this suite can speak to; it uploads the TRX results as an artifact.
+
 ## Pull request checks
 
 Pull requests targeting `main` run two GitHub Actions checks after they are marked ready for review. Draft pull requests skip both jobs without allocating a runner. Marking a draft ready for review starts the applicable checks immediately, and later commits continue to start them. Converting a ready pull request back to draft through the `converted_to_draft` activity cancels the superseded active run and skips the replacement job. Both workflows remain available through manual dispatch regardless of pull request state:
 
 - `Build and unit test` runs for pull requests to `main` that change production code, tests, the solution or SDK selection, shared build and package configuration, coverage tooling, or the workflow itself. It restores `MailMcp.slnx` and repository-local tools, builds the solution in Release configuration, runs all unit-test projects through Microsoft Testing Platform with unique coverage prefixes, merges their Cobertura reports, and fails below 85% aggregate line coverage for the complete configured production scope. It uploads raw and merged coverage artifacts and TRX results even when the threshold fails.
 - `dotnet format` restores `MailMcp.slnx` and verifies repository formatting without applying changes.
+
+A third workflow, `Integration tests`, is manual dispatch only and never runs for a pull request. See [Integration tests](#integration-tests) above.
 
 The `main` branch protection rule requires a pull request and the `Build and unit test` check, requires the branch to be current with `main`, applies to administrators, and requires review conversations to be resolved. It does not require an approving review because the repository currently has one maintainer. Force-pushes and deletion of `main` are disabled. The GitHub repository coverage rule must remain disabled because GitHub Code Quality coverage uploads are unavailable for this user-owned repository; the required repository-owned check enforces the same 85% minimum against the complete configured code scope.
 

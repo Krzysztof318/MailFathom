@@ -1,19 +1,53 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailMcp.AppHost;
+using Microsoft.Extensions.Configuration;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
-// The data volume outlives the container, so a developer keeps synchronized mail across restarts instead of paying an
-// initial IMAP synchronization every time the orchestration is stopped. Recreating the schema is therefore a deliberate
-// step — the migration resource's Reset Database command — rather than a side effect of losing the container.
-var postgres = builder.AddPostgres("postgres")
-    .WithImage("pgvector/pgvector")
-    .WithImageTag("0.8.2-pg17")
-    .WithDataVolume();
-var database = postgres.AddDatabase("mailmcp");
+// The integration-test suite starts this same app model, so the two shapes are selected here rather than duplicated in
+// a second app host: a developer's orchestration keeps its data across restarts, and a test run keeps nothing.
+var runsIntegrationTests = builder.Configuration.GetValue(
+    OrchestrationContract.IntegrationTestingConfigurationKey,
+    false);
 
-var mailMcpHost = builder.AddProject<Projects.Host>("mailmcp-host")
+var postgres = builder.AddPostgres(OrchestrationContract.PostgresResourceName)
+    .WithImage("pgvector/pgvector")
+    .WithImageTag("0.8.2-pg17");
+
+if (runsIntegrationTests)
+{
+    // Named rather than left to Aspire's random postfix, and given a volume rather than none, so that both survive a
+    // killed run as something the prefix identifies. A container the test topology left behind would otherwise be
+    // indistinguishable from the developer's own, and skipping the volume entirely would let the image's own VOLUME
+    // declaration create an anonymous one that outlives the container under a name nobody can filter on.
+    postgres
+        .WithContainerName($"{OrchestrationContract.EphemeralResourceNamePrefix}-postgres")
+        .WithDataVolume($"{OrchestrationContract.EphemeralResourceNamePrefix}-postgres-data");
+}
+else
+{
+    // The data volume outlives the container, so a developer keeps synchronized mail across restarts instead of paying
+    // an initial IMAP synchronization every time the orchestration is stopped. Recreating the schema is therefore a
+    // deliberate step — the migration resource's Reset Database command — rather than a side effect of losing the
+    // container.
+    postgres.WithDataVolume();
+}
+
+var database = postgres.AddDatabase(OrchestrationContract.DatabaseResourceName);
+
+var mailMcpHost = builder.AddProject<Projects.Host>(OrchestrationContract.HostResourceName)
     .WithReference(database)
     .WaitFor(database);
+
+if (runsIntegrationTests)
+{
+    // The suite verifies classes against a real database rather than the composed host, so the host resource stays in
+    // the model — the migration resource is defined on it, and the connection string is issued to it — but nothing
+    // starts it. Starting a second MailMcp against the test database would run its synchronization workers over the
+    // data a test is asserting on.
+    mailMcpHost.WithExplicitStart();
+}
 
 // Host is the startup project because it is the project resource the connection string is issued to; Infrastructure
 // owns the context and the migrations. The tool resource runs dotnet-ef with the orchestration's own
@@ -21,7 +55,7 @@ var mailMcpHost = builder.AddProject<Projects.Host>("mailmcp-host")
 // WaitFor is not optional here despite the parent project already declaring it. The migration resource opens its own
 // connection as soon as it starts, and PostgreSQL accepts a socket before it will complete an SSL handshake, so a run
 // without this waits on nothing and fails the handshake against a server that is still starting.
-var migrations = mailMcpHost.AddEFMigrations("mailmcp-migrations")
+var migrations = mailMcpHost.AddEFMigrations(OrchestrationContract.MigrationsResourceName)
     .WithMigrationsProject(Path.Combine(builder.AppHostDirectory, "..", "Infrastructure", "Infrastructure.csproj"))
     // The namespace is deliberately left to EF's own derivation from this directory, which produces
     // MailMcp.Infrastructure.Persistence.Migrations anyway. Stating it explicitly makes EF write the model snapshot to a

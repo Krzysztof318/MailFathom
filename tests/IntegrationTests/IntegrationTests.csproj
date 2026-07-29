@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.Testing" />
+    <!-- The full hosting package rather than the abstractions the production projects reference: a test composes a real
+         host so that infrastructure's hosted lifecycle events run, which is what makes the PostgreSQL connection string
+         available to anything that opens a connection. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="xunit.v3.mtp-v2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The app model under test, which is also where the Projects.AppHost metadata the testing builder starts comes
+         from. -->
+    <ProjectReference Include="..\..\src\AppHost\AppHost.csproj" />
+    <ProjectReference Include="..\..\src\Infrastructure\Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

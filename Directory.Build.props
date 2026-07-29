@@ -46,21 +46,43 @@
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
   </ItemGroup>
 
-  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.UnitTests'))">
-    <PackageReference Include="coverlet.MTP" PrivateAssets="all" />
+  <PropertyGroup>
+    <IsUnitTestProject Condition="$(MSBuildProjectName.EndsWith('.UnitTests'))">true</IsUnitTestProject>
+    <IsIntegrationTestProject Condition="'$(MSBuildProjectName)' == 'IntegrationTests'">true</IsIntegrationTestProject>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsUnitTestProject)' == 'true' Or '$(IsIntegrationTestProject)' == 'true'">
     <PackageReference Include="xunit.analyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
-    <None Include="$(MSBuildThisFileDirectory)testconfig.json" Link="testconfig.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.UnitTests'))">
+  <PropertyGroup Condition="'$(IsUnitTestProject)' == 'true' Or '$(IsIntegrationTestProject)' == 'true'">
     <IsPackable>false</IsPackable>
-    <IsTestProject>true</IsTestProject>
     <OutputType>Exe</OutputType>
     <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- Test names use underscores to encode the member, scenario, and expected behavior. -->
     <NoWarn>$(NoWarn);CS1591;CA1707</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsUnitTestProject)' == 'true'">
+    <PackageReference Include="coverlet.MTP" PrivateAssets="all" />
+    <None Include="$(MSBuildThisFileDirectory)testconfig.json" Link="testconfig.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(IsUnitTestProject)' == 'true'">
+    <IsTestProject>true</IsTestProject>
     <!-- Empty scaffold test projects are allowed until the first behavior slice adds real unit tests. -->
     <TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --ignore-exit-code 8</TestingPlatformCommandLineArguments>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsIntegrationTestProject)' == 'true'">
+    <!-- A solution-wide `dotnet test` discovers its test projects by this property, which xunit.v3 otherwise sets, so
+         opting out is what keeps a suite that needs Docker and a PostgreSQL container out of the fast loop and out of
+         the coverage gate. It is also what keeps that gate working at all: the collection run passes a Coverlet
+         argument to every discovered executable, and this one deliberately carries no collector, so being discovered
+         would fail the whole run on an unrecognized option. The project stays in the solution regardless, so it is
+         built, analyzed, and formatted by exactly the same gates as everything else; scripts/run-integration-tests.sh
+         is what runs it. -->
+    <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
   </PropertyGroup>
 </Project>
