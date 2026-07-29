@@ -373,6 +373,7 @@ public sealed class MailSynchronizationWorkerTests
         services.AddSingleton<TimeProvider>(timeProvider);
         services.AddSingleton(sessionFactory);
         services.AddSingleton<IMailTransportSecurityPolicyReader>(options);
+        services.AddSingleton<IMailSynchronizationWindowReader>(options);
         services.AddSingleton(Substitute.For<ISynchronizationCheckpointStore>());
         services.AddSingleton(Substitute.For<IPersistenceSessionFactory>());
         services.AddSingleton(Substitute.For<IEmailMetadataRepository>());

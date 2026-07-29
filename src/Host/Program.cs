@@ -42,6 +42,9 @@ try
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
+    // The one mail synchronization rule that needs the current date, which no attribute on a bound options graph can
+    // reach, arrives through the options framework's own validator seam rather than as a second validation mechanism.
+    builder.Services.AddSingleton<IValidateOptions<MailSynchronizationOptions>, MailSynchronizationWindowValidator>();
     // Bound strictly for the same reason as mail transport: a misspelled "Passwrod" would leave the secret block
     // undiscovered, start the host on a passwordless connection string, and surface as an authentication failure later.
     builder.Services.AddOptions<PersistenceOptions>()
@@ -80,6 +83,7 @@ try
     builder.Services.AddScoped<ScopedMailSynchronizationSettings>();
     builder.Services.AddScoped(provider => provider.GetRequiredService<ScopedMailSynchronizationSettings>().Current);
     builder.Services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+    builder.Services.AddScoped<IMailSynchronizationWindowReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();
     builder.Services.AddScoped(provider =>
     {

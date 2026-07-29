@@ -1,7 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Globalization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
+using MailMcp.Domain.Synchronization;
 using MailMcp.Domain.Transport;
 using MailMcp.Host.Configuration;
 using MailMcp.Infrastructure.Certificates;
@@ -197,6 +199,70 @@ public sealed class MailSynchronizationOptionsTests
     }
 
     [Fact]
+    public void GetWindow_AccountBoundingHowFarBackToReach_ReturnsThatDateAsTheWindow()
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.EarliestEmailReceivedDate = new DateOnly(2024, 1, 1);
+        var options = new MailSynchronizationOptions { Accounts = [account] };
+
+        // Act
+        var window = options.GetWindow(MailAccountId.Create("primary"));
+
+        // Assert
+        Assert.Equal(new DateOnly(2024, 1, 1), window.EarliestEmailReceivedDate);
+    }
+
+    /// <summary>Configuring no bound keeps the behavior every existing deployment has, which is to reach everything.</summary>
+    [Fact]
+    public void GetWindow_AccountWithNoConfiguredDate_ReturnsAnUnboundedWindow()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions { Accounts = [CreateAccount("primary")] };
+
+        // Act
+        var window = options.GetWindow(MailAccountId.Create("primary"));
+
+        // Assert
+        Assert.Equal(MailSynchronizationWindow.Unbounded, window);
+    }
+
+    [Fact]
+    public void FindSynchronizationWindowErrors_DateLaterThanToday_ReportsTheAccountAndTheProperty()
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.EarliestEmailReceivedDate = new DateOnly(2026, 8, 1);
+        var options = new MailSynchronizationOptions { Accounts = [account] };
+
+        // Act
+        var result = Assert.Single(options.FindSynchronizationWindowErrors(new DateOnly(2026, 7, 24)));
+
+        // Assert
+        Assert.Contains("Account 'primary'", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("2026-08-01", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Equal([nameof(MailSynchronizationAccountOptions.EarliestEmailReceivedDate)], result.MemberNames);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("2026-07-24")]
+    [InlineData("2019-12-31")]
+    public void FindSynchronizationWindowErrors_DateTodayOrEarlierOrAbsent_ReportsNoError(string? earliestEmailReceivedDate)
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.EarliestEmailReceivedDate = earliestEmailReceivedDate is null ? null : DateOnly.Parse(earliestEmailReceivedDate, CultureInfo.InvariantCulture);
+        var options = new MailSynchronizationOptions { Accounts = [account] };
+
+        // Act
+        var results = options.FindSynchronizationWindowErrors(new DateOnly(2026, 7, 24)).ToArray();
+
+        // Assert
+        Assert.Empty(results);
+    }
+
+    [Fact]
     public async Task ResolveSettingsAsync_ConfiguredAccount_ResolvesTheAccountPasswordForTheCallerToOwn()
     {
         // Arrange
@@ -282,6 +348,49 @@ public sealed class MailSynchronizationOptionsTests
         var account = Assert.Single(options.Accounts);
         Assert.Equal("systemd-credential:imap-primary-password", account.Secrets.Password.SecretReference);
         Assert.Empty(options.ValidateForSynchronization());
+    }
+
+    [Fact]
+    public void Bind_EarliestEmailReceivedDate_ReadsItAsAPlainDate()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:EarliestEmailReceivedDate"] = "2024-01-01",
+            })
+            .Build();
+
+        // Act
+        var options = configuration.GetSection("MailSynchronization").Get<MailSynchronizationOptions>()!;
+
+        // Assert
+        Assert.Equal(new DateOnly(2024, 1, 1), Assert.Single(options.Accounts).EarliestEmailReceivedDate);
+    }
+
+    /// <summary>
+    /// A bound nobody can interpret has to fail startup, and only the strict binding the host uses makes it do so: the
+    /// binder treats an account as a collection item and otherwise drops the whole item, which would remove an account
+    /// from synchronization over a typo in one of its dates.
+    /// </summary>
+    [Fact]
+    public void Bind_EarliestEmailReceivedDateThatIsNotADate_FailsInsteadOfDroppingTheAccount()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:EarliestEmailReceivedDate"] = "last January",
+            })
+            .Build();
+        var options = new MailSynchronizationOptions();
+
+        // Act, Assert
+        Assert.Throws<InvalidOperationException>(() => configuration
+            .GetSection("MailSynchronization")
+            .Bind(options, binderOptions => binderOptions.ErrorOnUnknownConfiguration = true));
     }
 
     private static TrustAnchorLoader CreateTrustAnchorLoader() =>

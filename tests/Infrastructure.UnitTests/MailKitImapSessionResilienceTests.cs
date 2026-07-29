@@ -6,6 +6,7 @@ using MailKit.Search;
 using MailMcp.Application.EmailContent;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Emails;
+using MailMcp.Domain.Synchronization;
 using NSubstitute;
 using Xunit;
 using static MailMcp.Infrastructure.UnitTests.MailKitImapSessionTestContext;
@@ -41,7 +42,7 @@ public sealed class MailKitImapSessionResilienceTests
 
         // Act
         var batch = await resilience.CompleteOnVirtualTimeAsync(
-            session.GetEmailBatchAfterAsync(null, 100, CancellationToken.None),
+            session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None),
             BackoffAdvanceStep);
 
         // Assert
@@ -112,7 +113,7 @@ public sealed class MailKitImapSessionResilienceTests
 
         // Act
         var batch = await resilience.CompleteOnVirtualTimeAsync(
-            session.GetEmailBatchAfterAsync(null, 100, CancellationToken.None),
+            session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None),
             BackoffAdvanceStep);
 
         // Assert
@@ -140,7 +141,7 @@ public sealed class MailKitImapSessionResilienceTests
 
         // Act
         await resilience.CompleteOnVirtualTimeAsync(
-            session.GetEmailBatchAfterAsync(null, 100, CancellationToken.None),
+            session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None),
             BackoffAdvanceStep);
 
         // Assert
@@ -168,7 +169,7 @@ public sealed class MailKitImapSessionResilienceTests
         // Act
         var failure = await Assert.ThrowsAsync<MailboxUnavailableException>(
             () => resilience.CompleteOnVirtualTimeAsync(
-                session.GetEmailBatchAfterAsync(null, 100, CancellationToken.None),
+                session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None),
                 BackoffAdvanceStep));
 
         // Assert
@@ -276,7 +277,7 @@ public sealed class MailKitImapSessionResilienceTests
         await using var session = await OpenScriptedSessionAsync(resilience, droppedClient, droppedFolder, recoveredClient, recreatedFolder);
 
         // Act
-        var execution = session.GetEmailBatchAfterAsync(null, 100, CancellationToken.None);
+        var execution = session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None);
         var failure = await Assert.ThrowsAsync<MailboxFolderRecreatedException>(
             () => resilience.CompleteOnVirtualTimeAsync(execution, BackoffAdvanceStep));
 
