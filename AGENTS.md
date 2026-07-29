@@ -4,6 +4,14 @@ These instructions apply to the entire repository.
 
 The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`; project directory and file names use short boundary names such as `Domain`, `Application`, and `Host`, while `Directory.Build.props` applies the `MailMcp.*` prefix to assembly names and root namespaces.
 
+## Project status
+
+MailMcp is under continuous development and has not had a first release. Nothing is published, no version is stamped, no deployment runs it, and no consumer outside this repository depends on any of its contracts. The first release is milestone `0.1.0 — first public release`, tracked by the checklist in #112.
+
+This is a working constraint, not a disclaimer. A breaking change to a configuration key, a database schema, an MCP tool contract, or a public API is taken now, in full, while it costs one edit and nothing has to be migrated — deferring it behind a compatibility shim trades a free change today for a permanent one later. It cuts the other way too: do not write versioning machinery, migration paths, deprecation shims, or fallbacks for a released version that does not exist. Say plainly in the change that a contract moved, and correct every caller in the same change set.
+
+None of this relaxes the rest of these instructions. Pre-release is a reason to change a contract cleanly, never a reason to skip tests, documentation, verification, or the privacy and licensing obligations below.
+
 ## Development environment
 
 - Development runs locally. The repository does not provision agent environments, so install the SDK pinned in `global.json` and any command-line tooling such as `dotnet-ef` or the Aspire CLI on the developer machine. `docs/operations/local-development.md` lists the commands that must work.
@@ -195,7 +203,7 @@ Each question has exactly one owner, and no mechanism answers a question another
 - Every issue body carries two or three user stories and a condensed acceptance list. A specification issue additionally opens with a header block naming the roadmap group, the draft delivery stage, a link to the specification file, the issues it depends on, and the estimated change size.
 - Do not copy specification text into an issue. The specification is the contract, and a duplicated copy goes stale silently.
 - Express dependencies as issue references so the board shows them as links. Specification dependencies always point backwards to lower-numbered specifications.
-- Never add dates, day estimates, sprints, or iteration fields. The owner works alone at irregular times, so the board records order and status only. The `Size` field is not an exception: it estimates a diff, not a duration.
+- Nothing on the board schedules work. The owner works alone at irregular times, so order is recorded and timing is not. The board carries a one-week `Week` field, kept deliberately informational: no rule reads it, no view filters on it, and an issue is complete without it. Never make it load-bearing, never add a deadline, day estimate, sprint, or capacity field beside it, and do not read `Size` as one — it estimates a diff, not a duration.
 - Use sub-issues only when the parent is itself a delivery gate that several issues have to clear, such as the first release checklist. Thematic grouping belongs to the `Track` field, so a parent issue opened only to group work creates a second hierarchy next to the roadmap.
 
 ### Labels
@@ -224,11 +232,12 @@ A milestone answers which release an issue ships in, and nothing else. An issue 
 
 ### Board fields
 
-The board carries three single-select fields beyond `Status`. Set `Track` on every issue. Set `Queue` on every open issue. Leave `Size` empty until the work is planned.
+The board carries three single-select fields beyond `Status`, plus an informational one. Set `Track` on every issue. Set `Queue` on every open issue. Leave `Size` empty until the work is planned, and leave `Week` alone entirely.
 
 - **`Track`** groups every item, including work with no specification. `A` through `E` are the roadmap groups from `specs/README.md`. `Release` is work a public release cannot ship without, `Platform` is repository tooling and cross-cutting concerns that no roadmap group owns, and `Future capabilities` is beyond the current roadmap segment.
 - **`Queue`** is the ordering signal, and a new issue takes one of its three lower values without asking. `Later` is the default: accepted scope not yet started. `Needs decision` is correct when the issue's own scope cannot be written until an ADR or a measurement lands, and it pairs with `type:decision`. `Parked` records a review outcome or a side question that carries no commitment to act. `Next` is the owner's alone: it means ready to start now, at most five items hold it at once, and the limit is the point of the field, so a sixth candidate is a proposal about which of the five drops back to `Later`.
-- **`Size`** records the estimate the specification already states, in changed lines including tests and documentation: `S` under 300, `M` about 600, `L` about 1000, `XL` too large for one pull request and to be split before it starts.
+- **`Size`** measures the pull request in changed lines, additions plus deletions, including tests and documentation: `S` under 1000, `M` up to 2500, `L` up to 5000, `XL` beyond that and to be split before it starts. Read a specification's own line estimate through a factor of five, because that is what the nine merged specification pull requests measured — a median of 5.0 against the estimate, ranging from 2.6 to 7.3, never below. A specification that says 600 lines is an `L`. `L` is the normal size of a specification here, so an `XL` is a genuine warning rather than a large-sounding label.
+- **`Week`** is informational and unused. It exists because a one-week grid is occasionally worth glancing at, not because anything depends on it. Do not set it, do not filter on it, and do not let a rule come to rest on it.
 
 The built-in workflows set `Status` and nothing else, so a newly opened issue reaches the board with no `Track` and no `Queue` and surfaces in the `Triage` view. Setting both is part of opening the issue:
 
