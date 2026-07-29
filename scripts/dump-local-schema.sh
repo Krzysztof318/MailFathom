@@ -8,7 +8,7 @@ set -euo pipefail
 # local container. Nothing here writes a credential anywhere, and the dump is written to standard output so it is never
 # left behind in the working tree by accident.
 
-app_host_user_secrets_id='mailmcp-apphost-6f1c0a24-8a2c-4f5c-9d3a-4c2d0f8b71e5'
+app_host_user_secrets_id='aspire-apphost-6f1c0a24-8a2c-4f5c-9d3a-4c2d0f8b71e5'
 postgres_image='pgvector/pgvector:0.8.2-pg17'
 database_name='mailmcp'
 

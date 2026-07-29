@@ -127,11 +127,3 @@ dotnet_diagnostic.VSTHRD111.severity = none # Avoid ConfigureAwait autosave chur
 dotnet_diagnostic.VSTHRD200.severity = none # Use Async suffix for async methods.
 
 dotnet_diagnostic.xUnit1004.severity = none # Avoid skipped tests; disabled until real tests exist.
-
-# EF Core writes these files and the migration workflow regenerates them, so a hand-applied fix is undone by the next
-# `Add Migration`. Only the diagnostics the generator actually trips are relaxed, and only under this directory, so a
-# migration is still compiled, still analyzed for correctness, and still reviewed as SQL before it is applied.
-[src/Infrastructure/Persistence/Migrations/*.cs]
-dotnet_diagnostic.CA1861.severity = none # Prefer static readonly fields over constant array arguments.
-dotnet_diagnostic.IDE0005.severity = none # Using directive is unnecessary.
-dotnet_diagnostic.IDE0073.severity = none # A source file is missing a required header.

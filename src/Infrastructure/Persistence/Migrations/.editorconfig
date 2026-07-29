@@ -1,0 +1,13 @@
+# EF Core writes the files in this directory and the add-migration workflow regenerates them, so a hand-applied fix is
+# undone by the next Add Migration. Only the diagnostics the generator actually trips are relaxed, and only here, so a
+# migration is still compiled, still analyzed for correctness, and still reviewed as SQL before it is applied.
+#
+# This file is not generated and must survive a regeneration: the workflow deletes the *.cs files in this directory
+# rather than the directory itself.
+
+# IDE0073 is deliberately left enforced: the copyright header is a property of every file in this repository, and the
+# regeneration script writes it into each generated file rather than the rule being relaxed for them.
+
+[*.cs]
+dotnet_diagnostic.CA1861.severity = none # Prefer static readonly fields over constant array arguments.
+dotnet_diagnostic.IDE0005.severity = none # Using directive is unnecessary.

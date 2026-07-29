@@ -15,7 +15,9 @@ Draft section 22 lists migrations in stage 1. Scheduling them there would have p
 
 ## Approved scope
 
-The `Infrastructure` project gains a design-time `DbContext` factory so `dotnet ef` can build the model without starting the host. One baseline migration is generated for the full schema — accounts, folders, stored emails, message contents, checkpoints, extracted text, the generated `tsvector` column, and every index and constraint from specifications 07 through 12 — and reviewed as SQL, not only as generated C#. The pgvector extension is enabled by this migration if and only if a vector column exists by then; otherwise it is left to the RAG stage that introduces one.
+The `Infrastructure` project gains a design-time `DbContext` factory so `dotnet ef` can build the model without starting the host. One baseline migration is generated for the full schema — accounts, folders, stored emails, message contents, checkpoints, extracted text, the generated `tsvector` column, and every index and constraint from specifications 07 through 12 — and reviewed as SQL, not only as generated C#.
+
+The pgvector extension is enabled by this migration, which this specification originally deferred to the RAG stage on the grounds that no vector column exists yet. The image ships the extension but does not install it, so the deferral would have left the first vector column failing on a type PostgreSQL does not know, and the RAG stage needing a migration whose only content is one `CREATE EXTENSION`. Enabling it costs an empty database one catalogue entry.
 
 Migrations are generated through Aspire so the command runs with the connection information from the app model rather than a hand-copied connection string.
 

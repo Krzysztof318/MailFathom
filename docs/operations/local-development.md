@@ -132,7 +132,9 @@ The same commands are available from the dashboard. `dotnet-ef` itself is fetche
 
 `MailMcpDbContextDesignTimeFactory` gives EF Core a context without starting the host, which matters because the host composes its connection string during startup and design-time tooling never runs that. It reads `ConnectionStrings__mailmcp` when the orchestration supplies it, then `MAILMCP_DESIGN_TIME_CONNECTION_STRING` for a command run outside it, and falls back to `Host=localhost;Database=mailmcp;Username=mailmcp`. The orchestrated value wins so a stale override left in a shell cannot point a migration at a different database than the one being migrated.
 
-While MailMcp is pre-release the repository keeps exactly one migration, `Initial`, and a model change regenerates it rather than adding a second one. The `add-migration` skill is that workflow, including the database reset it needs and the SQL review it requires; `scripts/dump-local-schema.sh` produces the schema dump that review reads. Making the workflow additive, and deciding how a released instance applies migrations, is tracked for the first release.
+While MailMcp is pre-release the repository keeps exactly one migration, `Initial`, and a model change regenerates it rather than adding a second one. `scripts/regenerate-migration.sh` does that in one command — it reuses a running orchestration, waits for the startup migration run to settle, regenerates the migration, and resets the database — and `scripts/dump-local-schema.sh` produces the schema dump the review then reads. The `add-migration` skill is the surrounding workflow, including that review, which no script performs. Making the workflow additive, and deciding how a released instance applies migrations, is tracked for the first release.
+
+The baseline migration also installs the `vector` extension. The `pgvector/pgvector` image ships it but does not install it, so without this the first vector column would fail on a type PostgreSQL does not know.
 
 #### Apply policy
 

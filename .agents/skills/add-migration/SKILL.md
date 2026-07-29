@@ -15,10 +15,10 @@ from `docs/operations/local-development.md`.
 
 ## Preconditions
 
-- Docker is running, and the model change is already saved and compiles.
-- A deployment that configures a non-default `Persistence:TextSearchConfiguration` exports it before step 5, because
-  the value is compiled into the search vector's stored generated column and the migration is generated for exactly
-  one configuration:
+- Docker is running, and the model change is saved.
+- A deployment that configures a non-default `Persistence:TextSearchConfiguration` exports it first, because the value
+  is compiled into the search vector's stored generated column and a migration is generated for exactly one
+  configuration:
 
   ```bash
   export Persistence__TextSearchConfiguration=english
@@ -26,117 +26,61 @@ from `docs/operations/local-development.md`.
 
   The host compares the configured value against the live schema at startup and refuses to run on a mismatch, so
   skipping this produces a startup failure rather than a silently wrong index.
-- Never run `dotnet ef` by hand. Every command below goes through the orchestration, so it uses the connection string
-  the AppHost issues rather than one written by hand.
-- Work from the repository root.
 
 ## Workflow
 
-1. **Confirm the model builds.**
+### 1. Regenerate
 
-   ```bash
-   dotnet build src/Host/Host.csproj --nologo
-   ```
+```bash
+scripts/regenerate-migration.sh
+```
 
-   Always build `Host`, never `Infrastructure` on its own. `Host` is the startup project the migration resource runs
-   `dotnet-ef` against, and the tool loads `MailMcp.Infrastructure.dll` from `Host`'s output directory. Building only
-   `Infrastructure` leaves a stale copy there, and the tool then reads the model and the migration list that the
-   previous build produced. Building `Host` rebuilds `Infrastructure` as a dependency and refreshes that copy.
+The script discards the existing migration, starts the orchestration if it is not already running, waits for PostgreSQL
+and for the startup migration run to settle, regenerates `Initial`, writes the copyright header into it, and drops and
+recreates the database with it applied. It reuses a running orchestration, which is what keeps a second run cheap:
+starting one rebuilds the AppHost and is the single largest cost here.
 
-   A migration generated from a project that does not compile fails with a message about the tool rather than about the
-   model, which is the slowest way to learn that a mapping is wrong.
+Three files appear under `src/Infrastructure/Persistence/Migrations/`: the migration, its designer file, and the model
+snapshot. All three are committed. The `.editorconfig` beside them is hand-written and is not regenerated — the script
+deletes the `.cs` files rather than the directory for exactly that reason. It relaxes the two diagnostics EF's
+generator trips and deliberately leaves `IDE0073` enforced, which is why the script runs the formatter over the
+generated migration: the copyright header is a property of every file here, and the verification loop formats only
+after a successful build that a missing header would fail.
 
-2. **Start the orchestration** and wait until `postgres` and `mailmcp` report `Healthy`.
+### 2. Review the result as SQL, not only as C#
 
-   ```bash
-   aspire start --apphost src/AppHost/AppHost.csproj --non-interactive
-   aspire describe --apphost src/AppHost/AppHost.csproj --non-interactive
-   ```
+This is the step the whole workflow exists for, and it is the one the script deliberately does not do: the generated C#
+hides what PostgreSQL was actually asked to do.
 
-   `mailmcp-migrations` applies whatever migration currently exists when the AppHost starts, so the database matches the
-   old model at this point. That is expected.
+```bash
+scripts/dump-local-schema.sh
+```
 
-   **Never drop the database as a separate step.** `Drop Database` leaves the `mailmcp` resource unhealthy, and every
-   later command on the migration resource waits for that resource to become healthy before it runs — so the command
-   that would recreate the database waits forever on the database it is about to create. Step 7 uses `Reset Database`,
-   which drops and recreates in one command while the resource is still healthy.
+Read the dump for: every table, column type, and nullability the model intended; the unique constraints and indexes
+each documented query shape needs; the generated `tsvector` column and its text search configuration; `ON DELETE`
+behavior on each foreign key; the extensions the schema creates; and any object the model did not intend. Fix the model
+and run the script again rather than editing the generated migration, which the next regeneration discards.
 
-3. **Delete the existing migration**, if there is one.
+The dump is a review artifact, not a repository file. Do not commit it.
 
-   ```bash
-   rm -rf src/Infrastructure/Persistence/Migrations
-   ```
+### 3. Prove the host accepts the schema
 
-   Deleting the directory is deliberate rather than running `Remove Migration`: removing a migration that is already
-   applied to the local database fails, and the whole point here is that the old one is being discarded rather than
-   unwound. `MailMcpDbContextModelSnapshot.cs` goes with it, which is what makes the regenerated migration describe the
-   whole schema instead of a difference from the model it replaced.
+```bash
+aspire stop  --apphost src/AppHost/AppHost.csproj --non-interactive
+aspire start --apphost src/AppHost/AppHost.csproj --non-interactive
+aspire describe --apphost src/AppHost/AppHost.csproj --non-interactive
+```
 
-4. **Rebuild** so the tool sees an assembly with no migrations in it.
+`mailmcp-host` must reach `Running` and `Healthy`. The host verifies the migration history and the lexical index's text
+search configuration at startup and refuses to run against a schema it does not recognize, so a healthy host is the
+evidence that the migration and the model agree. A host stuck in `Waiting` with `mailmcp-migrations` in `FailedToStart`
+means the migration did not apply; read `aspire logs mailmcp-migrations`.
 
-   ```bash
-   dotnet build src/Host/Host.csproj --nologo
-   ```
+### 4. Commit it with the model change
 
-   Skipping this fails the next step with `The name 'Initial' is used by an existing migration`, because the deleted
-   migration is still compiled into the assembly the tool loads.
-
-5. **Generate the baseline migration.** The name is always `Initial`.
-
-   ```bash
-   aspire resource mailmcp-migrations ef-migrations-add --apphost src/AppHost/AppHost.csproj --non-interactive -- --name Initial
-   ```
-
-   Three files appear under `src/Infrastructure/Persistence/Migrations/`: the migration, its designer file, and the
-   model snapshot. All three are committed.
-
-6. **Rebuild**, for the reason given in step 4: the next command applies what is in the assembly, not what is on disk.
-
-   ```bash
-   dotnet build src/Host/Host.csproj --nologo
-   ```
-
-7. **Reset the database**, which drops it and recreates it with the regenerated migration applied.
-
-   ```bash
-   aspire resource mailmcp-migrations ef-database-reset --apphost src/AppHost/AppHost.csproj --non-interactive
-   ```
-
-   The data volume outlives the container, so the schema the replaced migration created survives a restart and would
-   make a plain `Update Database` fail on objects that already exist. This is the step that makes the recreation clean,
-   and it is why the workflow destroys local mail data every time it runs.
-
-8. **Review the result as SQL, not only as C#.** This is the step the whole workflow exists for, and it is not
-   optional: the generated C# hides what PostgreSQL was actually asked to do. Dump the schema the migration produced:
-
-   ```bash
-   scripts/dump-local-schema.sh
-   ```
-
-   Read the dump for: every table, column type, and nullability the model intended; the unique constraints and indexes
-   each documented query shape needs; the generated `tsvector` column and its text search configuration; `ON DELETE`
-   behavior on each foreign key; and any object the model did not intend. Fix the model and start again from step 3
-   rather than editing the generated migration, which the next regeneration discards.
-
-   The dump is a review artifact, not a repository file. Do not commit it.
-
-9. **Prove the host accepts the schema.** Restart the orchestration and confirm `mailmcp-host` reaches
-   `Running` and `Healthy`.
-
-   ```bash
-   aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive
-   aspire start --apphost src/AppHost/AppHost.csproj --non-interactive
-   aspire describe --apphost src/AppHost/AppHost.csproj --non-interactive
-   ```
-
-   The host verifies the migration history at startup and refuses to run against a schema it does not recognize, so a
-   healthy host is the evidence that the migration and the model agree. A host stuck in `Waiting` with
-   `mailmcp-migrations` in `FailedToStart` means the migration did not apply; read its log with
-   `aspire logs mailmcp-migrations`.
-
-10. **Update the schema documentation** in `docs/architecture/stored-email-schema.md` when the change is visible to a
-    reader of the schema, and commit the migration with the model change that caused it. A migration committed on its
-    own cannot be reviewed, because the reason for it is in the other commit.
+Update `docs/architecture/stored-email-schema.md` when the change is visible to a reader of the schema, and commit the
+migration together with the model change that caused it. A migration committed on its own cannot be reviewed, because
+the reason for it is in the other commit.
 
 ## When something is stuck
 
@@ -149,5 +93,18 @@ from `docs/operations/local-development.md`.
   docker volume rm mailmcp.apphost-9beaf2538a-postgres-data
   ```
 
-- **`aspire start` times out while building.** Orphaned helper processes from an earlier failed start starve the
-  build. `pkill -9 -f aspire-managed`, then start again.
+- **`dotnet build` hangs at "Determining projects to restore".** A previous orchestration is still holding the build
+  output. `aspire stop` does not always reap it; `pkill -9 -f '/home/krzysiek/.aspire/versions'` and
+  `pkill -9 -f aspire.hosting.orchestration` clear it. Orphaned `aspire-managed` helpers from a failed start do the
+  same by starving the machine — `pkill -9 -f aspire-managed`.
+
+- **`Another command is already running on this resource`.** The startup migration run has not finished. The script
+  waits for it; a hand-run command has to wait too.
+
+- **`The name 'Initial' is used by an existing migration`.** The startup project was not rebuilt after the migration
+  files were deleted. `dotnet-ef` loads `MailMcp.Infrastructure.dll` from `Host`'s output directory, so `Host` is what
+  has to be rebuilt — never `Infrastructure` on its own. The script does this; a hand-run command has to as well.
+
+- **`error IDE0073` on a generated migration.** The formatter did not reach it. `--include` has to name the files
+  rather than their directory, and the scope has to be the solution: these files belong to `Infrastructure`, and an
+  `--include` filter evaluated against another project's workspace silently matches nothing and still exits `0`.

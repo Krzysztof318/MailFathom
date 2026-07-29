@@ -21,6 +21,7 @@ namespace MailMcp.Infrastructure.Persistence.Migrations
                 .HasAnnotation("ProductVersion", "10.0.10")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("MailMcp.Infrastructure.Persistence.BackfillPositionEntity", b =>

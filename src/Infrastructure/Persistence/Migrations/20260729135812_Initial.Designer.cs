@@ -13,7 +13,7 @@ using NpgsqlTypes;
 namespace MailMcp.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailMcpDbContext))]
-    [Migration("20260729104425_Initial")]
+    [Migration("20260729135812_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -24,6 +24,7 @@ namespace MailMcp.Infrastructure.Persistence.Migrations
                 .HasAnnotation("ProductVersion", "10.0.10")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("MailMcp.Infrastructure.Persistence.BackfillPositionEntity", b =>
