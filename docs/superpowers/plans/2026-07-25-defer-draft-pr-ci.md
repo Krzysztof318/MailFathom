@@ -1,5 +1,7 @@
 # Defer Draft Pull Request CI Implementation Plan
 
+> **Status (2026-07-30): partially superseded.** The draft guard this plan delivered survives, but `.github/workflows/build-and-unit-test.yml` and `.github/workflows/dotnet-format.yml` were merged into `.github/workflows/ci.yml` and their path filters moved into a `Detect changes` job behind the aggregating `Required CI` check. See `docs/operations/local-development.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Prevent build, unit-test, coverage, and formatting jobs from running for draft pull requests while running them immediately when a pull request becomes ready for review.

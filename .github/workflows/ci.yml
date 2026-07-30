@@ -1,0 +1,241 @@
+name: CI
+
+# One workflow, because the branch ruleset requires one check. A required check is identified by its
+# job name, so two workflows cannot each publish a `Required CI` job without the ruleset becoming
+# ambiguous about which one it is waiting for. The expensive jobs stay separate inside this workflow
+# and keep the names they had.
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - converted_to_draft
+    branches:
+      - main
+  workflow_dispatch:
+
+# No `paths` filter here, deliberately. GitHub reports a workflow the path filter excluded as neither
+# successful nor failed, so a required check never arrives and a documentation-only pull request waits
+# forever on a run that was never created. Change detection moved into `detect-changes` below, and the
+# expensive jobs skip themselves through `if` conditions instead.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  detect-changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    # The changed-file query reads the pull request through the REST API and never checks the branch
+    # out, so this is the whole privilege it needs.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      build: ${{ github.event_name != 'pull_request' || steps.filter.outputs.build == 'true' }}
+      format: ${{ github.event_name != 'pull_request' || steps.filter.outputs.format == 'true' }}
+    steps:
+      # A manual dispatch has no pull request to compare against, so the filter is skipped and both
+      # outputs fall back to `true` above: an explicitly started run always does the work.
+      - name: Detect changed paths
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            build:
+              - 'src/**'
+              - 'tests/**'
+              - '.config/**'
+              - '.editorconfig'
+              - '.github/workflows/ci.yml'
+              - 'BannedSymbols.txt'
+              - 'Directory.Build.props'
+              - 'Directory.Build.targets'
+              - 'Directory.Packages.props'
+              - 'MailMcp.slnx'
+              - 'NuGet.config'
+              - 'global.json'
+              - 'testconfig.json'
+            # `dotnet format` without a subcommand runs the whitespace, style, and analyzer passes, so
+            # its verdict depends on more than the files it rewrites: the analyzer packages pinned
+            # centrally, the properties the shared build files set, the projects the solution lists,
+            # and the SDK that supplies the formatter itself. A change to any of those can move the
+            # verdict without touching a single C# file, which is why this is not just `src` and
+            # `tests`. What stays out has no bearing on formatting: `BannedSymbols.txt` is enforced by
+            # the build, and `.config/**`, `NuGet.config`, and `testconfig.json` decide what is
+            # restored, run, and measured rather than how anything is written.
+            format:
+              - 'src/**'
+              - 'tests/**'
+              - '.editorconfig'
+              - '.github/workflows/ci.yml'
+              - 'Directory.Build.props'
+              - 'Directory.Build.targets'
+              - 'Directory.Packages.props'
+              - 'MailMcp.slnx'
+              - 'global.json'
+
+  build-and-unit-test:
+    name: Build and unit test
+    needs:
+      - detect-changes
+    if: >-
+      needs.detect-changes.outputs.build == 'true'
+      && (github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # Versions are pinned centrally and NuGet.config decides which sources they may come from, so
+      # the key covers both. A key that ignored source policy would keep serving packages obtained
+      # under the previous one; NuGet.config does not exist yet, and hashing an absent path simply
+      # contributes nothing until it does.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json') }}
+
+      - name: Restore dependencies
+        run: dotnet restore MailMcp.slnx
+
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      - name: Build solution
+        run: dotnet build MailMcp.slnx --configuration Release --no-restore
+
+      - name: Run unit tests and enforce code coverage
+        run: dotnet msbuild .config/CodeCoverage.proj -t:Collect
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: 'artifacts/coverage/raw/**/*.trx'
+          if-no-files-found: ignore
+
+      - name: Upload code coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-coverage
+          path: |
+            artifacts/coverage/raw/**/*.cobertura.*.xml
+            artifacts/coverage/report/**
+          if-no-files-found: ignore
+
+  dotnet-format:
+    name: dotnet format
+    needs:
+      - detect-changes
+    if: >-
+      needs.detect-changes.outputs.format == 'true'
+      && (github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # The same cache and the same key as the build job, for the same reason.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json') }}
+
+      - name: Restore dependencies
+        run: dotnet restore MailMcp.slnx
+
+      - name: Verify formatting
+        run: dotnet format MailMcp.slnx --verify-no-changes --verbosity diagnostic
+
+  required-ci:
+    name: Required CI
+    needs:
+      - detect-changes
+      - build-and-unit-test
+      - dotnet-format
+    # `always()` rather than `success() || failure()`, because this job has to report on a run that was
+    # cancelled as well as on one whose dependencies were skipped. Anything weaker leaves the required
+    # check itself skipped, which is the state this whole arrangement exists to avoid.
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      # The name of this check is the only thing the branch ruleset knows about this workflow, so it
+      # must not depend on the event, the changed files, the source branch, or a matrix dimension.
+      - name: Verify pipeline results
+        shell: bash
+        env:
+          DETECT_CHANGES_RESULT: ${{ needs.detect-changes.result }}
+          BUILD_AND_UNIT_TEST_RESULT: ${{ needs.build-and-unit-test.result }}
+          DOTNET_FORMAT_RESULT: ${{ needs.dotnet-format.result }}
+        run: |
+          set -euo pipefail
+
+          verdict=0
+
+          # Change detection decides whether the other jobs were allowed to skip, so a run in which it
+          # did not finish knows nothing about the change and cannot clear it.
+          require_success() {
+            local job_name="$1"
+            local result="$2"
+
+            if [[ "$result" != "success" ]]; then
+              echo "::error::${job_name} ended as '${result}' and must succeed."
+              verdict=1
+            fi
+          }
+
+          # A job the change did not concern reports `skipped`, which is a complete answer rather than
+          # a missing one. `failure` and `cancelled` never are.
+          require_success_or_skipped() {
+            local job_name="$1"
+            local result="$2"
+
+            if [[ "$result" != "success" && "$result" != "skipped" ]]; then
+              echo "::error::${job_name} ended as '${result}'; only 'success' or 'skipped' clear this check."
+              verdict=1
+            fi
+          }
+
+          require_success 'Detect changes' "$DETECT_CHANGES_RESULT"
+          require_success_or_skipped 'Build and unit test' "$BUILD_AND_UNIT_TEST_RESULT"
+          require_success_or_skipped 'dotnet format' "$DOTNET_FORMAT_RESULT"
+
+          if [[ "$verdict" -eq 0 ]]; then
+            echo "All pull-request checks completed or were not applicable to this change."
+          fi
+
+          exit "$verdict"
