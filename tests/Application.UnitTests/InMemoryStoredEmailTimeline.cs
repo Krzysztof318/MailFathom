@@ -22,7 +22,7 @@ namespace MailMcp.Application.UnitTests;
 /// </remarks>
 internal sealed class InMemoryStoredEmailTimeline : IStoredEmailTimelineReader
 {
-    private readonly List<TimelineEntry> entries = [];
+    private readonly List<InMemoryStoredEmail> entries = [];
 
     private readonly List<ReadPageCall> calls = [];
 
@@ -35,7 +35,7 @@ internal sealed class InMemoryStoredEmailTimeline : IStoredEmailTimelineReader
     /// <returns>This timeline, so arrangement reads as one statement.</returns>
     public InMemoryStoredEmailTimeline With(EmailSummary summary, params string[] ccAddresses)
     {
-        this.entries.Add(new TimelineEntry(summary, ccAddresses));
+        this.entries.Add(new InMemoryStoredEmail(summary, ccAddresses));
 
         return this;
     }
@@ -45,7 +45,7 @@ internal sealed class InMemoryStoredEmailTimeline : IStoredEmailTimelineReader
     /// <returns>This timeline, so arrangement reads as one statement.</returns>
     public InMemoryStoredEmailTimeline WithAll(IEnumerable<EmailSummary> summaries)
     {
-        this.entries.AddRange(summaries.Select(summary => new TimelineEntry(summary, [])));
+        this.entries.AddRange(summaries.Select(summary => new InMemoryStoredEmail(summary, [])));
 
         return this;
     }
@@ -68,7 +68,7 @@ internal sealed class InMemoryStoredEmailTimeline : IStoredEmailTimelineReader
         IReadOnlyList<EmailSummary> page =
         [
             .. this.entries
-                .Where(entry => entry.Matches(filter))
+                .Where(entry => entry.Matches(filter.Selection))
                 .Select(entry => entry.Summary)
                 .Order(new PositionComparer(order))
                 .Where(summary => continueAfter is not { } boundary || order.Compare(summary.Position, boundary) > 0)
@@ -86,46 +86,6 @@ internal sealed class InMemoryStoredEmailTimeline : IStoredEmailTimelineReader
         EmailTimelineFilter Filter,
         EmailTimelinePosition? ContinueAfter,
         int Limit);
-
-    private sealed record TimelineEntry(EmailSummary Summary, IReadOnlyList<string> CcAddresses)
-    {
-        public bool Matches(EmailTimelineFilter filter) =>
-            this.MatchesScope(filter)
-            && this.MatchesParticipants(filter)
-            && MatchesSubject(filter, this.Summary.Subject)
-            && this.MatchesReceivedRange(filter)
-            && this.MatchesFlags(filter);
-
-        private static bool MatchesSubject(EmailTimelineFilter filter, string? subject) =>
-            filter.SubjectFragment is not { } fragment
-            || (subject is not null && subject.Contains(fragment, StringComparison.OrdinalIgnoreCase));
-
-        private bool MatchesScope(EmailTimelineFilter filter) =>
-            (filter.Scope.AccountIds.Count is 0 || filter.Scope.AccountIds.Contains(this.Summary.AccountId))
-            && (filter.Scope.FolderAliases.Count is 0 || filter.Scope.FolderAliases.Contains(this.Summary.FolderAlias));
-
-        private bool MatchesParticipants(EmailTimelineFilter filter) =>
-            (filter.SenderNormalizedAddress is not { } sender || this.SenderMatches(sender))
-            && (filter.RecipientNormalizedAddress is not { } recipient || this.RecipientMatches(recipient));
-
-        private bool SenderMatches(string normalizedAddress) =>
-            EmailAddress.TryCreate(displayName: null, this.Summary.SenderAddress, out var sender)
-            && string.Equals(sender.NormalizedAddress, normalizedAddress, StringComparison.Ordinal);
-
-        private bool RecipientMatches(string normalizedAddress) =>
-            this.Summary.ToAddresses.Concat(this.CcAddresses).Contains(normalizedAddress, StringComparer.Ordinal);
-
-        private bool MatchesReceivedRange(EmailTimelineFilter filter) =>
-            (filter.ReceivedOnOrAfter is not { } onOrAfter
-                || (this.Summary.ReceivedAt is { } receivedAt && receivedAt >= onOrAfter))
-            && (filter.ReceivedBefore is not { } before
-                || (this.Summary.ReceivedAt is { } receivedBefore && receivedBefore < before));
-
-        private bool MatchesFlags(EmailTimelineFilter filter) =>
-            (filter.IsRemotelySeen is not { } isSeen || this.Summary.RemoteFlags.IsSeen == isSeen)
-            && (filter.HasAttachments is not { } hasAttachments
-                || this.Summary.Attachments.HasAttachments == hasAttachments);
-    }
 
     private sealed class PositionComparer(IComparer<EmailTimelinePosition> order) : IComparer<EmailSummary>
     {

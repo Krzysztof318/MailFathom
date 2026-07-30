@@ -87,6 +87,9 @@ public readonly record struct MailMcpErrorCode
     /// <summary>Gets subcategory 1, request validation: one filter of a mailbox query carries a value, a count, or a length the query does not accept.</summary>
     public static MailMcpErrorCode MailboxQueryFilterInvalid { get; } = new(51002);
 
+    /// <summary>Gets subcategory 1, request validation: an email search asked for more ranked results than the search serves.</summary>
+    public static MailMcpErrorCode EmailSearchResultLimitOutOfRange { get; } = new(51003);
+
     /// <summary>Gets subcategory 2, pagination: a continuation cursor is not one this system issued.</summary>
     public static MailMcpErrorCode MailboxQueryCursorMalformed { get; } = new(52001);
 
@@ -135,6 +138,7 @@ public readonly record struct MailMcpErrorCode
         OutboundDependencyUnavailable,
         MailboxQueryPageSizeOutOfRange,
         MailboxQueryFilterInvalid,
+        EmailSearchResultLimitOutOfRange,
         MailboxQueryCursorMalformed,
         MailboxQueryCursorFilterMismatch,
         MailAccountNotAccessible,

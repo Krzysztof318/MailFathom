@@ -8,10 +8,18 @@ never touches the remote `\Seen` flag, because it speaks no mail protocol at all
 The protocol adapter is not part of this: `MailboxTimelineReader` is an application use case, and the `list_emails` MCP
 tool that publishes it is described by [MCP tools](mcp-tools.md).
 
+[Lexical email search](lexical-email-search.md) is the second read use case and applies the same structured filters
+this page documents, so nothing about what a filter means is restated there.
+
 ## The request contract
 
 `ListEmailsRequest` carries what a caller asked for, unvalidated. `MailboxTimelineReader` turns it into a validated
 `EmailTimelineFilter`, so no adapter can reach a query with a filter that skipped validation.
+
+The filters themselves live on `MailboxEmailSelection`, which search applies too; `EmailTimelineFilter` adds the reading
+direction and the cursor fingerprint, which belong to a timeline alone. One type and one SQL predicate is what keeps an
+attachment filter or a recipient filter from coming to mean one thing in a listing and another in a search — a
+divergence neither copy would look wrong for on its own.
 
 | Field | Meaning | Absent means |
 |---|---|---|
@@ -182,8 +190,11 @@ configuration bounds.
 ## Where the pieces live
 
 - `MailMcp.Application.Emails.ListEmails` — the use case, its request, and its result.
-- `MailMcp.Application.Emails` — the filter, the cursor, the page size, the summary, and the query failures shared with
-  the later read models.
+- `MailMcp.Application.Emails` — `MailboxEmailSelection` and the timeline filter that wraps it, the cursor, the page
+  size, the summary, and the query failures shared with the other read models.
+- `MailMcp.Application.Emails.MailboxScopeResolver` — resolves the accounts a read runs against and refuses one this
+  deployment does not serve. It is a collaborator rather than a step inside the use case because the refusal is an access
+  decision every read model has to make identically.
 - `MailMcp.Application.Accounts` — `IMailAccountCatalog`, the port that names which accounts this deployment serves. One
   member answers both questions asked of it: whether the account a request named is accepted, and which accounts an
   unscoped request is narrowed to. `MailSynchronizationOptions` implements it, so the answer comes from the configuration
@@ -192,3 +203,7 @@ configuration bounds.
   return mail because every read model attaches freshness.
 - `MailMcp.Infrastructure.Persistence` — `StoredEmailTimelineReader` and `SynchronizationFreshnessReader`, which evaluate
   every filter, the keyset boundary, the ordering, and the row limit in PostgreSQL and track no entities.
+  `StoredEmailSelectionPredicate` is the filter predicate, shared with search, and `StoredEmailSummaryRow` carries the
+  column list and the mapping, shared with search and with the single-email lookup. Both are written once because each
+  is a control that decides what a mailbox read can return at all: a second copy would have to be found and read before
+  anyone could say what that is.

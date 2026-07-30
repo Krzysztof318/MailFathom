@@ -43,8 +43,8 @@ public sealed class ListEmailsToolTests
         // Assert
         Assert.NotNull(timeline.LastFilter);
         var filter = timeline.LastFilter;
-        Assert.Equal([MailAccountId.Create(ServedAccountId)], filter.Scope.AccountIds);
-        Assert.Empty(filter.Scope.FolderAliases);
+        Assert.Equal([MailAccountId.Create(ServedAccountId)], filter.Selection.Scope.AccountIds);
+        Assert.Empty(filter.Selection.Scope.FolderAliases);
         Assert.Equal(EmailTimelineDirection.NewestFirst, filter.Direction);
         Assert.Null(timeline.LastContinueAfter);
 
@@ -79,13 +79,13 @@ public sealed class ListEmailsToolTests
         // Assert
         Assert.NotNull(timeline.LastFilter);
         var filter = timeline.LastFilter;
-        Assert.Equal([MailAccountId.Create(ServedAccountId)], filter.Scope.AccountIds);
-        Assert.Equal([MailFolderAlias.Create("ARCHIVE")], filter.Scope.FolderAliases);
-        Assert.Equal("invoice", filter.SubjectFragment);
-        Assert.Equal(rangeStart, filter.ReceivedOnOrAfter);
-        Assert.Equal(rangeEnd, filter.ReceivedBefore);
-        Assert.False(filter.IsRemotelySeen);
-        Assert.True(filter.HasAttachments);
+        Assert.Equal([MailAccountId.Create(ServedAccountId)], filter.Selection.Scope.AccountIds);
+        Assert.Equal([MailFolderAlias.Create("ARCHIVE")], filter.Selection.Scope.FolderAliases);
+        Assert.Equal("invoice", filter.Selection.SubjectFragment);
+        Assert.Equal(rangeStart, filter.Selection.ReceivedOnOrAfter);
+        Assert.Equal(rangeEnd, filter.Selection.ReceivedBefore);
+        Assert.False(filter.Selection.IsRemotelySeen);
+        Assert.True(filter.Selection.HasAttachments);
         Assert.Equal(EmailTimelineDirection.OldestFirst, filter.Direction);
         Assert.Equal(11, timeline.LastLimit);
     }
@@ -105,7 +105,7 @@ public sealed class ListEmailsToolTests
 
         // Assert
         Assert.NotNull(timeline.LastFilter);
-        Assert.Equal([MailFolderAlias.Create("INBOX")], timeline.LastFilter.Scope.FolderAliases);
+        Assert.Equal([MailFolderAlias.Create("INBOX")], timeline.LastFilter.Selection.Scope.FolderAliases);
     }
 
     [Theory]
@@ -494,5 +494,5 @@ public sealed class ListEmailsToolTests
         new MailboxTimelineReader(
             timeline,
             freshness ?? new StubSynchronizationFreshnessReader(),
-            new StubMailAccountCatalog(ServedAccountId)));
+            new MailboxScopeResolver(new StubMailAccountCatalog(ServedAccountId))));
 }

@@ -5,6 +5,7 @@ using MailMcp.Application.EmailContent;
 using MailMcp.Application.Emails;
 using MailMcp.Application.Emails.GetEmailContent;
 using MailMcp.Application.Emails.ListEmails;
+using MailMcp.Application.Emails.SearchEmails;
 using MailMcp.Application.Folders;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Resilience;
@@ -138,6 +139,7 @@ public static class ServiceCollectionExtensions
         // write repositories rather than through one of them.
         services.AddScoped<IStoredEmailTimelineReader, StoredEmailTimelineReader>();
         services.AddScoped<IStoredEmailSummaryReader, StoredEmailSummaryReader>();
+        services.AddScoped<IEmailSearchIndexReader, StoredEmailSearchIndexReader>();
         services.AddScoped<ISynchronizationFreshnessReader, SynchronizationFreshnessReader>();
         // The one write a read path performs. It joins no session for the reason its port states, so it is registered
         // beside the readers rather than with the repositories that take one.
@@ -157,8 +159,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailFolderResolver>();
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<StoredEmailExtractionBackfill>();
+        services.AddScoped<MailboxScopeResolver>();
         services.AddScoped<MailboxTimelineReader>();
         services.AddScoped<EmailContentReader>();
+        services.AddScoped<MailboxSearchReader>();
         services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(
             static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),

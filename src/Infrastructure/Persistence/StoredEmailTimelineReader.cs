@@ -23,15 +23,6 @@ namespace MailMcp.Infrastructure.Persistence;
 [RequiresIntegrationCoverage]
 internal sealed class StoredEmailTimelineReader(MailMcpDbContext dbContext) : IStoredEmailTimelineReader
 {
-    /// <summary>The character that makes the next one in a pattern literal, stated rather than left to the default.</summary>
-    /// <remarks>
-    /// It has to be stated. The two-argument pattern match translates to <c>ILIKE ... ESCAPE ''</c>, and an empty escape
-    /// clause turns escaping off entirely: the escaped pattern would then be searched for the backslashes themselves and
-    /// would match nothing, while a caller's <c>%</c> would still be a wildcard. Backslash is PostgreSQL's own default,
-    /// so naming it changes nothing except that it is now in effect.
-    /// </remarks>
-    private const string PatternEscapeCharacter = "\\";
-
     /// <inheritdoc />
     public async Task<IReadOnlyList<EmailSummary>> ReadPageAsync(
         EmailTimelineFilter filter,
@@ -43,7 +34,7 @@ internal sealed class StoredEmailTimelineReader(MailMcpDbContext dbContext) : IS
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
         var selected = Beyond(
-            Matching(dbContext.StoredEmails.AsNoTracking(), filter),
+            StoredEmailSelectionPredicate.Matching(dbContext.StoredEmails.AsNoTracking(), filter.Selection),
             continueAfter,
             filter.Direction);
 
@@ -55,91 +46,34 @@ internal sealed class StoredEmailTimelineReader(MailMcpDbContext dbContext) : IS
         return [.. rows.Select(row => row.ToSummary())];
     }
 
-    /// <summary>Narrows the timeline to the emails a filter selects.</summary>
+    /// <summary>Orders the timeline the way the ordering contract defines, including where undated mail lands.</summary>
     /// <remarks>
-    /// Each nullable filter is unwrapped into a local before it enters an expression, so the predicate PostgreSQL
-    /// receives compares a value rather than an optional one. A recipient filter tests the <c>To</c> and <c>Cc</c>
-    /// arrays for containment, which is the operation their GIN indexes serve; the provider emits <c>@&gt;</c> for a
-    /// <c>Contains</c> over a GIN-indexed array column and <c>= ANY</c> for one without an index.
+    /// <para>
+    /// The leading key is what places undated mail: last when the newest is read first, first when the oldest is. It is
+    /// written as an ordering key because PostgreSQL's default under <c>DESC</c> is <c>NULLS FIRST</c> — the opposite of
+    /// the contract — and EF Core publishes no way to state a null sort order in a query. The timeline indexes spell out
+    /// <c>NULLS LAST</c>, so the two agree on the order; whether PostgreSQL can serve this expression from those indexes
+    /// without a sort step is a query-plan question specification 20 answers, and the answer there is a matching
+    /// expression index rather than a different order here.
+    /// </para>
+    /// <para>
+    /// The identifier is an ordering key rather than a decoration: two emails a mail server recorded in the same instant
+    /// would otherwise have no defined order between them, and a page boundary computed from an undefined order skips or
+    /// repeats rows.
+    /// </para>
     /// </remarks>
-    private static IQueryable<StoredEmailEntity> Matching(
+    internal static IOrderedQueryable<StoredEmailEntity> InTimelineOrder(
         IQueryable<StoredEmailEntity> emails,
-        EmailTimelineFilter filter)
-    {
-        if (filter.Scope.AccountIds.Count > 0)
-        {
-            var accountIds = filter.Scope.AccountIds.Select(static accountId => accountId.Value).ToArray();
-            emails = emails.Where(email => accountIds.Contains(email.MailboxAccountId));
-        }
-
-        if (filter.Scope.FolderAliases.Count > 0)
-        {
-            var folderAliases = filter.Scope.FolderAliases.Select(static alias => alias.Value).ToArray();
-            emails = emails.Where(email => folderAliases.Contains(email.MailFolder.Alias));
-        }
-
-        if (filter.SenderNormalizedAddress is { } senderAddress)
-        {
-            emails = emails.Where(email => email.SenderNormalizedAddress == senderAddress);
-        }
-
-        if (filter.RecipientNormalizedAddress is { } recipientAddress)
-        {
-            emails = emails.Where(email =>
-                email.ToAddresses.Contains(recipientAddress) || email.CcAddresses.Contains(recipientAddress));
-        }
-
-        if (filter.SubjectFragment is { } subjectFragment)
-        {
-            var pattern = ContainmentPattern(subjectFragment);
-            emails = emails.Where(email => email.Subject != null
-                && EF.Functions.ILike(email.Subject, pattern, PatternEscapeCharacter));
-        }
-
-        return MatchingReceivedRange(MatchingFlags(emails, filter), filter);
-    }
-
-    private static IQueryable<StoredEmailEntity> MatchingFlags(
-        IQueryable<StoredEmailEntity> emails,
-        EmailTimelineFilter filter)
-    {
-        if (filter.IsRemotelySeen is { } isRemotelySeen)
-        {
-            emails = emails.Where(email => email.IsRemotelySeen == isRemotelySeen);
-        }
-
-        if (filter.HasAttachments is { } hasAttachments)
-        {
-            emails = hasAttachments
-                ? emails.Where(email => email.AttachmentCount > 0)
-                : emails.Where(email => email.AttachmentCount == 0);
-        }
-
-        return emails;
-    }
-
-    /// <summary>Narrows the timeline to a received range, which excludes every email nobody could date.</summary>
-    /// <remarks>
-    /// An unknown received timestamp compares to neither bound, so a named range selects dated mail only. That follows
-    /// from SQL's three-valued logic rather than from a decision here, and it is the honest answer: an email with no
-    /// date is not known to fall inside the range the caller asked about.
-    /// </remarks>
-    private static IQueryable<StoredEmailEntity> MatchingReceivedRange(
-        IQueryable<StoredEmailEntity> emails,
-        EmailTimelineFilter filter)
-    {
-        if (filter.ReceivedOnOrAfter is { } receivedOnOrAfter)
-        {
-            emails = emails.Where(email => email.ReceivedAt >= receivedOnOrAfter);
-        }
-
-        if (filter.ReceivedBefore is { } receivedBefore)
-        {
-            emails = emails.Where(email => email.ReceivedAt < receivedBefore);
-        }
-
-        return emails;
-    }
+        EmailTimelineDirection direction) =>
+        direction is EmailTimelineDirection.NewestFirst
+            ? emails
+                .OrderBy(email => email.ReceivedAt == null)
+                .ThenByDescending(email => email.ReceivedAt)
+                .ThenByDescending(email => email.Id)
+            : emails
+                .OrderByDescending(email => email.ReceivedAt == null)
+                .ThenBy(email => email.ReceivedAt)
+                .ThenBy(email => email.Id);
 
     /// <summary>Keeps the emails that fall strictly beyond a page boundary in the direction being read.</summary>
     /// <remarks>
@@ -183,47 +117,4 @@ internal sealed class StoredEmailTimelineReader(MailMcpDbContext dbContext) : IS
                 email.ReceivedAt != null || email.Id > boundaryId),
         };
     }
-
-    /// <summary>Orders the timeline the way the ordering contract defines, including where undated mail lands.</summary>
-    /// <remarks>
-    /// <para>
-    /// The leading key is what places undated mail: last when the newest is read first, first when the oldest is. It is
-    /// written as an ordering key because PostgreSQL's default under <c>DESC</c> is <c>NULLS FIRST</c> — the opposite of
-    /// the contract — and EF Core publishes no way to state a null sort order in a query. The timeline indexes spell out
-    /// <c>NULLS LAST</c>, so the two agree on the order; whether PostgreSQL can serve this expression from those indexes
-    /// without a sort step is a query-plan question specification 20 answers, and the answer there is a matching
-    /// expression index rather than a different order here.
-    /// </para>
-    /// <para>
-    /// The identifier is an ordering key rather than a decoration: two emails a mail server recorded in the same instant
-    /// would otherwise have no defined order between them, and a page boundary computed from an undefined order skips or
-    /// repeats rows.
-    /// </para>
-    /// </remarks>
-    private static IOrderedQueryable<StoredEmailEntity> InTimelineOrder(
-        IQueryable<StoredEmailEntity> emails,
-        EmailTimelineDirection direction) =>
-        direction is EmailTimelineDirection.NewestFirst
-            ? emails
-                .OrderBy(email => email.ReceivedAt == null)
-                .ThenByDescending(email => email.ReceivedAt)
-                .ThenByDescending(email => email.Id)
-            : emails
-                .OrderByDescending(email => email.ReceivedAt == null)
-                .ThenBy(email => email.ReceivedAt)
-                .ThenBy(email => email.Id);
-
-    /// <summary>Builds the <c>ILIKE</c> pattern that matches a fragment anywhere in a subject.</summary>
-    /// <remarks>
-    /// The wildcards a caller may have written are escaped, so a subject fragment is matched as text rather than as a
-    /// pattern. Leaving them unescaped would let a fragment of <c>%</c> match every subject, which is a filter nobody
-    /// asked for and a scan nobody planned.
-    /// </remarks>
-    private static string ContainmentPattern(string fragment) => string.Concat(
-        "%",
-        fragment
-            .Replace("\\", "\\\\", StringComparison.Ordinal)
-            .Replace("%", "\\%", StringComparison.Ordinal)
-            .Replace("_", "\\_", StringComparison.Ordinal),
-        "%");
 }
