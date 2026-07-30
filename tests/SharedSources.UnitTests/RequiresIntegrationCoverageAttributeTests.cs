@@ -10,7 +10,7 @@ namespace MailMcp.SharedSources.UnitTests;
 public sealed class RequiresIntegrationCoverageAttributeTests
 {
     /// <summary>
-    /// The collector matches the marker by name through the <c>ExcludeByAttribute</c> entry in <c>testconfig.json</c>,
+    /// The collector matches the marker by name through the <c>ExcludeByAttribute</c> entry in <c>.config/testconfig.json</c>,
     /// which no rename refactoring updates. A renamed attribute would still compile and would silently pull every
     /// marked type back into the measured denominator, so the name is asserted here.
     /// </summary>

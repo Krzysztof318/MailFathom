@@ -55,22 +55,20 @@ jobs:
               - '.config/**'
               - '.editorconfig'
               - '.github/workflows/ci.yml'
-              - 'BannedSymbols.txt'
               - 'Directory.Build.props'
               - 'Directory.Build.targets'
               - 'Directory.Packages.props'
               - 'MailMcp.slnx'
               - 'NuGet.config'
               - 'global.json'
-              - 'testconfig.json'
             # `dotnet format` without a subcommand runs the whitespace, style, and analyzer passes, so
             # its verdict depends on more than the files it rewrites: the analyzer packages pinned
             # centrally, the properties the shared build files set, the projects the solution lists,
             # and the SDK that supplies the formatter itself. A change to any of those can move the
             # verdict without touching a single C# file, which is why this is not just `src` and
-            # `tests`. What stays out has no bearing on formatting: `BannedSymbols.txt` is enforced by
-            # the build, and `.config/**`, `NuGet.config`, and `testconfig.json` decide what is
-            # restored, run, and measured rather than how anything is written.
+            # `tests`. What stays out has no bearing on formatting: `.config/**` and `NuGet.config`
+            # decide what is restored, rejected, run, and measured rather than how anything is
+            # written.
             format:
               - 'src/**'
               - 'tests/**'
@@ -105,18 +103,17 @@ jobs:
         with:
           global-json-file: global.json
 
-      # Versions are pinned centrally and NuGet.config decides which sources they may come from, so
-      # the key covers both. A key that ignored source policy would keep serving packages obtained
-      # under the previous one; NuGet.config does not exist yet, and hashing an absent path simply
-      # contributes nothing until it does.
+      # Versions are pinned centrally, NuGet.config decides which sources they may come from, and the
+      # lock files fix the resolved transitive closure, so the key covers all three. A key that
+      # ignored source policy would keep serving packages obtained under the previous one.
       - name: Cache NuGet packages
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
 
       - name: Restore dependencies
-        run: dotnet restore MailMcp.slnx
+        run: dotnet restore MailMcp.slnx --locked-mode
 
       - name: Restore local tools
         run: dotnet tool restore
@@ -173,10 +170,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
 
       - name: Restore dependencies
-        run: dotnet restore MailMcp.slnx
+        run: dotnet restore MailMcp.slnx --locked-mode
 
       - name: Verify formatting
         run: dotnet format MailMcp.slnx --verify-no-changes --verbosity diagnostic

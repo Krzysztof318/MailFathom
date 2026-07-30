@@ -32,6 +32,18 @@
     <Optimize>true</Optimize>
   </PropertyGroup>
 
+  <!-- Directory.Packages.props pins the direct versions; it says nothing about the transitive closure those versions
+       pull in, which is the larger half of what actually gets restored. Each project's packages.lock.json records that
+       closure with the resolved version and a content hash per package, so a republished package cannot change what a
+       pinned version means, and a dependency bump shows every transitive move in the pull request diff. The lock files
+       are committed. Restore rewrites them whenever a version changes, and the verification scripts and continuous
+       integration restore in locked mode, which fails instead of rewriting: regenerate deliberately with a
+       force-evaluate restore as part of the change that moves a pin, as `docs/operations/local-development.md`
+       describes. -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
   <PropertyGroup>
     <RepositoryRoot>$([System.IO.Path]::GetDirectoryName($([MSBuild]::GetPathOfFileAbove('.gitignore', '$(MSBuildThisFileDirectory)'))))</RepositoryRoot>
   </PropertyGroup>
@@ -43,7 +55,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory).config/BannedSymbols.txt" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -66,7 +78,9 @@
 
   <ItemGroup Condition="'$(IsUnitTestProject)' == 'true'">
     <PackageReference Include="coverlet.MTP" PrivateAssets="all" />
-    <None Include="$(MSBuildThisFileDirectory)testconfig.json" Link="testconfig.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Microsoft Testing Platform reads the collector configuration from beside the test executable, so the link name
+         rather than the source path is what has to stay `testconfig.json`. -->
+    <None Include="$(MSBuildThisFileDirectory).config/testconfig.json" Link="testconfig.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup Condition="'$(IsUnitTestProject)' == 'true'">

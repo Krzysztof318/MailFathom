@@ -60,7 +60,7 @@ coverage_report_directory='artifacts/integration-tests/report'
 rm -rf artifacts/integration-tests
 
 dotnet tool restore
-dotnet restore "$integration_test_project"
+dotnet restore "$integration_test_project" --locked-mode
 dotnet build "$integration_test_project" --configuration Release --no-restore
 
 # Run rather than test: the project opts out of test-platform discovery so a solution-wide run never

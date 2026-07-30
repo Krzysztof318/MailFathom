@@ -41,7 +41,7 @@ fi
 
 bash scripts/test-agent-workflow.sh
 dotnet tool restore
-dotnet restore MailMcp.slnx
+dotnet restore MailMcp.slnx --locked-mode
 dotnet build MailMcp.slnx --configuration Release --no-restore
 dotnet msbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release
 dotnet format MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic
