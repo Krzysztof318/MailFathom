@@ -60,6 +60,21 @@ public sealed class MailboxQueryFilterInvalidException : MailMcpException
             filterName),
         filterName);
 
+    /// <summary>Refuses a filter that carries no text where the query has no meaning without one.</summary>
+    /// <param name="filterName">How this assembly names the filter, for example <c>search query</c>.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// Only a filter whose absence changes what the operation is uses this. Most filters are optional and an absent one
+    /// simply widens the result, so the refusal exists for the case where a blank value would silently turn the request
+    /// into a different query than the caller wrote.
+    /// </remarks>
+    public static MailboxQueryFilterInvalidException Blank(string filterName) => new(
+        string.Format(
+            CultureInfo.InvariantCulture,
+            "The mailbox query {0} carries no text, and the query has no meaning without one.",
+            filterName),
+        filterName);
+
     /// <summary>Refuses a range filter whose end is not after its start.</summary>
     /// <param name="filterName">How this assembly names the filter, for example <c>received date range</c>.</param>
     /// <returns>The failure to raise.</returns>

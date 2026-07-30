@@ -15,6 +15,7 @@ This documentation set explains the durable design and operating model for MailM
 
 - [IMAP synchronization](features/imap-synchronization.md)
 - [Mailbox queries](features/mailbox-queries.md) documents the `ListEmails` request contract, cursor semantics, freshness reporting, and attachment-presence rule.
+- [Lexical email search](features/lexical-email-search.md) documents the `SearchEmails` query contract, the snippet bounds, the bounded-window rationale, and what the index does not cover.
 
 ## Planned work
 

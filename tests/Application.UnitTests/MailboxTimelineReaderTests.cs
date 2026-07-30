@@ -317,7 +317,7 @@ public sealed class MailboxTimelineReaderTests
         Assert.Equal(served.StoredEmailId, Assert.Single(result.Emails).StoredEmailId);
         Assert.Equal(
             [MailAccountId.Create("primary")],
-            Assert.Single(timeline.Calls).Filter.Scope.AccountIds);
+            Assert.Single(timeline.Calls).Filter.Selection.Scope.AccountIds);
     }
 
     /// <summary>Configuration allows serving no account while a local copy still exists, and none of it is readable.</summary>
@@ -371,7 +371,7 @@ public sealed class MailboxTimelineReaderTests
 
         // Assert
         Assert.Equal(email.StoredEmailId, Assert.Single(result.Emails).StoredEmailId);
-        Assert.Equal(servedAccountIds, Assert.Single(timeline.Calls).Filter.Scope.AccountIds);
+        Assert.Equal(servedAccountIds, Assert.Single(timeline.Calls).Filter.Selection.Scope.AccountIds);
     }
 
     /// <summary>The resolved accounts take part in the fingerprint, so a cursor cannot outlive the scope it described.</summary>
@@ -709,7 +709,7 @@ public sealed class MailboxTimelineReaderTests
         ISynchronizationFreshnessReader? freshnessReader = null) => new(
         timeline,
         freshnessReader ?? FreshnessReaderReturning(InboxFreshness),
-        accountCatalog ?? CatalogServing(EveryAccountTheSyntheticTimelineUses));
+        new MailboxScopeResolver(accountCatalog ?? CatalogServing(EveryAccountTheSyntheticTimelineUses)));
 
     /// <summary>Builds a catalog that serves exactly the accounts named, in the order the port promises.</summary>
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)

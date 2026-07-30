@@ -2,7 +2,6 @@
 
 using MailMcp.Application.Accounts;
 using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
 
 namespace MailMcp.Application.Emails.ListEmails;
@@ -24,25 +23,25 @@ public sealed class MailboxTimelineReader
 {
     private readonly IStoredEmailTimelineReader timelineReader;
     private readonly ISynchronizationFreshnessReader freshnessReader;
-    private readonly IMailAccountCatalog accountCatalog;
+    private readonly MailboxScopeResolver scopeResolver;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="timelineReader">Reads bounded pages of stored email summaries.</param>
     /// <param name="freshnessReader">Reads how current the local copy of each folder is.</param>
-    /// <param name="accountCatalog">Answers which accounts this deployment serves.</param>
+    /// <param name="scopeResolver">Decides which accounts and folders the listing runs against.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxTimelineReader(
         IStoredEmailTimelineReader timelineReader,
         ISynchronizationFreshnessReader freshnessReader,
-        IMailAccountCatalog accountCatalog)
+        MailboxScopeResolver scopeResolver)
     {
         ArgumentNullException.ThrowIfNull(timelineReader);
         ArgumentNullException.ThrowIfNull(freshnessReader);
-        ArgumentNullException.ThrowIfNull(accountCatalog);
+        ArgumentNullException.ThrowIfNull(scopeResolver);
 
         this.timelineReader = timelineReader;
         this.freshnessReader = freshnessReader;
-        this.accountCatalog = accountCatalog;
+        this.scopeResolver = scopeResolver;
     }
 
     /// <summary>Lists one page of emails.</summary>
@@ -69,7 +68,7 @@ public sealed class MailboxTimelineReader
 
         // Every filter has been validated by this point, so a deployment that serves no account answers the same
         // refusals a deployment that serves several does, and only then reports that it holds nothing to read.
-        if (filter.Scope.AccountIds.Count is 0)
+        if (filter.Selection.Scope.AccountIds.Count is 0)
         {
             return new ListEmailsResult([], NextCursor: null, []);
         }
@@ -89,57 +88,22 @@ public sealed class MailboxTimelineReader
 
         // Read after the page rather than beside it: both reads reach the same scoped EF Core context, which serves one
         // operation at a time, so starting them together would fault instead of overlapping.
-        var folderFreshness = await this.freshnessReader.ReadAsync(filter.Scope, cancellationToken);
+        var folderFreshness = await this.freshnessReader.ReadAsync(filter.Selection.Scope, cancellationToken);
 
         return new ListEmailsResult(page, nextCursor, folderFreshness);
     }
 
     /// <summary>Validates the request's filters and restricts the query to the accounts this deployment serves.</summary>
-    /// <remarks>
-    /// <para>
-    /// An account the deployment does not serve is refused before anything is read, rather than narrowed away by a
-    /// predicate: a narrowed predicate would answer with an empty page, and an empty page tells a caller that the
-    /// identifier they named exists. The check runs against the normalized scope, so the same request cannot be written
-    /// two ways to reach two answers.
-    /// </para>
-    /// <para>
-    /// A request that names no account is restricted to the served accounts rather than left unrestricted. Removing an
-    /// account from configuration leaves its stored rows in place, so an absent account predicate would keep publishing
-    /// mail from an account this deployment no longer serves — which is also why the resolved accounts, not the
-    /// requested ones, take part in the cursor's fingerprint.
-    /// </para>
-    /// </remarks>
-    private EmailTimelineFilter ReadableFilter(ListEmailsRequest request)
-    {
-        var requestedScope = MailboxScope.Create(request.AccountIds, request.FolderAliases);
-        var servedAccountIds = this.accountCatalog.ServedAccountIds;
-
-        if (FirstAccountNotServed(requestedScope, servedAccountIds) is { } inaccessibleAccountId)
-        {
-            throw new MailAccountNotAccessibleException(inaccessibleAccountId);
-        }
-
-        var readableScope = requestedScope.AccountIds.Count is 0
-            ? MailboxScope.RestrictedToServedAccounts(servedAccountIds, requestedScope.FolderAliases)
-            : requestedScope;
-
-        return EmailTimelineFilter.Create(
-            readableScope,
-            request.SenderAddress,
-            request.RecipientAddress,
-            request.SubjectFragment,
-            request.ReceivedOnOrAfter,
-            request.ReceivedBefore,
-            request.IsRemotelySeen,
-            request.HasAttachments,
-            request.Direction);
-    }
-
-    private static MailAccountId? FirstAccountNotServed(
-        MailboxScope requestedScope,
-        IReadOnlyList<MailAccountId> servedAccountIds) => requestedScope.AccountIds
-        .Select(static accountId => (MailAccountId?)accountId)
-        .FirstOrDefault(accountId => !servedAccountIds.Contains(accountId!.Value));
+    private EmailTimelineFilter ReadableFilter(ListEmailsRequest request) => EmailTimelineFilter.Create(
+        this.scopeResolver.ReadableScope(request.AccountIds, request.FolderAliases),
+        request.SenderAddress,
+        request.RecipientAddress,
+        request.SubjectFragment,
+        request.ReceivedOnOrAfter,
+        request.ReceivedBefore,
+        request.IsRemotelySeen,
+        request.HasAttachments,
+        request.Direction);
 
     /// <summary>Reads the position a cursor names, after establishing that the cursor belongs to this request.</summary>
     /// <remarks>

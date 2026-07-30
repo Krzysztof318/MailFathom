@@ -54,6 +54,14 @@ try
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
+    // Bound strictly like the blocks above: a misspelled "SnippetsPerEmails" would leave the configured bound
+    // undiscovered and search would quietly keep showing the default amount of every matched message.
+    builder.Services.AddOptions<MailboxSearchOptions>()
+        .Bind(
+            builder.Configuration.GetSection("MailboxSearch"),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
     builder.Services.AddOptions<MailExtractionBackfillOptions>()
         .Bind(
             builder.Configuration.GetSection("MailExtractionBackfill"),
@@ -119,6 +127,13 @@ try
     builder.Services.AddSingleton(provider => new PersistenceConcurrencyOptions
     {
         MaximumCommitAttempts = provider.GetRequiredService<IOptions<PersistenceOptions>>().Value.MaximumConcurrencyCommitAttempts,
+    });
+    // A singleton rather than a scoped value: the bound is a deployment-wide privacy control, so every search in the
+    // process applies the one an operator configured rather than whichever snapshot a scope happened to open under.
+    builder.Services.AddSingleton(provider =>
+    {
+        var searchSettings = provider.GetRequiredService<IOptions<MailboxSearchOptions>>().Value;
+        return EmailSearchSnippetBounds.Create(searchSettings.SnippetsPerEmail, searchSettings.WordsPerSnippet);
     });
     // The validator is registered ahead of the worker so hosted-service ordering reinforces the StartingAsync ordering
     // rather than depending on it alone, and ahead of the infrastructure so an operator who mistyped several references

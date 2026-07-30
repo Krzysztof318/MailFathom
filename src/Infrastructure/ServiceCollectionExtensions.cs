@@ -4,6 +4,7 @@ using MailKit.Net.Imap;
 using MailMcp.Application.EmailContent;
 using MailMcp.Application.Emails;
 using MailMcp.Application.Emails.ListEmails;
+using MailMcp.Application.Emails.SearchEmails;
 using MailMcp.Application.Folders;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Resilience;
@@ -136,6 +137,7 @@ public static class ServiceCollectionExtensions
         // The read side takes no persistence session and joins no transaction, so its ports are registered beside the
         // write repositories rather than through one of them.
         services.AddScoped<IStoredEmailTimelineReader, StoredEmailTimelineReader>();
+        services.AddScoped<IEmailSearchIndexReader, StoredEmailSearchIndexReader>();
         services.AddScoped<ISynchronizationFreshnessReader, SynchronizationFreshnessReader>();
         // MimeKit arrives with MailKit, so message parsing needs no dependency of its own; the adapter keeps its types
         // out of Application the same way the IMAP adapter keeps MailKit's out.
@@ -147,7 +149,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailFolderResolver>();
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<StoredEmailExtractionBackfill>();
+        services.AddScoped<MailboxScopeResolver>();
         services.AddScoped<MailboxTimelineReader>();
+        services.AddScoped<MailboxSearchReader>();
         services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(
             static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),
