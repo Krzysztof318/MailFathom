@@ -43,6 +43,45 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Contains("At least one account", result.ErrorMessage, StringComparison.Ordinal);
     }
 
+    /// <summary>Configuration defines the served accounts, so a query's access check answers from the same options.</summary>
+    [Theory]
+    [InlineData("primary", true)]
+    [InlineData("  primary  ", true)]
+    [InlineData("secondary", false)]
+    [InlineData("PRIMARY", false)]
+    public void Serves_AccountIdentifier_AnswersFromTheConfiguredAccounts(string accountId, bool expected)
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions { Accounts = [CreateAccount("primary")] };
+
+        // Act
+        var serves = options.Serves(MailAccountId.Create(accountId));
+
+        // Assert
+        Assert.Equal(expected, serves);
+    }
+
+    /// <summary>Switching synchronization off stops runs from fetching mail; it does not hide the copy already stored.</summary>
+    [Fact]
+    public void Serves_SynchronizationDisabled_StillServesTheConfiguredAccount()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions { Enabled = false, Accounts = [CreateAccount("primary")] };
+
+        // Act, Assert
+        Assert.True(options.Serves(MailAccountId.Create("primary")));
+    }
+
+    [Fact]
+    public void Serves_NoAccountsConfigured_ServesNothing()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions();
+
+        // Act, Assert
+        Assert.False(options.Serves(MailAccountId.Create("primary")));
+    }
+
     [Fact]
     public void ValidateForSynchronization_AccountIdsDifferingOnlyByNormalization_ReportsThemAsDuplicates()
     {

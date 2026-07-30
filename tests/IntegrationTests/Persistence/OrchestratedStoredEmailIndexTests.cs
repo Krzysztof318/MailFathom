@@ -26,11 +26,13 @@ namespace MailMcp.IntegrationTests.Persistence;
 /// than merely exist, which is a statement only a query plan over real data can make.
 /// </para>
 /// <para>
-/// The queries are written here rather than taken from a read model, because the read models of specifications 13 and 15
-/// are not implemented yet. They are the shapes those read models will issue — the ordering the index declares, and a
-/// parameterized <c>tsquery</c> against the same text search configuration the generated column was built with — and the
-/// assertions are about the schema, which is what carries the coverage marker. When the read models land, these tests
-/// move onto them instead of being duplicated by them.
+/// The queries are written here rather than taken from a read model, and they stay that way. Each states something the
+/// read model's own query cannot: an <c>ORDER BY</c> with an explicit <c>NULLS LAST</c>, which is what the index
+/// declares and what EF Core publishes no way to write, and a parameterized <c>tsquery</c> against the text search
+/// configuration the generated column was built with. The assertions are therefore about the schema, which is what
+/// carries the coverage marker here. How the mailbox listing read model behaves over the same data is
+/// <see cref="OrchestratedStoredEmailTimelineReaderTests" />, and the lexical search read model of specification 15 will
+/// join it rather than this class.
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]

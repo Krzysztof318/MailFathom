@@ -38,6 +38,10 @@ public sealed class MailMcpErrorCodeTests
     [InlineData(23001, 2, 3)]
     [InlineData(31001, 3, 1)]
     [InlineData(41001, 4, 1)]
+    [InlineData(51001, 5, 1)]
+    [InlineData(51002, 5, 1)]
+    [InlineData(52001, 5, 2)]
+    [InlineData(53001, 5, 3)]
     public void CategoryAndSubcategory_AreTheFirstTwoDigits(int allocatedValue, int expectedCategory, int expectedSubcategory)
     {
         // Arrange

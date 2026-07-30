@@ -1,6 +1,8 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailMcp.Application.Accounts;
 using MailMcp.Application.EmailContent;
+using MailMcp.Application.Emails;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
@@ -136,6 +138,74 @@ public sealed class ApplicationFailureContractTests
         Assert.DoesNotContain(rejection.Message, failure.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("mail.example.test", failure.Message, StringComparison.Ordinal);
         Assert.Same(rejection, failure.InnerException);
+    }
+
+    [Fact]
+    public void ErrorCode_MailboxQueryFailures_AreTheCodesForThoseFailures()
+    {
+        // Act
+        var pageSize = new MailboxQueryPageSizeOutOfRangeException(1000, MailboxQueryPageSize.MaximumValue);
+        var malformedCursor = new MailboxQueryCursorMalformedException();
+        var mismatchedCursor = new MailboxQueryCursorFilterMismatchException();
+        var invalidFilter = MailboxQueryFilterInvalidException.NotAnAddress("sender address");
+
+        // Assert
+        Assert.Equal(MailMcpErrorCode.MailboxQueryPageSizeOutOfRange, pageSize.ErrorCode);
+        Assert.Equal(MailMcpErrorCode.MailboxQueryCursorMalformed, malformedCursor.ErrorCode);
+        Assert.Equal(MailMcpErrorCode.MailboxQueryCursorFilterMismatch, mismatchedCursor.ErrorCode);
+        Assert.Equal(MailMcpErrorCode.MailboxQueryFilterInvalid, invalidFilter.ErrorCode);
+    }
+
+    /// <summary>One answer for "no such account" and "not yours", so a caller cannot enumerate the served accounts.</summary>
+    [Fact]
+    public void ErrorCode_MailAccountNotAccessible_IsTheCodeAndNamesTheIdentifierTheCallerSupplied()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+
+        // Act
+        var failure = new MailAccountNotAccessibleException(accountId);
+
+        // Assert
+        Assert.Equal(MailMcpErrorCode.MailAccountNotAccessible, failure.ErrorCode);
+        Assert.Equal(accountId, failure.AccountId);
+        Assert.Contains("primary", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A refused filter value is mail content, so the message states the filter and never what was written into it.</summary>
+    [Fact]
+    public void MailboxQueryFilterInvalidException_Message_NamesTheFilterAndNotTheRefusedValue()
+    {
+        // Act
+        var overlyLongFragment = Record.Exception(() => MailboxQueryFilterInvalidException.ThrowIfLengthExceeded(
+            "confidential salary review".Length,
+            8,
+            "subject fragment"));
+
+        // Assert
+        var failure = Assert.IsType<MailboxQueryFilterInvalidException>(overlyLongFragment);
+        Assert.Equal("subject fragment", failure.FilterName);
+        Assert.DoesNotContain("salary", failure.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("8", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MailboxQueryFilterInvalidException_ValuesInsideTheirLimits_RaiseNothing()
+    {
+        // Act, Assert
+        MailboxQueryFilterInvalidException.ThrowIfCountExceeded(8, 8, "accounts");
+        MailboxQueryFilterInvalidException.ThrowIfLengthExceeded(8, 8, "subject fragment");
+    }
+
+    [Fact]
+    public void MailboxQueryFilterInvalidException_EmptyRange_NamesTheRangeFilter()
+    {
+        // Act
+        var failure = MailboxQueryFilterInvalidException.EmptyRange("received date range");
+
+        // Assert
+        Assert.Equal("received date range", failure.FilterName);
+        Assert.Contains("received date range", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]

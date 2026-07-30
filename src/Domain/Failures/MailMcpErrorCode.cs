@@ -79,6 +79,25 @@ public readonly record struct MailMcpErrorCode
 
     #endregion
 
+    #region Category 5 — The MCP boundary
+
+    /// <summary>Gets subcategory 1, request validation: a mailbox query asked for a page size outside the range the query serves.</summary>
+    public static MailMcpErrorCode MailboxQueryPageSizeOutOfRange { get; } = new(51001);
+
+    /// <summary>Gets subcategory 1, request validation: one filter of a mailbox query carries a value, a count, or a length the query does not accept.</summary>
+    public static MailMcpErrorCode MailboxQueryFilterInvalid { get; } = new(51002);
+
+    /// <summary>Gets subcategory 2, pagination: a continuation cursor is not one this system issued.</summary>
+    public static MailMcpErrorCode MailboxQueryCursorMalformed { get; } = new(52001);
+
+    /// <summary>Gets subcategory 2, pagination: a continuation cursor was issued for a different set of filters than the request carries.</summary>
+    public static MailMcpErrorCode MailboxQueryCursorFilterMismatch { get; } = new(52002);
+
+    /// <summary>Gets subcategory 3, access: a request named a mail account this deployment does not serve.</summary>
+    public static MailMcpErrorCode MailAccountNotAccessible { get; } = new(53001);
+
+    #endregion
+
     /// <summary>Gets every allocated code.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
     public static IReadOnlyList<MailMcpErrorCode> All { get; } =
@@ -92,6 +111,11 @@ public readonly record struct MailMcpErrorCode
         DatabaseSchemaStateUnreadable,
         DatabaseSchemaTextSearchConfigurationMismatch,
         OutboundDependencyUnavailable,
+        MailboxQueryPageSizeOutOfRange,
+        MailboxQueryFilterInvalid,
+        MailboxQueryCursorMalformed,
+        MailboxQueryCursorFilterMismatch,
+        MailAccountNotAccessible,
     ];
 
     /// <summary>Gets the five-digit code.</summary>

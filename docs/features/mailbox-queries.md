@@ -1,0 +1,163 @@
+# Mailbox queries
+
+MailMcp answers a mailbox listing from its local copy. `ListEmails` is the first read use case: it takes structured
+filters, returns a bounded page of email summaries, issues the cursor that continues the walk, and reports how current
+the local copy is. It reaches no mail server, so a listing behaves the same whether or not IMAP is available — and it
+never touches the remote `\Seen` flag, because it speaks no mail protocol at all.
+
+The protocol adapter is not part of this: `MailboxTimelineReader` is an application use case, and the `list_emails` MCP
+tool that maps onto it is specification 16.
+
+## The request contract
+
+`ListEmailsRequest` carries what a caller asked for, unvalidated. `MailboxTimelineReader` turns it into a validated
+`EmailTimelineFilter`, so no adapter can reach a query with a filter that skipped validation.
+
+| Field | Meaning | Absent means |
+|---|---|---|
+| `AccountIds` | The accounts to list from | every account this deployment serves |
+| `FolderAliases` | The folder aliases to list from | every folder of those accounts |
+| `SenderAddress` | The address the sender must carry, in any case | any sender |
+| `RecipientAddress` | The address a `To` or `Cc` recipient must carry | any recipient |
+| `SubjectFragment` | Text the subject must contain, compared without regard to case | any subject |
+| `ReceivedOnOrAfter` | Inclusive start of the received range | no start |
+| `ReceivedBefore` | Exclusive end of the received range | no end |
+| `IsRemotelySeen` | The remote `\Seen` state to require | either state |
+| `HasAttachments` | Whether attachments are required | either |
+| `Direction` | Which end of the timeline to read from | `NewestFirst` |
+| `PageSize` | How many emails the page returns | the default of 25 |
+| `Cursor` | The cursor a previous page returned | the first page |
+
+Accounts and folders are named by their domain identities rather than as text, so an adapter converts a caller's strings
+once at its own boundary. A folder alias is MailMcp's own name for a folder and is normalized to upper case, which is why
+naming `archive` and `ARCHIVE` is naming one folder.
+
+### What each filter accepts, and what it refuses
+
+Refusing beats absorbing throughout: a filter that was truncated or silently dropped would run as a query nobody wrote,
+and its result would read as an answer about the mailbox.
+
+- **Page size** is validated, not clamped. A request that names one outside 1–100 is refused with
+  `51001 MailboxQueryPageSizeOutOfRange`, because a page clamped to a hundredth of what a client planned for looks
+  exactly like the page it asked for. Naming none is a different input and takes the default.
+- **Addresses** are normalized by the domain into the comparison form the persistence layer indexes, so a filter and a
+  stored participant are compared in one form by construction. An unusable address is refused with
+  `51002 MailboxQueryFilterInvalid` rather than kept as a value that can match no row, and so is one longer than the 320
+  characters RFC 5321 allows a forward path — the same bound the stored columns carry.
+- **A subject fragment** is bounded at 256 characters and matched anywhere in the subject, case-insensitively. Wildcards a
+  caller writes are escaped, so a fragment of `%` matches the character rather than every subject.
+- **A received range** may be unbounded at either end; only an unbounded page is disallowed. A range whose end is not
+  after its start selects nothing and is refused. An email whose received timestamp is unknown falls inside neither
+  bound, so naming either one excludes undated mail.
+- **The scope** accepts at most 64 distinct accounts and 64 distinct folder aliases. Both lists are deduplicated and
+  ordered, so two spellings of one scope are one query with one cursor.
+- **An account nobody serves** is refused with `53001 MailAccountNotAccessible` before anything is read. One failure
+  covers both "no such account" and "not yours", and an empty page is deliberately not the answer: it would confirm the
+  identifier and turn a listing into a way to enumerate accounts.
+
+### Attachment presence
+
+`HasAttachments` follows the classification rule MIME extraction applies, not a `Content-Disposition` header. A message
+whose only non-body parts are inline resources or a cryptographic signature carries no attachments and does not match, so
+filtering for mail with attachments does not return every signed message and every message with a logo in a signature
+block.
+
+For the same reason the summary reports the counts separately: `AttachmentCount` and `InlineResourceCount` are distinct
+values, beside the total attachment size and the encrypted, unverified-signature, and unexpanded-TNEF markers.
+[MIME metadata extraction](imap-synchronization.md#mime-metadata-extraction) describes how each part is classified, and
+[Stored email schema](../architecture/stored-email-schema.md) which of it the row keeps.
+
+## What a summary carries
+
+`EmailSummary` is the bounded projection a listing returns: the stable local identifier every later request names the
+email by, its account and folder alias, the message identifier, subject, sent and received timestamps, size, the sender's
+display name and address, the `To` addresses, the attachment summary, whether raw MIME is stored locally, and the remote
+flag snapshot.
+
+It carries no raw MIME, no body, and no attachment bytes, and the query that produces it selects only the columns it
+publishes — a privacy control before a performance one, because it makes the stored content unreachable through this
+contract rather than merely unused by it. What it does carry is personal data and inherits the classification of the mail
+it summarizes.
+
+`Cc` and `Reply-To` are stored and filterable but not listed. A listing exists to let a reader recognize a message; the
+full participant set belongs to reading it.
+
+### The remote flag snapshot
+
+`RemoteEmailFlagSnapshot` reports the flags a server last showed, together with when they were read. The timestamp is
+what separates "the server reported none of these flags" from "nobody has looked yet", which no combination of the
+booleans can express on its own. Until reconciliation lands (specification 10) every row carries the never-observed
+value, so an email that has never been looked at matches the unseen side of `IsRemotelySeen` — and `WasObserved` is how a
+caller tells the two apart.
+
+The snapshot travels in one direction only. Nothing in any read path turns a flag into an IMAP `STORE`.
+
+## Ordering and pagination
+
+### The order
+
+`EmailTimelinePosition` is the single statement of the order a timeline is read and paged over: received timestamp, then
+the stable local identifier as the tiebreaker. The identifier is part of the position rather than a decoration on it,
+because a mail server can record several messages within the same instant and a page boundary computed from a
+non-deterministic order silently skips or repeats rows.
+
+Undated mail sorts at the far end of whichever direction is read: last when the newest is read first, first when the
+oldest is. `OldestFirst` is `NewestFirst` reversed exactly rather than a second decision, which is what makes a cursor
+taken in one direction name the same boundary in the other.
+
+The timeline indexes on `stored_emails` reproduce that order column for column, including the `NULLS LAST` PostgreSQL
+would otherwise invert; [Stored email schema](../architecture/stored-email-schema.md) records the index definitions. EF
+Core publishes no way to state a null sort order in a query, so the read model expresses the same placement as a leading
+ordering key. Whether PostgreSQL can then serve that expression from the timeline indexes without a sort step is a
+query-plan question specification 20 answers, and the answer there is a matching expression index rather than a different
+order here.
+
+### The cursor
+
+Pagination is keyset-based, never offset-based: the next page asks for rows beyond a known boundary, so mail arriving
+between two requests neither shifts a window nor causes a row to be skipped or repeated. Paging with stable filters
+therefore visits every row exactly once, including across equal timestamps and across undated mail.
+
+The cursor is an opaque string pairing that boundary with a fingerprint of the filters and reading direction it was
+issued for. It carries no secret and needs no signature, because every value in it is one the caller already supplied or
+already received; encoding it is about opacity — a client that cannot read a cursor cannot build one, and building one is
+how a caller would end up asking for a boundary this system never computed.
+
+- A cursor presented against **different filters or a different direction** is refused with
+  `52002 MailboxQueryCursorFilterMismatch`. It would still name a row, which is exactly why honoring it would be wrong:
+  the caller would receive an arbitrary window of the new result set and would have no way to notice.
+- A cursor presented with a **different page size** continues the same walk. Page size moves no boundary and is
+  deliberately not part of the fingerprint.
+- Anything else — truncated, hand-written, or from a build whose cursor format differs — is refused with
+  `52001 MailboxQueryCursorMalformed` rather than interpreted as far as it parses.
+- A **blank** cursor is the first page rather than a malformed one.
+- Two requests that select the same emails in the same order share a fingerprint, including when they name the same
+  accounts in a different order or write a subject fragment in a different case.
+
+The absence of a cursor in a result is the end of the result set rather than a hint: the reader establishes it by asking
+storage for one row beyond the page and finding none. A present cursor never promises that the next page is non-empty —
+mail can be expunged between two requests — but continuing from it can never skip or repeat a row.
+
+## Freshness reporting
+
+Every result carries one `MailboxFolderFreshness` entry per folder in the request's scope, each reporting when
+synchronization last durably committed progress for that folder or that it never has. Without it a caller cannot tell a
+folder that holds no matching mail from one whose synchronization has been failing for a week, and both look like an
+answer about the mailbox.
+
+A folder with no checkpoint is reported with no timestamp rather than omitted, because it is the folder whose staleness a
+caller most needs to see. An alias that has been bound to several remote folders over time reports the most recent
+progress of any of those bindings, which is what "how current is this alias" means to a reader.
+
+## Where the pieces live
+
+- `MailMcp.Application.Emails.ListEmails` — the use case, its request, and its result.
+- `MailMcp.Application.Emails` — the filter, the cursor, the page size, the summary, and the query failures shared with
+  the later read models.
+- `MailMcp.Application.Accounts` — `IMailAccountCatalog`, the port that answers which accounts this deployment serves.
+  `MailSynchronizationOptions` implements it, so the answer comes from the configuration that defines the accounts.
+  Switching synchronization off does not hide the copy already stored.
+- `MailMcp.Application.Synchronization` — the freshness port and its read model, kept separate from the readers that
+  return mail because every read model attaches freshness.
+- `MailMcp.Infrastructure.Persistence` — `StoredEmailTimelineReader` and `SynchronizationFreshnessReader`, which evaluate
+  every filter, the keyset boundary, the ordering, and the row limit in PostgreSQL and track no entities.
