@@ -69,11 +69,13 @@ internal sealed class MailMcpDbContext : DbContext
     internal DbSet<SynchronizationCheckpointEntity> SynchronizationCheckpoints => this.Set<SynchronizationCheckpointEntity>();
 
     /// <inheritdoc />
-    // TODO: UIDVALIDITY and UID are modelled as CLR `uint` because that is the IMAP wire type, but PostgreSQL has no
-    // native unsigned 32-bit integer. No migration exists yet, so this mapping has never been validated against a real
-    // database. Verify it when the first migration is generated and map both columns to `bigint` if Npgsql does not
-    // provide a lossless mapping. The same review must confirm that the unique index on (folder, UIDVALIDITY, UID) and
-    // the checkpoint comparisons still order correctly under whichever column type is chosen.
+    /// <remarks>
+    /// UIDVALIDITY and UID are modelled as CLR <see cref="uint" /> because that is the IMAP wire type, and PostgreSQL has
+    /// no unsigned 32-bit integer. Npgsql maps both onto <c>bigint</c>, which the baseline migration emits and which holds
+    /// every value the wire type can carry; the integration suite stores an occurrence at <see cref="uint.MaxValue" /> and
+    /// reads it back to keep that lossless. Narrowing either column to <c>integer</c> would truncate silently rather than
+    /// fail, so the column type is part of the identity contract instead of an implementation detail.
+    /// </remarks>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Declared before any entity so the baseline migration emits CREATE EXTENSION ahead of the tables. The image
