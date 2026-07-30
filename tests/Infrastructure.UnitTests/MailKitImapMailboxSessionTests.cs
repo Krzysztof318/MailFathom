@@ -8,6 +8,7 @@ using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
+using MailMcp.Domain.Synchronization;
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
 using NSubstitute;
@@ -123,7 +124,7 @@ public sealed class MailKitImapMailboxSessionTests
         await using var session = await OpenSessionAsync(resilience, client, folder);
 
         // Act
-        var batch = await session.GetEmailBatchAfterAsync(null, 100, CancellationToken.None);
+        var batch = await session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None);
 
         // Assert
         Assert.Null(batch.InspectedThroughUid);
@@ -157,7 +158,7 @@ public sealed class MailKitImapMailboxSessionTests
         await using var session = await OpenSessionAsync(resilience, client, folder);
 
         // Act
-        var batch = await session.GetEmailBatchAfterAsync(null, 100, CancellationToken.None);
+        var batch = await session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None);
 
         // Assert
         var metadata = Assert.Single(batch.Emails);
@@ -431,7 +432,7 @@ public sealed class MailKitImapMailboxSessionTests
         var exhaustedUid = ImapUid.Create(uint.MaxValue);
 
         // Act
-        var batch = await session.GetEmailBatchAfterAsync(exhaustedUid, 100, CancellationToken.None);
+        var batch = await session.GetEmailBatchAfterAsync(exhaustedUid, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None);
 
         // Assert
         Assert.Empty(batch.Emails);
@@ -471,7 +472,7 @@ public sealed class MailKitImapMailboxSessionTests
         await using var session = await OpenSessionAsync(resilience, client, folder);
 
         // Act
-        var batch = await session.GetEmailBatchAfterAsync(null, 2, CancellationToken.None);
+        var batch = await session.GetEmailBatchAfterAsync(null, 2, MailSynchronizationWindow.Unbounded, CancellationToken.None);
 
         // Assert
         Assert.Equal([100U, 400U], batch.Emails.Select(message => message.OccurrenceId.Uid.Value));
@@ -495,13 +496,99 @@ public sealed class MailKitImapMailboxSessionTests
         await using var session = await OpenSessionAsync(resilience, client, folder);
 
         // Act
-        var batch = await session.GetEmailBatchAfterAsync(ImapUid.Create(400), 2, CancellationToken.None);
+        var batch = await session.GetEmailBatchAfterAsync(ImapUid.Create(400), 2, MailSynchronizationWindow.Unbounded, CancellationToken.None);
 
         // Assert
         Assert.Equal([900U], batch.Emails.Select(message => message.OccurrenceId.Uid.Value));
         Assert.False(batch.HasMore);
         Assert.Equal(1000U, batch.InspectedThroughUid!.Value.Value);
     }
+
+    /// <summary>The bound has to be part of the search the server answers, or an excluded email would still be fetched.</summary>
+    [Fact]
+    public async Task GetEmailBatchAfterAsync_BoundedWindow_SendsTheUidRangeAndTheArrivalDateInOneSearch()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient();
+        var folder = CreateSelectedFolder();
+        folder.UidNext.Returns(new UniqueId(1001));
+        folder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>()).Returns([new UniqueId(900)]);
+        folder.FetchAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IFetchRequest>(),
+            Arg.Any<CancellationToken>()).Returns(callInfo => CreateSummaries(callInfo.Arg<IList<UniqueId>>() ?? []));
+        await using var session = await OpenSessionAsync(resilience, client, folder);
+
+        // Act
+        var batch = await session.GetEmailBatchAfterAsync(
+            ImapUid.Create(400),
+            100,
+            MailSynchronizationWindow.EmailsReceivedSince(new DateOnly(2024, 1, 1)),
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal([900U], batch.Emails.Select(email => email.OccurrenceId.Uid.Value));
+        var searchQuery = Assert.IsType<BinarySearchQuery>(CaptureSearchQuery(folder));
+        Assert.Equal(SearchTerm.And, searchQuery.Term);
+        var searchedUids = Assert.IsType<UidSearchQuery>(searchQuery.Left).Uids;
+        Assert.Equal(401U, searchedUids[0].Id);
+        Assert.Equal(1000U, searchedUids[^1].Id);
+        var dateQuery = Assert.IsType<DateSearchQuery>(searchQuery.Right);
+        Assert.Equal(SearchTerm.DeliveredAfter, dateQuery.Term);
+        Assert.Equal(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Unspecified), dateQuery.Date);
+    }
+
+    [Fact]
+    public async Task GetEmailBatchAfterAsync_UnboundedWindow_SearchesTheUidRangeWithNoDateCondition()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient();
+        var folder = CreateSelectedFolder();
+        folder.UidNext.Returns(new UniqueId(1001));
+        folder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>()).Returns([]);
+        await using var session = await OpenSessionAsync(resilience, client, folder);
+
+        // Act
+        await session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None);
+
+        // Assert
+        Assert.IsType<UidSearchQuery>(CaptureSearchQuery(folder));
+    }
+
+    /// <summary>A folder whose whole backlog is excluded must terminate, which means checkpointing through what the search covered.</summary>
+    [Fact]
+    public async Task GetEmailBatchAfterAsync_BoundExcludesEveryAssignedUid_ReportsTheWholeRangeInspectedWithoutFetching()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient();
+        var folder = CreateSelectedFolder();
+        folder.UidNext.Returns(new UniqueId(1001));
+        folder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>()).Returns([]);
+        await using var session = await OpenSessionAsync(resilience, client, folder);
+
+        // Act
+        var batch = await session.GetEmailBatchAfterAsync(
+            null,
+            100,
+            MailSynchronizationWindow.EmailsReceivedSince(new DateOnly(2026, 1, 1)),
+            CancellationToken.None);
+
+        // Assert
+        Assert.Empty(batch.Emails);
+        Assert.False(batch.HasMore);
+        Assert.Equal(1000U, batch.InspectedThroughUid!.Value.Value);
+        await folder.DidNotReceive().FetchAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IFetchRequest>(), Arg.Any<CancellationToken>());
+        await folder.DidNotReceive().StoreAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IStoreFlagsRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Reads the one query the session issued, so a test asserts on what the server was actually asked.</summary>
+    private static SearchQuery CaptureSearchQuery(IMailFolder folder) =>
+        Assert.Single(folder.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IMailFolder.SearchAsync))
+            .Select(call => (SearchQuery)call.GetArguments()[0]!));
 
     // Building a substitute configures NSubstitute's ambient call context rather than only the returned object, so the
     // construction stays in a loop instead of a Select whose deferred execution could interleave it with another

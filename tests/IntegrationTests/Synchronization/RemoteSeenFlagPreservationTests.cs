@@ -4,6 +4,7 @@ using MailMcp.Application.Mail;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
+using MailMcp.Domain.Synchronization;
 using MailMcp.IntegrationTests.Mailbox;
 using MailMcp.IntegrationTests.Orchestration;
 using Microsoft.Extensions.DependencyInjection;
@@ -99,7 +100,11 @@ public sealed class RemoteSeenFlagPreservationTests(MailMcpOrchestrationFixture 
                     scope.GetRequiredService<IMailTransportSecurityPolicyReader>().GetPolicy(account),
                     token);
 
-                var batch = await session.GetEmailBatchAfterAsync(checkpointUid, maxEmailCount: 50, token);
+                var batch = await session.GetEmailBatchAfterAsync(
+                    checkpointUid,
+                    maxEmailCount: 50,
+                    MailSynchronizationWindow.Unbounded,
+                    token);
 
                 var contentLengths = new List<int>();
                 foreach (var email in batch.Emails)

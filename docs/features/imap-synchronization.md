@@ -7,6 +7,7 @@ MailMcp now includes the first vertical slice for read-only IMAP synchronization
 - `Domain` models stable IMAP email occurrence identity as `EmailOccurrenceId`, keyed by `(account, folder, UIDVALIDITY, UID)`. The folder component is a `MailFolderResolutionId` — an alias together with the generation it was bound under — rather than a folder name, for the reason [folder aliases and discovery](#folder-aliases-and-discovery) explains. `Email` is the repository-wide term for the mail artifact; `Message` is reserved so it stays unambiguous once AI conversation types exist.
 - `Application` owns IMAP, metadata repository, content store, and checkpoint ports, the folder-discovery, binding-store, and mapping-audit ports in `MailMcp.Application.Folders`, plus the `IPersistenceSession` write-transaction port in `MailMcp.Application.Persistence`. The persistence session is named separately from `IMailboxSession` because both would otherwise be "the session" at a call site.
 - `MailboxSynchronizer` resolves the configured alias against the folders the server currently advertises before it reads anything, then opens folders through a read-only session port and requests bounded metadata batches. It retains at most one fetched MIME payload at a time: each seen-preserving remote fetch finishes before a short local session atomically upserts that occurrence's metadata, uses the returned local stored-email identifier for its content, and commits and disposes before the next remote fetch starts. After the inspected batch finishes, a separate short session advances the checkpoint only when the mailbox adapter reports a non-speculative UID cursor known safe from the opened folder state.
+- How far back a run reaches is bounded per account by an optional earliest date, which travels into the IMAP search itself rather than filtering what came back. An account that names one pays no `FETCH`, no MIME read, no `bytea` write, and no search-vector computation for the mail it excludes, and the folder checkpoint still advances across the excluded range so a run ends instead of rescanning it every interval. [Bounding how far back a run reaches](#bounding-how-far-back-a-run-reaches) states which date the bound compares against and what widening one later does not do.
 - Batches are bounded by email count, not by UID-space width. The adapter searches the whole remaining assigned UID range — a UID SEARCH returns identifiers only — and then fetches envelopes for at most `MaxMetadataBatchSize` emails. A folder whose UIDs are sparse after deletions therefore still advances a full batch per iteration instead of crawling the UID space, which keeps an initial backfill practical.
 - An email that exceeds `MaxRawMimeBytes` is never silently dropped. Its occurrence metadata is committed with `ContentAvailability = ExceededSizeLimit` before the checkpoint moves past it, so the gap stays queryable and auditable instead of existing only as a counter in a log line. The same applies when the advertised size understated the payload and the bounded stream read abandons it mid-fetch: the session reports that as a `RemoteEmailContentFetchResult` outcome rather than as a failure, because the caller records the occurrence and continues, exactly as it does for MIME the reader cannot parse.
 - Committing occurrences before the window checkpoint means a process failure may cause a later run to fetch an already stored occurrence again. Content and metadata writes use the stable remote occurrence identity and are idempotent, so this retry does not create duplicate stored emails.
@@ -365,6 +366,7 @@ Synchronization is disabled by default:
         "Host": "imap.example.test",
         "Port": 993,
         "UserName": "mailmcp@example.test",
+        "EarliestEmailReceivedDate": "2024-01-01",
         "Secrets": {
           "Password": { "SecretReference": "systemd-credential:imap-primary-password" }
         },
@@ -411,6 +413,50 @@ The extraction backfill has a section of its own rather than a block inside the 
 ```
 
 When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. Each entry of `Folders` names an alias and exactly one of `RemotePath` and `SpecialUse`; naming both, naming neither, or naming a role that does not exist fails startup with a message identifying the alias. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, and `Important`. If an account omits `Folders`, the worker applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
+
+### Bounding how far back a run reaches
+
+`EarliestEmailReceivedDate` is optional and per account. Omitting it synchronizes every email the server still holds,
+which stays the default and keeps existing configuration behaving exactly as before. Naming a date bounds the corpus: an
+account whose archive predates the assistant's usefulness synchronizes the mail worth asking about instead of fifteen
+years of backlog that would otherwise be searched, fetched, parsed, stored as raw MIME, and indexed before anything
+recent arrived. It binds as a plain date — `2024-01-01` — and the date itself is inside the window.
+
+**The bound compares against arrival, not against the sent date.** It becomes the IMAP `SINCE` key, which compares the
+server-assigned `INTERNALDATE`, disregarding time and time zone. It deliberately does not compare the envelope `Date`
+header that MailMcp stores as the email's sent timestamp, and the two disagree for imported and forwarded mail:
+
+- An archive copied onto a new server carries the arrival date of the copy, so a migrated mailbox is *not* bounded by
+  what its mail says it was sent on. A migration that has to be bounded needs the date the migration ran, not the date
+  the mail was written.
+- A message forwarded today carries the old header date of what it quotes. Bounding on the header would have made such a
+  message permanently invisible, because a bound on the sent date keeps excluding newly arriving old-dated mail forever
+  rather than only bounding a first run.
+
+Arrival is also the property that grows with the UID sequence a run walks, and every server keeps it for every email,
+while a `Date` header can be absent or unparseable.
+
+The bound is pushed into the search rather than applied to its answer: the remaining UID range and the date condition go
+to the server in one `UID SEARCH`, so an excluded UID is never fetched. The checkpoint still advances through everything
+the search inspected, not merely through the last email it described, so a folder whose entire backlog is excluded
+advances once to the highest assigned UID, reports no remaining work, and ends. Read-only behavior is unchanged: no path
+introduced by the bound can set `\Seen`.
+
+**Widening the bound later does not revisit mail a run already passed.** The folder checkpoint records how far the UID
+sequence has been walked, and nothing about a changed date rewinds it, so moving the bound further back only affects UIDs
+that have not been reached yet — mail below the checkpoint stays absent, and the absence shows up as a missing search
+result rather than as an error. Recovering it means clearing that folder's `synchronization_checkpoints` row so the next
+run walks the folder from its first UID again, which is safe because metadata and content writes are idempotent on the
+remote occurrence identity, and expensive because everything inside the widened window is fetched and indexed again.
+Narrowing the bound removes nothing that is already stored; pruning stored mail is a separate concern.
+
+A date later than the current UTC date fails startup, naming the account, because it would exclude every email in the
+mailbox — indistinguishable from synchronization silently doing nothing. That rule needs the current date, which no data
+annotation on bound options can reach, so it runs as the options framework's custom validator, at startup and then
+whenever a reload materializes new options, on the same terms as this section's other bound-options rules. It is not gated on `Enabled`, for the same reason secret resolution is not: a date an
+operator wrote is a date they intend to synchronize from. A value that is not a date at all fails startup while binding,
+which is what the section's strict binding buys here — a collection item whose conversion fails is otherwise dropped, and
+a typo in this one setting would remove the whole account from synchronization.
 
 ### Secrets
 

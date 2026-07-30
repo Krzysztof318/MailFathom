@@ -11,6 +11,7 @@ using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
+using MailMcp.Domain.Synchronization;
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Resilience;
 
@@ -82,6 +83,7 @@ internal sealed class MailKitImapMailboxSession(
     public Task<RemoteEmailMetadataBatch> GetEmailBatchAfterAsync(
         ImapUid? lastSeenUid,
         int maxEmailCount,
+        MailSynchronizationWindow synchronizationWindow,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxEmailCount);
@@ -92,7 +94,12 @@ internal sealed class MailKitImapMailboxSession(
         }
 
         return connection.ExecuteFolderReadAsync(
-            (openFolder, attemptToken) => this.SearchAndFetchBatchAsync(openFolder, lastSeenUid, maxEmailCount, attemptToken),
+            (openFolder, attemptToken) => this.SearchAndFetchBatchAsync(
+                openFolder,
+                lastSeenUid,
+                maxEmailCount,
+                synchronizationWindow,
+                attemptToken),
             cancellationToken);
     }
 
@@ -113,6 +120,7 @@ internal sealed class MailKitImapMailboxSession(
         IMailFolder openFolder,
         ImapUid? lastSeenUid,
         int maxEmailCount,
+        MailSynchronizationWindow synchronizationWindow,
         CancellationToken cancellationToken)
     {
         var minValue = lastSeenUid is { } uid ? uid.Value + 1U : 1U;
@@ -126,7 +134,9 @@ internal sealed class MailKitImapMailboxSession(
         // be bounded by email count rather than by UID-space width. Bounding by UID-space width would advance a sparse
         // folder by at most maxEmailCount UIDs per batch and make an initial backfill take an impractical number of runs.
         var searchRange = new UniqueIdRange(new UniqueId(minValue), new UniqueId(highestAssignedUid.Value));
-        var matchingUids = await openFolder.SearchAsync(SearchQuery.Uids(searchRange), cancellationToken);
+        var matchingUids = await openFolder.SearchAsync(
+            BuildRangeSearchQuery(searchRange, synchronizationWindow),
+            cancellationToken);
         var assignedUids = matchingUids
             .Where(candidate => candidate.Id >= minValue && candidate.Id <= highestAssignedUid.Value)
             .OrderBy(candidate => candidate.Id)
@@ -179,6 +189,25 @@ internal sealed class MailKitImapMailboxSession(
         }
 
         return RemoteEmailContentFetchResult.Retrieved(new RemoteEmailContent(occurrenceId, memory.ToArray()));
+    }
+
+    /// <summary>Builds the one UID SEARCH that carries both the remaining UID range and the account's earliest-arrival bound.</summary>
+    /// <remarks>
+    /// The date condition travels with the range in the same command, so the server never reports an excluded UID and
+    /// this run never fetches one. MailKit renders <c>DeliveredAfter</c> as the IMAP <c>SINCE</c> key, which compares
+    /// the server-assigned <c>INTERNALDATE</c> disregarding time and time zone and includes the named day itself; the
+    /// envelope <c>Date</c> header MailMcp stores as the sent timestamp is deliberately not what is compared, for the
+    /// reason <see cref="MailSynchronizationWindow" /> records.
+    /// </remarks>
+    private static SearchQuery BuildRangeSearchQuery(
+        UniqueIdRange searchRange,
+        MailSynchronizationWindow synchronizationWindow)
+    {
+        SearchQuery rangeQuery = SearchQuery.Uids(searchRange);
+
+        return synchronizationWindow.EarliestEmailReceivedDate is { } earliestReceivedDate
+            ? rangeQuery.And(SearchQuery.DeliveredAfter(earliestReceivedDate.ToDateTime(TimeOnly.MinValue)))
+            : rangeQuery;
     }
 
     private static uint? GetHighestAssignedUid(UniqueId? uidNext)
