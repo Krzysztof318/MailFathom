@@ -159,10 +159,11 @@ public sealed class EmailContentReader
 
     /// <summary>Builds the result for an email whose raw MIME the size limit kept out of local storage.</summary>
     /// <remarks>
-    /// Everything answerable is still answered. The headers come from the columns the listing is served out of, which
-    /// are narrower than a parse would produce but are what exists, and the attachment counts come from the summary
-    /// written when the occurrence was recorded. Only the per-attachment list is absent, because nothing local can
-    /// derive it, and the body state says why.
+    /// Everything answerable is still answered, and nothing else is. The headers come from the columns the listing is
+    /// served out of, which are narrower than a parse would produce but are what exists. Both the per-attachment list
+    /// and the attachment counts are absent, because nobody has ever read this message's parts: the row carries what
+    /// the server's envelope reported, and an envelope says nothing about attachments, so its zero counts are unset
+    /// defaults rather than a finding. The body state says why all of it is missing.
     /// </remarks>
     private static GetEmailContentResult ResultWithoutStoredContent(EmailSummary summary) => new()
     {
@@ -172,7 +173,7 @@ public sealed class EmailContentReader
         SizeOctets = summary.SizeOctets,
         Headers = HeadersFrom(summary),
         Body = EmailContentBody.NotStoredExceededSizeLimit,
-        AttachmentSummary = summary.Attachments,
+        AttachmentSummary = null,
         Attachments = [],
         RemoteFlags = summary.RemoteFlags,
     };

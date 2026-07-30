@@ -36,7 +36,7 @@ every classification, retention, access, and erasure constraint of the mail it w
 | `SizeOctets` | The size the mail server reported for the whole message |
 | `Headers` | Subject, sent and received timestamps, every participant under its header role, and the thread identifiers |
 | `Body` | The representations, or the reason there are none |
-| `AttachmentSummary` | The counts for what the message carries besides its body |
+| `AttachmentSummary` | The counts for what the message carries besides its body, absent when nobody has counted them |
 | `Attachments` | One entry per attachment, re-derived from the stored raw MIME, with no bytes |
 | `RemoteFlags` | The flags a server last showed, and when they were read |
 
@@ -60,9 +60,18 @@ instead, so a signed message and a message with a logo in its signature block do
 
 Those counts come from the same parse as the list whenever the stored MIME could be read, so the two can never disagree.
 They would if the row answered for them: a message stored before extraction ran records no attachments until the
-backfill reaches it, while the message it describes has them. Only where there is nothing to parse — content the size
-limit kept out of storage — does the row's summary answer, which is exactly the case where a caller still needs to know
-that the message has attachments.
+backfill reaches it, while the message it describes has them.
+
+Where there is nothing to parse — content the size limit kept out of storage — the summary is **absent rather than
+zero**. Nothing has ever read that message's parts: synchronization recorded what the server's envelope reported, and an
+envelope describes no attachments, so the row's zero counts are unset defaults rather than a finding. Publishing them
+would tell a caller that every oversized message carries no attachments, which is a claim nothing here is in a position
+to make.
+
+Each header role contributes at most 256 participants. Nothing between a sender and this system bounds how many
+addresses a header may carry, so without it one message could decide how large every result derived from it becomes.
+The persisted columns carry a bound of their own, deliberately: this one bounds what a parse publishes, that one bounds
+what a column stores.
 
 File names arrive normalized: path structure, control characters, and bidirectional overrides are removed when the name
 is read, and a name is never returned as a path or resolved against one.
@@ -83,6 +92,11 @@ discipline, and a unit test asserts it.
 An encrypted body is a state rather than an empty string, because merging the two would make mail this deployment holds
 and cannot decrypt indistinguishable from mail that genuinely said nothing. Decrypting it is out of scope and is tracked
 by #75.
+
+The state means what it says: nothing could read the body. A `multipart/alternative` may offer a readable `text/plain`
+member beside an encrypted one, and the message then has a body a reader can be shown — so it is reported as readable,
+even though the attachment summary still records that the message carries encrypted content somewhere. The unreadable
+state is reserved for a body that left nothing behind.
 
 `NotStoredExceededSizeLimit` is not a defect and schedules no repair: synchronization recorded the occurrence and
 deliberately stored no content for it, and asking for repair would ask a later run to store what the same limit refuses
@@ -120,10 +134,20 @@ bound strictly, so a misspelled key fails startup instead of being replaced by t
 The cut falls on a text-element boundary, so a body ending in an emoji or a combining sequence is never handed over as a
 lone surrogate that a JSON writer would replace and PostgreSQL would reject.
 
-Plain text is read in full and then cut, so the reported original length is the length that actually existed. Markup is
-the exception and is cut before it is parsed: sanitizing is the expensive step, and there is nothing to learn from
-parsing what will not be returned. The sanitizer's parse then closes what the cut left open, so a truncated HTML
-representation is still balanced markup, and its truncation is measured against the source it was cut from.
+Plain text is read in full and then cut, so the reported original length is the length that actually existed. Its edges
+are left exactly as the sender wrote them — a leading indent can be the first line of a code block and a trailing blank
+line can be the shape of a signature. Text *derived* from HTML is trimmed, because its edge whitespace belongs to the
+derivation rather than to the message: a body opening with a block element emits a line break before its first word.
+
+Markup is cut before it is parsed: sanitizing is the expensive step, and there is nothing to learn from parsing what
+will not be returned. The sanitizer's parse then closes what the cut left open, so a truncated HTML representation is
+still balanced markup, and its truncation is measured against the source it was cut from.
+
+Closing those elements adds characters, so a source that fits the bound can serialize past it — deeply nested markup can
+spend its whole allowance on opening tags and then need as much again to close them. Rather than cut the result, which
+would hand back exactly the unbalanced fragment the source-first cut avoids, the source is shrunk and sanitized again
+until the result fits. The retry terminates because a shorter prefix opens no more elements than a longer one, and
+ordinary mail never reaches a second pass.
 
 ## HTML sanitization
 

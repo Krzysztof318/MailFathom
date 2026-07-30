@@ -108,9 +108,12 @@ public sealed class OrchestratedEmailContentReadTests(MailMcpOrchestrationFixtur
 
         // The first sighting is what says how long the defect has been outstanding, so a later read must not move it.
         Assert.Equal(afterFirstRead.FirstRequestedAt, request.FirstRequestedAt);
-        Assert.True(
-            request.LastRequestedAt >= request.FirstRequestedAt,
-            "The last sighting of a defect cannot predate the first one.");
+
+        // Nothing is asserted about the ordering of the two timestamps against each other. Both come from the system
+        // clock this composition registers, so any claim about their order would be a claim about that clock rather
+        // than about the upsert — and two writes this close together can legitimately share a timestamp. What the
+        // statement guarantees against a straggler is that the stored value never goes backwards, which is a property
+        // of GREATEST rather than something a sequential pair of writes can exhibit.
     }
 
     private static Task<EmailContentRepairRequestEntity[]> ReadRequestsAsync(

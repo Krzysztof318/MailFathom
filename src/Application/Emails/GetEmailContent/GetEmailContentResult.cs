@@ -39,14 +39,21 @@ public sealed record GetEmailContentResult
     /// <summary>Gets the body representations, or the reason there are none.</summary>
     public required EmailContentBody Body { get; init; }
 
-    /// <summary>Gets the counts for what the message carries besides its body.</summary>
+    /// <summary>Gets the counts for what the message carries besides its body, or <see langword="null" /> when nobody has counted them.</summary>
     /// <remarks>
+    /// <para>
     /// They come from the same parse as <see cref="Attachments" /> whenever the stored MIME could be read, so the two
-    /// can never disagree, and from the stored row in the one case where there is nothing to parse. That case is what
-    /// the summary is for: it lets a caller state that a message has attachments even where the list below is empty
-    /// because nothing local can derive it.
+    /// can never disagree.
+    /// </para>
+    /// <para>
+    /// It is absent, rather than zero, for a message whose content the size limit kept out of storage. Nothing has ever
+    /// read that message's parts: synchronization recorded what the server's envelope reported and the envelope does
+    /// not describe attachments, so the row's counts are unset defaults rather than a finding. Publishing them would
+    /// tell a caller that an oversized message carries no attachments, which is a claim no code here is in a position
+    /// to make.
+    /// </para>
     /// </remarks>
-    public required StoredEmailAttachmentSummary AttachmentSummary { get; init; }
+    public StoredEmailAttachmentSummary? AttachmentSummary { get; init; }
 
     /// <summary>Gets one entry per attachment, re-derived from the stored raw MIME, and never any of their bytes.</summary>
     /// <remarks>

@@ -136,6 +136,116 @@ public sealed class MimeKitEmailContentRendererTests
         Assert.EndsWith("</p>", rendering.SanitizedHtmlBody.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>Deeply nested markup cannot serialize past the bound by spending it all on tags that must be closed.</summary>
+    [Fact]
+    public async Task RenderAsync_HtmlBodyNestedDeeplyEnoughToDoubleWhenClosed_StaysWithinTheBound()
+    {
+        // Arrange
+        const int maxBodyCharacters = 500;
+        var nesting = 200;
+        var markup = string.Concat(Enumerable.Repeat("<div>", nesting)) + "Text";
+        var content = HtmlOnlyMessage(markup);
+
+        // Act
+        var rendering = await RenderAsync(content, includeSanitizedHtml: true, maxBodyCharacters: maxBodyCharacters);
+
+        // Assert
+        Assert.NotNull(rendering.SanitizedHtmlBody);
+        Assert.True(
+            rendering.SanitizedHtmlBody.Text.Length <= maxBodyCharacters,
+            $"The sanitized representation is {rendering.SanitizedHtmlBody.Text.Length} characters, past the bound of {maxBodyCharacters}.");
+        Assert.True(rendering.SanitizedHtmlBody.WasTruncated);
+        Assert.EndsWith("</div>", rendering.SanitizedHtmlBody.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>Whitespace a sender wrote at either edge of a plain-text body is theirs, and survives.</summary>
+    [Fact]
+    public async Task RenderAsync_PlainTextBodyWithEdgeWhitespace_ReturnsItUnchanged()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            "    indented first line",
+            "last line",
+            "   ");
+
+        // Act
+        var rendering = await RenderAsync(content);
+
+        // Assert
+        Assert.StartsWith("    indented", rendering.PlainTextBody.Text, StringComparison.Ordinal);
+        Assert.EndsWith("   ", rendering.PlainTextBody.Text, StringComparison.Ordinal);
+        Assert.Equal(rendering.PlainTextBody.Text.Length, rendering.PlainTextBody.OriginalCharacterCount);
+    }
+
+    /// <summary>
+    /// A message offering a readable alternative beside an encrypted one has a body something can read, so the
+    /// unreadable state would be a false claim. It is reserved for a body that left nothing behind.
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_AlternativeOfferingReadableTextBesideAnEncryptedMember_ReturnsTheReadableText()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/alternative; boundary=\"alt\"",
+            string.Empty,
+            "--alt",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            "The readable alternative.",
+            "--alt",
+            "Content-Type: multipart/encrypted; protocol=\"application/pgp-encrypted\"; boundary=\"enc\"",
+            string.Empty,
+            "--enc",
+            "Content-Type: application/pgp-encrypted",
+            string.Empty,
+            "Version: 1",
+            "--enc",
+            "Content-Type: application/octet-stream",
+            string.Empty,
+            "-----BEGIN PGP MESSAGE-----",
+            "-----END PGP MESSAGE-----",
+            "--enc--",
+            "--alt--");
+
+        // Act
+        var rendering = await RenderAsync(content);
+
+        // Assert
+        Assert.False(rendering.BodyIsEncrypted);
+        Assert.Equal("The readable alternative.", rendering.PlainTextBody.Text);
+
+        // The summary still records that the message carries encrypted content, which is a different question.
+        Assert.True(rendering.Attachments.IsEncrypted);
+    }
+
+    /// <summary>One header cannot decide how large a result is by carrying an unbounded number of addresses.</summary>
+    [Fact]
+    public async Task RenderAsync_HeaderCarryingMoreAddressesThanTheBound_ReturnsNoMoreThanTheBoundForThatRole()
+    {
+        // Arrange
+        var recipients = string.Join(
+            ", ",
+            Enumerable.Range(0, EmailParticipant.MaximumPerRole + 50).Select(index => $"recipient{index}@example.test"));
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            $"To: {recipients}",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            "Body");
+
+        // Act
+        var rendering = await RenderAsync(content);
+
+        // Assert
+        Assert.Equal(
+            EmailParticipant.MaximumPerRole,
+            rendering.Headers.Participants.Count(participant => participant.Role == EmailAddressRole.To));
+    }
+
     /// <summary>An encrypted body is reported as one, not as a message that said nothing.</summary>
     [Fact]
     public async Task RenderAsync_MessageWhoseBodyArrivedEncrypted_ReportsItRatherThanReturningAnEmptyBody()

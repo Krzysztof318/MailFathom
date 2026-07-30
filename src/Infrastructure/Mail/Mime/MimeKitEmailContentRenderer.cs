@@ -103,12 +103,20 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
         CancellationToken cancellationToken)
     {
         var classification = await MimeAttachmentClassifier.ClassifyAsync(message, cancellationToken);
+        var plainTextBody = this.ReadPlainTextBody(classification);
+
+        // Encrypted content and an unreadable body are not the same claim. A multipart/alternative can offer a
+        // readable member beside an encrypted one, and the classifier marks the branch encrypted because it holds
+        // encrypted content somewhere; reporting that as "nothing can read this body" would discard text the message
+        // itself provided for exactly this purpose. The state is therefore reserved for a body that is both encrypted
+        // and left nothing readable behind.
+        var bodyIsUnreadable = classification.BodyIsEncrypted && plainTextBody.Text.Length == 0;
 
         return new EmailContentRendering(
             MimeMessageHeaderReader.Read(message),
-            this.ReadPlainTextBody(classification),
-            includeSanitizedHtml ? this.ReadSanitizedHtmlBody(classification) : null,
-            classification.BodyIsEncrypted,
+            bodyIsUnreadable ? EmailBodyRepresentation.Empty : plainTextBody,
+            includeSanitizedHtml && !bodyIsUnreadable ? this.ReadSanitizedHtmlBody(classification) : null,
+            bodyIsUnreadable,
             classification.Attachments);
     }
 
@@ -121,11 +129,6 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
     /// </remarks>
     private EmailBodyRepresentation ReadPlainTextBody(MimeContentClassification classification)
     {
-        if (classification.BodyIsEncrypted)
-        {
-            return EmailBodyRepresentation.Empty;
-        }
-
         var body = ReadPlainTextParts(classification.BodyTextParts)
             ?? DeriveTextFromHtmlParts(classification.BodyTextParts)
             ?? string.Empty;
@@ -135,42 +138,81 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
 
     /// <summary>Sanitizes the HTML the message displays, or reports that it displays none.</summary>
     /// <remarks>
-    /// The markup is cut before it is parsed, so a body far beyond the bound costs the bound rather than its own size.
-    /// Cutting markup leaves elements open, and the sanitizer's parse closes them as it re-serializes the document, so
-    /// what comes back is well-formed rather than a fragment ending mid-element. That is why the truncation is measured
-    /// against the source rather than against the result.
+    /// <para>
+    /// The markup is cut before it is parsed, so a body far beyond the bound costs the bound rather than its own size,
+    /// and the sanitizer's parse closes what the cut left open as it re-serializes the document.
+    /// </para>
+    /// <para>
+    /// Closing those elements adds characters, so a source that fits the bound can serialize past it — deeply nested
+    /// markup can spend its whole allowance on opening tags and then need as much again to close them. Both properties
+    /// a caller relies on are kept by shrinking the source instead of cutting the result: the returned markup stays
+    /// balanced, and it stays within the bound the caller sized its handling against.
+    /// </para>
+    /// <para>
+    /// The retry terminates because the serialized length never grows when the source shrinks — a shorter prefix opens
+    /// no more elements than a longer one — and the budget strictly decreases on every pass. Ordinary mail never
+    /// reaches a second pass.
+    /// </para>
     /// </remarks>
     private EmailBodyRepresentation? ReadSanitizedHtmlBody(MimeContentClassification classification)
     {
-        if (classification.BodyIsEncrypted)
-        {
-            return null;
-        }
-
         var htmlParts = classification.BodyTextParts.Where(part => part.IsHtml).ToArray();
         if (htmlParts.Length == 0)
         {
             return null;
         }
 
+        var maxCharacters = this.readOptions.MaxBodyCharacters;
         var source = string.Join('\n', htmlParts.Select(part => part.Text));
-        var boundedSource = MailTextBounds.TruncateAtTextElementBoundary(source, this.readOptions.MaxBodyCharacters);
+        var sourceBudget = maxCharacters;
+        string boundedSource;
+        string sanitized;
+
+        do
+        {
+            boundedSource = MailTextBounds.TruncateAtTextElementBoundary(source, sourceBudget);
+            sanitized = this.sanitizer.Sanitize(boundedSource);
+
+            // The next budget is scaled by how far the result overshot rather than reduced by the overshoot itself.
+            // Closing tags are proportional to the markup that opened them, so subtracting the overshoot would
+            // undershoot to nothing on exactly the markup this loop exists for; scaling lands near the answer and the
+            // explicit decrement guarantees the budget still falls when rounding would have left it unchanged.
+            sourceBudget = Math.Min(
+                sourceBudget - 1,
+                (int)((long)boundedSource.Length * maxCharacters / Math.Max(sanitized.Length, 1)));
+        }
+        while (sanitized.Length > maxCharacters && sourceBudget > 0);
 
         return new EmailBodyRepresentation(
-            this.sanitizer.Sanitize(boundedSource),
+            // Markup that is nothing but tags can exhaust the source budget without ever fitting, and the bound is what
+            // a caller can actually rely on. Cutting the result is the last resort for that case alone.
+            sanitized.Length > maxCharacters
+                ? MailTextBounds.TruncateAtTextElementBoundary(sanitized, maxCharacters)
+                : sanitized,
             source.Length,
             boundedSource.Length < source.Length);
     }
 
     /// <summary>Reads the plain-text body, joining the parts when a message resolved several as its body.</summary>
+    /// <remarks>
+    /// The edges are left exactly as the sender wrote them. A leading indent can be the first line of a code block and
+    /// a trailing blank line can be the shape of a signature, and trimming either would both alter the message and make
+    /// the reported original length describe something other than what was read.
+    /// </remarks>
     private static string? ReadPlainTextParts(IReadOnlyList<TextPart> bodyTextParts) =>
         JoinNormalized(bodyTextParts.Where(part => part.IsPlain).Select(part => part.Text));
 
     /// <summary>Derives the words an HTML body displays, which is only reached when no plain-text alternative exists.</summary>
+    /// <remarks>
+    /// This one is trimmed where the plain-text reading is not, because its edge whitespace belongs to the derivation
+    /// rather than to the message: a body opening with a block element emits a line break before its first word, and
+    /// returning that would report layout the sender never wrote as content they did.
+    /// </remarks>
     private static string? DeriveTextFromHtmlParts(IReadOnlyList<TextPart> bodyTextParts) =>
         JoinNormalized(bodyTextParts
             .Where(part => part.IsHtml)
-            .Select(part => HtmlBodyTextReader.ReadDisplayedText(part.Text, int.MaxValue)));
+            .Select(part => HtmlBodyTextReader.ReadDisplayedText(part.Text, int.MaxValue)))
+            ?.Trim();
 
     /// <summary>Joins what several body parts carried into one normalized text, or reports that there were none.</summary>
     /// <remarks>
@@ -198,6 +240,6 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
             MailBodyTextNormalizer.Append(body, text, int.MaxValue);
         }
 
-        return body.ToString().Trim();
+        return body.ToString();
     }
 }

@@ -68,9 +68,14 @@ public sealed class EmailContentReaderTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(summary.Attachments.AttachmentCount, result.Attachments.Count);
-        Assert.Equal(summary.Attachments.TotalSizeOctets, result.Attachments.Sum(attachment => attachment.DecodedSizeOctets));
-        Assert.Equal(summary.Attachments.InlineResourceCount, result.AttachmentSummary.InlineResourceCount);
+        var attachmentSummary = Assert.IsType<StoredEmailAttachmentSummary>(result.AttachmentSummary);
+        Assert.Equal(attachmentSummary.AttachmentCount, result.Attachments.Count);
+        Assert.Equal(attachmentSummary.TotalSizeOctets, result.Attachments.Sum(attachment => attachment.DecodedSizeOctets));
+
+        // The row counted the same message, so the derived answer and the persisted one agree here — which is the
+        // consistency the specification asks for. Where they could disagree, the derived one is what is published.
+        Assert.Equal(summary.Attachments.AttachmentCount, attachmentSummary.AttachmentCount);
+        Assert.Equal(summary.Attachments.InlineResourceCount, attachmentSummary.InlineResourceCount);
     }
 
     /// <summary>An attachment reaches the result as metadata only; the contract has nowhere to put its bytes.</summary>
@@ -191,6 +196,10 @@ public sealed class EmailContentReaderTests
 
         // Assert
         Assert.Equal(EmailBodyAvailability.NotStoredExceededSizeLimit, result.Body.Availability);
+
+        // Nobody ever read this message's parts, so its attachment counts are unknown rather than zero. The row holds
+        // what the envelope reported, and an envelope describes no attachments.
+        Assert.Null(result.AttachmentSummary);
         Assert.Equal("Quarterly report", result.Headers.Subject);
         Assert.Equal(
             ["sender@example.test", "recipient@example.test"],

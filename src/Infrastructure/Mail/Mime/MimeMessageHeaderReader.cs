@@ -59,8 +59,16 @@ internal static class MimeMessageHeaderReader
 
     /// <summary>Turns one header's mailboxes into participants, dropping the ones that do not parse as addresses.</summary>
     /// <remarks>
+    /// <para>
     /// Group syntax is flattened to its members, because a group name is a label the sender chose rather than a
     /// recipient anything can be filtered by.
+    /// </para>
+    /// <para>
+    /// The count is bounded by <see cref="EmailParticipant.MaximumPerRole" />, and the bound is applied to the usable
+    /// addresses rather than to the mailboxes the header declared, so a message padded with unparseable entries cannot
+    /// spend the allowance on addresses that would have been dropped anyway. Without it a message could devote most of
+    /// its raw MIME allowance to one address header and decide how large every result derived from it becomes.
+    /// </para>
     /// </remarks>
     private static IEnumerable<EmailParticipant> CreateParticipants(
         EmailAddressRole role,
@@ -69,7 +77,8 @@ internal static class MimeMessageHeaderReader
             .Select(mailbox => EmailAddress.TryCreate(mailbox.Name, mailbox.Address, out var address)
                 ? new EmailParticipant(role, address)
                 : null)
-            .OfType<EmailParticipant>();
+            .OfType<EmailParticipant>()
+            .Take(EmailParticipant.MaximumPerRole);
 
     /// <summary>Reads one date-bearing header in UTC, or nothing when it is absent or unparseable.</summary>
     /// <remarks>
