@@ -25,6 +25,20 @@ public sealed record EmailThreadReferences
     /// <summary>Gets the identifier of the message this one answers, or <see langword="null" /> when it answers none.</summary>
     public string? InReplyTo { get; }
 
+    /// <summary>The greatest number of ancestors a parse keeps from one <c>References</c> header.</summary>
+    /// <remarks>
+    /// The bound exists for the reason <see cref="EmailParticipant.MaximumPerRole" /> does: nothing between a sender and
+    /// this system limits how long the header may be, and every reader of a message publishes what it found — a content
+    /// read returns the path back to the root to whoever asked for the message. What a longer path loses is its middle:
+    /// the root identifier names the conversation and the recent end is what a reader walks, so both are kept.
+    /// <para>
+    /// The persisted column carries a bound of its own, deliberately narrower. This one bounds what a parse publishes
+    /// and that one bounds what a column stores, and the two would answer differently if a later schema change moved
+    /// one of them.
+    /// </para>
+    /// </remarks>
+    public const int MaximumReferences = 256;
+
     /// <summary>Gets the referenced ancestors in the order the header listed them, without duplicates.</summary>
     public IReadOnlyList<string> References { get; }
 
@@ -58,18 +72,33 @@ public sealed record EmailThreadReferences
             : new EmailThreadReferences(normalizedMessageId, normalizedInReplyTo, normalizedReferences);
     }
 
-    /// <summary>Normalizes the referenced ancestors, keeping header order and dropping repeats.</summary>
+    /// <summary>Normalizes the referenced ancestors, keeping header order, dropping repeats, and bounding the path.</summary>
     /// <remarks>
     /// The result is wrapped rather than returned as the array a collection expression builds, because an
     /// <see cref="IReadOnlyList{T}" /> backed directly by an array can be cast back to it and written through.
     /// </remarks>
-    private static ReadOnlyCollection<string> NormalizeReferences(IEnumerable<string> references) =>
-        references
-            .Select(NormalizeIdentifier)
-            .OfType<string>()
-            .Distinct(StringComparer.Ordinal)
-            .ToList()
-            .AsReadOnly();
+    private static ReadOnlyCollection<string> NormalizeReferences(IEnumerable<string> references)
+    {
+        List<string> normalizedReferences =
+        [
+            .. references
+                .Select(NormalizeIdentifier)
+                .OfType<string>()
+                .Distinct(StringComparer.Ordinal),
+        ];
+
+        return normalizedReferences.Count <= MaximumReferences
+            ? normalizedReferences.AsReadOnly()
+            : WithinBound(normalizedReferences);
+    }
+
+    /// <summary>Reduces a path longer than the bound to its root and its most recent ancestors.</summary>
+    /// <remarks>
+    /// The two ranges cannot overlap, because the list is already free of duplicates and longer than the bound, so the
+    /// recent end begins past the root.
+    /// </remarks>
+    private static ReadOnlyCollection<string> WithinBound(List<string> normalizedReferences) =>
+        new List<string>([normalizedReferences[0], .. normalizedReferences.TakeLast(MaximumReferences - 1)]).AsReadOnly();
 
     /// <summary>Reduces one written identifier to the form everything compares on.</summary>
     /// <remarks>

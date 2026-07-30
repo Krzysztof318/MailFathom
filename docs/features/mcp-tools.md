@@ -12,7 +12,8 @@ serves.
 `ModelContextProtocol.AspNetCore` 2.0.0 hosts the server. The `Mcp` project owns the tool descriptors, the conversion of
 protocol arguments into the domain identities a use case is expressed in, and the mapping from a use case's result back
 onto the published contract. It holds no query, no persistence, and no mail-protocol code: `list_emails` calls the
-`MailboxTimelineReader` use case and nothing else.
+`MailboxTimelineReader` use case and nothing else, and `get_email_content` calls the `EmailContentReader` use case and
+nothing else.
 
 The division is deliberate and is what keeps a second entrypoint from bypassing anything. Every filter bound, the
 page-size range, the account authorization, and the cursor's authenticity belong to the use case, so this boundary
@@ -20,12 +21,15 @@ re-states no limit of its own; [Mailbox queries](mailbox-queries.md) documents t
 the boundary owns is the one thing a use case cannot: turning a caller's text into an account identifier or a folder
 alias, and refusing text that names neither.
 
-Two properties hold for every tool and are proven by test rather than asserted here:
+Three properties hold for every tool and are proven by test rather than asserted here:
 
 - A call reads the local mailbox copy only. Nothing in a tool request reaches a mail server, so a request cannot wait on
   IMAP and cannot set the remote `\Seen` flag.
-- No result, error, or log line carries a filter value, a mailbox address, a subject, body text, raw MIME, attachment
-  bytes, an exception type, a stack trace, or an internal identifier.
+- No error and no log line carries a filter value, a mailbox address, a subject, body text, raw MIME, an exception type,
+  a stack trace, or an internal identifier. What a boundary withholds is not lost: the detail is logged on the server,
+  correlated by the trace the request already carries.
+- No result carries raw MIME or attachment bytes. Message content itself is a result only where the tool exists to
+  return it, which today is `get_email_content` alone; `list_emails` returns summaries and no body text at all.
 
 ## Descriptor conventions
 
@@ -34,8 +38,8 @@ it calls anything:
 
 | Element | Convention |
 |---|---|
-| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_emails` |
-| `title` | A human-readable label for display — `List emails` |
+| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_emails`, `get_email_content` |
+| `title` | A human-readable label for display — `List emails`, `Get email content` |
 | `description` | States what the tool reads, that it reads the local copy only, that it changes nothing, and what it bounds |
 | `inputSchema` | Every argument is a top-level property carrying its own description, unit, and absence meaning |
 | `outputSchema` | Generated from the result type, whose properties carry descriptions of their own |
@@ -77,13 +81,16 @@ configured name for an account and carries nothing the caller did not already wr
 |---|---|---|
 | `51001` | A page size outside the range the query serves | A page size of 0 or above 100, refused rather than clamped |
 | `51002` | A filter carries a value, a count, or a length the query does not accept | An unusable address, a subject fragment over 256 characters or carrying a control character, a received range that ends before it starts, more than 64 accounts or folder aliases, an account identifier or folder alias that is blank, over 256 characters, or carrying a control character |
+| `51004` | The call named an email with text that is no identifier this system issues | A `storedEmailId` that is blank, not a UUID, or the all-zero UUID, refused before anything is looked up |
 | `52001` | A continuation cursor is not one this system issued | A truncated, hand-written, or foreign cursor |
 | `52002` | A continuation cursor was issued for different filters | A cursor reused after a filter or the reading direction changed |
 | `53001` | The call named a mail account this deployment does not serve | An account identifier nobody configured, or one belonging to someone else — the two are deliberately one answer |
+| `53002` | The call named an email the local mailbox copy holds no row for | An email never synchronized, one expunged and collected, or one of an account this deployment stopped serving — deliberately one answer |
 | `54001` | The call failed for a reason the boundary deliberately does not describe | Anything undiagnosed; the detail is in the server log |
+| `55001` | The email exists locally and its stored content is missing, damaged, or unreadable | A local copy being repaired; the call is worth repeating once repair has run |
 
-Codes `51001` through `53001` are the query use case's own, allocated in the MCP-boundary category because that is where
-they surface, and every one of them is written for a caller to read. That is the whole rule the boundary applies: a
+Codes `51001` through `53002` and `55001` are the use cases' own, allocated in the MCP-boundary category because that is
+where they surface, and every one of them is written for a caller to read. That is the whole rule the boundary applies: a
 failure whose code belongs to that category is published as it stands, and a failure from any other category — a schema
 mismatch, an IMAP authentication refusal, a concurrency conflict — describes MailMcp's internals to whoever asked and
 collapses into `54001`. Stating the rule as a category rather than as a list of exception types is what stops a failure
@@ -194,8 +201,81 @@ to discover which account identifiers exist; "no such account" and "not yours" a
 names no account is narrowed to the served accounts rather than left unrestricted, because removing an account from
 configuration leaves its stored rows in place.
 
+## `get_email_content`
+
+Returns one email from the local mailbox copy: its normalized headers, the plain-text body, optionally a sanitized HTML
+body, and one entry per attachment. [Email content](email-content.md) documents the use case behind it — the
+representations, the sanitization policy, the truncation rule, and the consistency behavior — where they are enforced.
+This section describes the surface.
+
+### Arguments
+
+| Argument | Type | Meaning |
+|---|---|---|
+| `storedEmailId` | `string` | **Required.** The `storedEmailId` a listing or a search returned. A UUID; anything else is refused with `51004` |
+| `includeSanitizedHtml` | `boolean` | Whether to also return the sanitized HTML body. Omitted returns plain text alone |
+
+The identifier is the one argument this boundary converts, and it converts it before anything is looked up. Text that is
+blank, is not a UUID, or is the all-zero UUID names no email this system could have issued, so it is refused with
+`51004` rather than looked up and reported as absent — a typo and a deleted message are different findings. The refusal
+never repeats the text, because it is caller input on its way into a client-readable result and the log line beside it.
+
+`51004` and `53002` are therefore deliberately distinct, as are `53002` and `55001`: the first pair separates "you named
+no email" from "that email is not here", and the second separates "not here" from "here and currently unservable". Only
+the last is worth repeating.
+
+### Result
+
+| Field | Meaning |
+|---|---|
+| `storedEmailId`, `accountId`, `folderAlias` | Where the email is, in MailMcp's own names |
+| `sizeBytes` | The size of the whole email as the mail server reported it |
+| `headers` | Subject, sent and received timestamps, every participant with its header role, and the three threading identifiers |
+| `body` | The representations, or the reason there are none |
+| `attachments` | One entry per attachment: normalized file name, media type, decoded size — never bytes |
+| `attachmentCounts` | What the email carries besides its body, or `null` when nothing has ever read its parts |
+| `remoteFlags` | The flags a server last showed, and when they were read |
+
+Four parts of it are worth reading before a caller writes against them:
+
+- **Truncation travels inside each representation.** `plainText` and `sanitizedHtml` each carry `text`,
+  `originalCharacterCount`, and `wasTruncated`, because a body and the fact that it is incomplete are never useful apart:
+  a model handed only the text would summarize a cut message as a whole one. A message can exceed the bound in one
+  representation and not in the other, which is why the metadata is not shared between them.
+- **`availability` rather than an empty body.** `readable` means the text is the message, and an empty body under it
+  means the message displayed nothing. `encryptedNotReadableLocally` is mail this deployment cannot decrypt, and
+  `notStoredExceededSizeLimit` is mail whose bytes the configured limit deliberately kept out of storage. The last two
+  return an empty text because nothing could be read, and a caller that ignored the distinction would report an empty
+  message.
+- **`attachments` carries no content, in any shape.** Nothing reachable from the published result can hold bytes, which
+  `Mcp.UnitTests` asserts structurally over the whole contract rather than response by response. Attachment download and
+  message export are out of scope for the first release.
+- **File names are normalized and may say so.** A file name is attacker-controlled text that reaches a model directly, so
+  what is published is the domain's normalized form: a bare name, never a path or a traversal segment, never a control
+  character or a bidirectional override, at most 200 characters. `wasFileNameNormalized` states whether MailMcp had to
+  rewrite what the message wrote, and a part left with nothing usable is reported as unnamed rather than given an
+  invented name.
+
+`attachmentCounts` is `null`, rather than zero, for an email whose content the size limit kept out of storage. Nothing
+has ever read that message's parts — synchronization recorded what the server's envelope reported, and an envelope does
+not describe attachments — so publishing zeros would claim the email carries nothing attached, which no local state
+supports.
+
+### Reading changes nothing, locally or remotely
+
+The tool holds one use case and that use case holds no mailbox port, so no branch of a content read can open an IMAP
+session. A missing local copy is answered with `55001` and a durable repair request the synchronizer acts on later,
+never with a fetch; reading mail through MailMcp therefore cannot download it and cannot set the remote `\Seen` flag.
+The `remoteFlags` a result carries are an observation from the last synchronization run, with `wasObserved` stating
+whether any run has looked.
+
+Authorization is the use case's, as it is for `list_emails`: an email of an account this deployment does not serve is
+refused with `53002`, the same answer an email that was never stored gets, so a read cannot be used to discover which
+identifiers exist.
+
 ## Pending
 
-`get_email_content` and `search_emails` are specified but not implemented, and `ask_mail` with the RAG work behind it is a
-later stage. `list_emails` is complete: the PostgreSQL read models it queries through landed with the mailbox query use
-case, so a call against a synchronized mailbox answers from the local copy.
+`search_emails` is specified but not implemented — the `MailboxSearchReader` use case it will map onto has landed, the
+tool has not — and `ask_mail` with the RAG work behind it is a later stage. `list_emails` and `get_email_content` are
+complete: the PostgreSQL read models and the content store they read through landed with their use cases, so a call
+against a synchronized mailbox answers from the local copy.
