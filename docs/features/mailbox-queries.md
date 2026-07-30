@@ -6,7 +6,7 @@ the local copy is. It reaches no mail server, so a listing behaves the same whet
 never touches the remote `\Seen` flag, because it speaks no mail protocol at all.
 
 The protocol adapter is not part of this: `MailboxTimelineReader` is an application use case, and the `list_emails` MCP
-tool that maps onto it is specification 16.
+tool that publishes it is described by [MCP tools](mcp-tools.md).
 
 ## The request contract
 

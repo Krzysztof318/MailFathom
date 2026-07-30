@@ -24,6 +24,9 @@ public sealed class MailboxQueryFilterInvalidException : MailMcpException
     private MailboxQueryFilterInvalidException(string operatorSafeMessage, string filterName)
         : base(operatorSafeMessage) => this.FilterName = filterName;
 
+    private MailboxQueryFilterInvalidException(string operatorSafeMessage, string filterName, Exception cause)
+        : base(operatorSafeMessage, cause) => this.FilterName = filterName;
+
     /// <summary>Gets the filter that was refused, named as this assembly names it.</summary>
     public string FilterName { get; }
 
@@ -42,6 +45,37 @@ public sealed class MailboxQueryFilterInvalidException : MailMcpException
             CultureInfo.InvariantCulture,
             "The mailbox query {0} filter is not a usable mail address.",
             filterName),
+        filterName);
+
+    /// <summary>Refuses text that names no identity this system issues, such as an account identifier or a folder alias.</summary>
+    /// <param name="filterName">How this assembly names the filter, for example <c>folder aliases</c>.</param>
+    /// <param name="cause">The validation failure the domain identity raised, kept as the inner exception.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// A protocol adapter converts a caller's text into the domain identities a query is expressed in, and text that is
+    /// neither — blank, or carrying a control character — is refused there. It reports the refusal through this failure so
+    /// an adapter needs no failure of its own: the code is already the one allocated for a filter the query cannot accept,
+    /// and a second one would mean two codes for one answer. The cause travels as the inner exception, where an operator
+    /// reads it and no client does.
+    /// </remarks>
+    public static MailboxQueryFilterInvalidException NotAUsableIdentifier(string filterName, Exception cause) => new(
+        NotAUsableIdentifierMessage(filterName),
+        filterName,
+        cause);
+
+    /// <summary>Refuses text that names no identity this system issues, where no other failure explains why.</summary>
+    /// <param name="filterName">How this assembly names the filter, for example <c>folder aliases</c>.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// The overload without a cause exists for the checks an adapter makes itself, before a domain type is asked to read
+    /// the text: a length or a character class it refuses outright raises no exception of its own to carry.
+    /// </remarks>
+    public static MailboxQueryFilterInvalidException NotAUsableIdentifier(string filterName) =>
+        new(NotAUsableIdentifierMessage(filterName), filterName);
+
+    private static string NotAUsableIdentifierMessage(string filterName) => string.Format(
+        CultureInfo.InvariantCulture,
+        "The mailbox query {0} filter names a value this system does not issue.",
         filterName);
 
     /// <summary>Refuses a text filter that carries a control character.</summary>
