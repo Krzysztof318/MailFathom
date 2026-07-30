@@ -96,6 +96,15 @@ public readonly record struct MailMcpErrorCode
     /// <summary>Gets subcategory 3, access: a request named a mail account this deployment does not serve.</summary>
     public static MailMcpErrorCode MailAccountNotAccessible { get; } = new(53001);
 
+    /// <summary>Gets subcategory 4, undiagnosed failure: a tool call failed for a reason the boundary deliberately does not describe.</summary>
+    /// <remarks>
+    /// This is the one code every failure that is not already an allocated one collapses into, so a client learns that
+    /// the call failed and nothing about why. The detail stays in the server log, correlated by the trace the request
+    /// already carries. It is the only code in this category a tool boundary raises itself rather than reports on behalf
+    /// of a use case.
+    /// </remarks>
+    public static MailMcpErrorCode McpToolFailedUnexpectedly { get; } = new(54001);
+
     #endregion
 
     /// <summary>Gets every allocated code.</summary>
@@ -116,6 +125,7 @@ public readonly record struct MailMcpErrorCode
         MailboxQueryCursorMalformed,
         MailboxQueryCursorFilterMismatch,
         MailAccountNotAccessible,
+        McpToolFailedUnexpectedly,
     ];
 
     /// <summary>Gets the five-digit code.</summary>

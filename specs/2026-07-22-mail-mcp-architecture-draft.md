@@ -221,7 +221,7 @@ Each unit-test project references only the production boundary it verifies and t
 |---|---|---|
 | Runtime | .NET 10 | LTS, supported through November 2028 |
 | Host | ASP.NET Core 10 | Public Internet-facing Kestrel with HTTPS and client certificates |
-| MCP | `ModelContextProtocol.AspNetCore` 1.4.1 | Official C# MCP SDK, Streamable HTTP transport |
+| MCP | `ModelContextProtocol.AspNetCore` 2.0.0 | Official C# MCP SDK, Streamable HTTP transport. Raised from 1.4.1 when the surface was built; 2.0.0 is Apache-2.0 rather than MIT |
 | Mail | `MailKit` 4.17.0 | IMAP, SMTP, MIME, IDLE, NOTIFY, SASL |
 | ORM | EF Core 10 + `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3 | Relational persistence and migrations |
 | Database | PostgreSQL with pgvector 0.8.2 | Metadata, raw MIME, FTS, chunks, embeddings |

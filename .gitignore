@@ -14,3 +14,31 @@ artifacts/
 .env
 .env.*
 !.env.example
+
+# Agent sandboxes mask developer and editor configuration by bind-mounting an empty file over each
+# path, so these appear in the worktree as zero-byte files that `git add -A` will happily stage.
+# Listed without a trailing slash because the masked form is a file even where the real one is a
+# directory, which is why the `.idea/` and `.vs/` patterns above did not match them.
+# None of these is tracked. Should one ever need to be, `git add -f` says so out loud, which is the
+# quieter failure of the two: the alternative leaves an empty file reappearing before every commit.
+.bash_profile
+.bashrc
+.zshrc
+.zprofile
+.profile
+.gitconfig
+.gitmodules
+.ripgreprc
+.vscode
+.idea
+.mcp.json
+.claude/agents
+.claude/commands
+.claude/hooks
+.claude/output-styles
+.claude/routines
+.claude/workflows
+.claude/launch.json
+.claude/loop.md
+.claude/scheduled_tasks.json
+.claude/settings.json

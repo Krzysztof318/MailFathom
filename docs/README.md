@@ -10,11 +10,13 @@ This documentation set explains the durable design and operating model for MailM
 - [Operations](operations/local-development.md) covers local .NET and Aspire development commands.
 - [Secret provisioning](operations/secret-provisioning.md) covers secret references, the systemd and container provisioning paths, and in-memory exposure.
 - [Host startup telemetry](operations/host-startup-telemetry.md) describes the bootstrap logging pipeline that reports process start, startup failure, and shutdown.
+- [MCP endpoint](operations/mcp-endpoint.md) covers enabling the protocol surface and the interim posture of an endpoint with no transport authentication.
 - [Agent workflow](operations/agent-workflow.md) documents the shared Codex and Claude Code workflow.
 - [Decisions](decisions/README.md) describes the ADR workflow and templates.
 
 - [IMAP synchronization](features/imap-synchronization.md)
 - [Mailbox queries](features/mailbox-queries.md) documents the `ListEmails` request contract, cursor semantics, freshness reporting, and attachment-presence rule.
+- [MCP tools](features/mcp-tools.md) documents the tool descriptor conventions, the `list_emails` tool that publishes that use case, and the stable error codes.
 
 ## Planned work
 

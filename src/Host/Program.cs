@@ -13,6 +13,7 @@ using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Resilience;
 using MailMcp.Infrastructure.Secrets;
+using MailMcp.Mcp;
 using Microsoft.Extensions.Options;
 
 // Composed before anything else, CreateBuilder included, so that a malformed appsettings.json, a failure during
@@ -153,6 +154,29 @@ try
     builder.Services.AddHostedService<MailMcp.Host.Hosting.DatabaseSchemaStartupGate>();
     builder.Services.AddHostedService<MailMcp.Host.Hosting.MailSynchronizationWorker>();
     builder.Services.AddHostedService<MailMcp.Host.Hosting.MailExtractionBackfillWorker>();
+    // Registered whether or not the endpoint is enabled, because it is the warning that decides whether it has anything
+    // to say. Registering it conditionally would put the same condition in two places.
+    builder.Services.AddHostedService<MailMcp.Host.Hosting.McpTransportAuthenticationWarning>();
+
+    // Read once and registered, so the value that decides the route is the one every consumer resolves. Whether the
+    // endpoint exists is decided while the application is being built, before a container that could resolve a snapshot
+    // exists, and a second read of a reloadable source could otherwise map the endpoint from one value while the missing
+    // authentication was warned about from another.
+    //
+    // Bound strictly like the other security-sensitive sections: a misspelled "Enabeld" would leave the endpoint off
+    // while an operator believed they had turned it on.
+    var mcpEndpointSettings = builder.Configuration
+        .GetSection(McpEndpointOptions.SectionName)
+        .Get<McpEndpointOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        ?? new McpEndpointOptions();
+    builder.Services.AddSingleton(Options.Create(mcpEndpointSettings));
+
+    if (mcpEndpointSettings.Enabled)
+    {
+        // The tools read the local mailbox copy through the use cases the infrastructure registration above already
+        // added, so the protocol surface adds no port of its own.
+        builder.Services.AddMailMcpServer();
+    }
 
     var app = builder.Build();
 
@@ -160,6 +184,11 @@ try
 
     app.MapDefaultEndpoints();
     app.MapGet("/", () => Results.Ok(new { service = "MailMcp", status = "ready" }));
+
+    if (mcpEndpointSettings.Enabled)
+    {
+        app.MapMcp(McpEndpointRoute.Path);
+    }
 
     await app.RunAsync();
 
