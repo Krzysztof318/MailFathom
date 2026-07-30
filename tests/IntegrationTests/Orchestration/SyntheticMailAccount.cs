@@ -3,7 +3,9 @@
 using System.Diagnostics.CodeAnalysis;
 using MailMcp.AppHost;
 using MailMcp.Application.Mail;
+using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Synchronization;
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Secrets;
@@ -26,10 +28,18 @@ namespace MailMcp.IntegrationTests.Orchestration;
 /// </para>
 /// </remarks>
 internal sealed class SyntheticMailAccount(OrchestratedMailServerEndpoints endpoints)
-    : IImapAccountSettingsProvider, IMailTransportSecurityPolicyReader
+    : IImapAccountSettingsProvider, IMailTransportSecurityPolicyReader, IMailSynchronizationWindowReader
 {
     /// <summary>Gets the account identifier every occurrence this suite stores belongs to.</summary>
     public static MailAccountId AccountId { get; } = MailAccountId.Create("integration");
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Unbounded, because every test seeds the mail it then expects a run to find. A bound would silently exclude a
+    /// seeded email whenever the container's clock and the seeding date disagreed about the day, which would look like a
+    /// synchronization defect rather than like the arrangement it was.
+    /// </remarks>
+    public MailSynchronizationWindow GetWindow(MailAccountId accountId) => MailSynchronizationWindow.Unbounded;
 
     /// <inheritdoc />
     public MailTransportSecurityPolicy GetPolicy(MailAccountId accountId) => MailTransportSecurityPolicy.Create(
