@@ -100,6 +100,55 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
         Assert.Contains("MinWords=5", command, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The server marks matches with control characters, never with the markup a caller receives. Whether a fragment
+    /// carries a marker is what separates a genuine highlight from the opening words <c>ts_headline</c> falls back to,
+    /// and a printable marker cannot answer that — Markdown mail writes <c>**</c> of its own. Text extraction drops
+    /// every control character except the tab and the newline, so an indexed body cannot imitate these.
+    /// </summary>
+    [Fact]
+    public void RankedHitsQuery_HighlightMarkers_AreControlCharactersRatherThanPublishedMarkup()
+    {
+        // Act
+        var command = GeneratedCommand(QueryTextFor("invoice"));
+
+        // Assert
+        Assert.Contains("StartSel=\"\u0002\"", command, StringComparison.Ordinal);
+        Assert.Contains("StopSel=\"\u0003\"", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("StartSel=\"**\"", command, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The second statement narrows by the selection as well as by the ranked identifiers. PostgreSQL reads each
+    /// statement under its own snapshot, so a run committing between them could otherwise pair a summary that fails the
+    /// filter with the rank computed while it still passed.
+    /// </summary>
+    [Fact]
+    public void SummaryQuery_AnyWindow_NarrowsByTheSelectionAsWellAsTheRankedIdentifiers()
+    {
+        // Arrange
+        var selection = MailboxEmailSelection.Create(
+            MailboxScope.Unrestricted,
+            senderAddress: null,
+            recipientAddress: null,
+            subjectFragment: null,
+            receivedOnOrAfter: null,
+            receivedBefore: null,
+            isRemotelySeen: null,
+            hasAttachments: false);
+
+        using var context = new MailMcpDbContextDesignTimeFactory().CreateDbContext([]);
+
+        // Act
+        var command = StoredEmailSelectionPredicate
+            .Matching(context.StoredEmails.AsNoTracking(), selection)
+            .Select(StoredEmailSummaryProjection.Row)
+            .ToQueryString();
+
+        // Assert
+        Assert.Contains(nameof(StoredEmailEntity.AttachmentCount), command, StringComparison.Ordinal);
+    }
+
     /// <summary>The structural filters narrow the same table the listing narrows, through the predicate both share.</summary>
     [Fact]
     public void RankedHitsQuery_StructuralFilters_NarrowTheQueryBeforeAnythingIsRanked()

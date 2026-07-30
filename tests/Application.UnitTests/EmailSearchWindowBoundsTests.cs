@@ -91,6 +91,20 @@ public sealed class EmailSearchWindowBoundsTests
             EmailSearchSnippetBounds.Create(snippetsPerEmail, wordsPerSnippet));
     }
 
+    /// <summary>A word count is not a size: one unbroken token can satisfy it while carrying most of a message body.</summary>
+    [Theory]
+    [InlineData(EmailSearchSnippetBounds.MinimumWordsPerSnippet)]
+    [InlineData(24)]
+    [InlineData(EmailSearchSnippetBounds.MaximumWordsPerSnippet)]
+    public void SnippetBounds_CharacterCeiling_IsDerivedFromTheWordBound(int wordsPerSnippet)
+    {
+        // Act
+        var bounds = EmailSearchSnippetBounds.Create(snippetsPerEmail: 1, wordsPerSnippet);
+
+        // Assert
+        Assert.Equal(wordsPerSnippet * EmailSearchSnippetBounds.MaximumCharactersPerWord, bounds.MaximumCharacters);
+    }
+
     [Fact]
     public void SnippetBounds_Default_IsInsideTheAcceptedRange()
     {

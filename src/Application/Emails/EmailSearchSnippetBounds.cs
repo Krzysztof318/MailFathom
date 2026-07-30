@@ -30,6 +30,14 @@ public sealed record EmailSearchSnippetBounds
     /// <remarks>Below this an extract shows a matched word with no surrounding text, which tells a reader nothing a rank does not.</remarks>
     public const int MinimumWordsPerSnippet = 4;
 
+    /// <summary>The most characters one word is allowed to contribute before an extract is cut short.</summary>
+    /// <remarks>
+    /// Longer than any word in prose. A run of non-whitespace longer than this is a URL, a base64 blob, or a hash, and a
+    /// word count cannot tell the difference — which is why a bound expressed only in words is not a bound on how much
+    /// of a message an extract can carry.
+    /// </remarks>
+    public const int MaximumCharactersPerWord = 64;
+
     private EmailSearchSnippetBounds(int snippetsPerEmail, int wordsPerSnippet)
     {
         this.SnippetsPerEmail = snippetsPerEmail;
@@ -45,6 +53,15 @@ public sealed record EmailSearchSnippetBounds
 
     /// <summary>Gets how many words one extract may carry.</summary>
     public int WordsPerSnippet { get; }
+
+    /// <summary>Gets the most characters one extract may carry, whatever those words turn out to be made of.</summary>
+    /// <remarks>
+    /// The word bound is what PostgreSQL applies while cutting an extract, and it is the one a reader thinks in. This is
+    /// the bound that makes the first one mean something: a message carrying one enormous unbroken token beside a match
+    /// would otherwise satisfy a limit of a few words while publishing most of the body. Derived rather than configured,
+    /// so a deployment cannot set the two against each other.
+    /// </remarks>
+    public int MaximumCharacters => this.WordsPerSnippet * MaximumCharactersPerWord;
 
     /// <summary>Creates bounds from what a deployment configured.</summary>
     /// <param name="snippetsPerEmail">How many extracts one result may carry.</param>

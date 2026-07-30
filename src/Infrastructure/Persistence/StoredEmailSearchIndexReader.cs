@@ -32,14 +32,32 @@ internal sealed class StoredEmailSearchIndexReader(
     MailMcpDbContext dbContext,
     PostgresTextSearchConfiguration textSearchConfiguration) : IEmailSearchIndexReader
 {
-    /// <summary>Marks both ends of a matched run of words inside a snippet.</summary>
+    /// <summary>Marks the start of a matched run of words in what PostgreSQL returns.</summary>
+    /// <remarks>
+    /// A control character rather than anything printable, because this marker is not decoration: whether a fragment
+    /// carries it is what tells a genuine highlight from the opening words <c>ts_headline</c> falls back to when the
+    /// query matched nothing inside the body. A printable marker cannot answer that — Markdown mail carrying
+    /// <c>**</c> of its own would be read as highlighted and the fallback would be published as though it had matched.
+    /// The indexed body cannot contain this character: text extraction drops every control character except the tab
+    /// and the newline, so the distinction holds by construction rather than by improbability.
+    /// </remarks>
+    private const string HighlightStartMarker = "\u0002";
+
+    /// <summary>Marks the end of a matched run of words in what PostgreSQL returns.</summary>
+    /// <remarks>Distinct from the start marker so a fragment cut short by the character bound can be told to be unbalanced and closed.</remarks>
+    private const string HighlightEndMarker = "\u0003";
+
+    /// <summary>Marks both ends of a matched run of words in what a caller receives.</summary>
     /// <remarks>
     /// Emphasis a client can render, rather than PostgreSQL's default <c>&lt;b&gt;</c>: a snippet is text cut from
     /// untrusted mail, and handing it back wrapped in markup invites a consumer to treat the rest of it as markup too.
-    /// The marker is the only thing MailMcp adds to the extract, and a body that already contains the same characters
-    /// is the one case where a reader cannot tell the two apart.
+    /// It is substituted for the control markers after the fragment has been recognized as highlighted, so what a body
+    /// happens to contain never takes part in that decision.
     /// </remarks>
-    private const string HighlightMarker = "**";
+    private const string PublishedHighlightMarker = "**";
+
+    /// <summary>Marks an extract the character bound cut short.</summary>
+    private const string TruncationMarker = "…";
 
     /// <summary>Separates the extracts PostgreSQL returns as one value, so they can be split back apart.</summary>
     /// <remarks>
@@ -70,11 +88,12 @@ internal sealed class StoredEmailSearchIndexReader(
             return [];
         }
 
-        var summariesById = await this.SummariesByIdAsync(hits, cancellationToken);
+        var summariesById = await this.SummariesByIdAsync(selection, hits, cancellationToken);
 
         // The ranking query's order is the result's order, so the summaries are looked up rather than re-sorted. A hit
-        // whose email was deleted between the two queries is dropped: it is mail the caller is no longer entitled to
-        // read, and a placeholder result would publish that it had once existed.
+        // the second query did not return is dropped: its email was deleted, or a run committed between the two
+        // statements and left it outside the filter this search was issued for. Publishing it either way would put a row
+        // in the result that contradicts the request that produced it.
         return
         [
             .. hits
@@ -139,19 +158,29 @@ internal sealed class StoredEmailSearchIndexReader(
 
     /// <summary>Reads the summaries of the ranked emails through the projection every read model publishes them by.</summary>
     /// <remarks>
+    /// <para>
     /// A second query rather than a wider first one. The summary projection is the control that decides what a mailbox
     /// read can return at all, and restating its columns beside the ranking expressions would put a second copy of that
     /// control in the codebase. This one is keyed by at most a window's worth of identifiers, so what it costs is one
     /// index lookup per result.
+    /// </para>
+    /// <para>
+    /// It narrows by the selection as well as by those identifiers, which is what keeps two statements from publishing
+    /// one self-contradicting result. PostgreSQL reads each statement under its own snapshot, so a run committing
+    /// between them — the extraction backfill setting an attachment count, reconciliation setting a flag — could
+    /// otherwise return a summary that fails the filter its own rank was computed under. Re-applying the predicate makes
+    /// such a row absent rather than wrong, on the same terms as one that was deleted.
+    /// </para>
     /// </remarks>
     private async Task<Dictionary<Guid, EmailSummary>> SummariesByIdAsync(
+        MailboxEmailSelection selection,
         IReadOnlyList<StoredEmailSearchHitRow> hits,
         CancellationToken cancellationToken)
     {
         var rankedIds = hits.Select(static hit => hit.StoredEmailId).ToArray();
 
-        var rows = await dbContext.StoredEmails
-            .AsNoTracking()
+        var rows = await StoredEmailSelectionPredicate
+            .Matching(dbContext.StoredEmails.AsNoTracking(), selection)
             .Where(email => rankedIds.Contains(email.Id))
             .Select(StoredEmailSummaryProjection.Row)
             .ToArrayAsync(cancellationToken);
@@ -169,8 +198,8 @@ internal sealed class StoredEmailSearchIndexReader(
     private static string HeadlineOptions(EmailSearchSnippetBounds snippetBounds) => string.Format(
         CultureInfo.InvariantCulture,
         "StartSel=\"{0}\", StopSel=\"{1}\", MaxFragments={2}, MaxWords={3}, MinWords={4}, FragmentDelimiter=\"{5}\"",
-        HighlightMarker,
-        HighlightMarker,
+        HighlightStartMarker,
+        HighlightEndMarker,
         snippetBounds.SnippetsPerEmail,
         snippetBounds.WordsPerSnippet,
         MinimumWordsPerSnippet(snippetBounds),
@@ -190,8 +219,8 @@ internal sealed class StoredEmailSearchIndexReader(
     /// A fragment carrying no highlight marker is dropped. <c>ts_headline</c> falls back to the opening words of a
     /// document when the query matched nothing inside it — which happens whenever an email matched on its subject or a
     /// participant address — and returning that would publish the start of a message body while claiming it was what
-    /// matched. The count is bounded again here rather than trusted from the option list, because the bound is the
-    /// privacy control and a result must not depend on the server having honored it.
+    /// matched. Both bounds are applied again here rather than trusted from the option list, because they are the
+    /// privacy control and a result must not depend on the server having honored them.
     /// </remarks>
     private static IReadOnlyList<string> SnippetsFrom(string? headline, EmailSearchSnippetBounds snippetBounds) =>
         headline is null
@@ -200,7 +229,62 @@ internal sealed class StoredEmailSearchIndexReader(
             [
                 .. headline
                     .Split(SnippetSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Where(static fragment => fragment.Contains(HighlightMarker, StringComparison.Ordinal))
-                    .Take(snippetBounds.SnippetsPerEmail),
+                    .Where(static fragment => fragment.Contains(HighlightStartMarker, StringComparison.Ordinal))
+                    .Take(snippetBounds.SnippetsPerEmail)
+                    .Select(fragment => Published(fragment, snippetBounds)),
             ];
+
+    /// <summary>Bounds one extract by characters and puts its markers into the form a caller receives.</summary>
+    /// <remarks>
+    /// The character bound is what makes the word bound mean something. <c>MaxWords</c> counts words, and a word is
+    /// whatever lies between two spaces, so a message carrying one enormous unbroken token beside a match — a URL, a
+    /// base64 blob, a hash — satisfies a limit of a few words while publishing most of its body.
+    /// </remarks>
+    private static string Published(string fragment, EmailSearchSnippetBounds snippetBounds)
+    {
+        var bounded = BoundedToMessageCharacters(fragment, snippetBounds.MaximumCharacters);
+
+        return Closed(bounded)
+            .Replace(HighlightStartMarker, PublishedHighlightMarker, StringComparison.Ordinal)
+            .Replace(HighlightEndMarker, PublishedHighlightMarker, StringComparison.Ordinal);
+    }
+
+    /// <summary>Cuts an extract once it has carried as many characters of the message as the bound allows.</summary>
+    /// <remarks>
+    /// The markers are not counted, because the bound exists to limit how much of a message one result publishes and a
+    /// marker is MailMcp's own. Counting them would also make the bound depend on how often the query matched inside the
+    /// extract, so the same setting would show less of a message the better it matched — which is the opposite of what
+    /// a reader wants and tells an operator nothing about what the number protects.
+    /// </remarks>
+    private static string BoundedToMessageCharacters(string fragment, int maximumCharacters)
+    {
+        var messageCharacters = 0;
+        var index = 0;
+
+        while (index < fragment.Length && messageCharacters < maximumCharacters)
+        {
+            if (!IsMarker(fragment[index]))
+            {
+                messageCharacters++;
+            }
+
+            index++;
+        }
+
+        return index == fragment.Length ? fragment : string.Concat(fragment[..index], TruncationMarker);
+    }
+
+    private static bool IsMarker(char character) =>
+        character == HighlightStartMarker[0] || character == HighlightEndMarker[0];
+
+    /// <summary>Closes a highlight the character bound cut in half, so the published markers stay paired.</summary>
+    /// <remarks>
+    /// Truncation can land between the two control markers, and the published marker is the same string at both ends —
+    /// so an unclosed run would leave a client emphasizing the rest of the extract rather than the words that matched.
+    /// </remarks>
+    private static string Closed(string fragment) =>
+        fragment.Count(character => character == HighlightStartMarker[0])
+        > fragment.Count(character => character == HighlightEndMarker[0])
+            ? string.Concat(fragment, HighlightEndMarker)
+            : fragment;
 }

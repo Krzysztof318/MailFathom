@@ -90,9 +90,14 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
         Assert.Equal(SeededEmailCount, (await SearchAsync(services, SharedTerm, cancellationToken)).Count);
     }
 
-    /// <summary>The snippets come back bounded, marked, and cut from the body rather than replacing it.</summary>
+    /// <summary>The snippets come back bounded by both counts, marked, and cut from the body rather than replacing it.</summary>
+    /// <remarks>
+    /// The seeded body puts an unbroken token far longer than the word bound beside the matched term, which is the case
+    /// a word count alone cannot bound: <c>MaxWords</c> counts one such token as one word, so without the character
+    /// ceiling a snippet of eight words would carry thousands of characters of the message.
+    /// </remarks>
     [Fact]
-    public async Task ReadRankedMatchesAsync_MatchWithIndexedBodyText_ReturnsBoundedMarkedSnippets()
+    public async Task ReadRankedMatchesAsync_MatchWithIndexedBodyText_ReturnsSnippetsBoundedByWordsAndCharacters()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -111,7 +116,16 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
         {
             Assert.Contains("**", snippet, StringComparison.Ordinal);
             Assert.True(snippet.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length <= bounds.WordsPerSnippet);
+
+            var messageCharacters = MessageCharactersOf(snippet);
+            Assert.True(
+                messageCharacters <= bounds.MaximumCharacters,
+                $"A snippet carrying {messageCharacters} characters of the message exceeds the ceiling of {bounds.MaximumCharacters}.");
         });
+
+        // The unbroken token is longer than the ceiling, so at least one snippet had to be cut for the ceiling to be
+        // doing anything. Without this the assertion above would pass on a body that never approached it.
+        Assert.Contains(match.Snippets, snippet => snippet.EndsWith('…'));
     }
 
     /// <summary>A search that tracked its rows would let an unrelated commit in the same scope write mail nobody changed.</summary>
@@ -144,6 +158,18 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
         // Assert
         Assert.Equal(0, trackedEntityCount);
     }
+
+    /// <summary>Counts what a snippet carries of the message, which is what the character ceiling bounds.</summary>
+    /// <remarks>
+    /// The highlight markup and the truncation mark are MailMcp's own, so they do not count against a bound that exists
+    /// to limit how much of a message one result publishes. Removing every <c>**</c> also removes any the body wrote
+    /// itself, which can only make this count lower — so the assertion it feeds stays honest by erring towards passing,
+    /// and the ellipsis assertion beside it is what proves the ceiling did any cutting at all.
+    /// </remarks>
+    private static int MessageCharactersOf(string snippet) => snippet
+        .Replace("**", string.Empty, StringComparison.Ordinal)
+        .TrimEnd('…')
+        .Length;
 
     private static Task<IReadOnlyList<EmailSearchMatch>> SearchAsync(
         OrchestratedMailMcpServices services,
@@ -238,6 +264,21 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
     /// <summary>The one row that carries the distinctive term and repeats the shared one.</summary>
     private static int DistinctiveRowIndex => SeededEmailCount / 2;
 
+    /// <summary>How many characters each of the over-long words beside the distinctive term carries.</summary>
+    /// <remarks>
+    /// Below PostgreSQL's own token length limit, above which the parser skips a run rather than indexing it — so these
+    /// are words the text search parser accepts and <c>ts_headline</c> therefore emits, not a run it discards.
+    /// </remarks>
+    private const int OverLongWordCharacters = 400;
+
+    /// <summary>
+    /// A run of words each far longer than prose writes, placed beside the distinctive term so the extract cut around
+    /// that term has to contain them. Each counts as one word against <c>MaxWords</c>, which is what makes a bound
+    /// expressed only in words unable to bound how much of the message an extract carries.
+    /// </summary>
+    private static IEnumerable<string> OverLongWords =>
+        Enumerable.Range(0, 6).Select(index => new string((char)('a' + index), OverLongWordCharacters));
+
     private static string BodyTextOf(int index)
     {
         var body = SyntheticEmail.BodyTextContaining(SharedTerm, wordCount: 30);
@@ -245,7 +286,10 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
         return index == DistinctiveRowIndex
             ? string.Join(
                 ' ',
-                Enumerable.Repeat(SharedTerm, SharedTermRepetitions).Prepend(DistinctiveTerm).Prepend(body))
+                Enumerable.Repeat(SharedTerm, SharedTermRepetitions)
+                    .Prepend(string.Join(' ', OverLongWords))
+                    .Prepend(DistinctiveTerm)
+                    .Prepend(body))
             : body;
     }
 

@@ -105,8 +105,12 @@ the body they were cut from, and no result ever carries raw MIME or attachment b
 - **A message with no indexed body text carries no snippets at all**, which is the encrypted and attachment-only case
   above.
 - `**` is the only markup MailMcp adds. A snippet is text cut from untrusted mail, so it is handed back as text rather
-  than wrapped in HTML; a body that already contains those two characters is the one case where a reader cannot tell
-  the marker from the message.
+  than wrapped in HTML.
+
+Whether a fragment was highlighted is decided before that markup exists. PostgreSQL is asked to mark matches with two
+control characters, and the indexed body provably cannot contain either — text extraction drops every control character
+except the tab and the newline — so a body of its own writing `**`, which Markdown mail routinely does, can never be
+mistaken for a match. The control markers are replaced by `**` only after the fragment has been recognized.
 
 The bounds are deployment configuration under `MailboxSearch`, validated at startup:
 
@@ -116,9 +120,23 @@ The bounds are deployment configuration under `MailboxSearch`, validated at star
 | `WordsPerSnippet` | How many words one extract may carry | 24 | 4–100 |
 
 They are configuration rather than request input because a caller who could raise them could lift the control, and the
-useful values follow from how a deployment's mail is written rather than from what any single request wants. The
-shortest extract `ts_headline` may return is derived from `WordsPerSnippet` rather than configured beside it, so no pair
-of configured numbers can produce an option list PostgreSQL rejects.
+useful values follow from how a deployment's mail is written rather than from what any single request wants. Both are
+applied twice: once in the option list PostgreSQL cuts the extracts by, and again on what comes back, because the bound
+is the privacy control and a result must not depend on the server having honored it.
+
+A third bound is derived rather than configured. `WordsPerSnippet` counts words, and a word is whatever lies between two
+spaces, so a message carrying words far longer than prose writes — a URL, a base64 blob, a hash — would satisfy a limit
+of a few words while publishing most of its body. Each extract therefore carries at most `WordsPerSnippet × 64`
+characters **of the message**, and is marked with `…` when that cut applies. The `**` markers do not count against it:
+they are MailMcp's own, and counting them would make the same setting show less of a message the better the query
+matched it. The shortest extract `ts_headline` may return is derived the same way, so no pair of configured numbers can
+produce an option list PostgreSQL rejects.
+
+**Changing either setting requires a restart.** The bounds are read once at startup and published as a single value for
+the process, so editing `MailboxSearch` in a running host reloads the configuration file but leaves every search
+applying the bounds the host started with. This is deliberate — the value is a deployment-wide privacy control rather
+than a per-request preference — but it means an operator who tightens a bound and does not restart is not protected by
+the number they just wrote. Restart the host to adopt it.
 
 ## Ordering, and why there is no cursor
 
