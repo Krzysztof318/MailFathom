@@ -1,0 +1,14 @@
+# Code owners for MailMcp.
+#
+# GitHub applies the last matching pattern in this file, so the repository-wide
+# rule stays first and any path-specific rule added below it overrides ownership
+# for that path. A more specific rule replaces this one rather than adding to
+# it, so a path that must still require the repository owner names
+# @Krzysztof318 alongside its other owners.
+#
+# The repository is on a personal account, so ownership is a user and not a
+# team. This file only says who the owners are. Whether their review is
+# required is a `main` branch ruleset setting in repository settings; see
+# docs/operations/local-development.md.
+
+*       @Krzysztof318
