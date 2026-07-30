@@ -191,7 +191,7 @@ SHA-256 digest recorded beside it when it was written, and four things can be wr
 | `HashMismatch` | The payload is the right length and its bytes changed |
 | `Unreadable` | The payload is intact and still yields no message a parser can render |
 
-In every case the read records a durable repair request and then fails with `54001 EmailContentUnavailable`. The request
+In every case the read records a durable repair request and then fails with `55001 EmailContentUnavailable`. The request
 is recorded first, so the finding survives whether or not anything catches the failure; performing the repair belongs to
 the synchronizer and is out of scope here. The request is idempotent per email — PostgreSQL resolves the collision
 itself — so a caller retrying a damaged message leaves one row with an accurate count rather than a row per attempt.
