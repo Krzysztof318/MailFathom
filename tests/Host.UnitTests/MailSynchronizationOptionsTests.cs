@@ -43,43 +43,67 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Contains("At least one account", result.ErrorMessage, StringComparison.Ordinal);
     }
 
-    /// <summary>Configuration defines the served accounts, so a query's access check answers from the same options.</summary>
-    [Theory]
-    [InlineData("primary", true)]
-    [InlineData("  primary  ", true)]
-    [InlineData("secondary", false)]
-    [InlineData("PRIMARY", false)]
-    public void Serves_AccountIdentifier_AnswersFromTheConfiguredAccounts(string accountId, bool expected)
+    /// <summary>Configuration defines the served accounts, normalized and ordered the way a resolved query scope needs them.</summary>
+    [Fact]
+    public void ServedAccountIds_ConfiguredAccounts_AreNormalizedDeduplicatedAndOrdered()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions
+        {
+            Accounts = [CreateAccount("  secondary  "), CreateAccount("primary"), CreateAccount("secondary")],
+        };
+
+        // Act
+        var servedAccountIds = options.ServedAccountIds;
+
+        // Assert
+        Assert.Equal([MailAccountId.Create("primary"), MailAccountId.Create("secondary")], servedAccountIds);
+    }
+
+    /// <summary>Casing is part of an account identifier, so two spellings of one name are two accounts here.</summary>
+    [Fact]
+    public void ServedAccountIds_AccountNamedInAnotherCase_IsNotTheConfiguredAccount()
     {
         // Arrange
         var options = new MailSynchronizationOptions { Accounts = [CreateAccount("primary")] };
 
         // Act
-        var serves = options.Serves(MailAccountId.Create(accountId));
+        var servedAccountIds = options.ServedAccountIds;
 
         // Assert
-        Assert.Equal(expected, serves);
+        Assert.DoesNotContain(MailAccountId.Create("PRIMARY"), servedAccountIds);
     }
 
     /// <summary>Switching synchronization off stops runs from fetching mail; it does not hide the copy already stored.</summary>
     [Fact]
-    public void Serves_SynchronizationDisabled_StillServesTheConfiguredAccount()
+    public void ServedAccountIds_SynchronizationDisabled_StillNamesTheConfiguredAccount()
     {
         // Arrange
         var options = new MailSynchronizationOptions { Enabled = false, Accounts = [CreateAccount("primary")] };
 
         // Act, Assert
-        Assert.True(options.Serves(MailAccountId.Create("primary")));
+        Assert.Equal(MailAccountId.Create("primary"), Assert.Single(options.ServedAccountIds));
     }
 
     [Fact]
-    public void Serves_NoAccountsConfigured_ServesNothing()
+    public void ServedAccountIds_NoAccountsConfigured_ServesNothing()
     {
         // Arrange
         var options = new MailSynchronizationOptions();
 
         // Act, Assert
-        Assert.False(options.Serves(MailAccountId.Create("primary")));
+        Assert.Empty(options.ServedAccountIds);
+    }
+
+    /// <summary>An account whose identifier never bound is not a served account, and reading the set does not fail on it.</summary>
+    [Fact]
+    public void ServedAccountIds_AccountWithNoIdentifier_IsSkipped()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions { Accounts = [CreateAccount("primary"), CreateAccount("   ")] };
+
+        // Act, Assert
+        Assert.Equal(MailAccountId.Create("primary"), Assert.Single(options.ServedAccountIds));
     }
 
     [Fact]

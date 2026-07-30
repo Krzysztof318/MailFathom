@@ -44,6 +44,22 @@ public sealed class MailboxQueryFilterInvalidException : MailMcpException
             filterName),
         filterName);
 
+    /// <summary>Refuses a text filter that carries a control character.</summary>
+    /// <param name="filterName">How this assembly names the filter, for example <c>subject fragment</c>.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// A control character is refused at this boundary rather than sent onward, because PostgreSQL text cannot hold a
+    /// zero byte at all: a fragment carrying one would leave the query as a provider exception instead of the stable
+    /// failure this boundary publishes. The refusal covers the whole class rather than that one character, since no
+    /// subject a caller could be looking for part of contains any of them.
+    /// </remarks>
+    public static MailboxQueryFilterInvalidException ContainsControlCharacter(string filterName) => new(
+        string.Format(
+            CultureInfo.InvariantCulture,
+            "The mailbox query {0} filter contains a control character.",
+            filterName),
+        filterName);
+
     /// <summary>Refuses a range filter whose end is not after its start.</summary>
     /// <param name="filterName">How this assembly names the filter, for example <c>received date range</c>.</param>
     /// <returns>The failure to raise.</returns>

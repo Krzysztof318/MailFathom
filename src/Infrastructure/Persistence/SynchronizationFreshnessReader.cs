@@ -25,7 +25,11 @@ internal sealed class SynchronizationFreshnessReader(MailMcpDbContext dbContext)
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        var bindings = await Matching(dbContext.MailFolders.AsNoTracking(), scope)
+        // One alias can have been bound to several remote folders over time, and each binding keeps its own checkpoint.
+        // PostgreSQL performs the aggregate so the rows that cross the boundary number one per alias in scope, which is
+        // the size of the result itself: the number of historical bindings behind an alias grows without a ceiling as a
+        // server recreates folders, and grouping in process would make an unrelated request pay for that history.
+        var freshestBindings = await Matching(dbContext.MailFolders.AsNoTracking(), scope)
             .Select(folder => new
             {
                 folder.MailboxAccountId,
@@ -34,20 +38,24 @@ internal sealed class SynchronizationFreshnessReader(MailMcpDbContext dbContext)
                     ? null
                     : folder.SynchronizationCheckpoint.SynchronizedAt,
             })
+            .GroupBy(binding => new { binding.MailboxAccountId, binding.Alias })
+            .Select(alias => new
+            {
+                alias.Key.MailboxAccountId,
+                alias.Key.Alias,
+                SynchronizedAt = alias.Max(binding => binding.SynchronizedAt),
+            })
             .ToArrayAsync(cancellationToken);
 
-        // One alias can have been bound to several remote folders over time, and each binding keeps its own checkpoint.
-        // The grouping happens here rather than in SQL because the rows are already narrowed to the queried scope and
-        // number one per binding, so the aggregate costs nothing while an aggregate over an optional relationship would
-        // be one more query shape to prove translatable.
+        // Ordered here rather than in SQL because the order is ordinal by contract, and a database's collation is not
+        // something MailMcp configures.
         return
         [
-            .. bindings
-                .GroupBy(binding => (binding.MailboxAccountId, binding.Alias))
+            .. freshestBindings
                 .Select(alias => new MailboxFolderFreshness(
-                    MailAccountId.Create(alias.Key.MailboxAccountId),
-                    MailFolderAlias.Create(alias.Key.Alias),
-                    alias.Max(binding => binding.SynchronizedAt)))
+                    MailAccountId.Create(alias.MailboxAccountId),
+                    MailFolderAlias.Create(alias.Alias),
+                    alias.SynchronizedAt))
                 .OrderBy(freshness => freshness.AccountId.Value, StringComparer.Ordinal)
                 .ThenBy(freshness => freshness.FolderAlias.Value, StringComparer.Ordinal),
         ];

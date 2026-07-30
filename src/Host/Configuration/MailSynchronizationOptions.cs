@@ -117,13 +117,17 @@ internal sealed class MailSynchronizationOptions
     /// <remarks>
     /// Configuration is what defines the set of accounts, so this answers from the same bound options every other
     /// per-account reader does. It deliberately ignores <see cref="Enabled" />: that switch stops runs from fetching
-    /// mail, and an operator who turned it off has not asked for the copy already stored to become unreadable.
+    /// mail, and an operator who turned it off has not asked for the copy already stored to become unreadable. An
+    /// account they removed is a different matter, and its absence here is what makes its stored mail unreadable.
     /// </remarks>
-    public bool Serves(MailAccountId accountId) => (this.Accounts ?? [])
-        .Where(static candidate => !string.IsNullOrWhiteSpace(candidate.AccountId))
-        .Any(candidate => StringComparer.Ordinal.Equals(
-            MailAccountId.Create(candidate.AccountId).Value,
-            accountId.Value));
+    public IReadOnlyList<MailAccountId> ServedAccountIds =>
+    [
+        .. (this.Accounts ?? [])
+            .Where(static candidate => !string.IsNullOrWhiteSpace(candidate.AccountId))
+            .Select(static candidate => MailAccountId.Create(candidate.AccountId))
+            .DistinctBy(static accountId => accountId.Value, StringComparer.Ordinal)
+            .OrderBy(static accountId => accountId.Value, StringComparer.Ordinal),
+    ];
 
     /// <summary>Finds every configured earliest received date that could not mean anything on the supplied date.</summary>
     /// <param name="today">The current date the configured bounds are read against.</param>

@@ -19,6 +19,13 @@ public sealed class MailboxTimelineReaderTests
 {
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
 
+    /// <summary>What the default catalog serves, so an unscoped request reaches every email a test arranged.</summary>
+    private static readonly MailAccountId[] EveryAccountTheSyntheticTimelineUses =
+    [
+        MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId),
+        MailAccountId.Create("secondary"),
+    ];
+
     private static readonly MailboxFolderFreshness InboxFreshness = new(
         MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId),
         MailFolderAlias.Create(SyntheticEmailSummaries.DefaultFolderAlias),
@@ -281,9 +288,7 @@ public sealed class MailboxTimelineReaderTests
     {
         // Arrange
         var timeline = new InMemoryStoredEmailTimeline().WithAll(SyntheticEmailSummaries.CreateDailyRun(3, FirstJuly));
-        var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.Serves(Arg.Any<MailAccountId>()).Returns(false);
-        var reader = ReaderOver(timeline, catalog);
+        var reader = ReaderOver(timeline, CatalogServing(MailAccountId.Create("primary")));
 
         // Act
         var failure = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(() => reader.ListEmailsAsync(
@@ -293,6 +298,99 @@ public sealed class MailboxTimelineReaderTests
         // Assert
         Assert.Equal(MailAccountId.Create("unknown"), failure.AccountId);
         Assert.Empty(timeline.Calls);
+    }
+
+    /// <summary>Removing an account from configuration leaves its rows stored, so an unscoped read must not reach them.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_NoAccountNamed_ReadsOnlyTheAccountsThisDeploymentServes()
+    {
+        // Arrange
+        var served = SyntheticEmailSummaries.Create(FirstJuly, accountId: "primary");
+        var retired = SyntheticEmailSummaries.Create(FirstJuly.AddDays(1), accountId: "retired");
+        var timeline = new InMemoryStoredEmailTimeline().WithAll([served, retired]);
+        var reader = ReaderOver(timeline, CatalogServing(MailAccountId.Create("primary")));
+
+        // Act
+        var result = await reader.ListEmailsAsync(new ListEmailsRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(served.StoredEmailId, Assert.Single(result.Emails).StoredEmailId);
+        Assert.Equal(
+            [MailAccountId.Create("primary")],
+            Assert.Single(timeline.Calls).Filter.Scope.AccountIds);
+    }
+
+    /// <summary>Configuration allows serving no account while a local copy still exists, and none of it is readable.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_NoAccountServedAtAll_ReturnsAnEmptyPageWithoutReadingAnything()
+    {
+        // Arrange
+        var timeline = new InMemoryStoredEmailTimeline().WithAll(SyntheticEmailSummaries.CreateDailyRun(3, FirstJuly));
+        var freshnessReader = FreshnessReaderReturning(InboxFreshness);
+        var reader = ReaderOver(timeline, CatalogServing(), freshnessReader);
+
+        // Act
+        var result = await reader.ListEmailsAsync(new ListEmailsRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(result.Emails);
+        Assert.Null(result.NextCursor);
+        Assert.Empty(result.FolderFreshness);
+        Assert.Empty(timeline.Calls);
+        await freshnessReader.DidNotReceive()
+            .ReadAsync(Arg.Any<MailboxScope>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The refusals a request earns do not depend on how many accounts the deployment happens to serve.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_NoAccountServedAtAllAndAnUnusableFilter_StillRefusesTheFilter()
+    {
+        // Arrange
+        var reader = ReaderOver(new InMemoryStoredEmailTimeline(), CatalogServing());
+
+        // Act, Assert
+        await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(() => reader.ListEmailsAsync(
+            new ListEmailsRequest { SenderAddress = "not-an-address" },
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>The limit bounds what a request may name; a deployment's own account count is not caller input.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_MoreServedAccountsThanARequestMayName_IsStillAnswered()
+    {
+        // Arrange
+        var servedAccountIds = Enumerable.Range(0, MailboxScope.MaximumAccountIds + 1)
+            .Select(index => MailAccountId.Create($"account-{index:D3}"))
+            .ToArray();
+        var email = SyntheticEmailSummaries.Create(FirstJuly, accountId: "account-007");
+        var timeline = new InMemoryStoredEmailTimeline().With(email);
+        var reader = ReaderOver(timeline, CatalogServing(servedAccountIds));
+
+        // Act
+        var result = await reader.ListEmailsAsync(new ListEmailsRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(email.StoredEmailId, Assert.Single(result.Emails).StoredEmailId);
+        Assert.Equal(servedAccountIds, Assert.Single(timeline.Calls).Filter.Scope.AccountIds);
+    }
+
+    /// <summary>The resolved accounts take part in the fingerprint, so a cursor cannot outlive the scope it described.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_CursorIssuedBeforeAnAccountWasRemoved_IsRejected()
+    {
+        // Arrange
+        var timeline = new InMemoryStoredEmailTimeline().WithAll(SyntheticEmailSummaries.CreateDailyRun(4, FirstJuly));
+        var whileBothWereServed = ReaderOver(timeline, CatalogServing(EveryAccountTheSyntheticTimelineUses));
+        var firstPage = await whileBothWereServed.ListEmailsAsync(
+            new ListEmailsRequest { PageSize = 2 },
+            TestContext.Current.CancellationToken);
+        var afterOneWasRemoved = ReaderOver(timeline, CatalogServing(MailAccountId.Create("primary")));
+
+        // Act, Assert
+        await Assert.ThrowsAsync<MailboxQueryCursorFilterMismatchException>(() =>
+            afterOneWasRemoved.ListEmailsAsync(
+                new ListEmailsRequest { PageSize = 2, Cursor = firstPage.NextCursor },
+                TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -608,18 +706,21 @@ public sealed class MailboxTimelineReaderTests
     private static MailboxTimelineReader ReaderOver(
         InMemoryStoredEmailTimeline timeline,
         IMailAccountCatalog? accountCatalog = null,
-        ISynchronizationFreshnessReader? freshnessReader = null)
-    {
-        var catalog = accountCatalog ?? Substitute.For<IMailAccountCatalog>();
-        if (accountCatalog is null)
-        {
-            catalog.Serves(Arg.Any<MailAccountId>()).Returns(true);
-        }
+        ISynchronizationFreshnessReader? freshnessReader = null) => new(
+        timeline,
+        freshnessReader ?? FreshnessReaderReturning(InboxFreshness),
+        accountCatalog ?? CatalogServing(EveryAccountTheSyntheticTimelineUses));
 
-        return new MailboxTimelineReader(
-            timeline,
-            freshnessReader ?? FreshnessReaderReturning(InboxFreshness),
-            catalog);
+    /// <summary>Builds a catalog that serves exactly the accounts named, in the order the port promises.</summary>
+    private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
+    {
+        var catalog = Substitute.For<IMailAccountCatalog>();
+        catalog.ServedAccountIds.Returns(
+        [
+            .. servedAccountIds.OrderBy(accountId => accountId.Value, StringComparer.Ordinal),
+        ]);
+
+        return catalog;
     }
 
     private static ISynchronizationFreshnessReader FreshnessReaderReturning(params MailboxFolderFreshness[] freshness)

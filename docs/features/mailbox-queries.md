@@ -45,15 +45,35 @@ and its result would read as an answer about the mailbox.
   `51002 MailboxQueryFilterInvalid` rather than kept as a value that can match no row, and so is one longer than the 320
   characters RFC 5321 allows a forward path — the same bound the stored columns carry.
 - **A subject fragment** is bounded at 256 characters and matched anywhere in the subject, case-insensitively. Wildcards a
-  caller writes are escaped, so a fragment of `%` matches the character rather than every subject.
+  caller writes are escaped, so a fragment of `%` matches the character rather than every subject. A control character is
+  refused: PostgreSQL text cannot hold a zero byte, so a fragment carrying one would leave the query as a provider
+  exception rather than as a stable failure, and no subject anyone searches part of contains one.
 - **A received range** may be unbounded at either end; only an unbounded page is disallowed. A range whose end is not
   after its start selects nothing and is refused. An email whose received timestamp is unknown falls inside neither
   bound, so naming either one excludes undated mail.
-- **The scope** accepts at most 64 distinct accounts and 64 distinct folder aliases. Both lists are deduplicated and
-  ordered, so two spellings of one scope are one query with one cursor.
+- **The scope** accepts at most 64 accounts and 64 folder aliases, counting what a request names rather than what is left
+  after deduplication — that is what lets the limit be enforced while the caller's list is read instead of after it has
+  been materialized. Both lists are then deduplicated and ordered, so two spellings of one scope are one query with one
+  cursor.
 - **An account nobody serves** is refused with `53001 MailAccountNotAccessible` before anything is read. One failure
   covers both "no such account" and "not yours", and an empty page is deliberately not the answer: it would confirm the
   identifier and turn a listing into a way to enumerate accounts.
+
+### Which accounts an unscoped request reads
+
+Naming no account means every account this deployment serves, and the request is narrowed to that set before anything is
+read rather than left without an account predicate. The two are not the same: removing an account from configuration
+leaves its stored rows in place, so an absent predicate would keep publishing mail from an account MailMcp no longer
+serves. Switching synchronization off is a different matter and hides nothing — it stops runs from fetching mail, and the
+copy already stored stays readable.
+
+A deployment that serves no account at all is a configuration the options accept, and a listing then returns an empty
+page with no freshness entries. Every filter is still validated first, so what a request is refused for never depends on
+how many accounts happen to be configured.
+
+Because the resolved accounts are what the query runs with, they are also what the cursor's fingerprint covers. A cursor
+issued while three accounts were served is therefore refused after one of them is removed, which is correct: the result
+set it named no longer exists.
 
 ### Attachment presence
 
@@ -123,6 +143,11 @@ issued for. It carries no secret and needs no signature, because every value in 
 already received; encoding it is about opacity — a client that cannot read a cursor cannot build one, and building one is
 how a caller would end up asking for a boundary this system never computed.
 
+The fingerprint is computed over a text in which every value carries its own length in front of it. A folder alias may
+contain a comma, so joining a list with one would let `["ARCHIVE,SENT", "TRASH"]` and `["ARCHIVE", "SENT,TRASH"]` produce
+the same text — and a cursor accepted across those two scopes names a real row in the wrong result set, which is the one
+failure the fingerprint exists to prevent.
+
 - A cursor presented against **different filters or a different direction** is refused with
   `52002 MailboxQueryCursorFilterMismatch`. It would still name a row, which is exactly why honoring it would be wrong:
   the caller would receive an arbitrary window of the new result set and would have no way to notice.
@@ -149,14 +174,20 @@ A folder with no checkpoint is reported with no timestamp rather than omitted, b
 caller most needs to see. An alias that has been bound to several remote folders over time reports the most recent
 progress of any of those bindings, which is what "how current is this alias" means to a reader.
 
+PostgreSQL performs that aggregate, so the rows crossing the boundary number one per alias in scope. The count of
+historical bindings behind an alias grows every time a server recreates the folder, and grouping them in process would
+make an ordinary listing pay for that history; the result itself is bounded by the folders of the accounts in scope, which
+configuration bounds.
+
 ## Where the pieces live
 
 - `MailMcp.Application.Emails.ListEmails` — the use case, its request, and its result.
 - `MailMcp.Application.Emails` — the filter, the cursor, the page size, the summary, and the query failures shared with
   the later read models.
-- `MailMcp.Application.Accounts` — `IMailAccountCatalog`, the port that answers which accounts this deployment serves.
-  `MailSynchronizationOptions` implements it, so the answer comes from the configuration that defines the accounts.
-  Switching synchronization off does not hide the copy already stored.
+- `MailMcp.Application.Accounts` — `IMailAccountCatalog`, the port that names which accounts this deployment serves. One
+  member answers both questions asked of it: whether the account a request named is accepted, and which accounts an
+  unscoped request is narrowed to. `MailSynchronizationOptions` implements it, so the answer comes from the configuration
+  that defines the accounts.
 - `MailMcp.Application.Synchronization` — the freshness port and its read model, kept separate from the readers that
   return mail because every read model attaches freshness.
 - `MailMcp.Infrastructure.Persistence` — `StoredEmailTimelineReader` and `SynchronizationFreshnessReader`, which evaluate

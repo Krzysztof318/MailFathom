@@ -13,14 +13,21 @@ namespace MailMcp.Application.Synchronization;
 public interface ISynchronizationFreshnessReader
 {
     /// <summary>Reads one freshness entry per folder the scope covers.</summary>
-    /// <param name="scope">The accounts and folder aliases to report on, or <see cref="MailboxScope.Unrestricted" /> for every served account.</param>
+    /// <param name="scope">The accounts and folder aliases to report on.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>One entry per known folder in the scope, ordered by account and then by alias.</returns>
+    /// <returns>One entry per known folder in the scope, ordered ordinally by account and then by alias.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// A folder the scope names but no synchronization run has ever reached is reported with no timestamp rather than
     /// omitted, so a caller sees the folder it asked about. A folder that has never been discovered at all is unknown to
     /// local state and appears in no entry.
+    /// </para>
+    /// <para>
+    /// The scope's accounts are the accounts to report on, and a use case resolves them before it calls: a scope naming
+    /// none reaches every account the store holds folders for, including ones the deployment has stopped serving. The
+    /// result is bounded by the folders those accounts have, not by how many times a server has recreated them.
+    /// </para>
     /// </remarks>
     Task<IReadOnlyList<MailboxFolderFreshness>> ReadAsync(MailboxScope scope, CancellationToken cancellationToken);
 }

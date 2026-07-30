@@ -81,6 +81,32 @@ public sealed class EmailTimelineFilterTests
         Assert.Equal("subject fragment", failure.FilterName);
     }
 
+    /// <summary>PostgreSQL text holds no zero byte, so a control character is refused rather than sent to a parameter.</summary>
+    [Theory]
+    [InlineData((char)0x00)]
+    [InlineData((char)0x07)]
+    [InlineData((char)0x1f)]
+    public void Create_SubjectFragmentCarryingAControlCharacter_IsRejected(char controlCharacter)
+    {
+        // Act
+        var failure = Assert.Throws<MailboxQueryFilterInvalidException>(() =>
+            FilterWith(subjectFragment: $"quarterly{controlCharacter}report"));
+
+        // Assert
+        Assert.Equal("subject fragment", failure.FilterName);
+    }
+
+    /// <summary>Trimming already removes the whitespace controls, and what it leaves is not a fragment of any subject.</summary>
+    [Fact]
+    public void Create_SubjectFragmentWrappedInWhitespaceControls_IsAccepted()
+    {
+        // Act
+        var filter = FilterWith(subjectFragment: "\tinvoice\r\n");
+
+        // Assert
+        Assert.Equal("invoice", filter.SubjectFragment);
+    }
+
     [Fact]
     public void Create_SubjectFragment_IsTrimmedRatherThanTakenLiterally()
     {
@@ -156,6 +182,26 @@ public sealed class EmailTimelineFilterTests
 
         // Assert
         Assert.Equal(first.Fingerprint, second.Fingerprint);
+    }
+
+    /// <summary>A folder alias may contain the character a list is joined with, so the joined text alone cannot identify one.</summary>
+    [Fact]
+    public void Fingerprint_ScopesWhoseNamesShareTheirSeparators_DoNotMatch()
+    {
+        // Arrange
+        var oneAliasCarryingTheSeparator = MailboxScope.Create(
+            accountIds: null,
+            [MailFolderAlias.Create("ARCHIVE,SENT"), MailFolderAlias.Create("TRASH")]);
+        var theSameNamesSplitDifferently = MailboxScope.Create(
+            accountIds: null,
+            [MailFolderAlias.Create("ARCHIVE"), MailFolderAlias.Create("SENT,TRASH")]);
+
+        // Act
+        var first = FilterWith(scope: oneAliasCarryingTheSeparator);
+        var second = FilterWith(scope: theSameNamesSplitDifferently);
+
+        // Assert
+        Assert.NotEqual(first.Fingerprint, second.Fingerprint);
     }
 
     [Fact]

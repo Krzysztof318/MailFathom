@@ -44,7 +44,12 @@ public sealed record EmailTimelineFilter
     /// </remarks>
     private const int FingerprintOctets = 16;
 
-    /// <summary>Separates the fields of the text the fingerprint is computed over, chosen because no filter value can carry a control character.</summary>
+    /// <summary>Separates the fields of the text the fingerprint is computed over.</summary>
+    /// <remarks>
+    /// The separator makes the text readable rather than unambiguous. Every value written beside it carries its own
+    /// length in front of it, because an account identifier and a folder alias may contain any character a separator
+    /// could be chosen from — a comma, this one — and two scopes whose joined text agreed would share one cursor.
+    /// </remarks>
     private const char CanonicalFieldSeparator = '\u001f';
 
     /// <summary>Marks a filter nobody named in the text the fingerprint is computed over.</summary>
@@ -215,6 +220,11 @@ public sealed record EmailTimelineFilter
             MaximumSubjectFragmentLength,
             "subject fragment");
 
+        if (trimmed.Any(char.IsControl))
+        {
+            throw MailboxQueryFilterInvalidException.ContainsControlCharacter("subject fragment");
+        }
+
         return trimmed;
     }
 
@@ -228,24 +238,38 @@ public sealed record EmailTimelineFilter
     {
         var canonicalText = string.Join(
             CanonicalFieldSeparator,
-            "f1",
-            string.Join(',', this.Scope.AccountIds.Select(static accountId => accountId.Value)),
-            string.Join(',', this.Scope.FolderAliases.Select(static alias => alias.Value)),
-            this.SenderNormalizedAddress ?? CanonicalAbsentValue,
-            this.RecipientNormalizedAddress ?? CanonicalAbsentValue,
+            LengthPrefixed("f1"),
+            CanonicalList(this.Scope.AccountIds.Select(static accountId => accountId.Value)),
+            CanonicalList(this.Scope.FolderAliases.Select(static alias => alias.Value)),
+            LengthPrefixed(this.SenderNormalizedAddress ?? CanonicalAbsentValue),
+            LengthPrefixed(this.RecipientNormalizedAddress ?? CanonicalAbsentValue),
             // Upper-cased because the subject filter is case-insensitive: two requests that differ only in the case they
             // wrote a fragment in select the same emails, so they must not be two walks with incompatible cursors.
-            this.SubjectFragment?.ToUpperInvariant() ?? CanonicalAbsentValue,
-            CanonicalInstant(this.ReceivedOnOrAfter),
-            CanonicalInstant(this.ReceivedBefore),
-            CanonicalFlag(this.IsRemotelySeen),
-            CanonicalFlag(this.HasAttachments),
-            this.Direction.ToString());
+            LengthPrefixed(this.SubjectFragment?.ToUpperInvariant() ?? CanonicalAbsentValue),
+            LengthPrefixed(CanonicalInstant(this.ReceivedOnOrAfter)),
+            LengthPrefixed(CanonicalInstant(this.ReceivedBefore)),
+            LengthPrefixed(CanonicalFlag(this.IsRemotelySeen)),
+            LengthPrefixed(CanonicalFlag(this.HasAttachments)),
+            LengthPrefixed(this.Direction.ToString()));
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonicalText));
 
         return Base64Url.EncodeToString(hash.AsSpan(0, FingerprintOctets));
     }
+
+    private static string CanonicalList(IEnumerable<string> values) =>
+        LengthPrefixed(string.Join(CanonicalFieldSeparator, values.Select(LengthPrefixed)));
+
+    /// <summary>Writes one value with its own length in front of it, so nothing a caller supplies can imitate a separator.</summary>
+    /// <remarks>
+    /// Without it the scopes <c>["a,b", "c"]</c> and <c>["a", "b,c"]</c> produce one text and therefore one fingerprint,
+    /// and a cursor issued for either is accepted against the other — which names a real row and an arbitrary window
+    /// around it instead of raising the mismatch this fingerprint exists to raise. A length prefix makes the encoding
+    /// injective whatever characters the values carry, which is what a separator alone cannot do while an account
+    /// identifier is free text.
+    /// </remarks>
+    private static string LengthPrefixed(string value) =>
+        string.Concat(value.Length.ToString(CultureInfo.InvariantCulture), ":", value);
 
     private static string CanonicalInstant(DateTimeOffset? instant) => instant is { } value
         ? value.UtcTicks.ToString(CultureInfo.InvariantCulture)

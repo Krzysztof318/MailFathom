@@ -31,10 +31,17 @@ public interface IStoredEmailTimelineReader
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="filter" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is below one.</exception>
     /// <remarks>
+    /// <para>
     /// The order is total, which is what makes paging over it contiguous: the caller may ask for the next page at any
     /// time, and every row falls on exactly one side of <paramref name="continueAfter" /> even when several emails share
     /// a received timestamp or carry none. An implementation reproduces
     /// <see cref="EmailTimelinePosition.ComparerFor" /> rather than an order that merely resembles it.
+    /// </para>
+    /// <para>
+    /// The filter's scope names the accounts to read, and a use case resolves them before it calls. A scope naming none
+    /// reaches every account the store holds rows for, which includes accounts a deployment has stopped serving; nothing
+    /// here re-derives which those are.
+    /// </para>
     /// </remarks>
     Task<IReadOnlyList<EmailSummary>> ReadPageAsync(
         EmailTimelineFilter filter,

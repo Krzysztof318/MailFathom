@@ -63,9 +63,16 @@ public sealed class MailboxTimelineReader
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var filter = this.AccessibleFilter(request);
+        var filter = this.ReadableFilter(request);
         var pageSize = MailboxQueryPageSize.FromRequested(request.PageSize);
         var continueAfter = ContinuationPosition(request.Cursor, filter);
+
+        // Every filter has been validated by this point, so a deployment that serves no account answers the same
+        // refusals a deployment that serves several does, and only then reports that it holds nothing to read.
+        if (filter.Scope.AccountIds.Count is 0)
+        {
+            return new ListEmailsResult([], NextCursor: null, []);
+        }
 
         // One row beyond the page is what establishes whether another page exists. A count over the same filter would
         // cost a second scan and could still disagree with the page it describes, because mail arrives between queries.
@@ -87,23 +94,37 @@ public sealed class MailboxTimelineReader
         return new ListEmailsResult(page, nextCursor, folderFreshness);
     }
 
-    /// <summary>Validates the request's filters and refuses one that reaches an account this deployment does not serve.</summary>
+    /// <summary>Validates the request's filters and restricts the query to the accounts this deployment serves.</summary>
     /// <remarks>
-    /// The access check runs against the normalized scope, so the same request cannot be written two ways to reach two
-    /// answers. It runs before anything is read rather than as a predicate on the query, because an inaccessible account
-    /// has to be refused rather than answered with the empty page a narrowed predicate would produce.
+    /// <para>
+    /// An account the deployment does not serve is refused before anything is read, rather than narrowed away by a
+    /// predicate: a narrowed predicate would answer with an empty page, and an empty page tells a caller that the
+    /// identifier they named exists. The check runs against the normalized scope, so the same request cannot be written
+    /// two ways to reach two answers.
+    /// </para>
+    /// <para>
+    /// A request that names no account is restricted to the served accounts rather than left unrestricted. Removing an
+    /// account from configuration leaves its stored rows in place, so an absent account predicate would keep publishing
+    /// mail from an account this deployment no longer serves — which is also why the resolved accounts, not the
+    /// requested ones, take part in the cursor's fingerprint.
+    /// </para>
     /// </remarks>
-    private EmailTimelineFilter AccessibleFilter(ListEmailsRequest request)
+    private EmailTimelineFilter ReadableFilter(ListEmailsRequest request)
     {
-        var scope = MailboxScope.Create(request.AccountIds, request.FolderAliases);
+        var requestedScope = MailboxScope.Create(request.AccountIds, request.FolderAliases);
+        var servedAccountIds = this.accountCatalog.ServedAccountIds;
 
-        if (this.FirstAccountNotServed(scope) is { } inaccessibleAccountId)
+        if (FirstAccountNotServed(requestedScope, servedAccountIds) is { } inaccessibleAccountId)
         {
             throw new MailAccountNotAccessibleException(inaccessibleAccountId);
         }
 
+        var readableScope = requestedScope.AccountIds.Count is 0
+            ? MailboxScope.RestrictedToServedAccounts(servedAccountIds, requestedScope.FolderAliases)
+            : requestedScope;
+
         return EmailTimelineFilter.Create(
-            scope,
+            readableScope,
             request.SenderAddress,
             request.RecipientAddress,
             request.SubjectFragment,
@@ -114,9 +135,11 @@ public sealed class MailboxTimelineReader
             request.Direction);
     }
 
-    private MailAccountId? FirstAccountNotServed(MailboxScope scope) => scope.AccountIds
-        .Select(accountId => (MailAccountId?)accountId)
-        .FirstOrDefault(accountId => !this.accountCatalog.Serves(accountId!.Value));
+    private static MailAccountId? FirstAccountNotServed(
+        MailboxScope requestedScope,
+        IReadOnlyList<MailAccountId> servedAccountIds) => requestedScope.AccountIds
+        .Select(static accountId => (MailAccountId?)accountId)
+        .FirstOrDefault(accountId => !servedAccountIds.Contains(accountId!.Value));
 
     /// <summary>Reads the position a cursor names, after establishing that the cursor belongs to this request.</summary>
     /// <remarks>

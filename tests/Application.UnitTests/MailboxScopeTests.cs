@@ -17,7 +17,8 @@ public sealed class MailboxScopeTests
         var scope = MailboxScope.Create(accountIds: null, folderAliases: null);
 
         // Assert
-        Assert.True(scope.IsUnrestricted);
+        Assert.Empty(scope.AccountIds);
+        Assert.Empty(scope.FolderAliases);
         Assert.Same(MailboxScope.Unrestricted, scope);
     }
 
@@ -28,7 +29,7 @@ public sealed class MailboxScopeTests
         var scope = MailboxScope.Create([], []);
 
         // Assert
-        Assert.True(scope.IsUnrestricted);
+        Assert.Same(MailboxScope.Unrestricted, scope);
     }
 
     /// <summary>Deduplicated and ordered, so two spellings of one scope are one query with one cursor.</summary>
@@ -52,7 +53,7 @@ public sealed class MailboxScopeTests
         var scope = MailboxScope.Create(accountIds: null, [MailFolderAlias.Create("INBOX")]);
 
         // Assert
-        Assert.False(scope.IsUnrestricted);
+        Assert.NotSame(MailboxScope.Unrestricted, scope);
         Assert.Empty(scope.AccountIds);
     }
 
@@ -88,18 +89,40 @@ public sealed class MailboxScopeTests
         Assert.Equal("folder aliases", failure.FilterName);
     }
 
-    /// <summary>The limit counts distinct values, so repeating one account is not a way to reach it.</summary>
+    /// <summary>The limit counts the values a request names, so repeating one account is not a way past it.</summary>
     [Fact]
-    public void Create_TheSameAccountRepeatedPastTheLimit_IsAccepted()
+    public void Create_TheSameAccountRepeatedPastTheLimit_IsRejected()
     {
         // Arrange
-        var accountIds = Enumerable.Repeat(MailAccountId.Create("primary"), MailboxScope.MaximumAccountIds + 10)
-            .ToArray();
+        var accountIds = Enumerable.Repeat(MailAccountId.Create("primary"), MailboxScope.MaximumAccountIds + 1);
 
         // Act
-        var scope = MailboxScope.Create(accountIds, folderAliases: null);
+        var failure = Assert.Throws<MailboxQueryFilterInvalidException>(() =>
+            MailboxScope.Create(accountIds, folderAliases: null));
 
         // Assert
-        Assert.Equal(MailAccountId.Create("primary"), Assert.Single(scope.AccountIds));
+        Assert.Equal("accounts", failure.FilterName);
+    }
+
+    /// <summary>Refused while the caller's sequence is read, so an over-long list is never materialized to be counted.</summary>
+    [Fact]
+    public void Create_MoreAccountsThanAQueryMayName_StopsReadingAtTheValueThatCrossesTheLimit()
+    {
+        // Arrange
+        var readCount = 0;
+        var accountIds = Enumerable.Range(0, MailboxScope.MaximumAccountIds + 100)
+            .Select(index =>
+            {
+                readCount++;
+
+                return MailAccountId.Create($"account-{index}");
+            });
+
+        // Act
+        Assert.Throws<MailboxQueryFilterInvalidException>(() =>
+            MailboxScope.Create(accountIds, folderAliases: null));
+
+        // Assert
+        Assert.Equal(MailboxScope.MaximumAccountIds + 1, readCount);
     }
 }

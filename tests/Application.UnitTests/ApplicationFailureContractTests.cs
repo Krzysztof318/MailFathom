@@ -197,6 +197,19 @@ public sealed class ApplicationFailureContractTests
         MailboxQueryFilterInvalidException.ThrowIfLengthExceeded(8, 8, "subject fragment");
     }
 
+    /// <summary>A refused character is part of the value, so the message names neither it nor the text it came from.</summary>
+    [Fact]
+    public void MailboxQueryFilterInvalidException_ControlCharacter_NamesTheFilterAndCarriesTheCode()
+    {
+        // Act
+        var failure = MailboxQueryFilterInvalidException.ContainsControlCharacter("subject fragment");
+
+        // Assert
+        Assert.Equal(MailMcpErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
+        Assert.Equal("subject fragment", failure.FilterName);
+        Assert.Contains("subject fragment", failure.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void MailboxQueryFilterInvalidException_EmptyRange_NamesTheRangeFilter()
     {
