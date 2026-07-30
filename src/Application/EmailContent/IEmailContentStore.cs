@@ -26,14 +26,18 @@ public interface IEmailContentStore
         RemoteEmailContent content,
         CancellationToken cancellationToken);
 
-    /// <summary>Reads back the raw MIME stored for one locally stored email.</summary>
+    /// <summary>Reads back the raw MIME stored for one locally stored email, with what was recorded about it.</summary>
     /// <param name="storedEmailId">The stable local identifier of the metadata row.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The stored bytes, or <see langword="null" /> when no content is stored for that email.</returns>
+    /// <returns>The stored content, or <see langword="null" /> when no content is stored for that email.</returns>
     /// <remarks>
     /// The read joins no session, because it participates in no write and a transaction held open across it would only
     /// widen a lock around a large payload. Absent content is an ordinary answer rather than a failure: an occurrence
     /// whose message exceeded the size limit is recorded with its metadata and no content at all.
+    /// <para>
+    /// The recorded length and digest come back with the payload rather than being verified here, so a caller that
+    /// serves mail to a reader can tell a damaged local copy apart from an absent one and act on the difference.
+    /// </para>
     /// </remarks>
-    Task<ReadOnlyMemory<byte>?> FindRawMimeAsync(StoredEmailId storedEmailId, CancellationToken cancellationToken);
+    Task<StoredEmailContent?> FindStoredContentAsync(StoredEmailId storedEmailId, CancellationToken cancellationToken);
 }

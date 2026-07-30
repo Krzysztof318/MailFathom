@@ -1,0 +1,362 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+
+using System.Text;
+using MailMcp.Application.EmailContent;
+using MailMcp.Application.Emails;
+using MailMcp.Domain.Emails;
+using MailMcp.Infrastructure.Mail.Mime;
+using Xunit;
+
+namespace MailMcp.Infrastructure.UnitTests;
+
+/// <summary>Covers what a stored message yields for a reader: its headers, its body, and what it carries besides.</summary>
+public sealed class MimeKitEmailContentRendererTests
+{
+    /// <summary>What the sender wrote wins over a reading of how it was displayed.</summary>
+    [Fact]
+    public async Task RenderAsync_MessageOfferingBothRepresentations_ReturnsThePlainTextPartAsTheBody()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Subject: Quarterly report",
+            "Content-Type: multipart/alternative; boundary=\"alt\"",
+            string.Empty,
+            "--alt",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            "The plain body.",
+            "--alt",
+            "Content-Type: text/html; charset=utf-8",
+            string.Empty,
+            "<p>The HTML body.</p>",
+            "--alt--");
+
+        // Act
+        var rendering = await RenderAsync(content);
+
+        // Assert
+        Assert.Equal("The plain body.", rendering.PlainTextBody.Text);
+        Assert.Equal("Quarterly report", rendering.Headers.Subject);
+        Assert.False(rendering.PlainTextBody.WasTruncated);
+    }
+
+    /// <summary>A message with only markup is still readable as words, and the derivation is what produces them.</summary>
+    [Fact]
+    public async Task RenderAsync_MessageWithOnlyAnHtmlBody_DerivesThePlainTextFromItsMarkup()
+    {
+        // Arrange
+        var content = HtmlOnlyMessage("<p>First line</p><p>Second line</p>");
+
+        // Act
+        var rendering = await RenderAsync(content);
+
+        // Assert
+        // The blank line between them is the paragraph boundary the markup expressed, which is the one piece of
+        // structure the derivation keeps.
+        Assert.Equal("First line\n\nSecond line", rendering.PlainTextBody.Text);
+    }
+
+    /// <summary>Sanitized HTML costs a pass over hostile markup, so it is produced only when it was asked for.</summary>
+    [Fact]
+    public async Task RenderAsync_SanitizedHtmlNotRequested_ReturnsNoHtmlRepresentation()
+    {
+        // Arrange
+        var content = HtmlOnlyMessage("<p>Body</p>");
+
+        // Act
+        var rendering = await RenderAsync(content, includeSanitizedHtml: false);
+
+        // Assert
+        Assert.Null(rendering.SanitizedHtmlBody);
+    }
+
+    [Fact]
+    public async Task RenderAsync_SanitizedHtmlRequested_ReturnsTheSanitizedMarkup()
+    {
+        // Arrange
+        var content = HtmlOnlyMessage("""<p>Body</p><script>alert('xss')</script>""");
+
+        // Act
+        var rendering = await RenderAsync(content, includeSanitizedHtml: true);
+
+        // Assert
+        Assert.NotNull(rendering.SanitizedHtmlBody);
+        Assert.Contains("Body", rendering.SanitizedHtmlBody.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("script", rendering.SanitizedHtmlBody.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A message that has no HTML part returns none of it even when it was asked for.</summary>
+    [Fact]
+    public async Task RenderAsync_SanitizedHtmlRequestedAndTheMessageHasNoHtmlPart_ReturnsNoHtmlRepresentation()
+    {
+        // Arrange
+        var content = PlainTextMessage("Just words.");
+
+        // Act
+        var rendering = await RenderAsync(content, includeSanitizedHtml: true);
+
+        // Assert
+        Assert.Null(rendering.SanitizedHtmlBody);
+        Assert.Equal("Just words.", rendering.PlainTextBody.Text);
+    }
+
+    /// <summary>A body beyond the bound is cut and says so, together with the length it had.</summary>
+    [Fact]
+    public async Task RenderAsync_PlainTextBodyBeyondTheBound_CutsItAndReportsTheOriginalLength()
+    {
+        // Arrange
+        var body = new string('a', 500);
+        var content = PlainTextMessage(body);
+
+        // Act
+        var rendering = await RenderAsync(content, maxBodyCharacters: 100);
+
+        // Assert
+        Assert.Equal(100, rendering.PlainTextBody.Text.Length);
+        Assert.Equal(500, rendering.PlainTextBody.OriginalCharacterCount);
+        Assert.True(rendering.PlainTextBody.WasTruncated);
+    }
+
+    /// <summary>Markup is cut before it is parsed, and the parse then closes what the cut left open.</summary>
+    [Fact]
+    public async Task RenderAsync_HtmlBodyBeyondTheBound_CutsTheSourceAndStillReturnsBalancedMarkup()
+    {
+        // Arrange
+        var markup = "<p>" + new string('a', 500) + "</p>";
+        var content = HtmlOnlyMessage(markup);
+
+        // Act
+        var rendering = await RenderAsync(content, includeSanitizedHtml: true, maxBodyCharacters: 100);
+
+        // Assert
+        Assert.NotNull(rendering.SanitizedHtmlBody);
+        Assert.True(rendering.SanitizedHtmlBody.WasTruncated);
+        Assert.Equal(markup.Length, rendering.SanitizedHtmlBody.OriginalCharacterCount);
+        Assert.EndsWith("</p>", rendering.SanitizedHtmlBody.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>An encrypted body is reported as one, not as a message that said nothing.</summary>
+    [Fact]
+    public async Task RenderAsync_MessageWhoseBodyArrivedEncrypted_ReportsItRatherThanReturningAnEmptyBody()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/encrypted; protocol=\"application/pgp-encrypted\"; boundary=\"enc\"",
+            string.Empty,
+            "--enc",
+            "Content-Type: application/pgp-encrypted",
+            string.Empty,
+            "Version: 1",
+            "--enc",
+            "Content-Type: application/octet-stream",
+            string.Empty,
+            "-----BEGIN PGP MESSAGE-----",
+            "-----END PGP MESSAGE-----",
+            "--enc--");
+
+        // Act
+        var rendering = await RenderAsync(content);
+
+        // Assert
+        Assert.True(rendering.BodyIsEncrypted);
+        Assert.Equal(string.Empty, rendering.PlainTextBody.Text);
+        Assert.True(rendering.Attachments.IsEncrypted);
+    }
+
+    /// <summary>The per-attachment list is what the same parse found, with names normalized and no bytes.</summary>
+    [Fact]
+    public async Task RenderAsync_MessageCarryingAnAttachment_DescribesItWithoutItsContent()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/mixed; boundary=\"mix\"",
+            string.Empty,
+            "--mix",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            "See the attachment.",
+            "--mix",
+            "Content-Type: application/pdf",
+            "Content-Disposition: attachment; filename=\"../../etc/report.pdf\"",
+            "Content-Transfer-Encoding: base64",
+            string.Empty,
+            Convert.ToBase64String(Encoding.UTF8.GetBytes("pdf-bytes")),
+            "--mix--");
+
+        // Act
+        var rendering = await RenderAsync(content);
+
+        // Assert
+        var attachment = Assert.Single(rendering.Attachments.Attachments);
+        Assert.Equal("report.pdf", attachment.FileName?.Value);
+        Assert.Equal("application/pdf", attachment.MediaType);
+        Assert.Equal("pdf-bytes".Length, attachment.DecodedSizeOctets);
+        Assert.Equal("See the attachment.", rendering.PlainTextBody.Text);
+    }
+
+    /// <summary>A signature is not a file a person would open, so it never reaches the attachment list.</summary>
+    [Fact]
+    public async Task RenderAsync_SignedMessage_ReturnsNoAttachmentForItsSignaturePart()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/signed; protocol=\"application/pkcs7-signature\"; micalg=sha-256; boundary=\"sig\"",
+            string.Empty,
+            "--sig",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            "Signed words.",
+            "--sig",
+            "Content-Type: application/pkcs7-signature; name=\"smime.p7s\"",
+            "Content-Disposition: attachment; filename=\"smime.p7s\"",
+            string.Empty,
+            "signature",
+            "--sig--");
+
+        // Act
+        var rendering = await RenderAsync(content);
+
+        // Assert
+        Assert.Empty(rendering.Attachments.Attachments);
+        Assert.True(rendering.Attachments.CarriesUnverifiedSignature);
+        Assert.Equal("Signed words.", rendering.PlainTextBody.Text);
+    }
+
+    /// <summary>An embedded image is counted rather than listed, which is what a reader is told instead of the image.</summary>
+    [Fact]
+    public async Task RenderAsync_HtmlBodyEmbeddingAnImage_CountsItAsAnInlineResourceRatherThanAnAttachment()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/related; boundary=\"rel\"",
+            string.Empty,
+            "--rel",
+            "Content-Type: text/html; charset=utf-8",
+            string.Empty,
+            """<p>Chart:</p><img src="cid:chart@example.test">""",
+            "--rel",
+            "Content-Type: image/png",
+            "Content-ID: <chart@example.test>",
+            string.Empty,
+            "image",
+            "--rel--");
+
+        // Act
+        var rendering = await RenderAsync(content, includeSanitizedHtml: true);
+
+        // Assert
+        Assert.Empty(rendering.Attachments.Attachments);
+        Assert.Equal(1, rendering.Attachments.InlineResourceCount);
+        Assert.DoesNotContain("cid:", rendering.SanitizedHtmlBody!.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Bytes that are not a message leave nothing a reader could be shown.</summary>
+    [Fact]
+    public async Task RenderAsync_ContentThatIsNotAMimeMessage_ReportsItAsUnreadable()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredRawContent([0x00, 0x01, 0x02, 0x03]);
+
+        // Act
+        var result = await CreateRenderer().RenderAsync(
+            content,
+            includeSanitizedHtml: false,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(EmailContentRenderingOutcome.Unreadable, result.Outcome);
+        Assert.Null(result.Rendering);
+    }
+
+    /// <summary>A message beyond the structural limits is abandoned here exactly as it is during extraction.</summary>
+    [Fact]
+    public async Task RenderAsync_MessageDeclaringMorePartsThanTheLimit_ReportsItAsUnreadable()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/mixed; boundary=\"mix\"",
+            string.Empty,
+            "--mix",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            "First",
+            "--mix",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            "Second",
+            "--mix--");
+        var renderer = CreateRenderer(maxPartCount: 1);
+
+        // Act
+        var result = await renderer.RenderAsync(
+            content,
+            includeSanitizedHtml: false,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(EmailContentRenderingOutcome.Unreadable, result.Outcome);
+    }
+
+    /// <summary>Every participant the message wrote is returned, including the ones a listing row cannot hold.</summary>
+    [Fact]
+    public async Task RenderAsync_MessageAddressingSeveralHeaders_ReturnsEveryParticipantUnderItsRole()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: Anna Kowalska <anna@example.test>",
+            "To: recipient@example.test",
+            "Cc: copied@example.test",
+            "Reply-To: replies@example.test",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            "Body");
+
+        // Act
+        var rendering = await RenderAsync(content);
+
+        // Assert
+        Assert.Equal(
+            [EmailAddressRole.From, EmailAddressRole.ReplyTo, EmailAddressRole.To, EmailAddressRole.Cc],
+            rendering.Headers.Participants.Select(participant => participant.Role));
+        Assert.Equal("Anna Kowalska", rendering.Headers.Participants[0].Address.DisplayName);
+    }
+
+    private static async Task<EmailContentRendering> RenderAsync(
+        StoredEmailContent content,
+        bool includeSanitizedHtml = false,
+        int maxBodyCharacters = 100_000)
+    {
+        var result = await CreateRenderer(maxBodyCharacters: maxBodyCharacters).RenderAsync(
+            content,
+            includeSanitizedHtml,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(EmailContentRenderingOutcome.Rendered, result.Outcome);
+
+        return result.Rendering!;
+    }
+
+    private static MimeKitEmailContentRenderer CreateRenderer(
+        int maxBodyCharacters = 100_000,
+        int maxPartCount = 1000) => new(
+        new EmailMimeExtractionOptions { MaxPartCount = maxPartCount },
+        new EmailContentReadOptions { MaxBodyCharacters = maxBodyCharacters });
+
+    private static StoredEmailContent PlainTextMessage(string body) => MimeFixtures.StoredMessage(
+        "From: sender@example.test",
+        "Content-Type: text/plain; charset=utf-8",
+        string.Empty,
+        body);
+
+    private static StoredEmailContent HtmlOnlyMessage(string markup) => MimeFixtures.StoredMessage(
+        "From: sender@example.test",
+        "Content-Type: text/html; charset=utf-8",
+        string.Empty,
+        markup);
+}

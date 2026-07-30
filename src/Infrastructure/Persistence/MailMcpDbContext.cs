@@ -64,6 +64,8 @@ internal sealed class MailMcpDbContext : DbContext
 
     internal DbSet<EmailSearchDocumentEntity> EmailSearchDocuments => this.Set<EmailSearchDocumentEntity>();
 
+    internal DbSet<EmailContentRepairRequestEntity> EmailContentRepairRequests => this.Set<EmailContentRepairRequestEntity>();
+
     internal DbSet<BackfillPositionEntity> BackfillPositions => this.Set<BackfillPositionEntity>();
 
     internal DbSet<SynchronizationCheckpointEntity> SynchronizationCheckpoints => this.Set<SynchronizationCheckpointEntity>();
@@ -159,6 +161,26 @@ internal sealed class MailMcpDbContext : DbContext
         });
 
         this.ConfigureEmailSearchDocument(modelBuilder);
+
+        // One row per email whose stored content a read found unusable, keyed by that email so a reader meeting the
+        // same damage repeatedly leaves one outstanding request rather than a row per attempt. It is deliberately a
+        // table of its own rather than columns on the email: the requests are sparse, they are read as a work list,
+        // and a repair that succeeds deletes a row instead of nulling four columns on a row it must not otherwise touch.
+        modelBuilder.Entity<EmailContentRepairRequestEntity>(entity =>
+        {
+            entity.ToTable("email_content_repair_requests");
+            entity.HasKey(repairRequest => repairRequest.StoredEmailId);
+            entity.Property(repairRequest => repairRequest.StoredEmailId).ValueGeneratedNever();
+
+            // Stored as text for the reason the content-availability reason is: the defect stays readable in an audit
+            // query and survives any later reordering of the enum.
+            entity.Property(repairRequest => repairRequest.Defect).HasConversion<string>().HasMaxLength(64).IsRequired();
+
+            entity.HasOne(repairRequest => repairRequest.StoredEmail)
+                .WithOne(email => email.ContentRepairRequest)
+                .HasForeignKey<EmailContentRepairRequestEntity>(repairRequest => repairRequest.StoredEmailId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
         modelBuilder.Entity<BackfillPositionEntity>(entity =>
         {

@@ -83,12 +83,12 @@ internal static class EmailBodyTextExtractor
         var body = new StringBuilder();
         foreach (var part in plainTextParts)
         {
-            if (body.Length > 0 && !AppendNormalized(body, "\n", maxCharacters))
+            if (body.Length > 0 && !MailBodyTextNormalizer.Append(body, "\n", maxCharacters))
             {
                 break;
             }
 
-            if (!AppendNormalized(body, part.Text, maxCharacters))
+            if (!MailBodyTextNormalizer.Append(body, part.Text, maxCharacters))
             {
                 break;
             }
@@ -109,66 +109,18 @@ internal static class EmailBodyTextExtractor
         var body = new StringBuilder();
         foreach (var part in htmlParts)
         {
-            if (body.Length > 0 && !AppendNormalized(body, "\n", maxCharacters))
+            if (body.Length > 0 && !MailBodyTextNormalizer.Append(body, "\n", maxCharacters))
             {
                 break;
             }
 
             // The reader stops at the same bound, so the derivation never builds a string proportional to the markup.
-            if (!AppendNormalized(body, HtmlBodyTextReader.ReadDisplayedText(part.Text, maxCharacters), maxCharacters))
+            if (!MailBodyTextNormalizer.Append(body, HtmlBodyTextReader.ReadDisplayedText(part.Text, maxCharacters), maxCharacters))
             {
                 break;
             }
         }
 
         return body.ToString().Trim();
-    }
-
-    /// <summary>Appends what an index and a reader can both carry, and reports whether room is left for more.</summary>
-    /// <remarks>
-    /// Line endings are unified so the trimming rules see one line structure whichever platform wrote the message.
-    /// Control characters other than the line break and the tab are removed rather than kept: no body displays them,
-    /// PostgreSQL rejects a null byte in a text value outright, and a message could otherwise place one in the middle
-    /// of a word and make it unmatchable by any query. Normalizing during the append is what keeps the bound a bound on
-    /// work rather than only on the result.
-    /// </remarks>
-    private static bool AppendNormalized(StringBuilder body, string source, int maxCharacters)
-    {
-        var previousWasCarriageReturn = false;
-
-        foreach (var character in source)
-        {
-            if (body.Length >= maxCharacters)
-            {
-                return false;
-            }
-
-            switch (character)
-            {
-                case '\r':
-                    body.Append('\n');
-                    break;
-
-                case '\n' when previousWasCarriageReturn:
-                    break;
-
-                case '\n':
-                case '\t':
-                    body.Append(character);
-                    break;
-
-                default:
-                    if (!char.IsControl(character))
-                    {
-                        body.Append(character);
-                    }
-
-                    break;
-            }
-
-            previousWasCarriageReturn = character == '\r';
-        }
-
-        return body.Length < maxCharacters;
     }
 }

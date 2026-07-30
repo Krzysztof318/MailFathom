@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Security.Cryptography;
 using System.Text;
 using MailMcp.Application.EmailContent;
 using MailMcp.Domain.Accounts;
@@ -32,4 +33,24 @@ internal static class MimeFixtures
     /// <param name="rawMime">The raw payload.</param>
     /// <returns>The content, carrying a fixed occurrence identity.</returns>
     public static RemoteEmailContent RawContent(ReadOnlyMemory<byte> rawMime) => new(OccurrenceId, rawMime);
+
+    /// <summary>Turns MIME lines into stored content a read renders, recorded as intact.</summary>
+    /// <param name="lines">The message's lines, joined with CRLF as a mail transport writes them.</param>
+    /// <returns>The stored content, whose recorded length and digest describe the bytes beside them.</returns>
+    /// <remarks>
+    /// The recorded values are computed rather than stated, so a rendering test never fails on an integrity check it is
+    /// not about. Damaged content is the read's own concern and is arranged where that behavior is asserted.
+    /// </remarks>
+    public static StoredEmailContent StoredMessage(params string[] lines) => StoredRawContent(
+        Encoding.UTF8.GetBytes(string.Join("\r\n", lines)));
+
+    /// <summary>Turns raw bytes into stored content, recorded as intact.</summary>
+    /// <param name="rawMime">The raw payload.</param>
+    /// <returns>The stored content, whose recorded length and digest describe the bytes beside them.</returns>
+    public static StoredEmailContent StoredRawContent(byte[] rawMime)
+    {
+        ArgumentNullException.ThrowIfNull(rawMime);
+
+        return new StoredEmailContent(rawMime, rawMime.LongLength, SHA256.HashData(rawMime));
+    }
 }

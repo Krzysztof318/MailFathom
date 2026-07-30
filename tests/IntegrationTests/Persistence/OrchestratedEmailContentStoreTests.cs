@@ -36,7 +36,7 @@ public sealed class OrchestratedEmailContentStoreTests(MailMcpOrchestrationFixtu
     private const uint OverwrittenUid = 12;
 
     [Fact]
-    public async Task FindRawMimeAsync_ForAPayloadStoredOutOfLine_ReturnsEveryByteWithItsRecordedLengthAndHash()
+    public async Task FindStoredContentAsync_ForAPayloadStoredOutOfLine_ReturnsEveryByteWithItsRecordedLengthAndHash()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -48,18 +48,24 @@ public sealed class OrchestratedEmailContentStoreTests(MailMcpOrchestrationFixtu
         // Act
         var storedEmailId = await StoreAsync(services, occurrenceId, "content-round-trip", rawMime, cancellationToken);
         var readBack = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IEmailContentStore>().FindRawMimeAsync(storedEmailId, token),
+            (scope, token) => scope.GetRequiredService<IEmailContentStore>().FindStoredContentAsync(storedEmailId, token),
             cancellationToken);
 
         // Assert
-        Assert.True(readBack.HasValue);
+        Assert.NotNull(readBack);
         Assert.True(
-            rawMime.AsSpan().SequenceEqual(readBack!.Value.Span),
+            rawMime.AsSpan().SequenceEqual(readBack.RawMime.Span),
             "The raw MIME read back from the content store differs from the bytes that were stored.");
+
+        // The read reports the length and digest alongside the payload, which is what lets a reader tell a damaged
+        // local copy from an absent one, so the port's answer is asserted as well as the row behind it.
+        Assert.Null(readBack.FindIntegrityDefect());
 
         var integrity = await ReadIntegrityMetadataAsync(services, storedEmailId, cancellationToken);
         Assert.Equal(rawMime.LongLength, integrity.MimeByteLength);
         Assert.Equal(SHA256.HashData(rawMime), integrity.Sha256Hash);
+        Assert.Equal(integrity.MimeByteLength, readBack.RecordedByteLength);
+        Assert.Equal(integrity.Sha256Hash, readBack.RecordedSha256Hash.ToArray());
 
         // Read from PostgreSQL rather than from the round-tripped array, so a payload the server truncated on its way in
         // is reported as a length difference instead of matching a client-side copy of itself.
@@ -103,11 +109,11 @@ public sealed class OrchestratedEmailContentStoreTests(MailMcpOrchestrationFixtu
         Assert.Equal(PersistenceCommitResult.Committed, overwriteCommit);
 
         var readBack = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IEmailContentStore>().FindRawMimeAsync(storedEmailId, token),
+            (scope, token) => scope.GetRequiredService<IEmailContentStore>().FindStoredContentAsync(storedEmailId, token),
             cancellationToken);
-        Assert.True(readBack.HasValue);
+        Assert.NotNull(readBack);
         Assert.True(
-            secondRawMime.AsSpan().SequenceEqual(readBack!.Value.Span),
+            secondRawMime.AsSpan().SequenceEqual(readBack.RawMime.Span),
             "The overwritten payload was not the one the second write stored.");
 
         var integrity = await ReadIntegrityMetadataAsync(services, storedEmailId, cancellationToken);

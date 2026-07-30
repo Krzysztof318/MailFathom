@@ -14,6 +14,10 @@
     <PackageVersion Include="Aspire.Hosting.Testing" Version="13.4.6" />
     <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.4.6" />
     <PackageVersion Include="coverlet.MTP" Version="10.0.1" />
+    <!-- Brings AngleSharp 1.6.0 and AngleSharp.Css 1.0.0 transitively, both MIT. The 9.1 line replaced the exact
+         AngleSharp 0.17.1 pin the 9.0 line carried, so nothing here forecloses referencing AngleSharp directly, and
+         AngleSharp 1.6.0 publishes a net10.0 target of its own. -->
+    <PackageVersion Include="HtmlSanitizer" Version="9.1.974" />
     <PackageVersion Include="MailKit" Version="4.17.0" />
     <PackageVersion Include="MimeKit" Version="4.17.0" />
     <PackageVersion Include="Microsoft.Agents.AI" Version="1.15.0" />

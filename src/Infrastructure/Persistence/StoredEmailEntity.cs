@@ -125,4 +125,10 @@ internal sealed class StoredEmailEntity
     /// run for it. Its absence on a row whose content is stored is what the extraction backfill selects on.
     /// </summary>
     public EmailSearchDocumentEntity? SearchDocument { get; set; }
+
+    /// <summary>
+    /// Gets or sets the outstanding request to fetch or read this email's content again, which exists only while a
+    /// read has found the stored copy unusable. Its presence is what a repair run selects on.
+    /// </summary>
+    public EmailContentRepairRequestEntity? ContentRepairRequest { get; set; }
 }

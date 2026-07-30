@@ -17,20 +17,27 @@ internal sealed class EmailContentStore(MailMcpDbContext dbContext, TimeProvider
 {
     /// <inheritdoc />
     /// <remarks>
-    /// Projected to the single column rather than materialized as an entity, so the payload is neither tracked nor
-    /// kept alive by the change tracker after the caller is done with it.
+    /// Projected to the three columns rather than materialized as an entity, so the payload is neither tracked nor
+    /// kept alive by the change tracker after the caller is done with it. The recorded length and digest are read in
+    /// the same round trip as the payload they describe, because a second query could read them from a row a
+    /// re-synchronization had rewritten in between and report a mismatch nothing is wrong with.
     /// </remarks>
-    public async Task<ReadOnlyMemory<byte>?> FindRawMimeAsync(
+    public async Task<StoredEmailContent?> FindStoredContentAsync(
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken)
     {
-        var rawMime = await dbContext.EmailMessageContents
+        var storedContent = await dbContext.EmailMessageContents
             .AsNoTracking()
             .Where(content => content.StoredEmailId == storedEmailId.Value)
-            .Select(content => content.RawMime)
+            .Select(content => new StoredEmailContentRow(content.RawMime, content.MimeByteLength, content.Sha256Hash))
             .SingleOrDefaultAsync(cancellationToken);
 
-        return rawMime is null ? null : rawMime.AsMemory();
+        return storedContent is null
+            ? null
+            : new StoredEmailContent(
+                storedContent.RawMime.AsMemory(),
+                storedContent.MimeByteLength,
+                storedContent.Sha256Hash.AsMemory());
     }
 
     /// <inheritdoc />
