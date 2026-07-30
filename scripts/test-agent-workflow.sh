@@ -127,7 +127,7 @@ verify_fast_runs_restore_build_tests_and_formatting() {
   )
 
   assert_file_content \
-    $'restore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build\nformat MailMcp.slnx --no-restore --include src/Sample.cs\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic --include src/Sample.cs' \
+    $'restore MailMcp.slnx --locked-mode\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build\nformat MailMcp.slnx --no-restore --include src/Sample.cs\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic --include src/Sample.cs' \
     "$invocation_log"
 }
 
@@ -140,7 +140,7 @@ verify_full_runs_tests_once_through_coverage() {
   )
 
   assert_file_content \
-    $'tool restore\nrestore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore\nmsbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic' \
+    $'tool restore\nrestore MailMcp.slnx --locked-mode\nbuild MailMcp.slnx --configuration Release --no-restore\nmsbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic' \
     "$invocation_log"
 }
 
@@ -399,7 +399,7 @@ verify_fast_accepts_a_detached_head() {
   fi
 
   assert_file_content \
-    $'restore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build\nformat MailMcp.slnx --no-restore --include src/Sample.cs\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic --include src/Sample.cs' \
+    $'restore MailMcp.slnx --locked-mode\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build\nformat MailMcp.slnx --no-restore --include src/Sample.cs\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic --include src/Sample.cs' \
     "$invocation_log"
 }
 
@@ -422,7 +422,7 @@ verify_fast_skips_formatting_when_no_csharp_file_changed() {
   fi
 
   assert_file_content \
-    $'restore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build' \
+    $'restore MailMcp.slnx --locked-mode\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build' \
     "$invocation_log"
 }
 
@@ -439,7 +439,7 @@ verification_stops_after_first_failure() {
   fi
 
   assert_file_content \
-    $'restore MailMcp.slnx\nbuild MailMcp.slnx --configuration Release --no-restore' \
+    $'restore MailMcp.slnx --locked-mode\nbuild MailMcp.slnx --configuration Release --no-restore' \
     "$invocation_log"
 }
 

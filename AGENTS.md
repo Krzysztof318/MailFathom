@@ -43,6 +43,7 @@ None of this relaxes the rest of these instructions. Pre-release is a reason to 
 
 - Before using or changing a library, framework, protocol, CLI, or external API, consult its latest official documentation. Prefer Microsoft Learn, official project documentation, specifications, and upstream repositories.
 - Confirm .NET 10 compatibility and pin package versions centrally in `Directory.Packages.props`. Do not use floating versions.
+- Regenerate the lock files in the same change that moves a pin. `Directory.Packages.props` fixes the direct versions and the committed `packages.lock.json` files fix the transitive closure those versions resolve to, so the two are one decision recorded in two places. `AppHost` and `IntegrationTests` deliberately carry none, because the Aspire SDK picks part of their graph from the host platform's runtime identifier; do not add one back. Restore runs in locked mode everywhere it is gated, which fails with `NU1004` rather than quietly rewriting the closure; `dotnet restore MailMcp.slnx --force-evaluate` is what updates it. Review the resulting transitive diff, because that is the part central pinning never showed.
 - Unit tests are part of every behavior change, feature, and bug fix. Read `tests/AGENTS.md` before adding or changing tests.
 - Develop and verify tests and production code before documenting the implemented behavior. Update affected durable documentation in the same reviewable change set; stale guidance is a defect.
 - Read `docs/AGENTS.md` before changing documentation. Create or modify ADRs only with explicit owner approval.
@@ -67,11 +68,11 @@ Some of the rules below are enforced by the build rather than by a reader. Those
 | Enforced by | Covers |
 |---|---|
 | `.editorconfig` diagnostic severities, with `TreatWarningsAsErrors` | Formatting, unnecessary usings, accessibility modifiers, file-scoped namespaces, sealing internal types, disposal (`CA2000`), and the rest of the configured `CA`/`IDE` set |
-| `BannedSymbols.txt`, through `Microsoft.CodeAnalysis.BannedApiAnalyzers` (`RS0030`) | Ambient clocks (`DateTime.Now`, `DateTimeOffset.UtcNow`, and siblings), `Thread.Sleep`, and the `System.Net.Mail` types |
+| `.config/BannedSymbols.txt`, through `Microsoft.CodeAnalysis.BannedApiAnalyzers` (`RS0030`) | Ambient clocks (`DateTime.Now`, `DateTimeOffset.UtcNow`, and siblings), `Thread.Sleep`, and the `System.Net.Mail` types |
 | `Microsoft.VisualStudio.Threading.Analyzers` | Blocking on tasks and other async hazards |
 | `Roslynator.*` and `xunit.analyzers` | General C# quality and xUnit usage |
 
-Add a mechanically checkable rule to the mechanism, not to this file: a severity in `.editorconfig` when an analyzer already covers it, a line in `BannedSymbols.txt` when the rule is "never call this". Prose here is for what a tool cannot decide — architecture, naming, and the reasoning behind a constraint. When a rule appears in both places, the tool is authoritative and this file explains why the rule exists.
+Add a mechanically checkable rule to the mechanism, not to this file: a severity in `.editorconfig` when an analyzer already covers it, a line in `.config/BannedSymbols.txt` when the rule is "never call this". Prose here is for what a tool cannot decide — architecture, naming, and the reasoning behind a constraint. When a rule appears in both places, the tool is authoritative and this file explains why the rule exists.
 
 - Target .NET 10 and use idiomatic modern C# supported by the pinned SDK.
 - Keep the SDK version in `global.json`. Shared compiler and build settings belong in `Directory.Build.props`; shared package versions belong in `Directory.Packages.props`.
@@ -119,7 +120,7 @@ Add a mechanically checkable rule to the mechanism, not to this file: a severity
 - Use `Task` by default. Choose `ValueTask` only after measurement shows a meaningful benefit and its consumption constraints are acceptable.
 - Avoid unbounded concurrency. Put explicit limits and backpressure around mailbox synchronization, MIME processing, embedding generation, and SMTP delivery.
 - Do not use blanket `ConfigureAwait(false)` in ASP.NET Core application code. Use it only where a reusable library boundary has a documented reason.
-- Use `DateTimeOffset` for timestamps and inject `TimeProvider` wherever current time affects behavior. `BannedSymbols.txt` bans the ambient clock properties outright, so a test never depends on the wall clock and a delay is always cancellable.
+- Use `DateTimeOffset` for timestamps and inject `TimeProvider` wherever current time affects behavior. `.config/BannedSymbols.txt` bans the ambient clock properties outright, so a test never depends on the wall clock and a delay is always cancellable.
 - Validate options at startup. Fail fast on invalid or unsafe configuration.
 - Use structured logging with named properties. Never log credentials, tokens, message bodies, attachment content, or raw MIME.
 - Do not wrap ordinary log calls in `ILogger.IsEnabled(...)`. The logging infrastructure already skips disabled levels, so the guard only adds noise. Use it exclusively when producing the log arguments themselves is expensive, for example serialization, formatting, LINQ materialization, large allocations, or an extra query. Prefer removing the cost or using compile-time `LoggerMessage` source-generated methods over adding a guard.
@@ -167,6 +168,7 @@ Add a mechanically checkable rule to the mechanism, not to this file: a severity
 
 - Keep third-party types inside their owning adapter wherever practical.
 - Prefer platform capabilities before adding packages. Every new package must have a clear owner and purpose.
+- Take every package from the sources the repository's own `NuGet.config` declares. It clears the inherited source list so a feed configured on a developer machine cannot supply a dependency the license register never reviewed, and its package source mapping means a second source restores nothing until its packages are named explicitly. Adding a source is a licensing and supply-chain decision, so review it as one and record it in `LICENSES.md`.
 - Do not expose EF Core entities, MailKit objects, MCP SDK types, or provider-specific AI types across application boundaries.
 - Access raw RFC 822 content only through the application-owned `IEmailContentStore` port. Its initial implementation uses a dedicated PostgreSQL table, separate from email metadata.
 - Keep PostgreSQL, Npgsql, and `bytea` details inside the initial content-store adapter so a future MinIO/S3 implementation does not change application use cases or domain types.

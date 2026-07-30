@@ -51,7 +51,11 @@ list_changed_paths() {
   fi
 }
 
-dotnet restore MailMcp.slnx
+# Locked mode here and not only in the final gate, for the same reason formatting runs here: a pin
+# moved without regenerating the lock files fails restore with NU1004, and discovering that after the
+# whole coverage collection has already run wastes the loop this script exists to shorten. Regenerate
+# with `dotnet restore MailMcp.slnx --force-evaluate` as part of the change that moves the pin.
+dotnet restore MailMcp.slnx --locked-mode
 dotnet build MailMcp.slnx --configuration Release --no-restore
 dotnet test --solution MailMcp.slnx --configuration Release --no-build
 

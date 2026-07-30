@@ -75,7 +75,7 @@ dotnet_diagnostic.CA1860.severity = warning # Prefer Count comparisons over Any 
 dotnet_diagnostic.CA2000.severity = warning # Dispose objects before all references go out of scope.
 dotnet_diagnostic.CA2201.severity = warning # Do not raise reserved exception types.
 
-dotnet_diagnostic.RS0030.severity = warning # Do not use symbols listed in BannedSymbols.txt.
+dotnet_diagnostic.RS0030.severity = warning # Do not use symbols listed in .config/BannedSymbols.txt.
 
 dotnet_diagnostic.IDE0001.severity = warning # Simplify names.
 dotnet_diagnostic.IDE0005.severity = warning # Remove unnecessary usings.

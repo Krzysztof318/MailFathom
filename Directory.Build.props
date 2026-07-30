@@ -32,6 +32,27 @@
     <Optimize>true</Optimize>
   </PropertyGroup>
 
+  <!-- Directory.Packages.props pins the direct versions; it says nothing about the transitive closure those versions
+       pull in, which is the larger half of what actually gets restored. Each project's packages.lock.json records that
+       closure with the resolved version and a content hash per package, so a republished package cannot change what a
+       pinned version means, and a dependency bump shows every transitive move in the pull request diff. The lock files
+       are committed. Restore rewrites them whenever a version changes, and the verification scripts and continuous
+       integration restore in locked mode, which fails instead of rewriting: regenerate deliberately with a
+       force-evaluate restore as part of the change that moves a pin, as `docs/operations/local-development.md`
+       describes.
+
+       The two projects carrying the Aspire orchestration graph are excluded. Aspire.AppHost.Sdk adds
+       Aspire.Dashboard.Sdk.<rid> and Aspire.Hosting.Orchestration.<rid> as references chosen from
+       NETCoreSdkRuntimeIdentifier, so that part of the graph is a property of the machine running restore rather than
+       of this repository: a lock file recorded on one platform names packages no other platform asks for, and locked
+       mode there fails with NU1004 before a build can start. IntegrationTests has to follow AppHost because it
+       references the project and inherits those packages transitively, and a lock file cannot exclude a subtree.
+       Nothing is lost that matters: both ship nowhere, and their versions stay pinned centrally like every other
+       project's. -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile Condition="'$(MSBuildProjectName)' != 'AppHost' And '$(MSBuildProjectName)' != 'IntegrationTests'">true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
   <PropertyGroup>
     <RepositoryRoot>$([System.IO.Path]::GetDirectoryName($([MSBuild]::GetPathOfFileAbove('.gitignore', '$(MSBuildThisFileDirectory)'))))</RepositoryRoot>
   </PropertyGroup>
@@ -43,7 +64,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory).config/BannedSymbols.txt" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -66,7 +87,9 @@
 
   <ItemGroup Condition="'$(IsUnitTestProject)' == 'true'">
     <PackageReference Include="coverlet.MTP" PrivateAssets="all" />
-    <None Include="$(MSBuildThisFileDirectory)testconfig.json" Link="testconfig.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Microsoft Testing Platform reads the collector configuration from beside the test executable, so the link name
+         rather than the source path is what has to stay `testconfig.json`. -->
+    <None Include="$(MSBuildThisFileDirectory).config/testconfig.json" Link="testconfig.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup Condition="'$(IsUnitTestProject)' == 'true'">

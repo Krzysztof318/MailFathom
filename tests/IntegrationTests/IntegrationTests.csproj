@@ -11,7 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- A collector configuration of its own rather than the repository-root testconfig.json the unit suites link. The
+    <!-- A collector configuration of its own rather than the .config/testconfig.json the unit suites link. The
          two ask opposite questions of the same attribute: the unit run excludes everything marked
          [RequiresIntegrationCoverage] because it cannot reach it, and this run reports on that code and nothing else.
          The attribute can only be named in the excluding direction — Coverlet has ExcludeByAttribute and no include

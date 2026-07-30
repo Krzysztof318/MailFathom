@@ -42,15 +42,14 @@ jobs:
         with:
           global-json-file: global.json
 
-      # Versions are pinned centrally and NuGet.config decides which sources they may come from, so
-      # the key covers both. A key that ignored source policy would keep serving packages obtained
-      # under the previous one; NuGet.config does not exist yet, and hashing an absent path simply
-      # contributes nothing until it does.
+      # Versions are pinned centrally, NuGet.config decides which sources they may come from, and the
+      # lock files fix the resolved transitive closure, so the key covers all three. A key that
+      # ignored source policy would keep serving packages obtained under the previous one.
       - name: Cache NuGet packages
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
 
       # The same script a developer runs, so the suite has one way to be started rather than two that
       # can drift. It restores tools and packages, builds, removes anything a previous run left behind,
