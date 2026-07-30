@@ -1,5 +1,7 @@
 # Defer pull request CI until ready for review
 
+> **Status (2026-07-30): partially superseded.** The draft guard described here still holds, but the two workflows it names were merged into `.github/workflows/ci.yml` and their `on.pull_request.paths` filters were removed. A path-filtered workflow is never instantiated, so a required check never reports and a documentation-only pull request cannot merge. Change detection now lives in a `Detect changes` job and the required check is the aggregating `Required CI` job. See `docs/operations/local-development.md`.
+
 ## Goal
 
 Avoid consuming GitHub Actions runners for draft pull requests while preserving the existing build, unit-test, coverage, and formatting checks once a pull request is ready for review.
