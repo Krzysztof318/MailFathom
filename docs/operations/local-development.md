@@ -293,9 +293,25 @@ Draft pull requests skip the build and formatting jobs without allocating a runn
 
 ### Branch protection
 
-The `main` branch protection rule requires a pull request and one status check, requires the branch to be current with `main`, applies to administrators, and requires review conversations to be resolved. It does not require an approving review because the repository currently has one maintainer. Force-pushes and deletion of `main` are disabled. The GitHub repository coverage rule must remain disabled because GitHub Code Quality coverage uploads are unavailable for this user-owned repository; the required repository-owned check enforces the same 85% minimum against the complete configured code scope.
+The `main` branch ruleset requires a pull request with one approving review from a code owner, dismisses stale approvals when a new commit is pushed, requires review conversations to be resolved, permits squash as the only merge method, and requires the branch to be current with `main` and the single `Required CI` status check to pass. Creation, deletion, and force-pushes of `main` are refused. The repository admin role bypasses the rules when merging a pull request, for the reason [Code owners](#code-owners) below gives. The GitHub repository coverage rule must remain disabled because GitHub Code Quality coverage uploads are unavailable for this user-owned repository; the required repository-owned check enforces the same 85% minimum against the complete configured code scope.
 
-The required check must be `Required CI`. The rule lives in repository settings rather than in this repository, so it is changed there by the maintainer; until it is, the rule still names `Build and unit test`, and a pull request that skips that job stays blocked. Requiring any job other than `Required CI` reintroduces exactly the problem this arrangement removes: a job that legitimately skipped never reports a conclusion the ruleset accepts.
+The required check must be `Required CI`. Requiring any job other than `Required CI` reintroduces exactly the problem this arrangement removes: a job that legitimately skipped never reports a conclusion the ruleset accepts.
+
+The ruleset lives in repository settings rather than in this repository, so a maintainer changes it there and this section is the record of what it has to say.
+
+### Code owners
+
+`.github/CODEOWNERS` names `@Krzysztof318` as the owner of every path, and it is the half of the review requirement that lives in the repository. Requiring code-owner review without that file requires nobody: the ruleset asks for the approval of whoever owns the changed paths, and a repository with no `CODEOWNERS` has no owner for any path, so the condition is satisfied vacuously. The two settings are only a gate together.
+
+Naming an owner is deliberately not the same as requiring one approval from anybody. An arbitrary approving review satisfies the count and says nothing about who gave it; the code-owner requirement is what makes the approval have to come from the maintainer. Both stay on, because the count alone would be a weaker rule wearing the same name.
+
+The repository is on a personal account rather than in an organization, so the owner is a user. A GitHub Team is not available here and is not a substitute to reach for.
+
+The file's ordering carries a rule of its own. GitHub applies the last matching pattern, so the repository-wide entry is first and a path-specific entry added below it replaces ownership for that path instead of adding to it. A directory that must still require the maintainer names them among its owners rather than relying on the global line.
+
+GitHub does not let the author of a pull request approve it. Every pull request the maintainer opens is therefore unapprovable by the only code owner, which is why the ruleset lists the repository admin role as a bypass actor in `pull_request` mode: the maintainer merges their own pull request through the bypass, and a pull request from anyone else has no bypass available and waits for the code-owner review. Removing that bypass without adding a second code owner would make the repository unmergeable rather than more careful.
+
+`Require approval of the most recent reviewable push` stays off for the same reason. It requires that the approval come from someone other than whoever pushed last, so on a single-maintainer repository it removes the one path a self-authored pull request has to a satisfied rule while adding nothing to a pull request that already needs an outside owner's review. Turn it on when a second code owner exists.
 
 ### Shared workflow behavior
 
