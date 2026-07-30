@@ -99,6 +99,28 @@ public readonly record struct MailMcpErrorCode
     /// <summary>Gets subcategory 3, access: a request named a mail account this deployment does not serve.</summary>
     public static MailMcpErrorCode MailAccountNotAccessible { get; } = new(53001);
 
+    /// <summary>Gets subcategory 3, access: a request named an email the local mailbox copy holds no row for.</summary>
+    public static MailMcpErrorCode StoredEmailNotFound { get; } = new(53002);
+
+    /// <summary>Gets subcategory 4, undiagnosed failure: a tool call failed for a reason the boundary deliberately does not describe.</summary>
+    /// <remarks>
+    /// This is the one code every failure that is not already an allocated one collapses into, so a client learns that
+    /// the call failed and nothing about why. The detail stays in the server log, correlated by the trace the request
+    /// already carries. It is the only code in this category a tool boundary raises itself rather than reports on behalf
+    /// of a use case.
+    /// </remarks>
+    public static MailMcpErrorCode McpToolFailedUnexpectedly { get; } = new(54001);
+
+    /// <summary>Gets subcategory 5, local consistency: an email exists locally, but the content stored for it is missing, damaged, or unreadable.</summary>
+    /// <remarks>
+    /// It is separate from <see cref="StoredEmailNotFound" /> because the two say different things about the same
+    /// request: one names an email that was never stored here, the other an email that is stored and whose body this
+    /// deployment cannot currently serve. Only the second one schedules repair, and a caller that could not tell them
+    /// apart would retry the wrong one. It is a subcategory of its own rather than one more access failure, because a
+    /// caller can act on it: the local copy is being repaired, so the request is worth repeating.
+    /// </remarks>
+    public static MailMcpErrorCode EmailContentUnavailable { get; } = new(55001);
+
     #endregion
 
     /// <summary>Gets every allocated code.</summary>
@@ -120,6 +142,9 @@ public readonly record struct MailMcpErrorCode
         MailboxQueryCursorMalformed,
         MailboxQueryCursorFilterMismatch,
         MailAccountNotAccessible,
+        StoredEmailNotFound,
+        McpToolFailedUnexpectedly,
+        EmailContentUnavailable,
     ];
 
     /// <summary>Gets the five-digit code.</summary>

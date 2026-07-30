@@ -6,7 +6,7 @@ the local copy is. It reaches no mail server, so a listing behaves the same whet
 never touches the remote `\Seen` flag, because it speaks no mail protocol at all.
 
 The protocol adapter is not part of this: `MailboxTimelineReader` is an application use case, and the `list_emails` MCP
-tool that maps onto it is specification 16.
+tool that publishes it is described by [MCP tools](mcp-tools.md).
 
 [Lexical email search](lexical-email-search.md) is the second read use case and applies the same structured filters
 this page documents, so nothing about what a filter means is restated there.
@@ -203,6 +203,7 @@ configuration bounds.
   return mail because every read model attaches freshness.
 - `MailMcp.Infrastructure.Persistence` — `StoredEmailTimelineReader` and `SynchronizationFreshnessReader`, which evaluate
   every filter, the keyset boundary, the ordering, and the row limit in PostgreSQL and track no entities.
-  `StoredEmailSelectionPredicate` is the filter predicate and `StoredEmailSummaryProjection` the column list, both shared
-  with search. The projection is written once because it is the control that decides what a mailbox read can return at
-  all: a second copy would have to be found and read before anyone could say what that is.
+  `StoredEmailSelectionPredicate` is the filter predicate, shared with search, and `StoredEmailSummaryRow` carries the
+  column list and the mapping, shared with search and with the single-email lookup. Both are written once because each
+  is a control that decides what a mailbox read can return at all: a second copy would have to be found and read before
+  anyone could say what that is.

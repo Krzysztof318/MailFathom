@@ -182,12 +182,12 @@ internal sealed class StoredEmailSearchIndexReader(
         var rows = await StoredEmailSelectionPredicate
             .Matching(dbContext.StoredEmails.AsNoTracking(), selection)
             .Where(email => rankedIds.Contains(email.Id))
-            .Select(StoredEmailSummaryProjection.Row)
+            .Select(StoredEmailSummaryRow.Projection)
             .ToArrayAsync(cancellationToken);
 
         return rows.ToDictionary(
             static row => row.Id,
-            StoredEmailSummaryProjection.ToSummary);
+            static row => row.ToSummary());
     }
 
     /// <summary>Writes the bounds as the option list <c>ts_headline</c> reads them.</summary>

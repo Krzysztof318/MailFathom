@@ -39,11 +39,11 @@ internal sealed class StoredEmailTimelineReader(MailMcpDbContext dbContext) : IS
             filter.Direction);
 
         var rows = await InTimelineOrder(selected, filter.Direction)
-            .Select(StoredEmailSummaryProjection.Row)
+            .Select(StoredEmailSummaryRow.Projection)
             .Take(limit)
             .ToArrayAsync(cancellationToken);
 
-        return [.. rows.Select(StoredEmailSummaryProjection.ToSummary)];
+        return [.. rows.Select(row => row.ToSummary())];
     }
 
     /// <summary>Orders the timeline the way the ordering contract defines, including where undated mail lands.</summary>

@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Security.Cryptography;
 using MailMcp.Application.EmailContent;
 using MailMcp.Application.Emails;
 using MailMcp.Application.Persistence;
@@ -138,8 +139,8 @@ public sealed class StoredEmailExtractionBackfillTests
         var store = new FakeBackfillStore(EmailsAwaitingExtraction(2));
         var contentStore = Substitute.For<IEmailContentStore>();
         contentStore
-            .FindRawMimeAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReadOnlyMemory<byte>?>(null));
+            .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<StoredEmailContent?>(null));
         var backfill = CreateBackfill(store, contentStore, CreateReaderThatExtractsEverything(), batchSize: 10);
 
         // Act
@@ -268,12 +269,16 @@ public sealed class StoredEmailExtractionBackfillTests
             });
     }
 
+    /// <summary>Builds stored content whose recorded length and digest describe the bytes beside them.</summary>
+    private static StoredEmailContent StoredContent(byte[] rawMime) =>
+        new(rawMime, rawMime.Length, SHA256.HashData(rawMime));
+
     private static IEmailContentStore CreateContentStoreWithReadableMime()
     {
         var contentStore = Substitute.For<IEmailContentStore>();
         contentStore
-            .FindRawMimeAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReadOnlyMemory<byte>?>(new ReadOnlyMemory<byte>([1, 2, 3])));
+            .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<StoredEmailContent?>(StoredContent([1, 2, 3])));
 
         return contentStore;
     }

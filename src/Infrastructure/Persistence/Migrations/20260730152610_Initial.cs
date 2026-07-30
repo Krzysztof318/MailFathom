@@ -135,6 +135,27 @@ namespace MailMcp.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "email_content_repair_requests",
+                columns: table => new
+                {
+                    StoredEmailId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Defect = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    FirstRequestedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    LastRequestedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    RequestCount = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_email_content_repair_requests", x => x.StoredEmailId);
+                    table.ForeignKey(
+                        name: "FK_email_content_repair_requests_stored_emails_StoredEmailId",
+                        column: x => x.StoredEmailId,
+                        principalTable: "stored_emails",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "email_message_contents",
                 columns: table => new
                 {
@@ -242,6 +263,9 @@ namespace MailMcp.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.DropTable(
                 name: "backfill_positions");
+
+            migrationBuilder.DropTable(
+                name: "email_content_repair_requests");
 
             migrationBuilder.DropTable(
                 name: "email_message_contents");

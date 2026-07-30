@@ -171,8 +171,8 @@ caller cannot tell a folder that holds nothing matching from one whose synchroni
 - `MailMcp.Application.Emails.MailboxScopeResolver` — resolves the accounts a read runs against and refuses one this
   deployment does not serve, once, for every read model.
 - `MailMcp.Infrastructure.Persistence` — `StoredEmailSearchIndexReader`, which composes the ranking query, and
-  `StoredEmailSelectionPredicate` and `StoredEmailSummaryProjection`, the predicate and projection it shares with the
-  listing read model.
+  `StoredEmailSelectionPredicate`, the filter predicate it shares with the listing read model, and
+  `StoredEmailSummaryRow`, the projection and mapping it shares with every other read that publishes a summary.
 - `MailMcp.Host.Configuration.MailboxSearchOptions` — the snippet bounds, bound strictly and validated on start.
 
 ## How the guarantees are verified

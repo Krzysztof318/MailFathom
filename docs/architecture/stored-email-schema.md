@@ -40,7 +40,7 @@ Where a bound cuts a sequence, it keeps the end that answers the question. Recip
 
 The row keeps the indexable part of what the MIME reader found and only that: `attachment_count`, `attachment_total_size_octets`, `inline_resource_count`, and the `is_encrypted`, `carries_unverified_signature`, and `contains_unexpanded_tnef_part` markers.
 
-**The per-attachment list of file names, media types, and sizes is deliberately not persisted.** The same reasoning as for recipient display names applies, and one more: a second representation of the attachment list can drift from the raw MIME it was derived from, and re-deriving it costs nothing in a pass a body reader is already making. The signature marker is named for presence rather than verification because nothing here verifies anything; a column called "signed" would be read as an authenticity result by every query that later touched it.
+**The per-attachment list of file names, media types, and sizes is deliberately not persisted.** The same reasoning as for recipient display names applies, and one more: a second representation of the attachment list can drift from the raw MIME it was derived from, and re-deriving it costs nothing in a pass a body reader is already making. [Email content](../features/email-content.md#attachments-are-re-derived-never-stored) is the read that makes it. The signature marker is named for presence rather than verification because nothing here verifies anything; a column called "signed" would be read as an authenticity result by every query that later touched it.
 
 ## The derived search document
 
@@ -51,6 +51,21 @@ It is a table of its own for the reason raw MIME is. The text is large, only sea
 `subject_text` and `participant_addresses` are bounded copies rather than references to the columns of the same name on `stored_emails`. A PostgreSQL generated column must be immutable and can only read its own row, and the array-to-text functions that would flatten the recipient arrays are merely stable — they call element output functions that need not be immutable. Copying the two values into this row at write time keeps the column's expression trivially immutable instead of requiring a custom SQL function, which no migration exists to create.
 
 The copies are bounded more tightly than the columns they come from: 2000 characters of subject and 64 participant addresses in total. A `tsvector` cannot exceed one megabyte, and the whole document — subject, addresses, and up to `MaxExtractedTextCharacters` of body — shares that budget. Exceeding it would not degrade search; it would make the row unwritable, because the generated column is computed on every insert.
+
+## Outstanding content repair requests
+
+`email_content_repair_requests` is one-to-one with `stored_emails` and exists only while a read has found an email's
+stored content unusable. It records the `Defect` — missing content, a byte length or SHA-256 digest that disagrees with
+what was written, or a payload nothing can parse — together with when the defect was first and last seen and how many
+reads have hit it. [Email content](../features/email-content.md#when-the-local-copy-is-unusable) describes what produces
+each value.
+
+It is a table rather than four columns on `stored_emails` because the rows are sparse, they are read as a work list, and
+a repair that succeeds deletes a row instead of nulling columns on a row it must not otherwise touch. The write is a
+single `INSERT ... ON CONFLICT ("StoredEmailId") DO UPDATE`, so the idempotency the read path needs is the primary key's
+rather than a retry's: two readers meeting the same damaged message concurrently leave one row and one accurate count.
+Nothing drains the table yet — performing the repair belongs to the synchronizer — and the cascade from `stored_emails`
+removes a request with the email it is about.
 
 ## Indexes
 

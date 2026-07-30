@@ -155,16 +155,19 @@ public sealed class StoredEmailExtractionBackfill
             processedCount++;
             lastProcessedEmailId = email.StoredEmailId;
 
-            var rawMime = await this.contentStore.FindRawMimeAsync(email.StoredEmailId, cancellationToken);
-            if (rawMime is not { } storedMime)
+            var storedContent = await this.contentStore.FindStoredContentAsync(email.StoredEmailId, cancellationToken);
+            if (storedContent is null)
             {
                 missingContentCount++;
 
                 continue;
             }
 
+            // The recorded length and digest are deliberately not checked here. A backfill re-reads what is stored to
+            // fill in metadata it lacks, and a damaged payload simply fails to parse and is counted as unreadable; the
+            // integrity check belongs to the read that serves content to a person, which can act on the difference.
             var extraction = await this.mimeReader.ReadMetadataAsync(
-                new RemoteEmailContent(email.OccurrenceId, storedMime),
+                new RemoteEmailContent(email.OccurrenceId, storedContent.RawMime),
                 cancellationToken);
 
             // A message no reader can parse is stepped over exactly as it is during synchronization: it keeps whatever

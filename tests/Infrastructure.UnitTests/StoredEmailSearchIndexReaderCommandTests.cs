@@ -142,7 +142,7 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
         // Act
         var command = StoredEmailSelectionPredicate
             .Matching(context.StoredEmails.AsNoTracking(), selection)
-            .Select(StoredEmailSummaryProjection.Row)
+            .Select(StoredEmailSummaryRow.Projection)
             .ToQueryString();
 
         // Assert

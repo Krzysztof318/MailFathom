@@ -588,4 +588,5 @@ A rejected reload is logged with the configuration path and the failure identity
 - Reconciliation of the remote flag snapshot, which is why every stored row still carries the never-observed value.
 - Chaos-tested resilience pipelines. The composition has unit coverage; what is missing is proof that an adapter survives a
   dependency misbehaving, which belongs with the adapters now that they are under integration coverage.
-- MCP read tools, RAG indexing, and SMTP outbox integration.
+- RAG indexing and SMTP outbox integration. The MCP protocol surface has landed, with `list_emails` and the conventions
+  every later tool follows; [MCP tools](mcp-tools.md) describes it.

@@ -14,9 +14,8 @@ namespace MailMcp.Infrastructure.Mail.Mime;
 /// anything worse than a poorer reading of the same bytes.
 /// </para>
 /// <para>
-/// MimeKit ships the tokenizer with MailKit, so deriving text here adds no dependency. That is not only convenience:
-/// specification 14 pins an HTML sanitizer whose own dependency forecloses referencing a second HTML stack directly, so
-/// keeping this on MimeKit avoids trading one version conflict for another.
+/// MimeKit ships the tokenizer with MailKit, so deriving text here adds no dependency. The sanitizer beside it brings an
+/// AngleSharp stack of its own, and keeping this reading on MimeKit means the two never have to agree on a version.
 /// </para>
 /// </remarks>
 internal static class HtmlBodyTextReader
