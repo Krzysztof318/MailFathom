@@ -63,11 +63,24 @@ jobs:
               - 'NuGet.config'
               - 'global.json'
               - 'testconfig.json'
+            # `dotnet format` without a subcommand runs the whitespace, style, and analyzer passes, so
+            # its verdict depends on more than the files it rewrites: the analyzer packages pinned
+            # centrally, the properties the shared build files set, the projects the solution lists,
+            # and the SDK that supplies the formatter itself. A change to any of those can move the
+            # verdict without touching a single C# file, which is why this is not just `src` and
+            # `tests`. What stays out has no bearing on formatting: `BannedSymbols.txt` is enforced by
+            # the build, and `.config/**`, `NuGet.config`, and `testconfig.json` decide what is
+            # restored, run, and measured rather than how anything is written.
             format:
               - 'src/**'
               - 'tests/**'
               - '.editorconfig'
               - '.github/workflows/ci.yml'
+              - 'Directory.Build.props'
+              - 'Directory.Build.targets'
+              - 'Directory.Packages.props'
+              - 'MailMcp.slnx'
+              - 'global.json'
 
   build-and-unit-test:
     name: Build and unit test
