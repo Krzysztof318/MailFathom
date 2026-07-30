@@ -816,6 +816,33 @@ The recommended evaluation order is:
 
 No Microsoft Graph SDK, Outlook add-in package, Entra application, Exchange Online mailbox, connector registration, tenant permission, or Microsoft-hosted data flow is introduced by recording this idea. Any implementation must re-check official API support, .NET 10 compatibility, licensing and service terms, tenant requirements, telemetry, and data-processing implications at that time.
 
+### 21.7 Standard mail-client gateway over IMAP and SMTP
+
+MailMcp could become an intermediary mail server for ordinary desktop and mobile clients by exposing its committed local mailbox state through IMAP and accepting authenticated SMTP Message Submission into its durable outbox. A user could then connect a standard mail client to MailMcp rather than configuring every upstream provider directly. This idea is distinct from emulating Exchange, accepting Internet mail through MX records, or operating an unrestricted SMTP relay.
+
+The product direction remains open between exactly two variants:
+
+| Variant | Client-visible behavior | Main advantage | Main unresolved cost |
+| --- | --- | --- | --- |
+| Local projection gateway | IMAP projects committed MailMcp state, while SMTP submission durably enqueues outgoing mail for delivery through the selected upstream account | Offline access, one provider-neutral client endpoint, and a smaller consistency boundary | Every mutating IMAP capability must be explicitly rejected or given local-only semantics that clients tolerate |
+| Provider-backed bidirectional gateway | The same endpoints also propagate supported client-side flags, moves, deletes, drafts, and other mailbox mutations to upstream providers | A more conventional mail-client experience | Conflict resolution, feedback-loop prevention, provider-specific behavior, idempotency, and upstream availability become part of the gateway contract |
+
+Neither variant is selected by this draft. A future spike must compare them against real user needs and actual client behavior before an ADR or implementation issue commits to one.
+
+The IMAP surface cannot expose a local database identifier or an upstream provider identifier as though either were already an IMAP UID. Each projected mailbox needs a durable, non-zero `UIDVALIDITY`, monotonically increasing UIDs, and stable identity across process restarts. Folder renames, deletion and recreation, copies, moves, deduplicated occurrences, and remapping an account or folder must preserve the IMAP identity rules or deliberately advance `UIDVALIDITY`. The namespace also needs an unambiguous projection of accounts, folders, special-use mailboxes, and messages that occur in more than one upstream folder.
+
+IMAP reads must use committed local state and must never cause a synchronous upstream fetch. The gateway therefore needs explicit freshness and incomplete-content behavior when synchronization is delayed, an upstream provider is unavailable, or a locally indexed message still lacks raw MIME content. Standard clients also assume more than read-only retrieval: flags such as `\Seen`, `\Answered`, `\Flagged`, and `\Deleted`; `APPEND` for drafts and sent mail; mailbox creation and rename; copy, move, expunge, and concurrent sessions all require defined capability advertisements and failure behavior. The local projection variant must decide which changes remain local and which commands are rejected. The bidirectional variant must additionally reconcile each supported mutation with remote changes without losing intent or creating synchronization loops. In particular, client reads must not silently weaken the existing invariant that MailMcp synchronization and content retrieval never set the upstream IMAP `\Seen` flag.
+
+SMTP is a submission boundary, not proof of final delivery. MailMcp should acknowledge a message only after authentication, authorization, envelope and content validation, and durable outbox persistence have succeeded. It must validate sender identity, recipient and message-size limits, and account routing before acceptance. Later upstream rejection or exhausted delivery retries need a client-visible recovery design, such as a durable submission status or a dedicated failure mailbox; placing a message in Sent must not falsely imply successful delivery. The endpoint must not accept arbitrary relay traffic and is not an inbound SMTP or MX service.
+
+The gateway needs its own client authentication and authorization rather than exposing upstream mailbox credentials. Every authenticated principal must be restricted to its permitted accounts and folders. IMAP access and SMTP submission require TLS, with implicit TLS preferred as described by RFC 8314. Connection, session, command, recipient, message-size, concurrency, and submission-rate limits must prevent one client from exhausting synchronization, storage, or delivery capacity. Protocol logs must remain disabled or redacted by default, while security-relevant access and submission outcomes produce privacy-minimized audit evidence.
+
+Exposing mail to additional clients also expands the personal-data surface. Client-generated flags, drafts, submission envelopes, failure details, device metadata, and audit records need purpose, access, retention, export, and erasure rules aligned with the source messages. Multi-user deployments would require strict tenant isolation throughout authentication, mailbox projection, caching, outbox processing, observability, and administrative operations.
+
+A future spike should implement the smallest useful conformance slice and test it with at least two materially different real mail clients. It should cover initial account setup, mailbox discovery, stable UID behavior, reconnect and offline resynchronization, concurrent clients, authentication and TLS failure, incomplete local content, and durable submission acceptance followed by both delivery success and failure. The spike should compare the local projection and bidirectional variants, document unsupported client assumptions, and stop short of choosing a production protocol library or changing the first-release scope.
+
+No IMAP server library, SMTP listener, public mail port, authentication mechanism, certificate, DNS record, package, container, compatibility promise, or delivery-stage commitment is introduced by recording this idea.
+
 ## 22. Delivery stages
 
 Stages describe the shape of the release. The PR-sized units of work that deliver them live in `specs/`, indexed by [`specs/README.md`](README.md); the specification numbers below are the current decomposition, and the referenced files are authoritative for scope.
@@ -829,7 +856,7 @@ Stages describe the shape of the release. The PR-sized units of work that delive
 7. Agent Framework RAG hardening, prompt-injection isolation, citations, and provider-health gating.
 8. Deferred SMTP outbox and delivery service with unit-tested state transitions and retry behavior after the IMAP/RAG/MCP slice.
 9. ChatGPT OAuth/mTLS validation and general OAuth MCP client profile.
-10. Production hardening, backup, metrics, recovery exercises, GDPR workflow design, enterprise audit evidence, and explicit evaluation plans for future ideas: AGT governance, MinIO object storage, `mcpmail`, smtp4dev-backed SMTP integration tests, policy-driven mail automation, and Microsoft 365 interoperability.
+10. Production hardening, backup, metrics, recovery exercises, GDPR workflow design, enterprise audit evidence, and explicit evaluation plans for future ideas: AGT governance, MinIO object storage, `mcpmail`, smtp4dev-backed SMTP integration tests, policy-driven mail automation, Microsoft 365 interoperability, and a standard mail-client gateway over IMAP and SMTP.
 
 Two pieces of work cut across the numbered stages. Resilience pipelines (section 17.1) are established once in specification 03 and consumed by every later adapter, starting with specification 04. Infrastructure verification through Aspire test mode (section 6.2) lands in specifications 20 and 21 once the schema is settled, and pays off the PostgreSQL checks that ADR 001 defers together with the `\Seen` invariant that no substitute-based unit test can prove.
 
@@ -853,7 +880,7 @@ Stages 6 through 10 are decomposed into specifications when the current segment 
 - First-release configuration can be expressed in JSON without placing secrets or encrypted secret values in Git.
 - Future CLI work is explicitly deferred and uses `mcpmail` with `System.CommandLine` when implemented.
 - Aspire AppHost can start the local development environment for MailMcp and PostgreSQL without introducing production runtime coupling.
-- Future ideas are collected separately from first-release scope, including AGT governance evaluation, MinIO migration, `mcpmail`, smtp4dev-backed SMTP delivery verification, policy-driven mail automation, and Microsoft 365 interoperability.
+- Future ideas are collected separately from first-release scope, including AGT governance evaluation, MinIO migration, `mcpmail`, smtp4dev-backed SMTP delivery verification, policy-driven mail automation, Microsoft 365 interoperability, and a standard mail-client gateway over IMAP and SMTP.
 - The draft identifies personal-data classes, derived-data sensitivity, first-release privacy controls, and deferred GDPR workflows so later compliance implementation has explicit seams.
 - Enterprise-grade posture is visible in boundaries for auditability, governance, privacy, operational hardening, deterministic policy enforcement, and safe failure modes without prematurely adding first-release dependencies.
 - Shared repository settings are centralized in `global.json`, `Directory.Build.props`, and `Directory.Packages.props` whenever possible instead of being repeated in individual projects.
@@ -872,6 +899,9 @@ Stages 6 through 10 are decomposed into specifications when the current segment 
 - [Claude Code MCP](https://docs.anthropic.com/id/docs/claude-code/mcp)
 - [MailKit](https://www.nuget.org/packages/MailKit/)
 - [MailKit IMAP IDLE](https://mimekit.net/docs/html/M_MailKit_Net_Imap_ImapClient_IdleAsync.htm)
+- [RFC 9051 — Internet Message Access Protocol (IMAP) Version 4rev2](https://www.rfc-editor.org/info/rfc9051)
+- [RFC 6409 — Message Submission for Mail](https://www.rfc-editor.org/info/rfc6409)
+- [RFC 8314 — Use of TLS for Email Submission and Access](https://www.rfc-editor.org/info/rfc8314)
 - [Npgsql EF Core provider](https://www.npgsql.org/efcore/)
 - [pgvector](https://github.com/pgvector/pgvector)
 - [pgvector-dotnet](https://github.com/pgvector/pgvector-dotnet)
