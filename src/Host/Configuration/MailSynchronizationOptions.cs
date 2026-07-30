@@ -4,8 +4,10 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
 using MailMcp.Application.Mail;
+using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
+using MailMcp.Domain.Synchronization;
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Mail;
@@ -15,7 +17,7 @@ namespace MailMcp.Host.Configuration;
 
 /// <summary>Configures periodic IMAP synchronization.</summary>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
-internal sealed class MailSynchronizationOptions : IValidatableObject, IMailTransportSecurityPolicyReader
+internal sealed class MailSynchronizationOptions : IValidatableObject, IMailTransportSecurityPolicyReader, IMailSynchronizationWindowReader
 {
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
@@ -101,6 +103,26 @@ internal sealed class MailSynchronizationOptions : IValidatableObject, IMailTran
         return account.CreateTransportSecurityPolicy();
     }
 
+    /// <inheritdoc />
+    public MailSynchronizationWindow GetWindow(MailAccountId accountId)
+    {
+        var account = this.FindAccount(accountId.Value);
+
+        return account.CreateSynchronizationWindow();
+    }
+
+    /// <summary>Finds every configured earliest received date that could not mean anything on the supplied date.</summary>
+    /// <param name="today">The current date the configured bounds are read against.</param>
+    /// <returns>One result per account whose bound lies in the future, empty when every bound is usable.</returns>
+    /// <remarks>
+    /// The rule lives here with the other configuration rules while its clock stays outside, because the current date
+    /// is not something a bound options graph or a data annotation can reach. Nothing gates it on
+    /// <see cref="Enabled" />: a date an operator wrote is a date they intend to synchronize from, and discovering that
+    /// it excludes the whole mailbox at the moment synchronization is switched on is worse than discovering it now.
+    /// </remarks>
+    internal IEnumerable<ValidationResult> FindSynchronizationWindowErrors(DateOnly today) =>
+        this.Accounts?.SelectMany(account => account.ValidateSynchronizationWindow(today)) ?? [];
+
     internal IEnumerable<ValidationResult> ValidateForSynchronization()
     {
         if (this.Accounts is null)
@@ -161,6 +183,16 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
 
     /// <summary>Gets or sets the account's secret-bearing settings, which carry references rather than credentials.</summary>
     public MailAccountSecretOptions Secrets { get; set; } = new();
+
+    /// <summary>Gets or sets the earliest date the mail server may have received an email on for it to be synchronized.</summary>
+    /// <remarks>
+    /// Omitting it synchronizes every email the server still holds, which is the default. It binds as a plain date such
+    /// as <c>2024-01-01</c>, and a value that is not one fails startup: the account is a collection item, and the binder
+    /// would otherwise drop the whole account over a typo in this one setting, which is another reason the section is
+    /// bound with <c>ErrorOnUnknownConfiguration</c>. Which date the bound compares against, and why, is recorded on
+    /// <see cref="MailSynchronizationWindow" />.
+    /// </remarks>
+    public DateOnly? EarliestEmailReceivedDate { get; set; }
 
     /// <summary>Gets or sets the configured folder aliases. When omitted, the worker synchronizes the inbox only.</summary>
     public List<MailFolderMappingOptions> Folders { get; set; } = [];
@@ -224,6 +256,31 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             }
         }
     }
+
+    /// <summary>Reports an earliest received date that lies ahead of the supplied date.</summary>
+    /// <param name="today">The current date the configured bound is read against.</param>
+    /// <returns>One result when the bound is in the future, none otherwise.</returns>
+    /// <remarks>
+    /// A future bound is refused rather than adopted because it excludes every email the mailbox holds, which is
+    /// indistinguishable from synchronization silently doing nothing. The comparison is made in UTC, so a bound written
+    /// as the operator's local date is refused while UTC has not reached it yet.
+    /// </remarks>
+    internal IEnumerable<ValidationResult> ValidateSynchronizationWindow(DateOnly today)
+    {
+        if (this.EarliestEmailReceivedDate is { } earliestReceivedDate && earliestReceivedDate > today)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the earliest email received date {earliestReceivedDate:yyyy-MM-dd} is later than the current UTC date {today:yyyy-MM-dd}, so it would exclude every email in the mailbox.",
+                [nameof(this.EarliestEmailReceivedDate)]);
+        }
+    }
+
+    /// <summary>Builds the account's configured synchronization window.</summary>
+    /// <returns>The window the account's bound names, or an unbounded one when it configured none.</returns>
+    internal MailSynchronizationWindow CreateSynchronizationWindow() =>
+        this.EarliestEmailReceivedDate is { } earliestReceivedDate
+            ? MailSynchronizationWindow.EmailsReceivedSince(earliestReceivedDate)
+            : MailSynchronizationWindow.Unbounded;
 
     /// <summary>Builds the account's validated transport security policy.</summary>
     /// <returns>The policy the mailbox adapter must obey.</returns>

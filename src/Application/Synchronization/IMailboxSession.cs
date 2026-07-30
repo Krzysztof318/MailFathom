@@ -2,6 +2,7 @@
 
 using MailMcp.Application.EmailContent;
 using MailMcp.Domain.Emails;
+using MailMcp.Domain.Synchronization;
 
 namespace MailMcp.Application.Synchronization;
 
@@ -22,13 +23,21 @@ public interface IMailboxSession : IAsyncDisposable
     /// <summary>Gets a bounded remote email metadata page after the supplied checkpoint UID.</summary>
     /// <param name="lastSeenUid">The checkpoint to read past, or <see langword="null" /> to start at the first assigned UID.</param>
     /// <param name="maxEmailCount">The maximum number of emails the returned page may describe.</param>
+    /// <param name="synchronizationWindow">How far back the page may reach, which the implementation must apply on the server rather than to the answer.</param>
     /// <param name="cancellationToken">Cancels the read and every remaining attempt.</param>
     /// <returns>The page, with the UID it inspected through and whether more work remains.</returns>
     /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the read within its configured resilience budget.</exception>
     /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
+    /// <remarks>
+    /// An email the window excludes is not described by the page, and the returned cursor still covers it: the page
+    /// reports the UID the search inspected through rather than the UID it last described, so a caller advancing its
+    /// checkpoint by that cursor steps over an excluded range once instead of rescanning it on every run. That is also
+    /// why the window belongs on the server's side of the call — an excluded UID must cost no fetch.
+    /// </remarks>
     Task<RemoteEmailMetadataBatch> GetEmailBatchAfterAsync(
         ImapUid? lastSeenUid,
         int maxEmailCount,
+        MailSynchronizationWindow synchronizationWindow,
         CancellationToken cancellationToken);
 
     /// <summary>Fetches raw MIME content with a BODY.PEEK-style operation that preserves the remote Seen flag.</summary>

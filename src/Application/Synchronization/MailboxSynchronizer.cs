@@ -19,6 +19,7 @@ public sealed class MailboxSynchronizer
     private readonly MailFolderResolver folderResolver;
     private readonly IMailboxSessionFactory mailboxSessionFactory;
     private readonly IMailTransportSecurityPolicyReader transportSecurityPolicyReader;
+    private readonly IMailSynchronizationWindowReader synchronizationWindowReader;
     private readonly ISynchronizationCheckpointStore checkpointStore;
     private readonly IPersistenceSessionFactory persistenceSessionFactory;
     private readonly IEmailMetadataRepository metadataRepository;
@@ -33,6 +34,7 @@ public sealed class MailboxSynchronizer
         MailFolderResolver folderResolver,
         IMailboxSessionFactory mailboxSessionFactory,
         IMailTransportSecurityPolicyReader transportSecurityPolicyReader,
+        IMailSynchronizationWindowReader synchronizationWindowReader,
         ISynchronizationCheckpointStore checkpointStore,
         IPersistenceSessionFactory persistenceSessionFactory,
         IEmailMetadataRepository metadataRepository,
@@ -45,6 +47,7 @@ public sealed class MailboxSynchronizer
         this.folderResolver = folderResolver;
         this.mailboxSessionFactory = mailboxSessionFactory;
         this.transportSecurityPolicyReader = transportSecurityPolicyReader;
+        this.synchronizationWindowReader = synchronizationWindowReader;
         this.checkpointStore = checkpointStore;
         this.persistenceSessionFactory = persistenceSessionFactory;
         this.metadataRepository = metadataRepository;
@@ -77,9 +80,17 @@ public sealed class MailboxSynchronizer
     /// run was working with no longer name the same emails. The next run starts the folder over.
     /// </exception>
     /// <remarks>
+    /// <para>
     /// The alias is resolved against the server's advertised folders before anything is read, so a run always works
     /// under the binding that is durable at the moment it starts. An alias the server advertises no folder for ends
     /// this run and no other.
+    /// </para>
+    /// <para>
+    /// The account's synchronization window is read at the same moment as its transport security policy and bounds
+    /// every batch the run requests. Excluded mail is left out by the server, so it costs no fetch, no MIME read, and
+    /// no local write, and the folder checkpoint still advances across the excluded range so a run ends instead of
+    /// rescanning it on every interval.
+    /// </para>
     /// </remarks>
     public async Task<MailboxSynchronizationResult> SynchronizeAsync(
         MailAccountId accountId,
@@ -105,6 +116,7 @@ public sealed class MailboxSynchronizer
             accountId,
             folder,
             transportSecurityPolicy,
+            this.synchronizationWindowReader.GetWindow(accountId),
             cancellationToken);
     }
 
@@ -112,6 +124,7 @@ public sealed class MailboxSynchronizer
         MailAccountId accountId,
         MailFolderResolution folder,
         MailTransportSecurityPolicy transportSecurityPolicy,
+        MailSynchronizationWindow synchronizationWindow,
         CancellationToken cancellationToken)
     {
         var persistedCheckpoint =
@@ -138,7 +151,11 @@ public sealed class MailboxSynchronizer
         {
             inspectedBatchCount++;
 
-            var batch = await mailboxSession.GetEmailBatchAfterAsync(checkpoint.LastSeenUid, this.options.MaxMetadataBatchSize, cancellationToken);
+            var batch = await mailboxSession.GetEmailBatchAfterAsync(
+                checkpoint.LastSeenUid,
+                this.options.MaxMetadataBatchSize,
+                synchronizationWindow,
+                cancellationToken);
             foreach (var metadata in batch.Emails.OrderBy(email => email.OccurrenceId.Uid.Value))
             {
                 var occurrence = await this.StoreOccurrenceAsync(mailboxSession, metadata, cancellationToken);
