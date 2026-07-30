@@ -39,9 +39,18 @@
        are committed. Restore rewrites them whenever a version changes, and the verification scripts and continuous
        integration restore in locked mode, which fails instead of rewriting: regenerate deliberately with a
        force-evaluate restore as part of the change that moves a pin, as `docs/operations/local-development.md`
-       describes. -->
+       describes.
+
+       The two projects carrying the Aspire orchestration graph are excluded. Aspire.AppHost.Sdk adds
+       Aspire.Dashboard.Sdk.<rid> and Aspire.Hosting.Orchestration.<rid> as references chosen from
+       NETCoreSdkRuntimeIdentifier, so that part of the graph is a property of the machine running restore rather than
+       of this repository: a lock file recorded on one platform names packages no other platform asks for, and locked
+       mode there fails with NU1004 before a build can start. IntegrationTests has to follow AppHost because it
+       references the project and inherits those packages transitively, and a lock file cannot exclude a subtree.
+       Nothing is lost that matters: both ship nowhere, and their versions stay pinned centrally like every other
+       project's. -->
   <PropertyGroup>
-    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestorePackagesWithLockFile Condition="'$(MSBuildProjectName)' != 'AppHost' And '$(MSBuildProjectName)' != 'IntegrationTests'">true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <PropertyGroup>
