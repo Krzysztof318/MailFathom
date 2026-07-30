@@ -8,3 +8,7 @@ The ASP.NET Core host exposes a root readiness response. In development, `Host`'
 ## IMAP synchronization status
 
 The first implemented slice covers periodic read-only reconciliation, application-owned IMAP/persistence abstractions, EF Core PostgreSQL mappings, bounded raw MIME content storage, synchronization checkpoints, typed connection validation, and a disabled-by-default hosted worker with per-folder failure isolation. IDLE, NOTIFY, deployment-specific secret binding, MCP read tools, RAG indexing, and SMTP outbox processing remain pending. The baseline migration and its apply policy have since landed, and so has the integration-test foundation; the EF Core mappings, constraints, indexes, and transaction behavior this slice introduced are now verified against real PostgreSQL by `tests/IntegrationTests`, which is what the `[RequiresIntegrationCoverage]` markers record the location of.
+
+## Read side status
+
+The first read use case has landed. `ListEmails` answers a mailbox listing from the local copy with structured filters, a bounded page size, keyset pagination, and per-folder synchronization freshness, and it reaches no mail server; [Mailbox queries](mailbox-queries.md) documents its request contract, cursor semantics, and privacy bounds. It is an application use case only — the `list_emails` MCP tool, the email content read model, and lexical search are still pending, as are the remaining MCP tools and RAG retrieval.

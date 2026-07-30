@@ -14,6 +14,7 @@ This documentation set explains the durable design and operating model for MailM
 - [Decisions](decisions/README.md) describes the ADR workflow and templates.
 
 - [IMAP synchronization](features/imap-synchronization.md)
+- [Mailbox queries](features/mailbox-queries.md) documents the `ListEmails` request contract, cursor semantics, freshness reporting, and attachment-presence rule.
 
 ## Planned work
 

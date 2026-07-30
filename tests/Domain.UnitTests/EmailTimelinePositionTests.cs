@@ -82,6 +82,84 @@ public sealed class EmailTimelinePositionTests
         Assert.Equal([higher, lower], ordered);
     }
 
+    /// <summary>The other direction is the same order reversed, which is what makes one cursor mean one boundary in both.</summary>
+    [Fact]
+    public void OldestFirst_MessagesCarryingReceivedTimestamps_OrdersTheOldestFirst()
+    {
+        // Arrange
+        var positions = Enumerable.Range(0, 4)
+            .Select(dayOffset => new EmailTimelinePosition(
+                new DateTimeOffset(2026, 7, 20, 8, 0, 0, TimeSpan.Zero).AddDays(dayOffset),
+                StoredEmailId.Create(Guid.CreateVersion7())))
+            .ToArray();
+
+        // Act
+        var ordered = positions.Order(EmailTimelinePosition.OldestFirst).ToArray();
+
+        // Assert
+        Assert.Equal(positions, ordered);
+    }
+
+    /// <summary>Undated mail leads when the oldest is read first, because that placement is the reverse of the other one.</summary>
+    [Fact]
+    public void OldestFirst_MessageWithoutAReceivedTimestamp_SortsBeforeEveryDatedMessage()
+    {
+        // Arrange
+        var undated = new EmailTimelinePosition(null, StoredEmailId.Create(Guid.CreateVersion7()));
+        var oldest = new EmailTimelinePosition(
+            new DateTimeOffset(1998, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            StoredEmailId.Create(Guid.CreateVersion7()));
+        var newest = new EmailTimelinePosition(
+            new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero),
+            StoredEmailId.Create(Guid.CreateVersion7()));
+
+        // Act
+        var ordered = new[] { newest, oldest, undated }.Order(EmailTimelinePosition.OldestFirst).ToArray();
+
+        // Assert
+        Assert.Equal([undated, oldest, newest], ordered);
+    }
+
+    [Fact]
+    public void OldestFirst_MessagesShareAReceivedTimestamp_BreaksTheTieOnTheIdentifierAscending()
+    {
+        // Arrange
+        var sharedTimestamp = new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero);
+        var lower = new EmailTimelinePosition(sharedTimestamp, StoredEmailId.Create(IdentifierLeadingWithZero));
+        var higher = new EmailTimelinePosition(sharedTimestamp, StoredEmailId.Create(IdentifierLeadingWithTheHighBitSet));
+
+        // Act
+        var ordered = new[] { higher, lower }.Order(EmailTimelinePosition.OldestFirst).ToArray();
+
+        // Assert
+        Assert.Equal([lower, higher], ordered);
+    }
+
+    [Theory]
+    [InlineData(EmailTimelineDirection.NewestFirst)]
+    [InlineData(EmailTimelineDirection.OldestFirst)]
+    public void ComparerFor_EitherDirection_ReturnsThatDirectionsComparer(EmailTimelineDirection direction)
+    {
+        // Arrange
+        var expected = direction is EmailTimelineDirection.NewestFirst
+            ? EmailTimelinePosition.NewestFirst
+            : EmailTimelinePosition.OldestFirst;
+
+        // Act
+        var comparer = EmailTimelinePosition.ComparerFor(direction);
+
+        // Assert
+        Assert.Same(expected, comparer);
+    }
+
+    [Fact]
+    public void ComparerFor_ValueThatNamesNeitherEnd_IsRejected()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            EmailTimelinePosition.ComparerFor((EmailTimelineDirection)7));
+    }
+
     [Fact]
     public void NewestFirst_TwoPositionsDescribingTheSameMessage_CompareEqual()
     {

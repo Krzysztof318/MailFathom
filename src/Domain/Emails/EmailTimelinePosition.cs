@@ -28,6 +28,29 @@ public readonly record struct EmailTimelinePosition(DateTimeOffset? ReceivedAt, 
     /// </remarks>
     public static IComparer<EmailTimelinePosition> NewestFirst { get; } = new NewestFirstComparer();
 
+    /// <summary>Gets the comparer that reads the same timeline from its other end: oldest message first.</summary>
+    /// <remarks>
+    /// This is <see cref="NewestFirst" /> reversed exactly, so a message whose received timestamp is unknown sorts
+    /// before every message that has one. That placement is not a second decision about undated mail but the same one
+    /// read backwards, which is what makes a cursor taken in one direction name the same boundary in the other and
+    /// lets the timeline index serve this order as a backward scan of itself.
+    /// </remarks>
+    public static IComparer<EmailTimelinePosition> OldestFirst { get; } = new OldestFirstComparer();
+
+    /// <summary>Gets the comparer that realizes one reading direction of the timeline.</summary>
+    /// <param name="direction">The end of the timeline the caller reads from.</param>
+    /// <returns>The comparer that orders positions the way <paramref name="direction" /> is read.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="direction" /> is not a defined member.</exception>
+    public static IComparer<EmailTimelinePosition> ComparerFor(EmailTimelineDirection direction) => direction switch
+    {
+        EmailTimelineDirection.NewestFirst => NewestFirst,
+        EmailTimelineDirection.OldestFirst => OldestFirst,
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(direction),
+            direction,
+            "The timeline is read from one of its two ends, and no other value names a direction."),
+    };
+
     /// <summary>Orders two positions oldest first, which <see cref="NewestFirst" /> reverses.</summary>
     private static int CompareOldestFirst(EmailTimelinePosition left, EmailTimelinePosition right)
     {
@@ -69,5 +92,10 @@ public readonly record struct EmailTimelinePosition(DateTimeOffset? ReceivedAt, 
     private sealed class NewestFirstComparer : IComparer<EmailTimelinePosition>
     {
         public int Compare(EmailTimelinePosition x, EmailTimelinePosition y) => CompareOldestFirst(y, x);
+    }
+
+    private sealed class OldestFirstComparer : IComparer<EmailTimelinePosition>
+    {
+        public int Compare(EmailTimelinePosition x, EmailTimelinePosition y) => CompareOldestFirst(x, y);
     }
 }

@@ -3,6 +3,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
+using MailMcp.Application.Accounts;
 using MailMcp.Application.Mail;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
@@ -17,7 +18,8 @@ namespace MailMcp.Host.Configuration;
 
 /// <summary>Configures periodic IMAP synchronization.</summary>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
-internal sealed class MailSynchronizationOptions : IValidatableObject, IMailTransportSecurityPolicyReader, IMailSynchronizationWindowReader
+internal sealed class MailSynchronizationOptions
+    : IValidatableObject, IMailTransportSecurityPolicyReader, IMailSynchronizationWindowReader, IMailAccountCatalog
 {
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
@@ -110,6 +112,22 @@ internal sealed class MailSynchronizationOptions : IValidatableObject, IMailTran
 
         return account.CreateSynchronizationWindow();
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Configuration is what defines the set of accounts, so this answers from the same bound options every other
+    /// per-account reader does. It deliberately ignores <see cref="Enabled" />: that switch stops runs from fetching
+    /// mail, and an operator who turned it off has not asked for the copy already stored to become unreadable. An
+    /// account they removed is a different matter, and its absence here is what makes its stored mail unreadable.
+    /// </remarks>
+    public IReadOnlyList<MailAccountId> ServedAccountIds =>
+    [
+        .. (this.Accounts ?? [])
+            .Where(static candidate => !string.IsNullOrWhiteSpace(candidate.AccountId))
+            .Select(static candidate => MailAccountId.Create(candidate.AccountId))
+            .DistinctBy(static accountId => accountId.Value, StringComparer.Ordinal)
+            .OrderBy(static accountId => accountId.Value, StringComparer.Ordinal),
+    ];
 
     /// <summary>Finds every configured earliest received date that could not mean anything on the supplied date.</summary>
     /// <param name="today">The current date the configured bounds are read against.</param>
