@@ -89,12 +89,12 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
 
         // Assert
         var readBack = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IEmailContentStore>().FindRawMimeAsync(storedEmailId, token),
+            (scope, token) => scope.GetRequiredService<IEmailContentStore>().FindStoredContentAsync(storedEmailId, token),
             cancellationToken);
 
-        Assert.True(readBack.HasValue);
+        Assert.NotNull(readBack);
         Assert.True(
-            committedRawMime.AsSpan().SequenceEqual(readBack!.Value.Span),
+            committedRawMime.AsSpan().SequenceEqual(readBack.RawMime.Span),
             "The payload of an uncommitted session's set-based update survived, so the transaction did not cover it.");
     }
 

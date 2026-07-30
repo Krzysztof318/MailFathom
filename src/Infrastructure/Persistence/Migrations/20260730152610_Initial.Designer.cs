@@ -13,7 +13,7 @@ using NpgsqlTypes;
 namespace MailMcp.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailMcpDbContext))]
-    [Migration("20260729135812_Initial")]
+    [Migration("20260730152610_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -42,6 +42,30 @@ namespace MailMcp.Infrastructure.Persistence.Migrations
                     b.HasKey("Name");
 
                     b.ToTable("backfill_positions", (string)null);
+                });
+
+            modelBuilder.Entity("MailMcp.Infrastructure.Persistence.EmailContentRepairRequestEntity", b =>
+                {
+                    b.Property<Guid>("StoredEmailId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Defect")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("FirstRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("LastRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RequestCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("StoredEmailId");
+
+                    b.ToTable("email_content_repair_requests", (string)null);
                 });
 
             modelBuilder.Entity("MailMcp.Infrastructure.Persistence.EmailMessageContentEntity", b =>
@@ -339,6 +363,17 @@ namespace MailMcp.Infrastructure.Persistence.Migrations
                     b.ToTable("synchronization_checkpoints", (string)null);
                 });
 
+            modelBuilder.Entity("MailMcp.Infrastructure.Persistence.EmailContentRepairRequestEntity", b =>
+                {
+                    b.HasOne("MailMcp.Infrastructure.Persistence.StoredEmailEntity", "StoredEmail")
+                        .WithOne("ContentRepairRequest")
+                        .HasForeignKey("MailMcp.Infrastructure.Persistence.EmailContentRepairRequestEntity", "StoredEmailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("StoredEmail");
+                });
+
             modelBuilder.Entity("MailMcp.Infrastructure.Persistence.EmailMessageContentEntity", b =>
                 {
                     b.HasOne("MailMcp.Infrastructure.Persistence.StoredEmailEntity", "StoredEmail")
@@ -409,6 +444,8 @@ namespace MailMcp.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MailMcp.Infrastructure.Persistence.StoredEmailEntity", b =>
                 {
                     b.Navigation("Content");
+
+                    b.Navigation("ContentRepairRequest");
 
                     b.Navigation("SearchDocument");
                 });

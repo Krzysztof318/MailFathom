@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Application.Accounts;
+using MailMcp.Application.EmailContent;
 using MailMcp.Application.Emails;
 using MailMcp.Application.Mail;
 using MailMcp.Application.Persistence;
@@ -61,6 +62,12 @@ try
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
+    builder.Services.AddOptions<EmailContentOptions>()
+        .Bind(
+            builder.Configuration.GetSection("EmailContent"),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
     // The published snapshot, not the bound one, is what every consumer reads: a reload whose secret references do not
     // resolve is rejected and leaves the previous configuration active for new operations.
     builder.Services.AddSingleton<DatabaseConnectionSettingsMapper>();
@@ -107,6 +114,10 @@ try
             MaxNestingDepth = synchronizationSettings.MaxMimeNestingDepth,
             MaxExtractedTextCharacters = synchronizationSettings.MaxExtractedTextCharacters,
         };
+    });
+    builder.Services.AddScoped(provider => new EmailContentReadOptions
+    {
+        MaxBodyCharacters = provider.GetRequiredService<IOptions<EmailContentOptions>>().Value.MaxBodyCharacters,
     });
     builder.Services.AddScoped(provider =>
     {

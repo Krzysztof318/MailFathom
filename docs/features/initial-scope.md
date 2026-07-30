@@ -11,4 +11,10 @@ The first implemented slice covers periodic read-only reconciliation, applicatio
 
 ## Read side status
 
-The first read use case has landed and is published. `ListEmails` answers a mailbox listing from the local copy with structured filters, a bounded page size, keyset pagination, and per-folder synchronization freshness, and it reaches no mail server; [Mailbox queries](mailbox-queries.md) documents its request contract, cursor semantics, and privacy bounds, and the `list_emails` MCP tool serves it over the protocol. The email content read model and lexical search are still pending, as are the remaining MCP tools and RAG retrieval.
+Two read use cases have landed, both answered entirely from the local copy and neither reaching a mail server.
+
+`ListEmails` answers a mailbox listing with structured filters, a bounded page size, keyset pagination, and per-folder synchronization freshness; [Mailbox queries](mailbox-queries.md) documents its request contract, cursor semantics, and privacy bounds. The `list_emails` MCP tool serves it over the protocol.
+
+`GetEmailContent` answers one email with normalized headers, a bounded plain-text body, optionally a sanitized HTML representation, and per-attachment metadata re-derived from the stored MIME without any bytes. Truncation is always explicit, an encrypted body is a state of its own rather than an empty one, and a missing or damaged local copy produces a stable failure and a durable repair request instead of an IMAP fetch; [Email content](email-content.md) documents the representations, the sanitization policy, and the consistency behavior. It is an application use case only — the `get_email_content` MCP tool that publishes it is specification 17.
+
+Lexical search is still pending, as are the remaining MCP tools and RAG retrieval.

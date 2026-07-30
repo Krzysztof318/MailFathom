@@ -2,9 +2,7 @@
 
 using MailMcp.Application.Emails;
 using MailMcp.CodeCoverage;
-using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailMcp.Infrastructure.Persistence;
@@ -50,35 +48,11 @@ internal sealed class StoredEmailTimelineReader(MailMcpDbContext dbContext) : IS
             filter.Direction);
 
         var rows = await InTimelineOrder(selected, filter.Direction)
-            .Select(email => new StoredEmailTimelineRow(
-                email.Id,
-                email.MailboxAccountId,
-                email.MailFolder.Alias,
-                email.InternetMessageId,
-                email.Subject,
-                email.SentAt,
-                email.ReceivedAt,
-                email.SizeOctets,
-                email.SenderDisplayName,
-                email.SenderAddress,
-                email.ToAddresses,
-                email.AttachmentCount,
-                email.AttachmentTotalSizeOctets,
-                email.InlineResourceCount,
-                email.IsEncrypted,
-                email.CarriesUnverifiedSignature,
-                email.ContainsUnexpandedTnefPart,
-                email.ContentAvailability,
-                email.RemoteFlagsObservedAt,
-                email.IsRemotelySeen,
-                email.IsRemotelyAnswered,
-                email.IsRemotelyFlagged,
-                email.IsRemotelyDraft,
-                email.IsRemotelyDeleted))
+            .Select(StoredEmailSummaryRow.Projection)
             .Take(limit)
             .ToArrayAsync(cancellationToken);
 
-        return [.. rows.Select(ToSummary)];
+        return [.. rows.Select(row => row.ToSummary())];
     }
 
     /// <summary>Narrows the timeline to the emails a filter selects.</summary>
@@ -252,35 +226,4 @@ internal sealed class StoredEmailTimelineReader(MailMcpDbContext dbContext) : IS
             .Replace("%", "\\%", StringComparison.Ordinal)
             .Replace("_", "\\_", StringComparison.Ordinal),
         "%");
-
-    private static EmailSummary ToSummary(StoredEmailTimelineRow row) => new()
-    {
-        StoredEmailId = StoredEmailId.Create(row.Id),
-        AccountId = MailAccountId.Create(row.MailboxAccountId),
-        FolderAlias = MailFolderAlias.Create(row.FolderAlias),
-        InternetMessageId = row.InternetMessageId,
-        Subject = row.Subject,
-        SentAt = row.SentAt,
-        ReceivedAt = row.ReceivedAt,
-        SizeOctets = row.SizeOctets,
-        SenderDisplayName = row.SenderDisplayName,
-        SenderAddress = row.SenderAddress,
-        // A read-only view rather than the array itself, which a caller could cast back and write through.
-        ToAddresses = Array.AsReadOnly(row.ToAddresses),
-        Attachments = new StoredEmailAttachmentSummary(
-            row.AttachmentCount,
-            row.AttachmentTotalSizeOctets,
-            row.InlineResourceCount,
-            row.IsEncrypted,
-            row.CarriesUnverifiedSignature,
-            row.ContainsUnexpandedTnefPart),
-        ContentAvailability = row.ContentAvailability,
-        RemoteFlags = new RemoteEmailFlagSnapshot(
-            row.RemoteFlagsObservedAt,
-            row.IsRemotelySeen,
-            row.IsRemotelyAnswered,
-            row.IsRemotelyFlagged,
-            row.IsRemotelyDraft,
-            row.IsRemotelyDeleted),
-    };
 }

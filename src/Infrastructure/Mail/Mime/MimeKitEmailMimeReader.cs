@@ -1,13 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-using System.Collections.ObjectModel;
-using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using MailMcp.Application.EmailContent;
 using MailMcp.Application.Emails;
 using MailMcp.Domain.Emails;
 using MimeKit;
-using MimeKit.Utils;
 
 namespace MailMcp.Infrastructure.Mail.Mime;
 
@@ -62,7 +59,7 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
     {
         ArgumentNullException.ThrowIfNull(content);
 
-        await using var structuralPass = OpenRawMime(content);
+        await using var structuralPass = RawMimeStream.Open(content.RawMime);
 
         var exceededLimit = await MimeStructureLimitReader.FindExceededLimitAsync(
             structuralPass,
@@ -76,7 +73,7 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
                 : EmailMimeExtractionResult.NestingDepthLimitExceeded();
         }
 
-        await using var parsingPass = OpenRawMime(content);
+        await using var parsingPass = RawMimeStream.Open(content.RawMime);
 
         try
         {
@@ -111,103 +108,22 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
     private static Task<MimeMessage> LoadWithoutCopyingContentAsync(Stream rawMime, CancellationToken cancellationToken) =>
         MimeMessage.LoadAsync(ParserOptions.Default, rawMime, persistent: true, cancellationToken);
 
-    /// <summary>Reads the raw MIME without copying it, so neither pass duplicates the payload.</summary>
-    private static MemoryStream OpenRawMime(RemoteEmailContent content) =>
-        MemoryMarshal.TryGetArray(content.RawMime, out var segment) && segment.Array is { } buffer
-            ? new MemoryStream(buffer, segment.Offset, segment.Count, writable: false)
-            : new MemoryStream(content.RawMime.ToArray(), writable: false);
-
     private async Task<ExtractedEmailMetadata> ExtractMetadataAsync(
         EmailOccurrenceId occurrenceId,
         MimeMessage message,
         CancellationToken cancellationToken)
     {
         var classification = await MimeAttachmentClassifier.ClassifyAsync(message, cancellationToken);
+        var headers = MimeMessageHeaderReader.Read(message);
 
         return new ExtractedEmailMetadata(
             occurrenceId,
-            NormalizeSubject(message.Subject),
-            ReadHeaderDate(message, HeaderId.Date),
-            ReadHeaderDate(message, HeaderId.Received),
-            ReadParticipants(message),
-            EmailThreadReferences.Create(message.MessageId, message.InReplyTo, message.References),
+            headers.Subject,
+            headers.SentAt,
+            headers.ReceivedAt,
+            headers.Participants,
+            headers.ThreadReferences,
             classification.Attachments,
             EmailBodyTextExtractor.Extract(classification, this.options.MaxExtractedTextCharacters));
-    }
-
-    private static string? NormalizeSubject(string? subject)
-    {
-        if (string.IsNullOrWhiteSpace(subject))
-        {
-            return null;
-        }
-
-        // A subject reaches logs, MCP responses, and future indexes as one value, so the line breaks a folded or
-        // deliberately crafted header can carry are removed rather than passed on.
-        var singleLine = new string([.. subject.Where(character => !char.IsControl(character))]).Trim();
-
-        return singleLine.Length == 0 ? null : singleLine;
-    }
-
-    /// <summary>Reads every address the message wrote, each under the header role it appeared in.</summary>
-    /// <remarks>
-    /// The result is wrapped rather than handed over as the array a collection expression builds, so a consumer of the
-    /// record cannot cast the list back to an array and write through it.
-    /// </remarks>
-    private static ReadOnlyCollection<EmailParticipant> ReadParticipants(MimeMessage message) =>
-        new List<EmailParticipant>(
-        [
-            .. CreateParticipants(EmailAddressRole.Sender, message.Sender is null ? [] : [message.Sender]),
-            .. CreateParticipants(EmailAddressRole.From, message.From.Mailboxes),
-            .. CreateParticipants(EmailAddressRole.ReplyTo, message.ReplyTo.Mailboxes),
-            .. CreateParticipants(EmailAddressRole.To, message.To.Mailboxes),
-            .. CreateParticipants(EmailAddressRole.Cc, message.Cc.Mailboxes),
-            .. CreateParticipants(EmailAddressRole.Bcc, message.Bcc.Mailboxes),
-        ]).AsReadOnly();
-
-    /// <summary>Turns one header's mailboxes into participants, dropping the ones that do not parse as addresses.</summary>
-    /// <remarks>
-    /// Group syntax is flattened to its members, because a group name is a label the sender chose rather than a
-    /// recipient anything can be filtered by.
-    /// </remarks>
-    private static IEnumerable<EmailParticipant> CreateParticipants(
-        EmailAddressRole role,
-        IEnumerable<MailboxAddress> mailboxes) =>
-        mailboxes
-            .Select(mailbox => EmailAddress.TryCreate(mailbox.Name, mailbox.Address, out var address)
-                ? new EmailParticipant(role, address)
-                : null)
-            .OfType<EmailParticipant>();
-
-    /// <summary>Reads one date-bearing header in UTC, or nothing when it is absent or unparseable.</summary>
-    /// <remarks>
-    /// The <c>Received</c> header is read from the topmost occurrence, which the last receiving hop wrote, and its date
-    /// follows the final semicolon of the trace. A header the sender wrote unparseably yields no timestamp rather than
-    /// a guessed one.
-    /// </remarks>
-    private static DateTimeOffset? ReadHeaderDate(MimeMessage message, HeaderId headerId)
-    {
-        var headerValue = message.Headers[headerId];
-        if (headerValue is null)
-        {
-            return null;
-        }
-
-        var dateText = headerId == HeaderId.Received
-            ? ReadTraceDate(headerValue)
-            : headerValue;
-
-        return dateText is not null && DateUtils.TryParse(dateText, out var date)
-            ? date.ToUniversalTime()
-            : null;
-    }
-
-    private static string? ReadTraceDate(string receivedHeaderValue)
-    {
-        var separatorIndex = receivedHeaderValue.LastIndexOf(';');
-
-        return separatorIndex < 0 || separatorIndex == receivedHeaderValue.Length - 1
-            ? null
-            : receivedHeaderValue[(separatorIndex + 1)..];
     }
 }

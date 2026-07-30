@@ -3,6 +3,7 @@
 using MailKit.Net.Imap;
 using MailMcp.Application.EmailContent;
 using MailMcp.Application.Emails;
+using MailMcp.Application.Emails.GetEmailContent;
 using MailMcp.Application.Emails.ListEmails;
 using MailMcp.Application.Folders;
 using MailMcp.Application.Persistence;
@@ -136,11 +137,20 @@ public static class ServiceCollectionExtensions
         // The read side takes no persistence session and joins no transaction, so its ports are registered beside the
         // write repositories rather than through one of them.
         services.AddScoped<IStoredEmailTimelineReader, StoredEmailTimelineReader>();
+        services.AddScoped<IStoredEmailSummaryReader, StoredEmailSummaryReader>();
         services.AddScoped<ISynchronizationFreshnessReader, SynchronizationFreshnessReader>();
+        // The one write a read path performs. It joins no session for the reason its port states, so it is registered
+        // beside the readers rather than with the repositories that take one.
+        services.AddScoped<IEmailContentRepairRequestStore, EmailContentRepairRequestStore>();
         // MimeKit arrives with MailKit, so message parsing needs no dependency of its own; the adapter keeps its types
         // out of Application the same way the IMAP adapter keeps MailKit's out.
         services.AddScoped<IEmailMimeReader>(provider => new MimeKitEmailMimeReader(
             provider.GetRequiredService<EmailMimeExtractionOptions>()));
+        // The HTML sanitizer the renderer owns is built per instance rather than shared, so no configuration of it can
+        // be changed by one request and observed by another.
+        services.AddScoped<IEmailContentRenderer>(provider => new MimeKitEmailContentRenderer(
+            provider.GetRequiredService<EmailMimeExtractionOptions>(),
+            provider.GetRequiredService<EmailContentReadOptions>()));
         services.AddScoped<IMailFolderResolutionStore, MailFolderResolutionStore>();
         services.AddScoped<IMailFolderMappingChangeAuditor, LoggedMailFolderMappingChangeAuditor>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
@@ -148,6 +158,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<StoredEmailExtractionBackfill>();
         services.AddScoped<MailboxTimelineReader>();
+        services.AddScoped<EmailContentReader>();
         services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(
             static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),

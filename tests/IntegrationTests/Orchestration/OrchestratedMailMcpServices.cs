@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailMcp.Application.EmailContent;
 using MailMcp.Application.Emails;
 using MailMcp.Application.Mail;
 using MailMcp.Application.Persistence;
@@ -64,6 +65,7 @@ internal sealed class OrchestratedMailMcpServices : IAsyncDisposable
             MaxNestingDepth = 10,
             MaxExtractedTextCharacters = 10_000,
         });
+        builder.Services.AddSingleton(new EmailContentReadOptions { MaxBodyCharacters = 10_000 });
         builder.Services.AddSingleton(new PersistenceConcurrencyOptions { MaximumCommitAttempts = 3 });
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),
