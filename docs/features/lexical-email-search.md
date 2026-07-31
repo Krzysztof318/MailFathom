@@ -6,8 +6,9 @@ carrying the summary a listing would show, a relevance rank, and highlighted ext
 It reaches no mail server, so a search behaves the same whether or not IMAP is available — and it never touches the
 remote `\Seen` flag, because it speaks no mail protocol at all.
 
-The protocol adapter is not part of this: `MailboxSearchReader` is an application use case, and the `search_emails` MCP
-tool that maps onto it is specification 18.
+This page documents the use case. `MailboxSearchReader` is where every rule below is enforced, so a second entrypoint
+cannot reach the query without them; the `search_emails` MCP tool maps protocol arguments onto it and publishes what it
+returns, and [MCP tools](mcp-tools.md#search_emails) documents that surface.
 
 ## What is searchable, and what is not
 
@@ -121,8 +122,11 @@ The bounds are deployment configuration under `MailboxSearch`, validated at star
 
 They are configuration rather than request input because a caller who could raise them could lift the control, and the
 useful values follow from how a deployment's mail is written rather than from what any single request wants. Both are
-applied twice: once in the option list PostgreSQL cuts the extracts by, and again on what comes back, because the bound
-is the privacy control and a result must not depend on the server having honored it.
+applied twice here: once in the option list PostgreSQL cuts the extracts by, and again on what comes back, because the
+bound is the privacy control and a result must not depend on the server having honored it. The protocol boundary applies
+the count a third time for the same reason one level up, and applies a ceiling derived from the character bound rather
+than the bound itself; [MCP tools](mcp-tools.md#what-the-boundary-bounds-and-why-it-bounds-it-again) records why the
+exact count cannot be repeated once the markers are `**`.
 
 A third bound is derived rather than configured. `WordsPerSnippet` counts words, and a word is whatever lies between two
 spaces, so a message carrying words far longer than prose writes — a URL, a base64 blob, a hash — would satisfy a limit
@@ -174,6 +178,9 @@ caller cannot tell a folder that holds nothing matching from one whose synchroni
   `StoredEmailSelectionPredicate`, the filter predicate it shares with the listing read model, and
   `StoredEmailSummaryRow`, the projection and mapping it shares with every other read that publishes a summary.
 - `MailMcp.Host.Configuration.MailboxSearchOptions` — the snippet bounds, bound strictly and validated on start.
+- `MailMcp.Mcp.Tools` — `SearchEmailsTool`, the protocol adapter, with `SearchEmailsToolResult`, `SearchedEmailMatch`,
+  and `EmailRetrievalMode`, the published contract; and `MailboxScopeArguments`, the conversion of caller-supplied text
+  into account identifiers and folder aliases that it shares with the listing tool.
 
 ## How the guarantees are verified
 

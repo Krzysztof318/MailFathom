@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Text.Json;
 using MailMcp.Mcp.Tools;
 using ModelContextProtocol.Protocol;
 using Xunit;
@@ -127,6 +128,26 @@ public sealed class ListEmailsToolMetadataTests
         Assert.Equal(["newestFirst", "oldestFirst"], advertisedValues);
     }
 
+    /// <summary>
+    /// The availability states are wire values as much as the reading direction is, and a rename of either member would
+    /// change the published contract silently. Asserting the advertised spellings is what makes the member names safe to
+    /// carry the protocol identity, so every enumeration this surface publishes is pinned rather than only the ones on
+    /// the input side.
+    /// </summary>
+    [Fact]
+    public void AddMailMcpServer_AdvertisesTheContentAvailabilityAsItsNamedValues()
+    {
+        // Arrange
+        var outputSchema = AdvertisedListEmailsTool().OutputSchema;
+
+        // Act
+        Assert.NotNull(outputSchema);
+        var advertisedValues = AdvertisedEnumValues(outputSchema.Value, "contentAvailability");
+
+        // Assert
+        Assert.Equal(["available", "exceededSizeLimit"], advertisedValues);
+    }
+
     [Fact]
     public void AddMailMcpServer_AdvertisesTheResultShapeAsAnOutputSchema()
     {
@@ -141,9 +162,9 @@ public sealed class ListEmailsToolMetadataTests
         Assert.True(properties.TryGetProperty("folderFreshness", out _));
     }
 
-    /// <summary>The surface is two tools at this stage, so a third one arriving unnoticed is a change to the published contract.</summary>
+    /// <summary>The surface is the three read-only tools of this release, so a fourth arriving unnoticed is a change to the published contract.</summary>
     [Fact]
-    public void AddMailMcpServer_RegistersTheListingAndTheContentTool()
+    public void AddMailMcpServer_RegistersTheListingTheContentAndTheSearchTool()
     {
         // Arrange, Act
         var registeredNames = RegisteredMcpToolSurface
@@ -152,7 +173,49 @@ public sealed class ListEmailsToolMetadataTests
             .Order(StringComparer.Ordinal);
 
         // Assert
-        Assert.Equal([GetEmailContentTool.ToolName, ListEmailsTool.ToolName], registeredNames);
+        Assert.Equal(
+            [GetEmailContentTool.ToolName, ListEmailsTool.ToolName, SearchEmailsTool.ToolName],
+            registeredNames);
+    }
+
+    /// <summary>Reads the values one named property is advertised as accepting, wherever in the schema it sits.</summary>
+    /// <remarks>
+    /// The property is searched for rather than navigated to, because how deeply a result type nests and whether the
+    /// generator inlines a subschema or publishes it behind a reference are the generator's decisions. What the contract
+    /// promises is that a client reading this schema sees these spellings, and that is what the walk asserts.
+    /// </remarks>
+    private static IReadOnlyList<string> AdvertisedEnumValues(JsonElement schema, string propertyName)
+    {
+        var declaration = Subschemas(schema)
+            .FirstOrDefault(candidate => candidate.Name == propertyName && candidate.Value.TryGetProperty("enum", out _));
+
+        Assert.True(declaration.Value.ValueKind is JsonValueKind.Object, $"'{propertyName}' is advertised nowhere in the schema.");
+
+        return [.. declaration.Value.GetProperty("enum").EnumerateArray().Select(value => value.ToString())];
+    }
+
+    /// <summary>Walks every named subschema of a schema document, however deeply the generator nested it.</summary>
+    private static IEnumerable<JsonProperty> Subschemas(JsonElement schema)
+    {
+        if (schema.ValueKind is JsonValueKind.Object)
+        {
+            foreach (var member in schema.EnumerateObject())
+            {
+                yield return member;
+
+                foreach (var nested in Subschemas(member.Value))
+                {
+                    yield return nested;
+                }
+            }
+        }
+        else if (schema.ValueKind is JsonValueKind.Array)
+        {
+            foreach (var nested in schema.EnumerateArray().SelectMany(Subschemas))
+            {
+                yield return nested;
+            }
+        }
     }
 
     private static Tool AdvertisedListEmailsTool() =>

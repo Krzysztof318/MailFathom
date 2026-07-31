@@ -4,10 +4,8 @@ using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using MailMcp.Application.Emails;
 using MailMcp.Application.Emails.ListEmails;
-using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
 using MailMcp.Domain.Failures;
-using MailMcp.Domain.Folders;
 using ModelContextProtocol.Server;
 
 namespace MailMcp.Mcp.Tools;
@@ -37,13 +35,6 @@ internal sealed class ListEmailsTool(MailboxTimelineReader mailboxTimelineReader
     /// <summary>The name the tool is advertised and called under.</summary>
     /// <remarks>Snake case because it is the naming the Model Context Protocol tool ecosystem uses; the C# member naming stops at the boundary.</remarks>
     public const string ToolName = "list_emails";
-
-    /// <summary>The greatest length an account identifier or folder alias a caller names may carry.</summary>
-    /// <remarks>
-    /// Generous against every identifier an operator configures and short enough that a refusal cannot become a way to
-    /// place a paragraph of caller-chosen text into an error message or a log line.
-    /// </remarks>
-    private const int MaximumIdentifierLength = 256;
 
     /// <summary>Lists a bounded page of summaries from the local mailbox copy.</summary>
     /// <param name="accountIds">The accounts to read, or none to read every account this deployment serves.</param>
@@ -85,11 +76,11 @@ internal sealed class ListEmailsTool(MailboxTimelineReader mailboxTimelineReader
         string[]? accountIds = null,
         [Description("MailMcp folder aliases to read, such as INBOX. Omit to read every folder of the accounts in scope. At most 64 may be named. An alias is MailMcp's own name for a folder and is matched without regard to case.")]
         string[]? folderAliases = null,
-        [Description("Return only emails sent from this mail address. Matched as a whole address rather than as a fragment, without regard to case; a value that is not a usable mail address is refused. Omit to match any sender.")]
+        [Description("Return only emails sent from this mail address. Matched as a whole address rather than as a fragment, without regard to case; a non-empty value that is not a usable mail address is refused. Omit to match any sender, which an empty string does too.")]
         string? senderAddress = null,
-        [Description("Return only emails addressed to this mail address in their To or Cc header. Matched as a whole address rather than as a fragment; Reply-To is not searched. Omit to match any recipient.")]
+        [Description("Return only emails addressed to this mail address in their To or Cc header. Matched as a whole address rather than as a fragment; Reply-To is not searched. Omit to match any recipient, which an empty string does too.")]
         string? recipientAddress = null,
-        [Description("Return only emails whose subject contains this text, without regard to case, up to 256 characters. Wildcard characters match themselves. Omit to match any subject.")]
+        [Description("Return only emails whose subject contains this text, without regard to case, up to 256 characters. Wildcard characters match themselves. Omit to match any subject, which an empty string does too.")]
         string? subjectFragment = null,
         [Description("Return only emails received at or after this ISO 8601 timestamp. Emails whose received date is unknown are excluded whenever either bound is named. Omit for no lower bound.")]
         DateTimeOffset? receivedOnOrAfter = null,
@@ -109,8 +100,8 @@ internal sealed class ListEmailsTool(MailboxTimelineReader mailboxTimelineReader
     {
         var request = new ListEmailsRequest
         {
-            AccountIds = ParseAccountIds(accountIds),
-            FolderAliases = ParseFolderAliases(folderAliases),
+            AccountIds = MailboxScopeArguments.AccountIds(accountIds),
+            FolderAliases = MailboxScopeArguments.FolderAliases(folderAliases),
             SenderAddress = senderAddress,
             RecipientAddress = recipientAddress,
             SubjectFragment = subjectFragment,
@@ -136,72 +127,4 @@ internal sealed class ListEmailsTool(MailboxTimelineReader mailboxTimelineReader
         ListEmailsDirection.OldestFirst => EmailTimelineDirection.OldestFirst,
         _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, "The reading direction names no timeline order."),
     };
-
-    /// <summary>Turns the account identifiers a caller supplied into domain values.</summary>
-    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when more than the accepted number are named, or one of them is not an identifier this system issues.</exception>
-    private static IReadOnlyList<MailAccountId> ParseAccountIds(string[]? accountIds) =>
-        Parse(accountIds, MailAccountId.Create, MailboxScope.MaximumAccountIds, "accounts");
-
-    /// <summary>Turns the folder aliases a caller supplied into domain values.</summary>
-    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when more than the accepted number are named, or one of them is not an alias this system issues.</exception>
-    private static IReadOnlyList<MailFolderAlias> ParseFolderAliases(string[]? folderAliases) =>
-        Parse(folderAliases, MailFolderAlias.Create, MailboxScope.MaximumFolderAliases, "folder aliases");
-
-    /// <summary>Converts one list of caller-supplied text into the domain identity it names.</summary>
-    /// <remarks>
-    /// <para>
-    /// The count is checked before anything is converted. The list arrives from a caller nobody vouches for, and a
-    /// ceiling applied after the trimming and upper-casing it exists to prevent has already run over every element is not
-    /// a ceiling. The limit is the query's own, so the boundary refuses early without inventing a second one.
-    /// </para>
-    /// <para>
-    /// The conversion is refused through the query's own filter failure rather than through a failure this boundary
-    /// declares. The code it carries already names a filter the query cannot accept, so a caller reads one code for one
-    /// answer, and the refusal reaches the client and the log through the single path every use-case refusal takes.
-    /// </para>
-    /// <para>
-    /// The refused value is deliberately absent from it. An identifier a caller invented is that caller's own input rather
-    /// than one of MailMcp's configured names, and echoing input back is how a boundary starts reflecting content.
-    /// </para>
-    /// </remarks>
-    private static IReadOnlyList<TIdentity> Parse<TIdentity>(
-        string[]? values,
-        Func<string, TIdentity> createIdentity,
-        int limit,
-        string filterName)
-    {
-        if (values is null or { Length: 0 })
-        {
-            return [];
-        }
-
-        MailboxQueryFilterInvalidException.ThrowIfCountExceeded(values.Length, limit, filterName);
-
-        try
-        {
-            return [.. values.Select(value => createIdentity(UsableIdentifierText(value, filterName)))];
-        }
-        catch (ArgumentException exception)
-        {
-            throw MailboxQueryFilterInvalidException.NotAUsableIdentifier(filterName, exception);
-        }
-    }
-
-    /// <summary>Refuses text no identifier of this system is spelled with, before a domain type is asked to read it.</summary>
-    /// <remarks>
-    /// The domain identities differ in what they reject — a folder alias refuses control characters and an account
-    /// identifier does not — while both are equally reachable from an untrusted caller here. The stricter rule is applied
-    /// at this boundary for both, because an identifier that is never matched still travels: an account this deployment
-    /// does not serve is named back in the refusal a client reads, so an unbounded string carrying newlines would be a
-    /// way to write arbitrary text into that contract and into the log beside it.
-    /// </remarks>
-    private static string UsableIdentifierText(string value, string filterName)
-    {
-        if (value.Length > MaximumIdentifierLength || value.Any(char.IsControl))
-        {
-            throw MailboxQueryFilterInvalidException.NotAUsableIdentifier(filterName);
-        }
-
-        return value;
-    }
 }

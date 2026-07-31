@@ -42,7 +42,8 @@ public static class McpServiceCollectionExtensions
             .WithRequestFilters(requestFilters => requestFilters.AddCallToolFilter(next => (request, cancellationToken) =>
                 new ValueTask<CallToolResult>(RequiredReporter(request).ReportAsync(next, request, cancellationToken))))
             .WithTools<ListEmailsTool>(McpToolContractSerialization.Options)
-            .WithTools<GetEmailContentTool>(McpToolContractSerialization.Options);
+            .WithTools<GetEmailContentTool>(McpToolContractSerialization.Options)
+            .WithTools<SearchEmailsTool>(McpToolContractSerialization.Options);
     }
 
     /// <summary>Resolves the reporter from the scope the call arrived in.</summary>

@@ -5,6 +5,7 @@ using MailMcp.Application.EmailContent;
 using MailMcp.Application.Emails;
 using MailMcp.Application.Emails.GetEmailContent;
 using MailMcp.Application.Emails.ListEmails;
+using MailMcp.Application.Emails.SearchEmails;
 using MailMcp.Application.Synchronization;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Protocol;
@@ -32,12 +33,16 @@ internal static class RegisteredMcpToolSurface
         services.AddSingleton<IStoredEmailTimelineReader>(new StubStoredEmailTimelineReader());
         services.AddSingleton<ISynchronizationFreshnessReader>(new StubSynchronizationFreshnessReader());
         services.AddSingleton<IStoredEmailSummaryReader>(new StubStoredEmailSummaryReader());
+        services.AddSingleton<IEmailSearchIndexReader>(new StubEmailSearchIndexReader());
+        services.AddSingleton(EmailSearchSnippetBounds.Default);
         services.AddSingleton<IEmailContentStore>(new StubEmailContentStore());
         services.AddSingleton(Substitute.For<IEmailContentRenderer>());
         services.AddSingleton(Substitute.For<IEmailContentRepairRequestStore>());
         services.AddSingleton<IMailAccountCatalog>(new StubMailAccountCatalog("personal"));
+        services.AddSingleton<MailboxScopeResolver>();
         services.AddSingleton<MailboxTimelineReader>();
         services.AddSingleton<EmailContentReader>();
+        services.AddSingleton<MailboxSearchReader>();
         services.AddMailMcpServer();
 
         using var provider = services.BuildServiceProvider();

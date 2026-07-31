@@ -12,8 +12,13 @@ serves.
 `ModelContextProtocol.AspNetCore` 2.0.0 hosts the server. The `Mcp` project owns the tool descriptors, the conversion of
 protocol arguments into the domain identities a use case is expressed in, and the mapping from a use case's result back
 onto the published contract. It holds no query, no persistence, and no mail-protocol code: `list_emails` calls the
-`MailboxTimelineReader` use case and nothing else, and `get_email_content` calls the `EmailContentReader` use case and
-nothing else.
+`MailboxTimelineReader` use case and nothing else, `get_email_content` calls the `EmailContentReader` use case and
+nothing else, and `search_emails` calls the `MailboxSearchReader` use case and nothing else.
+
+It holds no AI code either, and cannot. The project references `Domain` and `Application` and no other MailMcp assembly,
+which `Mcp.UnitTests` asserts against the compiled reference list rather than against a convention — so no tool on this
+surface can embed a query, rewrite it, or hand anything to a chat model, and a package that would make one able to has
+to be added and reviewed before that changes.
 
 The division is deliberate and is what keeps a second entrypoint from bypassing anything. Every filter bound, the
 page-size range, the account authorization, and the cursor's authenticity belong to the use case, so this boundary
@@ -29,7 +34,8 @@ Three properties hold for every tool and are proven by test rather than asserted
   a stack trace, or an internal identifier. What a boundary withholds is not lost: the detail is logged on the server,
   correlated by the trace the request already carries.
 - No result carries raw MIME or attachment bytes. Message content itself is a result only where the tool exists to
-  return it, which today is `get_email_content` alone; `list_emails` returns summaries and no body text at all.
+  return it: `get_email_content` returns a bounded body, `search_emails` returns bounded extracts of one, and
+  `list_emails` returns summaries and no body text at all.
 
 ## Descriptor conventions
 
@@ -38,8 +44,8 @@ it calls anything:
 
 | Element | Convention |
 |---|---|
-| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_emails`, `get_email_content` |
-| `title` | A human-readable label for display — `List emails`, `Get email content` |
+| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_emails`, `get_email_content`, `search_emails` |
+| `title` | A human-readable label for display — `List emails`, `Get email content`, `Search emails` |
 | `description` | States what the tool reads, that it reads the local copy only, that it changes nothing, and what it bounds |
 | `inputSchema` | Every argument is a top-level property carrying its own description, unit, and absence meaning |
 | `outputSchema` | Generated from the result type, whose properties carry descriptions of their own |
@@ -52,11 +58,20 @@ The four annotations are contract metadata rather than documentation, so `Mcp.Un
 `tools/list` output: the name, the title, the description, every input property, the descriptions on them, the output
 schema, and each annotation. A descriptor that drifts fails the build.
 
-Enumerations travel as their names, camel-cased — `newestFirst`, `exceededSizeLimit` — never as ordinals. Each one is a
+Enumerations travel as their names, camel-cased — `newestFirst`, `exceededSizeLimit`, `lexical` — never as ordinals. Each one is a
 type this boundary owns rather than the domain enumeration describing the same states, because the member names *are* the
 published wire values: sharing the domain's type would make a rename inside the domain a silent change to the protocol.
 Timestamps are ISO 8601 and property names are camel-cased, both of which follow from the single `JsonSerializerOptions`
 every tool registration is given, so the schema that was advertised and the payload that is serialized cannot diverge.
+
+These stay plain C# enumerations rather than the closed enumerations the repository requires of a value that publishes an
+identity, and the reason is what that rule is about. A closed enumeration exists where the identity and the member name
+are different things — a SASL mechanism spelled `PLAIN`, a failure numbered `51002` — so the type has to carry the
+identity because the name cannot produce it. Here the name *is* the identity, converted by one shared policy, and a
+`readonly record struct` would add a second serialization path without adding a fact. What the rule protects against is
+a rename changing the contract in silence, and that is closed by assertion instead: `Mcp.UnitTests` pins the advertised
+spellings of every enumeration this surface publishes, on the input and the output side alike, so a rename fails the
+build. An enumeration added here without that assertion is the actual defect the rule is warning about.
 
 Sizes are published in bytes and named for it — `sizeBytes`, `totalSizeBytes` — even though the application and the
 stored schema call the same quantity octets. The two words mean one thing here, and the protocol uses the one a client
@@ -80,7 +95,8 @@ configured name for an account and carries nothing the caller did not already wr
 | Code | Meaning | Typical cause |
 |---|---|---|
 | `51001` | A page size outside the range the query serves | A page size of 0 or above 100, refused rather than clamped |
-| `51002` | A filter carries a value, a count, or a length the query does not accept | An unusable address, a subject fragment over 256 characters or carrying a control character, a received range that ends before it starts, more than 64 accounts or folder aliases, an account identifier or folder alias that is blank, over 256 characters, or carrying a control character |
+| `51002` | A filter carries a value, a count, or a length the query does not accept | An unusable address, a subject fragment over 256 characters or carrying a control character, a received range that ends before it starts, more than 64 accounts or folder aliases, an account identifier or folder alias that is blank, over 256 characters, or carrying a control character, a search query that is blank, over 512 characters, or carrying a control character |
+| `51003` | A search asked for more ranked results than a search serves | A `resultLimit` of 0 or above 50, refused rather than clamped |
 | `51004` | The call named an email with text that is no identifier this system issues | A `storedEmailId` that is blank, not a UUID, or the all-zero UUID, refused before anything is looked up |
 | `52001` | A continuation cursor is not one this system issued | A truncated, hand-written, or foreign cursor |
 | `52002` | A continuation cursor was issued for different filters | A cursor reused after a filter or the reading direction changed |
@@ -275,9 +291,117 @@ Authorization is the use case's, as it is for `list_emails`: an email of an acco
 refused with `53002`, the same answer an email that was never stored gets, so a read cannot be used to discover which
 identifiers exist.
 
+## `search_emails`
+
+Searches the local mailbox copy for text and returns one bounded window of matches ranked by relevance, each carrying
+the summary a listing would show, a relevance rank, and bounded extracts of the body around what matched.
+[Lexical email search](lexical-email-search.md) documents the use case behind it — what is indexed, what the rank means,
+how the extracts are cut, and why there is no cursor — where those are enforced. This section describes the surface.
+
+### Arguments
+
+| Argument | Type | Meaning |
+|---|---|---|
+| `queryText` | `string` | **Required.** The text to search for, up to 512 characters. Blank is refused with `51002`, because a search with no text is a listing |
+| `accountIds` | `string[]` | Accounts to search. Omitted searches every account this deployment serves; an account it does not serve is refused with `53001` |
+| `folderAliases` | `string[]` | MailMcp folder aliases such as `INBOX`. Omitted searches every folder of the accounts in scope |
+| `senderAddress` | `string` | The whole address the sender must carry, in any case — not a fragment |
+| `recipientAddress` | `string` | The whole address a `To` or `Cc` recipient must carry |
+| `subjectFragment` | `string` | Text the subject must contain, case-insensitively, up to 256 characters |
+| `receivedOnOrAfter` | `date-time` | Inclusive start of the received range |
+| `receivedBefore` | `date-time` | Exclusive end of the received range |
+| `isRemotelySeen` | `boolean` | The remote seen state to require. Searching never changes it |
+| `hasAttachments` | `boolean` | Whether to match only emails with attachments or only those without |
+| `resultLimit` | `integer` | 1 to 50. Omitted takes the default of 20; a value outside the range is refused with `51003` rather than clamped |
+
+The structured filters are `list_emails`' own and mean exactly the same things, because both read models apply one
+validated selection; the identifier lists are converted and bounded by the same code, so the `51002` refusals described
+above hold here word for word. `subjectFragment` and `queryText` are unrelated and the argument descriptions say so: the
+fragment narrows which emails are eligible, and the query text is what the eligible ones are matched and ranked against.
+
+There is deliberately no cursor, no offset, and no argument that widens how much of a message an extract may show. The
+first is unsound over a relevance order that moves as mail is indexed; the second would let a caller lift a privacy
+control that belongs to the deployment. `Mcp.UnitTests` asserts the absence of the second as part of the descriptor,
+because an argument added later would be the one thing that quietly changes what a search can draw out of a mailbox.
+
+### Result
+
+| Field | Meaning |
+|---|---|
+| `matches` | The matched emails, most relevant first, ties broken by the newest received. Empty when nothing matched |
+| `retrievalMode` | How the results were retrieved — `lexical` today |
+| `folderFreshness` | How current the local copy of each covered folder is, exactly as a listing reports it |
+
+Each match carries `summary`, which is the same shape `list_emails` publishes and is documented above, together with
+`relevanceRank` and `snippets`.
+
+- **`relevanceRank` is comparable within one response and nowhere else.** It is computed for the query that produced it,
+  so storing it or comparing it with a rank from another call compares two different scales.
+- **`snippets` are message text and are returned as data.** Each matched run is wrapped in `**` and nothing else is
+  added: no interpretation, no summary, and no formatting that would let mail somebody else wrote read as instruction or
+  as one of MailMcp's own fields. A caller passing them to a model treats them as untrusted input, as it would any other
+  message content.
+- **A match can carry no snippets at all.** An email that matched on its subject or a participant address carries none,
+  because the summary publishes both whole, and an email with no indexed body text — encrypted mail, or mail whose
+  content lives inside an attachment — carries none either.
+
+### The retrieval mode is a field from the first release
+
+`retrievalMode` reports `lexical` and is the only value it can report today. It exists anyway, because retrieval becomes
+hybrid when the RAG work lands and a client given no way to tell the two apart would either infer it from a server
+version or discover the change by reasoning wrongly about the results. Publishing it now costs one field and makes the
+later work widen an enumeration rather than reshape a response.
+
+Lexical means what it says on the descriptor: the words a query contains are matched against the words the mail is
+written in, so a query term that appears nowhere in a message will not find it however close its meaning. Words that
+appear only inside an attachment payload are not searchable at all, which is a limit of the index rather than of this
+tool.
+
+### What the boundary bounds, and why it bounds it again
+
+Every limit a caller can name belongs to the use case, as it does for `list_emails`: the query length, the filter
+bounds, the result-count range, and the account authorization are checked there and this boundary re-states none of
+them.
+
+Two bounds it does apply again, on what it is about to publish: at most the configured number of extracts per email, and
+at most the greatest number of ranked results a search serves. Neither is request input and neither is a caller's to
+widen — they are the control on how much mail content one call draws out of a mailbox, and this is the last place that
+content passes before it reaches a model. The read model already applies them against what PostgreSQL returned for the
+same reason, and a control a defective adapter could widen is not one.
+
+The character bound on a single extract is applied here as a ceiling rather than reproduced exactly. The use case counts
+the characters of the message and deliberately does not count the highlight markers, which are MailMcp's own; once those
+markers are `**` they are indistinguishable from a message that writes `**` itself, so this boundary cannot repeat that
+count and does not pretend to. It cuts at a ceiling derived from that bound instead — three times it, plus the one
+character the use case's own truncation mark contributes — which is above every extract the use case can produce, since
+a marked run needs a character of its own and a character separating it from the next and markup can therefore at most
+double an extract, and far below a body.
+
+### Empty results, and what a search does not reveal
+
+A query that matches nothing returns an empty `matches` array with the same `retrievalMode` and the same
+`folderFreshness` a window that matched would carry. It is an ordinary response rather than an error, so a search cannot
+be used to establish that an account or a folder holds mail the caller was not already entitled to see. An account this
+deployment does not serve is still refused with `53001` before anything is read, for the reason a listing refuses one:
+an empty result would confirm the identifier.
+
+What that guarantee covers is worth stating exactly, because it is narrower than "a search reveals nothing". It covers
+everything outside the served scope: the account authorization is resolved before any read, and a folder alias is only
+ever matched within the accounts already resolved, so no query — matching or empty — reports on an account this
+deployment does not serve for this caller. It deliberately does not hide the folder names *inside* a served account.
+`folderFreshness` publishes one entry per folder in scope, and a request that names no folder therefore lists every
+folder those accounts have; that is the field doing its job rather than leaking, since a caller who cannot see which
+folders are stale cannot tell an empty result from an unsynchronized one. A caller who guesses an alias and receives no
+freshness entry has learned that no such folder exists in their own mailbox, which the unscoped call would have told
+them outright.
+
+The query text is never logged and no failure message repeats it. What somebody is searching their own mailbox for is
+personal data of a particularly revealing kind, and the refusals this tool raises name the filter and its limit rather
+than the value.
+
 ## Pending
 
-`search_emails` is specified but not implemented — the `MailboxSearchReader` use case it will map onto has landed, the
-tool has not — and `ask_mail` with the RAG work behind it is a later stage. `list_emails` and `get_email_content` are
-complete: the PostgreSQL read models and the content store they read through landed with their use cases, so a call
-against a synchronized mailbox answers from the local copy.
+`ask_mail`, and the retrieval-augmented generation work behind it, is a later stage. `list_emails`,
+`get_email_content`, and `search_emails` are complete: the PostgreSQL read models, the lexical index, and the content
+store they read through landed with their use cases, so a call against a synchronized mailbox answers from the local
+copy.
