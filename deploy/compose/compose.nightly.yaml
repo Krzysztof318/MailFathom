@@ -1,0 +1,35 @@
+# The GHCR nightly channel. Unsupported.
+#
+# A nightly build is whatever `main` happened to be when someone dispatched the workflow. It carries no release
+# promise: its schema may be ahead of any published migration, its configuration keys may have moved, and no version
+# it reports means anything outside the commit it was built from. It is development output, published so a change can
+# be tried, and it is never a release.
+#
+# This overlay exists so that using one is a decision rather than an accident, and it is deliberately awkward:
+#
+#   MAILMCP_NIGHTLY_ACKNOWLEDGED=i-understand-this-is-unsupported \
+#   MAILMCP_NIGHTLY_TAG=<the nightly identifier> \
+#   docker compose -f compose.yaml -f compose.nightly.yaml up -d
+#
+# Leaving either variable out fails immediately with the reason. Nothing in compose.yaml reads GHCR, so a deployment
+# that does not name this file cannot reach a nightly image however it is configured.
+#
+# What the acknowledgement is, precisely: Compose's `${VAR:?…}` can require that a variable *has* a value and nothing
+# more — it has no equality operator — so any non-empty string gets past it and the phrase above is the one to use
+# rather than one that is checked. That is the whole guarantee here, and it is deliberately a smaller one than the
+# chart's: the Helm equivalent runs a template function and does compare the phrase exactly. What both actually buy is
+# the same thing, and it is not enforcement — it is that nobody reaches a nightly image without reading a sentence
+# saying it is not a release.
+#
+# The nightly identifiers themselves are #156's, and neither the registry path below nor any tag under it exists yet.
+
+services:
+  mailmcp:
+    image: ghcr.io/krzysztof318/mailmcp:${MAILMCP_NIGHTLY_TAG:?Name the nightly identifier to deploy. Nightly builds are unsupported development output and carry no release promise.}
+    build: !reset null
+    labels:
+      # Readable from `docker inspect` and from any monitoring that reads labels, so a container started from this
+      # overlay months ago still says what it is.
+      io.mailmcp.release-channel: "ghcr-nightly-unsupported"
+    environment:
+      MAILMCP_NIGHTLY_ACKNOWLEDGED: ${MAILMCP_NIGHTLY_ACKNOWLEDGED:?Set MAILMCP_NIGHTLY_ACKNOWLEDGED=i-understand-this-is-unsupported to deploy a nightly build. It is not a release, its schema and configuration may move without notice, and no support or upgrade path applies to it. Compose can only require that this variable is set; it cannot compare the phrase, which the Helm chart does.}

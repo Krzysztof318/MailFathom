@@ -1,0 +1,127 @@
+# syntax=docker/dockerfile:1
+
+### The MailMcp container image.
+#
+# One image comes out of this file: the service, built with `--target runtime`. It applies no schema change, ever. It
+# carries no migration tool, no SQL, and no credential that could apply one, which is what makes "the host never
+# applies migrations" a property of the image rather than a rule somebody has to remember.
+#
+# `DatabaseSchemaStartupGate` refuses to start against a schema it does not recognize, and the artifact that answers
+# that refusal is #126's — the reviewed, operator-invoked schema step for a released installation. Nothing here
+# produces or applies one, so a deployment built from this file reaches a database whose schema was established
+# separately and deliberately.
+#
+# The build context is the repository root, and the ignore-file beside this one is what bounds it:
+#
+#   docker build --target runtime --file deploy/docker/Dockerfile .
+
+# Base images are pinned to explicit patch versions rather than to a floating `10.0`, so a rebuild months from now
+# resolves what this change was reviewed against. Both are recorded in THIRD_PARTY_LICENSES.md.
+ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.302-noble
+# `-extra` carries ICU and tzdata. MailMcp decodes internationalized headers, folds case for search, and formats
+# instants for several time zones, so invariant globalization — what the plain chiseled image forces — would quietly
+# change how mail from outside one alphabet is read. The size saved is not worth that.
+ARG DOTNET_ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0.10-noble-chiseled-extra
+
+
+########################################################################################################################
+# Build: restore and publish. Runs once, on the build platform.
+########################################################################################################################
+
+# Pinned to BUILDPLATFORM on purpose. The application is published framework-dependent and without an apphost, so its
+# output is portable IL that any architecture's runtime loads — there is nothing per-architecture to produce, and
+# emulating an SDK under QEMU to produce it twice would cost minutes for an identical result. The runtime stages below
+# carry no `--platform`, so those are what buildx resolves per target platform.
+FROM --platform=$BUILDPLATFORM ${DOTNET_SDK_IMAGE} AS build
+
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_NOLOGO=1 \
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+    NUGET_XMLDOC_MODE=skip
+
+WORKDIR /source
+
+# The restore inputs first, so editing a `.cs` file does not invalidate the restore layer. The lock files travel with
+# the projects under src/.
+COPY Directory.Build.props Directory.Packages.props NuGet.config global.json .editorconfig ./
+COPY .config/BannedSymbols.txt .config/
+COPY src/ src/
+
+# Locked mode, like every other gate in this repository. The committed packages.lock.json files fix the transitive
+# closure, so a republished package cannot change what a pinned version means between the branch's verification and
+# this build; NU1004 fails here rather than a different graph being restored silently.
+RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore src/Host/Host.csproj --locked-mode
+
+# `UseAppHost=false` is what keeps the output architecture-neutral: an apphost is a native executable for one runtime
+# identifier, and producing one here would tie the image to the build machine's. The entrypoint therefore invokes the
+# managed assembly through `dotnet`.
+#
+# The XML documentation files are dropped: every project generates one, none is read at run time, and shipping them
+# puts the repository's own commentary about internal contracts into an artifact an operator can unpack. The portable
+# symbol files stay, because they are what turns a stack trace in a support report into file and line numbers, and
+# they reveal nothing the assemblies beside them do not.
+RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
+    dotnet publish src/Host/Host.csproj \
+        --configuration Release \
+        --no-restore \
+        -p:UseAppHost=false \
+        -p:PublishDocumentationFile=false \
+        -p:PublishDocumentationFiles=false \
+        -p:PublishReferencesDocumentationFiles=false \
+        --output /app
+
+
+########################################################################################################################
+# Runtime: the service.
+########################################################################################################################
+
+FROM ${DOTNET_ASPNET_IMAGE} AS runtime
+
+# Supplied by the build so a pulled image can be traced to the commit it came from without consulting anything mutable.
+# The application does not yet report these at run time; stamping them into the assembly is #119, and the release
+# semantics that decide what belongs in `version` are #116.
+ARG IMAGE_VERSION=0.0.0-unversioned
+ARG IMAGE_REVISION=unknown
+ARG IMAGE_CREATED=1970-01-01T00:00:00Z
+
+# `org.opencontainers.image.licenses` is deliberately absent. MailMcp has published no license of its own — #113 owns
+# that decision — and a label naming one would make a distribution claim the copyright holder has not granted. Add it
+# in the change that adds the LICENSE file, so the two can never disagree.
+LABEL org.opencontainers.image.title="MailMcp" \
+      org.opencontainers.image.description="Read-only MCP server over synchronized IMAP mailboxes." \
+      org.opencontainers.image.source="https://github.com/Krzysztof318/MailMcp" \
+      org.opencontainers.image.version="${IMAGE_VERSION}" \
+      org.opencontainers.image.revision="${IMAGE_REVISION}" \
+      org.opencontainers.image.created="${IMAGE_CREATED}"
+
+# 8080 is what the .NET base images already listen on, restated here so the number is visible beside the EXPOSE that
+# publishes it. The container speaks plain HTTP: TLS terminates at the ingress or the reverse proxy in front of it,
+# which is also the only place a certificate needs to exist.
+ENV ASPNETCORE_HTTP_PORTS=8080 \
+    # No diagnostic IPC socket. It would be the one thing this process writes outside /tmp's tmpfs, and a socket that
+    # can request a process dump is a way to read secret material out of managed memory — the exposure
+    # docs/operations/secret-provisioning.md documents and asks deployments to close. Set it back to 1 deliberately,
+    # for one session, when a dump is genuinely needed.
+    DOTNET_EnableDiagnostics=0
+
+EXPOSE 8080
+
+# Owned by root and copied with the default mode, so the unprivileged account below can read and execute the
+# application and write none of it. An explicit `--chmod` is deliberately not used: it applies one mode to directories
+# as well as files, and a directory without its execute bit cannot be traversed by the runtime that has to load from
+# it.
+WORKDIR /app
+COPY --from=build --chown=root:root /app .
+
+# `app` is the unprivileged account the .NET base images define, and root owns everything under /app, so the process
+# cannot rewrite its own code even before a read-only root filesystem is imposed on it. The image needs no writable
+# path of its own; mount a tmpfs at /tmp, which is where the runtime expects to be able to write.
+USER $APP_UID
+
+# No HEALTHCHECK, deliberately. The host serves `/health` and `/alive`, and Kubernetes probes them over HTTP without
+# needing anything from the image — but Docker and Podman run a health check as a command *inside* the container, and a
+# chiseled image has no shell and no HTTP client for one to be written in. Asking the endpoint would therefore mean
+# adding a probe mode to the application itself, which is #179's: it decides the listener, the transport, and whether
+# the probes are served at all. A check written here would be replaced by that change rather than extended by it.
+ENTRYPOINT ["dotnet", "/app/MailMcp.Host.dll"]

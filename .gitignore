@@ -15,6 +15,18 @@ artifacts/
 .env.*
 !.env.example
 
+# Everything an operator provisions for the Compose deployment. The directories themselves are tracked, because the
+# Compose file bind-mounts one of them and a missing bind source is a start-up failure rather than an empty mount;
+# nothing inside them ever is.
+deploy/compose/secrets/*
+!deploy/compose/secrets/mailmcp/
+deploy/compose/secrets/mailmcp/*
+!deploy/compose/secrets/mailmcp/.gitkeep
+# The operator's own copy of the example beside it. The example is tracked; the file MailMcp actually reads is not,
+# because it names the mailboxes a person reads.
+deploy/compose/config/*.json
+deploy/compose/compose.override.yaml
+
 # Agent sandboxes mask developer and editor configuration by bind-mounting an empty file over each
 # path, so these appear in the worktree as zero-byte files that `git add -A` will happily stage.
 # Listed without a trailing slash because the masked form is a file even where the real one is a

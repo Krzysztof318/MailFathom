@@ -1,0 +1,32 @@
+### What reaches the build context, stated as an allow-list.
+#
+# A deny-list is the wrong shape for this repository. The build context is the repository root, which is also where a
+# developer's `.env`, a mounted secret, a certificate, and an agent worktree live, and every one of those would be sent
+# to the daemon by a rule that only names what it remembers to exclude. Excluding everything first means a file reaches
+# the build because a line below says it does.
+#
+# The build stage needs the sources and the shared build contract; nothing here decides what reaches the *runtime*
+# image, which copies only the publish output and the generated migration script.
+
+**
+
+!/src
+!/Directory.Build.props
+!/Directory.Packages.props
+!/NuGet.config
+!/global.json
+
+# `EnforceCodeStyleInBuild` and `TreatWarningsAsErrors` are both on, so the analyzer severities decide whether the
+# build succeeds at all. Without these two the container build would apply default severities and fail on diagnostics
+# the repository has configured away — or, worse, pass while the repository's own gate does not.
+!/.editorconfig
+!/.config/BannedSymbols.txt
+
+# The entrypoint of the migration image. Nothing else under deploy/ enters the build: the Compose file, the chart, and
+# the example configuration are read by an operator's tooling, not baked into an image.
+!/deploy/migrations/apply-schema
+
+# Build output from the host machine. It is architecture- and configuration-specific, it can be stale, and letting it
+# into the context would let a local build decide what the image contains.
+/src/**/bin
+/src/**/obj

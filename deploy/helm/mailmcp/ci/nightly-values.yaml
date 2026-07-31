@@ -1,0 +1,13 @@
+# The unsupported channel, rendered so the repository's verification proves that selecting it requires the
+# acknowledgement, forces ghcr.io, and marks every rendered object as unsupported. Nothing installs from this file.
+image:
+  channel: nightly
+  repository: krzysztof318/mailmcp
+  tag: nightly-00000000
+  nightlyAcknowledgement: i-understand-this-is-unsupported
+
+database:
+  host: postgres.mailmcp.svc.cluster.local
+
+secrets:
+  existingSecret: mailmcp-secrets

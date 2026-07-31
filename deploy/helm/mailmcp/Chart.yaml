@@ -1,0 +1,35 @@
+apiVersion: v2
+name: mailmcp
+description: A read-only MCP server over synchronized IMAP mailboxes, backed by PostgreSQL.
+type: application
+
+# The chart's own version, moved when anything under this directory changes. It is not the application's version and
+# never follows it: a values default corrected without touching the image is a chart release on its own.
+version: 0.1.0
+
+# The application version this chart is written against. `0.0.0-unreleased` is literal rather than a placeholder
+# somebody forgot: MailMcp has published no release, and the semantics that will decide what a version means are still
+# an open decision. While it reads this, the chart makes no claim about which application version it deploys and its
+# image/appVersion drift check stays inactive — see the `image` section of values.yaml.
+appVersion: "0.0.0-unreleased"
+
+home: https://github.com/Krzysztof318/MailMcp
+sources:
+  - https://github.com/Krzysztof318/MailMcp
+
+keywords:
+  - mcp
+  - imap
+  - email
+
+maintainers:
+  - name: Krzysztof Kasprowicz
+    url: https://github.com/Krzysztof318
+
+# No dependencies, deliberately. The chart installs no database: MailMcp needs PostgreSQL with the `vector` extension,
+# and a subchart bundled here would make the chart responsible for the durability, backup, and upgrade of the store
+# that holds every synchronized message. `database` in values.yaml points at one the operator owns.
+#
+# No `artifacthub.io/license` annotation either, and for the same reason the image carries no `image.licenses` label:
+# MailMcp has published no license of its own. #113 owns that decision, and declaring one here would make a claim the
+# copyright holder has not granted.
