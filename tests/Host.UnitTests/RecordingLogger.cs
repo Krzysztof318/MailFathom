@@ -6,14 +6,30 @@ namespace MailMcp.Host.UnitTests;
 
 /// <summary>Captures formatted log messages so a test can assert what startup told the operator — and what it did not.</summary>
 /// <remarks>
+/// <para>
 /// Logging is part of the contract here rather than incidental: the host promises to name every setting that resolved
 /// to an inline value and to keep secret material out of every line it writes.
+/// </para>
+/// <para>
+/// Writes are serialized because the accounts and folders a supervised synchronization run logs from are genuinely
+/// concurrent, and a test that read a torn list would report a fault the code under test does not have.
+/// </para>
 /// </remarks>
 internal sealed class RecordingLogger<TCategory> : ILogger<TCategory>
 {
+    private readonly Lock recordedMessages = new();
     private readonly List<string> messages = [];
 
-    public IReadOnlyList<string> Messages => this.messages;
+    public IReadOnlyList<string> Messages
+    {
+        get
+        {
+            lock (this.recordedMessages)
+            {
+                return [.. this.messages];
+            }
+        }
+    }
 
     public IDisposable? BeginScope<TState>(TState state)
         where TState : notnull => null;
@@ -29,6 +45,9 @@ internal sealed class RecordingLogger<TCategory> : ILogger<TCategory>
     {
         ArgumentNullException.ThrowIfNull(formatter);
 
-        this.messages.Add(formatter(state, exception));
+        lock (this.recordedMessages)
+        {
+            this.messages.Add(formatter(state, exception));
+        }
     }
 }

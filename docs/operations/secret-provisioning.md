@@ -178,7 +178,7 @@ Combined with `InlineOnly`, that is the complete Azure App Configuration path: t
 
 ## Startup behavior
 
-Secret resolution runs before any hosted service starts, so the synchronization worker never runs against an unresolvable secret. Every failure is reported together, each naming its configuration path and a stable failure identity:
+Secret resolution runs before any hosted service starts, so no synchronization run ever starts against an unresolvable secret. Every failure is reported together, each naming its configuration path and a stable failure identity:
 
 ```
 MailSynchronization:Accounts:0:Secrets:Password — the secret reference could not be resolved [MaterialNotFound].
