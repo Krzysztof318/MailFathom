@@ -15,7 +15,7 @@ Give MailMcp one deliberate, configurable, and testable resilience model for out
 
 ## Approved scope
 
-Adopt Polly v8 resilience pipelines through the `AddResiliencePipeline` registration on `IServiceCollection`, resolving pipelines by key with `ResiliencePipelineProvider<TKey>`. Verify and centrally pin `Polly.Core` and `Polly.Extensions`, and record them in `LICENSES.md` with their upstream license expression before use. Evaluate `Microsoft.Extensions.Resilience` for metering enrichment in the same change and either adopt and record it or state why it was not needed.
+Adopt Polly v8 resilience pipelines through the `AddResiliencePipeline` registration on `IServiceCollection`, resolving pipelines by key with `ResiliencePipelineProvider<TKey>`. Verify and centrally pin `Polly.Core` and `Polly.Extensions`, and record them in `THIRD_PARTY_LICENSES.md` with their upstream license expression before use. Evaluate `Microsoft.Extensions.Resilience` for metering enrichment in the same change and either adopt and record it or state why it was not needed.
 
 The pipeline key is a typed enumeration of dependency classes rather than a free string, so a typo cannot silently resolve an empty pipeline: mailbox session establishment, mailbox data retrieval, message delivery, database command execution, and AI provider invocation. Each class has typed options — attempt count, base delay, maximum delay, per-attempt timeout, total timeout, circuit-breaker failure ratio and sampling window, and concurrency limit — validated at startup with `ValidateOnStart`.
 
@@ -37,7 +37,7 @@ Applying the pipelines to any specific adapter. Specification 04 wires IMAP; lat
 
 ## Definition of done
 
-- Polly packages are pinned centrally and recorded in `LICENSES.md`.
+- Polly packages are pinned centrally and recorded in `THIRD_PARTY_LICENSES.md`.
 - Every dependency class resolves a configured pipeline, and an unknown key cannot be constructed.
 - No Polly type is reachable from `Domain` or `Application`.
 - `docs/architecture/` gains a page describing the pipeline model, the single-layer rule, and the EF Core execution-strategy interaction.

@@ -36,8 +36,10 @@ None of this relaxes the rest of these instructions. Pre-release is a reason to 
 - Only use third-party components whose licenses permit commercial use and do not require MailMcp itself to be relicensed or distributed as source code. Prefer permissive licenses such as MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, and PostgreSQL License.
 - Do not introduce GPL, AGPL, SSPL, BUSL, Commons Clause, PolyForm Noncommercial, source-available-only, field-of-use-restricted, or otherwise non-permissive dependencies without explicit owner approval.
 - Treat hosted services, AI models, provider APIs, container images, generated assets, and copied code samples as separately reviewable from SDK licenses. A permissive SDK license does not approve the service terms, model terms, data-use policy, trademark terms, or redistribution conditions.
-- Keep the root `LICENSES.md` third-party license register current. Add or update its entries in the same change set as any dependency, service, protocol SDK, container image, generated asset, or externally sourced code sample change.
-- When a dependency is pinned in `Directory.Packages.props`, record the exact package name, version, license expression, upstream URL, and any required attribution or NOTICE handling in `LICENSES.md`.
+- Keep the root `THIRD_PARTY_LICENSES.md` third-party license register current. Add or update its entries in the same change set as any dependency, service, protocol SDK, container image, generated asset, or externally sourced code sample change.
+- The register is not MailMcp's own license and not a notice bundle. It records which third-party components are used and under which terms; the project's `LICENSE` and the generated notices that ship with an artifact are separate documents owned by #113.
+- Record a component in the register section that matches its exposure. What ships carries redistribution and notice obligations, and what only builds, tests, or runs on a developer machine does not; a register that states exposure per row rather than by structure lets the two blur.
+- When a dependency is pinned in `Directory.Packages.props`, record the exact package name, version, license expression, upstream URL, and any required attribution or NOTICE handling in `THIRD_PARTY_LICENSES.md`. Record the version the artifact's own graph resolves when nearest-wins resolution raises a pin that is only a floor.
 
 ## Documentation and test obligations
 
@@ -144,7 +146,7 @@ Add a mechanically checkable rule to the mechanism, not to this file: a severity
 - Keep explicit seams for future data-subject workflows such as access, export, rectification support, erasure, restriction of processing, retention holds, and audit evidence, even when those workflows are not implemented in the first release.
 - Do not treat embeddings or derived indexes as anonymous. They inherit the classification, retention, access-control, deletion, and export constraints of the source mail content unless a reviewed privacy design proves otherwise.
 - Future AGT adoption must remain an adapter-level governance concern. AGT policy decisions, audit records, and tool-call controls must not leak provider-specific or governance-framework types into `Domain` or `Application`.
-- Before adding AGT or any governance/compliance package, verify the current official documentation, .NET 10 compatibility, license, service terms, telemetry behavior, and data-processing implications; update `LICENSES.md` for any dependency or externally sourced component.
+- Before adding AGT or any governance/compliance package, verify the current official documentation, .NET 10 compatibility, license, service terms, telemetry behavior, and data-processing implications; update `THIRD_PARTY_LICENSES.md` for any dependency or externally sourced component.
 
 ## Reliability, security, and performance
 
@@ -168,7 +170,7 @@ Add a mechanically checkable rule to the mechanism, not to this file: a severity
 
 - Keep third-party types inside their owning adapter wherever practical.
 - Prefer platform capabilities before adding packages. Every new package must have a clear owner and purpose.
-- Take every package from the sources the repository's own `NuGet.config` declares. It clears the inherited source list so a feed configured on a developer machine cannot supply a dependency the license register never reviewed, and its package source mapping means a second source restores nothing until its packages are named explicitly. Adding a source is a licensing and supply-chain decision, so review it as one and record it in `LICENSES.md`.
+- Take every package from the sources the repository's own `NuGet.config` declares. It clears the inherited source list so a feed configured on a developer machine cannot supply a dependency the license register never reviewed, and its package source mapping means a second source restores nothing until its packages are named explicitly. Adding a source is a licensing and supply-chain decision, so review it as one and record it in `THIRD_PARTY_LICENSES.md`.
 - Do not expose EF Core entities, MailKit objects, MCP SDK types, or provider-specific AI types across application boundaries.
 - Access raw RFC 822 content only through the application-owned `IEmailContentStore` port. Its initial implementation uses a dedicated PostgreSQL table, separate from email metadata.
 - Keep PostgreSQL, Npgsql, and `bytea` details inside the initial content-store adapter so a future MinIO/S3 implementation does not change application use cases or domain types.

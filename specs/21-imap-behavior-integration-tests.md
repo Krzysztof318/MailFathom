@@ -17,7 +17,7 @@ Every unit test in the repository proves that application code *calls* the seen-
 
 A containerized IMAP server is added as a resource in a test-scoped app model and driven through the same `DistributedApplicationTestingBuilder` harness that specification 20 establishes, so there is one integration mechanism rather than two.
 
-The server image is selected as part of this work rather than assumed here. Selection criteria, in order: it must support the extensions the roadmap depends on — at minimum UIDVALIDITY semantics, PEEK fetch, and ideally IDLE, NOTIFY, and CONDSTORE — it must be scriptable enough to seed known messages and to read back flag state, and its license and image terms must be verified from official sources and permit this use. The chosen image, its tag, and its license are recorded in `LICENSES.md` before the dependency is added, and the evaluation is written down so a later change of server is an informed decision. If no candidate satisfies the flag-observation requirement, that finding is documented and the specification is reduced to the scenarios that remain verifiable.
+The server image is selected as part of this work rather than assumed here. Selection criteria, in order: it must support the extensions the roadmap depends on — at minimum UIDVALIDITY semantics, PEEK fetch, and ideally IDLE, NOTIFY, and CONDSTORE — it must be scriptable enough to seed known messages and to read back flag state, and its license and image terms must be verified from official sources and permit this use. The chosen image, its tag, and its license are recorded in `THIRD_PARTY_LICENSES.md` before the dependency is added, and the evaluation is written down so a later change of server is an informed decision. If no candidate satisfies the flag-observation requirement, that finding is documented and the specification is reduced to the scenarios that remain verifiable.
 
 ## Approved scope
 
@@ -59,5 +59,5 @@ SMTP delivery verification with smtp4dev, which draft section 21.3 defers to the
 
 - The `\Seen` invariant is proven against a real server, not only against a substitute.
 - Idempotency, UIDVALIDITY change, and expunge detection are verified end to end.
-- The chosen server image is license-reviewed and recorded in `LICENSES.md`, with the selection rationale documented.
+- The chosen server image is license-reviewed and recorded in `THIRD_PARTY_LICENSES.md`, with the selection rationale documented.
 - `docs/operations/` documents how to run the suite locally.
