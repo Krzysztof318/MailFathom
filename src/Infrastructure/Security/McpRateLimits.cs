@@ -21,6 +21,14 @@ namespace MailMcp.Infrastructure.Security;
 /// tells the client to back off while the server is still healthy. A deployment that would rather absorb a short burst
 /// can configure a bounded queue, and bounded is the only shape available.
 /// </para>
+/// <para>
+/// A client queue costs more than it looks like it does, which is why <see cref="RequestQueueLimit" /> is bounded by
+/// <see cref="MaxConcurrentRequests" /> rather than only by its own range. The two limiters are acquired in order, so a
+/// request waiting for its client's tokens has already taken a concurrency permit and holds it until the next
+/// replenishment — up to an hour away. Keeping the queue smaller than the permit count is what stops one client out of
+/// capacity from parking every permit the process has and refusing everyone else through a limit that is supposed to be
+/// its own.
+/// </para>
 /// </remarks>
 public sealed class McpRateLimits
 {
@@ -82,7 +90,7 @@ public sealed class McpRateLimits
     /// <param name="replenishmentPeriod">How often a client's spent capacity is restored.</param>
     /// <param name="requestQueueLimit">How many of one client's requests wait for capacity.</param>
     /// <returns>The limits.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when a value would leave the endpoint unbounded, unable to serve anything, or unable to recover the capacity it hands out.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when a value would leave the endpoint unbounded, unable to serve anything, unable to recover the capacity it hands out, or able to let one client hold every concurrency permit.</exception>
     /// <remarks>
     /// The guards here are the invariants the type cannot exist without, not the ranges an operator is held to. A
     /// deployment's settings are checked against those before they reach this method, so that an operator reads every
@@ -106,6 +114,12 @@ public sealed class McpRateLimits
         // A period that hands out more than the bucket holds is not a faster limit, it is a different one: the surplus
         // is discarded on every replenishment, so the rate an operator wrote down is never the rate that applies.
         ArgumentOutOfRangeException.ThrowIfGreaterThan(tokensPerReplenishmentPeriod, tokenCapacity);
+
+        // A request waiting for its client's capacity is already holding a concurrency permit, because the two limiters
+        // are acquired in that order. A client queue as large as the permit count therefore lets one client out of
+        // tokens hold every permit the process has until its next replenishment, which is the isolation these two
+        // controls exist to provide, inverted.
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(requestQueueLimit, maxConcurrentRequests);
 
         return new McpRateLimits(
             maxConcurrentRequests,

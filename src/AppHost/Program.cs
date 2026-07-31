@@ -111,7 +111,12 @@ if (runsIntegrationTests)
             OrchestrationContract.McpRateLimitTokenCapacity.ToString(CultureInfo.InvariantCulture))
         .WithEnvironment(
             "McpEndpoint__RateLimiting__ReplenishmentPeriod",
-            OrchestrationContract.McpRateLimitReplenishmentPeriod);
+            OrchestrationContract.McpRateLimitReplenishmentPeriod)
+        // Raised rather than narrowed, so the concurrency limit cannot refuse anything the suite sends and a 429 it
+        // observes can only have come from the per-client bucket the route's policy carries.
+        .WithEnvironment(
+            "McpEndpoint__RateLimiting__MaxConcurrentRequests",
+            OrchestrationContract.McpRateLimitMaxConcurrentRequests.ToString(CultureInfo.InvariantCulture));
 }
 
 // Host is the startup project because it is the project resource the connection string is issued to; Infrastructure

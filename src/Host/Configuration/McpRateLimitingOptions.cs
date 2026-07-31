@@ -54,6 +54,7 @@ internal sealed class McpRateLimitingOptions
     public TimeSpan ReplenishmentPeriod { get; set; } = McpRateLimits.Default.ReplenishmentPeriod;
 
     /// <summary>Gets or sets how many of one client's requests wait for capacity before the rest are refused.</summary>
+    /// <remarks>Has to stay below <see cref="MaxConcurrentRequests" />, because a request waiting here is already holding a concurrency permit.</remarks>
     public int RequestQueueLimit { get; set; } = McpRateLimits.Default.RequestQueueLimit;
 
     /// <summary>Finds everything an operator must fix before these limits can be applied.</summary>
@@ -140,6 +141,14 @@ internal sealed class McpRateLimitingOptions
         if (bothValuesAreUsable && this.TokensPerReplenishmentPeriod > this.TokenCapacity)
         {
             yield return $"{nameof(this.TokensPerReplenishmentPeriod)} — '{this.TokensPerReplenishmentPeriod}' restores more capacity than {nameof(this.TokenCapacity)} of '{this.TokenCapacity}' can hold, so the surplus is discarded on every replenishment and the rate written here is never the rate that applies; raise {nameof(this.TokenCapacity)} or lower this.";
+        }
+
+        var bothLimitsAreUsable = this.RequestQueueLimit is >= 0 and <= MaximumQueueLimit
+            && this.MaxConcurrentRequests is >= 1 and <= MaximumConcurrentRequests;
+
+        if (bothLimitsAreUsable && this.RequestQueueLimit >= this.MaxConcurrentRequests)
+        {
+            yield return $"{nameof(this.RequestQueueLimit)} — '{this.RequestQueueLimit}' is not below {nameof(this.MaxConcurrentRequests)} of '{this.MaxConcurrentRequests}', and a queued request holds a concurrency permit while it waits for its client's capacity to return; one client out of capacity could therefore hold every permit the process has until its next replenishment; lower this below {nameof(this.MaxConcurrentRequests)} or write 0 to refuse instead of queueing.";
         }
     }
 }

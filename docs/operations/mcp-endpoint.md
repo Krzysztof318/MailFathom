@@ -122,6 +122,13 @@ whatever the answer, and both sides of the comparison are reduced to a digest an
 is where the difference is — an expired key is recorded by name at `Warning`, and a key whose material has disappeared at
 `Error` — and neither line carries the presented credential, the configured material, or the reference target.
 
+**That challenge is what a refused request receives while there is capacity to serve it.** The challenge is written by
+authorization, which runs behind the rate limiter, and a request carrying no usable credential is counted against the
+shared anonymous partition on the way there. Once that partition or the process-wide concurrency limit is exhausted, the
+same request is answered `429 Too Many Requests` with no body and never reaches the point where a challenge is written.
+That is deliberate — it is what makes a flood of bad credentials cost the sender something — and it means a client
+retrying against an exhausted partition sees `429` where it expected `401`. See [Rate limiting](#rate-limiting).
+
 ### `None`
 
 `None` is the unauthenticated posture, and it is reachable only by writing it down. It never arises from a missing key, a
@@ -386,7 +393,7 @@ a number is not a decision anyone made.
 | `TokenCapacity` | `60` | 1–1000000 | The largest burst one client may spend at once |
 | `TokensPerReplenishmentPeriod` | `60` | 1–`TokenCapacity` | How much of that burst one client gets back each period |
 | `ReplenishmentPeriod` | `00:01:00` | 1s–1h | How often a client's spent capacity is restored |
-| `RequestQueueLimit` | `0` | 0–1000 | One client's requests that wait for capacity before the rest are refused |
+| `RequestQueueLimit` | `0` | 0 to `MaxConcurrentRequests` − 1 | One client's requests that wait for capacity before the rest are refused |
 
 The defaults are sized for the work an MCP request actually does here. Every tool answers from the local mailbox copy
 with a bounded query, so a request is short and database-bound rather than long and compute-bound. Twenty concurrent
@@ -408,10 +415,18 @@ that is already gone, which turns an overload into a slower, larger overload; re
 back off while the server is still healthy. A deployment that would rather absorb a short burst can configure a queue,
 and a bounded queue is the only shape available.
 
+**A client queue is bounded by the concurrency limit as well as by its own range.** The two limiters are acquired in
+order — the process-wide one first, the client's bucket second — so a request waiting for its client's tokens is already
+holding a concurrency permit and keeps it until the next replenishment, which can be an hour away. A queue as large as
+`MaxConcurrentRequests` would therefore let one client that has run out of capacity park every permit the process has
+and refuse everyone else, through the very limit that exists to keep one client's behaviour to itself. `RequestQueueLimit`
+has to stay below `MaxConcurrentRequests`, and `0` — refuse immediately, and tell the client when to come back — remains
+the setting to prefer.
+
 Configuration that could never work is refused at startup rather than applied: a limit of zero or below, an unbounded
-queue, a replenishment period below what the timer can resolve, and a period that restores more than the bucket holds —
+queue, a replenishment period below what the timer can resolve, a period that restores more than the bucket holds —
 which is not a faster limit but a different one, because the surplus is discarded every time and the rate written down is
-never the rate that applies.
+never the rate that applies — and a client queue that could hold every concurrency permit.
 
 ### Whose capacity a request spends
 
@@ -473,6 +488,14 @@ proxy or load balancer that bounds it if that matters.
 
 **It is not DDoS protection.** It bounds what one client can take from the process it is talking to. A flood arriving
 from many sources is a job for a WAF, a CDN, or a hosting provider's own protection, and none of that is in MailMcp.
+
+**It bounds what the endpoint serves, not what the server spends deciding whether to serve it.** The limiter runs behind
+the origin check, the certificate check, and authentication, so the work those do — reading every configured trust anchor
+and comparing every configured key, on every request — happens before a permit is taken. The order is what makes the
+per-client limit possible at all: run ahead of authentication and there is no client to count against, and every request
+shares the anonymous bucket. What a bad credential costs the sender is therefore a partition it shares with every other
+unidentified request, not the work the server already did to refuse it. Bounding connections that never authenticate is a
+job for whatever fronts the process.
 
 Turning the limits off is an explicit value and costs one startup warning:
 

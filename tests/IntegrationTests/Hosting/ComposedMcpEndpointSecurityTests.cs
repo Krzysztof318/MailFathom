@@ -161,9 +161,18 @@ public sealed class ComposedMcpEndpointSecurityTests
     /// which is the whole point of partitioning and would look identical from inside the process if it were broken.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The burst is dispatched together rather than one request after another, so what the limiter sees is a burst
     /// however fast the host answers. Sending them in sequence against a slow machine would let capacity replenish
     /// between them and leave the test passing because nothing was ever over the limit.
+    /// </para>
+    /// <para>
+    /// Two limiters can answer <c>429</c> on this route, so the refusals are checked for the one signal only the client
+    /// bucket produces: a <c>Retry-After</c>, which it can compute because it knows when the next replenishment lands
+    /// and which a concurrency refusal never carries. The topology also raises its concurrency ceiling well above this
+    /// burst, so the process-wide limiter is not merely distinguishable here but cannot have refused anything at all.
+    /// Without both, this test would pass on concurrency refusals alone even if the route carried no policy.
+    /// </para>
     /// </remarks>
     [Fact]
     public async Task McpEndpoint_AClientBurstingPastItsCapacity_IsRefusedWithoutSpendingAnotherClients()
@@ -187,6 +196,7 @@ public sealed class ComposedMcpEndpointSecurityTests
         Assert.NotEmpty(refusals);
         Assert.All(refusals, refusal => Assert.Empty(refusal.Body));
         Assert.All(refusals, refusal => Assert.Equal("no-store", refusal.CacheControl));
+        Assert.All(refusals, refusal => Assert.NotNull(refusal.RetryAfter));
         Assert.Equal(HttpStatusCode.OK, otherClient.StatusCode);
         Assert.Contains(
             ToolListedByTheProtocolSurface,
@@ -290,9 +300,11 @@ public sealed class ComposedMcpEndpointSecurityTests
         return new McpAnswer(
             response.StatusCode,
             await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
-            response.Headers.CacheControl?.ToString());
+            response.Headers.CacheControl?.ToString(),
+            response.Headers.RetryAfter?.ToString());
     }
 
     /// <summary>What one request in a burst is judged on, read before its response was released.</summary>
-    private sealed record McpAnswer(HttpStatusCode StatusCode, string Body, string? CacheControl);
+    /// <remarks><c>RetryAfter</c> is what says which limiter refused: only the per-client bucket knows when capacity returns.</remarks>
+    private sealed record McpAnswer(HttpStatusCode StatusCode, string Body, string? CacheControl, string? RetryAfter);
 }

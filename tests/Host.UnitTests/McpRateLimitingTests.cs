@@ -14,13 +14,14 @@ namespace MailMcp.Host.UnitTests;
 
 /// <summary>Covers the limits the MCP endpoint admits traffic under.</summary>
 /// <remarks>
-/// Nothing here observes a clock. The configured replenishment period is a minute throughout, so every test finishes
-/// inside one period and no capacity returns part way through an assertion; what a replenishment restores is asserted
-/// against the limiter description the endpoint is built from rather than by waiting for one, because
-/// <c>TokenBucketRateLimiter.TryReplenish</c> is itself gated on elapsed wall-clock time and a test that drove it would
-/// be a test of the clock. Restoring capacity on that schedule is the framework's own contract; what belongs here is
-/// that the schedule reaching it is the one an operator configured, and that automatic replenishment is on so nothing
-/// in this process has to pump it.
+/// Nothing here observes a clock, and nothing here is raced by one. A test that spends a client's capacity builds its
+/// bucket with the replenishment timer off, so a process that is suspended, debugged, or merely slow between two
+/// assertions cannot have capacity returned underneath it and turn an expected refusal into a pass. That leaves
+/// replenishment itself untested by construction, which is deliberate: <c>TokenBucketRateLimiter.TryReplenish</c> is
+/// gated on elapsed wall-clock time, so driving it would be a test of the clock. Restoring capacity on schedule is the
+/// framework's own contract; what belongs here is that the schedule reaching it is the one an operator configured, and
+/// that automatic replenishment is on in production so nothing in this process has to pump it — both asserted against
+/// the limiter description the endpoint is built from.
 /// </remarks>
 public sealed class McpRateLimitingTests
 {
@@ -465,9 +466,33 @@ public sealed class McpRateLimitingTests
         PartitionedRateLimiter.Create<HttpContext, string>(
             httpContext => McpRateLimiting.PartitionForProcess(httpContext, limits));
 
+    /// <summary>
+    /// Builds the endpoint's own partitions, with the replenishment timer left off so a test that spends capacity is
+    /// not racing it.
+    /// </summary>
+    /// <remarks>
+    /// The partition key is the one <see cref="McpRateLimiting.PartitionForClient" /> computed, because which client a
+    /// request is counted under is what these tests are about, and the bucket is the one
+    /// <see cref="McpRateLimiting.ClientBucketOptions" /> described apart from
+    /// <see cref="TokenBucketRateLimiterOptions.AutoReplenishment" />. That the endpoint leaves it on is asserted
+    /// against those options directly, which is the only place it can be asserted without waiting for a clock.
+    /// </remarks>
     private static PartitionedRateLimiter<HttpContext> ClientLimiter(McpRateLimits limits) =>
-        PartitionedRateLimiter.Create<HttpContext, string>(
-            httpContext => McpRateLimiting.PartitionForClient(httpContext, limits));
+        PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+            RateLimitPartition.GetTokenBucketLimiter(
+                McpRateLimiting.PartitionForClient(httpContext, limits).PartitionKey,
+                _ => WithoutTheReplenishmentTimer(McpRateLimiting.ClientBucketOptions(limits))));
+
+    private static TokenBucketRateLimiterOptions WithoutTheReplenishmentTimer(TokenBucketRateLimiterOptions options) =>
+        new()
+        {
+            AutoReplenishment = false,
+            TokenLimit = options.TokenLimit,
+            TokensPerPeriod = options.TokensPerPeriod,
+            ReplenishmentPeriod = options.ReplenishmentPeriod,
+            QueueLimit = options.QueueLimit,
+            QueueProcessingOrder = options.QueueProcessingOrder,
+        };
 
     private static DefaultHttpContext McpRequest(
         string? authenticatedClientName = null,

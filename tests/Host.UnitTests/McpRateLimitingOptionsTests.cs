@@ -126,6 +126,51 @@ public sealed class McpRateLimitingOptionsTests
     }
 
     [Fact]
+    public void FindConfigurationErrors_WithAClientQueueThatCouldHoldEveryPermit_ReportsTheCombination()
+    {
+        // Arrange
+        // The two limiters are acquired in order, so a request waiting for its client's capacity is already holding a
+        // concurrency permit. A queue this size lets one client out of tokens park every permit the process has.
+        var settings = new McpRateLimitingOptions { MaxConcurrentRequests = 4, RequestQueueLimit = 4 };
+
+        // Act
+        var errors = settings.FindConfigurationErrors();
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.StartsWith(nameof(McpRateLimitingOptions.RequestQueueLimit), error, StringComparison.Ordinal);
+        Assert.Contains(nameof(McpRateLimitingOptions.MaxConcurrentRequests), error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_WithAClientQueueBelowThePermitCount_ReportsNothing()
+    {
+        // Arrange
+        var settings = new McpRateLimitingOptions { MaxConcurrentRequests = 4, RequestQueueLimit = 3 };
+
+        // Act
+        var errors = settings.FindConfigurationErrors();
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_WithOneMistypedQueueLimit_ReportsItOnce()
+    {
+        // Arrange
+        // A queue beyond its own range is also beyond the permit count; reporting both would describe one typo twice.
+        var settings = new McpRateLimitingOptions { RequestQueueLimit = 1001 };
+
+        // Act
+        var errors = settings.FindConfigurationErrors();
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.StartsWith(nameof(McpRateLimitingOptions.RequestQueueLimit), error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FindConfigurationErrors_WithOneMistypedCapacity_ReportsItOnce()
     {
         // Arrange

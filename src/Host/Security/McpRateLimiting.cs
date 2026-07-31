@@ -25,6 +25,12 @@ namespace MailMcp.Host.Security;
 /// zero, so nothing waits and nothing is held; a deployment that configures a concurrency queue should know that a
 /// request can wait in it and then still be refused for its own rate.
 /// </para>
+/// <para>
+/// That order is also why a client queue cannot be as large as the concurrency limit, which
+/// <see cref="McpRateLimits" /> refuses to construct: a request waiting for its client's tokens keeps the concurrency
+/// permit it took on the way in, and would otherwise let one client out of capacity park every permit in the process
+/// until its next replenishment.
+/// </para>
 /// </remarks>
 internal static class McpRateLimiting
 {

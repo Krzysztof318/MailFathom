@@ -92,4 +92,44 @@ public sealed class McpRateLimitsTests
             replenishmentPeriod: TimeSpan.FromSeconds(1),
             requestQueueLimit: 0));
     }
+
+    /// <summary>
+    /// A queued request is holding a concurrency permit while it waits, because the process-wide limiter is acquired
+    /// first and the client's bucket second. A queue that could hold every permit would let one client out of capacity
+    /// stop the whole process until its next replenishment, which is the isolation the per-client bucket exists for,
+    /// inverted.
+    /// </summary>
+    [Theory]
+    [InlineData(4, 4)]
+    [InlineData(4, 5)]
+    public void Create_WithAClientQueueThatCouldHoldEveryPermit_Throws(
+        int maxConcurrentRequests,
+        int requestQueueLimit)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => McpRateLimits.Create(
+            maxConcurrentRequests,
+            concurrencyQueueLimit: 0,
+            tokenCapacity: 10,
+            tokensPerReplenishmentPeriod: 10,
+            replenishmentPeriod: TimeSpan.FromSeconds(1),
+            requestQueueLimit));
+    }
+
+    [Fact]
+    public void Create_WithAClientQueueBelowThePermitCount_LeavesAPermitForEveryoneElse()
+    {
+        // Act
+        var limits = McpRateLimits.Create(
+            maxConcurrentRequests: 4,
+            concurrencyQueueLimit: 0,
+            tokenCapacity: 10,
+            tokensPerReplenishmentPeriod: 10,
+            replenishmentPeriod: TimeSpan.FromSeconds(1),
+            requestQueueLimit: 3);
+
+        // Assert
+        Assert.Equal(3, limits.RequestQueueLimit);
+        Assert.True(limits.RequestQueueLimit < limits.MaxConcurrentRequests);
+    }
 }

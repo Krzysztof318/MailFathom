@@ -63,6 +63,16 @@ public static class OrchestrationContract
     /// <summary>How often the integration-test topology restores a client's spent MCP capacity.</summary>
     public const string McpRateLimitReplenishmentPeriod = "00:00:01";
 
+    /// <summary>How many MCP requests the integration-test topology's host serves at once, across every client.</summary>
+    /// <remarks>
+    /// Raised far above the product default, and above any burst the suite sends, so that the process-wide concurrency
+    /// limit cannot be what refuses a request. Left at the default it would sit at the same order as
+    /// <see cref="McpRateLimitTokenCapacity" />, and a burst large enough to exhaust a client's tokens would also exceed
+    /// the permits — leaving a test unable to say which of the two limiters answered, and passing even if the per-client
+    /// policy were never attached to the route.
+    /// </remarks>
+    public const int McpRateLimitMaxConcurrentRequests = 200;
+
     /// <summary>The one browser origin the integration-test topology's MCP endpoint serves.</summary>
     /// <remarks>
     /// The topology narrows the origins deliberately rather than leaving the permissive default, because a suite that
