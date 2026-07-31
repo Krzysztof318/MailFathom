@@ -171,6 +171,29 @@ Every trigger runs the workflow file from the default branch.
 deliberately no `workflow_dispatch`: a dispatch takes a ref, which would let the
 branch under review supply the job that receives the Claude credential.
 
+The paths under `$RUNNER_TEMP` are declared on each step that uses them rather
+than once for the job, because `runner` is not among the contexts a job-level
+`env` block may read and naming it there fails the whole file's validation before
+any job exists.
+
+### What the reviewer is measured against
+
+The prompt points the reviewer at this repository's own rules rather than at
+general review practice: root `AGENTS.md`, the nested `AGENTS.md` files under
+`src/`, `tests/`, and `docs/`, the recurring findings in the `review-change`
+skill, and the specifications and ADRs that govern the area the change touches. A
+finding is expected to name the rule it rests on, and one that applies generic
+advice where this repository has stated a different rule is itself wrong.
+
+Beyond that contract it works through five rubrics — the repository's rules,
+security and privacy, reliability, performance, and clean code — each stated as
+the specific things reviews have caught here rather than as a category name, and
+each applied only where the change reaches it. The same prompt still rules out
+what the build already enforces, anything about backward compatibility or
+migration paths, and a request for tests that names no untested case, so the two
+reviewers do not spend threads on findings this repository has already decided
+against.
+
 ### What the submission step guarantees
 
 It validates each finding's anchor against the same patches the reviewer was
