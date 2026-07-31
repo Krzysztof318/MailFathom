@@ -411,16 +411,28 @@ public sealed class TlsServerCertificateLoader
     }
 
     /// <summary>Publishes the assembled identity, or disposes it when it cannot serve the configured domain.</summary>
+    /// <remarks>
+    /// The chain is ordered here rather than taken as it arrived, because neither source states an order a client can
+    /// rely on: a PKCS#12 bundle states none at all, and a PEM file states whichever one it was concatenated in.
+    /// </remarks>
     private TlsServerCertificateLoadResult Accept(
         X509Certificate2 leaf,
         X509Certificate2[] intermediates,
         string domain)
     {
-        var certificate = new TlsServerCertificate(leaf, intermediates);
-        var unsuitability = TlsServerCertificateSuitability.FindUnsuitability(
-            leaf,
-            domain,
-            this.timeProvider.GetUtcNow());
+        var evaluatedAt = this.timeProvider.GetUtcNow();
+        var chainOrder = TlsServerCertificateSuitability.OrderTowardsRoot(leaf, intermediates, evaluatedAt);
+
+        if (chainOrder.Unsuitability is { } chainFailure)
+        {
+            // Released here rather than through an identity, because a chain that was refused never became one.
+            DisposeAll(leaf, intermediates);
+
+            return TlsServerCertificateLoadResult.Failed(chainFailure);
+        }
+
+        var certificate = new TlsServerCertificate(leaf, chainOrder.Intermediates);
+        var unsuitability = TlsServerCertificateSuitability.FindUnsuitability(leaf, domain, evaluatedAt);
 
         if (unsuitability is not { } failure)
         {
@@ -430,6 +442,16 @@ public sealed class TlsServerCertificateLoader
         certificate.Dispose();
 
         return TlsServerCertificateLoadResult.Failed(failure);
+    }
+
+    private static void DisposeAll(X509Certificate2 leaf, X509Certificate2[] intermediates)
+    {
+        leaf.Dispose();
+
+        foreach (var intermediate in intermediates)
+        {
+            intermediate.Dispose();
+        }
     }
 
     private async Task<(bool Resolvable, ResolvedSecret? Password)> ResolvePasswordAsync(

@@ -53,6 +53,25 @@ internal static class TestCertificates
         return request.CreateSelfSigned(ValidFrom, ValidUntil);
     }
 
+    /// <summary>Creates a self-signed certificate authority whose own validity ended long ago.</summary>
+    /// <remarks>Its purpose is to prove that a chain is refused for an authority that has expired, which a client meets as a path it cannot build rather than as anything the leaf says.</remarks>
+    internal static X509Certificate2 CreateExpiredCertificateAuthority(string commonName)
+    {
+        using var signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var request = new CertificateRequest($"CN={commonName}", signingKey, HashAlgorithmName.SHA256);
+
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(
+            certificateAuthority: true,
+            hasPathLengthConstraint: false,
+            pathLengthConstraint: 0,
+            critical: true));
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(
+            X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign,
+            critical: true));
+
+        return request.CreateSelfSigned(ValidFrom, ExpiredBy);
+    }
+
     /// <summary>Issues an intermediate authority under an existing one, private key included so it can issue in turn.</summary>
     internal static X509Certificate2 IssueIntermediateAuthority(X509Certificate2 issuer, string commonName) =>
         Issue(issuer, commonName, certificateAuthority: true, dnsName: null, keepPrivateKey: true);
@@ -104,6 +123,7 @@ internal static class TestCertificates
     /// <param name="notAfter">When the certificate stops being valid.</param>
     /// <param name="issuer">The authority that signs it, or <see langword="null" /> for a self-signed certificate.</param>
     /// <param name="serverAuthentication">Whether the extended key usage permits server authentication or only client authentication.</param>
+    /// <param name="keyUsage">The key usage the certificate declares, or <see langword="null" /> to declare none and leave the key unconstrained.</param>
     /// <returns>The certificate, with its private key, owned by the caller.</returns>
     /// <remarks>
     /// This differs from <see cref="IssueServerCertificate" /> in the two ways a presented identity differs from an
@@ -115,7 +135,8 @@ internal static class TestCertificates
         DateTimeOffset notBefore,
         DateTimeOffset notAfter,
         X509Certificate2? issuer = null,
-        bool serverAuthentication = true)
+        bool serverAuthentication = true,
+        X509KeyUsageFlags? keyUsage = null)
     {
         using var subjectKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var request = new CertificateRequest(
@@ -131,6 +152,11 @@ internal static class TestCertificates
         request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
             [new Oid(serverAuthentication ? ServerAuthenticationOid : ClientAuthenticationOid)],
             critical: false));
+
+        if (keyUsage is { } declaredKeyUsage)
+        {
+            request.CertificateExtensions.Add(new X509KeyUsageExtension(declaredKeyUsage, critical: true));
+        }
 
         var subjectAlternativeNames = new SubjectAlternativeNameBuilder();
 

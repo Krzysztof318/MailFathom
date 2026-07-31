@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using System.Net;
+using System.Net.Sockets;
 
 namespace MailMcp.Host.Configuration;
 
@@ -46,6 +47,7 @@ internal sealed class McpHttpsOptions
 
         errors.AddRange(this.FindCollidingIdentities(configurationPath));
         errors.AddRange(this.FindListenerDisagreements(configurationPath));
+        errors.AddRange(this.FindOverlappingListeners(configurationPath));
 
         return errors;
     }
@@ -110,4 +112,53 @@ internal sealed class McpHttpsOptions
             }
         }
     }
+
+    /// <summary>Refuses a port whose profiles ask for two sockets the operating system will only grant one of.</summary>
+    /// <remarks>
+    /// Profiles naming the same address share one listener, which is intended. Naming a wildcard address beside a
+    /// specific one on the same port is not: the wildcard socket already accepts the connections the second listener
+    /// was bound for, so the second bind fails and takes the whole process down with an address-in-use error that names
+    /// a socket rather than the profile that asked for it. Reporting it here turns that into a configuration message
+    /// read before any certificate is loaded.
+    /// </remarks>
+    private IEnumerable<string> FindOverlappingListeners(string configurationPath)
+    {
+        var sectionPath = $"{configurationPath}:{nameof(this.Endpoints)}";
+
+        var portGroups = this.Endpoints
+            .Where(static endpoint => IPAddress.TryParse(endpoint.BindAddress?.Trim(), out _))
+            .GroupBy(static endpoint => endpoint.ListenerAddress.Port);
+
+        foreach (var port in portGroups)
+        {
+            var addresses = port
+                .Select(static endpoint => endpoint.ListenerAddress.Address)
+                .Distinct()
+                .ToArray();
+
+            foreach (var wildcard in addresses.Where(IsWildcard))
+            {
+                var covered = addresses
+                    .Where(address => !address.Equals(wildcard) && Covers(wildcard, address))
+                    .ToArray();
+
+                if (covered.Length > 0)
+                {
+                    yield return $"{sectionPath} — profiles on port {port.Key} bind {wildcard} as well as {string.Join(" and ", covered.AsEnumerable())}; {wildcard} already accepts the connections those addresses would receive, so only one of the two listeners could bind. State one address for a port, or move a profile to a port of its own.";
+                }
+            }
+        }
+    }
+
+    /// <summary>Reports whether an address stands for every interface rather than for one of them.</summary>
+    private static bool IsWildcard(IPAddress address) =>
+        address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any);
+
+    /// <summary>Reports whether a wildcard listener already accepts what another address would be bound for.</summary>
+    /// <remarks>
+    /// <c>::</c> covers IPv4 as well, because Kestrel binds it as a dual-mode socket; <c>0.0.0.0</c> covers IPv4 alone,
+    /// and its overlap with <c>::</c> is reported against the IPv6 wildcard rather than twice.
+    /// </remarks>
+    private static bool Covers(IPAddress wildcard, IPAddress address) =>
+        wildcard.Equals(IPAddress.IPv6Any) || address.AddressFamily == AddressFamily.InterNetwork;
 }

@@ -218,7 +218,14 @@ try
     // Validated here rather than through ValidateOnStart, because the section is read before a container exists and the
     // decisions it carries — whether to map the endpoint, which scheme protects it — are taken during composition. The
     // secrets it names are proven separately, by the startup validator that proves every other section's.
-    var mcpEndpointConfigurationErrors = mcpEndpointSettings.FindConfigurationErrors();
+    var mcpEndpointConfigurationErrors = new List<string>(mcpEndpointSettings.FindConfigurationErrors());
+
+    // Read from the root configuration rather than from the bound section, because a listener Kestrel was configured
+    // with elsewhere survives the ones bound below and would serve the same route without the TLS a profile adds.
+    mcpEndpointConfigurationErrors.AddRange(ConfiguredKestrelEndpoints.FindHttpsProfileConflicts(
+        builder.Configuration,
+        mcpEndpointSettings.Https));
+
     if (mcpEndpointConfigurationErrors.Count > 0)
     {
         throw new OptionsValidationException(

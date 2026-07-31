@@ -358,6 +358,81 @@ public sealed class McpHttpsOptionsTests
         Assert.Empty(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true));
     }
 
+    /// <summary>The wildcard socket already owns the specific address, so the second bind fails with an address-in-use error naming a socket rather than a profile.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AWildcardAndASpecificAddressOnOnePort_IsRefused()
+    {
+        // Arrange
+        var everyInterface = Profile(name: "public", domain: "one.example.test");
+        var oneInterface = Profile(name: "internal", domain: "two.example.test");
+        oneInterface.BindAddress = "127.0.0.1";
+
+        // Act
+        var error = Assert.Single(With(everyInterface, oneInterface)
+            .FindConfigurationErrors(SectionPath, http3Supported: true));
+
+        // Assert
+        Assert.Contains("already accepts the connections", error, StringComparison.Ordinal);
+        Assert.Contains("127.0.0.1", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>Kestrel binds the IPv6 wildcard as a dual-mode socket, so it owns the IPv4 addresses of that port as well.</summary>
+    [Fact]
+    public void FindConfigurationErrors_TheIpv6WildcardBesideAnIpv4AddressOnOnePort_IsRefused()
+    {
+        // Arrange
+        var everyInterface = Profile(name: "public", domain: "one.example.test");
+        everyInterface.BindAddress = "::";
+        var oneInterface = Profile(name: "internal", domain: "two.example.test");
+        oneInterface.BindAddress = "10.0.0.5";
+
+        // Act
+        var error = Assert.Single(With(everyInterface, oneInterface)
+            .FindConfigurationErrors(SectionPath, http3Supported: true));
+
+        // Assert
+        Assert.Contains("already accepts the connections", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>Profiles naming one address share a listener and are told apart by server name, which is the arrangement the section exists to serve.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ProfilesNamingTheSameAddressAndPort_IsAccepted()
+    {
+        // Arrange
+        var first = Profile(name: "first", domain: "one.example.test");
+        var second = Profile(name: "second", domain: "two.example.test");
+
+        // Act, Assert
+        Assert.Empty(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true));
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_AWildcardAndASpecificAddressOnDifferentPorts_IsAccepted()
+    {
+        // Arrange
+        var everyInterface = Profile(name: "public", domain: "one.example.test");
+        var oneInterface = Profile(name: "internal", domain: "two.example.test");
+        oneInterface.BindAddress = "127.0.0.1";
+        oneInterface.Port = 9443;
+
+        // Act, Assert
+        Assert.Empty(With(everyInterface, oneInterface).FindConfigurationErrors(SectionPath, http3Supported: true));
+    }
+
+    /// <summary>Two specific addresses are two sockets the operating system grants independently.</summary>
+    [Fact]
+    public void FindConfigurationErrors_TwoSpecificAddressesOnOnePort_IsAccepted()
+    {
+        // Arrange
+        var first = Profile(name: "first", domain: "one.example.test");
+        first.BindAddress = "127.0.0.1";
+        var second = Profile(name: "second", domain: "two.example.test");
+        second.BindAddress = "10.0.0.5";
+
+        // Act, Assert
+        Assert.Empty(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true));
+    }
+
     private static McpHttpsOptions With(params McpHttpsEndpointOptions[] profiles)
     {
         var options = new McpHttpsOptions();

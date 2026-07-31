@@ -361,6 +361,17 @@ listener offers the same mailbox without protection.
 A deployment that needs a plain HTTP health endpoint beside HTTPS should keep the clear-text posture and terminate TLS
 at a reverse proxy instead.
 
+Kestrel's own `Kestrel:Endpoints` section is the one listener a profile cannot displace: those endpoints are bound
+alongside the ones bound in code rather than replaced by them, so an endpoint configured there would keep its socket and
+serve the same MCP route without the TLS a profile adds. Configuring both is therefore a startup failure that names
+each side, because only an operator can decide which one the deployment meant:
+
+```text
+Kestrel:Endpoints:Http — a Kestrel endpoint is configured beside McpEndpoint:Https, and Kestrel binds both: this
+listener would stay open alongside the HTTPS profiles and serve the same MCP endpoint without the TLS they were
+configured to add. Remove the endpoint, or remove the HTTPS profiles and let this listener serve the endpoint.
+```
+
 ### Several domains on one address
 
 Profiles that name the same `BindAddress` and `Port` share one listener and are told apart by the server name the client
@@ -400,6 +411,17 @@ Two rules follow from where each setting takes effect during the handshake:
   listener either opens or does not — both settled before any server name is known. Profiles sharing an address and port
   must name the same versions, and startup refuses them if they do not.
 
+Sharing a port means naming the *same* address. A wildcard address beside a specific one on a single port — `0.0.0.0`
+beside `127.0.0.1`, or the dual-mode `::` beside any IPv4 address — asks for two sockets the operating system grants one
+of, because the wildcard already accepts the connections the second listener was bound for. Startup reports that as the
+profile configuration it is rather than letting Kestrel fail on an address-in-use error that names a socket:
+
+```text
+McpEndpoint:Https:Endpoints — profiles on port 8443 bind 0.0.0.0 as well as 127.0.0.1; 0.0.0.0 already accepts the
+connections those addresses would receive, so only one of the two listeners could bind. State one address for a port,
+or move a profile to a port of its own.
+```
+
 ### TLS versions and HTTP versions
 
 `MinimumTlsVersion` is a floor, not a selection. `Tls12` is the default and still negotiates TLS 1.3 with a client that
@@ -428,7 +450,23 @@ start rather than a listener that fails every handshake. Each profile's material
 - the certificate is inside its validity period now;
 - a subject alternative name covers the configured `Domain` exactly, or by a single wildcard label;
 - the extended key usage permits server authentication;
-- the chain material states one leaf, not several.
+- the key usage, where the certificate declares one, permits `digitalSignature`;
+- the chain material states one leaf, not several;
+- every certificate supplied after the leaf is a certificate authority, is inside its own validity period, and issues
+  either the leaf or another supplied certificate.
+
+The key usage is checked because a server authenticates itself by signing the handshake transcript under TLS 1.3 and
+under every key exchange TLS 1.2 still negotiates. A certificate limited to `keyEncipherment` would load, open a
+listener, and then fail every handshake reaching it. An absent key-usage extension leaves the key unconstrained and is
+accepted, which is what a private authority commonly issues.
+
+The certificates after the leaf are checked for what is provable without a trust anchor — the root lives in the client's
+store, not in the deployment's material — so their signatures are not verified. What is proved is that each one can take
+part in the path a client builds: an end-entity certificate pasted into a chain file issues nothing, an expired
+authority breaks the path whatever the leaf says, and an authority that issues nothing in the chain means the wrong
+material was provisioned. Order is not something the material has to state. Neither source carries a reliable one — a
+PKCS#12 bundle states none at all — so the sequence presented to clients is rebuilt from the issuer each certificate
+names, leading from the leaf outwards.
 
 The subject common name is never consulted. Every current client ignores it, so a certificate accepted on the strength of
 one would still be refused by everything that connects.

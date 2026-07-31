@@ -73,4 +73,20 @@ public enum CertificateMaterialFailure
     /// <summary>The material parsed, but its encoding cannot serve the role the setting configured it for.</summary>
     /// <remarks>A PEM chain placed in the bundle setting and a PKCS#12 bundle placed in the chain setting are both this failure; each is a legitimate file in the other setting.</remarks>
     EncodingNotSupportedForRole = 18,
+
+    /// <summary>The certificate's key usage excludes <c>digitalSignature</c>, which every negotiable handshake needs it to permit.</summary>
+    /// <remarks>TLS 1.3 authenticates a server by having it sign the transcript, and the key exchanges TLS 1.2 still negotiates do the same, so a certificate limited to <c>keyEncipherment</c> completes no handshake this endpoint offers.</remarks>
+    DigitalSignatureNotPermitted = 19,
+
+    /// <summary>A certificate supplied after the leaf is not a certificate authority, so it can issue nothing.</summary>
+    /// <remarks>A second end-entity certificate pasted into a chain file is the usual cause; it is presented to every client and issues none of the certificates before it.</remarks>
+    ChainCarriesNonAuthorityCertificate = 20,
+
+    /// <summary>A certificate supplied after the leaf is outside its own validity period.</summary>
+    /// <remarks>The leaf's period is reported separately, because an expired intermediate is renewed from the authority that issued it while an expired leaf is reissued for the domain.</remarks>
+    ChainCertificateNotCurrentlyValid = 21,
+
+    /// <summary>A certificate supplied after the leaf issues neither the leaf nor another supplied certificate.</summary>
+    /// <remarks>It therefore takes no part in the path a client builds, and its presence means the chain that was provisioned is not the chain the leaf belongs to.</remarks>
+    ChainCarriesUnrelatedCertificate = 22,
 }

@@ -558,6 +558,134 @@ public sealed class TlsServerCertificateLoaderTests
             issued => Assert.Throws<ObjectDisposedException>(() => issued.RevealBytes().Length));
     }
 
+    /// <summary>TLS 1.3 authenticates a server by having it sign the transcript, so a key barred from signing completes no handshake this endpoint offers.</summary>
+    [Fact]
+    public async Task LoadAsync_CertificateWhoseKeyUsageExcludesDigitalSignature_IsRefusedBeforeTheListenerOpens()
+    {
+        // Arrange
+        var material = new ProvisionedMaterialResolver();
+        using var certificate = TestCertificates.CreateServerIdentity(
+            [Domain],
+            Now.AddDays(-1),
+            Now.AddDays(90),
+            keyUsage: X509KeyUsageFlags.KeyEncipherment);
+        ProvidePem(material, certificate);
+
+        // Act
+        using var result = await LoaderFor(material).LoadAsync(PemOf(), Domain, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(CertificateMaterialFailure.DigitalSignatureNotPermitted, result.Failure);
+    }
+
+    /// <summary>A declared key usage is binding, so the one a certificate authority actually issues has to keep loading.</summary>
+    [Fact]
+    public async Task LoadAsync_CertificateWhoseKeyUsagePermitsDigitalSignature_LoadsAnIdentity()
+    {
+        // Arrange
+        var material = new ProvisionedMaterialResolver();
+        using var certificate = TestCertificates.CreateServerIdentity(
+            [Domain],
+            Now.AddDays(-1),
+            Now.AddDays(90),
+            keyUsage: X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment);
+        ProvidePem(material, certificate);
+
+        // Act
+        using var result = await LoaderFor(material).LoadAsync(PemOf(), Domain, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(result.Failure);
+    }
+
+    /// <summary>A second end-entity certificate pasted into a chain file issues nothing, so it would be presented to every client for no reason a path could use.</summary>
+    [Fact]
+    public async Task LoadAsync_ChainCarryingACertificateThatIsNoAuthority_IsRefused()
+    {
+        // Arrange
+        var material = new ProvisionedMaterialResolver();
+        using var certificate = ServerCertificateFor(Domain);
+        using var otherIdentity = ServerCertificateFor("other.example.test");
+        using var publicOtherIdentity = TestCertificates.WithoutPrivateKey(otherIdentity);
+        material.ProvisionText(
+            ChainReference,
+            TestCertificates.ToCertificateChainPem(certificate, publicOtherIdentity));
+        material.ProvisionText(PrivateKeyReference, TestCertificates.ToPrivateKeyPem(certificate));
+
+        // Act
+        using var result = await LoaderFor(material).LoadAsync(PemOf(), Domain, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(CertificateMaterialFailure.ChainCarriesNonAuthorityCertificate, result.Failure);
+    }
+
+    /// <summary>An authority outside its own validity period breaks the path whatever the leaf beneath it says, and it is renewed from a different place than the leaf is.</summary>
+    [Fact]
+    public async Task LoadAsync_ChainCarryingAnExpiredAuthority_IsRefusedAgainstTheChainRatherThanTheLeaf()
+    {
+        // Arrange
+        var material = new ProvisionedMaterialResolver();
+        using var expiredAuthority = TestCertificates.CreateExpiredCertificateAuthority("MailMcp Retired Authority");
+        using var certificate = ServerCertificateFor(Domain);
+        using var publicAuthority = TestCertificates.WithoutPrivateKey(expiredAuthority);
+        material.ProvisionText(
+            ChainReference,
+            TestCertificates.ToCertificateChainPem(certificate, publicAuthority));
+        material.ProvisionText(PrivateKeyReference, TestCertificates.ToPrivateKeyPem(certificate));
+
+        // Act
+        using var result = await LoaderFor(material).LoadAsync(PemOf(), Domain, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(CertificateMaterialFailure.ChainCertificateNotCurrentlyValid, result.Failure);
+    }
+
+    /// <summary>An authority that issued nothing in the chain takes no part in the path a client builds, so its presence means the wrong material was provisioned.</summary>
+    [Fact]
+    public async Task LoadAsync_ChainCarryingAnAuthorityThatIssuedNothingInIt_IsRefused()
+    {
+        // Arrange
+        var material = new ProvisionedMaterialResolver();
+        using var unrelatedAuthority = TestCertificates.CreateCertificateAuthority("MailMcp Unrelated Authority");
+        using var certificate = ServerCertificateFor(Domain);
+        using var publicAuthority = TestCertificates.WithoutPrivateKey(unrelatedAuthority);
+        material.ProvisionText(
+            ChainReference,
+            TestCertificates.ToCertificateChainPem(certificate, publicAuthority));
+        material.ProvisionText(PrivateKeyReference, TestCertificates.ToPrivateKeyPem(certificate));
+
+        // Act
+        using var result = await LoaderFor(material).LoadAsync(PemOf(), Domain, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(CertificateMaterialFailure.ChainCarriesUnrelatedCertificate, result.Failure);
+    }
+
+    /// <summary>A bundle states no order at all, so the sequence a client follows has to be rebuilt from the issuer each certificate names.</summary>
+    [Fact]
+    public async Task LoadAsync_BundleCarryingItsAuthoritiesOutOfOrder_PresentsThemLeadingTowardsTheRoot()
+    {
+        // Arrange
+        var material = new ProvisionedMaterialResolver();
+        using var root = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var intermediate = TestCertificates.IssueIntermediateAuthority(root, "MailMcp Test Intermediate");
+        using var certificate = ServerCertificateFor(Domain, issuer: intermediate);
+        using var publicRoot = TestCertificates.WithoutPrivateKey(root);
+        using var publicIntermediate = TestCertificates.WithoutPrivateKey(intermediate);
+        material.Provision(
+            BundleReference,
+            TestCertificates.ToBundleOf(bundlePassword: null, certificate, publicRoot, publicIntermediate));
+
+        // Act
+        using var result = await LoaderFor(material).LoadAsync(BundleOf(), Domain, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(result.Failure);
+        Assert.Equal(
+            [intermediate.Subject, root.Subject],
+            result.Certificate!.Intermediates.Select(static presented => presented.Subject));
+    }
+
     private static TlsServerCertificateLoader LoaderFor(ProvisionedMaterialResolver material) =>
         new(material, new FakeTimeProvider(Now));
 
