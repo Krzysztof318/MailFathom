@@ -52,7 +52,7 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         Assert.True(options.Enabled);
-        Assert.Equal(McpTransportAuthenticationMode.ApiKey, options.Authentication);
+        Assert.Equal(McpTransportAuthenticationMethods.ApiKey, options.Authentication);
         Assert.Equal(["workstation", "chatgpt-connector"], options.ApiKeys.Select(key => key.Name));
         Assert.Equal(
             [SecretLifetime.NoLimitValue, "2027-01-31T00:00:00Z"],
@@ -127,7 +127,7 @@ public sealed class McpEndpointOptionsBindingTests
     }
 
     [Fact]
-    public void ReadFrom_AnUnconfiguredDeployment_LeavesTheEndpointOffAndNamesNoMode()
+    public void ReadFrom_AnUnconfiguredDeployment_LeavesTheEndpointOffAndRequiresNothing()
     {
         // Arrange
         var configuration = ConfigurationFrom([]);
@@ -137,9 +137,44 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         Assert.False(options.Enabled);
-        Assert.Null(options.Authentication);
+        Assert.Equal(McpTransportAuthenticationMethods.None, options.Authentication);
         Assert.Empty(options.ApiKeys);
         Assert.True(options.Cors.ServesEveryBrowserOrigin);
+    }
+
+    /// <summary>
+    /// The reason the set is one scalar value rather than a collection. A single value either binds or fails startup,
+    /// whereas a collection lets a binder drop an element it could not read and leave a shorter list behind — which for
+    /// this setting would mean quietly turning a method off.
+    /// </summary>
+    [Fact]
+    public void ReadFrom_BothMethodsWrittenAsOneValue_ReadsThemAsASet()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+            ["McpEndpoint:Authentication"] = "ApiKey, OAuth",
+            ["McpEndpoint:ApiKeys:0:Name"] = "nightly-digest",
+            ["McpEndpoint:ApiKeys:0:SecretReference"] = "systemd-credential:mailmcp-mcp-digest-key",
+            ["McpEndpoint:OAuth:Resource"] = "https://mail.example.test/mcp",
+            ["McpEndpoint:OAuth:RequiredScopes:0"] = "mailmcp.read",
+            ["McpEndpoint:OAuth:AuthorizationServers:0:Name"] = "workforce",
+            ["McpEndpoint:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailmcp",
+            ["McpEndpoint:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "9f2c",
+        });
+
+        // Act
+        var options = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.True(options.AllowsApiKey);
+        Assert.True(options.AllowsOAuth);
+        Assert.Equal("https://mail.example.test/mcp", options.OAuth.Resource);
+        Assert.Equal(["mailmcp.read"], options.OAuth.RequiredScopes);
+        Assert.Equal(["workforce"], options.OAuth.AuthorizationServers.Select(server => server.Name));
+        Assert.Equal(["9f2c"], options.OAuth.AuthorizationServers.Single().AuthorizedSubjects);
+        Assert.Empty(options.FindConfigurationErrors());
     }
 
     /// <summary>A configured list replaces the default rather than being added to it, which a pre-populated collection could not achieve.</summary>
@@ -214,15 +249,17 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.ThrowsAny<InvalidOperationException>(() => McpEndpointOptions.ReadFrom(configuration));
     }
 
-    /// <summary>A mode the binder cannot read is a startup failure, never a silent fall back to the unauthenticated posture.</summary>
-    [Fact]
-    public void ReadFrom_AnAuthenticationModeThatIsNotOneOfTheTwo_Fails()
+    /// <summary>A method name the binder cannot read is a startup failure, never a silent fall back to the unauthenticated posture.</summary>
+    [Theory]
+    [InlineData("Nonee")]
+    [InlineData("ApiKey, OAuht")]
+    public void ReadFrom_AnAuthenticationMethodNoMemberNames_Fails(string authentication)
     {
         // Arrange
         var configuration = ConfigurationFrom(new Dictionary<string, string?>
         {
             ["McpEndpoint:Enabled"] = "true",
-            ["McpEndpoint:Authentication"] = "Nonee",
+            ["McpEndpoint:Authentication"] = authentication,
         });
 
         // Act, Assert

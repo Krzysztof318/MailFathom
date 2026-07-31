@@ -17,9 +17,10 @@ namespace MailMcp.Host.Configuration;
 /// expected to find.
 /// </para>
 /// <para>
-/// The endpoint is disabled by default, so a deployment that configures nothing serves no mailbox over the network.
-/// Enabling it requires naming an <see cref="Authentication" /> mode, so the unauthenticated posture is something an
-/// operator wrote down rather than something a missing setting selected for them.
+/// The endpoint is disabled by default, so a deployment that configures nothing serves no mailbox over the network. What
+/// guards an enabled one is a set of <see cref="Authentication" /> methods that starts empty, so authentication is
+/// something an operator turns on; leaving it off is announced at startup rather than assumed to be intended, and the
+/// spellings that could have meant to turn it on — a misspelled key, a value naming no method — fail startup instead.
 /// </para>
 /// <para>
 /// The value is read once, while the host is being composed, because whether an endpoint exists and what guards it are
@@ -34,13 +35,16 @@ internal sealed class McpEndpointOptions
     /// <summary>The configuration section the endpoint settings are bound from.</summary>
     public const string SectionName = "McpEndpoint";
 
+    private const McpTransportAuthenticationMethods KnownAuthenticationMethods =
+        McpTransportAuthenticationMethods.ApiKey | McpTransportAuthenticationMethods.OAuth;
+
     /// <summary>Gets or sets whether the MCP endpoint is served at all.</summary>
     /// <remarks>Disabled unless a deployment states otherwise, so reaching a mailbox over MCP is always something an operator turned on.</remarks>
     public bool Enabled { get; set; }
 
-    /// <summary>Gets or sets what a client must present before a request is served, which an enabled endpoint must name.</summary>
-    /// <remarks>Nullable rather than defaulted, because every candidate default is a posture, and the one that would be safe to assume is also the one that refuses every client a working deployment has.</remarks>
-    public McpTransportAuthenticationMode? Authentication { get; set; }
+    /// <summary>Gets or sets which credentials a client may present, written as a set such as <c>ApiKey, OAuth</c>.</summary>
+    /// <remarks>Empty by default, which is the unauthenticated posture. A request is served when it satisfies any one of the methods named here, because the methods identify different kinds of caller rather than layering checks on one.</remarks>
+    public McpTransportAuthenticationMethods Authentication { get; set; } = McpTransportAuthenticationMethods.None;
 
     /// <summary>Gets the API keys a client may authenticate with, each a named secret with its own lifetime.</summary>
     /// <remarks>
@@ -49,6 +53,9 @@ internal sealed class McpEndpointOptions
     /// entry may stay in the list; it authenticates nothing and documents what was retired.
     /// </remarks>
     public IList<ConfiguredSecret> ApiKeys { get; } = [];
+
+    /// <summary>Gets or sets what this deployment is called in OAuth terms, and which authorization servers may speak for it.</summary>
+    public McpOAuthOptions OAuth { get; set; } = new();
 
     /// <summary>Gets or sets which browser origins the endpoint answers.</summary>
     public McpCorsOptions Cors { get; set; } = new();
@@ -73,6 +80,20 @@ internal sealed class McpEndpointOptions
     /// <summary>Gets or sets how much traffic the endpoint accepts before it starts refusing.</summary>
     /// <remarks>Unlike the settings above, every value in this section has a product default, so an endpoint an operator enabled is bounded whether or not they wrote a number.</remarks>
     public McpRateLimitingOptions RateLimiting { get; set; } = new();
+
+    /// <summary>Gets whether a client may authenticate with one of the configured API keys.</summary>
+    public bool AllowsApiKey => this.Authentication.HasFlag(McpTransportAuthenticationMethods.ApiKey);
+
+    /// <summary>Gets whether a client may authenticate with an access token from one of the configured authorization servers.</summary>
+    public bool AllowsOAuth => this.Authentication.HasFlag(McpTransportAuthenticationMethods.OAuth);
+
+    /// <summary>Gets whether a request must present a credential naming who is calling.</summary>
+    /// <remarks>
+    /// A client certificate profile is not one of these. A certificate names the application making the request, which
+    /// is a different question from which person's mail is being served, so a deployment requiring a certificate and no
+    /// authentication method still requires nothing in the sense this asks about — and still warns at startup.
+    /// </remarks>
+    public bool RequiresAuthentication => this.Authentication != McpTransportAuthenticationMethods.None;
 
     /// <summary>Reads the section the way composition does, defaults included.</summary>
     /// <param name="configuration">The application configuration.</param>
@@ -172,32 +193,59 @@ internal sealed class McpEndpointOptions
 
     private IEnumerable<string> FindAuthenticationErrors()
     {
-        if (this.Authentication is not { } authenticationMode)
-        {
-            yield return $"{SectionName}:{nameof(this.Authentication)} — an enabled endpoint must state '{nameof(McpTransportAuthenticationMode.ApiKey)}' or '{nameof(McpTransportAuthenticationMode.None)}'; there is no default, because an unauthenticated endpoint serves every synchronized mailbox to anything that can reach it.";
-
-            yield break;
-        }
-
-        // The binder accepts any number for an enum, so 'Authentication=2' would bind to a value no member declares.
-        // Every check below asks whether the mode equals one of the two, and such a value answers no to all of them: it
+        // The binder accepts any number for an enum, so 'Authentication=4' would bind to a set no member declares. Every
+        // check below asks whether a particular method is among them, and such a value answers no to all of them: it
         // registers no authentication, requires no credential, and leaves the unauthenticated warning silent because it
         // is not None either. Refusing it here is what keeps a typo from opening the endpoint instead of closing it.
-        if (!Enum.IsDefined(authenticationMode))
+        var unknownMethods = this.Authentication & ~KnownAuthenticationMethods;
+        if (unknownMethods != McpTransportAuthenticationMethods.None)
         {
-            yield return $"{SectionName}:{nameof(this.Authentication)} — '{(int)authenticationMode}' names no authentication mode; state '{nameof(McpTransportAuthenticationMode.ApiKey)}' or '{nameof(McpTransportAuthenticationMode.None)}'.";
+            yield return $"{SectionName}:{nameof(this.Authentication)} — '{(int)unknownMethods}' names no authentication method; write '{nameof(McpTransportAuthenticationMethods.ApiKey)}', '{nameof(McpTransportAuthenticationMethods.OAuth)}', both separated by a comma, or '{nameof(McpTransportAuthenticationMethods.None)}'.";
 
             yield break;
         }
 
-        if (authenticationMode == McpTransportAuthenticationMode.ApiKey && this.ApiKeys.Count == 0)
+        foreach (var error in this.FindApiKeyErrors())
         {
-            yield return $"{SectionName}:{nameof(this.ApiKeys)} — '{nameof(McpTransportAuthenticationMode.ApiKey)}' authentication is selected and no key is configured, so no client could authenticate.";
+            yield return error;
         }
 
-        if (authenticationMode == McpTransportAuthenticationMode.None && this.ApiKeys.Count > 0)
+        foreach (var error in this.FindOAuthErrors())
         {
-            yield return $"{SectionName}:{nameof(this.ApiKeys)} — API keys are configured while authentication is '{nameof(McpTransportAuthenticationMode.None)}', so none of them is checked; select '{nameof(McpTransportAuthenticationMode.ApiKey)}' or remove them.";
+            yield return error;
+        }
+    }
+
+    private IEnumerable<string> FindApiKeyErrors()
+    {
+        if (this.AllowsApiKey && this.ApiKeys.Count == 0)
+        {
+            yield return $"{SectionName}:{nameof(this.ApiKeys)} — '{nameof(McpTransportAuthenticationMethods.ApiKey)}' authentication is selected and no key is configured, so no client could authenticate with one.";
+        }
+
+        // Configured-but-unchecked is refused rather than ignored in both directions below, because settings nothing
+        // reads are a deployment believing it is protected — which is worse than one that knows it is not.
+        if (!this.AllowsApiKey && this.ApiKeys.Count > 0)
+        {
+            yield return $"{SectionName}:{nameof(this.ApiKeys)} — API keys are configured while '{nameof(McpTransportAuthenticationMethods.ApiKey)}' is not among the authentication methods, so none of them is checked; add it or remove them.";
+        }
+    }
+
+    private IEnumerable<string> FindOAuthErrors()
+    {
+        if (!this.AllowsOAuth)
+        {
+            if (this.OAuth.IsConfigured)
+            {
+                yield return $"{SectionName}:{nameof(this.OAuth)} — authorization servers are configured while '{nameof(McpTransportAuthenticationMethods.OAuth)}' is not among the authentication methods, so no token is checked against them; add it or remove the section.";
+            }
+
+            yield break;
+        }
+
+        foreach (var error in this.OAuth.FindConfigurationErrors())
+        {
+            yield return $"{SectionName}:{nameof(this.OAuth)}:{error}";
         }
     }
 }

@@ -1,5 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Buffers.Text;
+using System.Text;
 using MailMcp.Domain.Transport;
 using MailMcp.Host.Configuration;
 using MailMcp.Host.Hosting;
@@ -17,6 +19,8 @@ namespace MailMcp.Host.UnitTests;
 
 public sealed class SecretConfigurationStartupValidatorTests
 {
+    private const string WorkforceIssuer = "https://sso.example.test/realms/mailmcp";
+
     private static readonly DateTimeOffset ValidatedAt = new(2026, 7, 31, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly DatabaseCommandTimeout DefaultCommandTimeout =
@@ -423,7 +427,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_AnMcpApiKeyThatCannotBeResolved_FailsStartupNamingItsPosition()
     {
         // Arrange
-        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMode.ApiKey };
+        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMethods.ApiKey };
         endpoint.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "file:/run/secrets/absent" });
         var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
 
@@ -441,7 +445,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_TwoMcpApiKeysSharingAName_FailsStartupBecauseNeitherCouldBeRotatedByName()
     {
         // Arrange
-        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMode.ApiKey };
+        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMethods.ApiKey };
         endpoint.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:one" });
         endpoint.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:two" });
         var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
@@ -455,12 +459,59 @@ public sealed class SecretConfigurationStartupValidatorTests
         Assert.StartsWith("McpEndpoint:ApiKeys:1:Name", failure, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The endpoint tells the two credentials apart by shape, so a key that is a token naming a configured authorization
+    /// server reaches that server's validator and the key comparison it exists for is never reached. Nothing about the
+    /// deployment would look wrong: the key resolves, the profile is valid, and no client can ever authenticate.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_AnMcpApiKeyShapedLikeATokenOfAConfiguredServer_FailsStartupNamingItsPosition()
+    {
+        // Arrange
+        var endpoint = EndpointAcceptingBothCredentials();
+        endpoint.ApiKeys.Add(new ConfiguredSecret
+        {
+            Name = "workstation",
+            SecretReference = $"plaintext:{TokenShapedKeyIssuedBy(WorkforceIssuer)}",
+        });
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("McpEndpoint:ApiKeys:0", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain(WorkforceIssuer, failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>The shape alone decides nothing: a key naming an issuer this deployment does not configure selects no validator and is compared like any other opaque credential.</summary>
+    [Fact]
+    public async Task StartingAsync_AnMcpApiKeyShapedLikeATokenOfAnUnconfiguredServer_IsAccepted()
+    {
+        // Arrange
+        var endpoint = EndpointAcceptingBothCredentials();
+        endpoint.ApiKeys.Add(new ConfiguredSecret
+        {
+            Name = "workstation",
+            SecretReference = $"plaintext:{TokenShapedKeyIssuedBy("https://sso.other.test/realms/mailmcp")}",
+        });
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+
+        // Act
+        await harness.Validator.StartingAsync(CancellationToken.None);
+
+        // Assert
+        Assert.DoesNotContain(harness.ReportedMessages, message => message.Contains("ApiKeys", StringComparison.Ordinal));
+    }
+
     /// <summary>Material that resolves but is not a certificate would pass a reference check and then refuse every client the profile exists to serve.</summary>
     [Fact]
     public async Task StartingAsync_AClientCertificateTrustAnchorThatIsNotACertificate_FailsStartupNamingItsPosition()
     {
         // Arrange
-        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMode.None };
+        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMethods.None };
         var profile = new McpClientCertificateProfileOptions
         {
             Name = "chatgpt-connector",
@@ -519,6 +570,30 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         Assert.Empty(harness.ReportedMessages);
+    }
+
+    private static McpEndpointOptions EndpointAcceptingBothCredentials()
+    {
+        var authorizationServer = new McpAuthorizationServerOptions { Name = "workforce", Issuer = WorkforceIssuer };
+        authorizationServer.AuthorizedSubjects.Add("9f2c");
+
+        var endpoint = new McpEndpointOptions
+        {
+            Enabled = true,
+            Authentication = McpTransportAuthenticationMethods.ApiKey | McpTransportAuthenticationMethods.OAuth,
+            OAuth = new McpOAuthOptions { Resource = "https://mail.example.test/mcp" },
+        };
+
+        endpoint.OAuth.AuthorizationServers.Add(authorizationServer);
+
+        return endpoint;
+    }
+
+    private static string TokenShapedKeyIssuedBy(string issuer)
+    {
+        var payload = Base64Url.EncodeToString(Encoding.UTF8.GetBytes($$"""{"iss":"{{issuer}}","sub":"9f2c"}"""));
+
+        return $"header.{payload}.signature";
     }
 
     private static ValidatorHarness CreateHarness(

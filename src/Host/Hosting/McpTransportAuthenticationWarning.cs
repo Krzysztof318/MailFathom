@@ -10,11 +10,10 @@ namespace MailMcp.Host.Hosting;
 /// <summary>States at startup that an enabled MCP endpoint requires no credential of the clients it serves.</summary>
 /// <remarks>
 /// <para>
-/// The unauthenticated posture is now a choice rather than the only option, so the warning is a condition rather than
-/// an announcement: it fires when the enabled endpoint runs under
-/// <see cref="McpTransportAuthenticationMode.None" /> and stays silent when a credential is required. What it refuses
-/// to let happen is unchanged — that a mailbox turns out months later to have been reachable by anything that could
-/// reach its address.
+/// The unauthenticated posture is what a deployment gets for turning no authentication method on, so this is the
+/// startup message that keeps that from being a silent outcome: it fires when the enabled endpoint requires no
+/// credential, and stays silent as soon as any method is configured. What it refuses to let happen is that a mailbox
+/// turns out months later to have been reachable by anything that could reach its address.
 /// </para>
 /// <para>
 /// Neither the origin policy nor a client certificate, when those arrive, can silence it. Neither identifies the person
@@ -59,7 +58,7 @@ internal sealed partial class McpTransportAuthenticationWarning : IHostedService
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (this.endpointSettings is not { Enabled: true, Authentication: McpTransportAuthenticationMode.None })
+        if (!this.endpointSettings.Enabled || this.endpointSettings.RequiresAuthentication)
         {
             return Task.CompletedTask;
         }
@@ -79,11 +78,12 @@ internal sealed partial class McpTransportAuthenticationWarning : IHostedService
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "The MCP endpoint is enabled on {McpEndpointPath} with authentication set to None, so anything that can "
-            + "reach this address can read the synchronized mailboxes. Configure API keys instead unless the address is "
-            + "reachable only from this machine or from a network you control. Neither an origin policy nor a client "
-            + "certificate substitutes for this: the first restricts which page a browser will let call, the second names "
-            + "the application calling, and neither identifies the person whose mail is served.")]
+        Message = "The MCP endpoint is enabled on {McpEndpointPath} with no authentication method turned on, so anything "
+            + "that can reach this address can read the synchronized mailboxes. Set McpEndpoint:Authentication to ApiKey, "
+            + "to OAuth, or to both unless the address is reachable only from this machine or from a network you control. "
+            + "Neither an origin policy nor a client certificate substitutes for this: the first restricts which page a "
+            + "browser will let call, the second names the application calling, and neither identifies the person whose "
+            + "mail is served.")]
     private partial void LogEndpointServedWithoutTransportAuthentication(string mcpEndpointPath);
 
     [LoggerMessage(

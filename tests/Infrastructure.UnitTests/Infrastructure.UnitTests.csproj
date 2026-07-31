@@ -17,5 +17,9 @@
     <Compile Include="..\shared\RecordingLoggerProvider.cs" Link="RecordingLoggerProvider.cs" />
     <Compile Include="..\shared\ExceptionHierarchyAssertion.cs" Link="ExceptionHierarchyAssertion.cs" />
     <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
+    <!-- The bounded metadata handler is the one Infrastructure type that speaks HTTP, and the suite's single HTTP test
+         double is hand-written because a substitute cannot override the protected send path. -->
+    <Compile Include="..\shared\FakeHttpMessageHandler.cs" Link="FakeHttpMessageHandler.cs" />
+    <Compile Include="..\shared\RecordedHttpRequest.cs" Link="RecordedHttpRequest.cs" />
   </ItemGroup>
 </Project>

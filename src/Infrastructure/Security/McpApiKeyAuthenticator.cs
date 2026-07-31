@@ -31,8 +31,6 @@ namespace MailMcp.Infrastructure.Security;
 /// </remarks>
 public sealed partial class McpApiKeyAuthenticator
 {
-    private const string BearerScheme = "Bearer";
-
     private const int DigestLength = 32;
 
     private readonly byte[] comparisonKey = RandomNumberGenerator.GetBytes(DigestLength);
@@ -72,7 +70,7 @@ public sealed partial class McpApiKeyAuthenticator
     {
         ArgumentNullException.ThrowIfNull(configuredKeys);
 
-        if (!TryReadBearerCredential(authorizationHeaderValue, out var presentedCredential))
+        if (!BearerCredentialHeader.TryRead(authorizationHeaderValue, out var presentedCredential))
         {
             return McpApiKeyAuthenticationResult.Rejected(string.IsNullOrWhiteSpace(authorizationHeaderValue)
                 ? McpApiKeyRejection.CredentialMissing
@@ -101,40 +99,6 @@ public sealed partial class McpApiKeyAuthenticator
         return McpApiKeyAuthenticationResult.Rejected(matchedExpiredKey
             ? McpApiKeyRejection.CredentialExpired
             : McpApiKeyRejection.CredentialUnrecognized);
-    }
-
-    /// <summary>Reads the credential out of an <c>Authorization</c> header value.</summary>
-    /// <remarks>
-    /// The scheme is matched ignoring case, as HTTP requires, and exactly one space separates it from the credential.
-    /// Anything else — another scheme, a scheme with no credential, a bare token — is malformed rather than a credential
-    /// worth comparing, and is refused with the same response as every other rejection.
-    /// </remarks>
-    private static bool TryReadBearerCredential(string? authorizationHeaderValue, out string credential)
-    {
-        credential = string.Empty;
-
-        if (authorizationHeaderValue is null)
-        {
-            return false;
-        }
-
-        var headerValue = authorizationHeaderValue.AsSpan().Trim();
-
-        if (!headerValue.StartsWith(BearerScheme, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var presentedCredential = headerValue[BearerScheme.Length..].TrimStart(' ');
-
-        if (presentedCredential.Length == headerValue.Length - BearerScheme.Length || presentedCredential.IsEmpty)
-        {
-            return false;
-        }
-
-        credential = presentedCredential.ToString();
-
-        return true;
     }
 
     /// <summary>Judges one configured key against the presented digest.</summary>
