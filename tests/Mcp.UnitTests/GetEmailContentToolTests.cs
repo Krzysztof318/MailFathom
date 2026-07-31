@@ -403,6 +403,27 @@ public sealed class GetEmailContentToolTests
         Assert.Equal(0, summaryReader.ReadCount);
     }
 
+    /// <summary>
+    /// The parse scans whatever it is handed and the caller decides how long that is, so the length is refused before
+    /// anything tries to read an identity out of it.
+    /// </summary>
+    [Fact]
+    public async Task GetEmailContentAsync_IdentifierLongerThanAnyUuidForm_IsRefusedWithoutParsingIt()
+    {
+        // Arrange
+        var summaryReader = new StubStoredEmailSummaryReader(SummaryOf());
+        var tool = ToolOver(summaryReader);
+        var overlongIdentifier = $"{Guid.CreateVersion7()}{new string('0', 1024)}";
+
+        // Act
+        var failure = await Assert.ThrowsAsync<StoredEmailIdentifierMalformedException>(
+            () => tool.GetEmailContentAsync(overlongIdentifier, cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailMcpErrorCode.StoredEmailIdentifierMalformed, failure.ErrorCode);
+        Assert.Equal(0, summaryReader.ReadCount);
+    }
+
     /// <summary>A refused identifier is caller input, and a boundary that echoes input back has started returning content.</summary>
     [Fact]
     public async Task GetEmailContentAsync_IdentifierCarryingText_NamesNoRefusedValue()

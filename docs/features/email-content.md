@@ -49,8 +49,12 @@ message than the one that arrived.
 
 Both header lists a sender controls the length of are bounded where the parse produces them: at most 256 participants
 per header role, and at most 256 thread references, of which an over-long path keeps its root and its most recent
-ancestors. The persisted columns bound the same values more narrowly, deliberately — one bound is about what a parse
-publishes to a reader and the other about what a column stores.
+ancestors. The reference bound is applied while the header is read rather than to the list it produced, so a sender who
+writes a hundred thousand ancestors costs the parse the memory of the ones it keeps. Each thread identifier is bounded
+in itself as well, at the 998 octets RFC 5322 allows a header line: a longer one is refused rather than cut, because a
+prefix of a message identifier is an identifier another message may legitimately carry. The persisted columns bound the
+same values more narrowly, deliberately — one bound is about what a parse publishes to a reader and the other about
+what a column stores.
 
 ### Attachments are re-derived, never stored
 

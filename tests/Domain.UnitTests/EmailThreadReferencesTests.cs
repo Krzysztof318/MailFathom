@@ -102,6 +102,29 @@ public sealed class EmailThreadReferencesTests
         Assert.Equal("ancestor-11@example.test", references.References[1]);
     }
 
+    /// <summary>
+    /// A header longer than a mail line could carry came from something no parser produced, and publishing it verbatim
+    /// would return megabytes from a contract that promises bounded content. It is refused rather than cut, because a
+    /// prefix of a message identifier is an identifier another message may legitimately carry.
+    /// </summary>
+    [Fact]
+    public void Create_IdentifierLongerThanAMailLine_RefusesItRatherThanTruncatingIt()
+    {
+        // Arrange
+        var overlongIdentifier = $"<{new string('a', EmailThreadReferences.MaximumIdentifierLength)}@example.test>";
+
+        // Act
+        var references = EmailThreadReferences.Create(
+            overlongIdentifier,
+            overlongIdentifier,
+            [overlongIdentifier, "<ancestor@example.test>"]);
+
+        // Assert
+        Assert.Null(references.MessageId);
+        Assert.Null(references.InReplyTo);
+        Assert.Equal(["ancestor@example.test"], references.References);
+    }
+
     /// <summary>A message with no threading headers is one value rather than three empty ones.</summary>
     [Theory]
     [InlineData(null, null)]

@@ -37,6 +37,14 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
     /// <remarks>Snake case because it is the naming the Model Context Protocol tool ecosystem uses; the C# member naming stops at the boundary.</remarks>
     public const string ToolName = "get_email_content";
 
+    /// <summary>The greatest length text naming an email may carry before anything tries to read an identity out of it.</summary>
+    /// <remarks>
+    /// The longest form <see cref="Guid.TryParse(string, out Guid)" /> accepts is the 68-character hexadecimal one, so
+    /// nothing a client could legitimately send is refused by this. What it stops is work proportional to a request:
+    /// the parse scans whatever it is handed, and a caller nobody vouches for decides how much that is.
+    /// </remarks>
+    private const int MaximumIdentifierLength = 68;
+
     /// <summary>Reads one email's content from the local mailbox copy.</summary>
     /// <param name="storedEmailId">The stable local identifier a listing or a search returned for the email.</param>
     /// <param name="includeSanitizedHtml">Whether to also return the sanitized HTML representation of the body.</param>
@@ -83,6 +91,11 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
     /// no identifier at all, and no email is ever stored under it.
     /// </para>
     /// <para>
+    /// The length is checked before the parse for the reason the listing checks its identifier lists before converting
+    /// them: the parse scans what it is handed, and the caller decides how long that is. A ceiling applied afterwards
+    /// would have let a request-sized argument be scanned before being refused for not being a UUID.
+    /// </para>
+    /// <para>
     /// The refused text is deliberately absent from the failure. It is the caller's own input on its way into a
     /// client-readable result and the log line beside it, and an identifier a caller invented says nothing an operator
     /// needs that the code does not already say.
@@ -90,7 +103,9 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
     /// </remarks>
     /// <exception cref="StoredEmailIdentifierMalformedException">Thrown when the text is not an identifier this system issues.</exception>
     private static StoredEmailId NamedEmail(string storedEmailId) =>
-        Guid.TryParse(storedEmailId, out var identity) && identity != Guid.Empty
+        storedEmailId.Length <= MaximumIdentifierLength
+        && Guid.TryParse(storedEmailId, out var identity)
+        && identity != Guid.Empty
             ? StoredEmailId.Create(identity)
             : throw new StoredEmailIdentifierMalformedException();
 }

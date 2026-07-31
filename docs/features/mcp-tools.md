@@ -216,9 +216,11 @@ This section describes the surface.
 | `includeSanitizedHtml` | `boolean` | Whether to also return the sanitized HTML body. Omitted returns plain text alone |
 
 The identifier is the one argument this boundary converts, and it converts it before anything is looked up. Text that is
-blank, is not a UUID, or is the all-zero UUID names no email this system could have issued, so it is refused with
-`51004` rather than looked up and reported as absent — a typo and a deleted message are different findings. The refusal
-never repeats the text, because it is caller input on its way into a client-readable result and the log line beside it.
+blank, longer than any UUID form, is not a UUID, or is the all-zero UUID names no email this system could have issued,
+so it is refused with `51004` rather than looked up and reported as absent — a typo and a deleted message are different
+findings. The length is checked before the parse rather than after it, because a parse scans whatever it is handed and
+a caller nobody vouches for decides how much that is. The refusal never repeats the text, because it is caller input on
+its way into a client-readable result and the log line beside it.
 
 `51004` and `53002` are therefore deliberately distinct, as are `53002` and `55001`: the first pair separates "you named
 no email" from "that email is not here", and the second separates "not here" from "here and currently unservable". Only
