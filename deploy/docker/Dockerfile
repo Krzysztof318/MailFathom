@@ -127,9 +127,9 @@ COPY --from=build --chown=root:root /app .
 # path of its own; mount a tmpfs at /tmp, which is where the runtime expects to be able to write.
 USER $APP_UID
 
-# No HEALTHCHECK, deliberately. The host serves `/health` and `/alive`, and Kubernetes probes them over HTTP without
-# needing anything from the image — but Docker and Podman run a health check as a command *inside* the container, and a
-# chiseled image has no shell and no HTTP client for one to be written in. Asking the endpoint would therefore mean
-# adding a probe mode to the application itself, which is #179's: it decides the listener, the transport, and whether
-# the probes are served at all. A check written here would be replaced by that change rather than extended by it.
+# No HEALTHCHECK, deliberately. The host serves `/started`, `/health`, and `/alive` on a listener of their own — port
+# 8081 unless a deployment configures another — and Kubernetes probes them over HTTP without needing anything from the
+# image. Docker and Podman run a health check as a command *inside* the container instead, and a chiseled image has no
+# shell and no HTTP client for one to be written in; adding either to reach an endpoint that is already reachable from
+# outside would grow the image's attack surface for nothing. Compose publishes the probe port and asks from there.
 ENTRYPOINT ["dotnet", "/app/MailFathom.Host.dll"]

@@ -292,6 +292,16 @@ verify_the_chart() {
     helm_command template verification mailfathom --values mailfathom/ci/release-values.yaml --set probes.liveness.path=/health
 
   expect_rejection \
+    'A startup probe pointed at the liveness endpoint is refused.' \
+    'probes/startup/path' \
+    helm_command template verification mailfathom --values mailfathom/ci/release-values.yaml --set probes.startup.path=/alive
+
+  expect_rejection \
+    'A probe port that collides with the application listener is refused.' \
+    'probes/port' \
+    helm_command template verification mailfathom --values mailfathom/ci/release-values.yaml --set probes.port=8080
+
+  expect_rejection \
     'A misspelled values key is refused rather than silently ignored.' \
     "additional properties 'pullPolcy' not allowed" \
     helm_command template verification mailfathom --values mailfathom/ci/release-values.yaml --set image.pullPolcy=Always

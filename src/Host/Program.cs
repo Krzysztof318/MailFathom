@@ -18,6 +18,7 @@ using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets;
 using MailFathom.Mcp;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
 // Composed before anything else, CreateBuilder included, so that a malformed appsettings.json, a failure during
@@ -168,6 +169,15 @@ try
         var searchSettings = provider.GetRequiredService<IOptions<MailboxSearchOptions>>().Value;
         return EmailSearchSnippetBounds.Create(searchSettings.SnippetsPerEmail, searchSettings.WordsPerSnippet);
     });
+    // What the startup probe reports. Both gates reach a remote dependency, so both take as long as that dependency
+    // does, and an orchestrator's startup probe is what turns that interval into an extended grace period rather than
+    // into a failing instance. The probe answers from this tracker rather than from the order the framework happens to
+    // start its hosted services in.
+    builder.Services.AddSingleton(new HostStartupGates(
+        HostStartupGate.SecretConfiguration,
+        HostStartupGate.DatabaseSchema));
+    builder.Services.AddHealthChecks()
+        .AddCheck<HostStartupGatesHealthCheck>(HostStartupGatesHealthCheck.Name, tags: [HealthProbe.Startup.Tag]);
     // The validator is registered ahead of the worker so hosted-service ordering reinforces the StartingAsync ordering
     // rather than depending on it alone, and ahead of the infrastructure so an operator who mistyped several references
     // reads one aggregated report rather than whichever failure the database happened to hit first.
@@ -193,9 +203,14 @@ try
     // one, and read from configuration directly for the same reason the text search configuration is: the value has to
     // be known before the container that would resolve an options snapshot exists. PersistenceOptions validates the
     // same key on start, which is what reports an out-of-range value to an operator.
-    builder.AddDatabaseHealthAndTelemetry(TimeSpan.FromSeconds(builder.Configuration.GetValue(
-        "Persistence:CommandTimeoutSeconds",
-        HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds)));
+    // Readiness alone. The database is a dependency a request needs, so an unreachable one must remove this instance
+    // from traffic; it must never reach the liveness probe, because restarting a process cannot fix a database and
+    // would turn one outage into an outage plus a restart loop.
+    builder.AddDatabaseHealthAndTelemetry(
+        TimeSpan.FromSeconds(builder.Configuration.GetValue(
+            "Persistence:CommandTimeoutSeconds",
+            HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds)),
+        probeTags: [HealthProbe.Readiness.Tag]);
     // Ahead of the workers so no unit of work reads or writes mail before the schema this build expects is proven, and
     // after the infrastructure that registers the inspector it resolves.
     builder.Services.AddHostedService<DatabaseSchemaStartupGate>();
@@ -285,20 +300,99 @@ try
         builder.Services.AddMcpRateLimiting(mcpRateLimits);
     }
 
+    // Read once, like the MCP section and for the same reason: it decides which sockets are opened and which routes
+    // exist, both of which are settled while the application is being built. Bound strictly, so a misspelled key cannot
+    // leave a deployment serving a posture nobody selected.
+    var healthEndpointSettings = HealthEndpointOptions.ReadFrom(builder.Configuration);
+    builder.Services.AddSingleton(Options.Create(healthEndpointSettings));
+
+    // The addresses the application listener would bind, read before anything is added to the Kestrel configuration
+    // below. Where the MCP HTTPS profiles bind their own listeners, they are the application listener, and the
+    // URL-shaped addresses are already being ignored.
+    var applicationListenerUrls = ConfiguredApplicationListeners.ResolveUrls(builder.Configuration);
+    var mcpTerminatesTls = mcpEndpointSettings.Enabled && mcpEndpointSettings.Https.TerminatesTls;
+    IReadOnlyCollection<int> applicationListenerPorts = mcpTerminatesTls
+        ? [.. mcpEndpointSettings.Https.Endpoints.Select(static endpoint => endpoint.Port)]
+        : ConfiguredApplicationListeners.ListenerPorts(applicationListenerUrls);
+
+    var healthEndpointConfigurationErrors = healthEndpointSettings.FindConfigurationErrors(applicationListenerPorts);
+
+    if (healthEndpointConfigurationErrors.Count > 0)
+    {
+        throw new OptionsValidationException(
+            HealthEndpointOptions.SectionName,
+            typeof(HealthEndpointOptions),
+            healthEndpointConfigurationErrors);
+    }
+
+    // Registered whether or not the transport terminates TLS, because the holder is what a certificate is loaded into
+    // and disposed from, and a clear-text deployment simply loads none.
+    builder.Services.AddSingleton<HealthEndpointCertificate>();
+
+    if (healthEndpointSettings.Enabled)
+    {
+        // Kestrel ignores the URL-shaped addresses as soon as any listener is bound in code, so opening the probe
+        // listener would silently take the application listener away from a deployment that states its port through
+        // ASPNETCORE_HTTP_PORTS or ASPNETCORE_URLS. Restating those addresses as Kestrel endpoints hands the same
+        // strings back to the framework's own parser, which binds the same sockets it would have bound. Nothing is
+        // restated where the addresses were already being ignored: a deployment that names its own Kestrel endpoints
+        // keeps them, and one whose MCP HTTPS profiles bind in code keeps the promise that no clear-text listener
+        // stays open behind them.
+        if (!mcpTerminatesTls && !ConfiguredKestrelEndpoints.AnyConfigured(builder.Configuration))
+        {
+            builder.Configuration.AddInMemoryCollection(
+                ConfiguredApplicationListeners.AsKestrelEndpointConfiguration(applicationListenerUrls));
+        }
+
+        // The callback runs when the server is constructed, after the container exists and after the composition root
+        // below has loaded the certificate the TLS listener presents.
+        builder.WebHost.ConfigureKestrel(kestrelOptions => HealthEndpointListenerBinder.Bind(
+            kestrelOptions,
+            healthEndpointSettings,
+            kestrelOptions.ApplicationServices.GetRequiredService<HealthEndpointCertificate>()));
+    }
+
     var app = builder.Build();
 
-    // Before the server starts rather than from a hosted service, because the web host is the first hosted service to
-    // start and a certificate proven after it has already bound would be proven after the listener was open. A profile
-    // whose material is missing, expired, or issued for another domain therefore fails startup with nothing listening.
+    // Before the server starts rather than from a hosted service, because a hosted service could be started after the
+    // web host and a certificate proven then would be proven after the listener was already open. A profile whose
+    // material is missing, expired, or issued for another domain therefore fails startup with nothing listening.
     if (mcpEndpointSettings.Enabled && mcpEndpointSettings.Https.TerminatesTls)
     {
         await app.Services.GetRequiredService<McpServerCertificateStore>()
             .LoadAsync(app.Lifetime.ApplicationStopping);
     }
 
+    // For the same reason, and with the same outcome: a TLS transport whose material is unusable fails startup with
+    // nothing listening rather than downgrading the probe port to clear text.
+    await app.Services.GetRequiredService<HealthEndpointCertificate>()
+        .LoadAsync(app.Lifetime.ApplicationStopping);
+
     app.UseExceptionHandler();
 
-    app.MapDefaultEndpoints();
+    if (healthEndpointSettings.Enabled)
+    {
+        // A probe reports healthy over no checks at all, because the aggregate of nothing is healthy. Asserting the
+        // composed result rather than the wiring is what catches a tag that stopped matching: readiness answering
+        // without consulting the database would keep an instance in traffic that cannot serve a request.
+        var unansweredProbes = HealthProbeEndpoints.FindUnansweredProbes(
+            app.Services.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations);
+
+        if (unansweredProbes.Count > 0)
+        {
+            throw new OptionsValidationException(
+                HealthEndpointOptions.SectionName,
+                typeof(HealthEndpointOptions),
+                unansweredProbes);
+        }
+
+        // Ahead of everything the MCP endpoint adds, so a request for the protocol surface that arrived on the probe
+        // port is refused before it reaches CORS, authentication, or the rate limiter, and a probe request that arrived
+        // on the application port is refused before it can report dependency state to whoever can reach it.
+        app.UseHealthEndpointIsolation(healthEndpointSettings.ListenerPorts);
+        app.MapHealthProbes();
+    }
+
     app.MapGet("/", () => Results.Ok(new { service = "MailFathom", status = "ready" }));
 
     if (mcpEndpointSettings.Enabled)

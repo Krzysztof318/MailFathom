@@ -24,6 +24,24 @@ internal static class ConfiguredKestrelEndpoints
 
     private const string UrlKey = "Url";
 
+    /// <summary>Reports whether the deployment names any Kestrel endpoint of its own.</summary>
+    /// <param name="configuration">The application configuration, read at the root because the Kestrel section is not nested under this product's own.</param>
+    /// <returns><see langword="true" /> when at least one configured endpoint binds a listener, otherwise <see langword="false" />.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A deployment that names its own endpoints is one whose URL-shaped addresses Kestrel is already ignoring, which is
+    /// what <see cref="ConfiguredApplicationListeners" /> must not undo by restating them beside the endpoints an
+    /// operator wrote.
+    /// </remarks>
+    internal static bool AnyConfigured(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        return configuration.GetSection(SectionName)
+            .GetChildren()
+            .Any(static endpoint => !string.IsNullOrWhiteSpace(endpoint[UrlKey]));
+    }
+
     /// <summary>Finds the configured Kestrel endpoints that would stay open behind the configured HTTPS profiles.</summary>
     /// <param name="configuration">The application configuration, read at the root because the Kestrel section is not nested under this product's own.</param>
     /// <param name="httpsSettings">The HTTPS profiles the MCP endpoint is served over.</param>

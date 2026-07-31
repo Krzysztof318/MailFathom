@@ -109,15 +109,20 @@ deployment.
 
 ```bash
 docker compose ps                                    # PostgreSQL reports healthy; MailFathom reports running
-curl -fsS http://127.0.0.1:8080/health               # readiness, including the database
-curl -fsS http://127.0.0.1:8080/alive                # liveness, the process alone
+curl -fsS http://127.0.0.1:8081/started              # has it finished coming up
+curl -fsS http://127.0.0.1:8081/health               # readiness, including the database
+curl -fsS http://127.0.0.1:8081/alive                # liveness, the process alone
 docker compose logs -f mailfathom
 ```
 
+The probes answer on **8081**, not on the port the MCP endpoint is served on. They carry no credential, so which network
+their port is published to is what controls who may ask them; one of those paths asked on 8080 is answered with `404`,
+and so is `/mcp` asked on 8081. `MAILFATHOM_HEALTH_BIND` and `MAILFATHOM_HEALTH_PORT` move the published address, and
+[the health endpoints](health-endpoints.md) states what each probe consults and how to turn the surface off or serve it
+over TLS.
+
 The MailFathom container declares no Docker health check. Its image carries no shell and no HTTP client for one to run
-in, so the two endpoints above are asked from outside the container instead;
-[issue #179](https://github.com/Krzysztof318/MailFathom/issues/179) is what turns the probe surface into something a
-deployment configures.
+in, so the endpoints above are asked from outside the container instead.
 
 The MCP endpoint answers at `/mcp` and is off until the configuration enables it. Read
 [the MCP endpoint](mcp-endpoint.md) before you do; an enabled endpoint must state how it is authenticated, and there is
@@ -125,9 +130,14 @@ no default.
 
 ## The network boundary
 
-The port is published on **loopback** by default. MailFathom speaks plain HTTP and terminates no TLS, so publishing it on
-another interface exposes synchronized mail without transport protection. Change `MAILFATHOM_HTTP_BIND` only once a
-reverse proxy on the `frontend` network is what listens publicly, and give that proxy the certificate.
+Both ports are published on **loopback** by default. MailFathom speaks plain HTTP and terminates no TLS, so publishing
+the application port on another interface exposes synchronized mail without transport protection. Change
+`MAILFATHOM_HTTP_BIND` only once a reverse proxy on the `frontend` network is what listens publicly, and give that
+proxy the certificate.
+
+The probe port is separate and stays loopback unless the machine asking is not this one. It answers without a
+credential, so `MAILFATHOM_HEALTH_BIND` is the whole of its access control; a probe path is never served on the
+application port, so widening one does not widen the other.
 
 PostgreSQL publishes no port at all. It sits on `backend`, which is declared `internal`, so it is reachable from
 MailFathom and from whatever else you attach to that network — a schema step or a backup container — and from nothing

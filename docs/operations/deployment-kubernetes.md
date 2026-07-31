@@ -183,8 +183,8 @@ Every one of those is a MailFathom setting rather than a chart value, so turning
 | Client certificates | `McpEndpoint:ClientCertificateProfiles` | [Client certificates](mcp-endpoint.md#client-certificates) |
 | Rate limits | `McpEndpoint:RateLimiting` | [Rate limiting](mcp-endpoint.md#rate-limiting) |
 
-Configuring `Https:Endpoints` takes over the host's listeners, so the chart's `service.port` and the container port have
-to match what the profiles bind. That is a deliberate step rather than the default: in a cluster, TLS at the ingress is
+Configuring `Https:Endpoints` takes over the host's application listener, so the chart's `service.port` and the `http`
+container port have to match what the profiles bind. The probe listener is unaffected and keeps its own transport. That is a deliberate step rather than the default: in a cluster, TLS at the ingress is
 usually what an operator already has.
 
 The credentials any of them reads stay `file:` references into the mounted Secret. Keep them out of `config.files` and
@@ -206,12 +206,19 @@ with nothing to authenticate to and one more thing to steal.
 
 | Probe | Path | Consults |
 | --- | --- | --- |
-| Startup | `/alive` | The process. Its budget is what a slow first start is allowed, and it holds liveness off until it succeeds. |
-| Readiness | `/health` | Every check, the database included. A pod that cannot serve leaves the Service's endpoints. |
+| Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified. Its budget is what a slow first start is allowed, and it holds liveness off until it succeeds. |
+| Readiness | `/health` | The dependencies a request needs, the database included. A pod that cannot serve leaves the Service's endpoints. |
 | Liveness | `/alive` | The process alone, so a database outage never becomes a restart loop that cannot fix it. |
 
-The schema restricts a probe path to one of those two, because pointing liveness at `/health` is exactly the mistake
-that turns an outage into a crash loop.
+All three are served on a container port of their own — `probes.port`, `8081` by default — which sets both the port the
+kubelet dials and the `HealthEndpoints:Port` the host binds, so the two cannot drift. The Service publishes 8080 alone,
+so nothing outside the node reaches the probe listener: the probes answer without a credential, and which network their
+port is on is what controls who may ask them. Setting `probes.port` to 8080 is refused, and so is a probe pointed at
+another endpoint's path — pointing liveness at `/health` is exactly the mistake that turns an outage into a crash loop,
+and pointing startup at `/alive` ends the startup grace period while the pod is still coming up.
+
+[The health endpoints](health-endpoints.md) states what each probe consults and how a deployment turns the surface off
+or serves it over TLS.
 
 ## Configuration reload
 

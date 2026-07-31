@@ -66,11 +66,21 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
+            {{- /*
+              The probes get a listener of their own so that reaching them never means reaching the MCP endpoint. It is
+              a container port and not a Service port: the kubelet dials it on the pod's address, and nothing the
+              Service publishes reaches it.
+            */}}
+            - name: health
+              containerPort: {{ .Values.probes.port }}
+              protocol: TCP
           env:
             - name: ASPNETCORE_ENVIRONMENT
               value: Production
             - name: ASPNETCORE_HTTP_PORTS
               value: "8080"
+            - name: HealthEndpoints__Port
+              value: {{ .Values.probes.port | quote }}
             - name: ConfigurationSources__Directory
               value: {{ .Values.config.mountPath | quote }}
             {{- if .Values.config.pollForChanges }}
@@ -110,14 +120,14 @@ spec:
           startupProbe:
             httpGet:
               path: {{ .Values.probes.startup.path }}
-              port: http
+              port: health
             periodSeconds: {{ .Values.probes.startup.periodSeconds }}
             timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
             failureThreshold: {{ .Values.probes.startup.failureThreshold }}
           readinessProbe:
             httpGet:
               path: {{ .Values.probes.readiness.path }}
-              port: http
+              port: health
             initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
             timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
@@ -125,7 +135,7 @@ spec:
           livenessProbe:
             httpGet:
               path: {{ .Values.probes.liveness.path }}
-              port: http
+              port: health
             initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
             timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}

@@ -172,8 +172,20 @@ temporaryDirectory:
 terminationGracePeriodSeconds: 60
 
 probes:
-  # Readiness consults every health check, the database included, so a pod that cannot serve leaves the Service's
-  # endpoints instead of answering requests it cannot fulfil.
+  # The port the probes are served on, which is never the port the MCP endpoint is. It is set here once and reaches
+  # both the container port the kubelet dials and the `HealthEndpoints:Port` the host binds, so the two cannot drift.
+  # The Service publishes 8080 alone, so nothing outside the node reaches this listener: an unauthenticated endpoint
+  # reporting dependency state is exposed by which network its port is on, and by nothing else.
+  port: 8081
+  # Startup reports whether MailFathom has finished coming up — every secret reference resolved and the database schema
+  # verified. Its budget is what a slow first start is allowed, and it holds the liveness probe off until it succeeds.
+  startup:
+    path: /started
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 30
+  # Readiness consults the dependencies a request needs, the database included, so a pod that cannot serve leaves the
+  # Service's endpoints instead of answering requests it cannot fulfil.
   readiness:
     path: /health
     initialDelaySeconds: 10
@@ -188,13 +200,6 @@ probes:
     periodSeconds: 20
     timeoutSeconds: 5
     failureThreshold: 3
-  # Startup covers the interval in which MailFathom validates every secret reference and verifies the database schema.
-  # Its budget is what a slow first start is allowed, and it holds the liveness probe off until it succeeds.
-  startup:
-    path: /alive
-    periodSeconds: 5
-    timeoutSeconds: 5
-    failureThreshold: 30
 
 ### Scheduling
 nodeSelector: {}

@@ -4,6 +4,7 @@
 using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 
 namespace MailFathom.Infrastructure;
@@ -15,11 +16,16 @@ public static class HostApplicationBuilderExtensions
     /// <summary>The seconds a database command may run before it is cancelled, when no deployment configures another value.</summary>
     public const int DefaultDatabaseCommandTimeoutSeconds = 30;
 
+    /// <summary>The name the database health check is registered under, which is the context type's own name.</summary>
+    /// <remarks>The enrichment names it, so this restates that name rather than choosing one. It is the registration the configured probe tags are applied to.</remarks>
+    private const string DatabaseHealthCheckName = nameof(MailFathomDbContext);
+
     /// <summary>Makes the EF Core context report its health and publish database traces and metrics.</summary>
     /// <param name="builder">The host application builder the context is already registered on.</param>
     /// <param name="commandTimeout">How long a single database command may run before it is cancelled.</param>
+    /// <param name="probeTags">The health-check tags that decide which probes consult the database, stated by the composition root that owns the probes.</param>
     /// <returns>The builder, for chaining.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder" /> or <paramref name="probeTags" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="commandTimeout" /> is not a positive duration.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the context has not been registered yet.</exception>
     /// <remarks>
@@ -43,9 +49,11 @@ public static class HostApplicationBuilderExtensions
     /// </remarks>
     public static IHostApplicationBuilder AddDatabaseHealthAndTelemetry(
         this IHostApplicationBuilder builder,
-        TimeSpan commandTimeout)
+        TimeSpan commandTimeout,
+        IReadOnlyCollection<string> probeTags)
     {
         ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(probeTags);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(commandTimeout, TimeSpan.Zero);
 
         // Published so a reloaded candidate can be compared against the value the context was actually built with. It
@@ -60,6 +68,23 @@ public static class HostApplicationBuilderExtensions
             settings.DisableTracing = false;
             settings.DisableMetrics = false;
             settings.CommandTimeout = (int)commandTimeout.TotalSeconds;
+        });
+
+        // The enrichment registers the check without tags, and a probe selects its checks by tag, so an untagged check
+        // reaches no probe. Which probes the database belongs to is not this layer's decision — it is the composition
+        // root's — but the registration is here, which is where the answer has to be applied.
+        builder.Services.Configure<HealthCheckServiceOptions>(healthCheckOptions =>
+        {
+            var databaseRegistrations = healthCheckOptions.Registrations
+                .Where(static registration => string.Equals(registration.Name, DatabaseHealthCheckName, StringComparison.Ordinal));
+
+            foreach (var registration in databaseRegistrations)
+            {
+                foreach (var tag in probeTags)
+                {
+                    registration.Tags.Add(tag);
+                }
+            }
         });
 
         return builder;

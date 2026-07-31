@@ -84,6 +84,40 @@ public sealed class ConfiguredKestrelEndpointsTests
         Assert.Empty(ConfiguredKestrelEndpoints.FindHttpsProfileConflicts(configuration, HttpsProfiles()));
     }
 
+    /// <summary>
+    /// A deployment naming its own endpoints is one whose URL-shaped addresses Kestrel already ignores, which is what
+    /// the health-endpoint listener must not undo by restating them beside the endpoints an operator wrote.
+    /// </summary>
+    [Fact]
+    public void AnyConfigured_AConfiguredEndpoint_ReportsThatTheDeploymentNamesItsOwnListeners()
+    {
+        // Arrange
+        var configuration = ConfigurationWith(("Kestrel:Endpoints:Http:Url", "http://0.0.0.0:8080"));
+
+        // Act, Assert
+        Assert.True(ConfiguredKestrelEndpoints.AnyConfigured(configuration));
+    }
+
+    [Fact]
+    public void AnyConfigured_AnEndpointWithoutAUrl_ReportsNoConfiguredListener()
+    {
+        // Arrange
+        var configuration = ConfigurationWith(("Kestrel:Endpoints:Http:Protocols", "Http1AndHttp2"));
+
+        // Act, Assert
+        Assert.False(ConfiguredKestrelEndpoints.AnyConfigured(configuration));
+    }
+
+    [Fact]
+    public void AnyConfigured_NoKestrelSectionAtAll_ReportsNoConfiguredListener()
+    {
+        // Arrange
+        var configuration = ConfigurationWith(("Logging:LogLevel:Default", "Information"));
+
+        // Act, Assert
+        Assert.False(ConfiguredKestrelEndpoints.AnyConfigured(configuration));
+    }
+
     private static IConfiguration ConfigurationWith(params (string Key, string Value)[] settings) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(settings.Select(static setting =>

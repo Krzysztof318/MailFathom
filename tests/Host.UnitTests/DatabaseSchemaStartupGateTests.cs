@@ -26,6 +26,40 @@ public sealed class DatabaseSchemaStartupGateTests
     }
 
     [Fact]
+    public async Task StartAsync_EveryMigrationApplied_ReportsTheSchemaGateToTheStartupProbe()
+    {
+        // Arrange
+        var startupGates = new HostStartupGates(HostStartupGate.DatabaseSchema);
+
+        // Act
+        await CreateGate(CreateCurrentSchemaInspector(), startupGates: startupGates).StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.True(startupGates.Completed);
+    }
+
+    /// <summary>
+    /// A gate that failed took the host down with it, so it never reports itself; what the startup probe must not do is
+    /// report a host as having come up on the strength of a step that raised.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_MigrationsPending_LeavesTheSchemaGateOutstanding()
+    {
+        // Arrange
+        var startupGates = new HostStartupGates(HostStartupGate.DatabaseSchema);
+        var inspector = Substitute.For<IDatabaseSchemaInspector>();
+        inspector.ReadPendingMigrationIdentifiersAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(["20260729_Initial"]));
+
+        // Act
+        await Assert.ThrowsAsync<DatabaseSchemaOutOfDateException>(() =>
+            CreateGate(inspector, startupGates: startupGates).StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.False(startupGates.Completed);
+    }
+
+    [Fact]
     public async Task StartAsync_MigrationsPending_FailsStartupNamingThemInsteadOfApplyingThem()
     {
         // Arrange
@@ -141,7 +175,8 @@ public sealed class DatabaseSchemaStartupGateTests
 
     private static DatabaseSchemaStartupGate CreateGate(
         IDatabaseSchemaInspector inspector,
-        PostgresTextSearchConfiguration? textSearchConfiguration = null)
+        PostgresTextSearchConfiguration? textSearchConfiguration = null,
+        HostStartupGates? startupGates = null)
     {
         var services = new ServiceCollection();
         services.AddScoped(_ => inspector);
@@ -149,6 +184,7 @@ public sealed class DatabaseSchemaStartupGateTests
         return new DatabaseSchemaStartupGate(
             services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             textSearchConfiguration ?? PostgresTextSearchConfiguration.Default,
+            startupGates ?? new HostStartupGates(HostStartupGate.DatabaseSchema),
             NullLogger<DatabaseSchemaStartupGate>.Instance);
     }
 }
