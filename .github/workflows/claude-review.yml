@@ -144,12 +144,6 @@ jobs:
       # The pull request's body names the issue it closes, and that issue is the change's stated
       # contract. Reading it on a private repository needs this scope of its own.
       issues: read
-    env:
-      # What the reviewer is given, and what it produces, are separate directories on purpose. The
-      # collected inputs are made read-only once they are complete, so the only writable path the
-      # reviewer has is its own output and it cannot rewrite the anchor list that validates it.
-      REVIEW_DIRECTORY: ${{ runner.temp }}/review
-      FINDINGS_FILE: ${{ runner.temp }}/findings/findings.json
     steps:
       # The base commit, which is code that already merged, and never the branch under review. It
       # supplies the repository's own instructions — `AGENTS.md`, the `review-change` skill, the
@@ -168,6 +162,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
+          # What the reviewer is given, and what it produces, are separate directories on purpose.
+          # The collected inputs are made read-only once they are complete, so the only writable
+          # path the reviewer has is its own output and it cannot rewrite the anchor list that
+          # validates it. Both paths are declared per step rather than once for the job, because
+          # `runner` is not one of the contexts a job-level `env` block may read and a workflow that
+          # names it there fails validation before a job exists.
+          REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          FINDINGS_FILE: ${{ runner.temp }}/findings/findings.json
         run: |
           set -euo pipefail
 
@@ -356,12 +358,21 @@ jobs:
 
             ## Read before you judge anything
 
-            - `AGENTS.md` at the repository root. It is the contract this change is measured
-              against, including the pre-release rule under "Project status".
+            The repository in your working directory states its own rules, and those rules are the
+            rubric. Read them before judging anything, and name the one a finding rests on. A
+            finding that applies general good practice where this repository has stated a different
+            rule is a wrong finding, and so is one these files already reject.
+
+            - `AGENTS.md` at the repository root: the architecture boundaries, the .NET and C#
+              conventions, the governance and privacy obligations, the reliability, security, and
+              performance rules, the cross-boundary email invariants, and the pre-release rule
+              under "Project status".
             - `.agents/skills/review-change/SKILL.md`. Its "Recurring findings" section is the
               distilled history of what review has actually caught here. Work through every category
               the change reaches.
-            - `tests/AGENTS.md` and `docs/AGENTS.md` when the change touches tests or documentation.
+            - `src/AGENTS.md`, `src/Infrastructure/AGENTS.md`, `tests/AGENTS.md`, and
+              `docs/AGENTS.md` for the parts of the tree the change touches. A nested file adds
+              rules to the root one rather than replacing them.
             - The specification under `specs/` and the ADRs under `docs/decisions/` that govern the
               area it changes.
 
@@ -375,22 +386,145 @@ jobs:
             A finding another reviewer already raised in `review-comments.json` or
             `issue-comments.json` is not raised again, whatever its wording.
 
-            ## What counts as a finding
+            ## What to look for
+
+            Five rubrics. Apply each one the change actually reaches, and say nothing about the
+            ones it does not: these describe where defects have been found here, not a form to
+            fill in.
+
+            ### The repository's rules
+
+            `AGENTS.md` is a contract, so breaking it is a defect even where the code would run
+            correctly. Give these the same weight as a wrong result:
+
+            - **Boundaries.** `Domain` depends on no framework. `Application` depends only on
+              `Domain` and owns its ports. `Infrastructure` keeps EF Core entities, MailKit types,
+              Npgsql and `bytea` details, MCP SDK types, and provider-specific AI types inside the
+              adapter that owns them. `Mcp` maps protocol to use cases and holds no persistence or
+              mail-protocol logic. `Host` is composition, configuration, and wiring only. Raw RFC
+              822 content is reached through `IEmailContentStore` and nothing else.
+            - **Naming.** Domain-correct, unabbreviated, and unambiguous where a reader meets it:
+              `Email` and never `Message` or `MailMessage` for the mail artifact, `IMailboxSession`
+              or `IPersistenceSession` rather than a bare `Session`, a method named after the
+              result it produces rather than `Handle`, `Process`, `Manage`, or `Execute`.
+            - **Type shape.** Enum members carry explicit contiguous values that are never
+              reordered or reused, `[Flags]` members are explicit powers of two with `None = 0`, a
+              value that must publish an identity surviving a rename is a closed enumeration rather
+              than an enum, data that represents a value is an immutable record or value object,
+              implementations default to `internal sealed`, collections cross boundaries as
+              read-only abstractions, and byte payloads cross them as `ReadOnlyMemory<byte>` or a
+              span rather than `byte[]`.
+            - **Imports.** Every type reached through a `using` and written by its simple name,
+              qualification only for a real collision and then on every side of it, and no `using`
+              or `global using` alias anywhere.
+            - **Async and time.** I/O asynchronous end to end, a `CancellationToken` accepted,
+              placed last, and propagated rather than replaced with `None` inside a chain, `Task`
+              unless measurement chose `ValueTask`, no blanket `ConfigureAwait(false)` in
+              application code, `DateTimeOffset` for timestamps, and an injected `TimeProvider`
+              wherever current time affects behavior.
+            - **Failures.** An expected application failure is an explicit result type and an
+              exceptional one is an exception; a `catch` exists only to add context, translate at a
+              boundary, apply a defined retry policy, or complete cleanup, and preserves the
+              original as `InnerException`. `null` never encodes more than one state.
+            - **Ownership.** A type that owns a resource implements the disposal contract that
+              matches it and never disposes a dependency the container owns.
+            - **Documentation and licensing.** Public types and members documented, XML
+              documentation that still matches the signature and behavior it describes, and a row
+              in `THIRD_PARTY_LICENSES.md` for every dependency, service, image, or copied sample
+              the change introduces, recording its exposure and the version the graph resolves.
+            - **Email invariants.** `(account, folder, UIDVALIDITY, UID)` is the remote occurrence
+              identity, retrieval never sets `\Seen`, synchronization and outbox work is
+              idempotent, an MCP read is served locally and never triggers a synchronous IMAP
+              fetch, and every public query is keyset-paginated and bounded.
+
+            ### Security and privacy
+
+            Email content, metadata, embeddings, retrieval snippets, tokens, certificate material,
+            and audit traces are sensitive by default, and an embedding inherits the retention,
+            access, deletion, and export constraints of the mail it was derived from.
+
+            - Untrusted input — email HTML, headers, filenames, URLs, tool arguments, model output,
+              and whatever a remote server returns — is validated and encoded for the context it
+              reaches, and an explicit size and count limit is applied at every public or remote
+              boundary before the value is expanded rather than after.
+            - Nothing sensitive reaches a log, span, exception message, or exporter: no
+              credentials, tokens, message bodies, attachment content, or raw MIME, and a value
+              derived from an exception, a configuration entry, a certificate, or a server response
+              is redacted first, on startup and shutdown paths too.
+            - Secrets are compared in constant time, tokens and security-sensitive identifiers come
+              from a cryptographically secure generator, and database roles, OAuth scopes,
+              filesystem access, and certificates carry least privilege.
+            - A security decision that fails open where the documentation says it fails closed, an
+              authorization check reachable on only one of several paths, or a trust decision taken
+              on a key alone is a P1.
+            - Options are validated at startup, so unsafe or misspelled configuration fails fast
+              instead of binding a default.
+
+            ### Reliability
+
+            - Every external call is bounded by a timeout, and its failure is sorted into caller
+              cancellation, shutdown, timeout, authentication failure, or transient transport
+              failure rather than collapsed into one outcome.
+            - A retry exists only where repeating is safe, and is bounded, jittered, and never
+              nested inside another retry. An exhausted budget becomes the domain outcome its
+              caller acts on.
+            - Mailbox synchronization, MIME processing, embedding generation, and delivery run
+              under an explicit concurrency limit with backpressure, and state a crash could
+              duplicate or lose is durable.
+
+            ### Performance
+
+            - Work is proportional to the input: a database projection rather than a full entity, a
+              streamed MIME body rather than one buffered twice, no large `bytea` tracked by EF
+              Core without a reason, no query issued once per element of a sequence, and no
+              unbounded result set.
+            - A sequence is enumerated once. A query that is filtered, counted, and read again is
+              materialized first, and a lazily evaluated query is never handed to a caller that
+              will iterate it more than once.
+            - Measure before optimizing. A micro-optimization with no measurement behind it is not
+              a finding, and neither is a cost you cannot demonstrate.
+
+            ### Clean code
+
+            - A method reads as one sequence of decisions: guard clauses instead of nesting, a
+              named private method instead of a comment announcing the next stage, and blank lines
+              separating the guards, each stage, and the return.
+            - Work over a sequence is a LINQ pipeline that names the operation, and a loop survives
+              only where the body does something a query cannot express. A pipeline never carries a
+              side effect, and a chain that stops reading as one sentence is broken into a named
+              local or a named method.
+            - A comment explains why the code must behave this way and never narrates a readable
+              statement, and a misleading name is renamed rather than annotated.
+            - No abstraction without a current testing, protocol, or replacement need, no
+              inheritance used only to share implementation, and no collaborator hidden behind a
+              service locator or static mutable state.
+
+            ### Tests and documentation
+
+            A behavior change carries unit tests, and `tests/AGENTS.md` states what they must look
+            like: no real clock, no real delay, no wall-clock ordering, no test that cannot fail,
+            and a fake that preserves the ordering and identity guarantees of what it replaces.
+            Durable documentation is updated in the same change set, and prose that describes a
+            validator, a guarantee, or an ownership rule the code does not implement is a defect in
+            the documentation.
+
+            ## Severity
 
             - **P1** — the change is wrong: incorrect behavior, lost or duplicated work, a security
               or privacy defect, a violated invariant or published contract, an unhandled failure
-              mode, or documentation that states something the code does not do. Stale documentation
-              is a defect in this repository, not a nicety.
+              mode, an architecture boundary crossed, or documentation that states something the
+              code does not do. Stale documentation is a defect in this repository, not a nicety.
             - **P2** — a real defect with a narrower blast radius: unbounded work, missing validation
               at a boundary, a test that cannot fail or that depends on wall-clock time, a leaked
               architectural type, a missing row in `THIRD_PARTY_LICENSES.md` for a component the
-              change introduces, an error code missing from its registry.
+              change introduces, an error code missing from its registry, or a rule above broken
+              where nothing yet depends on it.
             - **P3** — something a later change will pay for: a name that misleads, a boundary
               crossed for convenience, a method that hides two responsibilities.
 
-            Post nothing below P3, and at most fifteen findings. Verify each one against the file it
-            concerns before writing it down; if you cannot confirm it there, drop it rather than
-            hedging it.
+            Post nothing below P3, and at most fifteen findings; when more clear the bar, keep the
+            most severe. Verify each one against the file it concerns before writing it down; if you
+            cannot confirm it there, drop it rather than hedging it.
 
             ## What is not a finding here
 
@@ -407,6 +541,8 @@ jobs:
               suggestions that begin "consider".
             - A request for tests in general. Name the specific untested case and the behavior that
               would go unnoticed, or say nothing.
+            - A rubric item the change does not reach. The lists above say where to look; a finding
+              exists because the code is wrong, never because a category went unmentioned.
             - Anything that would quote a credential, a token, message content, or raw MIME.
 
             ## What to write
@@ -463,6 +599,9 @@ jobs:
           # credential the reviewer was never able to read still cannot be published if it somehow
           # reaches the findings.
           CLAUDE_CREDENTIAL: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The two paths the collection step wrote, restated here for the reason given there.
+          REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          FINDINGS_FILE: ${{ runner.temp }}/findings/findings.json
         run: |
           set -euo pipefail
 
