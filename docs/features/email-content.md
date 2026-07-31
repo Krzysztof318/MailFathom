@@ -11,7 +11,7 @@ an IMAP session. Reading an email therefore cannot download it and cannot set th
 the local copy turns out to be usable.
 
 The protocol adapter is not part of this. `EmailContentReader` is an application use case; the `get_email_content` MCP
-tool that maps onto it is specification 17.
+tool that maps onto it is documented in [MCP tools](mcp-tools.md#get_email_content).
 
 ## The request contract
 
@@ -46,6 +46,15 @@ The headers are read during the same parse that produces the body rather than fr
 of. The row keeps only the comparison forms a filter needs, so display names, a `Bcc` a message carries for its own
 recipient, and the `Sender` header exist nowhere else — a reader shown the listing's copy would be shown a narrower
 message than the one that arrived.
+
+Both header lists a sender controls the length of are bounded where the parse produces them: at most 256 participants
+per header role, and at most 256 thread references, of which an over-long path keeps its root and its most recent
+ancestors. The reference bound is applied while the header is read rather than to the list it produced, so a sender who
+writes a hundred thousand ancestors costs the parse the memory of the ones it keeps. Each thread identifier is bounded
+in itself as well, at the 998 octets RFC 5322 allows a header line: a longer one is refused rather than cut, because a
+prefix of a message identifier is an identifier another message may legitimately carry. The persisted columns bound the
+same values more narrowly, deliberately — one bound is about what a parse publishes to a reader and the other about
+what a column stores.
 
 ### Attachments are re-derived, never stored
 

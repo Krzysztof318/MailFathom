@@ -74,6 +74,57 @@ public sealed class EmailThreadReferencesTests
         Assert.Equal("AbC123@Example.Test", references.MessageId);
     }
 
+    /// <summary>
+    /// A sender decides how long the header is and a content read publishes what a parse found, so the path is bounded
+    /// where it is read. The root and the recent end survive, because one names the conversation and the other is what
+    /// a reader walks.
+    /// </summary>
+    [Fact]
+    public void Create_MoreAncestorsThanTheBoundKeeps_KeepsTheRootAndTheMostRecentOnes()
+    {
+        // Arrange
+        var writtenReferences = Enumerable
+            .Range(0, EmailThreadReferences.MaximumReferences + 10)
+            .Select(position => $"<ancestor-{position}@example.test>")
+            .ToArray();
+
+        // Act
+        var references = EmailThreadReferences.Create(messageId: null, inReplyTo: null, writtenReferences);
+
+        // Assert
+        Assert.Equal(EmailThreadReferences.MaximumReferences, references.References.Count);
+        Assert.Equal("ancestor-0@example.test", references.References[0]);
+        Assert.Equal(
+            $"ancestor-{EmailThreadReferences.MaximumReferences + 9}@example.test",
+            references.References[^1]);
+
+        // The eleven ancestors after the root are what the bound gave up, so the second entry is the twelfth written.
+        Assert.Equal("ancestor-11@example.test", references.References[1]);
+    }
+
+    /// <summary>
+    /// A header longer than a mail line could carry came from something no parser produced, and publishing it verbatim
+    /// would return megabytes from a contract that promises bounded content. It is refused rather than cut, because a
+    /// prefix of a message identifier is an identifier another message may legitimately carry.
+    /// </summary>
+    [Fact]
+    public void Create_IdentifierLongerThanAMailLine_RefusesItRatherThanTruncatingIt()
+    {
+        // Arrange
+        var overlongIdentifier = $"<{new string('a', EmailThreadReferences.MaximumIdentifierLength)}@example.test>";
+
+        // Act
+        var references = EmailThreadReferences.Create(
+            overlongIdentifier,
+            overlongIdentifier,
+            [overlongIdentifier, "<ancestor@example.test>"]);
+
+        // Assert
+        Assert.Null(references.MessageId);
+        Assert.Null(references.InReplyTo);
+        Assert.Equal(["ancestor@example.test"], references.References);
+    }
+
     /// <summary>A message with no threading headers is one value rather than three empty ones.</summary>
     [Theory]
     [InlineData(null, null)]

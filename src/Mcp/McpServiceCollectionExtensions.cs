@@ -41,7 +41,8 @@ public static class McpServiceCollectionExtensions
             // that boundary and the reporter itself keeps the Task every other MailMcp method returns.
             .WithRequestFilters(requestFilters => requestFilters.AddCallToolFilter(next => (request, cancellationToken) =>
                 new ValueTask<CallToolResult>(RequiredReporter(request).ReportAsync(next, request, cancellationToken))))
-            .WithTools<ListEmailsTool>(McpToolContractSerialization.Options);
+            .WithTools<ListEmailsTool>(McpToolContractSerialization.Options)
+            .WithTools<GetEmailContentTool>(McpToolContractSerialization.Options);
     }
 
     /// <summary>Resolves the reporter from the scope the call arrived in.</summary>

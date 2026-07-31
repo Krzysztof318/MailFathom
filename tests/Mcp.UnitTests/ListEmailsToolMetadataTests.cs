@@ -1,13 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
-using MailMcp.Application.Accounts;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Emails.ListEmails;
-using MailMcp.Application.Synchronization;
 using MailMcp.Mcp.Tools;
-using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Protocol;
-using ModelContextProtocol.Server;
 using Xunit;
 
 namespace MailMcp.Mcp.UnitTests;
@@ -147,35 +141,20 @@ public sealed class ListEmailsToolMetadataTests
         Assert.True(properties.TryGetProperty("folderFreshness", out _));
     }
 
-    /// <summary>The surface is one tool at this stage, so a second one arriving unnoticed is a change to the published contract.</summary>
+    /// <summary>The surface is two tools at this stage, so a third one arriving unnoticed is a change to the published contract.</summary>
     [Fact]
-    public void AddMailMcpServer_RegistersOnlyTheListEmailsTool()
+    public void AddMailMcpServer_RegistersTheListingAndTheContentTool()
     {
         // Arrange, Act
-        var registeredTools = RegisteredTools();
+        var registeredNames = RegisteredMcpToolSurface
+            .Tools()
+            .Select(tool => tool.ProtocolTool.Name)
+            .Order(StringComparer.Ordinal);
 
         // Assert
-        var registeredTool = Assert.Single(registeredTools);
-        Assert.Equal(ListEmailsTool.ToolName, registeredTool.ProtocolTool.Name);
+        Assert.Equal([GetEmailContentTool.ToolName, ListEmailsTool.ToolName], registeredNames);
     }
 
     private static Tool AdvertisedListEmailsTool() =>
-        RegisteredTools().Single(tool => tool.ProtocolTool.Name == ListEmailsTool.ToolName).ProtocolTool;
-
-    private static IReadOnlyList<McpServerTool> RegisteredTools()
-    {
-        var services = new ServiceCollection();
-
-        services.AddLogging();
-        services.AddSingleton(TimeProvider.System);
-        services.AddSingleton<IStoredEmailTimelineReader>(new StubStoredEmailTimelineReader());
-        services.AddSingleton<ISynchronizationFreshnessReader>(new StubSynchronizationFreshnessReader());
-        services.AddSingleton<IMailAccountCatalog>(new StubMailAccountCatalog("personal"));
-        services.AddSingleton<MailboxTimelineReader>();
-        services.AddMailMcpServer();
-
-        using var provider = services.BuildServiceProvider();
-
-        return [.. provider.GetServices<McpServerTool>()];
-    }
+        RegisteredMcpToolSurface.AdvertisedTool(ListEmailsTool.ToolName);
 }

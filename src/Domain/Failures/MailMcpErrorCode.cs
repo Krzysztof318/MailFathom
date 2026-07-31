@@ -90,6 +90,14 @@ public readonly record struct MailMcpErrorCode
     /// <summary>Gets subcategory 1, request validation: an email search asked for more ranked results than the search serves.</summary>
     public static MailMcpErrorCode EmailSearchResultLimitOutOfRange { get; } = new(51003);
 
+    /// <summary>Gets subcategory 1, request validation: a request named an email by text that is not an identifier this system issues.</summary>
+    /// <remarks>
+    /// It is separate from <see cref="StoredEmailNotFound" /> because the two answer different questions: this one says
+    /// the request never named an email at all, while that one says an email was named and is not held here. Reporting
+    /// a malformed identifier as an absent email would tell a caller that a typo is a message someone deleted.
+    /// </remarks>
+    public static MailMcpErrorCode StoredEmailIdentifierMalformed { get; } = new(51004);
+
     /// <summary>Gets subcategory 2, pagination: a continuation cursor is not one this system issued.</summary>
     public static MailMcpErrorCode MailboxQueryCursorMalformed { get; } = new(52001);
 
@@ -139,6 +147,7 @@ public readonly record struct MailMcpErrorCode
         MailboxQueryPageSizeOutOfRange,
         MailboxQueryFilterInvalid,
         EmailSearchResultLimitOutOfRange,
+        StoredEmailIdentifierMalformed,
         MailboxQueryCursorMalformed,
         MailboxQueryCursorFilterMismatch,
         MailAccountNotAccessible,
