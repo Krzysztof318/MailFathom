@@ -194,6 +194,27 @@ migration paths, and a request for tests that names no untested case, so the two
 reviewers do not spend threads on findings this repository has already decided
 against.
 
+### When the reviewer stops
+
+`claude-code-action` hides everything the reviewer produced, and rightly so: that output
+is model text derived from an untrusted diff. It hides the run's own error string with
+it, which is the one place a failure says what happened — an expired credential, an
+exhausted subscription, a model the plan cannot use. The action does save every message
+to `$RUNNER_TEMP/claude-execution-output.json`, so a step after it reads the last result
+message's error text and prints that and nothing else, flattened to one line, truncated
+to 500 characters, and withheld if it matches a credential shape or either credential the
+workflow holds. The alternative the action offers is `show_full_output`, which would
+print the entire review into the log to recover one sentence.
+
+The submission step then distinguishes two silences. A reviewer that never answered has
+already failed and said why, so a missing findings file is reported as a notice and the
+run keeps the reviewer's own error as its only cause. A reviewer that answered and still
+produced no valid file is this workflow's defect and fails there.
+
+Both steps refuse to compare against an unset `CLAUDE_CODE_OAUTH_TOKEN` and report the
+missing secret instead, because `grep -F ''` matches every file and an empty pattern
+would otherwise turn every review into a refusal that reads like a credential leak.
+
 ### What the submission step guarantees
 
 It validates each finding's anchor against the same patches the reviewer was
