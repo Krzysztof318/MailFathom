@@ -118,6 +118,7 @@ try
     builder.Services.AddScoped(provider => provider.GetRequiredService<ScopedMailSynchronizationSettings>().Current);
     builder.Services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IMailSynchronizationWindowReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+    builder.Services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IMailAccountCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();
     builder.Services.AddScoped(provider =>
@@ -128,6 +129,7 @@ try
             MaxMetadataBatchSize = synchronizationSettings.MaxMetadataBatchSize,
             MaxRawMimeBytes = synchronizationSettings.MaxRawMimeBytes,
             MaxMetadataBatchesPerRun = synchronizationSettings.MaxMetadataBatchesPerRun,
+            MaxReconciledEmailsPerRun = synchronizationSettings.MaxReconciledEmailsPerRun,
         };
     });
     builder.Services.AddScoped(provider =>

@@ -25,6 +25,7 @@ public sealed class MailboxSynchronizer
     private readonly IEmailMetadataRepository metadataRepository;
     private readonly IEmailContentStore contentStore;
     private readonly IEmailMimeReader mimeReader;
+    private readonly MailboxReconciler reconciler;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly TimeProvider timeProvider;
     private readonly MailboxSynchronizationOptions options;
@@ -40,6 +41,7 @@ public sealed class MailboxSynchronizer
         IEmailMetadataRepository metadataRepository,
         IEmailContentStore contentStore,
         IEmailMimeReader mimeReader,
+        MailboxReconciler reconciler,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options)
@@ -53,6 +55,7 @@ public sealed class MailboxSynchronizer
         this.metadataRepository = metadataRepository;
         this.contentStore = contentStore;
         this.mimeReader = mimeReader;
+        this.reconciler = reconciler;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.timeProvider = timeProvider;
         this.options = options;
@@ -191,12 +194,24 @@ public sealed class MailboxSynchronizer
             hasMore = batch.HasMore;
         }
 
+        // The backward pass runs last and over the same open session, so it costs no second connection and inspects
+        // only what the forward pass has already committed. It is deliberately not gated on the forward pass having
+        // finished its folder: a mailbox whose backfill spans many runs must still notice a deletion in the part of it
+        // that is already stored.
+        var reconciliation = await this.reconciler.ReconcileAsync(
+            mailboxSession,
+            accountId,
+            folder,
+            uidValidity,
+            cancellationToken);
+
         return MailboxSynchronizationResult.Synchronized(
             storedCount,
             skippedOversizedCount,
             unreadableMimeCount,
             hasMore,
-            checkpoint);
+            checkpoint,
+            reconciliation);
     }
 
     private async Task<OccurrenceSynchronizationOutcome> StoreOccurrenceAsync(
@@ -322,13 +337,15 @@ public enum MailboxSynchronizationOutcome
 /// <param name="UnreadableMimeEmailCount">How many stored occurrences carried MIME that enrichment could not read.</param>
 /// <param name="HasMoreEmails">Whether the folder still held unprocessed emails when the run's batch budget ran out.</param>
 /// <param name="Checkpoint">The progress the run ended on, which is present exactly when <paramref name="Outcome" /> is <see cref="MailboxSynchronizationOutcome.Synchronized" />.</param>
+/// <param name="Reconciliation">What the run's backward pass found among the emails already stored for this folder.</param>
 public sealed record MailboxSynchronizationResult(
     MailboxSynchronizationOutcome Outcome,
     int StoredEmailCount,
     int SkippedOversizedEmailCount,
     int UnreadableMimeEmailCount,
     bool HasMoreEmails,
-    SynchronizationCheckpoint? Checkpoint)
+    SynchronizationCheckpoint? Checkpoint,
+    MailboxReconciliationResult Reconciliation)
 {
     /// <summary>Reports a run that reached its folder.</summary>
     /// <param name="storedEmailCount">How many occurrences were stored with their content.</param>
@@ -336,20 +353,23 @@ public sealed record MailboxSynchronizationResult(
     /// <param name="unreadableMimeEmailCount">How many stored occurrences carried unreadable MIME.</param>
     /// <param name="hasMoreEmails">Whether unprocessed emails remain.</param>
     /// <param name="checkpoint">The progress the run ended on.</param>
+    /// <param name="reconciliation">What the run's backward pass found.</param>
     /// <returns>A synchronized result.</returns>
     public static MailboxSynchronizationResult Synchronized(
         int storedEmailCount,
         int skippedOversizedEmailCount,
         int unreadableMimeEmailCount,
         bool hasMoreEmails,
-        SynchronizationCheckpoint checkpoint) =>
+        SynchronizationCheckpoint checkpoint,
+        MailboxReconciliationResult reconciliation) =>
         new(
             MailboxSynchronizationOutcome.Synchronized,
             storedEmailCount,
             skippedOversizedEmailCount,
             unreadableMimeEmailCount,
             hasMoreEmails,
-            checkpoint);
+            checkpoint,
+            reconciliation);
 
     /// <summary>Reports a configured alias that named no single advertised folder.</summary>
     /// <param name="resolutionOutcome">Why resolution produced no binding.</param>
@@ -371,6 +391,13 @@ public sealed record MailboxSynchronizationResult(
                 "A resolved folder is reported through Synchronized rather than as an unresolved alias."),
         };
 
-        return new MailboxSynchronizationResult(outcome, 0, 0, 0, HasMoreEmails: false, Checkpoint: null);
+        return new MailboxSynchronizationResult(
+            outcome,
+            0,
+            0,
+            0,
+            HasMoreEmails: false,
+            Checkpoint: null,
+            MailboxReconciliationResult.NothingToReconcile);
     }
 }

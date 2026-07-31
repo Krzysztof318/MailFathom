@@ -13,7 +13,7 @@ using NpgsqlTypes;
 namespace MailMcp.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailMcpDbContext))]
-    [Migration("20260730152610_Initial")]
+    [Migration("20260731123140_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -257,6 +257,9 @@ namespace MailMcp.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ReceivedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("RemoteExpungeObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset?>("RemoteFlagsObservedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -317,6 +320,11 @@ namespace MailMcp.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_stored_emails_to_addresses");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("ToAddresses"), "GIN");
+
+                    b.HasIndex("MailFolderId", "RemoteFlagsObservedAt")
+                        .HasDatabaseName("ix_stored_emails_reconciliation_queue");
+
+                    NpgsqlIndexBuilderExtensions.HasNullSortOrder(b.HasIndex("MailFolderId", "RemoteFlagsObservedAt"), new[] { NullSortOrder.Unspecified, NullSortOrder.NullsFirst });
 
                     b.HasIndex("MailFolderId", "ReceivedAt", "Id")
                         .IsDescending(false, true, true)

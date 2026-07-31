@@ -95,6 +95,7 @@ namespace MailMcp.Infrastructure.Persistence.Migrations
                     CarriesUnverifiedSignature = table.Column<bool>(type: "boolean", nullable: false),
                     ContainsUnexpandedTnefPart = table.Column<bool>(type: "boolean", nullable: false),
                     RemoteFlagsObservedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    RemoteExpungeObservedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     IsRemotelySeen = table.Column<bool>(type: "boolean", nullable: false),
                     IsRemotelyAnswered = table.Column<bool>(type: "boolean", nullable: false),
                     IsRemotelyFlagged = table.Column<bool>(type: "boolean", nullable: false),
@@ -239,6 +240,12 @@ namespace MailMcp.Infrastructure.Persistence.Migrations
                 table: "stored_emails",
                 columns: new[] { "MailFolderId", "UidValidity", "Uid" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_stored_emails_reconciliation_queue",
+                table: "stored_emails",
+                columns: new[] { "MailFolderId", "RemoteFlagsObservedAt" })
+                .Annotation("Npgsql:IndexNullSortOrder", new[] { NullSortOrder.Unspecified, NullSortOrder.NullsFirst });
 
             migrationBuilder.CreateIndex(
                 name: "ix_stored_emails_reply_to_addresses",

@@ -1,0 +1,476 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+
+using MailMcp.Application.Persistence;
+using MailMcp.Application.Synchronization;
+using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Emails;
+using MailMcp.Domain.Folders;
+using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
+using Xunit;
+
+namespace MailMcp.Application.UnitTests;
+
+public sealed class MailboxReconcilerTests
+{
+    private static readonly MailAccountId Account = MailAccountId.Create("primary");
+
+    private static readonly MailFolderResolution InboxFolder = MailFolderResolution.FirstBindingOf(
+        MailFolderAlias.Create("inbox"),
+        RemoteFolderPath.Create("INBOX", '/'));
+
+    private static readonly ImapUidValidity SelectedUidValidity = ImapUidValidity.Create(7);
+
+    private static readonly DateTimeOffset RunInstant = new(2026, 7, 31, 12, 0, 0, TimeSpan.Zero);
+
+    /// <summary>The whole point of the pass: a UID the server stopped reporting leaves the mailbox a reader sees.</summary>
+    [Fact]
+    public async Task ReconcileAsync_ServerNoLongerHoldsAnOccurrence_TombstonesItWithoutRemovingTheRow()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10, 11, 12));
+        await using var mailboxSession = CreateSessionHolding(10, 12);
+        var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.RetainTombstone);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, result.ObservedEmailCount);
+        Assert.Equal(1, result.RemotelyDeletedEmailCount);
+        Assert.Equal([11U], store.TombstonedUids);
+        Assert.Empty(store.RemovedUids);
+        Assert.Equal(RunInstant, store.RowOf(11).RemoteExpungeObservedAt);
+    }
+
+    /// <summary>The second variant destroys the local copy instead of hiding it, and the account's setting is what chooses.</summary>
+    [Fact]
+    public async Task ReconcileAsync_AccountErasesLocalCopies_RemovesTheRowInsteadOfTombstoningIt()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10, 11));
+        await using var mailboxSession = CreateSessionHolding(10);
+        var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.EraseLocalCopy);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.RemotelyDeletedEmailCount);
+        Assert.Equal([11U], store.RemovedUids);
+        Assert.Empty(store.TombstonedUids);
+    }
+
+    /// <summary>A message read on another client changes its flags, and the stored snapshot has to follow.</summary>
+    [Fact]
+    public async Task ReconcileAsync_ServerReportsChangedFlags_RefreshesTheStoredSnapshot()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10));
+        await using var mailboxSession = Substitute.For<IMailboxSession>();
+        IReadOnlyList<RemoteEmailFlagObservation> observations =
+        [
+            new RemoteEmailFlagObservation(
+                ImapUid.Create(10),
+                new RemoteEmailFlagSnapshot(
+                    RunInstant,
+                    IsSeen: true,
+                    IsAnswered: true,
+                    IsFlagged: false,
+                    IsDraft: false,
+                    IsDeleted: true)),
+        ];
+        mailboxSession
+            .GetRemoteFlagsWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(observations));
+        var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.RetainTombstone);
+
+        // Act
+        await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            CancellationToken.None);
+
+        // Assert
+        var row = store.RowOf(10);
+        Assert.True(row.Snapshot!.IsSeen);
+        Assert.True(row.Snapshot.IsAnswered);
+
+        // The server reporting \Deleted is a message still in the folder, not a disappearance, so the row keeps its
+        // place in the mailbox and only the flag changes.
+        Assert.True(row.Snapshot.IsDeleted);
+        Assert.Null(row.RemoteExpungeObservedAt);
+    }
+
+    /// <summary>A large folder is reconciled across runs rather than scanned in one, and the run says so.</summary>
+    [Fact]
+    public async Task ReconcileAsync_MoreEmailsThanTheWindowHolds_BoundsTheWindowAndReportsRemainingWork()
+    {
+        // Arrange
+        var storedUids = Enumerable.Range(10, 10).Select(uid => (uint)uid).ToArray();
+        var store = new FakeReconciliationStore(StoredOccurrences(storedUids));
+        await using var mailboxSession = CreateSessionHolding(storedUids);
+        var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.RetainTombstone, maxReconciledEmailsPerRun: 4);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(4, result.ObservedEmailCount);
+        Assert.True(result.EmailsRemain);
+        Assert.Equal([10U, 11U, 12U, 13U], store.AskedAboutUids);
+    }
+
+    /// <summary>Observing an email is what moves it to the back of the queue, which is how the window advances with no cursor.</summary>
+    [Fact]
+    public async Task ReconcileAsync_RunAgainAfterAWindow_AsksAboutTheEmailsObservedLongestAgo()
+    {
+        // Arrange
+        var storedUids = Enumerable.Range(10, 6).Select(uid => (uint)uid).ToArray();
+        var store = new FakeReconciliationStore(StoredOccurrences(storedUids));
+        await using var mailboxSession = CreateSessionHolding(storedUids);
+        var timeProvider = new FakeTimeProvider(RunInstant);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            maxReconciledEmailsPerRun: 3,
+            timeProvider: timeProvider);
+        await reconciler.ReconcileAsync(mailboxSession, Account, InboxFolder, SelectedUidValidity, CancellationToken.None);
+        store.AskedAboutUids.Clear();
+        timeProvider.Advance(TimeSpan.FromMinutes(5));
+
+        // Act
+        await reconciler.ReconcileAsync(mailboxSession, Account, InboxFolder, SelectedUidValidity, CancellationToken.None);
+
+        // Assert
+        Assert.Equal([13U, 14U, 15U], store.AskedAboutUids);
+    }
+
+    /// <summary>A renumbered folder must cost nothing locally: every stored occurrence names a UID space the server abandoned.</summary>
+    [Fact]
+    public async Task ReconcileAsync_FolderReportsADifferentUidValidity_DeletesNothingAndReachesNoServer()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10, 11, 12));
+        await using var mailboxSession = CreateSessionHolding();
+        var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.EraseLocalCopy);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            ImapUidValidity.Create(8),
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.RemotelyDeletedEmailCount);
+        Assert.Empty(store.RemovedUids);
+        Assert.Empty(store.TombstonedUids);
+        await mailboxSession.DidNotReceive().GetRemoteFlagsWithoutSettingSeenAsync(
+            Arg.Any<IReadOnlyList<ImapUid>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Re-running over a folder whose deletions are already recorded commits the same state, not a second one.</summary>
+    [Fact]
+    public async Task ReconcileAsync_RunTwiceOverTheSameDisappearance_KeepsTheFirstObservationTimestamp()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10, 11));
+        await using var mailboxSession = CreateSessionHolding(10);
+        var timeProvider = new FakeTimeProvider(RunInstant);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            timeProvider: timeProvider);
+        await reconciler.ReconcileAsync(mailboxSession, Account, InboxFolder, SelectedUidValidity, CancellationToken.None);
+        timeProvider.Advance(TimeSpan.FromHours(1));
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.RemotelyDeletedEmailCount);
+        Assert.Equal([11U], store.TombstonedUids);
+        Assert.Equal(RunInstant, store.RowOf(11).RemoteExpungeObservedAt);
+    }
+
+    /// <summary>
+    /// The pass inspects mail that is already stored, which is exactly where a careless fetch would mark a whole mailbox
+    /// as read. The absence is meaningful because the same substitute would report a content fetch if one were issued.
+    /// </summary>
+    [Fact]
+    public async Task ReconcileAsync_WindowOfStoredEmails_ReadsFlagsWithoutFetchingAnyContent()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10, 11));
+        await using var mailboxSession = CreateSessionHolding(10, 11);
+        var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.RetainTombstone);
+
+        // Act
+        await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            CancellationToken.None);
+
+        // Assert
+        await mailboxSession.Received(1).GetRemoteFlagsWithoutSettingSeenAsync(
+            Arg.Any<IReadOnlyList<ImapUid>>(),
+            Arg.Any<CancellationToken>());
+        await mailboxSession.DidNotReceive().FetchEmailContentWithoutSettingSeenAsync(
+            Arg.Any<EmailOccurrenceId>(),
+            Arg.Any<long>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A folder with nothing stored costs no command, so a first run over an empty mailbox is free.</summary>
+    [Fact]
+    public async Task ReconcileAsync_FolderHoldsNothingLocally_ReachesNoServerAndReportsNoWork()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore([]);
+        await using var mailboxSession = CreateSessionHolding();
+        var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.RetainTombstone);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.ObservedEmailCount);
+        Assert.False(result.EmailsRemain);
+        await mailboxSession.DidNotReceive().GetRemoteFlagsWithoutSettingSeenAsync(
+            Arg.Any<IReadOnlyList<ImapUid>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReconcileAsync_CallerCancels_StopsWithoutCommittingTheWindow()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10, 11));
+        await using var mailboxSession = CreateSessionHolding(10);
+        var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.RetainTombstone);
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        // Act and assert
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            cancellation.Token));
+        Assert.Empty(store.TombstonedUids);
+    }
+
+    /// <summary>Builds a session whose folder still holds exactly the named UIDs, and says nothing about the rest.</summary>
+    private static IMailboxSession CreateSessionHolding(params uint[] presentUids)
+    {
+        var mailboxSession = Substitute.For<IMailboxSession>();
+        IReadOnlyList<RemoteEmailFlagObservation> observations =
+        [
+            .. presentUids.Select(uid => new RemoteEmailFlagObservation(
+                ImapUid.Create(uid),
+                new RemoteEmailFlagSnapshot(
+                    RunInstant,
+                    IsSeen: false,
+                    IsAnswered: false,
+                    IsFlagged: false,
+                    IsDraft: false,
+                    IsDeleted: false))),
+        ];
+
+        mailboxSession
+            .GetRemoteFlagsWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult<IReadOnlyList<RemoteEmailFlagObservation>>(
+            [
+                .. observations.Where(observation =>
+                    call.Arg<IReadOnlyList<ImapUid>>()!.Contains(observation.Uid)),
+            ]));
+
+        return mailboxSession;
+    }
+
+    private static MailboxReconciler CreateReconciler(
+        FakeReconciliationStore store,
+        RemotelyDeletedEmailDisposition disposition,
+        int maxReconciledEmailsPerRun = 100,
+        FakeTimeProvider? timeProvider = null)
+    {
+        var clock = timeProvider ?? new FakeTimeProvider(RunInstant);
+        var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
+
+        var dispositionReader = Substitute.For<IRemotelyDeletedEmailDispositionReader>();
+        dispositionReader.GetDisposition(Arg.Any<MailAccountId>()).Returns(disposition);
+
+        return new MailboxReconciler(
+            store,
+            dispositionReader,
+            new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), clock),
+            clock,
+            new MailboxSynchronizationOptions { MaxReconciledEmailsPerRun = maxReconciledEmailsPerRun });
+    }
+
+    private static IReadOnlyList<StoredOccurrence> StoredOccurrences(params uint[] uids) =>
+    [
+        .. uids.Select(uid => new StoredOccurrence(
+            StoredEmailId.Create(Guid.CreateVersion7(RunInstant.AddSeconds(uid))),
+            uid)),
+    ];
+
+    /// <summary>One locally stored occurrence a test arranged, before any run has touched it.</summary>
+    private sealed record StoredOccurrence(StoredEmailId StoredEmailId, uint Uid);
+
+    /// <summary>
+    /// Holds the reconciliation queue the way the database does, because the queue is the mechanism under test: the
+    /// window is ordered by how long ago each row was observed, so a fake that returned an arbitrary order would let a
+    /// pass that never advances pass its own test.
+    /// </summary>
+    private sealed class FakeReconciliationStore : IStoredEmailReconciliationStore
+    {
+        private readonly Dictionary<StoredEmailId, ReconciledRow> rowsById;
+
+        public FakeReconciliationStore(IReadOnlyList<StoredOccurrence> storedOccurrences)
+        {
+            this.rowsById = storedOccurrences.ToDictionary(
+                occurrence => occurrence.StoredEmailId,
+                occurrence => new ReconciledRow(occurrence.Uid));
+        }
+
+        public List<uint> AskedAboutUids { get; } = [];
+
+        public IReadOnlyList<uint> TombstonedUids =>
+        [
+            .. this.rowsById.Values
+                .Where(row => row.RemoteExpungeObservedAt is not null)
+                .Select(row => row.Uid)
+                .Order(),
+        ];
+
+        public IReadOnlyList<uint> RemovedUids => [.. this.removedUids.Order()];
+
+        private readonly List<uint> removedUids = [];
+
+        public ReconciledRow RowOf(uint uid) => this.rowsById.Values.Single(row => row.Uid == uid);
+
+        public Task<IReadOnlyList<StoredEmailAwaitingReconciliation>> GetLeastRecentlyObservedAsync(
+            MailAccountId accountId,
+            MailFolderResolutionId folderResolutionId,
+            ImapUidValidity uidValidity,
+            int maxEmailCount,
+            CancellationToken cancellationToken)
+        {
+            // Occurrences are stored under the selected UIDVALIDITY only, so a folder the server renumbered selects
+            // none of them rather than reporting the whole mailbox as missing.
+            if (uidValidity != SelectedUidValidity)
+            {
+                return Task.FromResult<IReadOnlyList<StoredEmailAwaitingReconciliation>>([]);
+            }
+
+            IReadOnlyList<StoredEmailAwaitingReconciliation> window =
+            [
+                .. this.rowsById
+                    .Where(entry => entry.Value.RemoteExpungeObservedAt is null)
+                    .OrderBy(entry => entry.Value.ObservedAt is not null)
+                    .ThenBy(entry => entry.Value.ObservedAt)
+                    .ThenBy(entry => entry.Value.Uid)
+                    .Take(maxEmailCount)
+                    .Select(entry => new StoredEmailAwaitingReconciliation(entry.Key, ImapUid.Create(entry.Value.Uid))),
+            ];
+
+            this.AskedAboutUids.AddRange(window.Select(candidate => candidate.Uid.Value));
+
+            return Task.FromResult(window);
+        }
+
+        public Task RecordFlagObservationAsync(
+            IPersistenceSession session,
+            StoredEmailId storedEmailId,
+            RemoteEmailFlagSnapshot snapshot,
+            CancellationToken cancellationToken)
+        {
+            var row = this.rowsById[storedEmailId];
+            row.ObservedAt = snapshot.ObservedAt;
+            row.Snapshot = snapshot;
+
+            return Task.CompletedTask;
+        }
+
+        public Task RecordRemoteDeletionAsync(
+            IPersistenceSession session,
+            StoredEmailId storedEmailId,
+            RemotelyDeletedEmailDisposition disposition,
+            DateTimeOffset observedAt,
+            CancellationToken cancellationToken)
+        {
+            if (!this.rowsById.TryGetValue(storedEmailId, out var row))
+            {
+                return Task.CompletedTask;
+            }
+
+            if (disposition is RemotelyDeletedEmailDisposition.EraseLocalCopy)
+            {
+                this.removedUids.Add(row.Uid);
+                this.rowsById.Remove(storedEmailId);
+
+                return Task.CompletedTask;
+            }
+
+            row.RemoteExpungeObservedAt ??= observedAt;
+            row.ObservedAt ??= observedAt;
+
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>The columns reconciliation writes on one stored email.</summary>
+    private sealed class ReconciledRow(uint uid)
+    {
+        public uint Uid { get; } = uid;
+
+        public DateTimeOffset? ObservedAt { get; set; }
+
+        public DateTimeOffset? RemoteExpungeObservedAt { get; set; }
+
+        public RemoteEmailFlagSnapshot? Snapshot { get; set; }
+    }
+
+    private sealed class CommittingSession : IPersistenceSession
+    {
+        public Task<PersistenceCommitResult> CommitAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(PersistenceCommitResult.Committed);
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+}

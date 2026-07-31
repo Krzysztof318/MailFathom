@@ -30,7 +30,8 @@ internal sealed class StoredEmailExtractionBackfillStore(MailMcpDbContext dbCont
     /// <inheritdoc />
     /// <remarks>
     /// The predicate is what makes the walk shrink: an email gains a search document exactly when its extraction is
-    /// committed, so a completed one never appears in a later batch even if the resume position is reset. Ordering by
+    /// committed, so a completed one never appears in a later batch even if the resume position is reset. A tombstoned
+    /// email is skipped as well, because indexing text nothing may search for is work with no reader. Ordering by
     /// the primary key gives the keyset comparison an index to walk and a total order that no later write disturbs.
     /// Both the ordering and the comparison are evaluated by PostgreSQL, so the walk runs entirely under that server's
     /// <c>uuid</c> ordering and never has to agree with how the CLR compares two <see cref="Guid" /> values.
@@ -47,6 +48,7 @@ internal sealed class StoredEmailExtractionBackfillStore(MailMcpDbContext dbCont
             .AsNoTracking()
             .Where(email => email.ContentAvailability == StoredEmailContentAvailability.Available
                 && email.SearchDocument == null
+                && email.RemoteExpungeObservedAt == null
                 && (resumeAfterId == null || email.Id > resumeAfterId))
             .OrderBy(email => email.Id)
             .Take(batchSize)

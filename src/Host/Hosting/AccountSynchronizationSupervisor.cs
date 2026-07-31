@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Emails;
 using MailMcp.Host.Configuration;
 
 namespace MailMcp.Host.Hosting;
@@ -170,7 +171,11 @@ internal sealed partial class AccountSynchronizationSupervisor
                         return;
                     }
 
-                    if (!await this.SynchronizeFolderAsync(runSettings, configuredFolder, folderToken))
+                    if (!await this.SynchronizeFolderAsync(
+                        runSettings,
+                        account.RemotelyDeletedEmailDisposition,
+                        configuredFolder,
+                        folderToken))
                     {
                         Interlocked.Increment(ref failedFolderCount);
                     }
@@ -200,6 +205,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The supervisor isolates an unexpected per-folder failure so the account's remaining folders and its later runs can continue.")]
     private async Task<bool> SynchronizeFolderAsync(
         MailSynchronizationOptions runSettings,
+        RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition,
         MailFolderMappingOptions configuredFolder,
         CancellationToken cancellationToken)
     {
@@ -220,7 +226,7 @@ internal sealed partial class AccountSynchronizationSupervisor
             var synchronizer = scope.ServiceProvider.GetRequiredService<MailboxSynchronizer>();
             var result = await synchronizer.SynchronizeAsync(this.accountId, folderMapping, cancellationToken);
 
-            this.ReportFolderOutcome(folderAlias, result);
+            this.ReportFolderOutcome(folderAlias, remotelyDeletedEmailDisposition, result);
 
             return true;
         }
@@ -249,7 +255,10 @@ internal sealed partial class AccountSynchronizationSupervisor
     }
 
     /// <summary>Reports one folder's run, keeping an alias that named no single folder separate from a failure.</summary>
-    private void ReportFolderOutcome(string folderAlias, MailboxSynchronizationResult result)
+    private void ReportFolderOutcome(
+        string folderAlias,
+        RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition,
+        MailboxSynchronizationResult result)
     {
         if (result.Outcome == MailboxSynchronizationOutcome.FolderAliasUnresolved)
         {
@@ -272,6 +281,39 @@ internal sealed partial class AccountSynchronizationSupervisor
             result.SkippedOversizedEmailCount,
             result.UnreadableMimeEmailCount,
             result.HasMoreEmails);
+
+        this.ReportReconciliation(folderAlias, remotelyDeletedEmailDisposition, result.Reconciliation);
+    }
+
+    /// <summary>Emits the audit line for the backward pass, and emits it only when the pass found something to record.</summary>
+    /// <remarks>
+    /// A window that observed nothing says nothing, so a folder whose emails are all up to date does not repeat a line
+    /// per interval forever. Local deletion is reported at warning level whichever disposition produced it, because an
+    /// operator watching this is watching for mail leaving the local copy — and a misconfigured folder alias or a
+    /// server rebuilding a mailbox shows up here first.
+    /// </remarks>
+    private void ReportReconciliation(
+        string folderAlias,
+        RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition,
+        MailboxReconciliationResult reconciliation)
+    {
+        if (reconciliation.RemotelyDeletedEmailCount > 0)
+        {
+            this.LogRemotelyDeletedEmailsRecorded(
+                this.accountId.Value,
+                folderAlias,
+                reconciliation.RemotelyDeletedEmailCount,
+                remotelyDeletedEmailDisposition);
+        }
+
+        if (reconciliation.ObservedEmailCount > 0)
+        {
+            this.LogFolderReconciled(
+                this.accountId.Value,
+                folderAlias,
+                reconciliation.ObservedEmailCount,
+                reconciliation.EmailsRemain);
+        }
     }
 
     /// <summary>Reports one account's run in counts and duration only; no subject, address, or fragment of a body may reach a log.</summary>
@@ -320,6 +362,31 @@ internal sealed partial class AccountSynchronizationSupervisor
         int skippedOversizedEmailCount,
         int unreadableMimeEmailCount,
         bool hasMoreEmails);
+
+    /// <summary>Reports the backward pass in counts only, and says whether the folder still has emails awaiting a check.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Reconciled IMAP folder {AccountId}/{FolderAlias}; refreshed the remote flags of {ObservedEmailCount} stored messages and has more to reconcile: {EmailsRemain}.")]
+    private partial void LogFolderReconciled(
+        string accountId,
+        string folderAlias,
+        int observedEmailCount,
+        bool emailsRemain);
+
+    /// <summary>Records mail leaving the local copy, which is the one reconciliation outcome an operator has to be able to find afterwards.</summary>
+    /// <remarks>
+    /// The disposition is part of the line rather than left to the reader to look up in configuration, because the two
+    /// outcomes it names are not comparable: one hides a row, the other destroys it along with everything derived from
+    /// it. Only counts and MailMcp's own configured names appear here; nothing derived from a message may.
+    /// </remarks>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Mail server no longer holds {RemotelyDeletedEmailCount} messages stored for {AccountId}/{FolderAlias}; their local copies were handled as {RemotelyDeletedEmailDisposition}.")]
+    private partial void LogRemotelyDeletedEmailsRecorded(
+        string accountId,
+        string folderAlias,
+        int remotelyDeletedEmailCount,
+        RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition);
 
     /// <summary>Separates a folder the server does not advertise from a folder that failed, because only one of them is the operator's to fix in configuration.</summary>
     [LoggerMessage(

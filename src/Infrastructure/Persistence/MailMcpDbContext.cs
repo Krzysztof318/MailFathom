@@ -22,6 +22,8 @@ internal sealed class MailMcpDbContext : DbContext
 
     internal const string StoredEmailFolderTimelineIndexName = "ix_stored_emails_folder_timeline";
 
+    internal const string StoredEmailReconciliationQueueIndexName = "ix_stored_emails_reconciliation_queue";
+
     internal const string StoredEmailSenderIndexName = "ix_stored_emails_sender";
 
     internal const string StoredEmailToAddressesIndexName = "ix_stored_emails_to_addresses";
@@ -278,6 +280,14 @@ internal sealed class MailMcpDbContext : DbContext
             .HasDatabaseName(StoredEmailFolderTimelineIndexName)
             .IsDescending(false, true, true)
             .HasNullSortOrder(NullSortOrder.Unspecified, NullSortOrder.NullsLast, NullSortOrder.Unspecified);
+
+        // The reconciliation queue, ordered exactly as the window that reads it: within one folder, the emails observed
+        // longest ago come first and the never-observed ones lead. NULLS FIRST is stated for the reason the timeline
+        // indexes state NULLS LAST — PostgreSQL's default under ASC is the opposite of the decision, and an email
+        // nobody has ever asked the server about is precisely the one a window must reach first.
+        entity.HasIndex(email => new { email.MailFolderId, email.RemoteFlagsObservedAt })
+            .HasDatabaseName(StoredEmailReconciliationQueueIndexName)
+            .HasNullSortOrder(NullSortOrder.Unspecified, NullSortOrder.NullsFirst);
 
         entity.HasIndex(email => email.SenderNormalizedAddress)
             .HasDatabaseName(StoredEmailSenderIndexName);
