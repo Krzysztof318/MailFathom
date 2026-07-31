@@ -10,6 +10,9 @@
     <Company>Krzysztof Kasprowicz</Company>
     <Copyright>Copyright © 2026 Krzysztof Kasprowicz</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Krzysztof318/MailMcp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Krzysztof318/MailMcp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>
