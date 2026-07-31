@@ -85,7 +85,7 @@ Beyond the draft, five capabilities are tracked as issues on the roadmap board w
 
 Attachment handling is not on that list. It is inside this roadmap, and [#80](https://github.com/Krzysztof318/MailMcp/issues/80) corrected specifications 06, 07, 08, 13, 14, 15, and 17 so the classification rule, file-name normalization, and structural parsing bounds are stated before any of that work starts.
 
-Until the OAuth work lands, the MCP endpoint has no transport authentication. The owner has accepted that for this development segment, so specification 16 imposes no address restriction; it keeps the endpoint disabled by default and warns explicitly at startup when it is enabled without authentication.
+Specification 16 shipped the MCP endpoint with no transport authentication at all, disabled by default and warning at startup whenever it was enabled. [#140](https://github.com/Krzysztof318/MailMcp/issues/140) replaces that posture before the first release: [#164](https://github.com/Krzysztof318/MailMcp/issues/164) makes an enabled endpoint state whether it requires an API key or nothing, and [#165](https://github.com/Krzysztof318/MailMcp/issues/165) adds the mTLS trust profiles. Neither is OAuth 2.1, which stays where the table above puts it — an API key names a client rather than a person, and the owner authorization every tool call already performs is unchanged by both.
 
 ## Dependencies these specifications add
 

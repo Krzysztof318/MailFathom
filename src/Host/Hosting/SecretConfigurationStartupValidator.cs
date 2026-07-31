@@ -28,20 +28,27 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
 {
     private readonly ISettingsSnapshot<MailSynchronizationOptions> mailSynchronizationSettings;
     private readonly ISettingsSnapshot<PersistenceOptions> persistenceSettings;
+    private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly SecretConfigurationValidator validator;
     private readonly SecretResolutionOptions resolutionOptions;
     private readonly ILogger<SecretConfigurationStartupValidator> logger;
 
     /// <summary>Initializes a new secret configuration startup validator.</summary>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="mcpEndpointSettings" /> is <see langword="null" />.</exception>
+    /// <remarks>The endpoint settings arrive as the composed value rather than as a snapshot, because the section is read once while the host is built and takes a restart to change.</remarks>
     public SecretConfigurationStartupValidator(
         ISettingsSnapshot<MailSynchronizationOptions> mailSynchronizationSettings,
         ISettingsSnapshot<PersistenceOptions> persistenceSettings,
+        IOptions<McpEndpointOptions> mcpEndpointSettings,
         SecretConfigurationValidator validator,
         SecretResolutionOptions resolutionOptions,
         ILogger<SecretConfigurationStartupValidator> logger)
     {
+        ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
+
         this.mailSynchronizationSettings = mailSynchronizationSettings;
         this.persistenceSettings = persistenceSettings;
+        this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.validator = validator;
         this.resolutionOptions = resolutionOptions;
         this.logger = logger;
@@ -61,6 +68,11 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         failures.AddRange(
             await this.validator.FindPersistenceConfigurationErrorsAsync(
                 this.persistenceSettings.Current,
+                cancellationToken));
+
+        failures.AddRange(
+            await this.validator.FindMcpEndpointConfigurationErrorsAsync(
+                this.mcpEndpointSettings,
                 cancellationToken));
 
         if (failures.Count > 0)

@@ -91,6 +91,8 @@ Configure a development account in `appsettings.Development.json` or, better, in
 
 ```bash
 dotnet user-secrets --project src/Host/Host.csproj set \
+  "MailSynchronization:Accounts:0:Secrets:Password:Name" "dev-password"
+dotnet user-secrets --project src/Host/Host.csproj set \
   "MailSynchronization:Accounts:0:Secrets:Password:SecretReference" "plaintext:dev-password"
 ```
 

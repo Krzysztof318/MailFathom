@@ -76,11 +76,23 @@ var mailMcpHost = builder.AddProject<Projects.Host>(OrchestrationContract.HostRe
 
 if (runsIntegrationTests)
 {
-    // The suite verifies classes against a real database rather than the composed host, so the host resource stays in
-    // the model — the migration resource is defined on it, and the connection string is issued to it — but nothing
-    // starts it. Starting a second MailMcp against the test database would run its synchronization workers over the
-    // data a test is asserting on.
-    mailMcpHost.WithExplicitStart();
+    // Nothing starts the host with the application. Most of the suite verifies classes against a real database and a
+    // real mailbox, and a second MailMcp reconciling folders underneath them would make its synchronization part of
+    // every one of those tests' environment. The suite starts it explicitly, from a collection ordered after all of
+    // them, once nothing else is asserting on the infrastructure it would touch.
+    mailMcpHost
+        .WithExplicitStart()
+        // Stated here rather than left to appsettings.json, because the isolation above is a promise this app model
+        // makes: a default edited elsewhere must not be able to turn the started host into a synchronizing one.
+        .WithEnvironment("MailSynchronization__Enabled", "false")
+        // The endpoint is served under the posture worth proving end to end — a credential is required, and the origins
+        // are narrowed. Leaving the permissive origin default would let a suite pass while the check was never wired in.
+        .WithEnvironment("McpEndpoint__Enabled", "true")
+        .WithEnvironment("McpEndpoint__Authentication", "ApiKey")
+        .WithEnvironment("McpEndpoint__ApiKeys__0__Name", OrchestrationContract.McpApiKeyName)
+        .WithEnvironment("McpEndpoint__ApiKeys__0__SecretReference", $"plaintext:{OrchestrationContract.McpApiKey}")
+        .WithEnvironment("McpEndpoint__Cors__AllowAnyOrigin", "false")
+        .WithEnvironment("McpEndpoint__Cors__AllowedOrigins__0", OrchestrationContract.McpPermittedOrigin);
 }
 
 // Host is the startup project because it is the project resource the connection string is issued to; Infrastructure

@@ -9,12 +9,15 @@ using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailMcp.Host.UnitTests;
 
 public sealed class SecretConfigurationStartupValidatorTests
 {
+    private static readonly DateTimeOffset ValidatedAt = new(2026, 7, 31, 12, 0, 0, TimeSpan.Zero);
+
     private static readonly DatabaseCommandTimeout DefaultCommandTimeout =
         new(TimeSpan.FromSeconds(HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds));
 
@@ -24,7 +27,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         // Arrange
         var harness = CreateHarness(
             ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")),
-            new PersistenceOptions { Password = new ConfiguredSecret { SecretReference = "plaintext:postgres-password" } });
+            new PersistenceOptions { Password = new ConfiguredSecret { Name = "postgres", SecretReference = "plaintext:postgres-password" } });
 
         // Act, Assert
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -67,7 +70,7 @@ public sealed class SecretConfigurationStartupValidatorTests
             ConfiguredAccounts.WithPasswordReferences(
                 ("primary", "file:/run/secrets/absent"),
                 ("secondary", "a-pasted-password")),
-            new PersistenceOptions { Password = new ConfiguredSecret { SecretReference = "file:/run/secrets/postgres" } });
+            new PersistenceOptions { Password = new ConfiguredSecret { Name = "postgres", SecretReference = "file:/run/secrets/postgres" } });
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -123,7 +126,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         // Arrange
         var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
         synchronization.Accounts[0].TransportSecurity.TrustedCertificateAuthority =
-            new ConfiguredSecret { SecretReference = "file:/run/secrets/private-ca.pem" };
+            new ConfiguredSecret { Name = "primary-ca", SecretReference = "file:/run/secrets/private-ca.pem" };
         var harness = CreateHarness(synchronization, new PersistenceOptions());
 
         // Act
@@ -145,7 +148,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
         synchronization.Accounts[0].TransportSecurity.CertificateTrust = MailServerCertificateTrust.AdditionalTrustedAuthority;
         synchronization.Accounts[0].TransportSecurity.TrustedCertificateAuthority =
-            new ConfiguredSecret { SecretReference = "plaintext:not-a-certificate" };
+            new ConfiguredSecret { Name = "primary-ca", SecretReference = "plaintext:not-a-certificate" };
         var harness = CreateHarness(synchronization, new PersistenceOptions());
 
         // Act
@@ -305,6 +308,165 @@ public sealed class SecretConfigurationStartupValidatorTests
         Assert.Contains("is not a PostgreSQL text search configuration MailMcp supports", failure, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task StartingAsync_ASecretWithNoName_FailsStartupNamingTheSettingToAdd()
+    {
+        // Arrange
+        var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        synchronization.Accounts[0].Secrets.Password.Name = string.Empty;
+        var harness = CreateHarness(synchronization, new PersistenceOptions());
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("MailSynchronization:Accounts:0:Secrets:Password:Name", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartingAsync_TwoSecretsSharingAName_FailsStartupBecauseNeitherCouldBeNamedUnambiguously()
+    {
+        // Arrange
+        var synchronization = ConfiguredAccounts.WithPasswordReferences(
+            ("primary", "plaintext:dev-password"),
+            ("secondary", "plaintext:dev-password"));
+        synchronization.Accounts[1].Secrets.Password.Name = synchronization.Accounts[0].Secrets.Password.Name;
+        var harness = CreateHarness(synchronization, new PersistenceOptions());
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("MailSynchronization:Accounts:1:Secrets:Password:Name", failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>Names identify secrets to an operator reading one section, so adding a section must not collide with one already working.</summary>
+    [Fact]
+    public async Task StartingAsync_TheSameNameInTwoSections_IsAcceptedBecauseUniquenessIsScopedToOne()
+    {
+        // Arrange
+        var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        var persistence = new PersistenceOptions
+        {
+            Password = new ConfiguredSecret
+            {
+                Name = synchronization.Accounts[0].Secrets.Password.Name,
+                SecretReference = "plaintext:postgres-password",
+            },
+        };
+        var harness = CreateHarness(synchronization, persistence);
+
+        // Act, Assert
+        await harness.Validator.StartingAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StartingAsync_AnUnreadableLifetime_FailsStartupRatherThanFallingBackToNoLimit()
+    {
+        // Arrange
+        var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        synchronization.Accounts[0].Secrets.Password.Lifetime = "next Tuesday";
+        var harness = CreateHarness(synchronization, new PersistenceOptions());
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("MailSynchronization:Accounts:0:Secrets:Password:Lifetime", failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An expired entry left beside its replacement is what a completed rotation looks like. Refusing to start over one
+    /// would make rotating a credential harder than never rotating it, so it is reported and the host runs.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_AnExpiredSecret_IsReportedByNameRatherThanFailingStartup()
+    {
+        // Arrange
+        var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        synchronization.Accounts[0].Secrets.Password.Lifetime = "2026-07-30T00:00:00Z";
+        var harness = CreateHarness(synchronization, new PersistenceOptions());
+
+        // Act
+        await harness.Validator.StartingAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Contains(
+            harness.ReportedMessages,
+            message => message.Contains("primary-password", StringComparison.Ordinal)
+                && message.Contains("lifetime ended", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task StartingAsync_ASecretExpiringLater_IsNotReportedAsExpired()
+    {
+        // Arrange
+        var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        synchronization.Accounts[0].Secrets.Password.Lifetime = "2027-07-30T00:00:00Z";
+        var harness = CreateHarness(synchronization, new PersistenceOptions());
+
+        // Act
+        await harness.Validator.StartingAsync(CancellationToken.None);
+
+        // Assert
+        Assert.DoesNotContain(harness.ReportedMessages, message => message.Contains("lifetime ended", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task StartingAsync_AnMcpApiKeyThatCannotBeResolved_FailsStartupNamingItsPosition()
+    {
+        // Arrange
+        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMode.ApiKey };
+        endpoint.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "file:/run/secrets/absent" });
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("McpEndpoint:ApiKeys:0", failure, StringComparison.Ordinal);
+        Assert.Contains(nameof(SecretResolutionFailure.MaterialNotFound), failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartingAsync_TwoMcpApiKeysSharingAName_FailsStartupBecauseNeitherCouldBeRotatedByName()
+    {
+        // Arrange
+        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMode.ApiKey };
+        endpoint.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:one" });
+        endpoint.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:two" });
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("McpEndpoint:ApiKeys:1:Name", failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>A disabled endpoint reads no key, so failing a host over one nothing was going to use would be a rule with no purpose.</summary>
+    [Fact]
+    public async Task StartingAsync_AnUnresolvableApiKeyUnderADisabledEndpoint_IsNotValidated()
+    {
+        // Arrange
+        var endpoint = new McpEndpointOptions();
+        endpoint.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "file:/run/secrets/absent" });
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+
+        // Act, Assert
+        await harness.Validator.StartingAsync(CancellationToken.None);
+    }
+
     /// <summary>Every lifecycle stage other than the starting one is deliberately empty, because the check belongs before hosted services start.</summary>
     [Fact]
     public async Task RemainingLifecycleMembers_Always_CompleteWithoutResolvingAnything()
@@ -330,7 +492,8 @@ public sealed class SecretConfigurationStartupValidatorTests
         PersistenceOptions persistenceOptions,
         SecretValueInterpretation interpretation = SecretValueInterpretation.ReferenceOnly,
         SecretMaterialSource source = SecretMaterialSource.SchemeAdapter,
-        IDatabaseConnectionSettingsValidator? databaseConnectionSettings = null)
+        IDatabaseConnectionSettingsValidator? databaseConnectionSettings = null,
+        McpEndpointOptions? mcpEndpointOptions = null)
     {
         var resolver = new PlaintextOnlySecretReferenceResolver { Source = source };
         var connectionSettingsValidator = databaseConnectionSettings ?? new StubDatabaseConnectionSettingsValidator();
@@ -340,6 +503,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         var validator = new SecretConfigurationStartupValidator(
             new StubSettingsSnapshot<MailSynchronizationOptions>(synchronizationOptions),
             new StubSettingsSnapshot<PersistenceOptions>(persistenceOptions),
+            Options.Create(mcpEndpointOptions ?? new McpEndpointOptions()),
             new SecretConfigurationValidator(
                 resolver,
                 new TrustAnchorLoader(resolver),
@@ -347,6 +511,7 @@ public sealed class SecretConfigurationStartupValidatorTests
                 connectionSettingsValidator,
                 PostgresTextSearchConfiguration.Default,
                 DefaultCommandTimeout,
+                new FakeTimeProvider(ValidatedAt),
                 validationLogger),
             new SecretResolutionOptions(interpretation),
             startupLogger);

@@ -11,7 +11,7 @@ This documentation set explains the durable design and operating model for MailM
 - [Configuration sources](operations/configuration-sources.md) covers the source precedence, the deployment-provisioned JSON directory and file, and the Kubernetes ConfigMap and Secret mapping.
 - [Secret provisioning](operations/secret-provisioning.md) covers secret references, the systemd and container provisioning paths, and in-memory exposure.
 - [Host startup telemetry](operations/host-startup-telemetry.md) describes the bootstrap logging pipeline that reports process start, startup failure, and shutdown.
-- [MCP endpoint](operations/mcp-endpoint.md) covers enabling the protocol surface and the interim posture of an endpoint with no transport authentication.
+- [MCP endpoint](operations/mcp-endpoint.md) covers enabling the protocol surface, the API keys and explicit unauthenticated mode that guard it, and the origins it answers.
 - [Agent workflow](operations/agent-workflow.md) documents the shared Codex and Claude Code workflow.
 - [Decisions](decisions/README.md) describes the ADR workflow and templates.
 

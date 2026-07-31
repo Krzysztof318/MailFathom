@@ -9,6 +9,7 @@ using MailMcp.Application.Synchronization;
 using MailMcp.Host;
 using MailMcp.Host.Configuration;
 using MailMcp.Host.Observability;
+using MailMcp.Host.Security;
 using MailMcp.Infrastructure;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Persistence;
@@ -213,11 +214,24 @@ try
         ?? new McpEndpointOptions();
     builder.Services.AddSingleton(Options.Create(mcpEndpointSettings));
 
+    // Validated here rather than through ValidateOnStart, because the section is read before a container exists and the
+    // decisions it carries — whether to map the endpoint, which scheme protects it — are taken during composition. The
+    // secrets it names are proven separately, by the startup validator that proves every other section's.
+    var mcpEndpointConfigurationErrors = mcpEndpointSettings.FindConfigurationErrors();
+    if (mcpEndpointConfigurationErrors.Count > 0)
+    {
+        throw new OptionsValidationException(
+            McpEndpointOptions.SectionName,
+            typeof(McpEndpointOptions),
+            mcpEndpointConfigurationErrors);
+    }
+
     if (mcpEndpointSettings.Enabled)
     {
         // The tools read the local mailbox copy through the use cases the infrastructure registration above already
         // added, so the protocol surface adds no port of its own.
         builder.Services.AddMailMcpServer();
+        builder.Services.AddMcpTransportSecurity(mcpEndpointSettings);
     }
 
     var app = builder.Build();
@@ -229,7 +243,26 @@ try
 
     if (mcpEndpointSettings.Enabled)
     {
-        app.MapMcp(McpEndpointRoute.Path);
+        // CORS first, so a browser's preflight is answered by the middleware that owns preflight rather than reaching a
+        // check written for real requests. The origin check then runs ahead of authentication, because whether this
+        // deployment serves a page's origin does not depend on which credential the page attached.
+        app.UseCors();
+        app.UseMcpOriginValidation();
+
+        var mcpEndpoint = app
+            .MapMcp(McpEndpointRoute.Path)
+            .RequireCors(McpTransportSecurityExtensions.CorsPolicyName);
+
+        if (mcpEndpointSettings.Authentication == McpTransportAuthenticationMode.ApiKey)
+        {
+            app.UseAuthentication();
+            app.UseAuthorization();
+
+            // On the endpoint rather than as a fallback policy, so the readiness response and the health endpoints keep
+            // answering unauthenticated and every MCP method and response path — the post, the stream, the delete — is
+            // covered by the one requirement the route carries.
+            mcpEndpoint.RequireAuthorization();
+        }
     }
 
     await app.RunAsync();

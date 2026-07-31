@@ -3,7 +3,7 @@
 MailMcp publishes its read side as Model Context Protocol tools over the Streamable HTTP transport. This page records the
 conventions every tool follows, the contract of the tools that exist, and what a client reads when a call fails.
 
-The endpoint is disabled by default and, until the OAuth 2.1 work lands, carries no transport authentication.
+The endpoint is disabled by default, and enabling it requires stating whether a client presents an API key or nothing at all.
 `docs/operations/mcp-endpoint.md` records that posture and how to enable the endpoint; this page describes the surface it
 serves.
 

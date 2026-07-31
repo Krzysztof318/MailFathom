@@ -12,7 +12,7 @@ namespace MailMcp.Infrastructure.Secrets;
 /// </remarks>
 public static class SecretPropertyNaming
 {
-    private static readonly string[] SecretNameFragments = ["Password", "Secret", "Credential", "PrivateKey", "Token"];
+    private static readonly string[] SecretNameFragments = ["Password", "Secret", "Credential", "PrivateKey", "Token", "ApiKey"];
 
     /// <summary>Gets whether a property name announces that the property holds a secret.</summary>
     /// <param name="propertyName">The property name to classify.</param>

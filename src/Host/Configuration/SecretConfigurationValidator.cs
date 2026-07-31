@@ -27,6 +27,8 @@ internal sealed partial class SecretConfigurationValidator
 
     private const string PersistenceConfigurationPath = "Persistence";
 
+    private readonly TimeProvider timeProvider;
+
     private readonly ISecretReferenceResolver secretReferenceResolver;
     private readonly TrustAnchorLoader trustAnchorLoader;
     private readonly DatabaseConnectionSettingsMapper connectionSettingsMapper;
@@ -47,6 +49,7 @@ internal sealed partial class SecretConfigurationValidator
         IDatabaseConnectionSettingsValidator connectionSettingsValidator,
         PostgresTextSearchConfiguration schemaTextSearchConfiguration,
         DatabaseCommandTimeout composedCommandTimeout,
+        TimeProvider timeProvider,
         ILogger<SecretConfigurationValidator> logger)
     {
         this.secretReferenceResolver = secretReferenceResolver;
@@ -55,6 +58,7 @@ internal sealed partial class SecretConfigurationValidator
         this.connectionSettingsValidator = connectionSettingsValidator;
         this.schemaTextSearchConfiguration = schemaTextSearchConfiguration;
         this.composedCommandTimeout = composedCommandTimeout;
+        this.timeProvider = timeProvider;
         this.logger = logger;
     }
 
@@ -150,12 +154,38 @@ internal sealed partial class SecretConfigurationValidator
         return errors;
     }
 
-    /// <summary>Resolves every secret reference in a bound options graph and reports the ones that produced no material.</summary>
+    /// <summary>Finds everything an operator must fix before the MCP endpoint's secrets can be used.</summary>
+    /// <param name="candidate">The bound endpoint settings, which are read once during composition.</param>
+    /// <param name="cancellationToken">Cancels the resolution.</param>
+    /// <returns>One message per unusable setting, empty when the section's secrets are all usable.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A disabled endpoint configures no keys worth proving, and validating them anyway would fail a host over a
+    /// credential nothing was going to read. The structural rules of the section are its own and run during
+    /// composition; this covers the secrets it carries, on exactly the terms every other section's secrets are covered.
+    /// </remarks>
+    internal async Task<IReadOnlyList<string>> FindMcpEndpointConfigurationErrorsAsync(
+        McpEndpointOptions candidate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        return candidate.Enabled
+            ? await this.FindSecretReferenceErrorsAsync(McpEndpointOptions.SectionName, candidate, cancellationToken)
+            : [];
+    }
+
+    /// <summary>Resolves every secret reference in a bound options graph and reports the ones an operator must fix.</summary>
     /// <param name="rootConfigurationPath">The configuration path of the bound root, which prefixes every reported path.</param>
     /// <param name="boundOptions">The bound options root.</param>
     /// <param name="cancellationToken">Cancels the resolution.</param>
-    /// <returns>One message per unresolvable reference and per plain string setting that names a secret.</returns>
-    /// <remarks>The material is erased immediately: this proves the reference is reachable, and each actual use resolves again.</remarks>
+    /// <returns>One message per faulty declaration, per unresolvable reference, and per plain string setting that names a secret.</returns>
+    /// <remarks>
+    /// The material is erased immediately: this proves the reference is reachable, and each actual use resolves again.
+    /// A secret whose lifetime has already ended is reported to the log rather than refused, because an expired entry
+    /// left beside its replacement is what a completed rotation looks like and failing a host over it would make
+    /// rotating one harder than not rotating at all.
+    /// </remarks>
     internal async Task<IReadOnlyList<string>> FindSecretReferenceErrorsAsync(
         string rootConfigurationPath,
         object boundOptions,
@@ -163,6 +193,10 @@ internal sealed partial class SecretConfigurationValidator
     {
         var discovered = ConfiguredSecretDiscovery.FindSecretBearingSettings(boundOptions, rootConfigurationPath);
         var errors = new List<string>(discovered.RawSecretPropertyPaths.Select(DescribeRawSecretProperty));
+
+        errors.AddRange(discovered.FindDeclarationErrors().Select(DescribeDeclarationError));
+
+        var now = this.timeProvider.GetUtcNow();
 
         foreach (var block in discovered.Blocks)
         {
@@ -183,9 +217,21 @@ internal sealed partial class SecretConfigurationValidator
             {
                 this.LogSettingResolvedInline(block.ConfigurationPath);
             }
+
+            this.ReportExpiredLifetime(block, now);
         }
 
         return errors;
+    }
+
+    /// <summary>Records a secret whose configured lifetime has already ended.</summary>
+    /// <remarks>The name and the path are both operator-chosen configuration identities and carry no material, which is what makes this line safe to write at all.</remarks>
+    private void ReportExpiredLifetime(DiscoveredSecret block, DateTimeOffset now)
+    {
+        if (SecretLifetime.TryParse(block.Secret.Lifetime, out var lifetime) && lifetime.HasExpiredAt(now))
+        {
+            this.LogSecretExpired(block.ConfigurationPath, block.Secret.Name, lifetime.ToString());
+        }
     }
 
     private static string DescribeConnectionFailure(DatabaseConnectionConfigurationFailure failure) =>
@@ -193,6 +239,20 @@ internal sealed partial class SecretConfigurationValidator
 
     private static string DescribeRawSecretProperty(string configurationPath) =>
         $"{configurationPath} — a setting that names a secret must bind to a secret reference block rather than to a plain string.";
+
+    private static string DescribeDeclarationError(SecretDeclarationError error) => error.Failure switch
+    {
+        SecretDeclarationFailure.NameMissing =>
+            $"{error.ConfigurationPath}:{nameof(ConfiguredSecret.Name)} — every secret needs a name, which is the identity a rotation, an expiry, and an audit record name it by.",
+        SecretDeclarationFailure.NameMalformed =>
+            $"{error.ConfigurationPath}:{nameof(ConfiguredSecret.Name)} — a name may carry up to {SecretName.MaximumLength} letters, digits, dots, dashes, and underscores, and must begin with a letter or a digit.",
+        SecretDeclarationFailure.NameDuplicated =>
+            $"{error.ConfigurationPath}:{nameof(ConfiguredSecret.Name)} — another secret in this section already carries this name, so neither could be named unambiguously.",
+        SecretDeclarationFailure.LifetimeMissing =>
+            $"{error.ConfigurationPath}:{nameof(ConfiguredSecret.Lifetime)} — a blank lifetime states nothing; write '{SecretLifetime.NoLimitValue}' or the instant the secret expires.",
+        _ =>
+            $"{error.ConfigurationPath}:{nameof(ConfiguredSecret.Lifetime)} — write '{SecretLifetime.NoLimitValue}' or an ISO 8601 instant carrying an explicit offset, such as '2027-01-31T00:00:00Z'.",
+    };
 
     /// <summary>Loads every configured trust anchor and reports the ones no connection could use.</summary>
     /// <remarks>
@@ -239,6 +299,11 @@ internal sealed partial class SecretConfigurationValidator
         Level = LogLevel.Warning,
         Message = "Configuration setting {ConfigurationPath} resolved to an inline secret value rather than to a reference; inline material cannot be erased from process memory.")]
     private partial void LogSettingResolvedInline(string configurationPath);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Configuration setting {ConfigurationPath} carries the secret {SecretName}, whose configured lifetime ended at {Expiration}. Consumers that enforce a lifetime refuse it; the rest keep using it, so remove or re-date it once its replacement is in place.")]
+    private partial void LogSecretExpired(string configurationPath, string secretName, string expiration);
 
     [LoggerMessage(
         Level = LogLevel.Information,

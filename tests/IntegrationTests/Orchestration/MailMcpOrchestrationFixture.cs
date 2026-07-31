@@ -17,9 +17,11 @@ namespace MailMcp.IntegrationTests.Orchestration;
 /// never through a container of its own.
 /// </para>
 /// <para>
-/// The MailMcp host resource is present in the app model but never started, because the suite verifies classes against
-/// real infrastructure rather than the composed host. Every test therefore owns the database and the mailbox
-/// exclusively; nothing synchronizes mail underneath it.
+/// The MailMcp host resource is present in the app model and does not start with it. Most of the suite verifies classes
+/// against real infrastructure rather than the composed host, and every one of those tests owns the database and the
+/// mailbox exclusively; a second MailMcp reconciling folders underneath them would make its synchronization part of
+/// their environment. <see cref="StartMailMcpHostAsync" /> starts it on request, and the one collection that calls it
+/// is ordered after every other, so nothing is asserting on that infrastructure by the time the host touches it.
 /// </para>
 /// </remarks>
 public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
@@ -27,7 +29,14 @@ public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
     /// <summary>Bounds the whole start-up, which on a cold machine includes pulling the images and building the migration project.</summary>
     private static readonly TimeSpan StartupTimeout = TimeSpan.FromMinutes(10);
 
+    /// <summary>Bounds the composed host's own start, which builds and runs a project against an already-migrated database.</summary>
+    private static readonly TimeSpan HostStartupTimeout = TimeSpan.FromMinutes(5);
+
+    private readonly SemaphoreSlim hostStartGate = new(1, 1);
+
     private DistributedApplication? application;
+
+    private Uri? startedHostBaseAddress;
 
     /// <summary>Gets or sets the connection string once the orchestration issued it.</summary>
     private string? IssuedDatabaseConnectionString { get; set; }
@@ -104,12 +113,85 @@ public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
                 OrchestrationContract.MailServerSmtpEndpointName));
     }
 
+    /// <summary>Starts the composed MailMcp host and reports the address it serves on.</summary>
+    /// <param name="cancellationToken">Cancels waiting for the host to become reachable.</param>
+    /// <returns>The base address of the host's HTTP endpoint.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started, or when the host resource refused the start command.</exception>
+    /// <remarks>
+    /// <para>
+    /// Starting is deliberately a request rather than part of <see cref="InitializeAsync" />. The host opens the same
+    /// database every other test writes to, so bringing it up with the application would put it inside the environment
+    /// of tests that assume they own that database. Only <c>ComposedHostCollectionDefinition</c> calls this, and that
+    /// collection is ordered last.
+    /// </para>
+    /// <para>
+    /// The first caller pays the start; the rest wait for it and receive the same address. The gate is held across the
+    /// wait rather than around a flag, because two classes in the collection would otherwise both issue the start
+    /// command and the second would race a resource that is already leaving its stopped state.
+    /// </para>
+    /// </remarks>
+    public async Task<Uri> StartMailMcpHostAsync(CancellationToken cancellationToken)
+    {
+        await this.hostStartGate.WaitAsync(cancellationToken);
+
+        try
+        {
+            if (this.startedHostBaseAddress is { } alreadyStarted)
+            {
+                return alreadyStarted;
+            }
+
+            using var startCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            startCancellation.CancelAfter(HostStartupTimeout);
+
+            this.startedHostBaseAddress = await this.StartHostResourceAsync(startCancellation.Token);
+
+            return this.startedHostBaseAddress;
+        }
+        finally
+        {
+            this.hostStartGate.Release();
+        }
+    }
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        this.hostStartGate.Dispose();
+
         if (this.application is not null)
         {
             await this.application.DisposeAsync();
         }
+    }
+
+    private async Task<Uri> StartHostResourceAsync(CancellationToken cancellationToken)
+    {
+        var startedApplication = this.application
+            ?? throw new InvalidOperationException(
+                "The MailMcp host is started before the suite started the application.");
+
+        // The resource carries WithExplicitStart, so the app model created it and left it stopped. This is the command
+        // the dashboard's own Start button issues, which keeps the suite starting the host the way an operator would.
+        var startResult = await startedApplication.ResourceCommands.ExecuteCommandAsync(
+            OrchestrationContract.HostResourceName,
+            KnownResourceCommands.StartCommand,
+            cancellationToken);
+
+        if (!startResult.Success)
+        {
+            throw new InvalidOperationException(
+                $"The MailMcp host resource refused to start [{startResult.Message}].");
+        }
+
+        await startedApplication.ResourceNotifications.WaitForResourceHealthyAsync(
+            OrchestrationContract.HostResourceName,
+            cancellationToken);
+
+        // Read once the resource is healthy, because the host port is allocated when the project starts rather than
+        // when the app model describes it.
+        return startedApplication.GetEndpoint(
+            OrchestrationContract.HostResourceName,
+            OrchestrationContract.HostHttpEndpointName);
     }
 }
