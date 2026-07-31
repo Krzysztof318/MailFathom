@@ -44,19 +44,23 @@ internal sealed class PersistenceSessionFactory(MailMcpDbContext dbContext) : IP
         public Task RollbackTransactionAsync(CancellationToken cancellationToken) =>
             transaction.RollbackAsync(cancellationToken);
 
-        /// <summary>Recognizes the two inserts a competing writer can win, and nothing else.</summary>
+        /// <summary>Recognizes the three inserts a competing writer can win, and nothing else.</summary>
         /// <remarks>
-        /// Both name a constraint whose violation means "another run got here first" rather than "this data is
-        /// wrong": the first checkpoint of a folder, and the first binding of an alias to a remote folder. Every
-        /// other unique violation stays a failure, because treating an unnamed collision as a race would retry a
-        /// write that will never succeed.
+        /// Each names a constraint whose violation means "another run got here first" rather than "this data is
+        /// wrong": the first checkpoint of a folder, the first binding of an alias to a remote folder, and the account
+        /// row that first binding creates on its way. The account is listed because it is part of that same insert:
+        /// two runs binding an alias for the first time under an account nothing has stored yet collide on the account
+        /// before they ever reach the alias, and reporting only one half of one race would leave the other half an
+        /// unhandled failure. Every other unique violation stays a failure, because treating an unnamed collision as a
+        /// race would retry a write that will never succeed.
         /// </remarks>
         public bool IsConcurrencyConflict(DbUpdateException exception) =>
             exception.InnerException is PostgresException
             {
                 SqlState: PostgresErrorCodes.UniqueViolation,
                 ConstraintName: MailMcpDbContext.SynchronizationCheckpointPrimaryKeyConstraintName
-                    or MailMcpDbContext.MailFolderBindingUniqueIndexName,
+                    or MailMcpDbContext.MailFolderBindingUniqueIndexName
+                    or MailMcpDbContext.MailboxAccountPrimaryKeyConstraintName,
             };
 
         public void ClearTrackedState() => dbContext.ChangeTracker.Clear();
