@@ -1,0 +1,18 @@
+{{- include "mailmcp.validate" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mailmcp.fullname" . }}-config
+  labels:
+    {{- include "mailmcp.labels" . | nindent 4 }}
+data:
+  {{- /*
+    Every key becomes one file in the mounted directory, layered in file-name order beneath the environment block.
+    Nothing here may be a credential: a ConfigMap is readable by anything holding `get` on it and is neither encrypted
+    at rest nor audited like a Secret. A secret-bearing setting carries a `file:` reference into the mounted Secret
+    instead, which is what makes this object safe to review, diff, and store.
+  */}}
+  {{- range $fileName, $fileContents := .Values.config.files }}
+  {{ $fileName }}: |
+    {{- $fileContents | nindent 4 }}
+  {{- end }}

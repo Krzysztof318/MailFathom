@@ -1,0 +1,45 @@
+MailMcp {{ include "mailmcp.versionLabel" . }} is installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+Image:    {{ include "mailmcp.image" . }}
+Database: {{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }} as {{ .Values.database.user }}
+Secrets:  {{ .Values.secrets.existingSecret }}, mounted read-only at {{ .Values.secrets.mountPath }}
+{{ if eq .Values.image.channel "nightly" }}
+  ############################################################################
+  #  UNSUPPORTED: this release deploys a GHCR nightly build.                 #
+  #                                                                          #
+  #  A nightly is whatever main happened to be when someone dispatched a     #
+  #  build. It is not a release: it carries no version promise, it may       #
+  #  expect a schema no published migration produces, and no support or      #
+  #  upgrade path applies to it. Move to a Docker Hub release image before   #
+  #  this deployment holds anything you would mind losing.                   #
+  ############################################################################
+{{ end }}
+Watch it become ready:
+
+  kubectl --namespace {{ .Release.Namespace }} rollout status deployment/{{ include "mailmcp.fullname" . }}
+
+MailMcp verifies the database schema while starting and refuses to serve against one it does not recognize. It never
+applies a migration itself, in any environment. If the pod reports a pending migration, apply the schema deliberately:
+
+  helm upgrade {{ .Release.Name }} <chart> --namespace {{ .Release.Namespace }} --reuse-values \
+    --set migrations.enabled=true \
+    --set migrations.image.repository=<repository> --set migrations.image.tag=<tag> --wait
+  kubectl --namespace {{ .Release.Namespace }} logs job/{{ include "mailmcp.fullname" . }}-migrate-<revision>
+
+Then switch it off again, so the next upgrade does not create another Job:
+
+  helm upgrade {{ .Release.Name }} <chart> --namespace {{ .Release.Namespace }} --reuse-values --set migrations.enabled=false
+{{ if not .Values.ingress.enabled }}
+No Ingress is configured, so the endpoint is reachable only from inside the cluster. Reach it for a check with:
+
+  kubectl --namespace {{ .Release.Namespace }} port-forward service/{{ include "mailmcp.fullname" . }} 8080:{{ .Values.service.port }}
+{{- else }}
+{{- range .Values.ingress.hosts }}
+Reachable at {{ if $.Values.ingress.tls }}https{{ else }}http{{ end }}://{{ .host }}/mcp
+{{- end }}
+{{- if not .Values.ingress.tls }}
+
+  WARNING: the Ingress carries no TLS entry. The MCP endpoint hands its API key and every message it serves to
+  anything on the network path. Configure ingress.tls unless this is a network where that is acceptable.
+{{- end }}
+{{- end }}

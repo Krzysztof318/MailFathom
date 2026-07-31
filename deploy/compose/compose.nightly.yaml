@@ -1,0 +1,34 @@
+# The GHCR nightly channel. Unsupported.
+#
+# A nightly build is whatever `main` happened to be when someone dispatched the workflow. It carries no release
+# promise: its schema may be ahead of any published migration, its configuration keys may have moved, and no version
+# it reports means anything outside the commit it was built from. It is development output, published so a change can
+# be tried, and it is never a release.
+#
+# This overlay exists so that using one is a decision rather than an accident, and it is deliberately awkward:
+#
+#   MAILMCP_NIGHTLY_ACKNOWLEDGED=i-understand-this-is-unsupported \
+#   MAILMCP_NIGHTLY_TAG=<the nightly identifier> \
+#   docker compose -f compose.yaml -f compose.nightly.yaml up -d
+#
+# Leaving either variable out fails immediately with the reason. Nothing in compose.yaml reads GHCR, so a deployment
+# that does not name this file cannot reach a nightly image however it is configured.
+#
+# The nightly identifiers themselves are #156's, and neither the registry path below nor any tag under it exists yet.
+
+services:
+  mailmcp:
+    image: ghcr.io/krzysztof318/mailmcp:${MAILMCP_NIGHTLY_TAG:?Name the nightly identifier to deploy. Nightly builds are unsupported development output and carry no release promise.}
+    build: !reset null
+    labels:
+      # Readable from `docker inspect` and from any monitoring that reads labels, so a container started from this
+      # overlay months ago still says what it is.
+      io.mailmcp.release-channel: "ghcr-nightly-unsupported"
+    environment:
+      MAILMCP_NIGHTLY_ACKNOWLEDGED: ${MAILMCP_NIGHTLY_ACKNOWLEDGED:?Set MAILMCP_NIGHTLY_ACKNOWLEDGED=i-understand-this-is-unsupported to deploy a nightly build. It is not a release, its schema and configuration may move without notice, and no support or upgrade path applies to it.}
+
+  migrations:
+    image: ghcr.io/krzysztof318/mailmcp-migrations:${MAILMCP_NIGHTLY_TAG:?Name the nightly identifier to deploy. Nightly builds are unsupported development output and carry no release promise.}
+    build: !reset null
+    labels:
+      io.mailmcp.release-channel: "ghcr-nightly-unsupported"

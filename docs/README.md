@@ -12,6 +12,9 @@ This documentation set explains the durable design and operating model for MailM
 - [Secret provisioning](operations/secret-provisioning.md) covers secret references, the systemd and container provisioning paths, and in-memory exposure.
 - [Host startup telemetry](operations/host-startup-telemetry.md) describes the bootstrap logging pipeline that reports process start, startup failure, and shutdown.
 - [MCP endpoint](operations/mcp-endpoint.md) covers enabling the protocol surface, the API keys and explicit unauthenticated mode that guard it, the origins it answers, and the domains and certificates it terminates TLS for.
+- [The container image](operations/container-image.md) documents the two images the one `Dockerfile` produces, how the service runs, the health probe, and the schema script the migration image applies.
+- [Deploying with Docker Compose](operations/deployment-compose.md) is the supported single-machine deployment, including secret and configuration provisioning, the explicit migration step, backup, and what survives removal.
+- [Deploying to Kubernetes](operations/deployment-kubernetes.md) documents the Helm chart, its required inputs, the opt-in migration Job, TLS at the ingress, and the Restricted Pod Security Standard defaults.
 - [Agent workflow](operations/agent-workflow.md) documents the shared Codex and Claude Code workflow.
 - [Decisions](decisions/README.md) describes the ADR workflow and templates.
 

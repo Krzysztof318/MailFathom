@@ -1,0 +1,10 @@
+# Patterns to ignore when packaging the chart.
+.DS_Store
+.git/
+.gitignore
+*.swp
+*.bak
+*.tmp
+*.orig
+# The values files below exist for the repository's own verification and are not part of what an operator installs.
+ci/

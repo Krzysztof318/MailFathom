@@ -1,0 +1,45 @@
+{{- if .Values.ingress.enabled }}
+{{- include "mailmcp.validate" . -}}
+{{- $fullName := include "mailmcp.fullname" . -}}
+{{- $servicePort := .Values.service.port -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "mailmcp.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- /*
+    TLS terminates here and nowhere else. MailMcp speaks plain HTTP inside the cluster and terminates none of its own,
+    and the chart never templates, issues, or stores certificate material: `secretName` names a Secret the cluster
+    already holds, whether an operator created it or cert-manager did. An MCP endpoint reached over plain HTTP hands
+    the API key and every message it serves to anything on the path, so an Ingress without a `tls` entry is a
+    deliberate choice for a network where that is acceptable.
+  */}}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ $fullName }}
+                port:
+                  number: {{ $servicePort }}
+          {{- end }}
+    {{- end }}
+{{- end }}

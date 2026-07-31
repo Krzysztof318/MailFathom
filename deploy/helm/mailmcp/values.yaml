@@ -1,0 +1,242 @@
+# Default values for the MailMcp chart.
+#
+# Two things have no default and must be supplied: the image, and the database. Everything else below is a working
+# value that a deployment may leave alone. `values.schema.json` beside this file rejects a values document that omits
+# what is required or that combines settings which cannot both hold, so a mistake fails at `helm install` rather than
+# as a pod that never becomes ready.
+
+### Naming
+#
+# Every object is named after the release. Override only where a cluster already reserves the name a release would
+# produce; changing either after an install renames objects the previous release owned.
+nameOverride: ""
+fullnameOverride: ""
+
+### The image
+#
+# There is no default repository or tag, because MailMcp has published no release. Supplying one here would either
+# name an image that does not exist or, worse, name a moving tag that a cluster would silently follow. Set the values
+# below to an immutable reference once the release channel exists.
+image:
+  # `release` or `nightly`.
+  #
+  # `release` is a published Docker Hub image and the only supported channel. `nightly` is whatever `main` happened to
+  # be when someone dispatched a build: it is published to GHCR, carries no release promise, may expect a schema no
+  # published migration produces, and is never what `appVersion` describes. Selecting it requires the acknowledgement
+  # below, and the chart's notes say so on every install and upgrade.
+  channel: release
+
+  # Left empty for the release channel, where the schema requires it to be supplied. The nightly channel forces
+  # `ghcr.io` and rejects any other value, so a nightly reference cannot be made to look like a Docker Hub release.
+  registry: ""
+  repository: ""
+
+  # Supply exactly one. A digest is preferred: it is the only reference a registry cannot repoint, so a rollback goes
+  # back to the same bytes. A tag is accepted when it is immutable — never `latest`, and never a floating major or
+  # minor, both of which the schema rejects.
+  tag: ""
+  digest: ""
+
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+  # Required, and rejected unless it reads exactly `i-understand-this-is-unsupported`, when `channel` is `nightly`.
+  nightlyAcknowledgement: ""
+
+  # The chart compares `image.tag` against `Chart.appVersion` on the release channel and refuses an install where the
+  # two disagree, so a chart upgrade cannot quietly deploy a different application version than it documents. The
+  # check is inactive while `appVersion` reads `0.0.0-unreleased`, and activates on its own once a real one is
+  # stamped. Set this to true only to deploy a deliberate combination, and say why in your own values file.
+  allowVersionMismatch: false
+
+### The database
+#
+# MailMcp needs PostgreSQL with the `vector` extension. The chart installs none: a database holding every synchronized
+# message needs backup, durability, and an upgrade path that belong to whoever operates it. Point this at one you own.
+database:
+  # Everything except the password. The password arrives as a mounted secret, named below, because a connection string
+  # in a ConfigMap would put a credential into an object that is neither encrypted at rest nor access-controlled like
+  # a Secret.
+  host: ""
+  port: 5432
+  name: mailmcp
+  user: mailmcp
+
+  # Extra Npgsql keywords appended verbatim, for example `SslMode=VerifyFull;`. Keep credentials out of it; the schema
+  # rejects a value that names a password.
+  extraConnectionParameters: ""
+
+  # The key inside the mounted secret holding the password. The reference MailMcp binds is
+  # `file:/etc/mailmcp/secrets/<key>`, which is the same shape the Compose deployment uses, so a `SecretReference`
+  # written for one deployment reads correctly in the other.
+  passwordSecretKey: mailmcp-database-password
+
+### Secrets
+#
+# The chart creates no Secret and templates no credential. It mounts one the operator has already created, read-only,
+# at /etc/mailmcp/secrets — one file per key. Every credential MailMcp reads is a `file:` reference into that
+# directory: mailbox passwords, MCP API keys, and a private trust anchor alike. A Secrets Store CSI driver needs no
+# support beyond this, because it mounts files too.
+secrets:
+  existingSecret: ""
+  mountPath: /etc/mailmcp/secrets
+
+### Configuration
+#
+# Rendered into a ConfigMap and mounted as a directory of JSON files, which MailMcp layers in file-name order beneath
+# the environment block. Nothing here may be a secret: a ConfigMap is readable by anything with `get` on it.
+config:
+  # Map of file name to file contents. The name must end in `.json`; anything else is ignored by the loader and would
+  # be a setting that silently never applied, so the schema rejects it.
+  files: {}
+  mountPath: /etc/mailmcp/config
+
+  # Appended to the environment block, which outranks every mounted file. Use it for a per-deployment override of one
+  # setting rather than for a whole configuration. The schema rejects a name that reads like a credential, because an
+  # environment variable is visible to anything that can read /proc and cannot be erased from process memory.
+  extraEnvironment: {}
+
+  # `FileSystemWatcher` does not observe the symlink swap the kubelet performs when it updates a mounted ConfigMap, so
+  # polling is what makes an edited value reach the running process. Leave this on unless a deployment has decided
+  # that a restart is how configuration changes.
+  pollForChanges: true
+
+### Networking
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+# MailMcp speaks plain HTTP and terminates no TLS of its own. TLS belongs to the ingress, which is also the only place
+# a certificate has to exist — the chart never templates, issues, or stores certificate material. Name a Secret the
+# cluster already holds, whether an operator created it or cert-manager did.
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: mailmcp.example.test
+      paths:
+        - path: /mcp
+          pathType: Prefix
+  tls: []
+  #  - secretName: mailmcp-tls
+  #    hosts:
+  #      - mailmcp.example.test
+
+### Workload
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "2"
+    memory: 1Gi
+
+# Restricted Pod Security Standard. Every value below is what that standard requires, and the chart's schema keeps the
+# ones that cannot be relaxed without leaving the standard from being turned off by accident.
+podSecurityContext:
+  runAsNonRoot: true
+  # The unprivileged account the .NET base images define, and the account the image already runs as. Stated here as
+  # well so the cluster enforces it rather than trusting the image's own `USER`.
+  runAsUser: 1654
+  runAsGroup: 1654
+  fsGroup: 1654
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  # MailMcp calls no Kubernetes API. A projected token in the pod would be a credential with nothing to authenticate
+  # to, so it is not mounted.
+  automountToken: false
+
+# The runtime writes to /tmp and to nothing else, which is what makes a read-only root filesystem workable. The size
+# bounds it, so a runaway temporary file cannot consume node memory.
+temporaryDirectory:
+  sizeLimit: 64Mi
+
+# Longer than the host's own shutdown budget, which MailMcp derives from `MailSynchronization:ShutdownDrainTimeout`,
+# so a synchronization run drains and the process exits rather than being killed part-way. Raise both together.
+terminationGracePeriodSeconds: 60
+
+probes:
+  # Readiness consults every health check, the database included, so a pod that cannot serve leaves the Service's
+  # endpoints instead of answering requests it cannot fulfil.
+  readiness:
+    path: /health
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  # Liveness consults only the checks that report the process itself, so a database outage never becomes a restart
+  # loop that cannot fix what is actually broken.
+  liveness:
+    path: /alive
+    initialDelaySeconds: 20
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 3
+  # Startup covers the interval in which MailMcp validates every secret reference and verifies the database schema.
+  # Its budget is what a slow first start is allowed, and it holds the liveness probe off until it succeeds.
+  startup:
+    path: /alive
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+### Scheduling
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+priorityClassName: ""
+
+podAnnotations: {}
+podLabels: {}
+
+### The schema migration
+#
+# Off, and it stays off during an ordinary install or upgrade. MailMcp never applies a schema change while starting —
+# it verifies the schema and refuses to serve against one it does not recognize — and this Job is the explicit,
+# operator-invoked answer to that refusal. It carries no Helm hook annotation on purpose: a hook would run it on every
+# upgrade, which is the automatic migration the whole arrangement exists to prevent.
+#
+# Enable it deliberately, watch it, then set it back to false:
+#
+#   helm upgrade <release> <chart> --set migrations.enabled=true --wait
+#   kubectl logs job/<release>-mailmcp-migrate-<revision>
+#
+# The Job is named with the release revision, so re-enabling it creates a new one rather than colliding with the
+# completed one it should not silently replace.
+migrations:
+  enabled: false
+  image:
+    repository: ""
+    tag: ""
+    digest: ""
+  # The role the migration connects as needs privileges the service's does not: the schema installs the `vector`
+  # extension, which PostgreSQL does not permit an ordinary role to create. Name a separate key when the deployment
+  # provisions a separate, more privileged credential; leaving it empty reuses the service's.
+  passwordSecretKey: ""
+  user: ""
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi

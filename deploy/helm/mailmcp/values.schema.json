@@ -1,0 +1,293 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MailMcp chart values",
+  "description": "Shape and value constraints for the MailMcp chart. This file rejects what can be decided from one field: a wrong type, an empty required string, a moving image tag, a configuration file name MailMcp would never read, an environment variable that looks like a credential. Constraints that hold between two fields — a nightly image needing its acknowledgement, a tag disagreeing with the chart's application version — are enforced by the chart's own validation helper, because a draft-07 schema can only state those as nested conditionals that report which subschema failed rather than what is wrong.",
+  "type": "object",
+  "required": ["image", "database", "secrets", "config", "service", "probes", "migrations"],
+  "properties": {
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "replicaCount": { "type": "integer", "minimum": 0 },
+
+    "image": {
+      "type": "object",
+      "required": ["channel", "repository", "pullPolicy"],
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": ["release", "nightly"],
+          "description": "'release' is a published Docker Hub image and the only supported channel. 'nightly' is unsupported development output published to GHCR."
+        },
+        "registry": { "type": "string" },
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "description": "No default exists: MailMcp has published no release, and a chart that guessed one would deploy an image nobody named."
+        },
+        "tag": {
+          "type": "string",
+          "not": {
+            "enum": ["latest", "main", "master", "stable", "edge", "nightly"],
+            "description": "A moving tag makes what a cluster runs depend on when a node last pulled, and makes a rollback go somewhere other than where it came from."
+          }
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^$|^sha256:[a-f0-9]{64}$"
+        },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+        "pullSecrets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": { "name": { "type": "string", "minLength": 1 } }
+          }
+        },
+        "nightlyAcknowledgement": { "type": "string" },
+        "allowVersionMismatch": { "type": "boolean" }
+      }
+    },
+
+    "database": {
+      "type": "object",
+      "required": ["host", "port", "name", "user", "passwordSecretKey"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "description": "The chart installs no database. MailMcp needs PostgreSQL with the vector extension, and the store holding every synchronized message belongs to whoever operates it."
+        },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "name": { "type": "string", "minLength": 1 },
+        "user": { "type": "string", "minLength": 1 },
+        "extraConnectionParameters": {
+          "type": "string",
+          "not": {
+            "pattern": "(?i)password",
+            "description": "The password arrives as a mounted file. Putting one here would place a credential into a ConfigMap-visible connection string and leave two sources for one secret."
+          }
+        },
+        "passwordSecretKey": { "type": "string", "minLength": 1 }
+      }
+    },
+
+    "secrets": {
+      "type": "object",
+      "required": ["existingSecret", "mountPath"],
+      "properties": {
+        "existingSecret": {
+          "type": "string",
+          "description": "The chart creates no Secret and templates no credential. Name one the cluster already holds."
+        },
+        "mountPath": { "type": "string", "pattern": "^/.+" }
+      }
+    },
+
+    "config": {
+      "type": "object",
+      "required": ["files", "mountPath"],
+      "properties": {
+        "files": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "\\.json$",
+            "description": "MailMcp layers in *.json only, so a key with another extension would be a setting that silently never applied."
+          },
+          "additionalProperties": { "type": "string" }
+        },
+        "mountPath": { "type": "string", "pattern": "^/.+" },
+        "extraEnvironment": {
+          "type": "object",
+          "propertyNames": {
+            "not": {
+              "pattern": "(?i)(password|secret|credential|token|apikey|api_key|privatekey|private_key)"
+            },
+            "description": "An environment variable is readable through /proc by anything in the pod and cannot be erased from process memory. Credentials arrive as mounted files."
+          },
+          "additionalProperties": { "type": ["string", "number", "boolean"] }
+        },
+        "pollForChanges": { "type": "boolean" }
+      }
+    },
+
+    "service": {
+      "type": "object",
+      "required": ["type", "port"],
+      "properties": {
+        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "annotations": { "type": "object" }
+      }
+    },
+
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "annotations": { "type": "object" },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["host", "paths"],
+            "properties": {
+              "host": { "type": "string", "minLength": 1 },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["path", "pathType"],
+                  "properties": {
+                    "path": { "type": "string", "pattern": "^/" },
+                    "pathType": { "type": "string", "enum": ["Exact", "Prefix", "ImplementationSpecific"] }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["secretName"],
+            "properties": {
+              "secretName": {
+                "type": "string",
+                "minLength": 1,
+                "description": "A Secret the cluster already holds. The chart never issues or stores certificate material."
+              },
+              "hosts": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+
+    "resources": { "type": "object" },
+
+    "podSecurityContext": {
+      "type": "object",
+      "required": ["runAsNonRoot", "seccompProfile"],
+      "properties": {
+        "runAsNonRoot": {
+          "const": true,
+          "description": "The Restricted Pod Security Standard requires it, and MailMcp has no reason to be root: the image runs as an unprivileged account and writes only to a mounted tmpfs."
+        },
+        "runAsUser": { "type": "integer", "minimum": 1 },
+        "runAsGroup": { "type": "integer", "minimum": 1 },
+        "fsGroup": { "type": "integer", "minimum": 1 },
+        "seccompProfile": {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "type": "string", "enum": ["RuntimeDefault", "Localhost"] }
+          }
+        }
+      }
+    },
+
+    "containerSecurityContext": {
+      "type": "object",
+      "required": ["allowPrivilegeEscalation", "readOnlyRootFilesystem", "capabilities"],
+      "properties": {
+        "allowPrivilegeEscalation": { "const": false },
+        "readOnlyRootFilesystem": {
+          "const": true,
+          "description": "The image needs no writable path of its own; /tmp is a mounted emptyDir. A deployment that needed to relax this would be working around something else."
+        },
+        "capabilities": {
+          "type": "object",
+          "required": ["drop"],
+          "properties": {
+            "drop": {
+              "type": "array",
+              "contains": { "const": "ALL" }
+            },
+            "add": { "type": "array", "maxItems": 0 }
+          }
+        }
+      }
+    },
+
+    "serviceAccount": {
+      "type": "object",
+      "required": ["create", "automountToken"],
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "type": "object" },
+        "automountToken": { "type": "boolean" }
+      }
+    },
+
+    "temporaryDirectory": {
+      "type": "object",
+      "required": ["sizeLimit"],
+      "properties": { "sizeLimit": { "type": "string", "minLength": 1 } }
+    },
+
+    "terminationGracePeriodSeconds": { "type": "integer", "minimum": 1 },
+
+    "probes": {
+      "type": "object",
+      "required": ["readiness", "liveness", "startup"],
+      "properties": {
+        "readiness": { "$ref": "#/definitions/probe" },
+        "liveness": { "$ref": "#/definitions/probe" },
+        "startup": { "$ref": "#/definitions/probe" }
+      }
+    },
+
+    "nodeSelector": { "type": "object" },
+    "tolerations": { "type": "array" },
+    "affinity": { "type": "object" },
+    "topologySpreadConstraints": { "type": "array" },
+    "priorityClassName": { "type": "string" },
+    "podAnnotations": { "type": "object" },
+    "podLabels": { "type": "object" },
+
+    "migrations": {
+      "type": "object",
+      "required": ["enabled", "image"],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Off during an ordinary install or upgrade. The Job it renders is the explicit, operator-invoked schema step; MailMcp never applies a migration itself."
+        },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string" },
+            "tag": { "type": "string", "not": { "enum": ["latest", "main", "master", "stable", "edge"] } },
+            "digest": { "type": "string", "pattern": "^$|^sha256:[a-f0-9]{64}$" }
+          }
+        },
+        "passwordSecretKey": { "type": "string" },
+        "user": { "type": "string" },
+        "backoffLimit": { "type": "integer", "minimum": 0 },
+        "ttlSecondsAfterFinished": { "type": "integer", "minimum": 0 },
+        "resources": { "type": "object" }
+      }
+    }
+  },
+
+  "definitions": {
+    "probe": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "enum": ["/health", "/alive"],
+          "description": "/health consults every check including the database; /alive consults only the checks that report the process itself. Pointing liveness at /health turns a database outage into a restart loop that cannot fix it."
+        },
+        "initialDelaySeconds": { "type": "integer", "minimum": 0 },
+        "periodSeconds": { "type": "integer", "minimum": 1 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "failureThreshold": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

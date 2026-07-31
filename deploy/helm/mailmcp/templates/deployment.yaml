@@ -1,0 +1,146 @@
+{{- include "mailmcp.validate" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mailmcp.fullname" . }}
+  labels:
+    {{- include "mailmcp.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "mailmcp.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- /*
+          Restarts the pods when the configuration they mount changes. A ConfigMap edit is picked up without one for
+          the settings MailMcp classifies reloadable, but adding or removing a *key* is restart-required: the directory
+          is enumerated once while the host composes itself, so a new key produces a file no provider reads.
+        */}}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "mailmcp.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "mailmcp.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountToken }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: mailmcp
+          image: {{ include "mailmcp.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Production
+            - name: ASPNETCORE_HTTP_PORTS
+              value: "8080"
+            - name: ConfigurationSources__Directory
+              value: {{ .Values.config.mountPath | quote }}
+            {{- if .Values.config.pollForChanges }}
+            {{- /*
+              The kubelet updates a mounted ConfigMap by swapping a symbolic link, which FileSystemWatcher does not
+              reliably observe. Polling is what makes an edited value reach the running process; the four-second
+              interval is the runtime's and is not configurable.
+            */}}
+            - name: DOTNET_USE_POLLING_FILE_WATCHER
+              value: "1"
+            {{- end }}
+            - name: ConnectionStrings__mailmcp
+              value: {{ include "mailmcp.connectionString" . | quote }}
+            {{- /*
+              The password is never read into this object. MailMcp resolves the reference below per use and erases the
+              material immediately, which is also why a Secret the cluster rotates behind an unchanged mount path
+              reaches the next database connection without a restart.
+            */}}
+            - name: Persistence__Password__Name
+              value: {{ .Values.database.passwordSecretKey | quote }}
+            - name: Persistence__Password__SecretReference
+              value: {{ printf "file:%s/%s" (trimSuffix "/" .Values.secrets.mountPath) .Values.database.passwordSecretKey | quote }}
+            {{- range $name, $value := .Values.config.extraEnvironment }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: {{ .Values.config.mountPath }}
+              readOnly: true
+            - name: secrets
+              mountPath: {{ .Values.secrets.mountPath }}
+              readOnly: true
+            {{- /* The one path the runtime writes to, which is what makes a read-only root filesystem workable. */}}
+            - name: temporary
+              mountPath: /tmp
+          startupProbe:
+            httpGet:
+              path: {{ .Values.probes.startup.path }}
+              port: http
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "mailmcp.fullname" . }}-config
+        - name: secrets
+          secret:
+            secretName: {{ .Values.secrets.existingSecret }}
+            defaultMode: 0400
+        - name: temporary
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.temporaryDirectory.sizeLimit }}

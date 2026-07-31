@@ -8,6 +8,7 @@ using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
 using MailMcp.Host;
 using MailMcp.Host.Configuration;
+using MailMcp.Host.Hosting;
 using MailMcp.Host.Observability;
 using MailMcp.Host.Security;
 using MailMcp.Infrastructure;
@@ -17,6 +18,21 @@ using MailMcp.Infrastructure.Resilience;
 using MailMcp.Infrastructure.Secrets;
 using MailMcp.Mcp;
 using Microsoft.Extensions.Options;
+
+// Ahead of everything, the bootstrap logger included. This process asks the *running* host a question and exits; it
+// composes no configuration and starts nothing, so recording a host start for it would put a start record in the log
+// for every health check the container platform runs.
+if (ContainerHealthProbe.IsRequestedBy(args))
+{
+    using var probeClient = new HttpClient { Timeout = ContainerHealthProbe.RequestTimeout };
+
+    return await ContainerHealthProbe.ProbeAsync(
+        probeClient,
+        ContainerHealthProbe.ResolveProbeAddress(
+            Environment.GetEnvironmentVariable(ContainerHealthProbe.PortsVariableName),
+            Environment.GetEnvironmentVariable(ContainerHealthProbe.PathVariableName)),
+        CancellationToken.None);
+}
 
 // Composed before anything else, CreateBuilder included, so that a malformed appsettings.json, a failure during
 // composition, and a failed host start are all reported rather than only printed. The pipeline the container owns
@@ -169,7 +185,7 @@ try
     // The validator is registered ahead of the worker so hosted-service ordering reinforces the StartingAsync ordering
     // rather than depending on it alone, and ahead of the infrastructure so an operator who mistyped several references
     // reads one aggregated report rather than whichever failure the database happened to hit first.
-    builder.Services.AddHostedService<MailMcp.Host.Hosting.SecretConfigurationStartupValidator>();
+    builder.Services.AddHostedService<SecretConfigurationStartupValidator>();
     // Registered after the startup gate so the first snapshot is proven before either begins accepting reloaded ones.
     builder.Services.AddHostedService(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>());
     builder.Services.AddHostedService(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<PersistenceOptions>>());
@@ -196,14 +212,14 @@ try
         HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds)));
     // Ahead of the workers so no unit of work reads or writes mail before the schema this build expects is proven, and
     // after the infrastructure that registers the inspector it resolves.
-    builder.Services.AddHostedService<MailMcp.Host.Hosting.DatabaseSchemaStartupGate>();
-    builder.Services.AddHostedService<MailMcp.Host.Hosting.MailSynchronizationCoordinator>();
-    builder.Services.AddHostedService<MailMcp.Host.Hosting.MailExtractionBackfillWorker>();
+    builder.Services.AddHostedService<DatabaseSchemaStartupGate>();
+    builder.Services.AddHostedService<MailSynchronizationCoordinator>();
+    builder.Services.AddHostedService<MailExtractionBackfillWorker>();
     // Registered whether or not the endpoint is enabled, because it is the warning that decides whether it has anything
     // to say. Registering it conditionally would put the same condition in two places.
-    builder.Services.AddHostedService<MailMcp.Host.Hosting.McpTransportAuthenticationWarning>();
-    builder.Services.AddHostedService<MailMcp.Host.Hosting.McpTransportEncryptionWarning>();
-    builder.Services.AddHostedService<MailMcp.Host.Hosting.McpRateLimitingStartupReport>();
+    builder.Services.AddHostedService<McpTransportAuthenticationWarning>();
+    builder.Services.AddHostedService<McpTransportEncryptionWarning>();
+    builder.Services.AddHostedService<McpRateLimitingStartupReport>();
 
     // Read once and registered, so the value that decides the route is the one every consumer resolves. Whether the
     // endpoint exists is decided while the application is being built, before a container that could resolve a snapshot
@@ -379,3 +395,8 @@ catch (Exception exception)
 
     throw;
 }
+
+// Written out because the health probe above returns a code, which makes this program's result an exit code rather
+// than nothing. A host that ran and stopped on request ended successfully; every other ending leaves through the
+// rethrow above and never reaches here.
+return 0;

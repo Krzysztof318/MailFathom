@@ -1,0 +1,53 @@
+// Copy to `10-mailmcp.json` beside this file and edit. The extension matters: MailMcp layers in `*.json` only, so
+// this example sits in the mounted directory without being read, and a `.bak` left behind after an edit is ignored
+// the same way. Files are layered in file-name order, so `20-…` overrides `10-…`.
+//
+// Nothing here is a secret. Every credential is a *reference* to a file the deployment mounted, which is what makes
+// this file safe to commit, diff, and review. Every path below is a file the operator drops into ./secrets/mailmcp/,
+// which compose.yaml mounts read-only at /etc/mailmcp/secrets — the same path the Helm chart mounts its Secret at, so
+// a reference reads identically in both. See docs/operations/secret-provisioning.md for the reference grammar and
+// docs/operations/configuration-sources.md for how this directory is read.
+//
+// The database is configured by compose.yaml through the environment block, which outranks this file, so it is
+// deliberately absent here.
+{
+  "MailSynchronization": {
+    "Enabled": true,
+    "Interval": "00:05:00",
+    "Accounts": [
+      {
+        "AccountId": "primary",
+        "Host": "imap.example.test",
+        "Port": 993,
+        "UserName": "you@example.test",
+        "Secrets": {
+          "Password": {
+            "Name": "imap-primary-password",
+            "SecretReference": "file:/etc/mailmcp/secrets/imap-primary-password"
+          }
+        },
+        "TransportSecurity": {
+          "ConnectionSecurity": "TlsOnConnect"
+        },
+        "Folders": [
+          { "Alias": "inbox", "SpecialUse": "Inbox" }
+        ]
+      }
+    ]
+  },
+  "McpEndpoint": {
+    "Enabled": true,
+    "Authentication": "ApiKey",
+    "ApiKeys": [
+      {
+        "Name": "workstation",
+        "SecretReference": "file:/etc/mailmcp/secrets/mcp-workstation-key",
+        "Lifetime": "NoLimit"
+      }
+    ],
+    "Cors": {
+      "AllowAnyOrigin": false,
+      "AllowedOrigins": []
+    }
+  }
+}
