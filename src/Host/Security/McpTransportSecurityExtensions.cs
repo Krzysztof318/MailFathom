@@ -4,6 +4,7 @@ using MailMcp.Host.Configuration;
 using MailMcp.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.Net.Http.Headers;
 
 namespace MailMcp.Host.Security;
@@ -47,6 +48,11 @@ internal static class McpTransportSecurityExtensions
             CorsPolicyName,
             policy => ConfigureCorsPolicy(policy, originPolicy)));
 
+        if (endpointSettings.ClientCertificateProfiles.Count > 0)
+        {
+            services.AddSingleton<McpClientCertificateAuthenticator>();
+        }
+
         if (endpointSettings.Authentication != McpTransportAuthenticationMode.ApiKey)
         {
             return services;
@@ -63,12 +69,48 @@ internal static class McpTransportSecurityExtensions
         return services;
     }
 
+    /// <summary>Asks every HTTPS connection for a client certificate and leaves the decision to the trust profiles.</summary>
+    /// <param name="webHost">The web host being configured.</param>
+    /// <returns>The web host, so composition reads as one sequence.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="webHost" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// A certificate has to be asked for during the handshake or it never arrives, and it is asked for rather than
+    /// demanded so that a client without one reaches the middleware and is refused there. A handshake failure would say
+    /// nothing to the operator reading a log and nothing to a client that could act on it.
+    /// </para>
+    /// <para>
+    /// The connection-level validation accepts every certificate on purpose, and it grants nothing by doing so. Kestrel
+    /// would otherwise validate against the machine's own trust store, which is both too narrow and too wide for this
+    /// design: it would fail the handshake for the private authority a profile names, and it would accept a certificate
+    /// from any public authority the machine happens to trust. Whether a certificate is trusted is
+    /// <see cref="McpClientCertificateValidation" />'s decision, made against the profile's anchors, and this line
+    /// exists so that decision is reached at all.
+    /// </para>
+    /// </remarks>
+    internal static IWebHostBuilder RequestMcpClientCertificates(this IWebHostBuilder webHost)
+    {
+        ArgumentNullException.ThrowIfNull(webHost);
+
+        return webHost.ConfigureKestrel(kestrel => kestrel.ConfigureHttpsDefaults(https =>
+        {
+            https.ClientCertificateMode = ClientCertificateMode.AllowCertificate;
+            https.ClientCertificateValidation = static (_, _, _) => true;
+        }));
+    }
+
     /// <summary>Builds the CORS policy from the configured origins.</summary>
     /// <remarks>
-    /// Credentials are never allowed, under either policy. A browser that could attach an ambient cookie to an MCP
+    /// <para>
+    /// A policy that names no origin at all is the deliberate third posture rather than an oversight: it advertises
+    /// nothing to a browser, which is what a deployment whose only clients are agents and command-line tools wants.
+    /// </para>
+    /// <para>
+    /// Credentials are never allowed, under any policy. A browser that could attach an ambient cookie to an MCP
     /// request would let a page act as whoever is logged in somewhere else, and the endpoint has no use for one anyway:
     /// its credential is a bearer token a client sets deliberately. Allowing any origin and allowing credentials is
     /// also a combination the CORS specification forbids outright.
+    /// </para>
     /// </remarks>
     private static void ConfigureCorsPolicy(CorsPolicyBuilder policy, McpOriginPolicy originPolicy)
     {

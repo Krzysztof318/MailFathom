@@ -2,6 +2,7 @@
 
 using MailMcp.Host.Configuration;
 using MailMcp.Infrastructure.Secrets;
+using MailMcp.Infrastructure.Security;
 using Xunit;
 
 namespace MailMcp.Host.UnitTests;
@@ -133,13 +134,14 @@ public sealed class McpEndpointOptionsTests
     {
         // Arrange
         var options = EnabledWith(McpTransportAuthenticationMode.None);
+        options.Cors.ServeEveryBrowserOrigin();
         options.Cors.AllowedOrigins.Add("https://client.example.test");
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
 
         // Assert
-        Assert.StartsWith("McpEndpoint:Cors:AllowAnyOrigin", error, StringComparison.Ordinal);
+        Assert.StartsWith("McpEndpoint:Cors:AllowedOrigins", error, StringComparison.Ordinal);
     }
 
     /// <summary>Every fault is reported together, so an operator fixing a section reads all of it rather than one restart at a time.</summary>
@@ -147,7 +149,8 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_SeveralFaults_ReportsThemAllAtOnce()
     {
         // Arrange
-        var options = new McpEndpointOptions { Enabled = true, Cors = new McpCorsOptions { AllowAnyOrigin = false } };
+        var options = new McpEndpointOptions { Enabled = true };
+        options.Cors.AllowedOrigins.Add("not-an-origin");
 
         // Act
         var errors = options.FindConfigurationErrors();
@@ -166,8 +169,90 @@ public sealed class McpEndpointOptionsTests
         Assert.Empty(options.ApiKeys);
     }
 
+    /// <summary>Mutual TLS is off unless a profile says otherwise, and it composes with the mode rather than replacing it.</summary>
+    [Fact]
+    public void ClientCertificateProfiles_UnconfiguredDeployment_IsEmptyRatherThanNull()
+    {
+        // Arrange, Act
+        var options = EnabledWith(McpTransportAuthenticationMode.None);
+
+        // Assert
+        Assert.Empty(options.ClientCertificateProfiles);
+        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Empty(options.ToClientCertificateTrustProfiles());
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_AnUnusableClientCertificateProfile_IsReportedUnderItsPosition()
+    {
+        // Arrange
+        var options = EnabledWith(McpTransportAuthenticationMode.None);
+        var profile = ConnectorProfile();
+        profile.TrustAnchors.Clear();
+        options.ClientCertificateProfiles.Add(profile);
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith("McpEndpoint:ClientCertificateProfiles:0:TrustAnchors", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>A refusal in the log and an audit record are read by the profile's name, so two profiles answering to one name make both ambiguous.</summary>
+    [Fact]
+    public void FindConfigurationErrors_TwoProfilesSharingAName_IsRefused()
+    {
+        // Arrange
+        var options = EnabledWith(McpTransportAuthenticationMode.None);
+        options.ClientCertificateProfiles.Add(ConnectorProfile());
+        options.ClientCertificateProfiles.Add(ConnectorProfile());
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith("McpEndpoint:ClientCertificateProfiles:1:Name", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ToClientCertificateTrustProfiles_SeveralProfiles_MapsThemInConfigurationOrder()
+    {
+        // Arrange
+        var options = EnabledWith(McpTransportAuthenticationMode.None);
+        options.ClientCertificateProfiles.Add(ConnectorProfile());
+        var reportingProfile = ConnectorProfile();
+        reportingProfile.Name = "reporting-service";
+        options.ClientCertificateProfiles.Add(reportingProfile);
+
+        // Act
+        var trustProfiles = options.ToClientCertificateTrustProfiles();
+
+        // Assert
+        Assert.Equal(
+            ["chatgpt-connector", "reporting-service"],
+            trustProfiles.Select(profile => profile.Name));
+    }
+
     private static McpEndpointOptions EnabledWith(McpTransportAuthenticationMode authentication) =>
         new() { Enabled = true, Authentication = authentication };
+
+    private static McpClientCertificateProfileOptions ConnectorProfile()
+    {
+        var profile = new McpClientCertificateProfileOptions
+        {
+            Name = "chatgpt-connector",
+            Requirement = McpClientCertificateRequirement.Optional,
+        };
+
+        profile.TrustAnchors.Add(new ConfiguredSecret
+        {
+            Name = "openai-connectors-ca",
+            SecretReference = "file:/run/secrets/openai-connectors-ca.pem",
+        });
+        profile.SubjectAlternativeNames.Add("mtls.prod.connectors.openai.com");
+
+        return profile;
+    }
 
     private static ConfiguredSecret Key(string name) => new()
     {

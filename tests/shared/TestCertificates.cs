@@ -3,7 +3,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailMcp.TestSupport;
 
 /// <summary>Builds the certificates a trust-anchor test needs, entirely in memory.</summary>
 /// <remarks>
@@ -18,8 +18,12 @@ internal static class TestCertificates
     /// <summary><c>id-kp-clientAuth</c>, which a TLS server certificate must not be limited to.</summary>
     private const string ClientAuthenticationOid = "1.3.6.1.5.5.7.3.2";
 
+    /// <summary><c>id-kp-serverAuth</c>, which a TLS client certificate must not be limited to.</summary>
+    private const string ServerAuthenticationOid = "1.3.6.1.5.5.7.3.1";
+
     private static readonly DateTimeOffset ValidFrom = new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset ValidUntil = new(2100, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset ExpiredBy = new(2001, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     private static long issuedCount;
 
@@ -61,6 +65,28 @@ internal static class TestCertificates
             keepPrivateKey: false,
             extendedKeyUsageOid: ClientAuthenticationOid);
 
+    /// <summary>Issues a certificate limited to server authentication, which a client profile must not accept.</summary>
+    internal static X509Certificate2 IssueServerAuthenticationCertificate(X509Certificate2 issuer, string dnsName) =>
+        Issue(
+            issuer,
+            commonName: dnsName,
+            certificateAuthority: false,
+            dnsName,
+            keepPrivateKey: false,
+            extendedKeyUsageOid: ServerAuthenticationOid);
+
+    /// <summary>Issues a client certificate whose validity ended long ago, so no clock the test runs under revives it.</summary>
+    internal static X509Certificate2 IssueExpiredClientAuthenticationCertificate(X509Certificate2 issuer, string dnsName) =>
+        Issue(
+            issuer,
+            commonName: dnsName,
+            certificateAuthority: false,
+            dnsName,
+            keepPrivateKey: false,
+            extendedKeyUsageOid: ClientAuthenticationOid,
+            validFrom: ValidFrom,
+            validUntil: ExpiredBy);
+
     /// <summary>Strips the private key, which is what a deployment provisions as a trust anchor.</summary>
     internal static X509Certificate2 WithoutPrivateKey(X509Certificate2 certificate) =>
         X509CertificateLoader.LoadCertificate(certificate.Export(X509ContentType.Cert));
@@ -83,7 +109,9 @@ internal static class TestCertificates
         bool certificateAuthority,
         string? dnsName,
         bool keepPrivateKey,
-        string? extendedKeyUsageOid = null)
+        string? extendedKeyUsageOid = null,
+        DateTimeOffset? validFrom = null,
+        DateTimeOffset? validUntil = null)
     {
         using var subjectKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var request = new CertificateRequest($"CN={commonName}", subjectKey, HashAlgorithmName.SHA256);
@@ -109,7 +137,11 @@ internal static class TestCertificates
             request.CertificateExtensions.Add(subjectAlternativeNames.Build());
         }
 
-        var issued = request.Create(issuer, ValidFrom, ValidUntil, NextSerialNumber());
+        var issued = request.Create(
+            issuer,
+            validFrom ?? ValidFrom,
+            validUntil ?? ValidUntil,
+            NextSerialNumber());
         if (!keepPrivateKey)
         {
             return issued;

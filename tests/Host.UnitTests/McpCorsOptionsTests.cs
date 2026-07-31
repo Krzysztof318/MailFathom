@@ -5,19 +5,22 @@ using Xunit;
 
 namespace MailMcp.Host.UnitTests;
 
-/// <summary>Covers which origins a deployment serves and how an ambiguous policy is refused.</summary>
+/// <summary>Covers which origins a deployment serves and how a list that states two policies is refused.</summary>
 public sealed class McpCorsOptionsTests
 {
     /// <summary>The endpoint is protected by the credential a caller presents, not by where it was loaded from, so narrowing origins is a choice rather than the starting point.</summary>
     [Fact]
-    public void AllowAnyOrigin_UnconfiguredDeployment_ServesEveryOrigin()
+    public void ServeEveryBrowserOrigin_TheDefaultAnUnconfiguredDeploymentReceives_ServesEveryOrigin()
     {
-        // Arrange, Act
+        // Arrange
         var options = new McpCorsOptions();
 
+        // Act
+        options.ServeEveryBrowserOrigin();
+
         // Assert
-        Assert.True(options.AllowAnyOrigin);
-        Assert.Empty(options.AllowedOrigins);
+        Assert.True(options.ServesEveryBrowserOrigin);
+        Assert.Equal([McpCorsOptions.AnyOriginValue], options.AllowedOrigins);
         Assert.Empty(options.FindConfigurationErrors());
         Assert.True(options.ToOriginPolicy().AllowsAnyOrigin);
     }
@@ -26,7 +29,7 @@ public sealed class McpCorsOptionsTests
     public void ToOriginPolicy_ConfiguredOrigins_ServesExactlyThemInTheFormABrowserSends()
     {
         // Arrange
-        var options = new McpCorsOptions { AllowAnyOrigin = false };
+        var options = new McpCorsOptions();
         options.AllowedOrigins.Add("https://client.example.test");
         options.AllowedOrigins.Add("https://Other-Client.Example.Test:8443/");
 
@@ -41,42 +44,49 @@ public sealed class McpCorsOptionsTests
             policy.AllowedOrigins.Order(StringComparer.Ordinal));
     }
 
-    /// <summary>Guessing which of two stated policies was meant would either widen a deployment an operator narrowed or narrow one they widened.</summary>
+    /// <summary>An empty list is the third posture rather than a mistake: no browser is served, and every client that sends no origin still is.</summary>
     [Fact]
-    public void FindConfigurationErrors_AllowAnyOriginBesideAnExactList_IsRefusedAsAmbiguous()
+    public void ToOriginPolicy_AnEmptyList_ServesNoBrowserAndEveryClientThatSendsNoOrigin()
     {
         // Arrange
         var options = new McpCorsOptions();
+
+        // Act
+        var policy = options.ToOriginPolicy();
+
+        // Assert
+        Assert.Empty(options.FindConfigurationErrors());
+        Assert.False(policy.AllowsAnyOrigin);
+        Assert.Empty(policy.AllowedOrigins);
+        Assert.False(policy.Permits("https://client.example.test"));
+        Assert.True(policy.Permits(origin: null));
+    }
+
+    /// <summary>Guessing which of two stated policies was meant would either widen a deployment an operator narrowed or narrow one they widened.</summary>
+    [Fact]
+    public void FindConfigurationErrors_EveryOriginListedBesideAnExactOne_IsRefusedAsAmbiguous()
+    {
+        // Arrange
+        var options = new McpCorsOptions();
+        options.ServeEveryBrowserOrigin();
         options.AllowedOrigins.Add("https://client.example.test");
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
 
         // Assert
-        Assert.StartsWith(nameof(McpCorsOptions.AllowAnyOrigin), error, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void FindConfigurationErrors_NeitherAllowAnyOriginNorAList_IsRefusedBecauseNoBrowserCouldReachIt()
-    {
-        // Arrange
-        var options = new McpCorsOptions { AllowAnyOrigin = false };
-
-        // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
-
-        // Assert
         Assert.StartsWith(nameof(McpCorsOptions.AllowedOrigins), error, StringComparison.Ordinal);
+        Assert.Contains("states two policies at once", error, StringComparison.Ordinal);
     }
 
     [Theory]
     [InlineData("client.example.test")]
-    [InlineData("*")]
     [InlineData("https://client.example.test/mcp")]
+    [InlineData("https://user@client.example.test")]
     public void FindConfigurationErrors_SomethingThatIsNotAnOrigin_IsReportedAgainstItsPositionInTheList(string configuredOrigin)
     {
         // Arrange
-        var options = new McpCorsOptions { AllowAnyOrigin = false };
+        var options = new McpCorsOptions();
         options.AllowedOrigins.Add("https://client.example.test");
         options.AllowedOrigins.Add(configuredOrigin);
 
@@ -92,7 +102,7 @@ public sealed class McpCorsOptionsTests
     public void FindConfigurationErrors_TheSameOriginSpelledTwice_IsRefusedRatherThanCollapsed()
     {
         // Arrange
-        var options = new McpCorsOptions { AllowAnyOrigin = false };
+        var options = new McpCorsOptions();
         options.AllowedOrigins.Add("https://client.example.test");
         options.AllowedOrigins.Add("https://CLIENT.example.test:443");
 
@@ -107,7 +117,7 @@ public sealed class McpCorsOptionsTests
     public void ToOriginPolicy_SettingsThatWereNeverValidated_ThrowsRatherThanServingAShorterList()
     {
         // Arrange
-        var options = new McpCorsOptions { AllowAnyOrigin = false };
+        var options = new McpCorsOptions();
         options.AllowedOrigins.Add("https://client.example.test");
         options.AllowedOrigins.Add("not-an-origin");
 

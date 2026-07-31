@@ -16,5 +16,6 @@
   <ItemGroup>
     <Compile Include="..\shared\RecordingLoggerProvider.cs" Link="RecordingLoggerProvider.cs" />
     <Compile Include="..\shared\ExceptionHierarchyAssertion.cs" Link="ExceptionHierarchyAssertion.cs" />
+    <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
   </ItemGroup>
 </Project>

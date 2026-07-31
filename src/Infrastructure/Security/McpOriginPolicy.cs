@@ -30,6 +30,14 @@ public sealed class McpOriginPolicy
     /// <summary>Gets the policy that serves every origin, which is what a deployment configuring none receives.</summary>
     public static McpOriginPolicy AllowingAnyOrigin { get; } = new(allowsAnyOrigin: true, []);
 
+    /// <summary>Gets the policy that serves no browser at all, which a deployment states by configuring an empty origin list.</summary>
+    /// <remarks>
+    /// It refuses every request carrying an <c>Origin</c> and serves every request carrying none, so what it excludes is
+    /// browsers rather than clients. That is the accurate posture for a deployment whose only consumers are agents and
+    /// command-line clients, and it is the one posture a list of origins cannot express.
+    /// </remarks>
+    public static McpOriginPolicy ServingNoBrowserOrigin { get; } = new(allowsAnyOrigin: false, []);
+
     /// <summary>Gets whether every origin is served.</summary>
     public bool AllowsAnyOrigin { get; }
 
@@ -40,7 +48,7 @@ public sealed class McpOriginPolicy
     /// <param name="allowedOrigins">The configured origins, which must already have passed <see cref="TryNormalize" />.</param>
     /// <returns>The restricting policy.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="allowedOrigins" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="allowedOrigins" /> is empty, which would serve no browser at all and is a configuration mistake rather than a policy.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="allowedOrigins" /> is empty; serving no browser at all is <see cref="ServingNoBrowserOrigin" />, which says so by its name rather than by a list that happens to be short.</exception>
     public static McpOriginPolicy Restricting(IEnumerable<string> allowedOrigins)
     {
         ArgumentNullException.ThrowIfNull(allowedOrigins);

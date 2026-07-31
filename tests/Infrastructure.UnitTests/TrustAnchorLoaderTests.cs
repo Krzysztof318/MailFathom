@@ -3,6 +3,7 @@
 using System.Text;
 using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Secrets;
+using MailMcp.TestSupport;
 using Xunit;
 
 namespace MailMcp.Infrastructure.UnitTests;
@@ -308,32 +309,4 @@ public sealed class TrustAnchorLoaderTests
     }
 
     private static ConfiguredSecret Reference(string secretReference) => new() { SecretReference = secretReference };
-
-    /// <summary>Hands back exactly the bytes a deployment provisioned, without touching the file system.</summary>
-    private sealed class ProvisionedMaterialResolver : ISecretReferenceResolver
-    {
-        private readonly Dictionary<string, (byte[] Material, SecretMaterialSource Source)> provisioned = new(StringComparer.Ordinal);
-        private readonly List<ResolvedSecret> issued = [];
-
-        public IReadOnlyList<ResolvedSecret> IssuedMaterial => this.issued;
-
-        public void Provision(
-            string secretReference,
-            byte[] material,
-            SecretMaterialSource source = SecretMaterialSource.SchemeAdapter) =>
-            this.provisioned[secretReference] = (material, source);
-
-        public Task<SecretResolutionResult> ResolveAsync(string? configuredValue, CancellationToken cancellationToken)
-        {
-            if (configuredValue is null || !this.provisioned.TryGetValue(configuredValue, out var entry))
-            {
-                return Task.FromResult(SecretResolutionResult.Failed(SecretResolutionFailure.MaterialNotFound));
-            }
-
-            var material = ResolvedSecret.FromBytes(entry.Material);
-            this.issued.Add(material);
-
-            return Task.FromResult(SecretResolutionResult.Resolved(material, entry.Source));
-        }
-    }
 }

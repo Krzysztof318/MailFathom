@@ -4,6 +4,7 @@ using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
+using MailMcp.TestSupport;
 using Xunit;
 
 namespace MailMcp.Infrastructure.UnitTests;

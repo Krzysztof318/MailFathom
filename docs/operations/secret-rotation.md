@@ -16,7 +16,8 @@ Material is applied at operation boundaries, never mid-operation:
 | Secret | The operation that picks up a rotation |
 | --- | --- |
 | Mailbox password | The next connection attempt. A synchronization run that has already authenticated finishes with the credential it authenticated with. |
-| Trust anchor | The next connection attempt, which loads the anchor alongside the password. |
+| Mail account trust anchor | The next connection attempt, which loads the anchor alongside the password. |
+| MCP client certificate trust anchor | The next MCP request. Every anchor of the profile being judged is loaded again on each one. |
 | Database credential | The next **physical** connection the pool opens. Connections already open finish with the credential they authenticated with, and a pooled logical connection reusing an open physical one keeps it too. |
 | MCP API key | The next MCP request. Every configured key is read again on each one, so a rotated file takes effect immediately. |
 
@@ -70,13 +71,26 @@ kubectl create secret generic mailmcp-imap --from-literal=imap-primary-password=
 
 Projected Secret volumes refresh on the kubelet's own sync period, so allow for that delay before revoking the old credential. A Secret mounted with `subPath` does **not** refresh; mount the directory instead.
 
-## Rotating a trust anchor
+## Rotating a mail account's trust anchor
 
 Replace the certificate behind the reference the account names, exactly as for a password, and follow the same per-shape rules above. The next connection attempt loads the new anchor.
 
-Provision the replacement **before** the current one expires and keep the server's own certificate chaining to whichever anchor is active at that moment. There is no overlap mechanism: one anchor is configured at a time, so the cut-over is the moment the file changes.
+Provision the replacement **before** the current one expires and keep the server's own certificate chaining to whichever anchor is active at that moment. There is no overlap mechanism here: an account names one anchor, so the cut-over is the moment the file changes. An MCP client certificate profile is the exception and names several, which is the section below.
 
 Because the chain rebuild does not check revocation, replacing the provisioned material is how a compromised private authority is retired. That is the reason this rotation path matters more for a trust anchor than the equivalent path would for a publicly trusted one.
+
+## Rotating an MCP client certificate authority
+
+A [client certificate profile](mcp-endpoint.md#client-certificates) names several trust anchors precisely so an authority can be replaced without a window in which clients are refused.
+
+1. Provision the successor certificate and add it to that profile's `TrustAnchors` under a **new** `Name`.
+2. Restart the host. The endpoint section is read once during composition, so a new entry needs one; the material behind an existing entry does not.
+3. Let clients move onto certificates the successor signed. Both authorities are accepted in between, and each request loads the anchors again.
+4. Remove the predecessor entry and restart.
+
+Replacing the certificate *behind* an existing reference is the other shape and needs no restart at all: the next request loads what the file now holds. Use it when the authority keeps its identity and only its material changed, and use the overlap above when the authority itself is being replaced.
+
+An anchor that stops loading is recorded at `Error` and skipped, so the rest of that profile keeps working; a profile whose anchors all fail to load refuses every certificate rather than accepting one. Startup loads every configured anchor and fails the host on one that does not, so this state means the deployment changed underneath a running process.
 
 ## Rotating an MCP API key
 
