@@ -423,7 +423,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_AnMcpApiKeyThatCannotBeResolved_FailsStartupNamingItsPosition()
     {
         // Arrange
-        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMode.ApiKey };
+        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMethods.ApiKey };
         endpoint.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "file:/run/secrets/absent" });
         var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
 
@@ -441,7 +441,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_TwoMcpApiKeysSharingAName_FailsStartupBecauseNeitherCouldBeRotatedByName()
     {
         // Arrange
-        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMode.ApiKey };
+        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMethods.ApiKey };
         endpoint.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:one" });
         endpoint.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:two" });
         var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
@@ -460,7 +460,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_AClientCertificateTrustAnchorThatIsNotACertificate_FailsStartupNamingItsPosition()
     {
         // Arrange
-        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMode.None };
+        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMethods.None };
         var profile = new McpClientCertificateProfileOptions
         {
             Name = "chatgpt-connector",

@@ -70,7 +70,7 @@ internal sealed class McpApiKeyAuthenticationHandler : AuthenticationHandler<Aut
             [new Claim(McpApiKeyAuthentication.ApiKeyNameClaimType, keyName.Value!)],
             McpApiKeyAuthentication.SchemeName,
             McpApiKeyAuthentication.ApiKeyNameClaimType,
-            roleType: string.Empty);
+            McpApiKeyAuthentication.RoleClaimType);
 
         return AuthenticateResult.Success(
             new AuthenticationTicket(new ClaimsPrincipal(identity), this.Scheme.Name));

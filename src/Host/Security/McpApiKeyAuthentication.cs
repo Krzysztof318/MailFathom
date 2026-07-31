@@ -26,4 +26,8 @@ internal static class McpApiKeyAuthentication
     /// diagnostic can name which key was used, and it is the only thing the principal carries.
     /// </remarks>
     internal const string ApiKeyNameClaimType = "urn:mailmcp:api-key-name";
+
+    /// <summary>The claim type a role check reads on a key's identity, which nothing ever issues.</summary>
+    /// <remarks>Named rather than left empty, because an identity given an empty role type silently reverts to the framework's default; a claim type no mapping writes is what actually makes a role check answer no.</remarks>
+    internal const string RoleClaimType = "urn:mailmcp:api-key-role";
 }

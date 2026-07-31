@@ -319,10 +319,11 @@ try
             .MapMcp(McpEndpointRoute.Path)
             .RequireCors(McpTransportSecurityExtensions.CorsPolicyName);
 
-        var authenticatesClients = mcpEndpointSettings.Authentication == McpTransportAuthenticationMode.ApiKey;
-
-        if (authenticatesClients)
+        if (mcpEndpointSettings.RequiresAuthentication)
         {
+            // Authentication also serves the protected resource metadata document, which the MCP authentication scheme
+            // publishes as a request handler rather than as a route, so the middleware runs whether or not the request
+            // that follows carries a credential.
             app.UseAuthentication();
         }
 
@@ -340,7 +341,7 @@ try
             mcpEndpoint.RequireRateLimiting(McpRateLimiting.PolicyName);
         }
 
-        if (authenticatesClients)
+        if (mcpEndpointSettings.RequiresAuthentication)
         {
             app.UseAuthorization();
 
@@ -348,7 +349,7 @@ try
             // answering unauthenticated while everything the MCP route exposes is covered by the one requirement it
             // carries. Under the stateless transport that route is the post alone; a get or a delete is not mapped at
             // all, so there is no second entry into the protocol surface for a requirement to miss.
-            mcpEndpoint.RequireAuthorization();
+            mcpEndpoint.RequireAuthorization(McpAccessPolicy.PolicyName);
         }
     }
 

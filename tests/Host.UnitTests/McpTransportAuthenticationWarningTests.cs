@@ -32,7 +32,7 @@ public sealed class McpTransportAuthenticationWarningTests
         var record = Assert.Single(logs.Records);
         Assert.Equal(LogLevel.Warning, record.Level);
         Assert.Contains("read the synchronized mailboxes", record.Message, StringComparison.Ordinal);
-        Assert.Contains("API keys", record.Message, StringComparison.Ordinal);
+        Assert.Contains("McpEndpoint:Authentication", record.Message, StringComparison.Ordinal);
         Assert.Equal("/mcp", Assert.Contains("McpEndpointPath", record.Properties));
     }
 
@@ -66,7 +66,7 @@ public sealed class McpTransportAuthenticationWarningTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var settings = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMode.ApiKey };
+        var settings = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMethods.ApiKey };
         settings.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:a-key" });
         var warning = WarningFor(settings, logs);
 
@@ -84,7 +84,7 @@ public sealed class McpTransportAuthenticationWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var warning = WarningFor(
-            new McpEndpointOptions { Authentication = McpTransportAuthenticationMode.None },
+            new McpEndpointOptions { Authentication = McpTransportAuthenticationMethods.None },
             logs);
 
         // Act
@@ -95,16 +95,40 @@ public sealed class McpTransportAuthenticationWarningTests
     }
 
     /// <summary>
-    /// Naming no mode is a configuration failure the composition root refuses before this ever runs. The warning stays
-    /// silent rather than treating the absence as the unauthenticated posture, so the two are never confused: one is an
-    /// operator's decision, the other is a host that must not have started.
+    /// Turning no method on is the unauthenticated posture rather than an unfinished configuration, so this warning is
+    /// the whole mechanism that keeps it from being silent. An operator who enabled the endpoint and wrote nothing
+    /// beside it reads the same message as one who wrote <c>None</c>, because they have the same deployment.
     /// </summary>
     [Fact]
-    public async Task StartAsync_EnabledEndpointNamingNoMode_SaysNothingRatherThanAssumingTheUnauthenticatedPosture()
+    public async Task StartAsync_EnabledEndpointTurningNoMethodOn_WarnsExactlyAsAnExplicitNoneDoes()
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var warning = WarningFor(new McpEndpointOptions { Enabled = true }, logs);
+        var settings = new McpEndpointOptions { Enabled = true };
+        settings.Cors.AllowedOrigins.Add("https://client.example.test");
+        var warning = WarningFor(settings, logs);
+
+        // Act
+        await warning.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Equal(LogLevel.Warning, record.Level);
+        Assert.Contains("read the synchronized mailboxes", record.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>An access token identifies the person whose mail is served, which is the whole thing the warning asks for.</summary>
+    [Fact]
+    public async Task StartAsync_EnabledEndpointRequiringAnAccessToken_SaysNothing()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var settings = new McpEndpointOptions
+        {
+            Enabled = true,
+            Authentication = McpTransportAuthenticationMethods.OAuth,
+        };
+        var warning = WarningFor(settings, logs);
 
         // Act
         await warning.StartAsync(TestContext.Current.CancellationToken);
@@ -119,7 +143,7 @@ public sealed class McpTransportAuthenticationWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var warning = WarningFor(
-            new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMode.None },
+            new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMethods.None },
             logs);
 
         // Act
@@ -152,7 +176,7 @@ public sealed class McpTransportAuthenticationWarningTests
     private static McpEndpointOptions Unauthenticated() => new()
     {
         Enabled = true,
-        Authentication = McpTransportAuthenticationMode.None,
+        Authentication = McpTransportAuthenticationMethods.None,
     };
 
     private static McpTransportAuthenticationWarning WarningFor(McpEndpointOptions settings, RecordingLoggerProvider logs)

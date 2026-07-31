@@ -29,8 +29,11 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
 | Setting | Default | Meaning |
 |---|---|---|
 | `Enabled` | `false` | Whether the Streamable HTTP endpoint is mapped at all |
-| `Authentication` | none — an enabled endpoint must state one | `ApiKey` or `None` |
+| `Authentication` | `None` | Which credentials are accepted: `ApiKey`, `OAuth`, both separated by a comma, or `None` |
 | `ApiKeys` | empty | The keys a client may present, each a named secret with its own lifetime |
+| `OAuth.Resource` | none | The canonical public URL this deployment is known by in OAuth terms |
+| `OAuth.RequiredScopes` | empty | The scopes an access token must carry |
+| `OAuth.AuthorizationServers` | empty | The external authorization servers whose tokens are accepted |
 | `Cors.AllowedOrigins` | `["*"]` | The browser origins served: `*` for every one, a list for exactly those, an empty list for none |
 | `ClientCertificateProfiles` | empty | The client applications whose certificates are accepted, each with its own authorities and expected names |
 | `RateLimiting` | bounded — see [Rate limiting](#rate-limiting) | How much traffic the endpoint accepts, per process and per client |
@@ -54,16 +57,25 @@ configured key is a separate matter and is re-read on every request, which is wh
 
 ## Authentication
 
-**An enabled endpoint must name a mode.** There is no default, and absence is a startup failure rather than a posture:
+**`Authentication` is a set, not a choice.** The two methods identify different kinds of caller — a key belongs to a client
+the operator provisioned, a token belongs to a person an external authorization server signed in — so a deployment serving
+both writes both:
 
-```text
-McpEndpoint:Authentication — an enabled endpoint must state 'ApiKey' or 'None'; there is no default, because an
-unauthenticated endpoint serves every synchronized mailbox to anything that can reach it.
+```json
+{
+  "McpEndpoint": { "Enabled": true, "Authentication": "ApiKey, OAuth" }
+}
 ```
 
-That is the point of having no default. A misspelled key, a section that failed to bind, and an operator who simply forgot
-would otherwise all end the same way — with a mailbox served to anything that can open a connection — and none of them
-would look like a decision anybody made.
+A request is served when it satisfies **any one** of the methods named. The credentials are told apart by shape: an access
+token is a JSON Web Token naming its issuer, an API key is anything else, and each reaches only the check that understands
+it.
+
+**Authentication is turned on, not chosen.** An enabled endpoint that names no method is the unauthenticated posture and
+starts, because the loopback and reverse-proxy deployment is the ordinary one and making it need extra settings would be
+backwards. What keeps that from being silent is the startup warning below rather than a refusal. The near misses are still
+startup failures: the section binds strictly, so a misspelled `Authentcation` fails, and a value naming no method — a typo
+such as `ApiKye`, or a number no member declares — fails too.
 
 ### `ApiKey`
 
@@ -131,10 +143,147 @@ same request is answered `429 Too Many Requests` with no body and never reaches 
 That is deliberate — it is what makes a flood of bad credentials cost the sender something — and it means a client
 retrying against an exhausted partition sees `429` where it expected `401`. See [Rate limiting](#rate-limiting).
 
+### `OAuth`
+
+MailMcp acts as an [OAuth 2.1 protected resource](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization).
+An external authorization server the operator already runs signs users in and issues tokens; MailMcp verifies what that
+server signed and nothing else. It is **never** an authorization server: it stores no password, issues no token, redeems no
+authorization code, holds no refresh token, and has no login page.
+
+```json
+{
+  "McpEndpoint": {
+    "Enabled": true,
+    "Authentication": "OAuth",
+    "OAuth": {
+      "Resource": "https://mail.example.test/mcp",
+      "RequiredScopes": [ "mailmcp.read" ],
+      "AuthorizationServers": [
+        {
+          "Name": "workforce",
+          "Issuer": "https://sso.example.test/realms/mailmcp"
+        }
+      ]
+    }
+  }
+}
+```
+
+**`Resource` is the canonical URL clients reach this deployment at**, and it is configuration rather than something derived
+from the request. It is published in the metadata document, a client copies it into the `resource` parameter when asking for
+a token, and every token's audience is compared against it — which is what stops a token issued for some other service on the
+same authorization server from being replayed here. Behind a reverse proxy, write the proxy's public URL: deriving it from
+the `Host` or `X-Forwarded-Host` header would tell each client to authenticate for whichever name it arrived under, including
+one an attacker chose.
+
+**`Issuer` is copied verbatim from the authorization server**, trailing slash included where there is one. It is compared
+against a token's `iss` by exact string equality and checked against the `issuer` the discovery document reports. Several
+widely deployed servers publish an issuer whose whole path is one trailing slash, so a value tidied up by hand is a
+configuration that starts cleanly and then refuses every token that server issues.
+
+**Nothing about the server's endpoints is configured or guessed.** MailMcp looks for the discovery document where the MCP
+authorization specification says to look, taking the first that answers with a document reporting the configured issuer:
+
+| Order | Address, for issuer `https://sso.example.test/realms/mailmcp` |
+|---|---|
+| 1 | `https://sso.example.test/.well-known/oauth-authorization-server/realms/mailmcp` |
+| 2 | `https://sso.example.test/.well-known/openid-configuration/realms/mailmcp` |
+| 3 | `https://sso.example.test/realms/mailmcp/.well-known/openid-configuration` |
+
+An issuer with no path drops the third. The key set address comes out of that document, so a server that moves an endpoint
+keeps working. `OAuth.AuthorizationServers[n].MetadataAddress` overrides the search for a server publishing its document
+somewhere else entirely; it must sit on the issuer's own host and port, so a mistyped one cannot make the host fetch an
+address the profile never named.
+
+#### What a token must prove
+
+Every token is checked, before any MCP protocol handling and before any tool runs, for:
+
+- a signature by a key from **that issuer's own key set**, using an asymmetric algorithm from a fixed allow-list
+  (`RS256`/`384`/`512`, `PS256`/`384`/`512`, `ES256`/`384`/`512`). `alg: none` and every symmetric algorithm are absent from
+  the list, and the algorithm is never taken from the token's own header;
+- an `iss` equal to the configured issuer, **exactly**;
+- an `aud` equal to `Resource`. A valid signature from a trusted issuer is not by itself a reason to serve a mailbox;
+- `exp` and `nbf`, with 60 seconds of clock skew tolerated;
+- every scope in `RequiredScopes`.
+
+Several `AuthorizationServers` stay isolated from one another. Each has its own key set, reachable only from the scheme whose
+issuer published it, so a token claiming one server's issuer is never validated against another's keys — and a token naming an
+issuer nobody configured matches no profile at all.
+
+`RequiredScopes` may be left empty, which accepts any token those servers issued for this resource. That is the coarser
+boundary rather than a broken one, and it is the right setting where the authorization server already decides who receives a
+token for MailMcp. A required scope constrains tokens only: an API key cannot carry one, and its authorization is the
+operator's decision to configure it.
+
+**Tokens are never passed on.** A token presented here is used to identify the caller and nothing else. It is not forwarded to
+a mail provider, to a downstream service, or to another MCP server.
+
+#### Discovery a client uses
+
+The endpoint publishes [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) protected resource metadata at the address
+derived from `Resource` — for `https://mail.example.test/mcp`, that is
+`https://mail.example.test/.well-known/oauth-protected-resource/mcp`:
+
+```json
+{
+  "resource": "https://mail.example.test/mcp",
+  "authorization_servers": [ "https://sso.example.test/realms/mailmcp" ],
+  "scopes_supported": [ "mailmcp.read" ],
+  "bearer_methods_supported": [ "header" ],
+  "resource_name": "MailMcp"
+}
+```
+
+A request with no usable credential is answered with a `401` pointing at it:
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer resource_metadata="https://mail.example.test/.well-known/oauth-protected-resource/mcp"
+```
+
+A caller who **did** authenticate but whose token lacks a required scope has nothing to gain from authenticating again, so it
+receives a `403` naming what would have sufficed:
+
+```http
+HTTP/1.1 403 Forbidden
+WWW-Authenticate: Bearer error="insufficient_scope", scope="mailmcp.read",
+                  resource_metadata="https://mail.example.test/.well-known/oauth-protected-resource/mcp"
+```
+
+Neither response says why. An expired token, a wrong audience, an unknown issuer, and an invalid signature are one answer to
+the client; the server log is where they differ.
+
+> **The metadata document is served only to a request whose own scheme and host match `Resource`.** That is the MCP SDK's
+> check, and it is what stops the document being served under a name the deployment never claimed. A deployment where
+> MailMcp terminates TLS itself, or one behind a proxy that passes HTTPS through with the `Host` header intact, satisfies
+> it; a proxy that terminates TLS does not, because the request then arrives as `http` and no forwarded header changes
+> that — MailMcp does not process `X-Forwarded-Proto` or `X-Forwarded-Host` today, so nothing on either side configures
+> it away. A `404` on the metadata address with everything else working is this, and OAuth discovery cannot complete
+> until the deployment is one of the two shapes above.
+
+#### What the MCP client does, not MailMcp
+
+The interactive half of OAuth belongs to the MCP client — ChatGPT, Claude Desktop, an IDE — and to the authorization server:
+
+- **authorization-code flow with PKCE (`S256`) and the `resource` parameter** is performed by the client;
+- **client registration** is an arrangement between the client and the authorization server. Client ID Metadata Documents,
+  Dynamic Client Registration ([RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591)), and preregistering a client by hand
+  all work, and MailMcp neither advertises nor constrains the choice. Whether one is available depends on the server: a
+  `registration_endpoint` in its metadata means Dynamic Client Registration, `client_id_metadata_document_supported` means the
+  first;
+- **client secrets, authorization codes, and refresh tokens** never reach MailMcp.
+
+Configuring the authorization server is therefore where an operator does the work: create a client for the MCP client, allow
+its redirect URIs, and make the server issue `https://mail.example.test/mcp` as the token's audience. A server that does not
+yet implement Resource Indicators ([RFC 8707](https://www.rfc-editor.org/rfc/rfc8707.html)) can still do that through its own
+audience mapping — Keycloak, for example, through a client scope carrying an audience mapper. **Do not answer such a server by
+relaxing audience validation**; there is no setting for it, deliberately.
+
 ### `None`
 
-`None` is the unauthenticated posture, and it is reachable only by writing it down. It never arises from a missing key, a
-failed secret resolution, or any other fallback:
+An enabled endpoint with no method turned on requires no credential. Writing `None` says so explicitly and is exactly
+equivalent:
 
 ```json
 {
@@ -142,23 +291,23 @@ failed secret resolution, or any other fallback:
 }
 ```
 
-Configuring keys alongside it is a startup failure rather than a silent no-op, because keys nothing checks are a deployment
-believing it is protected — which is worse than one that knows it is not.
+Configuring keys or authorization servers alongside it is a startup failure rather than a silent no-op, because settings
+nothing checks are a deployment believing it is protected — which is worse than one that knows it is not.
 
-Whenever an enabled endpoint runs under `None`, startup logs one warning:
+Whenever an enabled endpoint requires no credential, startup logs one warning:
 
 ```text
 warn: MailMcp.Host.Hosting.McpTransportAuthenticationWarning
-      The MCP endpoint is enabled on /mcp with authentication set to None, so anything that can reach this address can
-      read the synchronized mailboxes. Configure API keys instead unless the address is reachable only from this machine
-      or from a network you control. Neither an origin policy nor a client certificate substitutes for this: the first
-      restricts which page a browser will let call, the second names the application calling, and neither identifies the
-      person whose mail is served.
+      The MCP endpoint is enabled on /mcp with no authentication method turned on, so anything that can reach this
+      address can read the synchronized mailboxes. Set McpEndpoint:Authentication to ApiKey, to OAuth, or to both unless
+      the address is reachable only from this machine or from a network you control. Neither an origin policy nor a
+      client certificate substitutes for this: the first restricts which page a browser will let call, the second names
+      the application calling, and neither identifies the person whose mail is served.
 ```
 
-Leaving `Cors.AllowedOrigins` at its default of `["*"]` under `None` — which is what makes the endpoint work behind a
-reverse proxy or on a trusted network without further configuration — adds a second warning rather than a startup
-failure:
+Leaving `Cors.AllowedOrigins` at its default of `["*"]` with no credential required — which is what makes the endpoint
+work behind a reverse proxy or on a trusted network without further configuration — adds a second warning rather than a
+startup failure:
 
 ```text
 warn: MailMcp.Host.Hosting.McpTransportAuthenticationWarning
@@ -182,14 +331,23 @@ The operational consequences are the ones that always applied to an unauthentica
 - **Treat the whole surface as read-only but not harmless.** The tools cannot send, delete, move, or mark mail as read, so
   the exposure is disclosure rather than modification. Disclosure of a mailbox is enough.
 
-### What API keys are not
+### What a credential decides, and what it does not
 
-A key identifies a *client*, not a person. Every tool call still resolves the accounts the configured owner controls and
-refuses anything outside them, so authorization is unchanged by this and always was in place. What the later OAuth 2.1
-work adds is where the owner's identity comes from — configuration today, an authenticated token then — rather than a
-first authorization check. A shared bearer credential also has the properties every shared bearer credential has: it does
-not expire on its own unless you give it a lifetime, it cannot be revoked for one user without revoking it for the client,
-and anything that reads it can use it.
+**The endpoint asks one question: is this a caller the deployment recognizes.** Beyond that, every tool call resolves the
+accounts the configured owner controls and refuses anything outside them, whichever credential got the caller in. Two
+recognized callers therefore see the same mailboxes. Per-user permissions are future work; `RequiredScopes` is the seam
+they will be built on, which is why it exists before anything varies by it.
+
+A key identifies a *client*, a token identifies a *person*, and the difference matters operationally. A shared bearer
+credential has the properties every shared bearer credential has: it does not expire on its own unless you give it a
+lifetime, it cannot be revoked for one user without revoking it for the client, and anything that reads it can use it. A
+token expires on its own, is revoked where the authorization server says so, and carries the multi-factor and
+conditional-access policy that server already enforces.
+
+Of a validated token, MailMcp keeps three things and discards the rest: the issuer, the subject, and the scopes. A name,
+an email address, a group, and a tenant claim are dropped at the boundary, so nothing downstream can begin trusting a
+claim the operator never mapped. The identity is `iss` together with `sub` rather than `sub` alone, because a subject is
+unique only within the server that issued it, and never an email address, which is reassignable.
 
 ## CORS and the `Origin` header
 
@@ -518,8 +676,8 @@ certificate's names carry.
 ## Client certificates
 
 Mutual TLS is off unless `McpEndpoint:ClientCertificateProfiles` names at least one client. A profile identifies a client
-*application* — the ChatGPT connector, a reporting service, a workstation fleet — and it composes with `ApiKey` or
-`None` rather than replacing either. A certificate says which program is calling; it never says on whose behalf.
+*application* — the ChatGPT connector, a reporting service, a workstation fleet — and it composes with the authentication
+methods rather than replacing any of them. A certificate says which program is calling; it never says on whose behalf.
 
 **A client certificate only arrives over a TLS connection this process terminated.** That is either an HTTPS profile
 from the section above, or a listener the host was started with that serves HTTPS of its own — a `https://` entry in
