@@ -202,6 +202,7 @@ try
     // Registered whether or not the endpoint is enabled, because it is the warning that decides whether it has anything
     // to say. Registering it conditionally would put the same condition in two places.
     builder.Services.AddHostedService<MailMcp.Host.Hosting.McpTransportAuthenticationWarning>();
+    builder.Services.AddHostedService<MailMcp.Host.Hosting.McpTransportEncryptionWarning>();
 
     // Read once and registered, so the value that decides the route is the one every consumer resolves. Whether the
     // endpoint exists is decided while the application is being built, before a container that could resolve a snapshot
@@ -232,15 +233,46 @@ try
         builder.Services.AddMailMcpServer();
         builder.Services.AddMcpTransportSecurity(mcpEndpointSettings);
 
-        if (mcpEndpointSettings.ClientCertificateProfiles.Count > 0)
+        // A certificate is asked for while the connection is being established or it never arrives at all, so this is a
+        // decision the server has to take before it is listening rather than one a request can reach. Which call states
+        // it depends on how the listener was configured, and that is not a second mechanism for one concern: one
+        // decision — whether any trust profile exists to judge a certificate — reaches whichever listener shape this
+        // deployment has. ConfigureHttpsDefaults below applies to a listener built from a URL, and a listener that
+        // supplies its own SslServerAuthenticationOptions never consults it, which is why the HTTPS profiles restate
+        // the same posture in their own handshake callback.
+        if (mcpEndpointSettings.ClientCertificateProfiles.Count > 0 && !mcpEndpointSettings.Https.TerminatesTls)
         {
-            // A certificate is asked for while the connection is being established or it never arrives at all, so this
-            // is a decision the server has to take before it is listening rather than one a request can reach.
             builder.WebHost.RequestMcpClientCertificates();
         }
     }
 
+    // Registered whether or not any profile is configured, because the store is what the certificates are loaded into
+    // and disposed from, and an unconfigured deployment simply loads none.
+    builder.Services.AddSingleton<McpServerCertificateStore>();
+
+    if (mcpEndpointSettings.Enabled && mcpEndpointSettings.Https.TerminatesTls)
+    {
+        // Binding a listener here replaces the URLs the host was otherwise configured with, which is what keeps a
+        // clear-text listener from staying open behind an endpoint an operator configured HTTPS for. The callback runs
+        // when the server is constructed, after the container exists, so the store it reads is the one the composition
+        // root has already loaded.
+        builder.WebHost.ConfigureKestrel(kestrelOptions => McpHttpsEndpointBinder.Bind(
+            kestrelOptions,
+            mcpEndpointSettings.Https,
+            kestrelOptions.ApplicationServices.GetRequiredService<McpServerCertificateStore>(),
+            mcpEndpointSettings.ClientCertificateProfiles.Count > 0));
+    }
+
     var app = builder.Build();
+
+    // Before the server starts rather than from a hosted service, because the web host is the first hosted service to
+    // start and a certificate proven after it has already bound would be proven after the listener was open. A profile
+    // whose material is missing, expired, or issued for another domain therefore fails startup with nothing listening.
+    if (mcpEndpointSettings.Enabled && mcpEndpointSettings.Https.TerminatesTls)
+    {
+        await app.Services.GetRequiredService<McpServerCertificateStore>()
+            .LoadAsync(app.Lifetime.ApplicationStopping);
+    }
 
     app.UseExceptionHandler();
 

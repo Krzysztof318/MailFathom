@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using System.Diagnostics.CodeAnalysis;
+using System.Net.Quic;
 using MailMcp.Infrastructure.Secrets;
 using MailMcp.Infrastructure.Security;
 
@@ -51,6 +52,14 @@ internal sealed class McpEndpointOptions
 
     /// <summary>Gets or sets which browser origins the endpoint answers.</summary>
     public McpCorsOptions Cors { get; set; } = new();
+
+    /// <summary>Gets or sets whether Kestrel terminates TLS for this endpoint, and under which domains and certificates.</summary>
+    /// <remarks>
+    /// Empty by default, which serves the endpoint over the host's ordinary listener — clear text unless something in
+    /// front supplies TLS. It is what makes <see cref="ClientCertificateProfiles" /> reachable without a reverse proxy,
+    /// because a client certificate is presented during a handshake this process has to be the one terminating.
+    /// </remarks>
+    public McpHttpsOptions Https { get; set; } = new();
 
     /// <summary>Gets the client applications whose certificates the endpoint accepts, empty when mutual TLS is off.</summary>
     /// <remarks>
@@ -111,6 +120,13 @@ internal sealed class McpEndpointOptions
             .Select(error => $"{SectionName}:{nameof(this.Cors)}:{error}"));
 
         errors.AddRange(this.FindClientCertificateProfileErrors());
+
+        // The platform capability is read here rather than passed in, because whether this host can serve HTTP/3 is a
+        // property of the machine the process is running on and not a decision composition takes. The rules that do not
+        // depend on it live in the section itself, where a test can state both answers.
+        errors.AddRange(this.Https.FindConfigurationErrors(
+            $"{SectionName}:{nameof(this.Https)}",
+            QuicListener.IsSupported));
 
         return errors;
     }

@@ -79,6 +79,37 @@ Provision the replacement **before** the current one expires and keep the server
 
 Because the chain rebuild does not check revocation, replacing the provisioned material is how a compromised private authority is retired. That is the reason this rotation path matters more for a trust anchor than the equivalent path would for a publicly trusted one.
 
+## Renewing an MCP server certificate
+
+The certificates behind `McpEndpoint:Https:Endpoints` are loaded once, before the server starts, and held for the process
+lifetime. Renewing one is therefore a restart rather than a reload, and there is no overlap mechanism: a profile presents
+one identity at a time.
+
+1. Provision the renewed certificate behind the reference the profile already names, following the same per-shape rules
+   as a mailbox password above.
+2. Restart the host.
+
+Startup validates the renewed material before anything listens — that it parses, carries a matching private key, is
+inside its validity period, covers the profile's domain, and permits server authentication — so a bad renewal is a host
+that refuses to start rather than an endpoint that has quietly stopped working. If any configured profile fails, none is
+served, and the failure names the profile and the reason:
+
+```
+McpEndpoint:Https:Endpoints:0 — the HTTPS profile 'public' has no usable server certificate [CertificateExpired].
+```
+
+Renew before the certificate expires rather than after. Startup reports the expiry of each profile it loaded, and turns
+that line into a warning within thirty days:
+
+```
+warn: The MCP HTTPS profile public presents a server certificate that expires at 2027-01-31 00:00:00Z. Renew it before
+      then: once it expires the profile stops starting, because a certificate outside its validity period is refused
+      rather than served.
+```
+
+Connections already accepted finish on the certificate they negotiated; the restart is what ends them, as it ends every
+other connection.
+
 ## Rotating an MCP client certificate authority
 
 A [client certificate profile](mcp-endpoint.md#client-certificates) names several trust anchors precisely so an authority can be replaced without a window in which clients are refused.
