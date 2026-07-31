@@ -1,8 +1,9 @@
 # The MCP endpoint and what protects it
 
 The MCP endpoint is how an agent reaches MailMcp. This page records what enabling it means operationally, what a client
-has to present to reach it, which browser origins it answers, and which client applications it accepts a certificate
-from. The tools it serves are described in `docs/features/mcp-tools.md`.
+has to present to reach it, which browser origins it answers, which client applications it accepts a certificate from,
+and how much traffic it accepts before it starts refusing. The tools it serves are described in
+`docs/features/mcp-tools.md`.
 
 ## The endpoint is off by default
 
@@ -31,6 +32,7 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
 | `ApiKeys` | empty | The keys a client may present, each a named secret with its own lifetime |
 | `Cors.AllowedOrigins` | `["*"]` | The browser origins served: `*` for every one, a list for exactly those, an empty list for none |
 | `ClientCertificateProfiles` | empty | The client applications whose certificates are accepted, each with its own authorities and expected names |
+| `RateLimiting` | bounded — see [Rate limiting](#rate-limiting) | How much traffic the endpoint accepts, per process and per client |
 
 The endpoint always answers on **`/mcp`**, which is a constant rather than a setting. An MCP client is configured with a
 server URL, so a deployment could only move the path in step with every client pointed at it — the configurability would
@@ -343,6 +345,126 @@ than accepting one, because an anchor that has become unreadable must never wide
 That refusal is the *profile's*, not the endpoint's. Another profile still accepts a certificate its own anchors verify,
 because the broken material took no part in that verdict — one deleted file closes the clients it belongs to, not the
 ones whose trust material is intact.
+
+## Rate limiting
+
+An enabled endpoint is bounded. Two controls run in front of it, and they bound different things:
+
+- **A process-wide concurrency limit** caps how many MCP requests are being served at any instant, across every client.
+  It protects what the machine has one set of: database connections, threads, and open response streams.
+- **A per-client token bucket** caps how often one client may ask. A client that goes into a loop spends its own capacity
+  rather than everyone's.
+
+Unlike the settings above, **every value here has a product default**, so an endpoint someone enabled is bounded by the
+act of enabling it. There is no correct default for who may read a mailbox, which is why `Authentication` refuses to be
+guessed; there is a sane default for how fast one client may ask, and leaving the endpoint unbounded because nobody wrote
+a number is not a decision anyone made.
+
+```json
+{
+  "McpEndpoint": {
+    "RateLimiting": {
+      "Enabled": true,
+      "MaxConcurrentRequests": 20,
+      "ConcurrencyQueueLimit": 0,
+      "TokenCapacity": 60,
+      "TokensPerReplenishmentPeriod": 60,
+      "ReplenishmentPeriod": "00:01:00",
+      "RequestQueueLimit": 0
+    }
+  }
+}
+```
+
+| Setting | Default | Range | Meaning |
+|---|---|---|---|
+| `Enabled` | `true` | — | Whether the limits below are applied at all |
+| `MaxConcurrentRequests` | `20` | 1–1000 | MCP requests served at once, across every client |
+| `ConcurrencyQueueLimit` | `0` | 0–1000 | Requests that wait for a concurrency slot before the rest are refused |
+| `TokenCapacity` | `60` | 1–1000000 | The largest burst one client may spend at once |
+| `TokensPerReplenishmentPeriod` | `60` | 1–`TokenCapacity` | How much of that burst one client gets back each period |
+| `ReplenishmentPeriod` | `00:01:00` | 1s–1h | How often a client's spent capacity is restored |
+| `RequestQueueLimit` | `0` | 0–1000 | One client's requests that wait for capacity before the rest are refused |
+
+The defaults are sized for the work an MCP request actually does here. Every tool answers from the local mailbox copy
+with a bounded query, so a request is short and database-bound rather than long and compute-bound. Twenty concurrent
+requests keep the endpoint well inside the connection pool the synchronization workers share; one request per second with
+a sixty-request burst covers an agent that lists a page and then reads what it found, while still costing an unattended
+loop its capacity within a second.
+
+Whatever is in force is stated once at startup, so a deployment running on defaults can read back what it is enforcing
+rather than having to know these numbers:
+
+```text
+info: MailMcp.Host.Hosting.McpRateLimitingStartupReport
+      The MCP endpoint on /mcp serves at most 20 requests at once across every client, queueing 0 beyond that, and
+      allows each client a burst of 60 requests restored at 60 every 00:01:00, queueing 0 of its requests beyond that.
+```
+
+**Queue limits default to zero throughout.** A queued request holds memory and a connection while it waits for capacity
+that is already gone, which turns an overload into a slower, larger overload; refusing it immediately tells the client to
+back off while the server is still healthy. A deployment that would rather absorb a short burst can configure a queue,
+and a bounded queue is the only shape available.
+
+Configuration that could never work is refused at startup rather than applied: a limit of zero or below, an unbounded
+queue, a replenishment period below what the timer can resolve, and a period that restores more than the bucket holds —
+which is not a faster limit but a different one, because the surplus is discarded every time and the rate written down is
+never the rate that applies.
+
+### Whose capacity a request spends
+
+The per-client limit is counted under **the name of the API key the request authenticated with** — MailMcp's own
+configured identity for that credential, never the credential itself. The set of partitions an authenticated deployment
+keeps is therefore as large as the key list and no larger.
+
+Everything else shares **one anonymous partition**: a request under `None`, and a request whose credential was refused.
+That is deliberately coarse. Every partition a request can name is a dictionary entry the process keeps, so a key an
+attacker chooses is memory an attacker allocates. Nothing a caller writes — a header, a path, a query string, an
+`Origin`, a user agent — reaches a partition key, and neither does a forwarded address, because a proxy header is chosen
+by whoever is upstream. The remote address is not used either, not even as a fallback: it is spoofable on the traffic
+this is aimed at, and one client behind a shared address would otherwise be limited by another's behaviour.
+
+Counting refused credentials against the anonymous partition is what makes a flood of bad credentials cost the sender
+something. The limiter runs **behind authentication**, so the identity it counts under is the one authentication
+established, and **ahead of authorization**, so a request about to be refused for its credential has still spent capacity
+rather than being the one kind of traffic served without limit.
+
+Readiness, liveness, and the root endpoint are outside all of this and keep answering while the MCP endpoint is refusing.
+
+### What a refused request receives
+
+A request over either limit is answered `429 Too Many Requests` with `Cache-Control: no-store` and **no body**. A body
+would have to say either nothing useful or something about the configured limits, and the second describes the deployment
+to every refused caller — including one whose credential is about to be refused, which must not learn that a named key
+exists. Refusals are identical whoever provoked them.
+
+`Retry-After` is included when the limiter can compute one, which means when the per-client bucket refused the request:
+it knows when the next replenishment lands. A refusal for concurrency carries none, because a concurrency limit has no
+scheduled moment at which a slot frees and a guess would be worse than silence. The advertised value is never below one
+second, so a client never reads it as "immediately" and retries into the same refusal.
+
+Rejections, active leases, queued requests, and lease durations are recorded through the built-in
+`Microsoft.AspNetCore.RateLimiting` metrics, tagged with the policy name. Nothing MailMcp adds records a client name, an
+address, an origin, a credential, or anything from a request or its response.
+
+### What this is not
+
+**The limits are counted in this process alone.** A deployment running several instances enforces them once per process
+rather than once in total; there is no shared state and no coordination between them. Put the total behind a reverse
+proxy or load balancer that bounds it if that matters.
+
+**It is not DDoS protection.** It bounds what one client can take from the process it is talking to. A flood arriving
+from many sources is a job for a WAF, a CDN, or a hosting provider's own protection, and none of that is in MailMcp.
+
+Turning the limits off is an explicit value and costs one startup warning:
+
+```text
+warn: MailMcp.Host.Hosting.McpRateLimitingStartupReport
+      The MCP endpoint is enabled on /mcp with rate limiting turned off, so one client can hold every database
+      connection, response stream, and thread the process has until something runs out. This is the right setting only
+      where something in front of this process already bounds the traffic reaching it. Remove
+      McpEndpoint:RateLimiting:Enabled to run under the product defaults.
+```
 
 ## What the endpoint records
 

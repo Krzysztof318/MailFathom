@@ -155,6 +155,46 @@ public sealed class ComposedMcpEndpointSecurityTests
     }
 
     /// <summary>
+    /// What the limiter does with a partition is unit-tested; what only a composed host shows is that a limiter is on
+    /// this route at all. Two of its parts are invisible from a unit test and are asserted together here rather than in
+    /// tests of their own: that the route carries the policy, and that one client's exhausted capacity is not another's,
+    /// which is the whole point of partitioning and would look identical from inside the process if it were broken.
+    /// </summary>
+    /// <remarks>
+    /// The burst is dispatched together rather than one request after another, so what the limiter sees is a burst
+    /// however fast the host answers. Sending them in sequence against a slow machine would let capacity replenish
+    /// between them and leave the test passing because nothing was ever over the limit.
+    /// </remarks>
+    [Fact]
+    public async Task McpEndpoint_AClientBurstingPastItsCapacity_IsRefusedWithoutSpendingAnotherClients()
+    {
+        // Arrange
+        using var client = await this.ComposedHostClientAsync();
+        var burstSize = OrchestrationContract.McpRateLimitTokenCapacity * 3;
+
+        // Act
+        var burst = await Task.WhenAll(Enumerable
+            .Range(0, burstSize)
+            .Select(_ => this.AnswerToAsync(client, OrchestrationContract.McpExpendableApiKey)));
+
+        using var afterTheBurst = ListToolsRequest(OrchestrationContract.McpApiKey);
+        afterTheBurst.Headers.Add("Origin", OrchestrationContract.McpPermittedOrigin);
+        using var otherClient = await client.SendAsync(afterTheBurst, TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusals = burst.Where(answer => answer.StatusCode == HttpStatusCode.TooManyRequests).ToArray();
+
+        Assert.NotEmpty(refusals);
+        Assert.All(refusals, refusal => Assert.Empty(refusal.Body));
+        Assert.All(refusals, refusal => Assert.Equal("no-store", refusal.CacheControl));
+        Assert.Equal(HttpStatusCode.OK, otherClient.StatusCode);
+        Assert.Contains(
+            ToolListedByTheProtocolSurface,
+            await otherClient.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The requirement is carried by the MCP route rather than by a fallback policy, and the difference is not visible
     /// from configuration. A probe has no credential to present, so a readiness response that started asking for one
     /// would take the deployment out of rotation rather than protect anything.
@@ -234,4 +274,25 @@ public sealed class ComposedMcpEndpointSecurityTests
     {
         BaseAddress = await this.orchestration.StartMailMcpHostAsync(TestContext.Current.CancellationToken),
     };
+
+    /// <summary>Sends one tool listing and reads everything a burst is judged on before the response is released.</summary>
+    /// <remarks>
+    /// The response is disposed here rather than handed back, so a burst of them cannot hold connections open while the
+    /// rest of the assertions run. What the caller keeps is the small record below, which is why the body is read now.
+    /// </remarks>
+    private async Task<McpAnswer> AnswerToAsync(HttpClient client, string apiKey)
+    {
+        using var request = ListToolsRequest(apiKey);
+        request.Headers.Add("Origin", OrchestrationContract.McpPermittedOrigin);
+
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        return new McpAnswer(
+            response.StatusCode,
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
+            response.Headers.CacheControl?.ToString());
+    }
+
+    /// <summary>What one request in a burst is judged on, read before its response was released.</summary>
+    private sealed record McpAnswer(HttpStatusCode StatusCode, string Body, string? CacheControl);
 }

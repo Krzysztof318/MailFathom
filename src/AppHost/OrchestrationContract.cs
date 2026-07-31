@@ -38,6 +38,31 @@ public static class OrchestrationContract
     /// </remarks>
     public const string McpApiKey = "integration-tests-only-mcp-api-key";
 
+    /// <summary>The name the integration-test topology configures a second, deliberately expendable MCP API key under.</summary>
+    /// <remarks>
+    /// A rate limit is counted per client, so a test that exhausts one has to exhaust a client nothing else in the suite
+    /// depends on. This key exists to be spent: the burst that proves the limiter is wired takes it to zero, and
+    /// <see cref="McpApiKeyName" /> keeps its own capacity untouched, which is also what makes the partitions'
+    /// independence observable from outside the process.
+    /// </remarks>
+    public const string McpExpendableApiKeyName = "integration-tests-expendable";
+
+    /// <summary>The second MCP API key the integration-test topology's host accepts.</summary>
+    /// <remarks>A literal under the same restriction as <see cref="McpApiKey" />, and it authenticates the same ephemeral host.</remarks>
+    public const string McpExpendableApiKey = "integration-tests-only-mcp-expendable-key";
+
+    /// <summary>The burst one MCP client may spend in the integration-test topology before it is refused.</summary>
+    /// <remarks>
+    /// Declared here because the suite has to send more than this to observe a refusal, and a value that reached only
+    /// the app model would leave the burst either too small to refuse anything or needlessly large. It is deliberately
+    /// well above what any other test in the suite spends, and it is restored every
+    /// <see cref="McpRateLimitReplenishmentPeriod" />, so exhausting it disturbs nothing that runs afterwards.
+    /// </remarks>
+    public const int McpRateLimitTokenCapacity = 20;
+
+    /// <summary>How often the integration-test topology restores a client's spent MCP capacity.</summary>
+    public const string McpRateLimitReplenishmentPeriod = "00:00:01";
+
     /// <summary>The one browser origin the integration-test topology's MCP endpoint serves.</summary>
     /// <remarks>
     /// The topology narrows the origins deliberately rather than leaving the permissive default, because a suite that
