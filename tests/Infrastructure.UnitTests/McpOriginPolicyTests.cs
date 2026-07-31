@@ -59,6 +59,21 @@ public sealed class McpOriginPolicyTests
         Assert.True(policy.Permits("null"));
     }
 
+    /// <summary>What it excludes is browsers rather than clients: a request carrying no origin is every non-browser client and is still served.</summary>
+    [Fact]
+    public void Permits_TheNoBrowserOriginPolicy_RefusesEveryOriginAndServesARequestCarryingNone()
+    {
+        // Arrange
+        var policy = McpOriginPolicy.ServingNoBrowserOrigin;
+
+        // Act, Assert
+        Assert.False(policy.AllowsAnyOrigin);
+        Assert.Empty(policy.AllowedOrigins);
+        Assert.False(policy.Permits("https://client.example.test"));
+        Assert.False(policy.Permits("null"));
+        Assert.True(policy.Permits(origin: null));
+    }
+
     [Fact]
     public void Permits_AListedOrigin_IsServedAndAnUnlistedOneIsNot()
     {

@@ -1,8 +1,8 @@
 # The MCP endpoint and what protects it
 
 The MCP endpoint is how an agent reaches MailMcp. This page records what enabling it means operationally, what a client
-has to present to reach it, and which browser origins it answers. The tools it serves are described in
-`docs/features/mcp-tools.md`.
+has to present to reach it, which browser origins it answers, and which client applications it accepts a certificate
+from. The tools it serves are described in `docs/features/mcp-tools.md`.
 
 ## The endpoint is off by default
 
@@ -29,8 +29,8 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
 | `Enabled` | `false` | Whether the Streamable HTTP endpoint is mapped at all |
 | `Authentication` | none — an enabled endpoint must state one | `ApiKey` or `None` |
 | `ApiKeys` | empty | The keys a client may present, each a named secret with its own lifetime |
-| `Cors.AllowAnyOrigin` | `true` | Whether every browser origin is served |
-| `Cors.AllowedOrigins` | empty | The exact origins served when `AllowAnyOrigin` is off |
+| `Cors.AllowedOrigins` | `["*"]` | The browser origins served: `*` for every one, a list for exactly those, an empty list for none |
+| `ClientCertificateProfiles` | empty | The client applications whose certificates are accepted, each with its own authorities and expected names |
 
 The endpoint always answers on **`/mcp`**, which is a constant rather than a setting. An MCP client is configured with a
 server URL, so a deployment could only move the path in step with every client pointed at it — the configurability would
@@ -145,16 +145,17 @@ warn: MailMcp.Host.Hosting.McpTransportAuthenticationWarning
       person whose mail is served.
 ```
 
-Leaving `Cors.AllowAnyOrigin` on under `None` — which is the default, and what makes the endpoint work behind a reverse
-proxy or on a trusted network without further configuration — adds a second warning rather than a startup failure:
+Leaving `Cors.AllowedOrigins` at its default of `["*"]` under `None` — which is what makes the endpoint work behind a
+reverse proxy or on a trusted network without further configuration — adds a second warning rather than a startup
+failure:
 
 ```text
 warn: MailMcp.Host.Hosting.McpTransportAuthenticationWarning
       Every browser origin is served while no credential is required, so a web page the user never visited can reach this
       endpoint through DNS rebinding and read what it returns. This is the right posture only where the address is
       unreachable from a browser that could be aimed at it, such as an intranet or a reverse proxy that authenticates.
-      Turn McpEndpoint:Cors:AllowAnyOrigin off and list the origins served in McpEndpoint:Cors:AllowedOrigins wherever a
-      browser could be pointed at this address.
+      Replace the '*' in McpEndpoint:Cors:AllowedOrigins with the origins served wherever a browser could be pointed at
+      this address.
 ```
 
 Refusing that combination would make the ordinary intranet and reverse-proxy deployment the one needing extra settings,
@@ -192,14 +193,19 @@ Neither is authentication, and neither is why a request is trusted. A non-browse
 exactly as before; any client that chooses its own headers can send whichever origin it likes. The check is worth
 something against exactly one attacker — a browser, which sets the header itself and does not let a page forge it.
 
-Every origin is served by default, because the endpoint is protected by the credential a caller presents rather than by
-where it was loaded from. Narrowing is a deliberate step:
+**One setting carries the whole policy.** `McpEndpoint:Cors:AllowedOrigins` has three postures, and each is a
+consequence of what the list holds rather than a switch of its own:
+
+| The list | What is served |
+|---|---|
+| `["*"]`, which is the default | Every browser origin |
+| `["https://client.example.test"]` | Exactly the origins listed |
+| `[]` | No browser origin at all — only clients that send no `Origin`, which is every non-browser client |
 
 ```json
 {
   "McpEndpoint": {
     "Cors": {
-      "AllowAnyOrigin": false,
       "AllowedOrigins": [
         "https://client.example.test",
         "https://console.example.test:8443"
@@ -209,14 +215,22 @@ where it was loaded from. Narrowing is a deliberate step:
 }
 ```
 
+Every origin is served by default because the endpoint is protected by the credential a caller presents rather than by
+where it was loaded from. Narrowing is a deliberate step, and so is the empty list: a deployment whose only clients are
+agents and command-line tools states it and serves no browser anything.
+
 An origin is a scheme, a host, and a port where the port is not the scheme's default — nothing else. A path, a query, a
 fragment, or user information means a URL was written where an origin belongs and is refused at startup, as is a value
 that is not an origin at all. Entries are normalized to the form a browser sends, so `https://Client.Example.Test:443/`
 and `https://client.example.test` are one entry and listing both is refused rather than quietly collapsed.
 
-Two combinations are refused as ambiguous rather than guessed at: `AllowAnyOrigin` together with a list, and
-`AllowAnyOrigin` off with an empty list. Guessing would either widen a deployment an operator narrowed or narrow one they
-widened.
+`*` beside a real origin is refused at startup. It states two policies at once, and guessing would either widen a
+deployment an operator narrowed or narrow one they widened. `*` itself is answered before the entries are read as
+origins, so it needs no escaping and cannot collide with anything an operator could configure.
+
+An empty list has to be written as one — `"AllowedOrigins": []` in a JSON source, which every file-based provider
+supports. Environment variables cannot express an empty list, so a deployment configured entirely through them narrows
+by listing origins rather than by emptying the list.
 
 A request whose `Origin` is outside the configured list is answered `403` before any tool runs. Preflight is handled by
 the CORS middleware ahead of that check, so a browser's `OPTIONS` never reaches it as a request to refuse, and handling
@@ -229,10 +243,106 @@ bearer authentication need, rather than everything a browser might ask to send.
 
 ## Client certificates
 
-Not implemented yet. mTLS trust profiles, including the ChatGPT connector profile OpenAI publishes, are tracked
-separately. When they arrive they will authenticate a client *application* and compose with `ApiKey` or `None` — they do
-not replace end-user authentication, and the warning above will keep firing under `None` even with a certificate
-configured.
+Mutual TLS is off unless `McpEndpoint:ClientCertificateProfiles` names at least one client. A profile identifies a client
+*application* — the ChatGPT connector, a reporting service, a workstation fleet — and it composes with `ApiKey` or
+`None` rather than replacing either. A certificate says which program is calling; it never says on whose behalf.
+
+```json
+{
+  "McpEndpoint": {
+    "Enabled": true,
+    "Authentication": "ApiKey",
+    "ClientCertificateProfiles": [
+      {
+        "Name": "chatgpt-connector",
+        "Requirement": "Optional",
+        "TrustAnchors": [
+          {
+            "Name": "openai-connectors-ca",
+            "SecretReference": "file:/etc/mailmcp/openai-connectors-ca.pem"
+          }
+        ],
+        "SubjectAlternativeNames": ["mtls.prod.connectors.openai.com"]
+      }
+    ]
+  }
+}
+```
+
+| Setting | Meaning |
+|---|---|
+| `Name` | The operator-chosen name of the client, which is what a refusal in the log is read by. Required and unique |
+| `Requirement` | `Required` refuses a request that presents no certificate at all; `Optional` serves it and identifies no client. Required to state |
+| `TrustAnchors` | The certificate authorities a presented certificate must chain to. Ordinary [named secrets](secret-provisioning.md#the-secret-block), several of them so an authority can rotate by overlap |
+| `SubjectAlternativeNames` | The DNS names of which a presented certificate must carry at least one. Required, because an authority alone accepts every certificate it has ever issued |
+
+**A certificate has to pass all four checks**, against one profile: it carries an extended key usage naming client
+authentication, it carries one of that profile's expected DNS names as a subject alternative name, it is inside its
+validity period, and it chains to one of that profile's anchors. Profiles are tried in configuration order and the first
+one that accepts ends the walk, so a deployment can serve several clients whose authorities have nothing to do with each
+other.
+
+**Every refusal is an empty `403`.** Which profile objected, and why, is in the server log — recorded by the
+certificate's thumbprint, which is public material — and never in the response, because what a client could act on is
+what to present next.
+
+Several deliberate strictnesses are worth knowing before a profile is written:
+
+- **The certificate comes from the TLS connection.** No header is read, however a proxy in front of MailMcp spells one.
+  Terminating TLS elsewhere and forwarding what it saw is a design with its own trust boundary and is not this one.
+- **A certificate carrying no extended key usage is refused**, even though X.509 reads absence as every usage. A profile
+  that names client authentication asked for a certificate that says so, and the same authority commonly issues server
+  certificates too.
+- **The subject common name is never consulted** — only subject alternative names, which is what a certificate authority
+  actually attests to.
+- **Only the leaf is validated against the anchors.** The server does not see the chain a client sent, so a client whose
+  certificate chains through an intermediate needs that intermediate listed as a trust anchor beside its root.
+- **No revocation is checked.** The authorities behind a client profile are commonly private and publish neither a
+  revocation list nor a responder, so withdrawing a client means removing its profile or its anchor — which takes effect
+  on the next request, with no restart.
+- **Requesting a certificate is not requiring one.** Kestrel asks every HTTPS connection for one and accepts whatever
+  arrives, so the decision is made here rather than in the handshake, where a refusal would say nothing to anybody.
+
+**mTLS needs an HTTPS endpoint.** A client certificate only exists on a TLS connection, so a deployment serving plain
+HTTP presents none: an `Optional` profile then identifies nothing, and a `Required` profile refuses every request.
+Serving MCP over HTTPS with operator-provided certificates is
+[#142](https://github.com/Krzysztof318/MailMcp/issues/142); until it lands, terminate TLS in front of MailMcp only if you
+are not using these profiles, because a proxy that terminates TLS is exactly what stops the certificate from arriving.
+
+### The ChatGPT connector profile
+
+OpenAI publishes a managed client certificate for its MCP connector, and the profile above is the shape it asks for: the
+leaf chains to the published OpenAI Connectors mTLS certificate authority, is valid for client authentication, and
+carries the subject alternative name `mtls.prod.connectors.openai.com`. Nothing pins the leaf, because that certificate
+rotates and a pinned fingerprint would turn a routine rotation into an outage.
+
+The authority itself is **supplied by you**, as an ordinary secret reference. No third-party certificate ships in this
+repository, which is what keeps OpenAI rotating their authority an operator change rather than a MailMcp release. Fetch
+the current certificate from OpenAI's published location, provision it like any other trust anchor, and add the
+successor beside it while a rotation is in flight.
+
+`Requirement` is `Optional` above on purpose. A `Required` profile refuses every request that presents no certificate,
+which includes the workstation reaching the same endpoint with an API key alone; state `Required` only once every client
+of the deployment holds a certificate.
+
+**This is not complete ChatGPT production authentication.** OpenAI's connector expects an OAuth 2.1 authorization flow
+alongside the client certificate, and that is later work. What mTLS provides here is confidence about which application
+is connecting, which is worth having and is not the same thing as knowing whose mailbox is being read.
+
+### Rotating an authority
+
+Add the successor to the same `TrustAnchors` list, restart, let clients move onto certificates the new authority signed,
+then remove the predecessor and restart. Both are accepted in between, so nothing is refused while the change is in
+flight. Restarts are needed because the profile *list* is read once during composition; the material behind an anchor is
+re-read on every request, so replacing a certificate file in place needs no restart at all.
+
+An anchor that stops loading — a deleted file, a corrupted certificate — is recorded at `Error` and skipped, so the
+other anchors of that profile keep working. A profile whose anchors all fail to load refuses every certificate rather
+than accepting one, because an anchor that has become unreadable must never widen what a profile trusts.
+
+That refusal is the *profile's*, not the endpoint's. Another profile still accepts a certificate its own anchors verify,
+because the broken material took no part in that verdict — one deleted file closes the clients it belongs to, not the
+ones whose trust material is intact.
 
 ## What the endpoint records
 

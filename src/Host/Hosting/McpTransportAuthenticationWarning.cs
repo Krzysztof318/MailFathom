@@ -66,7 +66,7 @@ internal sealed partial class McpTransportAuthenticationWarning : IHostedService
 
         this.LogEndpointServedWithoutTransportAuthentication(McpEndpointRoute.Path);
 
-        if (this.endpointSettings.Cors.AllowAnyOrigin)
+        if (this.endpointSettings.Cors.ServesEveryBrowserOrigin)
         {
             this.LogEveryBrowserOriginServedWithoutTransportAuthentication();
         }
@@ -91,7 +91,7 @@ internal sealed partial class McpTransportAuthenticationWarning : IHostedService
         Message = "Every browser origin is served while no credential is required, so a web page the user never visited "
             + "can reach this endpoint through DNS rebinding and read what it returns. This is the right posture only "
             + "where the address is unreachable from a browser that could be aimed at it, such as an intranet or a "
-            + "reverse proxy that authenticates. Turn McpEndpoint:Cors:AllowAnyOrigin off and list the origins served "
-            + "in McpEndpoint:Cors:AllowedOrigins wherever a browser could be pointed at this address.")]
+            + "reverse proxy that authenticates. Replace the '*' in McpEndpoint:Cors:AllowedOrigins with the origins "
+            + "served wherever a browser could be pointed at this address.")]
     private partial void LogEveryBrowserOriginServedWithoutTransportAuthentication();
 }

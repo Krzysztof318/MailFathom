@@ -170,9 +170,54 @@ internal sealed partial class SecretConfigurationValidator
     {
         ArgumentNullException.ThrowIfNull(candidate);
 
-        return candidate.Enabled
-            ? await this.FindSecretReferenceErrorsAsync(McpEndpointOptions.SectionName, candidate, cancellationToken)
-            : [];
+        if (!candidate.Enabled)
+        {
+            return [];
+        }
+
+        var errors = new List<string>(
+            await this.FindSecretReferenceErrorsAsync(McpEndpointOptions.SectionName, candidate, cancellationToken));
+
+        errors.AddRange(await this.FindClientCertificateTrustAnchorErrorsAsync(candidate, cancellationToken));
+
+        return errors;
+    }
+
+    /// <summary>Loads every trust anchor a client certificate profile names and reports the ones no request could use.</summary>
+    /// <remarks>
+    /// Resolving the reference is not enough, for the reason the mail anchors are loaded too: material that resolves but
+    /// does not parse as a certificate would pass a reference check and then refuse every client the profile exists to
+    /// serve. Each anchor is discarded once it has proven loadable, because a request loads its own.
+    /// </remarks>
+    private async Task<IReadOnlyList<string>> FindClientCertificateTrustAnchorErrorsAsync(
+        McpEndpointOptions candidate,
+        CancellationToken cancellationToken)
+    {
+        var errors = new List<string>();
+
+        // The positions are part of the reported configuration path, so they come from Index rather than from counters
+        // the loop bodies could forget to advance. The loops themselves stay, because each step awaits a retrieval.
+        foreach (var (profileIndex, profile) in candidate.ClientCertificateProfiles.Index())
+        {
+            foreach (var (anchorIndex, configuredAnchor) in profile.TrustAnchors.Index())
+            {
+                var configurationPath =
+                    $"{McpEndpointOptions.SectionName}:{nameof(McpEndpointOptions.ClientCertificateProfiles)}:{profileIndex}:{nameof(McpClientCertificateProfileOptions.TrustAnchors)}:{anchorIndex}";
+
+                using var loadResult = await this.trustAnchorLoader.LoadAsync(configuredAnchor, cancellationToken);
+
+                if (loadResult.TrustAnchor is { } trustAnchor)
+                {
+                    this.LogTrustAnchorLoaded(configurationPath, trustAnchor.Subject, trustAnchor.Thumbprint);
+                }
+                else
+                {
+                    errors.Add($"{configurationPath} — the trust anchor material could not be loaded [{loadResult.Failure}].");
+                }
+            }
+        }
+
+        return errors;
     }
 
     /// <summary>Resolves every secret reference in a bound options graph and reports the ones an operator must fix.</summary>

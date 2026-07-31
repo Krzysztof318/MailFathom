@@ -2,6 +2,7 @@
 
 using System.Text;
 using MailMcp.Infrastructure.Certificates;
+using MailMcp.TestSupport;
 using Xunit;
 
 namespace MailMcp.Infrastructure.UnitTests;

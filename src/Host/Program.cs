@@ -210,10 +210,7 @@ try
     //
     // Bound strictly like the other security-sensitive sections: a misspelled "Enabeld" would leave the endpoint off
     // while an operator believed they had turned it on.
-    var mcpEndpointSettings = builder.Configuration
-        .GetSection(McpEndpointOptions.SectionName)
-        .Get<McpEndpointOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-        ?? new McpEndpointOptions();
+    var mcpEndpointSettings = McpEndpointOptions.ReadFrom(builder.Configuration);
     builder.Services.AddSingleton(Options.Create(mcpEndpointSettings));
 
     // Validated here rather than through ValidateOnStart, because the section is read before a container exists and the
@@ -234,6 +231,13 @@ try
         // added, so the protocol surface adds no port of its own.
         builder.Services.AddMailMcpServer();
         builder.Services.AddMcpTransportSecurity(mcpEndpointSettings);
+
+        if (mcpEndpointSettings.ClientCertificateProfiles.Count > 0)
+        {
+            // A certificate is asked for while the connection is being established or it never arrives at all, so this
+            // is a decision the server has to take before it is listening rather than one a request can reach.
+            builder.WebHost.RequestMcpClientCertificates();
+        }
     }
 
     var app = builder.Build();
@@ -250,6 +254,14 @@ try
         // deployment serves a page's origin does not depend on which credential the page attached.
         app.UseCors();
         app.UseMcpOriginValidation();
+
+        if (mcpEndpointSettings.ClientCertificateProfiles.Count > 0)
+        {
+            // Ahead of authentication, because which client application is calling and which credential it presents are
+            // separate questions: a request from a program this deployment does not serve is turned away before any
+            // credential is read.
+            app.UseMcpClientCertificateValidation(mcpEndpointSettings.ToClientCertificateTrustProfiles());
+        }
 
         var mcpEndpoint = app
             .MapMcp(McpEndpointRoute.Path)

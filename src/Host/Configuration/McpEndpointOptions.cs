@@ -2,6 +2,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailMcp.Infrastructure.Secrets;
+using MailMcp.Infrastructure.Security;
 
 namespace MailMcp.Host.Configuration;
 
@@ -51,6 +52,45 @@ internal sealed class McpEndpointOptions
     /// <summary>Gets or sets which browser origins the endpoint answers.</summary>
     public McpCorsOptions Cors { get; set; } = new();
 
+    /// <summary>Gets the client applications whose certificates the endpoint accepts, empty when mutual TLS is off.</summary>
+    /// <remarks>
+    /// Several named profiles rather than one certificate setting, so each client's policy is stated separately and one
+    /// client's authority rotating cannot widen what another is trusted for. They compose with
+    /// <see cref="Authentication" /> instead of replacing it, and a certificate reaches them only over an HTTPS
+    /// endpoint — a deployment serving plain HTTP presents none, which a required profile refuses.
+    /// </remarks>
+    public IList<McpClientCertificateProfileOptions> ClientCertificateProfiles { get; } = [];
+
+    /// <summary>Reads the section the way composition does, defaults included.</summary>
+    /// <param name="configuration">The application configuration.</param>
+    /// <returns>The bound settings, with the defaults no binder can apply already applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Strict binding is part of the read rather than something a caller opts into: this section is security-sensitive
+    /// throughout, and a misspelled key that bound quietly would leave a decision reading as one nobody made.
+    /// <para>
+    /// The origin list is the one setting whose default cannot be a property initializer. A collection the binder finds
+    /// values for is added to rather than replaced, so a pre-populated default would survive beside the configured
+    /// entries; and an empty JSON list binds identically to an absent one, which is why the two are told apart by asking
+    /// configuration whether the key exists at all rather than by looking at what was bound.
+    /// </para>
+    /// </remarks>
+    public static McpEndpointOptions ReadFrom(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        var section = configuration.GetSection(SectionName);
+        var settings = section.Get<McpEndpointOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+            ?? new McpEndpointOptions();
+
+        if (!section.GetSection($"{nameof(Cors)}:{nameof(McpCorsOptions.AllowedOrigins)}").Exists())
+        {
+            settings.Cors.ServeEveryBrowserOrigin();
+        }
+
+        return settings;
+    }
+
     /// <summary>Finds everything an operator must fix before the endpoint can be served.</summary>
     /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
     /// <remarks>
@@ -70,7 +110,41 @@ internal sealed class McpEndpointOptions
         errors.AddRange(this.Cors.FindConfigurationErrors()
             .Select(error => $"{SectionName}:{nameof(this.Cors)}:{error}"));
 
+        errors.AddRange(this.FindClientCertificateProfileErrors());
+
         return errors;
+    }
+
+    /// <summary>Maps the configured profiles onto the ones a presented certificate is judged against.</summary>
+    /// <returns>The trust profiles, in configuration order, empty when mutual TLS is off.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
+    public IReadOnlyList<McpClientCertificateTrustProfile> ToClientCertificateTrustProfiles() =>
+        [.. this.ClientCertificateProfiles.Select(profile => profile.ToTrustProfile())];
+
+    /// <summary>Reports the profiles an operator must fix, and the names two of them share.</summary>
+    /// <remarks>
+    /// A duplicated name is refused rather than resolved by position, for the reason every other configured name is:
+    /// the name is what a refusal in the log and an audit record are read by, and two profiles answering to one name
+    /// make both records ambiguous.
+    /// </remarks>
+    private IEnumerable<string> FindClientCertificateProfileErrors()
+    {
+        var claimedNames = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var (index, profile) in this.ClientCertificateProfiles.Index())
+        {
+            var profilePath = $"{SectionName}:{nameof(this.ClientCertificateProfiles)}:{index}";
+
+            foreach (var error in profile.FindConfigurationErrors())
+            {
+                yield return $"{profilePath}:{error}";
+            }
+
+            if (!claimedNames.Add(profile.Name))
+            {
+                yield return $"{profilePath}:{nameof(McpClientCertificateProfileOptions.Name)} — another profile in this section already carries this name, so neither could be named unambiguously.";
+            }
+        }
     }
 
     private IEnumerable<string> FindAuthenticationErrors()

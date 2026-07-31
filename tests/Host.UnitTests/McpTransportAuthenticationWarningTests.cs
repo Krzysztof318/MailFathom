@@ -46,9 +46,7 @@ public sealed class McpTransportAuthenticationWarningTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var warning = WarningFor(
-            new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMode.None },
-            logs);
+        var warning = WarningFor(UnauthenticatedServingEveryBrowserOrigin(), logs);
 
         // Act
         await warning.StartAsync(TestContext.Current.CancellationToken);
@@ -134,17 +132,28 @@ public sealed class McpTransportAuthenticationWarningTests
     /// <summary>The unauthenticated posture with the origin question already answered, so only the credential warning is left to fire.</summary>
     private static McpEndpointOptions UnauthenticatedServingOneBrowserOrigin()
     {
-        var settings = new McpEndpointOptions
-        {
-            Enabled = true,
-            Authentication = McpTransportAuthenticationMode.None,
-            Cors = new McpCorsOptions { AllowAnyOrigin = false },
-        };
+        var settings = Unauthenticated();
 
         settings.Cors.AllowedOrigins.Add("https://client.example.test");
 
         return settings;
     }
+
+    /// <summary>The unauthenticated posture a deployment that configured no origin list receives, which is what composition applies.</summary>
+    private static McpEndpointOptions UnauthenticatedServingEveryBrowserOrigin()
+    {
+        var settings = Unauthenticated();
+
+        settings.Cors.ServeEveryBrowserOrigin();
+
+        return settings;
+    }
+
+    private static McpEndpointOptions Unauthenticated() => new()
+    {
+        Enabled = true,
+        Authentication = McpTransportAuthenticationMode.None,
+    };
 
     private static McpTransportAuthenticationWarning WarningFor(McpEndpointOptions settings, RecordingLoggerProvider logs)
     {

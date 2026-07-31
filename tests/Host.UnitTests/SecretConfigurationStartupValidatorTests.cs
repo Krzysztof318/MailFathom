@@ -7,6 +7,7 @@ using MailMcp.Infrastructure;
 using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
+using MailMcp.Infrastructure.Security;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -452,6 +453,39 @@ public sealed class SecretConfigurationStartupValidatorTests
         // Assert
         var failure = Assert.Single(exception.Failures);
         Assert.StartsWith("McpEndpoint:ApiKeys:1:Name", failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>Material that resolves but is not a certificate would pass a reference check and then refuse every client the profile exists to serve.</summary>
+    [Fact]
+    public async Task StartingAsync_AClientCertificateTrustAnchorThatIsNotACertificate_FailsStartupNamingItsPosition()
+    {
+        // Arrange
+        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMode.None };
+        var profile = new McpClientCertificateProfileOptions
+        {
+            Name = "chatgpt-connector",
+            Requirement = McpClientCertificateRequirement.Optional,
+        };
+        profile.TrustAnchors.Add(new ConfiguredSecret
+        {
+            Name = "openai-connectors-ca",
+            SecretReference = "plaintext:not-a-certificate",
+        });
+        profile.SubjectAlternativeNames.Add("mtls.prod.connectors.openai.com");
+        endpoint.ClientCertificateProfiles.Add(profile);
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith(
+            "McpEndpoint:ClientCertificateProfiles:0:TrustAnchors:0",
+            failure,
+            StringComparison.Ordinal);
+        Assert.Contains(nameof(CertificateMaterialFailure.EncodingNotRecognized), failure, StringComparison.Ordinal);
     }
 
     /// <summary>A disabled endpoint reads no key, so failing a host over one nothing was going to use would be a rule with no purpose.</summary>

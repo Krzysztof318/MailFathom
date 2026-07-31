@@ -12,6 +12,7 @@ using MailMcp.Domain.Synchronization;
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Mail.MailKit;
+using MailMcp.TestSupport;
 using NSubstitute;
 using Xunit;
 using static MailMcp.Infrastructure.UnitTests.MailKitImapSessionTestContext;

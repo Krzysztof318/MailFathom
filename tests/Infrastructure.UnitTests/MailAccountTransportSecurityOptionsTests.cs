@@ -3,6 +3,7 @@
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Secrets;
+using MailMcp.TestSupport;
 using Xunit;
 
 namespace MailMcp.Infrastructure.UnitTests;

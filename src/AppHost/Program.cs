@@ -91,7 +91,6 @@ if (runsIntegrationTests)
         .WithEnvironment("McpEndpoint__Authentication", "ApiKey")
         .WithEnvironment("McpEndpoint__ApiKeys__0__Name", OrchestrationContract.McpApiKeyName)
         .WithEnvironment("McpEndpoint__ApiKeys__0__SecretReference", $"plaintext:{OrchestrationContract.McpApiKey}")
-        .WithEnvironment("McpEndpoint__Cors__AllowAnyOrigin", "false")
         .WithEnvironment("McpEndpoint__Cors__AllowedOrigins__0", OrchestrationContract.McpPermittedOrigin);
 }
 

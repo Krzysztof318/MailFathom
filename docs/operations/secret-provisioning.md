@@ -201,7 +201,9 @@ A trust anchor is provisioned like any other secret, but the bytes behind it are
 
 An anchor that carries a private key is rejected. Provision the public certificate — `openssl x509 -in ca.pem -out ca-public.pem` if the file you have holds more than that — because a trust anchor needs nothing else, and a private key MailMcp holds is an authority MailMcp could impersonate.
 
-[IMAP synchronization](../features/imap-synchronization.md) describes how the anchor is used, including the revocation trade-off a private authority implies.
+Two things are provisioned this way and they are judged differently. A mail account's anchor decides whether MailMcp trusts the *server* it connects to; an [MCP client certificate profile](mcp-endpoint.md#client-certificates)'s anchors decide whether MailMcp trusts a *client* connecting to it, and a profile names several so an authority can rotate by overlap.
+
+[IMAP synchronization](../features/imap-synchronization.md) describes how the server-side anchor is used, including the revocation trade-off a private authority implies.
 
 ## Interpretation modes
 
