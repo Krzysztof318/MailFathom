@@ -70,6 +70,10 @@ internal sealed class McpEndpointOptions
     /// </remarks>
     public IList<McpClientCertificateProfileOptions> ClientCertificateProfiles { get; } = [];
 
+    /// <summary>Gets or sets how much traffic the endpoint accepts before it starts refusing.</summary>
+    /// <remarks>Unlike the settings above, every value in this section has a product default, so an endpoint an operator enabled is bounded whether or not they wrote a number.</remarks>
+    public McpRateLimitingOptions RateLimiting { get; set; } = new();
+
     /// <summary>Reads the section the way composition does, defaults included.</summary>
     /// <param name="configuration">The application configuration.</param>
     /// <returns>The bound settings, with the defaults no binder can apply already applied.</returns>
@@ -118,6 +122,9 @@ internal sealed class McpEndpointOptions
 
         errors.AddRange(this.Cors.FindConfigurationErrors()
             .Select(error => $"{SectionName}:{nameof(this.Cors)}:{error}"));
+
+        errors.AddRange(this.RateLimiting.FindConfigurationErrors()
+            .Select(error => $"{SectionName}:{nameof(this.RateLimiting)}:{error}"));
 
         errors.AddRange(this.FindClientCertificateProfileErrors());
 

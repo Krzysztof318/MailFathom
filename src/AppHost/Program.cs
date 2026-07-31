@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Globalization;
 using MailMcp.AppHost;
 
 var builder = DistributedApplication.CreateBuilder(args);
@@ -91,7 +92,31 @@ if (runsIntegrationTests)
         .WithEnvironment("McpEndpoint__Authentication", "ApiKey")
         .WithEnvironment("McpEndpoint__ApiKeys__0__Name", OrchestrationContract.McpApiKeyName)
         .WithEnvironment("McpEndpoint__ApiKeys__0__SecretReference", $"plaintext:{OrchestrationContract.McpApiKey}")
-        .WithEnvironment("McpEndpoint__Cors__AllowedOrigins__0", OrchestrationContract.McpPermittedOrigin);
+        // A second key exists to be spent. Rate limits are counted per client, so proving one is enforced means taking a
+        // client to zero, and doing that to the key every other test authenticates with would make this suite's results
+        // depend on the order it ran in.
+        .WithEnvironment("McpEndpoint__ApiKeys__1__Name", OrchestrationContract.McpExpendableApiKeyName)
+        .WithEnvironment(
+            "McpEndpoint__ApiKeys__1__SecretReference",
+            $"plaintext:{OrchestrationContract.McpExpendableApiKey}")
+        .WithEnvironment("McpEndpoint__Cors__AllowedOrigins__0", OrchestrationContract.McpPermittedOrigin)
+        // Narrowed from the product defaults for the same reason the origins are: a burst small enough to exhaust
+        // deliberately is what makes the difference between a limiter that is wired in and one that is not observable.
+        // The period is a second, so a spent client is whole again long before anything else in the suite runs.
+        .WithEnvironment(
+            "McpEndpoint__RateLimiting__TokenCapacity",
+            OrchestrationContract.McpRateLimitTokenCapacity.ToString(CultureInfo.InvariantCulture))
+        .WithEnvironment(
+            "McpEndpoint__RateLimiting__TokensPerReplenishmentPeriod",
+            OrchestrationContract.McpRateLimitTokenCapacity.ToString(CultureInfo.InvariantCulture))
+        .WithEnvironment(
+            "McpEndpoint__RateLimiting__ReplenishmentPeriod",
+            OrchestrationContract.McpRateLimitReplenishmentPeriod)
+        // Raised rather than narrowed, so the concurrency limit cannot refuse anything the suite sends and a 429 it
+        // observes can only have come from the per-client bucket the route's policy carries.
+        .WithEnvironment(
+            "McpEndpoint__RateLimiting__MaxConcurrentRequests",
+            OrchestrationContract.McpRateLimitMaxConcurrentRequests.ToString(CultureInfo.InvariantCulture));
 }
 
 // Host is the startup project because it is the project resource the connection string is issued to; Infrastructure

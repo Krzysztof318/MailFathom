@@ -203,6 +203,7 @@ try
     // to say. Registering it conditionally would put the same condition in two places.
     builder.Services.AddHostedService<MailMcp.Host.Hosting.McpTransportAuthenticationWarning>();
     builder.Services.AddHostedService<MailMcp.Host.Hosting.McpTransportEncryptionWarning>();
+    builder.Services.AddHostedService<MailMcp.Host.Hosting.McpRateLimitingStartupReport>();
 
     // Read once and registered, so the value that decides the route is the one every consumer resolves. Whether the
     // endpoint exists is decided while the application is being built, before a container that could resolve a snapshot
@@ -225,6 +226,13 @@ try
             typeof(McpEndpointOptions),
             mcpEndpointConfigurationErrors);
     }
+
+    // Mapped once, next to the decision that reads it, so the numbers the limiters are built from and the numbers the
+    // startup report states are the same reading of the same settings. Null means an operator turned limiting off, which
+    // is the one case in which no limiter is registered at all rather than one configured to permit everything.
+    var mcpRateLimits = mcpEndpointSettings is { Enabled: true, RateLimiting.Enabled: true }
+        ? mcpEndpointSettings.RateLimiting.ToRateLimits()
+        : null;
 
     if (mcpEndpointSettings.Enabled)
     {
@@ -263,6 +271,11 @@ try
             mcpEndpointSettings.ClientCertificateProfiles.Count > 0));
     }
 
+    if (mcpRateLimits is not null)
+    {
+        builder.Services.AddMcpRateLimiting(mcpRateLimits);
+    }
+
     var app = builder.Build();
 
     // Before the server starts rather than from a hosted service, because the web host is the first hosted service to
@@ -299,9 +312,29 @@ try
             .MapMcp(McpEndpointRoute.Path)
             .RequireCors(McpTransportSecurityExtensions.CorsPolicyName);
 
-        if (mcpEndpointSettings.Authentication == McpTransportAuthenticationMode.ApiKey)
+        var authenticatesClients = mcpEndpointSettings.Authentication == McpTransportAuthenticationMode.ApiKey;
+
+        if (authenticatesClients)
         {
             app.UseAuthentication();
+        }
+
+        if (mcpRateLimits is not null)
+        {
+            // Behind authentication, so a per-client limit is counted under the identity that established rather than
+            // under something the caller chose, and ahead of authorization, so a request that is about to be refused for
+            // its credential still spends anonymous capacity — otherwise a flood of bad credentials would be the one
+            // kind of traffic the endpoint served without limit.
+            app.UseRateLimiter();
+
+            // On the endpoint for the same reason authorization is: the readiness and liveness endpoints have to keep
+            // answering while this one is refusing. The process-wide half of the policy cannot be attached here, because
+            // an endpoint resolves one limiter, so it rides on the global limiter and excludes every other route itself.
+            mcpEndpoint.RequireRateLimiting(McpRateLimiting.PolicyName);
+        }
+
+        if (authenticatesClients)
+        {
             app.UseAuthorization();
 
             // On the endpoint rather than as a fallback policy, so the readiness response and the health endpoints keep
