@@ -99,7 +99,7 @@ here is still an open decision. The application does not yet report its own vers
 license and a build must not be able to say otherwise. The label is only the claim a registry indexes; the terms
 themselves are `/app/LICENSE` and `/app/NOTICE`, which arrive as part of the publish output the runtime stage copies.
 `Host` fails its own publish when either is missing, so the image cannot be built without them. The third-party
-notices that must accompany them are not in the image yet — see `THIRD_PARTY_LICENSES.md` and issue #123.
+notices that must accompany them are not in the image yet — see `THIRD_PARTY_LICENSES.md` and issue #191.
 
 ## The schema
 
