@@ -1,0 +1,262 @@
+name: Claude review
+
+# Manual dispatch only, and never a required check. The review costs Claude subscription usage and
+# says nothing a merge should wait on, so it runs when the owner asks a specific pull request for a
+# second opinion rather than on every push. The Codex review already comments on pull requests here;
+# this one is the same kind of advice from a different reviewer, in the same P1/P2/P3 vocabulary, so
+# one pass over the threads answers both.
+#
+# It is deliberately a `workflow_dispatch` rather than a label or a comment trigger. A dispatch takes
+# the workflow file from the ref it was started on, so the prompt below is the one on `main` rather
+# than the one the pull request would leave behind, and a branch cannot rewrite the instructions that
+# judge it. The cost is that the action sees no pull-request context and therefore installs no inline
+# comment tool, which is why the prompt posts through the reviews endpoint instead.
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request_number:
+        description: 'Number of the pull request to review'
+        required: true
+        type: string
+      model:
+        description: 'Model that performs the review'
+        required: false
+        default: opus
+        type: choice
+        options:
+          - opus
+          - sonnet
+
+concurrency:
+  # One review at a time per pull request, and never cancelled. A cancelled run can already have
+  # posted part of a review, and the next run would then have no way to tell its own findings from
+  # the half that survived.
+  group: ${{ github.workflow }}-${{ inputs.pull_request_number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  claude-review:
+    name: Claude review
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Posting the review needs it. It is the widest privilege here and it is wider than the job
+      # uses: it also permits closing or relabelling a pull request, and GitHub offers no narrower
+      # scope for commenting alone. `contents: read` is what keeps the run off the branch itself; the
+      # prompt is what keeps the review to `COMMENT`.
+      pull-requests: write
+      # The action exchanges the workflow's OIDC token for a GitHub App installation token when the
+      # Claude app is installed; without it the run falls back to the workflow token.
+      id-token: write
+    steps:
+      # One resolution of what is being reviewed, from the API rather than from the workspace, so
+      # every later step and the review itself name the same two commits even if the branch moves
+      # while the run is in flight. GitHub computes the merge base server-side, which is the same
+      # commit the pull request's own diff is taken against.
+      - name: Resolve the pull request under review
+        id: pull-request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request_number }}
+        run: |
+          set -euo pipefail
+
+          # The input is a free-text string, and every later step interpolates it into an API path.
+          if [[ ! "$PULL_REQUEST_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "::error::'${PULL_REQUEST_NUMBER}' is not a pull-request number."
+            exit 1
+          fi
+
+          pull_request="$(
+            gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" \
+              --jq '{state: .state, head: .head.sha, base: .base.ref}'
+          )"
+
+          state="$(jq -r '.state' <<< "$pull_request")"
+          if [[ "$state" != 'open' ]]; then
+            echo "::error::Pull request #${PULL_REQUEST_NUMBER} is ${state}. Only an open pull request is reviewed."
+            exit 1
+          fi
+
+          head_sha="$(jq -r '.head' <<< "$pull_request")"
+          base_ref="$(jq -r '.base' <<< "$pull_request")"
+          merge_base="$(
+            gh api "repos/${REPOSITORY}/compare/${base_ref}...${head_sha}" \
+              --jq '.merge_base_commit.sha'
+          )"
+
+          {
+            echo "head_sha=${head_sha}"
+            echo "merge_base_sha=${merge_base}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Reviewing ${merge_base}..${head_sha} against ${base_ref}."
+
+      # The head commit rather than the merge commit, so a line the review comments on is a line the
+      # branch actually contains, and the whole history, so the diff against the merge base can be
+      # taken locally instead of from an API response that paginates.
+      - name: Check out the pull request head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.pull-request.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the review range is present
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.pull-request.outputs.head_sha }}
+          MERGE_BASE_SHA: ${{ steps.pull-request.outputs.merge_base_sha }}
+        run: |
+          set -euo pipefail
+
+          # The checkout brings the branch history rather than the base branch by name, so this
+          # confirms the range is diffable before the review starts rather than leaving Claude to
+          # discover a missing commit and quietly review something narrower.
+          for commit in "$MERGE_BASE_SHA" "$HEAD_SHA"; do
+            if ! git cat-file -e "${commit}^{commit}" 2>/dev/null; then
+              echo "::error::${commit} is not in the checked-out repository, so the review range cannot be diffed."
+              exit 1
+            fi
+          done
+
+      - name: Review the pull request
+        uses: anthropics/claude-code-action@v1
+        with:
+          # A Claude Code OAuth token rather than an API key: this repository's review runs on the
+          # owner's Claude subscription. Generate it with `claude setup-token` and store it as the
+          # `CLAUDE_CODE_OAUTH_TOKEN` repository secret.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The buffering post-step reads the pull-request number from the event payload, which a
+          # dispatch does not carry, and this run posts through the reviews endpoint rather than
+          # through the inline comment tool the buffer serves.
+          classify_inline_comments: 'false'
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ inputs.pull_request_number }}
+            HEAD SHA: ${{ steps.pull-request.outputs.head_sha }}
+            MERGE BASE: ${{ steps.pull-request.outputs.merge_base_sha }}
+
+            You are reviewing a pull request in MailMcp, a pre-release .NET 10 clean-architecture
+            modular monolith that serves a local copy of a mailbox over MCP. The repository is
+            already checked out at HEAD SHA, and `gh` is authenticated.
+
+            ## Read before you judge anything
+
+            - `AGENTS.md` at the repository root. It is the contract this change is measured against,
+              including the pre-release rule under "Project status".
+            - `.agents/skills/review-change/SKILL.md`. Its "Recurring findings" section is the
+              distilled history of what review has actually caught in this repository. Work through
+              every category the diff reaches.
+            - `tests/AGENTS.md` and `docs/AGENTS.md` when the diff touches tests or documentation.
+            - The issue the pull-request body closes, the specification under `specs/` it names, and
+              the ADRs under `docs/decisions/` that govern the area it changes.
+
+            ## Scope
+
+            `git diff ${{ steps.pull-request.outputs.merge_base_sha }}..${{ steps.pull-request.outputs.head_sha }}`
+            is the change. Review it and its direct consequences, nothing else. Read the whole file
+            around each hunk before deciding anything: a hunk shows what moved, not what the code now
+            does, and a finding that the surrounding file already answers is noise.
+
+            Read the threads that already exist on this pull request first
+            (`gh api repos/${{ github.repository }}/pulls/${{ inputs.pull_request_number }}/comments --paginate`
+            and `gh pr view ${{ inputs.pull_request_number }} --json comments,reviews,body,title`).
+            A finding another reviewer already raised is not raised again, whatever its wording.
+
+            ## What counts as a finding
+
+            Severity, using the same ladder the existing reviews use:
+
+            - **P1** — the change is wrong: incorrect behavior, lost or duplicated work, a security or
+              privacy defect, a violated invariant or published contract, an unhandled failure mode,
+              or documentation that states something the code does not do. Stale documentation is a
+              defect in this repository, not a nicety.
+            - **P2** — a real defect with a narrower blast radius: unbounded work, missing validation
+              at a boundary, a test that cannot fail or that depends on wall-clock time, a leaked
+              architectural type, a missing row in `THIRD_PARTY_LICENSES.md` for a component the
+              change introduces, an error code missing from its registry.
+            - **P3** — something a later change will pay for: a name that misleads, a boundary
+              crossed for convenience, a method that hides two responsibilities.
+
+            Post nothing below P3. Fifteen findings is the ceiling; if you have more, post the
+            fifteen that matter and say in the body that you stopped there.
+
+            Verify before you post. Confirm in the checked-out tree that the code does what you claim
+            it does. If you cannot confirm it, drop the finding rather than hedging it.
+
+            ## What is not a finding here
+
+            - Anything the build already enforces: formatting, `.editorconfig` severities, the `CA`
+              and `IDE` set, Roslynator, the xUnit analyzers, the banned symbols in
+              `.config/BannedSymbols.txt`, and the threading analyzers. `Required CI` fails on those
+              already, and repeating them costs the owner a thread to resolve for nothing.
+            - Backward compatibility, migration paths, deprecation shims, versioning machinery, or
+              obsolete markers. Nothing is released, nothing outside this repository depends on any
+              contract, and `AGENTS.md` requires a breaking change to be taken now and in full.
+              Asking for a compatibility shim is a defect in the review.
+            - Praise, a summary of what the change does, or a restatement of the diff.
+            - Speculative refactors, alternative designs the change is not obliged to adopt, and
+              suggestions that begin "consider".
+            - A request for tests in general. Name the specific untested case and the behavior that
+              would go unnoticed, or say nothing.
+            - Anything you cannot anchor to a line in the diff. A concern about the change as a whole
+              belongs in the review body, in one or two sentences.
+            - Anything that would quote a credential, a token, message content, or raw MIME.
+
+            ## How to write each finding
+
+            One imperative title naming the correction, then the reasoning. Match the existing
+            threads in this repository:
+
+            ```
+            **P1 — Refuse when a matching profile loses all anchors**
+
+            When a certificate matches a profile's SAN but every anchor becomes unloadable after
+            startup, `FindRejectionAsync` returns `TrustAnchorUnavailable`, yet this loop records it
+            and continues, so a later profile can accept the certificate and widen access against the
+            documented fail-closed behavior. Return the rejection immediately when it is
+            `TrustAnchorUnavailable`.
+            ```
+
+            State the impact concretely and propose the smallest correction. Use a
+            ```suggestion``` block only when the replacement is a syntactically complete drop-in for
+            the exact lines you anchored to.
+
+            ## How to post
+
+            Post exactly one pull-request review, and post it once. Write the payload with the
+            `Write` tool, which is the only writing tool this run has, and send it:
+
+            ```bash
+            gh api repos/${{ github.repository }}/pulls/${{ inputs.pull_request_number }}/reviews \
+              --input ${{ runner.temp }}/review.json
+            ```
+
+            The payload uses `"event": "COMMENT"`,
+            `"commit_id": "${{ steps.pull-request.outputs.head_sha }}"`, a short body, and one entry
+            in `comments` per finding, each with `path`, `line`, `"side": "RIGHT"`, and `body`. Use
+            `start_line` with `line` for a range. Every line you anchor to must appear in
+            `gh pr diff ${{ inputs.pull_request_number }}` as an added or context line on the right
+            side; the API rejects the whole review over a single line that does not, so check the
+            anchors against the diff before sending. If it is rejected anyway, post the body alone
+            and then add each finding through
+            `gh api repos/${{ github.repository }}/pulls/${{ inputs.pull_request_number }}/comments`.
+
+            The body is at most five lines: what you reviewed, the count by severity, and any concern
+            that had no line to sit on. When nothing clears the bar, post the review with an empty
+            `comments` array and a body that says so plainly.
+
+            Never approve and never request changes; `COMMENT` is the only event you may use. Never
+            edit a tracked file, never commit, and never push. Write only under
+            `${{ runner.temp }}`. Do not report your findings as chat output instead of posting them:
+            a finding that is not on the pull request was not delivered.
+          claude_args: |
+            --model ${{ inputs.model }}
+            --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh api:*)"

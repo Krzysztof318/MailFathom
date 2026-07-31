@@ -113,6 +113,55 @@ Skills live under `.agents/skills/`. Claude Code consumes the same directory
 through the relative symlink `.claude/skills -> ../.agents/skills`; do not copy
 or maintain a second skill tree.
 
+## Review on the pull request
+
+`review-change` reviews the diff before it leaves the workspace. Two reviewers
+then comment on the pull request itself: Codex, which runs on its own, and
+Claude, which runs when asked. Both post threads carrying a `P1`, `P2`, or `P3`
+severity, so one pass over the pull request's threads answers both rather than
+two passes reading two vocabularies.
+
+The Claude pass is the `Claude review` workflow, started from the Actions tab or
+from the command line:
+
+```bash
+gh workflow run claude-review.yml -f pull_request_number=<number> -f model=opus
+```
+
+It is a `workflow_dispatch` and reports no status check. A review costs
+subscription usage and advises rather than gates, so it runs on a pull request
+the owner wants a second opinion on instead of on every push. `model` selects
+`opus` or `sonnet`; nothing else about the run is configurable.
+
+The run resolves the pull request's head commit and asks GitHub for its merge
+base with the target branch, checks that commit out with the whole history, and
+confirms both ends of the range are diffable before the review starts. Resolving
+once and from the API rather than from the workspace means the review, the
+commits it names, and the comments it anchors describe the same two commits even
+if the branch moves while the run is in flight. Claude gets that range. The
+prompt in `.github/workflows/claude-review.yml` is the whole instruction: it
+points at root `AGENTS.md`, the recurring findings in the `review-change` skill,
+and the specification and ADRs the change names, and it rules out the findings
+this repository does not want — anything the analyzers already enforce, praise,
+restatement of the diff, and compatibility or migration machinery for a release
+that does not exist. A dispatch takes the workflow file from the ref it was
+started on, so a branch cannot rewrite the instructions that judge it.
+
+Claude posts exactly one review with `event: COMMENT`, each finding anchored to
+the line it concerns, and says so in one comment when nothing clears the bar. It
+never approves, never requests changes, never writes to the branch, and repeats
+no finding an existing thread already raised. Because the dispatch carries no
+pull-request context, the action installs no inline-comment tool and the review
+goes through the pull-request reviews endpoint instead; the API rejects a whole
+review over one line that is not in the diff, so the prompt checks its anchors
+first and falls back to standalone comments.
+
+Authentication is the `CLAUDE_CODE_OAUTH_TOKEN` repository secret, produced by
+`claude setup-token` against the owner's Claude subscription. Without it the run
+fails at the action step. `THIRD_PARTY_LICENSES.md` records what the run sends
+and under whose terms, including the consumer-plan data-training setting that
+decides whether repository source submitted this way trains future models.
+
 ## Instruction scope
 
 Root `AGENTS.md` and `CLAUDE.md` carry repository-wide rules. More specific
