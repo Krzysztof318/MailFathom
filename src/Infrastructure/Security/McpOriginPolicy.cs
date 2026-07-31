@@ -30,6 +30,15 @@ public sealed class McpOriginPolicy
     /// <summary>Gets the policy that serves every origin, which is what a deployment configuring none receives.</summary>
     public static McpOriginPolicy AllowingAnyOrigin { get; } = new(allowsAnyOrigin: true, []);
 
+    /// <summary>Gets the policy that serves no request carrying an <c>Origin</c> at all.</summary>
+    /// <remarks>
+    /// The posture for a deployment whose clients are not browsers, which is the ordinary shape of an MCP server run
+    /// beside the agent that uses it. Such a client sends no <c>Origin</c> and <see cref="Permits" /> serves it exactly
+    /// as before, so what this refuses is precisely the case the transport specification is worried about: a page the
+    /// user never visited, reaching an address a browser resolved back to the operator's own host.
+    /// </remarks>
+    public static McpOriginPolicy RefusingEveryBrowserOrigin { get; } = new(allowsAnyOrigin: false, []);
+
     /// <summary>Gets whether every origin is served.</summary>
     public bool AllowsAnyOrigin { get; }
 

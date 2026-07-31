@@ -259,8 +259,9 @@ try
             app.UseAuthorization();
 
             // On the endpoint rather than as a fallback policy, so the readiness response and the health endpoints keep
-            // answering unauthenticated and every MCP method and response path — the post, the stream, the delete — is
-            // covered by the one requirement the route carries.
+            // answering unauthenticated while everything the MCP route exposes is covered by the one requirement it
+            // carries. Under the stateless transport that route is the post alone; a get or a delete is not mapped at
+            // all, so there is no second entry into the protocol surface for a requirement to miss.
             mcpEndpoint.RequireAuthorization();
         }
     }

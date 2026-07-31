@@ -85,6 +85,36 @@ public sealed class ComposedMcpEndpointSecurityTests
             await withUnrecognizedCredential.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// The requirement is a convention carried by the route rather than a check written into a handler, so what has to
+    /// be established is which requests that route actually exposes. The transport is stateless, and the SDK maps the
+    /// post alone for it: the get that would open a server stream and the delete that would end a session are not
+    /// routes at all, which routing answers before authorization is ever consulted. There is therefore no second way
+    /// into the protocol surface to protect — and the one way in refuses the method that returns mail.
+    /// </summary>
+    [Fact]
+    public async Task McpEndpoint_TheStatelessTransportsOnlyVerb_RefusesAToolCallCarryingNoCredential()
+    {
+        // Arrange
+        using var client = await this.ComposedHostClientAsync();
+        using var openStream = McpRequest(HttpMethod.Get, jsonRpcPayload: null);
+        using var endSession = McpRequest(HttpMethod.Delete, jsonRpcPayload: null);
+        using var callTool = McpRequest(HttpMethod.Post, ToolCallPayload());
+
+        // Act
+        using var streamAttempt = await client.SendAsync(openStream, TestContext.Current.CancellationToken);
+        using var sessionAttempt = await client.SendAsync(endSession, TestContext.Current.CancellationToken);
+        using var toolCallRefusal = await client.SendAsync(callTool, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [HttpStatusCode.MethodNotAllowed, HttpStatusCode.MethodNotAllowed],
+            [.. new[] { streamAttempt, sessionAttempt }.Select(attempt => attempt.StatusCode)]);
+        Assert.Equal(HttpStatusCode.Unauthorized, toolCallRefusal.StatusCode);
+        Assert.Equal("Bearer", Assert.Single(toolCallRefusal.Headers.WwwAuthenticate).Scheme);
+        Assert.Empty(await toolCallRefusal.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+    }
+
     [Fact]
     public async Task McpEndpoint_RequestCarryingTheConfiguredKeyFromAServedOrigin_ReachesTheProtocolSurface()
     {
@@ -150,23 +180,52 @@ public sealed class ComposedMcpEndpointSecurityTests
     /// </remarks>
     private static HttpRequestMessage ListToolsRequest(string? apiKey)
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, new Uri("/mcp", UriKind.Relative))
+        var request = McpRequest(HttpMethod.Post, new
         {
-            Content = JsonContent.Create(new
-            {
-                jsonrpc = "2.0",
-                id = 1,
-                method = "tools/list",
-            }),
-        };
-
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+            jsonrpc = "2.0",
+            id = 1,
+            method = "tools/list",
+        });
 
         if (apiKey is not null)
         {
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         }
+
+        return request;
+    }
+
+    /// <summary>Builds the invocation of a tool that reads mail, which is the request whose refusal the design exists for.</summary>
+    /// <remarks>
+    /// The arguments are the ones a caller would send. A refusal that happens before the endpoint runs cannot depend on
+    /// them, and the point of sending a well-formed call is that the refusal is not explained by malformedness either.
+    /// </remarks>
+    private static object ToolCallPayload() => new
+    {
+        jsonrpc = "2.0",
+        id = 1,
+        method = "tools/call",
+        @params = new
+        {
+            name = ToolListedByTheProtocolSurface,
+            arguments = new { accountId = "any-account", folder = "INBOX" },
+        },
+    };
+
+    /// <summary>Addresses one verb of the MCP route, accepting both content types the transport may reply with.</summary>
+    /// <remarks>
+    /// The payload is declared as <see cref="object" /> so its runtime shape is what gets serialized, which keeps each
+    /// caller's request readable at the call site instead of behind a parameter list describing JSON-RPC.
+    /// </remarks>
+    private static HttpRequestMessage McpRequest(HttpMethod verb, object? jsonRpcPayload)
+    {
+        var request = new HttpRequestMessage(verb, new Uri("/mcp", UriKind.Relative))
+        {
+            Content = jsonRpcPayload is null ? null : JsonContent.Create(jsonRpcPayload),
+        };
+
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
 
         return request;
     }

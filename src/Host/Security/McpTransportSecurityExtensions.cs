@@ -78,6 +78,9 @@ internal static class McpTransportSecurityExtensions
         }
         else
         {
+            // An empty set is the refuse-every-browser-origin posture rather than an oversight, and naming no origin is
+            // how it reaches CORS: the middleware then matches nothing and writes no Access-Control-Allow-Origin, which
+            // leaves a browser unable to read a response it was never going to be served.
             policy.WithOrigins([.. originPolicy.AllowedOrigins]);
         }
 

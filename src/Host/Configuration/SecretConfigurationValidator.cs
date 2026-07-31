@@ -225,12 +225,27 @@ internal sealed partial class SecretConfigurationValidator
     }
 
     /// <summary>Records a secret whose configured lifetime has already ended.</summary>
-    /// <remarks>The name and the path are both operator-chosen configuration identities and carry no material, which is what makes this line safe to write at all.</remarks>
+    /// <remarks>
+    /// <para>
+    /// The name and the path are both operator-chosen configuration identities and carry no material, which is what
+    /// makes this line safe to write at all.
+    /// </para>
+    /// <para>
+    /// The name is written only once <see cref="SecretName" /> has accepted it. That type exists to keep a configured
+    /// value safe to place in a log line unescaped, and a name carrying a newline would otherwise forge a second line
+    /// here — in a run that reports the malformed declaration and fails anyway, so nothing is lost by staying silent.
+    /// </para>
+    /// </remarks>
     private void ReportExpiredLifetime(DiscoveredSecret block, DateTimeOffset now)
     {
+        if (!SecretName.TryCreate(block.Secret.Name, out var secretName))
+        {
+            return;
+        }
+
         if (SecretLifetime.TryParse(block.Secret.Lifetime, out var lifetime) && lifetime.HasExpiredAt(now))
         {
-            this.LogSecretExpired(block.ConfigurationPath, block.Secret.Name, lifetime.ToString());
+            this.LogSecretExpired(block.ConfigurationPath, secretName.Value!, lifetime.ToString());
         }
     }
 

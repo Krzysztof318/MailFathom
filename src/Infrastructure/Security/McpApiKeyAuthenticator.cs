@@ -79,7 +79,7 @@ public sealed partial class McpApiKeyAuthenticator
                 : McpApiKeyRejection.CredentialMalformed);
         }
 
-        var presentedDigest = this.DigestOfText(presentedCredential);
+        var presentedDigest = this.DigestOfCharacters(presentedCredential);
         var now = this.timeProvider.GetUtcNow();
 
         SecretName? authenticatedKeyName = null;
@@ -169,7 +169,7 @@ public sealed partial class McpApiKeyAuthenticator
 
         using (material)
         {
-            if (!CryptographicOperations.FixedTimeEquals(this.Digest(material.RevealBytes()), presentedDigest))
+            if (!CryptographicOperations.FixedTimeEquals(this.DigestOfTextView(material), presentedDigest))
             {
                 return McpApiKeyAuthenticationResult.Rejected(McpApiKeyRejection.CredentialUnrecognized);
             }
@@ -187,25 +187,55 @@ public sealed partial class McpApiKeyAuthenticator
         return McpApiKeyAuthenticationResult.Authenticated(keyName);
     }
 
-    /// <summary>Reduces a presented credential to its digest, erasing the encoded copy it had to make.</summary>
+    /// <summary>Reduces configured key material to the digest of its text view.</summary>
     /// <remarks>
-    /// The credential itself arrives as a <see cref="string" />, which the request pipeline already materialized and
-    /// which cannot be erased. What this controls is the second copy: the encoded bytes are held in a pinned buffer and
-    /// zeroed here rather than left for the collector, on the same terms as every other secret this process handles.
+    /// <para>
+    /// The text view rather than the raw bytes, because an API key is a credential a client writes into a header, and
+    /// <see cref="ResolvedSecret" /> removes one trailing newline from that view for exactly the reason it matters here:
+    /// a key file written by <c>echo</c>, provisioned as a Compose secret, or mounted by Kubernetes routinely ends in
+    /// one. Digesting the bytes would compare a value no operator can see against the one they configured, and the
+    /// deployment would start cleanly while refusing every client presenting the visible key.
+    /// </para>
+    /// <para>
+    /// The decoded characters are held in a pinned buffer and cleared here rather than left for the collector, on the
+    /// same terms as the encoded copy below and as every other secret this process handles.
+    /// </para>
     /// </remarks>
-    private byte[] DigestOfText(string credential)
+    private byte[] DigestOfTextView(ResolvedSecret material)
     {
-        var encodedCredential = GC.AllocateArray<byte>(Encoding.UTF8.GetByteCount(credential), pinned: true);
+        var revealedText = GC.AllocateArray<char>(material.TextLength, pinned: true);
 
         try
         {
-            Encoding.UTF8.GetBytes(credential, encodedCredential);
+            material.RevealTextInto(revealedText);
 
-            return this.Digest(encodedCredential);
+            return this.DigestOfCharacters(revealedText);
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(encodedCredential);
+            revealedText.AsSpan().Clear();
+        }
+    }
+
+    /// <summary>Reduces text to its digest, erasing the encoded copy it had to make.</summary>
+    /// <remarks>
+    /// A presented credential arrives as a <see cref="string" />, which the request pipeline already materialized and
+    /// which cannot be erased. What this controls is the second copy: the encoded bytes are held in a pinned buffer and
+    /// zeroed here rather than left for the collector.
+    /// </remarks>
+    private byte[] DigestOfCharacters(ReadOnlySpan<char> text)
+    {
+        var encodedText = GC.AllocateArray<byte>(Encoding.UTF8.GetByteCount(text), pinned: true);
+
+        try
+        {
+            Encoding.UTF8.GetBytes(text, encodedText);
+
+            return this.Digest(encodedText);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(encodedText);
         }
     }
 

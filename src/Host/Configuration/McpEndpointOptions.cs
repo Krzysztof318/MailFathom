@@ -82,14 +82,40 @@ internal sealed class McpEndpointOptions
             yield break;
         }
 
+        // The binder accepts any number for an enum, so 'Authentication=2' would bind to a value no member declares.
+        // Every check below asks whether the mode equals one of the two, and such a value answers no to all of them: it
+        // registers no authentication, requires no credential, and leaves the unauthenticated warning silent because it
+        // is not None either. Refusing it here is what keeps a typo from opening the endpoint instead of closing it.
+        if (!Enum.IsDefined(authenticationMode))
+        {
+            yield return $"{SectionName}:{nameof(this.Authentication)} — '{(int)authenticationMode}' names no authentication mode; state '{nameof(McpTransportAuthenticationMode.ApiKey)}' or '{nameof(McpTransportAuthenticationMode.None)}'.";
+
+            yield break;
+        }
+
         if (authenticationMode == McpTransportAuthenticationMode.ApiKey && this.ApiKeys.Count == 0)
         {
             yield return $"{SectionName}:{nameof(this.ApiKeys)} — '{nameof(McpTransportAuthenticationMode.ApiKey)}' authentication is selected and no key is configured, so no client could authenticate.";
         }
 
-        if (authenticationMode == McpTransportAuthenticationMode.None && this.ApiKeys.Count > 0)
+        if (authenticationMode != McpTransportAuthenticationMode.None)
+        {
+            yield break;
+        }
+
+        if (this.ApiKeys.Count > 0)
         {
             yield return $"{SectionName}:{nameof(this.ApiKeys)} — API keys are configured while authentication is '{nameof(McpTransportAuthenticationMode.None)}', so none of them is checked; select '{nameof(McpTransportAuthenticationMode.ApiKey)}' or remove them.";
+        }
+
+        // Nothing else stands between a web page and the mailbox once no credential is required. A page the user never
+        // visited can reach a loopback or private address through DNS rebinding, and the browser attaches its own
+        // Origin, so serving every origin means serving that page — and the permissive CORS headers then let it read
+        // what it got back. Under ApiKey this is harmless, because the page has no credential to present and none is
+        // ambient; under None the origin list is the only thing left, so it has to say something.
+        if (this.Cors.AllowAnyOrigin)
+        {
+            yield return $"{SectionName}:{nameof(this.Cors)}:{nameof(McpCorsOptions.AllowAnyOrigin)} — every browser origin is served while authentication is '{nameof(McpTransportAuthenticationMode.None)}', which lets any web page read this mailbox through DNS rebinding; list the origins served, or turn it off and list none to serve no browser at all.";
         }
     }
 }

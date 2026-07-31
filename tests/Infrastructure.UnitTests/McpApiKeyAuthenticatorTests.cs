@@ -378,6 +378,43 @@ public sealed class McpApiKeyAuthenticatorTests
         Lifetime = lifetime ?? SecretLifetime.NoLimitValue,
     };
 
+    /// <summary>
+    /// A key file written by <c>echo</c>, provisioned as a Compose secret, or mounted by Kubernetes routinely ends in a
+    /// newline, which is why <see cref="ResolvedSecret" /> removes one from its text view. Digesting the raw bytes
+    /// instead would let the deployment start cleanly and then refuse every client presenting the key an operator can
+    /// actually see — a failure with no symptom on the server but a total one at every client.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_KeyMaterialEndingInANewline_StillAuthenticatesTheVisibleCredential()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        using var loggerFactory = LoggerFactory.Create(logging => logging.AddProvider(logs));
+        var authenticator = new McpApiKeyAuthenticator(
+            new NewlineTerminatedResolver(WorkstationKeyMaterial),
+            new FakeTimeProvider(RequestedAt),
+            loggerFactory.CreateLogger<McpApiKeyAuthenticator>());
+
+        // Act
+        var result = await authenticator.AuthenticateAsync(
+            [Key("workstation", WorkstationKeyMaterial)],
+            $"Bearer {WorkstationKeyMaterial}",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(result.Succeeded);
+        Assert.Equal("workstation", result.AuthenticatedKeyName?.Value);
+    }
+
+    /// <summary>Resolves every reference to one material with a trailing newline, the way a mounted key file arrives.</summary>
+    private sealed class NewlineTerminatedResolver(string material) : ISecretReferenceResolver
+    {
+        public Task<SecretResolutionResult> ResolveAsync(string? configuredValue, CancellationToken cancellationToken) =>
+            Task.FromResult(SecretResolutionResult.Resolved(
+                ResolvedSecret.FromText(material + "\n"),
+                SecretMaterialSource.SchemeAdapter));
+    }
+
     private sealed class AuthenticatorHarness
     {
         private readonly McpApiKeyAuthenticator authenticator;

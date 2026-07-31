@@ -120,7 +120,7 @@ data:
             "Port": 993,
             "UserName": "mailmcp@example.test",
             "Secrets": {
-              "Password": { "SecretReference": "file:/etc/mailmcp/secrets/imap-primary-password" }
+              "Password": { "Name": "primary-imap-password", "SecretReference": "file:/etc/mailmcp/secrets/imap-primary-password" }
             },
             "TransportSecurity": { "ConnectionSecurity": "TlsOnConnect" },
             "Folders": [ { "Alias": "inbox", "SpecialUse": "Inbox" } ]
@@ -131,7 +131,7 @@ data:
   20-persistence.json: |
     {
       "Persistence": {
-        "Password": { "SecretReference": "file:/etc/mailmcp/secrets/postgres-password" }
+        "Password": { "Name": "postgres", "SecretReference": "file:/etc/mailmcp/secrets/postgres-password" }
       }
     }
 ---
