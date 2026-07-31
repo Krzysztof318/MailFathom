@@ -119,7 +119,9 @@ internal static class McpRateLimiting
         ArgumentNullException.ThrowIfNull(limits);
 
         return RateLimitPartition.GetTokenBucketLimiter(
-            McpRateLimitPartitions.KeyFor(AuthenticatedClientName(httpContext)),
+            McpRateLimitPartitions.KeyFor(
+                AuthenticatedClientName(httpContext),
+                httpContext.Features.Get<McpClientCertificateIdentity>()?.ProfileName),
             _ => ClientBucketOptions(limits));
     }
 

@@ -304,6 +304,8 @@ Several deliberate strictnesses are worth knowing before a profile is written:
   on the next request, with no restart.
 - **Requesting a certificate is not requiring one.** Kestrel asks every HTTPS connection for one and accepts whatever
   arrives, so the decision is made here rather than in the handshake, where a refusal would say nothing to anybody.
+- **A matched profile also names a rate-limit partition**, but only where no API key identified the caller. See
+  [Whose capacity a request spends](#whose-capacity-a-request-spends) for the rule between the two.
 
 **mTLS needs an HTTPS endpoint.** A client certificate only exists on a TLS connection, so a deployment serving plain
 HTTP presents none: an `Optional` profile then identifies nothing, and a `Required` profile refuses every request.
@@ -413,21 +415,37 @@ never the rate that applies.
 
 ### Whose capacity a request spends
 
-The per-client limit is counted under **the name of the API key the request authenticated with** — MailMcp's own
-configured identity for that credential, never the credential itself. The set of partitions an authenticated deployment
-keeps is therefore as large as the key list and no larger.
+Two identities can name a caller, and they are consulted in a fixed order:
 
-Everything else shares **one anonymous partition**: a request under `None`, and a request whose credential was refused.
-That is deliberately coarse. Every partition a request can name is a dictionary entry the process keeps, so a key an
-attacker chooses is memory an attacker allocates. Nothing a caller writes — a header, a path, a query string, an
-`Origin`, a user agent — reaches a partition key, and neither does a forwarded address, because a proxy header is chosen
-by whoever is upstream. The remote address is not used either, not even as a fallback: it is spoofable on the traffic
-this is aimed at, and one client behind a shared address would otherwise be limited by another's behaviour.
+1. **The name of the API key the request authenticated with**, whenever there is one.
+2. **The name of the client-certificate profile the connection matched**, when no key authenticated the request.
+3. **One shared anonymous partition** otherwise.
+
+Both are MailMcp's own configured identities — never the credential, and never anything the certificate itself carried.
+The partitions a deployment keeps therefore number no more than its key list plus its profile list.
+
+**The key wins wherever both exist, and the two are never combined.** A key names one client of this deployment, which is
+exactly what an operator partitioned their clients into; a profile names a client *application*, and several keys may sit
+behind one profile. Taking the profile instead would let one key starve another that happens to share its certificate,
+and combining the two into a pair would hand the same credential a fresh bucket for every profile it could present
+under — capacity bought by holding one more certificate.
+
+A profile's partition is written `<profile:name>` and a key's is written bare, because the two are configured under the
+same grammar and a profile named after a key would otherwise share its bucket. Under `ApiKey` both kinds exist at once,
+since a request whose credential was refused still arrives carrying the profile its certificate matched.
+
+Everything unidentified shares **one anonymous partition**: a request under `None` presenting no certificate, and a
+request whose credential was refused. That is deliberately coarse. Every partition a request can name is a dictionary
+entry the process keeps, so a key an attacker chooses is memory an attacker allocates. Nothing a caller writes — a
+header, a path, a query string, an `Origin`, a user agent — reaches a partition key, and neither does a forwarded
+address, because a proxy header is chosen by whoever is upstream. The remote address is not used either, not even as a
+fallback: it is spoofable on the traffic this is aimed at, and one client behind a shared address would otherwise be
+limited by another's behaviour.
 
 Counting refused credentials against the anonymous partition is what makes a flood of bad credentials cost the sender
-something. The limiter runs **behind authentication**, so the identity it counts under is the one authentication
-established, and **ahead of authorization**, so a request about to be refused for its credential has still spent capacity
-rather than being the one kind of traffic served without limit.
+something. The limiter runs **behind the certificate check and behind authentication**, so both identities are settled
+before it counts, and **ahead of authorization**, so a request about to be refused for its credential has still spent
+capacity rather than being the one kind of traffic served without limit.
 
 Readiness, liveness, and the root endpoint are outside all of this and keep answering while the MCP endpoint is refusing.
 

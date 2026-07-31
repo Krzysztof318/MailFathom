@@ -238,6 +238,57 @@ public sealed class McpRateLimitingTests
         DisposeAll([anonymous, authenticated]);
     }
 
+    /// <summary>
+    /// Under <c>None</c> a client certificate is the only identity there is, so a deployment that trusts several client
+    /// applications keeps a bucket per application instead of pooling them all into the anonymous one.
+    /// </summary>
+    [Fact]
+    public void PartitionForClient_WithACertificateProfileAndNoCredential_KeepsEachClientApplicationApart()
+    {
+        // Arrange
+        var limits = Limits(tokenCapacity: 1, tokensPerReplenishmentPeriod: 1);
+        using var limiter = ClientLimiter(limits);
+
+        // Act
+        var chatgpt = limiter.AttemptAcquire(McpRequest(certificateProfileName: "chatgpt-connector"));
+        var workstation = limiter.AttemptAcquire(McpRequest(certificateProfileName: "workstation-connector"));
+        var chatgptAgain = limiter.AttemptAcquire(McpRequest(certificateProfileName: "chatgpt-connector"));
+        var unidentified = limiter.AttemptAcquire(McpRequest());
+
+        // Assert
+        Assert.True(chatgpt.IsAcquired);
+        Assert.True(workstation.IsAcquired);
+        Assert.False(chatgptAgain.IsAcquired);
+        Assert.True(unidentified.IsAcquired);
+
+        DisposeAll([chatgpt, workstation, chatgptAgain, unidentified]);
+    }
+
+    /// <summary>
+    /// A key names one client of this deployment and a profile names a client application several keys may sit behind,
+    /// so the key decides. Were the two combined, one credential would earn a fresh bucket for every certificate it
+    /// could present under — capacity bought by holding one more certificate.
+    /// </summary>
+    [Fact]
+    public void PartitionForClient_WithBothIdentities_SpendsTheAuthenticatedClientsCapacityOnly()
+    {
+        // Arrange
+        var limits = Limits(tokenCapacity: 1, tokensPerReplenishmentPeriod: 1);
+        using var limiter = ClientLimiter(limits);
+
+        // Act
+        var underOneProfile = limiter.AttemptAcquire(
+            McpRequest("desktop-agent", certificateProfileName: "chatgpt-connector"));
+        var underAnotherProfile = limiter.AttemptAcquire(
+            McpRequest("desktop-agent", certificateProfileName: "workstation-connector"));
+
+        // Assert
+        Assert.True(underOneProfile.IsAcquired);
+        Assert.False(underAnotherProfile.IsAcquired);
+
+        DisposeAll([underOneProfile, underAnotherProfile]);
+    }
+
     [Fact]
     public async Task RefuseAsync_ForAnyRejection_AnswersTooManyRequestsWithoutABody()
     {
@@ -418,7 +469,9 @@ public sealed class McpRateLimitingTests
         PartitionedRateLimiter.Create<HttpContext, string>(
             httpContext => McpRateLimiting.PartitionForClient(httpContext, limits));
 
-    private static DefaultHttpContext McpRequest(string? authenticatedClientName = null)
+    private static DefaultHttpContext McpRequest(
+        string? authenticatedClientName = null,
+        string? certificateProfileName = null)
     {
         var httpContext = RequestTo(McpEndpointRoute.Path);
 
@@ -427,6 +480,13 @@ public sealed class McpRateLimitingTests
             httpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
                 [new Claim(ClaimTypes.Name, authenticatedClientName)],
                 authenticationType: "test"));
+        }
+
+        if (certificateProfileName is not null)
+        {
+            // The same feature the client-certificate middleware publishes, so the limiter reads the identity it will
+            // actually be handed rather than one shaped for the test.
+            httpContext.Features.Set(new McpClientCertificateIdentity(certificateProfileName));
         }
 
         return httpContext;

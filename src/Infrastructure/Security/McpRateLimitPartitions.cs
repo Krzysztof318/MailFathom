@@ -23,6 +23,15 @@ namespace MailMcp.Infrastructure.Security;
 /// credential was refused, so a flood of bad credentials is counted and limited rather than served for free.
 /// </para>
 /// <para>
+/// Two identities can be established at once, and the rule between them is fixed rather than merged. A configured API
+/// key names one client of this deployment, which is what the operator partitioned their clients into; a client
+/// certificate profile names a client *application*, and several keys may sit behind one profile. Taking the key
+/// wherever there is one therefore keeps the partitions exactly as narrow as the key list, while taking the profile
+/// would let one key starve another that happens to share its certificate. Combining the two is the rule not taken: a
+/// pair-shaped key would hand the same credential a second bucket for every profile it could present under, which is
+/// capacity bought by holding one more certificate.
+/// </para>
+/// <para>
 /// The remote address is deliberately not part of any key, not even as a fallback. It is spoofable on the traffic this
 /// is aimed at, and one client behind a shared address would otherwise be limited by another's behaviour.
 /// </para>
@@ -47,12 +56,31 @@ public static class McpRateLimitPartitions
 
     /// <summary>Names the partition a request's capacity is taken from.</summary>
     /// <param name="authenticatedClientName">The name of the credential the request authenticated with, or <see langword="null" /> when it authenticated with none.</param>
-    /// <returns>The configured name of the authenticated client, or <see cref="AnonymousKey" />.</returns>
+    /// <param name="matchedCertificateProfileName">The name of the trust profile the connection certificate matched, or <see langword="null" /> when no certificate identified a client application.</param>
+    /// <returns>The configured name of the authenticated client, a partition of the identified client application, or <see cref="AnonymousKey" />.</returns>
     /// <remarks>
-    /// The name is MailMcp's own configured identity for a credential, never the credential. It is chosen by the
-    /// operator who wrote the configuration, so the set of partitions an authenticated deployment keeps is as large as
-    /// the key list and no larger. A blank name is treated as no name at all rather than as a partition of its own.
+    /// <para>
+    /// Both names are MailMcp's own configured identities, never a credential and never anything a certificate carried.
+    /// They are chosen by the operator who wrote the configuration, so the partitions an identified deployment keeps
+    /// number no more than its key list plus its profile list. A blank name is treated as no name at all rather than as
+    /// a partition of its own.
+    /// </para>
+    /// <para>
+    /// A profile's partition is bracketed and a key's is not, because the two grammars are the same — both accept
+    /// letters, digits, dots, dashes, and underscores — so a profile and a key sharing a name would otherwise share a
+    /// bucket. Under <c>ApiKey</c> both kinds occur at once, since a request whose credential was refused still reaches
+    /// this with the profile its certificate matched.
+    /// </para>
     /// </remarks>
-    public static string KeyFor(string? authenticatedClientName) =>
-        string.IsNullOrWhiteSpace(authenticatedClientName) ? AnonymousKey : authenticatedClientName;
+    public static string KeyFor(string? authenticatedClientName, string? matchedCertificateProfileName)
+    {
+        if (!string.IsNullOrWhiteSpace(authenticatedClientName))
+        {
+            return authenticatedClientName;
+        }
+
+        return string.IsNullOrWhiteSpace(matchedCertificateProfileName)
+            ? AnonymousKey
+            : $"<profile:{matchedCertificateProfileName}>";
+    }
 }

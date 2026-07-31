@@ -77,6 +77,14 @@ internal static class McpClientCertificateValidation
             return;
         }
 
+        // Published for the rate limiter, which keeps a client application's capacity apart under an authentication mode
+        // that establishes no other identity. Set only when a profile actually matched, because a request served on the
+        // strength of every profile being content without a certificate identifies nobody.
+        if (result.MatchedProfileName is { } matchedProfileName)
+        {
+            context.Features.Set(new McpClientCertificateIdentity(matchedProfileName));
+        }
+
         await next(context);
     }
 }
