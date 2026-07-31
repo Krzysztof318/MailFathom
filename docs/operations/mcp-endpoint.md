@@ -108,7 +108,10 @@ a statement about the mailbox.
 email whose content is missing or damaged locally is answered with `55001` and a durable repair request rather than with
 a download. An operator reading `55001` in the log is reading a local-consistency problem, not a mail-server one.
 
-`search_emails` reads the lexical index built over that copy, so a folder that has synchronized but whose text
-extraction has not run yet answers an empty window rather than a failure — the same state `folderFreshness` is there to
-distinguish. Its `retrievalMode` reports `lexical`, and a request that asks for more than 50 ranked results is refused
-with `51003` rather than served a smaller window.
+`search_emails` reads the lexical index built over that copy rather than the copy itself, so a folder that has
+synchronized but whose text extraction has not run yet answers an empty window rather than a failure. `folderFreshness`
+does not distinguish that case: it is computed from synchronization checkpoints alone, so such a folder reports a recent
+`synchronizedAt` and `wasSynchronized` true exactly as a fully indexed one does. An empty window from a freshly
+synchronized folder is therefore worth checking against extraction progress in the server log before it is read as a
+statement about the mailbox. Its `retrievalMode` reports `lexical`, and a request that asks for more than 50 ranked
+results is refused with `51003` rather than served a smaller window.

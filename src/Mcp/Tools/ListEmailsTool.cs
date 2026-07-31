@@ -76,11 +76,11 @@ internal sealed class ListEmailsTool(MailboxTimelineReader mailboxTimelineReader
         string[]? accountIds = null,
         [Description("MailMcp folder aliases to read, such as INBOX. Omit to read every folder of the accounts in scope. At most 64 may be named. An alias is MailMcp's own name for a folder and is matched without regard to case.")]
         string[]? folderAliases = null,
-        [Description("Return only emails sent from this mail address. Matched as a whole address rather than as a fragment, without regard to case; a value that is not a usable mail address is refused. Omit to match any sender.")]
+        [Description("Return only emails sent from this mail address. Matched as a whole address rather than as a fragment, without regard to case; a non-empty value that is not a usable mail address is refused. Omit to match any sender, which an empty string does too.")]
         string? senderAddress = null,
-        [Description("Return only emails addressed to this mail address in their To or Cc header. Matched as a whole address rather than as a fragment; Reply-To is not searched. Omit to match any recipient.")]
+        [Description("Return only emails addressed to this mail address in their To or Cc header. Matched as a whole address rather than as a fragment; Reply-To is not searched. Omit to match any recipient, which an empty string does too.")]
         string? recipientAddress = null,
-        [Description("Return only emails whose subject contains this text, without regard to case, up to 256 characters. Wildcard characters match themselves. Omit to match any subject.")]
+        [Description("Return only emails whose subject contains this text, without regard to case, up to 256 characters. Wildcard characters match themselves. Omit to match any subject, which an empty string does too.")]
         string? subjectFragment = null,
         [Description("Return only emails received at or after this ISO 8601 timestamp. Emails whose received date is unknown are excluded whenever either bound is named. Omit for no lower bound.")]
         DateTimeOffset? receivedOnOrAfter = null,

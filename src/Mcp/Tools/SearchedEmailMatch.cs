@@ -91,7 +91,11 @@ internal sealed record SearchedEmailMatch
     }
 
     /// <summary>Cuts one extract that is longer than any the use case produces.</summary>
+    /// <remarks>
+    /// The mark this adds is counted against the ceiling rather than added on top of it, so a cut extract is never
+    /// longer than one that needed no cutting. A ceiling a truncation can push past is not the bound it claims to be.
+    /// </remarks>
     private static string Bounded(string snippet, int maximumLength) => snippet.Length <= maximumLength
         ? snippet
-        : string.Concat(snippet[..maximumLength], TruncationMarker);
+        : string.Concat(snippet[..(maximumLength - TruncationMarker.Length)], TruncationMarker);
 }

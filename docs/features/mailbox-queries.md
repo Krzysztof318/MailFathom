@@ -48,6 +48,11 @@ and its result would read as an answer about the mailbox.
 - **Page size** is validated, not clamped. A request that names one outside 1–100 is refused with
   `51001 MailboxQueryPageSizeOutOfRange`, because a page clamped to a hundredth of what a client planned for looks
   exactly like the page it asked for. Naming none is a different input and takes the default.
+- **Blank text names no filter.** A text filter that arrives empty or as whitespace alone is read as one the request did
+  not name, rather than as a value to match: it takes the "absent means" column above. This holds for the addresses and
+  the subject fragment alike, so a client that sends a field it left empty gets the unfiltered read it meant rather than
+  a refusal. The free-text search query is the one exception, and refuses blank, because a search with no text is a
+  listing rather than an unfiltered search.
 - **Addresses** are normalized by the domain into the comparison form the persistence layer indexes, so a filter and a
   stored participant are compared in one form by construction. An unusable address is refused with
   `51002 MailboxQueryFilterInvalid` rather than kept as a value that can match no row, and so is one longer than the 320

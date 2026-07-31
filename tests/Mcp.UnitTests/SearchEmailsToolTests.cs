@@ -108,6 +108,35 @@ public sealed class SearchEmailsToolTests
         Assert.Equal(Query, index.LastQueryText?.Value);
     }
 
+    /// <summary>
+    /// A text filter a client sent empty names no filter rather than a value nothing can match, which is what the
+    /// argument descriptions promise and what a client that always sends its whole form depends on.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SearchEmailsAsync_BlankTextFilter_ReadsAsThoughItWereNotNamed(string blank)
+    {
+        // Arrange
+        var index = new StubEmailSearchIndexReader();
+        var tool = ToolOver(index);
+
+        // Act
+        await tool.SearchEmailsAsync(
+            Query,
+            senderAddress: blank,
+            recipientAddress: blank,
+            subjectFragment: blank,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(index.LastSelection);
+        Assert.Null(index.LastSelection.SenderNormalizedAddress);
+        Assert.Null(index.LastSelection.RecipientNormalizedAddress);
+        Assert.Null(index.LastSelection.SubjectFragment);
+        Assert.Equal(1, index.ReadCount);
+    }
+
     /// <summary>A search with no text is a listing, which <c>list_emails</c> answers in a stable order and with a cursor.</summary>
     [Theory]
     [InlineData("")]
@@ -234,7 +263,7 @@ public sealed class SearchEmailsToolTests
     public async Task SearchEmailsAsync_MatchedEmail_PublishesTheSummaryTheRankAndTheSnippetsAsTheyWereMatched()
     {
         // Arrange
-        var storedEmailId = Guid.CreateVersion7();
+        var storedEmailId = EmailIdentityAt(1);
         var receivedAt = new DateTimeOffset(2026, 3, 1, 8, 0, 0, TimeSpan.Zero);
         var match = new EmailSearchMatch(
             SummaryOf(storedEmailId, receivedAt),
@@ -342,6 +371,12 @@ public sealed class SearchEmailsToolTests
         var published = Assert.Single(Assert.Single(result.Matches).Snippets);
         Assert.True(published.Length < wholeBody.Length, "The extract was published whole.");
         Assert.EndsWith("…", published, StringComparison.Ordinal);
+
+        // Three times the character bound is the ceiling the boundary publishes under, and the mark it adds while
+        // cutting counts against it: a ceiling a truncation can push past is not a bound.
+        Assert.True(
+            published.Length <= (snippetBounds.MaximumCharacters * 3) + 1,
+            $"The cut extract is {published.Length} characters, above the ceiling it was cut to.");
     }
 
     /// <summary>An extract within the bound is published exactly as it was matched, markers and all.</summary>
@@ -365,8 +400,8 @@ public sealed class SearchEmailsToolTests
     {
         // Arrange
         var oversuppliedWindow = Enumerable
-            .Range(0, EmailSearchResultLimit.MaximumValue + 5)
-            .Select(position => MatchWith(rank: 1.0f - (position * 0.01f), snippets: ["**invoice**"]))
+            .Range(1, EmailSearchResultLimit.MaximumValue + 5)
+            .Select(position => MatchWith(rank: 1.0f - (position * 0.01f), snippets: ["**invoice**"], position))
             .ToArray();
         var tool = ToolOver(new StubEmailSearchIndexReader(oversuppliedWindow));
 
@@ -413,10 +448,18 @@ public sealed class SearchEmailsToolTests
             () => tool.SearchEmailsAsync(Query, cancellationToken: cancellation.Token));
     }
 
-    private static EmailSearchMatch MatchWith(float rank, IReadOnlyList<string> snippets) => new(
-        SummaryOf(Guid.CreateVersion7(), new DateTimeOffset(2026, 3, 1, 8, 0, 0, TimeSpan.Zero)),
+    private static EmailSearchMatch MatchWith(float rank, IReadOnlyList<string> snippets, int position = 1) => new(
+        SummaryOf(EmailIdentityAt(position), new DateTimeOffset(2026, 3, 1, 8, 0, 0, TimeSpan.Zero)),
         rank,
         snippets);
+
+    /// <summary>Names one email by its position, so the same run of a test always uses the same identifiers.</summary>
+    /// <remarks>
+    /// Derived rather than generated: a match's identity participates in no assertion here, but a failure has to be
+    /// reproducible from the data the test names, which a fresh UUID per invocation is not.
+    /// </remarks>
+    private static Guid EmailIdentityAt(int position) =>
+        new($"00000000-0000-0000-0000-{position:D12}");
 
     private static EmailSummary SummaryOf(Guid storedEmailId, DateTimeOffset receivedAt) => new()
     {
