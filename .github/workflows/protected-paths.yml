@@ -1,0 +1,121 @@
+name: Protected paths
+
+# Four directories decide how every other change is judged rather than being judged by it, which is
+# what makes them one set:
+#
+#   `.github/`  who has to approve a change, which checks the `main` ruleset waits for, and which
+#               dependency updates open themselves
+#   `.config/`  which API calls the build bans, what the coverage gate demands, which local tools
+#               restore, and how the test runner is configured
+#   `.agents/`  the skills that define the task, review, verification, and completion contract
+#   `.claude/`  the tracked entry points to those same skills
+#
+# A pull request that edits any of them is editing the gate it has to pass, so the repository owner
+# is the only author for whom that is ordinary work. `CODEOWNERS` says this to the reviewer; this job
+# says it to the author, within seconds of the push and without a reviewer having to notice.
+#
+# It is not a security boundary on its own. A `pull_request` run uses the workflow file as the pull
+# request would leave it, so a change to this file changes the check that judges it. The pair is what
+# holds: weakening the check means editing `.github/`, which needs the code owner's approval, and
+# deleting or renaming this job leaves the required check permanently unreported, which the ruleset
+# refuses to merge past. Both ways out are closed; neither of them is closed by this file alone.
+#
+# The set is a list rather than a pattern because each entry was added for a reason that had to be
+# stated. A directory joins it when a change to it decides what the repository enforces on every
+# other change; a dotted directory is not protected merely for being dotted.
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - converted_to_draft
+    branches:
+      - main
+
+# No `paths` filter, for the reason `ci.yml` records: GitHub instantiates no run for a workflow a path
+# filter excluded, and a required check that was never created never arrives. This job takes seconds
+# on a pull request that touches nothing protected, so it always runs and decides inside instead.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  protected-paths:
+    # No `if` condition of any kind, including the draft guard `ci.yml`'s expensive jobs carry. This
+    # job costs seconds, and a required check that only starts reporting once a pull request is
+    # marked ready withholds the one fact it exists to surface early.
+    name: Protected paths
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The changed-file query reads the pull request through the REST API and never checks the
+      # branch out, so this is the whole privilege it needs.
+      pull-requests: read
+    steps:
+      - name: Verify who changed the repository configuration
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          PULL_REQUEST_AUTHOR: ${{ github.event.pull_request.user.login }}
+          CHANGED_FILE_COUNT: ${{ github.event.pull_request.changed_files }}
+        run: |
+          set -euo pipefail
+
+          protected_prefixes=('.github/' '.agents/' '.claude/' '.config/')
+          protected_directories="${protected_prefixes[*]}"
+          reportable_file_limit=3000
+
+          # The changed-files endpoint stops at 3000 entries, so a larger pull request cannot be shown
+          # to leave the protected paths alone. An answer that could not be computed is not an answer
+          # that clears this check.
+          if (( CHANGED_FILE_COUNT > reportable_file_limit )); then
+            echo "::error::This pull request changes ${CHANGED_FILE_COUNT} files, more than the ${reportable_file_limit} the changed-files endpoint reports, so its changes under ${protected_directories} cannot be verified."
+            exit 1
+          fi
+
+          # `previous_filename` is read alongside `filename`, so moving a file out of the protected
+          # directory counts as changing it rather than as adding an unrelated one somewhere else.
+          changed_paths="$(
+            gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/files?per_page=100" \
+              --paginate --jq '.[] | .filename, (.previous_filename // empty)'
+          )"
+
+          # Prefix matching rather than a regular expression, so the leading dot of each directory is
+          # a dot and a sibling whose name merely ends that way is not protected by accident.
+          protected_changes=()
+          while IFS= read -r changed_path; do
+            for protected_prefix in "${protected_prefixes[@]}"; do
+              if [[ "$changed_path" == "${protected_prefix}"* ]]; then
+                protected_changes+=("$changed_path")
+                break
+              fi
+            done
+          done <<< "$changed_paths"
+
+          if (( ${#protected_changes[@]} == 0 )); then
+            echo "This pull request changes nothing under ${protected_directories}."
+            exit 0
+          fi
+
+          # GitHub logins are compared case-insensitively, because the same account is addressable
+          # under either casing and the two spellings must not decide a gate differently.
+          if [[ "${PULL_REQUEST_AUTHOR,,}" == "${REPOSITORY_OWNER,,}" ]]; then
+            echo "The repository owner authored this pull request, so its changes under ${protected_directories} are allowed."
+            exit 0
+          fi
+
+          for protected_change in "${protected_changes[@]}"; do
+            echo "::error file=${protected_change}::${protected_change} is repository configuration and only ${REPOSITORY_OWNER} may change it in a pull request."
+          done
+
+          echo "::error::This pull request is authored by ${PULL_REQUEST_AUTHOR} and changes repository configuration under ${protected_directories}. Open that change separately, or ask ${REPOSITORY_OWNER} to make it."
+          exit 1
