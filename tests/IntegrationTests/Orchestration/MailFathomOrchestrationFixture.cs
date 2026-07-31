@@ -18,11 +18,12 @@ namespace MailFathom.IntegrationTests.Orchestration;
 /// never through a container of its own.
 /// </para>
 /// <para>
-/// The MailFathom host resource is present in the app model and does not start with it. Most of the suite verifies classes
-/// against real infrastructure rather than the composed host, and every one of those tests owns the database and the
-/// mailbox exclusively; a second MailFathom reconciling folders underneath them would make its synchronization part of
-/// their environment. <see cref="StartMailFathomHostAsync" /> starts it on request, and the one collection that calls it
-/// is ordered after every other, so nothing is asserting on that infrastructure by the time the host touches it.
+/// The two MailFathom host resources are present in the app model and neither starts with it. Most of the suite verifies
+/// classes against real infrastructure rather than a composed host, and every one of those tests owns the database and
+/// the mailbox exclusively; a MailFathom reconciling folders underneath them would make its synchronization part of
+/// their environment. <see cref="StartMailFathomHostAsync" /> and <see cref="StartMutualTlsHostAsync" /> start them on
+/// request, and each is called from one collection the orderer places after every other, so nothing is asserting on
+/// that infrastructure by the time a host touches it.
 /// </para>
 /// </remarks>
 public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
@@ -35,9 +36,14 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
 
     private readonly SemaphoreSlim hostStartGate = new(1, 1);
 
+    /// <summary>The address each host resource the suite started is reachable at, keyed by resource name.</summary>
+    private readonly Dictionary<string, Uri> startedHostAddresses = new(StringComparer.Ordinal);
+
     private DistributedApplication? application;
 
-    private Uri? startedHostBaseAddress;
+    /// <summary>Gets the certificates the mutual-TLS host is served with and judges presented certificates against.</summary>
+    /// <remarks>Issued when this fixture is constructed, because the material has to exist before the app model is built: the host reads it from the environment variables the build injects it into.</remarks>
+    public OrchestratedMutualTlsCertificates MutualTlsCertificates { get; } = new();
 
     /// <summary>Gets or sets the connection string once the orchestration issued it.</summary>
     private string? IssuedDatabaseConnectionString { get; set; }
@@ -74,6 +80,8 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.AppHost>(
             [OrchestrationContract.IntegrationTestingArgument],
             cancellationToken);
+
+        SupplyMutualTlsMaterial(builder, this.MutualTlsCertificates);
 
         this.application = await builder.BuildAsync(cancellationToken);
 
@@ -131,34 +139,30 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     /// command and the second would race a resource that is already leaving its stopped state.
     /// </para>
     /// </remarks>
-    public async Task<Uri> StartMailFathomHostAsync(CancellationToken cancellationToken)
-    {
-        await this.hostStartGate.WaitAsync(cancellationToken);
+    public Task<Uri> StartMailFathomHostAsync(CancellationToken cancellationToken) => this.StartHostOnceAsync(
+        OrchestrationContract.HostResourceName,
+        OrchestrationContract.HostHttpEndpointName,
+        cancellationToken);
 
-        try
-        {
-            if (this.startedHostBaseAddress is { } alreadyStarted)
-            {
-                return alreadyStarted;
-            }
-
-            using var startCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            startCancellation.CancelAfter(HostStartupTimeout);
-
-            this.startedHostBaseAddress = await this.StartHostResourceAsync(startCancellation.Token);
-
-            return this.startedHostBaseAddress;
-        }
-        finally
-        {
-            this.hostStartGate.Release();
-        }
-    }
+    /// <summary>Starts the MailFathom host served over HTTPS behind mutual TLS and reports the address it serves on.</summary>
+    /// <param name="cancellationToken">Cancels waiting for the host to become reachable.</param>
+    /// <returns>The base address of the host's HTTPS endpoint.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started, or when the host resource refused the start command.</exception>
+    /// <remarks>
+    /// A second host rather than a posture on the first, for the reason <see cref="OrchestrationContract.MutualTlsHostResourceName" />
+    /// states: whether a client certificate is required is one answer for a whole process. It is started on request on
+    /// the same terms, and from the same collection, because it opens the same database.
+    /// </remarks>
+    public Task<Uri> StartMutualTlsHostAsync(CancellationToken cancellationToken) => this.StartHostOnceAsync(
+        OrchestrationContract.MutualTlsHostResourceName,
+        OrchestrationContract.MutualTlsHostHttpsEndpointName,
+        cancellationToken);
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         this.hostStartGate.Dispose();
+        this.MutualTlsCertificates.Dispose();
 
         if (this.application is not null)
         {
@@ -166,33 +170,95 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
         }
     }
 
-    private async Task<Uri> StartHostResourceAsync(CancellationToken cancellationToken)
+    /// <summary>Hands the mutual-TLS host the material the app model deliberately does not carry.</summary>
+    /// <remarks>
+    /// The app model names the environment variables its secret references read and stops there, so no private key
+    /// enters the repository. Supplying them here rather than through the app host's own environment is what keeps them
+    /// on the one resource that needs them instead of on every process the orchestration starts.
+    /// </remarks>
+    private static void SupplyMutualTlsMaterial(
+        IDistributedApplicationTestingBuilder builder,
+        OrchestratedMutualTlsCertificates certificates)
+    {
+        var mutualTlsHost = builder.Resources
+            .OfType<ProjectResource>()
+            .Single(resource => string.Equals(
+                resource.Name,
+                OrchestrationContract.MutualTlsHostResourceName,
+                StringComparison.Ordinal));
+
+        builder.CreateResourceBuilder(mutualTlsHost)
+            .WithEnvironment(
+                OrchestrationContract.MutualTlsServerCertificateChainVariable,
+                certificates.ServerCertificateChainPem)
+            .WithEnvironment(
+                OrchestrationContract.MutualTlsServerPrivateKeyVariable,
+                certificates.ServerPrivateKeyPem)
+            .WithEnvironment(
+                OrchestrationContract.MutualTlsClientTrustAnchorVariable,
+                certificates.ClientTrustAnchorPem);
+    }
+
+    private async Task<Uri> StartHostOnceAsync(
+        string resourceName,
+        string endpointName,
+        CancellationToken cancellationToken)
+    {
+        await this.hostStartGate.WaitAsync(cancellationToken);
+
+        try
+        {
+            if (this.startedHostAddresses.TryGetValue(resourceName, out var alreadyStarted))
+            {
+                return alreadyStarted;
+            }
+
+            using var startCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            startCancellation.CancelAfter(HostStartupTimeout);
+
+            var startedAddress = await this.StartHostResourceAsync(
+                resourceName,
+                endpointName,
+                startCancellation.Token);
+
+            this.startedHostAddresses[resourceName] = startedAddress;
+
+            return startedAddress;
+        }
+        finally
+        {
+            this.hostStartGate.Release();
+        }
+    }
+
+    private async Task<Uri> StartHostResourceAsync(
+        string resourceName,
+        string endpointName,
+        CancellationToken cancellationToken)
     {
         var startedApplication = this.application
             ?? throw new InvalidOperationException(
-                "The MailFathom host is started before the suite started the application.");
+                $"The MailFathom host resource {resourceName} is started before the suite started the application.");
 
         // The resource carries WithExplicitStart, so the app model created it and left it stopped. This is the command
         // the dashboard's own Start button issues, which keeps the suite starting the host the way an operator would.
         var startResult = await startedApplication.ResourceCommands.ExecuteCommandAsync(
-            OrchestrationContract.HostResourceName,
+            resourceName,
             KnownResourceCommands.StartCommand,
             cancellationToken);
 
         if (!startResult.Success)
         {
             throw new InvalidOperationException(
-                $"The MailFathom host resource refused to start [{startResult.Message}].");
+                $"The MailFathom host resource {resourceName} refused to start [{startResult.Message}].");
         }
 
         await startedApplication.ResourceNotifications.WaitForResourceHealthyAsync(
-            OrchestrationContract.HostResourceName,
+            resourceName,
             cancellationToken);
 
         // Read once the resource is healthy, because the host port is allocated when the project starts rather than
         // when the app model describes it.
-        return startedApplication.GetEndpoint(
-            OrchestrationContract.HostResourceName,
-            OrchestrationContract.HostHttpEndpointName);
+        return startedApplication.GetEndpoint(resourceName, endpointName);
     }
 }

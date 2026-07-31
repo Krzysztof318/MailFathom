@@ -11,8 +11,9 @@ namespace MailFathom.IntegrationTests.Orchestration;
 /// A separate collection from <see cref="OrchestratedInfrastructureCollectionDefinition" /> rather than a member of it,
 /// because the two share a resource in opposite directions. Those tests need the database and the mailbox to hold only
 /// what they put there; these need a whole MailFathom connected to the same database. Naming the difference is what lets
-/// <see cref="ComposedHostRunsLastCollectionOrderer" /> put this one after the other, which is the entire mechanism
-/// keeping a starting host out of another test's environment.
+/// <see cref="ComposedHostsRunLastCollectionOrderer" /> put this one after the other, which is the entire mechanism
+/// keeping a starting host out of another test's environment. <see cref="MutualTlsHostCollectionDefinition" /> is
+/// ordered after this one in turn, so the second host starts once nothing here is still measuring.
 /// </para>
 /// <para>
 /// Parallelization is off for the same reason it is off for the other collection: xUnit runs collections that disable

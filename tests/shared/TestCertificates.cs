@@ -92,6 +92,43 @@ internal static class TestCertificates
             keepPrivateKey: false,
             extendedKeyUsageOid: ClientAuthenticationOid);
 
+    /// <summary>Issues the identity a TLS server presents under an existing authority, private key kept so it can complete a handshake.</summary>
+    /// <param name="issuer">The authority that signs it, whose certificate a client needs as its trust anchor.</param>
+    /// <param name="dnsName">The host name the certificate covers, which is the name a client's handshake asks for.</param>
+    /// <returns>The certificate, with its private key, owned by the caller.</returns>
+    /// <remarks>
+    /// This differs from <see cref="CreateServerIdentity" /> in what decides the validity period. That one takes the
+    /// caller's, because it exists for the expiry rules; this one takes the fixed interval every other issued
+    /// certificate here carries, because a server completing a real handshake is judged against the system clock no
+    /// injected time provider reaches.
+    /// </remarks>
+    internal static X509Certificate2 IssueServerIdentity(X509Certificate2 issuer, string dnsName) =>
+        Issue(
+            issuer,
+            commonName: dnsName,
+            certificateAuthority: false,
+            dnsName,
+            keepPrivateKey: true,
+            extendedKeyUsageOid: ServerAuthenticationOid);
+
+    /// <summary>Issues the identity a TLS client presents, private key kept so it can complete a handshake.</summary>
+    /// <param name="issuer">The authority that signs it, whose certificate a trust profile names as its anchor.</param>
+    /// <param name="dnsName">The host name the certificate carries, which is the name a trust profile matches on.</param>
+    /// <returns>The certificate, with its private key, owned by the caller.</returns>
+    /// <remarks>
+    /// <see cref="IssueClientAuthenticationCertificate" /> is the same certificate without its key, which is all a test
+    /// that only inspects one needs. Presenting one during a handshake needs the key, because that is what the client
+    /// signs the transcript with.
+    /// </remarks>
+    internal static X509Certificate2 IssueClientIdentity(X509Certificate2 issuer, string dnsName) =>
+        Issue(
+            issuer,
+            commonName: dnsName,
+            certificateAuthority: false,
+            dnsName,
+            keepPrivateKey: true,
+            extendedKeyUsageOid: ClientAuthenticationOid);
+
     /// <summary>Issues a certificate limited to server authentication, which a client profile must not accept.</summary>
     internal static X509Certificate2 IssueServerAuthenticationCertificate(X509Certificate2 issuer, string dnsName) =>
         Issue(
