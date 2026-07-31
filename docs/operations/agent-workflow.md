@@ -120,11 +120,13 @@ then comment on the pull request itself: Codex and Claude. Both post threads
 carrying a `P1`, `P2`, or `P3` severity, so one pass over the pull request's
 threads answers both rather than two passes reading two vocabularies.
 
-The Claude pass is the `Claude review` workflow. It runs by itself on a published
-pull request whose branch is in this repository, on `opened`, `reopened`,
-`synchronize`, and `ready_for_review`. A draft is skipped, because a draft is
-still being written and a review of it spends subscription usage on a moving
-target. Two things ask for a review anyway:
+The Claude pass is the `Claude review` workflow. It runs by itself once, when a
+pull request whose branch is in this repository becomes reviewable: `opened`,
+`reopened`, or `ready_for_review`. A draft is skipped, because a draft is still
+being written and reviewing it spends subscription usage on a moving target. A
+later push is not reviewed either — it runs the required checks and nothing
+else, since those gate the merge while a re-review would mostly repeat findings
+the author is already answering. Two things ask for a review anyway:
 
 - a comment on the pull request containing `claude-review`, from an author with
   write access. Adding `sonnet` to that comment selects the cheaper model;
@@ -176,7 +178,8 @@ given, so a line that moved cannot make GitHub reject the whole review; an
 unanchored finding moves into the review body instead of being dropped. It caps
 the review at fifteen findings, sets `start_side` alongside `start_line` for a
 ranged comment, submits with an explicit `POST`, and refuses to post at all if
-the findings contain anything shaped like a GitHub token.
+the findings contain either credential this workflow holds or anything shaped
+like one.
 
 Authentication is the `CLAUDE_CODE_OAUTH_TOKEN` repository secret, produced by
 `claude setup-token` against the owner's Claude subscription. Without it the run

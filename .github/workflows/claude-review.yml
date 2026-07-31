@@ -17,11 +17,14 @@ name: Claude review
 # keeps a prompt injection in the diff, in a comment, or in the linked issue from reaching an
 # authenticated API call.
 on:
+  # No `synchronize`. A push to a pull request that is already open runs the required checks and
+  # nothing else: those are cheap, deterministic, and gate the merge, while a re-review costs
+  # subscription usage and would repeat findings the author is already answering. A review of the
+  # updated branch is asked for, with a `claude-review` comment.
   pull_request_target:
     types:
       - opened
       - reopened
-      - synchronize
       - ready_for_review
       - labeled
     branches:
@@ -86,9 +89,9 @@ jobs:
               elif [[ "$PULL_REQUEST_DRAFT" == 'true' ]]; then
                 reason='the pull request is a draft; label it claude-review or comment claude-review to review it anyway'
               elif [[ "$HEAD_REPOSITORY" != "$REPOSITORY" ]]; then
-                # A fork's own pushes never start a review. The label does, and the action's own
-                # write-permission check on the actor agrees: on a `labeled` event the actor is the
-                # maintainer, on a `synchronize` event it is the contributor.
+                # A fork's own pull request never starts a review by being opened. The label
+                # does, and the action's own write-permission check on the actor agrees: on a
+                # `labeled` event the actor is the maintainer who applied it.
                 reason="the head branch is in ${HEAD_REPOSITORY}; a maintainer applies the claude-review label to review a fork"
               else
                 review='true'
@@ -142,7 +145,11 @@ jobs:
       # contract. Reading it on a private repository needs this scope of its own.
       issues: read
     env:
+      # What the reviewer is given, and what it produces, are separate directories on purpose. The
+      # collected inputs are made read-only once they are complete, so the only writable path the
+      # reviewer has is its own output and it cannot rewrite the anchor list that validates it.
       REVIEW_DIRECTORY: ${{ runner.temp }}/review
+      FINDINGS_FILE: ${{ runner.temp }}/findings/findings.json
     steps:
       # The base commit, which is code that already merged, and never the branch under review. It
       # supplies the repository's own instructions — `AGENTS.md`, the `review-change` skill, the
@@ -174,7 +181,7 @@ jobs:
           comment_limit=100
           comment_body_limit=2000
 
-          mkdir -p "$REVIEW_DIRECTORY/head"
+          mkdir -p "$REVIEW_DIRECTORY/head" "$(dirname "$FINDINGS_FILE")"
 
           gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" \
             --jq '{number, title, body, draft, author: .user.login, head_sha: .head.sha, base_sha: .base.sha, base_ref: .base.ref, changed_files, additions, deletions}' \
@@ -273,6 +280,12 @@ jobs:
             : > "$REVIEW_DIRECTORY/truncation.txt"
           fi
 
+          # Read-only from here on. The reviewer reads these files and the submission step trusts
+          # them — `lines.json` in particular is what makes an anchor valid — so nothing that runs
+          # in between may rewrite them. Removing write permission from the directories as well as
+          # the files is what stops an entry being replaced rather than modified.
+          chmod -R a-w "$REVIEW_DIRECTORY"
+
           echo "Collected ${collected_files} changed files and ${fetched} head-content files."
 
       - name: Review the change
@@ -291,8 +304,11 @@ jobs:
           classify_inline_comments: 'false'
           # The reviewer reads and writes one file. It has no shell, no editor, no network tool, and
           # no MCP tool, so no path exists from the untrusted text it reads to an authenticated call
-          # or to the runner. The `.git` deny rule matters because the action writes the workflow
-          # token into the workspace's git configuration for its own use.
+          # or to the runner. The deny rules cover the places a credential still sits despite that:
+          # the workspace git configuration, where the action writes the workflow token for its own
+          # use; `/proc`, where a process can read its own environment as a file; and `.claude`,
+          # where the CLI keeps its own configuration. This input is written to the user settings
+          # file, which is why every path pattern is absolute.
           settings: |
             {
               "permissions": {
@@ -302,7 +318,9 @@ jobs:
                   "WebFetch",
                   "WebSearch",
                   "mcp__*",
+                  "Read(//proc/**)",
                   "Read(//**/.git/**)",
+                  "Read(//**/.claude/**)",
                   "Read(//**/.ssh/**)",
                   "Read(//**/.npmrc)",
                   "Read(//**/.netrc)"
@@ -393,7 +411,7 @@ jobs:
 
             ## What to write
 
-            Write your findings to `${{ runner.temp }}/review/findings.json` with the `Write` tool,
+            Write your findings to `${{ runner.temp }}/findings/findings.json` with the `Write` tool,
             and write nothing else anywhere. The step after you validates this file and submits the
             review; a finding that is not in this file is not delivered, and prose in your final
             message reaches nobody.
@@ -422,9 +440,15 @@ jobs:
 
             When nothing clears the bar, write the file with an empty `findings` array and a summary
             that says so plainly.
+          # `--setting-sources user` keeps the deny list above as the only settings the session
+          # loads. The action would otherwise load `user`, `project`, and `local`, and a project
+          # source means settings and hooks read out of the working directory. Nothing untrusted is
+          # in that directory today, and this is what keeps that true if a later change puts
+          # something there.
           claude_args: |
             --model ${{ needs.decide.outputs.model }}
             --allowedTools "Read,Grep,Glob,Write"
+            --setting-sources user
 
       - name: Submit the review
         if: always() && steps.collect.outcome == 'success'
@@ -435,21 +459,27 @@ jobs:
           PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
           HEAD_SHA: ${{ steps.collect.outputs.head_sha }}
           WORKFLOW_TOKEN: ${{ github.token }}
+          # Held only by this step, which runs no model output and makes one API call, so that a
+          # credential the reviewer was never able to read still cannot be published if it somehow
+          # reaches the findings.
+          CLAUDE_CREDENTIAL: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -euo pipefail
 
-          findings_file="$REVIEW_DIRECTORY/findings.json"
-          if [[ ! -s "$findings_file" ]] || ! jq -e '.' "$findings_file" > /dev/null 2>&1; then
-            echo "::error::The reviewer produced no valid ${findings_file}, so there is nothing to submit."
+          payload_file="$(mktemp)"
+
+          if [[ ! -s "$FINDINGS_FILE" ]] || ! jq -e '.' "$FINDINGS_FILE" > /dev/null 2>&1; then
+            echo "::error::The reviewer produced no valid ${FINDINGS_FILE}, so there is nothing to submit."
             exit 1
           fi
 
-          # A GitHub token in the payload would be published by the very call that posts it. The
+          # A credential in the payload would be published by the very call that posts it. The
           # reviewer is denied the paths that hold one, and this refuses the review outright if one
           # appears anyway, because a redacted review is not worth the risk of a wrong redaction.
-          if grep -qE 'gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,}' "$findings_file" \
-            || grep -qF "$WORKFLOW_TOKEN" "$findings_file"; then
-            echo '::error::The findings contain something shaped like a GitHub token and were not posted.'
+          if grep -qE 'gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{16,}' "$FINDINGS_FILE" \
+            || grep -qF "$WORKFLOW_TOKEN" "$FINDINGS_FILE" \
+            || grep -qF "$CLAUDE_CREDENTIAL" "$FINDINGS_FILE"; then
+            echo '::error::The findings contain something shaped like a credential and were not posted.'
             exit 1
           fi
 
@@ -489,10 +519,10 @@ jobs:
                   }
                   + (if .start_line == null then {} else {start_line, start_side: "RIGHT"} end)
                 ))
-              }' "$findings_file" > "$REVIEW_DIRECTORY/payload.json"
+              }' "$FINDINGS_FILE" > "$payload_file"
 
           gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews" \
-            --method POST --input "$REVIEW_DIRECTORY/payload.json" --silent
+            --method POST --input "$payload_file" --silent
 
           printf 'Posted a review with %s inline findings.\n' \
-            "$(jq -r '.comments | length' "$REVIEW_DIRECTORY/payload.json")"
+            "$(jq -r '.comments | length' "$payload_file")"
