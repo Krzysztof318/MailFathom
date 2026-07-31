@@ -1,13 +1,16 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Host.Configuration;
+using MailMcp.Infrastructure.Security;
 using Xunit;
 
 namespace MailMcp.Host.UnitTests;
 
-/// <summary>Covers one authorization server profile: what it must state, and where it then looks for that server.</summary>
+/// <summary>Covers one authorization server profile: what it must state, whose tokens it serves, and where it then looks for that server.</summary>
 public sealed class McpAuthorizationServerOptionsTests
 {
+    private const string OwnerSubject = "9f2c";
+
     [Fact]
     public void FindConfigurationErrors_ANamedProfileWithAnIssuer_IsAccepted()
     {
@@ -121,6 +124,97 @@ public sealed class McpAuthorizationServerOptionsTests
         Assert.StartsWith("MetadataAddress", error, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A mistyped issuer is the one setting whose value can carry user information or a query, and the message reporting
+    /// it is recorded through the startup failure log. Naming the setting is what an operator needs; copying the value
+    /// there is what would export a credential somebody pasted into the wrong place.
+    /// </summary>
+    [Fact]
+    public void FindConfigurationErrors_AMalformedIssuer_IsReportedWithoutQuotingTheValue()
+    {
+        // Arrange
+        var profile = Profile("workforce", "https://operator:s3cret@sso.example.test/realms/mailmcp?token=abc");
+
+        // Act
+        var error = Assert.Single(profile.FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith("Issuer", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("s3cret", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("sso.example.test", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A tenant holds whoever the operator's identity platform holds, and every subject able to obtain a token for this
+    /// resource would otherwise read the configured owner's mail. The profile therefore states whose tokens it serves.
+    /// </summary>
+    [Fact]
+    public void FindConfigurationErrors_AProfileNamingNoSubject_IsRefused()
+    {
+        // Arrange
+        var profile = new McpAuthorizationServerOptions
+        {
+            Name = "workforce",
+            Issuer = "https://sso.example.test/realms/mailmcp",
+        };
+
+        // Act
+        var error = Assert.Single(profile.FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith("AuthorizedSubjects", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void FindConfigurationErrors_ABlankSubject_IsRefusedByItsPosition(string subject)
+    {
+        // Arrange
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailmcp");
+        profile.AuthorizedSubjects.Add(subject);
+
+        // Act
+        var error = Assert.Single(profile.FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith("AuthorizedSubjects:1", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_ARepeatedSubject_IsRefused()
+    {
+        // Arrange
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailmcp");
+        profile.AuthorizedSubjects.Add(OwnerSubject);
+
+        // Act
+        var error = Assert.Single(profile.FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith("AuthorizedSubjects:1", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>A subject is unique only within the server that issued it, so what the policy compares is the pair.</summary>
+    [Fact]
+    public void AuthorizedIdentities_AConfiguredSubject_IsPairedWithTheProfilesIssuer()
+    {
+        // Arrange
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailmcp");
+        profile.AuthorizedSubjects.Add("  4b81  ");
+
+        // Act
+        var identities = profile.AuthorizedIdentities();
+
+        // Assert
+        Assert.Equal(
+            [
+                McpOAuthIdentity.IdentityOf("https://sso.example.test/realms/mailmcp", OwnerSubject),
+                McpOAuthIdentity.IdentityOf("https://sso.example.test/realms/mailmcp", "4b81"),
+            ],
+            identities);
+    }
+
     [Fact]
     public void IsConfigured_AnUntouchedProfile_ReportsNothingWasWritten()
     {
@@ -131,6 +225,20 @@ public sealed class McpAuthorizationServerOptionsTests
         Assert.False(profile.IsConfigured);
     }
 
+    /// <summary>A profile carrying only subjects is a profile an operator started writing, so it is validated rather than skipped.</summary>
+    [Fact]
+    public void IsConfigured_AProfileCarryingOnlySubjects_ReportsSomethingWasWritten()
+    {
+        // Arrange
+        var profile = new McpAuthorizationServerOptions();
+
+        // Act
+        profile.AuthorizedSubjects.Add(OwnerSubject);
+
+        // Assert
+        Assert.True(profile.IsConfigured);
+    }
+
     private static McpAuthorizationServerOptions Profile(string? name, string? issuer) =>
-        new() { Name = name, Issuer = issuer };
+        new() { Name = name, Issuer = issuer, AuthorizedSubjects = { OwnerSubject } };
 }

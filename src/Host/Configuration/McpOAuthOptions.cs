@@ -72,7 +72,7 @@ internal sealed class McpOAuthOptions
 
         if (!OAuthIdentifierUri.TryCanonicalize(this.Resource, out _))
         {
-            errors.Add($"{nameof(this.Resource)} — '{this.Resource}' is not a canonical resource URL; write the absolute https URL clients reach this endpoint at, with no query and no fragment.");
+            errors.Add($"{nameof(this.Resource)} — the configured value is not a canonical resource URL; write the absolute https URL clients reach this endpoint at, with no user information, no query, and no fragment.");
         }
 
         if (this.AuthorizationServers.Count == 0)
@@ -94,6 +94,12 @@ internal sealed class McpOAuthOptions
             ? canonicalResource
             : throw new InvalidOperationException(
                 "The canonical resource was read before it was validated, so it is not usable as a resource identifier.");
+
+    /// <summary>Reports the identities a token must name to be served, across every configured authorization server.</summary>
+    /// <returns>The issuer and subject pairs, compared exactly.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
+    public HashSet<string> AuthorizedIdentities() =>
+        [.. this.AuthorizationServers.SelectMany(authorizationServer => authorizationServer.AuthorizedIdentities())];
 
     /// <summary>Reports where the protected resource metadata document is published.</summary>
     /// <returns>The absolute address of the RFC 9728 document.</returns>
@@ -118,6 +124,13 @@ internal sealed class McpOAuthOptions
 
         return $"{resource.GetLeftPart(UriPartial.Authority)}/.well-known/oauth-protected-resource{resource.AbsolutePath.TrimEnd('/')}";
     }
+
+    /// <summary>Reports the path of the protected resource metadata document, without its authority.</summary>
+    /// <returns>The absolute path the document answers at.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
+    /// <remarks>The SDK publishes the document from an authentication request handler rather than from a mapped route, so composition needs the path on its own to put a middleware in front of it.</remarks>
+    public string ProtectedResourceMetadataPath() =>
+        new Uri(this.ProtectedResourceMetadataAddress()).AbsolutePath;
 
     private IEnumerable<string> FindRequiredScopeErrors()
     {
@@ -171,7 +184,7 @@ internal sealed class McpOAuthOptions
             // token is trusted against would depend on configuration order rather than on what the token says.
             if (!claimedIssuers.Add(authorizationServer.ValidatedIssuer()))
             {
-                yield return $"{settingPath}:{nameof(McpAuthorizationServerOptions.Issuer)} — '{authorizationServer.Issuer}' repeats an issuer another authorization server already carries, which would leave the key set a token is trusted against decided by configuration order.";
+                yield return $"{settingPath}:{nameof(McpAuthorizationServerOptions.Issuer)} — this issuer repeats one another authorization server already carries, which would leave the key set a token is trusted against decided by configuration order.";
             }
         }
     }

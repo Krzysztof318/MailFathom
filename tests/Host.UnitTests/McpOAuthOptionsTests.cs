@@ -79,6 +79,7 @@ public sealed class McpOAuthOptionsTests
         {
             Name = "workforce",
             Issuer = "https://sso.example.test/realms/mailmcp",
+            AuthorizedSubjects = { "9f2c" },
         });
         oauth.RequiredScopes.Add("mailmcp.read");
         oauth.RequiredScopes.Add("mailmcp.read");
@@ -100,11 +101,13 @@ public sealed class McpOAuthOptionsTests
         {
             Name = "workforce",
             Issuer = "https://sso.example.test/realms/mailmcp",
+            AuthorizedSubjects = { "9f2c" },
         });
         oauth.AuthorizationServers.Add(new McpAuthorizationServerOptions
         {
             Name = "Workforce",
             Issuer = "https://partners.example.test",
+            AuthorizedSubjects = { "4b81" },
         });
 
         // Act

@@ -55,11 +55,27 @@ internal sealed class McpAuthorizationServerOptions
     /// </remarks>
     public string? MetadataAddress { get; set; }
 
+    /// <summary>Gets the subjects this authorization server may authenticate, each its own stable identifier for one person.</summary>
+    /// <remarks>
+    /// <para>
+    /// A tenant holds whoever the operator's identity platform holds, and a token proves which of them is asking rather
+    /// than that they were meant to read this mailbox. MailMcp serves one configured owner's mail to everyone it lets
+    /// in, so without this list every colleague who can obtain a token for this resource reads that owner's mail.
+    /// </para>
+    /// <para>
+    /// Write the <c>sub</c> the server issues, which its administration console shows as the user's identifier — a UUID
+    /// in Keycloak, <c>auth0|…</c> in Auth0, the object identifier in Entra ID. An email address is not it: a subject is
+    /// what the server promises not to reuse, and an address is reassigned to whoever holds the mailbox next.
+    /// </para>
+    /// </remarks>
+    public IList<string> AuthorizedSubjects { get; } = [];
+
     /// <summary>Gets whether anything at all was configured for this profile.</summary>
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(this.Name)
         || !string.IsNullOrWhiteSpace(this.Issuer)
-        || !string.IsNullOrWhiteSpace(this.MetadataAddress);
+        || !string.IsNullOrWhiteSpace(this.MetadataAddress)
+        || this.AuthorizedSubjects.Count > 0;
 
     /// <summary>Finds everything an operator must fix before this profile can validate a token.</summary>
     /// <returns>One message per faulty setting, relative to this profile, empty when the profile is usable.</returns>
@@ -72,17 +88,28 @@ internal sealed class McpAuthorizationServerOptions
             errors.Add($"{nameof(this.Name)} — every authorization server needs a name, because a startup message and a log line identify a profile by it rather than by its issuer.");
         }
 
+        // The faulty value is described rather than quoted, unlike a name or an origin elsewhere in this section. A URL
+        // an operator mistyped can carry user information or a query, so the one message that would name it is also the
+        // one that could copy a credential into a startup log; the setting path already says which entry to look at.
         if (!OAuthIdentifierUri.IsWellFormed(this.Issuer))
         {
-            errors.Add($"{nameof(this.Issuer)} — '{this.Issuer}' is not an issuer identifier; write an absolute https URL with no query and no fragment, exactly as the authorization server publishes it.");
+            errors.Add($"{nameof(this.Issuer)} — the configured value is not an issuer identifier; write an absolute https URL with no user information, no query, and no fragment, exactly as the authorization server publishes it.");
 
             return errors;
         }
 
         errors.AddRange(this.FindMetadataAddressErrors());
+        errors.AddRange(this.FindAuthorizedSubjectErrors());
 
         return errors;
     }
+
+    /// <summary>Reports the identities a token from this server must match to be served.</summary>
+    /// <returns>The authorized subjects, each paired with this profile's issuer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the profile has not passed <see cref="FindConfigurationErrors" />.</exception>
+    /// <remarks>A subject is only unique within the server that issued it, so it is paired with the issuer here rather than compared on its own; two servers may both call someone <c>1</c> without either being wrong.</remarks>
+    public IEnumerable<string> AuthorizedIdentities() =>
+        this.AuthorizedSubjects.Select(subject => McpOAuthIdentity.IdentityOf(this.ValidatedIssuer(), subject.Trim()));
 
     /// <summary>Reports the issuer every comparison against this profile uses.</summary>
     /// <returns>The configured issuer, trimmed and otherwise unchanged.</returns>
@@ -101,6 +128,35 @@ internal sealed class McpAuthorizationServerOptions
             ? OAuthMetadataAddresses.ForIssuer(this.ValidatedIssuer())
             : [this.MetadataAddress.Trim()];
 
+    private IEnumerable<string> FindAuthorizedSubjectErrors()
+    {
+        if (this.AuthorizedSubjects.Count == 0)
+        {
+            yield return $"{nameof(this.AuthorizedSubjects)} — an authorization server authenticates whoever its tenant holds, so a profile names the subjects it may authenticate; configure at least one, or every user who can obtain a token for this resource reads the configured owner's mail.";
+
+            yield break;
+        }
+
+        var claimedSubjects = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var (index, configuredSubject) in this.AuthorizedSubjects.Index())
+        {
+            var settingPath = $"{nameof(this.AuthorizedSubjects)}:{index}";
+
+            // A subject is opaque, so nothing about its shape can be checked beyond its presence. It is quoted back
+            // because it is an identifier the operator copied from their own console rather than a URL that could carry
+            // a credential, and naming it is what lets them see which entry does not match the token being refused.
+            if (string.IsNullOrWhiteSpace(configuredSubject))
+            {
+                yield return $"{settingPath} — a subject is the authorization server's own identifier for one person; write the value it issues as 'sub'.";
+            }
+            else if (!claimedSubjects.Add(configuredSubject.Trim()))
+            {
+                yield return $"{settingPath} — '{configuredSubject}' repeats a subject the list already carries.";
+            }
+        }
+    }
+
     private IEnumerable<string> FindMetadataAddressErrors()
     {
         if (string.IsNullOrWhiteSpace(this.MetadataAddress))
@@ -111,7 +167,7 @@ internal sealed class McpAuthorizationServerOptions
         if (!Uri.TryCreate(this.MetadataAddress.Trim(), UriKind.Absolute, out var metadataAddress)
             || metadataAddress.Scheme != Uri.UriSchemeHttps)
         {
-            yield return $"{nameof(this.MetadataAddress)} — '{this.MetadataAddress}' is not an absolute https URL.";
+            yield return $"{nameof(this.MetadataAddress)} — the configured value is not an absolute https URL.";
 
             yield break;
         }

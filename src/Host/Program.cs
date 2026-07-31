@@ -305,6 +305,20 @@ try
         // check written for real requests. The origin check then runs ahead of authentication, because whether this
         // deployment serves a page's origin does not depend on which credential the page attached.
         app.UseCors();
+
+        if (mcpEndpointSettings.AllowsOAuth)
+        {
+            // The policy reaches the MCP route as endpoint metadata, and the protected resource metadata document has
+            // none to carry it: the authentication handler publishes it instead of a mapped route. A browser client
+            // reads that document before it holds any credential, so without the policy applied to its path the one
+            // response that says where to authorize is the one a page cannot read.
+            var protectedResourceMetadataPath = mcpEndpointSettings.OAuth.ProtectedResourceMetadataPath();
+
+            app.UseWhen(
+                context => context.Request.Path.Equals(protectedResourceMetadataPath, StringComparison.OrdinalIgnoreCase),
+                metadataDocument => metadataDocument.UseCors(McpTransportSecurityExtensions.CorsPolicyName));
+        }
+
         app.UseMcpOriginValidation();
 
         if (mcpEndpointSettings.ClientCertificateProfiles.Count > 0)

@@ -99,11 +99,16 @@ internal sealed class OAuthAuthorizationServerMetadataRetriever : IConfiguration
                 ? configuration
                 : null;
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (Exception exception) when (exception is not OperationCanceledException || !cancel.IsCancellationRequested)
         {
             // An address that is not the one this server publishes at answers 404, answers something that is not a
             // document, or fails to connect. All of them mean "not here" and the next candidate is tried; the retrieval
             // as a whole only fails once every candidate has.
+            //
+            // A candidate that hangs until the client's own timeout is one of them, which is why the caller's token is
+            // what the filter asks about rather than the exception's type: an HttpClient timeout arrives as a
+            // TaskCanceledException carrying a token nobody here cancelled, and treating that as caller cancellation
+            // would let one unresponsive address hide the document published at the next one.
             return null;
         }
     }

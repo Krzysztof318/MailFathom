@@ -9,15 +9,20 @@ namespace MailMcp.Host.UnitTests;
 
 /// <summary>Covers what an authenticated caller must satisfy before a tool runs.</summary>
 /// <remarks>
-/// The endpoint asks one question today — is this a caller the deployment recognizes — so most of what is worth stating
-/// here is which credentials count as recognized, and that a required scope constrains a token without ever being asked
-/// of a key that could not carry one.
+/// The endpoint asks two questions of a token — whose it is, and what it was issued for — so what is worth stating here
+/// is that neither substitutes for the other, that a subject is only meaningful together with the issuer that named it,
+/// and that neither is ever asked of a key that could not carry one.
 /// </remarks>
 public sealed class McpAccessPolicyTests
 {
     private const string OAuthScheme = "MailMcpOAuth:workforce";
 
     private const string Issuer = "https://sso.example.test/realms/mailmcp";
+
+    private const string OwnerSubject = "9f2c";
+
+    private static readonly HashSet<string> AuthorizedOwner =
+        [McpOAuthIdentity.IdentityOf(Issuer, OwnerSubject)];
 
     [Fact]
     public void IsAuthorized_AnAnonymousCaller_IsRefused()
@@ -26,37 +31,63 @@ public sealed class McpAccessPolicyTests
         var anonymous = new ClaimsPrincipal(new ClaimsIdentity());
 
         // Act, Assert
-        Assert.False(McpAccessPolicy.IsAuthorized(anonymous, []));
+        Assert.False(McpAccessPolicy.IsAuthorized(anonymous, AuthorizedOwner, []));
     }
 
     [Fact]
-    public void IsAuthorized_AValidTokenWhereNoScopeIsRequired_IsAllowed()
+    public void IsAuthorized_AnAuthorizedSubjectWhereNoScopeIsRequired_IsAllowed()
     {
         // Arrange
         var caller = TokenPrincipal();
 
         // Act, Assert
-        Assert.True(McpAccessPolicy.IsAuthorized(caller, []));
+        Assert.True(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, []));
     }
 
     [Fact]
-    public void IsAuthorized_ATokenCarryingEveryRequiredScope_IsAllowed()
+    public void IsAuthorized_AnAuthorizedSubjectCarryingEveryRequiredScope_IsAllowed()
     {
         // Arrange
         var caller = TokenPrincipal("mailmcp.read", "mailmcp.search");
 
         // Act, Assert
-        Assert.True(McpAccessPolicy.IsAuthorized(caller, ["mailmcp.read"]));
+        Assert.True(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailmcp.read"]));
     }
 
     [Fact]
-    public void IsAuthorized_ATokenMissingARequiredScope_IsRefused()
+    public void IsAuthorized_AnAuthorizedSubjectMissingARequiredScope_IsRefused()
     {
         // Arrange
         var caller = TokenPrincipal("mailmcp.read");
 
         // Act, Assert
-        Assert.False(McpAccessPolicy.IsAuthorized(caller, ["mailmcp.search"]));
+        Assert.False(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailmcp.search"]));
+    }
+
+    /// <summary>
+    /// A tenant holds whoever the operator's identity platform holds, and MailMcp serves one owner's mail to everyone it
+    /// admits. A colleague who can obtain a token for this resource is therefore refused by the subject alone, whatever
+    /// the authorization server was willing to put in it.
+    /// </summary>
+    [Fact]
+    public void IsAuthorized_AValidTokenNamingAnotherSubjectOfTheSameTenant_IsRefused()
+    {
+        // Arrange
+        var colleague = TokenPrincipalFor(Issuer, "4b81", "mailmcp.read");
+
+        // Act, Assert
+        Assert.False(McpAccessPolicy.IsAuthorized(colleague, AuthorizedOwner, ["mailmcp.read"]));
+    }
+
+    /// <summary>A subject is unique only within the server that issued it, so the pair is compared rather than the subject alone.</summary>
+    [Fact]
+    public void IsAuthorized_TheAuthorizedSubjectNamedByAnotherIssuer_IsRefused()
+    {
+        // Arrange
+        var caller = TokenPrincipalFor("https://sso.other.test/realms/mailmcp", OwnerSubject);
+
+        // Act, Assert
+        Assert.False(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, []));
     }
 
     /// <summary>
@@ -71,7 +102,18 @@ public sealed class McpAccessPolicyTests
         var caller = ApiKeyPrincipal("nightly-digest");
 
         // Act, Assert
-        Assert.True(McpAccessPolicy.IsAuthorized(caller, ["mailmcp.read"]));
+        Assert.True(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailmcp.read"]));
+    }
+
+    /// <summary>A key names no subject and is not expected to, so the subject list constrains tokens alone.</summary>
+    [Fact]
+    public void IsAuthorized_AnApiKeyWhereSubjectsAreAuthorized_IsAllowedBecauseAKeyNamesNone()
+    {
+        // Arrange
+        var caller = ApiKeyPrincipal("nightly-digest");
+
+        // Act, Assert
+        Assert.True(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, []));
     }
 
     /// <summary>The bypass follows what the principal carries rather than which scheme named it, so a token cannot claim it by naming a scheme.</summary>
@@ -79,20 +121,34 @@ public sealed class McpAccessPolicyTests
     public void IsAuthorized_ATokenAuthenticatedUnderTheApiKeySchemeName_StillHasItsScopesChecked()
     {
         // Arrange
-        var claims = new[] { new Claim("iss", Issuer), new Claim("sub", "9f2c") };
+        var claims = new[] { new Claim("iss", Issuer), new Claim("sub", OwnerSubject) };
         var identity = McpOAuthIdentity.FromValidatedToken(claims, "MailMcpApiKey");
         var caller = new ClaimsPrincipal(identity!);
 
         // Act, Assert
-        Assert.False(McpAccessPolicy.IsAuthorized(caller, ["mailmcp.read"]));
+        Assert.False(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailmcp.read"]));
     }
 
-    private static ClaimsPrincipal TokenPrincipal(params string[] scopes)
+    /// <summary>An authenticated principal carrying no identity at all is refused rather than treated as unrestricted.</summary>
+    [Fact]
+    public void IsAuthorized_AnAuthenticatedPrincipalCarryingNoSubject_IsRefused()
+    {
+        // Arrange
+        var caller = new ClaimsPrincipal(new ClaimsIdentity(claims: [], OAuthScheme));
+
+        // Act, Assert
+        Assert.False(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, []));
+    }
+
+    private static ClaimsPrincipal TokenPrincipal(params string[] scopes) =>
+        TokenPrincipalFor(Issuer, OwnerSubject, scopes);
+
+    private static ClaimsPrincipal TokenPrincipalFor(string issuer, string subject, params string[] scopes)
     {
         Claim[] claims =
         [
-            new("iss", Issuer),
-            new("sub", "9f2c"),
+            new("iss", issuer),
+            new("sub", subject),
             new("scope", string.Join(' ', scopes)),
         ];
 

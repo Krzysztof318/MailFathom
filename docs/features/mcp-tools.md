@@ -209,8 +209,10 @@ but no run has ever reached is reported with no timestamp rather than omitted.
 
 The use case resolves the accounts this deployment serves and refuses anything outside them before it reads, so a second
 entrypoint cannot reach the query without the same check. Ownership is the configured account list today, read through the
-`IMailAccountCatalog` application port; the OAuth 2.1 work replaces the implementation behind that port with one that
-derives the set from the authenticated identity rather than introducing authorization for the first time.
+`IMailAccountCatalog` application port. OAuth 2.1 decides *who* reaches a tool at all — a token has to name a subject the
+deployment authorized — and leaves that port unchanged, so every admitted caller still resolves the same configured
+accounts. Deriving the account set from the authenticated identity is the later step, and it replaces the implementation
+behind that port rather than introducing authorization for the first time.
 
 An unknown account identifier is refused with `53001` rather than answered with an empty page, so a listing cannot be used
 to discover which account identifiers exist; "no such account" and "not yours" are deliberately one answer. A request that

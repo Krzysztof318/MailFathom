@@ -246,8 +246,38 @@ internal static class McpTransportSecurityExtensions
 
         jwtOptions.Events = new JwtBearerEvents
         {
+            OnMessageReceived = RefuseATokenThatArrivedWithoutTransportEncryption,
             OnTokenValidated = ReplacePrincipalWithMinimalIdentity,
         };
+    }
+
+    /// <summary>Refuses a bearer token presented over a connection that was not encrypted.</summary>
+    /// <remarks>
+    /// <para>
+    /// An access token is a reusable credential, so a request carrying one over plain HTTP hands it to anybody watching
+    /// the network — and unlike a password nothing about presenting it a second time looks unusual. The resource
+    /// identifier being HTTPS and metadata retrieval requiring HTTPS protect what this deployment publishes and what it
+    /// fetches; neither says anything about the transport an incoming request arrived on.
+    /// </para>
+    /// <para>
+    /// Nothing that worked before is refused by this. A deployment reached over plain HTTP cannot complete OAuth
+    /// discovery anyway, because the SDK serves the protected resource metadata document only to a request whose own
+    /// scheme and host match the configured resource. What this closes is a host listening on both an encrypted and a
+    /// plaintext endpoint, where discovery succeeds over the first and the token is then presented over the second.
+    /// </para>
+    /// <para>
+    /// The refusal is silent — no result rather than a failure — so the caller receives the same challenge an
+    /// unauthenticated request receives, and the token is never read, validated, or recorded.
+    /// </para>
+    /// </remarks>
+    internal static Task RefuseATokenThatArrivedWithoutTransportEncryption(MessageReceivedContext context)
+    {
+        if (!context.Request.IsHttps)
+        {
+            context.NoResult();
+        }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>Reduces a validated token to the identity MailMcp keeps of it.</summary>
@@ -298,11 +328,16 @@ internal static class McpTransportSecurityExtensions
             ? endpointSettings.OAuth.RequiredScopes.ToArray()
             : [];
 
+        var authorizedIdentities = endpointSettings.AllowsOAuth
+            ? endpointSettings.OAuth.AuthorizedIdentities()
+            : new HashSet<string>(StringComparer.Ordinal);
+
         services.AddAuthorization(authorizationOptions => authorizationOptions.AddPolicy(
             McpAccessPolicy.PolicyName,
             policy => policy
                 .AddAuthenticationSchemes(McpOAuthAuthentication.RoutingSchemeName)
-                .RequireAssertion(context => McpAccessPolicy.IsAuthorized(context.User, requiredScopes))));
+                .RequireAssertion(context =>
+                    McpAccessPolicy.IsAuthorized(context.User, authorizedIdentities, requiredScopes))));
 
         // Only a required scope can turn an authenticated caller away, so the refusal that explains which scope is
         // missing is registered only where one exists. Without it the endpoint answers every failure with a challenge,
@@ -353,6 +388,13 @@ internal static class McpTransportSecurityExtensions
                 LastEventHeaderName,
                 McpSessionHeaderName,
                 McpProtocolVersionHeaderName)
-            .WithExposedHeaders(McpSessionHeaderName, McpProtocolVersionHeaderName);
+            .WithExposedHeaders(
+                McpSessionHeaderName,
+                McpProtocolVersionHeaderName,
+
+                // A refusal says where to authorize and which scopes are required, and a browser cannot read a response
+                // header the policy does not name. Without this the one answer that tells a page how to proceed is the
+                // one it cannot see, and a client that could have started discovery only learns that something failed.
+                HeaderNames.WWWAuthenticate);
     }
 }

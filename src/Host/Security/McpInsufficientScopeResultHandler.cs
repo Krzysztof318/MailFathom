@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using MailMcp.Infrastructure.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.Net.Http.Headers;
@@ -31,6 +32,8 @@ internal sealed class McpInsufficientScopeResultHandler : IAuthorizationMiddlewa
 {
     private static readonly AuthorizationMiddlewareResultHandler FrameworkHandler = new();
 
+    private readonly IReadOnlyCollection<string> requiredScopes;
+
     private readonly string insufficientScopeChallenge;
 
     /// <summary>Initializes a new handler for the scopes this deployment requires.</summary>
@@ -44,6 +47,7 @@ internal sealed class McpInsufficientScopeResultHandler : IAuthorizationMiddlewa
         ArgumentNullException.ThrowIfNull(requiredScopes);
         ArgumentNullException.ThrowIfNull(protectedResourceMetadataAddress);
 
+        this.requiredScopes = requiredScopes;
         this.insufficientScopeChallenge =
             $"Bearer error=\"insufficient_scope\", scope=\"{string.Join(' ', requiredScopes)}\", "
             + $"resource_metadata=\"{protectedResourceMetadataAddress}\"";
@@ -59,7 +63,10 @@ internal sealed class McpInsufficientScopeResultHandler : IAuthorizationMiddlewa
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(authorizeResult);
 
-        if (!authorizeResult.Forbidden)
+        // A caller refused for who they are, rather than for what their token was issued for, receives the framework's
+        // plain 403. Naming scopes there would send a client to ask its authorization server for something that would
+        // change nothing, and would say that the scopes are all that stands between it and the mailbox.
+        if (!authorizeResult.Forbidden || McpOAuthIdentity.CarriesEveryScope(context.User, this.requiredScopes))
         {
             return FrameworkHandler.HandleAsync(next, context, policy, authorizeResult);
         }

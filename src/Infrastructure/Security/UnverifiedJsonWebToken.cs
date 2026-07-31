@@ -47,6 +47,18 @@ public static class UnverifiedJsonWebToken
     {
         claimedIssuer = null;
 
+        return credential is not null && TryReadClaimedIssuer(credential.AsSpan(), out claimedIssuer);
+    }
+
+    /// <summary>Reads the issuer a compact-serialized JSON Web Token claims, from characters that are not a string.</summary>
+    /// <param name="credential">The credential characters, which the caller may be holding outside the managed heap.</param>
+    /// <param name="claimedIssuer">The unverified issuer when the characters are a JSON Web Token carrying one; otherwise <see langword="null" />.</param>
+    /// <returns><see langword="true" /> when an issuer was read; otherwise <see langword="false" />.</returns>
+    /// <remarks>Startup asks this of revealed API key material, which is held in a pinned buffer that is cleared afterwards, so the question has to be answerable without copying that material into a string the collector would move and leave behind.</remarks>
+    public static bool TryReadClaimedIssuer(ReadOnlySpan<char> credential, [NotNullWhen(true)] out string? claimedIssuer)
+    {
+        claimedIssuer = null;
+
         if (!TryReadEncodedPayload(credential, out var encodedPayload))
         {
             return false;
@@ -65,35 +77,32 @@ public static class UnverifiedJsonWebToken
     }
 
     /// <summary>Isolates the encoded payload of a compact serialization, which is the second of its three segments.</summary>
-    private static bool TryReadEncodedPayload(string? credential, out ReadOnlySpan<char> encodedPayload)
+    private static bool TryReadEncodedPayload(ReadOnlySpan<char> credential, out ReadOnlySpan<char> encodedPayload)
     {
         encodedPayload = default;
 
-        if (credential is null)
-        {
-            return false;
-        }
-
-        var headerEnd = credential.IndexOf('.', StringComparison.Ordinal);
+        var headerEnd = credential.IndexOf('.');
         if (headerEnd <= 0)
         {
             return false;
         }
 
-        var payloadEnd = credential.IndexOf('.', headerEnd + 1);
-        if (payloadEnd <= headerEnd + 1)
+        var payloadLength = credential[(headerEnd + 1)..].IndexOf('.');
+        if (payloadLength <= 0)
         {
             return false;
         }
+
+        var payloadEnd = headerEnd + 1 + payloadLength;
 
         // A compact serialization has exactly three segments. A fourth would make this a JSON Web Encryption, which is
         // not a shape this endpoint accepts, and reading its second segment would be reading an encrypted key.
-        if (credential.IndexOf('.', payloadEnd + 1) >= 0)
+        if (credential[(payloadEnd + 1)..].Contains('.'))
         {
             return false;
         }
 
-        var payload = credential.AsSpan(headerEnd + 1, payloadEnd - headerEnd - 1);
+        var payload = credential.Slice(headerEnd + 1, payloadLength);
 
         if (payload.Length > PayloadSizeLimitInBytes)
         {

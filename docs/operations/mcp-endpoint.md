@@ -69,7 +69,11 @@ both writes both:
 
 A request is served when it satisfies **any one** of the methods named. The credentials are told apart by shape: an access
 token is a JSON Web Token naming its issuer, an API key is anything else, and each reaches only the check that understands
-it.
+it. That is also why **an API key must not itself be a token of a configured authorization server**: such a key would be
+judged as an access token by that server and never compared as a key, so no client could authenticate with it. Startup
+refuses the combination by position — `McpEndpoint:ApiKeys:0` — rather than letting a deployment start with a key nothing
+can ever use. A token-shaped key naming an issuer this deployment does not configure selects no validator and is compared
+like any other opaque key, so it is accepted; issue opaque keys and the question does not arise.
 
 **Authentication is turned on, not chosen.** An enabled endpoint that names no method is the unauthenticated posture and
 starts, because the loopback and reverse-proxy deployment is the ordinary one and making it need extra settings would be
@@ -161,7 +165,8 @@ authorization code, holds no refresh token, and has no login page.
       "AuthorizationServers": [
         {
           "Name": "workforce",
-          "Issuer": "https://sso.example.test/realms/mailmcp"
+          "Issuer": "https://sso.example.test/realms/mailmcp",
+          "AuthorizedSubjects": [ "9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04" ]
         }
       ]
     }
@@ -180,6 +185,14 @@ one an attacker chose.
 against a token's `iss` by exact string equality and checked against the `issuer` the discovery document reports. Several
 widely deployed servers publish an issuer whose whole path is one trailing slash, so a value tidied up by hand is a
 configuration that starts cleanly and then refuses every token that server issues.
+
+**`AuthorizedSubjects` names whose tokens are served, and at least one is required.** An authorization server authenticates
+whoever its tenant holds, while MailMcp serves one owner's synchronized mail to everyone it admits — so without this list
+every colleague who can obtain a token for this resource reads that owner's mail. Write the `sub` the server issues, which
+its administration console shows as the user's identifier: a UUID in Keycloak, `auth0|…` in Auth0, the object identifier in
+Entra ID. An email address is not it, because a subject is what the server promises not to reuse and an address is
+reassigned to whoever holds the mailbox next. The comparison is against the issuer and the subject together, so a subject
+one server authorized is not authorized by another server that happens to name someone the same way.
 
 **Nothing about the server's endpoints is configured or guessed.** MailMcp looks for the discovery document where the MCP
 authorization specification says to look, taking the first that answers with a document reporting the configured issuer:
@@ -205,7 +218,21 @@ Every token is checked, before any MCP protocol handling and before any tool run
 - an `iss` equal to the configured issuer, **exactly**;
 - an `aud` equal to `Resource`. A valid signature from a trusted issuer is not by itself a reason to serve a mailbox;
 - `exp` and `nbf`, with 60 seconds of clock skew tolerated;
+- a `sub` among that profile's `AuthorizedSubjects`;
 - every scope in `RequiredScopes`.
+
+A subject and a scope are both required and neither stands in for the other: a scope says what a token was issued for, and
+a subject says whose it is. A token from an authorized subject that is missing a scope is answered `403` naming the scopes;
+a valid token from anybody else receives a plain `403` that names nothing, because asking its authorization server for more
+scopes would change nothing.
+
+**A token is refused outright when the request did not arrive over TLS.** An access token is a reusable credential, so a
+request carrying one over plain HTTP has already disclosed it to anything on the path. `Resource` being HTTPS and metadata
+retrieval requiring HTTPS protect what this deployment publishes and what it fetches, not the transport a request arrived
+on. The refusal is silent — the caller receives the same `401` challenge an unauthenticated request receives. Nothing that
+worked before is refused by this: an endpoint reached over plain HTTP cannot complete discovery anyway (see the note under
+[Discovery a client uses](#discovery-a-client-uses)). What it closes is a host listening on both an encrypted and a
+plaintext endpoint, where discovery succeeds over the first and the token is then presented over the second.
 
 Several `AuthorizationServers` stay isolated from one another. Each has its own key set, reachable only from the scheme whose
 issuer published it, so a token claiming one server's issuer is never validated against another's keys — and a token naming an
@@ -333,10 +360,12 @@ The operational consequences are the ones that always applied to an unauthentica
 
 ### What a credential decides, and what it does not
 
-**The endpoint asks one question: is this a caller the deployment recognizes.** Beyond that, every tool call resolves the
-accounts the configured owner controls and refuses anything outside them, whichever credential got the caller in. Two
-recognized callers therefore see the same mailboxes. Per-user permissions are future work; `RequiredScopes` is the seam
-they will be built on, which is why it exists before anything varies by it.
+**The endpoint asks whether this is a caller the deployment serves, and of a token also which person it names.** Beyond
+that, every tool call resolves the accounts the configured owner controls and refuses anything outside them, whichever
+credential got the caller in. Two admitted callers therefore see the same mailboxes — which is exactly why a token has to
+name an authorized subject: admitting a colleague of the same tenant would admit them to the owner's mail rather than to
+their own. Per-user permissions are future work; `RequiredScopes` is the seam they will be built on, which is why it
+exists before anything varies by it.
 
 A key identifies a *client*, a token identifies a *person*, and the difference matters operationally. A shared bearer
 credential has the properties every shared bearer credential has: it does not expire on its own unless you give it a
@@ -409,6 +438,12 @@ preflight weakens nothing on the real request that follows.
 would let a page act as whoever is logged in somewhere else, and the endpoint has no use for one: its credential is a
 bearer token a client sets deliberately. Allowed methods and headers are the minimum the Streamable HTTP transport and
 bearer authentication need, rather than everything a browser might ask to send.
+
+**What a browser may read includes the authentication challenge.** `WWW-Authenticate` is not a header CORS exposes on its
+own, and it is the one that says where to authorize and which scopes are required, so the policy names it alongside the
+MCP session and protocol-version headers. The protected resource metadata document is served by the authentication
+handler rather than by a mapped route, so the same policy is applied to its path directly; without both, a browser client
+can provoke the response that would tell it how to proceed and then not be permitted to read it.
 
 ## HTTPS and your own domain
 
@@ -772,9 +807,13 @@ successor beside it while a rotation is in flight.
 which includes the workstation reaching the same endpoint with an API key alone; state `Required` only once every client
 of the deployment holds a certificate.
 
-**This is not complete ChatGPT production authentication.** OpenAI's connector expects an OAuth 2.1 authorization flow
-alongside the client certificate, and that is later work. What mTLS provides here is confidence about which application
-is connecting, which is worth having and is not the same thing as knowing whose mailbox is being read.
+**Compose the profile with OAuth rather than relying on it alone.** A certificate says which application is connecting and
+never whose mailbox is being read, so the connector's own OAuth 2.1 flow answers the second question — write
+`"Authentication": "OAuth"` beside this profile, configure the authorization server as [`OAuth`](#oauth) describes, and
+name the owner in its `AuthorizedSubjects`. The two run independently: the certificate is judged before any credential is
+read, and a request satisfying one and not the other is refused. What remains outside MailMcp is the connector-side
+arrangement — registering the client with your authorization server and having it issue `Resource` as the audience — which
+is the client's half of the flow and the same for every MCP client.
 
 ### Rotating an authority
 

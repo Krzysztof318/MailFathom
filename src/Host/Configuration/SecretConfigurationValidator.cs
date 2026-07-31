@@ -4,6 +4,7 @@ using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
+using MailMcp.Infrastructure.Security;
 
 namespace MailMcp.Host.Configuration;
 
@@ -179,8 +180,91 @@ internal sealed partial class SecretConfigurationValidator
             await this.FindSecretReferenceErrorsAsync(McpEndpointOptions.SectionName, candidate, cancellationToken));
 
         errors.AddRange(await this.FindClientCertificateTrustAnchorErrorsAsync(candidate, cancellationToken));
+        errors.AddRange(await this.FindUnreachableApiKeyErrorsAsync(candidate, cancellationToken));
 
         return errors;
+    }
+
+    /// <summary>Reports every configured API key that no request could ever authenticate with.</summary>
+    /// <remarks>
+    /// <para>
+    /// Both credentials arrive as a bearer credential, and the endpoint tells them apart by shape: a credential that is
+    /// a JSON Web Token naming a configured authorization server reaches that server's token validator, and everything
+    /// else reaches the API key comparison. A configured key that happens to have that shape therefore never reaches
+    /// the comparison it exists for, and no client can authenticate with it however correctly it is presented.
+    /// </para>
+    /// <para>
+    /// Only the overlap is refused rather than every token-shaped key, because the shape alone decides nothing: a key
+    /// naming an issuer this deployment does not configure selects no validator and is compared like any other opaque
+    /// credential. What makes the reported case unusable is that the deployment configured both sides of it.
+    /// </para>
+    /// <para>
+    /// The key is named by its configuration position and by nothing else. Neither the material nor the issuer it names
+    /// appears, because a key is a credential and the issuer was read out of one.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<string>> FindUnreachableApiKeyErrorsAsync(
+        McpEndpointOptions candidate,
+        CancellationToken cancellationToken)
+    {
+        if (!candidate.AllowsApiKey || !candidate.AllowsOAuth)
+        {
+            return [];
+        }
+
+        // Composed from the profiles that are well formed rather than from all of them, because this runs beside the
+        // structural rules rather than after them: a malformed issuer is already being reported by its own check, and
+        // asking it for a validated value here would raise instead of adding to that report.
+        var configuredIssuers = candidate.OAuth.AuthorizationServers
+            .Where(authorizationServer => OAuthIdentifierUri.IsWellFormed(authorizationServer.Issuer))
+            .Select(authorizationServer => authorizationServer.ValidatedIssuer())
+            .ToHashSet(StringComparer.Ordinal);
+
+        var errors = new List<string>();
+
+        // The loop stays because each step awaits a retrieval, and the position is part of the reported path.
+        foreach (var (keyIndex, configuredKey) in candidate.ApiKeys.Index())
+        {
+            var resolution = await this.secretReferenceResolver.ResolveAsync(
+                configuredKey.SecretReference,
+                cancellationToken);
+
+            // A reference that does not resolve is already reported by the reference check, which every section runs.
+            if (resolution.Secret is not { } material)
+            {
+                continue;
+            }
+
+            using (material)
+            {
+                if (NamesAConfiguredIssuer(material, configuredIssuers))
+                {
+                    errors.Add(
+                        $"{McpEndpointOptions.SectionName}:{nameof(McpEndpointOptions.ApiKeys)}:{keyIndex} — this key is a JSON Web Token naming one of the configured authorization servers, so every request presenting it is judged as an access token by that server and the key itself is never compared; issue an opaque key instead.");
+                }
+            }
+        }
+
+        return errors;
+    }
+
+    /// <summary>Reports whether resolved key material is a token naming one of the configured authorization servers.</summary>
+    /// <remarks>The material is revealed into a pinned buffer and cleared here, on the same terms as every other reading of a secret in this process.</remarks>
+    private static bool NamesAConfiguredIssuer(ResolvedSecret material, HashSet<string> configuredIssuers)
+    {
+        var revealedText = GC.AllocateArray<char>(material.TextLength, pinned: true);
+
+        try
+        {
+            material.RevealTextInto(revealedText);
+
+            return UnverifiedJsonWebToken.TryReadClaimedIssuer(revealedText, out var claimedIssuer)
+                && configuredIssuers.Contains(claimedIssuer);
+        }
+        finally
+        {
+            revealedText.AsSpan().Clear();
+        }
     }
 
     /// <summary>Loads every trust anchor a client certificate profile names and reports the ones no request could use.</summary>

@@ -161,6 +161,7 @@ public sealed class McpEndpointOptionsBindingTests
             ["McpEndpoint:OAuth:RequiredScopes:0"] = "mailmcp.read",
             ["McpEndpoint:OAuth:AuthorizationServers:0:Name"] = "workforce",
             ["McpEndpoint:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailmcp",
+            ["McpEndpoint:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "9f2c",
         });
 
         // Act
@@ -172,6 +173,7 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Equal("https://mail.example.test/mcp", options.OAuth.Resource);
         Assert.Equal(["mailmcp.read"], options.OAuth.RequiredScopes);
         Assert.Equal(["workforce"], options.OAuth.AuthorizationServers.Select(server => server.Name));
+        Assert.Equal(["9f2c"], options.OAuth.AuthorizationServers.Single().AuthorizedSubjects);
         Assert.Empty(options.FindConfigurationErrors());
     }
 

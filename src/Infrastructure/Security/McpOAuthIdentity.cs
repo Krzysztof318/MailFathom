@@ -51,6 +51,20 @@ public static class McpOAuthIdentity
 
     private static readonly string[] TokenScopeClaimTypes = ["scope", "scp"];
 
+    /// <summary>Joins an issuer and a subject into the one identity everything else compares against.</summary>
+    /// <param name="issuer">The authorization server that authenticated the person.</param>
+    /// <param name="subject">That server's own stable identifier for them.</param>
+    /// <returns>The identity carried by <see cref="SubjectClaimType" />.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="issuer" /> or <paramref name="subject" /> is <see langword="null" />.</exception>
+    /// <remarks>Composed in one place so a configured identity and a token's identity cannot be spelled differently; a subject is unique only within its issuer, so neither half identifies anyone alone.</remarks>
+    public static string IdentityOf(string issuer, string subject)
+    {
+        ArgumentNullException.ThrowIfNull(issuer);
+        ArgumentNullException.ThrowIfNull(subject);
+
+        return $"{issuer}{IdentitySeparator}{subject}";
+    }
+
     /// <summary>Maps a validated token's claims onto the minimal identity MailMcp carries.</summary>
     /// <param name="validatedClaims">The claims of a token whose signature, issuer, audience, and lifetime have already been checked.</param>
     /// <param name="authenticationScheme">The scheme that validated the token, which the identity records as its authentication type.</param>
@@ -77,7 +91,7 @@ public static class McpOAuthIdentity
 
         Claim[] mappedClaims =
         [
-            new(SubjectClaimType, $"{issuer}{IdentitySeparator}{subject}"),
+            new(SubjectClaimType, IdentityOf(issuer, subject)),
             new(IssuerClaimType, issuer),
             .. ScopesOf(claims).Select(scope => new Claim(ScopeClaimType, scope)),
         ];
@@ -86,6 +100,17 @@ public static class McpOAuthIdentity
         // framework's default in place would let a claim named 'role' arriving from an authorization server answer an
         // IsInRole check that no configuration ever authorized.
         return new ClaimsIdentity(mappedClaims, authenticationScheme, SubjectClaimType, RoleClaimType);
+    }
+
+    /// <summary>Reports which person a principal is, when a validated token produced it.</summary>
+    /// <param name="principal">The principal a validated credential produced.</param>
+    /// <returns>The issuer and subject pair, or <see langword="null" /> when no token produced this principal.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="principal" /> is <see langword="null" />.</exception>
+    public static string? IdentityCarriedBy(ClaimsPrincipal principal)
+    {
+        ArgumentNullException.ThrowIfNull(principal);
+
+        return principal.FindFirst(SubjectClaimType)?.Value;
     }
 
     /// <summary>Reports whether an authenticated principal carries every scope a request requires.</summary>

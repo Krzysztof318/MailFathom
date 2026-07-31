@@ -100,6 +100,12 @@ internal static class McpOAuthAuthentication
             ValidateAudience = true,
             ValidAudience = canonicalResource,
 
+            // The validator otherwise treats an audience differing only by a trailing slash as the same one. The
+            // resource is a single canonical identifier this deployment publishes and a client copies verbatim, so
+            // there is no second spelling to be lenient towards — and a server serving distinct resources at '/mcp'
+            // and '/mcp/' would have the token for one accepted here for the other.
+            IgnoreTrailingSlashWhenValidatingAudience = false,
+
             ValidateLifetime = true,
             RequireExpirationTime = true,
             ClockSkew = PermittedClockSkew,

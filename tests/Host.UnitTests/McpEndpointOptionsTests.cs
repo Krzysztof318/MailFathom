@@ -421,7 +421,7 @@ public sealed class McpEndpointOptionsTests
     }
 
     private static McpAuthorizationServerOptions AuthorizationServer(string name, string issuer) =>
-        new() { Name = name, Issuer = issuer };
+        new() { Name = name, Issuer = issuer, AuthorizedSubjects = { "9f2c" } };
 
     private static McpClientCertificateProfileOptions ConnectorProfile()
     {
