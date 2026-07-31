@@ -139,6 +139,7 @@ public readonly record struct MailMcpErrorCode
     public static IReadOnlyList<MailMcpErrorCode> All { get; } =
     [
         MailTransportSecurityPolicyViolated,
+        ProvisionedConfigurationSourceInvalid,
         MailAuthenticationMechanismUnavailable,
         MailboxUnavailable,
         MailboxFolderRecreated,

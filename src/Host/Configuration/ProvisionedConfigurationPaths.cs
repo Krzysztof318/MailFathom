@@ -51,39 +51,52 @@ internal sealed record ProvisionedConfigurationPaths(string? DirectoryPath, stri
 
         var section = configuration.GetSection(SectionName);
 
-        RejectUnknownSettings(section);
+        RejectUnusableSettings(section);
 
         return new ProvisionedConfigurationPaths(
             NullWhenBlank(section[DirectorySettingName]),
             NullWhenBlank(section[FileSettingName]));
     }
 
-    /// <summary>Fails when the section carries a setting MailMcp does not define.</summary>
+    /// <summary>Fails when the section carries a setting MailMcp does not define, or a defined one that is not a path.</summary>
     /// <remarks>
+    /// <para>
     /// The section is checked by hand rather than through <c>ErrorOnUnknownConfiguration</c>, which the rest of the host
     /// uses, because these two settings decide which sources exist and are therefore read before the options framework
     /// the binder belongs to. The rule is the same one, for the same reason: a misspelled <c>Directroy</c> that bound
     /// nothing would leave the host running on defaults while the operator believed their mount was in force, which is
     /// precisely the failure these settings exist to remove.
+    /// </para>
+    /// <para>
+    /// A defined setting that carries descendants rather than a value is the same failure wearing the right name. A
+    /// flattening provider can express one — <c>ConfigurationSources__Directory__Path=/etc/mailmcp/config</c> produces a
+    /// child called <c>Directory</c> whose own value is absent — and reading it as a path yields nothing, so a check
+    /// that looked only at the name would accept the setting and start the host without the mount.
+    /// </para>
     /// </remarks>
-    private static void RejectUnknownSettings(IConfigurationSection section)
+    private static void RejectUnusableSettings(IConfigurationSection section)
     {
-        string[] unknownSettingNames =
-        [
-            .. section.GetChildren()
-                .Select(child => child.Key)
-                .Where(IsUnknownSettingName)
-                .Order(StringComparer.OrdinalIgnoreCase),
-        ];
+        string[] children = [.. section.GetChildren().Select(child => child.Key).Order(StringComparer.OrdinalIgnoreCase)];
 
-        if (unknownSettingNames.Length == 0)
+        var unknownSettingNames = children.Where(IsUnknownSettingName).ToArray();
+
+        if (unknownSettingNames.Length > 0)
         {
-            return;
+            throw new ProvisionedConfigurationSourceInvalidException(
+                $"{SectionName} carries settings MailMcp does not define: {string.Join(", ", unknownSettingNames)}. "
+                + $"The section defines {DirectorySettingName} and {FileSettingName}.");
         }
 
-        throw new ProvisionedConfigurationSourceInvalidException(
-            $"{SectionName} carries settings MailMcp does not define: {string.Join(", ", unknownSettingNames)}. "
-            + $"The section defines {DirectorySettingName} and {FileSettingName}.");
+        var structuredSettingNames = children
+            .Where(settingName => section.GetSection(settingName).GetChildren().Any())
+            .ToArray();
+
+        if (structuredSettingNames.Length > 0)
+        {
+            throw new ProvisionedConfigurationSourceInvalidException(
+                $"{SectionName} carries settings that are not a path: {string.Join(", ", structuredSettingNames)}. "
+                + $"{DirectorySettingName} and {FileSettingName} each take one path and no nested value.");
+        }
     }
 
     private static bool IsUnknownSettingName(string settingName) =>

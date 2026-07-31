@@ -56,10 +56,16 @@ internal static class ProvisionedConfigurationExtensions
         {
             Path = filePath,
 
-            // The existence check has already run and produced a message naming the configuration key that pointed at
-            // the path. Letting the provider enforce the same condition again would give one rule two mechanisms, and
-            // the second one reports a bare file path with no indication of which setting named it.
-            Optional = true,
+            // Required, because the existence check cannot be atomic with the load: a mount being updated could remove
+            // the file in between, and an optional provider would turn that into an empty source and let startup
+            // continue on lower-precedence defaults. The check still owns the ordinary diagnosis — it names the
+            // configuration key, which the provider's own FileNotFoundException does not — and this closes the window
+            // the check structurally cannot cover.
+            //
+            // It costs nothing on the reload path. A watcher-driven reload of a file that has since disappeared empties
+            // the provider and raises the change token without throwing, whatever this flag says; only the initial load
+            // and an explicit IConfigurationRoot.Reload throw, and nothing here calls the latter.
+            Optional = false,
             ReloadOnChange = true,
         };
 

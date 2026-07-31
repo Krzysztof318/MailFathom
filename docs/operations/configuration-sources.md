@@ -72,9 +72,11 @@ A `0` on a deployment that mounts a ConfigMap means the mount is empty or did no
 
 ## Reload
 
-Provisioned files are watched, so a setting group classified reloadable in [ADR 0002](../decisions/0002-configuration-reading-mapping-and-reload-boundary.md) picks up a changed ConfigMap without a restart, through the same validated-snapshot path every other source uses. A candidate snapshot that fails validation is rejected and the last known good one stays active.
+What reloads is the **content of the files that existed when the host started**. Each of those gets a watched provider, so a setting group classified reloadable in [ADR 0002](../decisions/0002-configuration-reading-mapping-and-reload-boundary.md) picks up an edited ConfigMap key without a restart, through the same validated-snapshot path every other source uses. A candidate snapshot that fails validation is rejected and the last known good one stays active.
 
-Two caveats decide whether that actually happens in Kubernetes, and neither is MailMcp's to fix:
+**Adding or removing a ConfigMap key is restart-required.** The directory is enumerated once, while the host is composing itself, and each file found becomes its own provider; nothing watches the directory for membership. A key added to a mounted ConfigMap therefore produces a file no provider reads, and a key removed empties its provider rather than removing the layer. Restart the pod after changing which keys a ConfigMap holds. Editing the value inside a key that already existed needs no restart.
+
+Two caveats decide whether even a content change actually arrives, and neither is MailMcp's to fix:
 
 - **A `subPath` mount never updates.** The kubelet updates a mounted ConfigMap by swapping the volume's `..data` link, and a `subPath` mount bypasses that entirely — the file the container sees is the one that existed when the pod started. Mount the whole volume and use `ConfigurationSources:Directory` when reload matters; use `subPath` only where a restart on change is acceptable and say so in the deployment.
 - **Change detection on a mounted volume needs polling.** `FileSystemWatcher` does not reliably observe the symbolic-link swap that an atomic update performs. Setting `DOTNET_USE_POLLING_FILE_WATCHER=1` makes the file provider poll every four seconds instead; the interval is not configurable. Microsoft documents this for container and network-share mounts generally, not only for Kubernetes.
@@ -137,11 +139,23 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mailmcp
+  labels:
+    app.kubernetes.io/name: mailmcp
 spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mailmcp
   template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mailmcp
     spec:
       containers:
         - name: mailmcp
+          # Substitute the image your deployment uses. MailMcp publishes none yet; the image contract is
+          # tracked separately and this page does not define it.
+          image: mailmcp:replace-me
           env:
             - name: ConfigurationSources__Directory
               value: /etc/mailmcp/config

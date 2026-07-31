@@ -88,6 +88,23 @@ public sealed class ProvisionedConfigurationPathsTests
         Assert.Contains("Directroy", failure.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>A flattening provider can express a shape that is a defined name over no path at all.</summary>
+    [Fact]
+    public void ReadFrom_DefinedSettingCarryingNestedValues_FailsNamingIt()
+    {
+        // Arrange
+        var configuration = Build(
+            ($"{ProvisionedConfigurationPaths.DirectoryKey}:Path", "/etc/mailmcp/config"));
+
+        // Act
+        var failure = Assert.Throws<ProvisionedConfigurationSourceInvalidException>(
+            () => ProvisionedConfigurationPaths.ReadFrom(configuration));
+
+        // Assert
+        Assert.Equal(MailMcpErrorCode.ProvisionedConfigurationSourceInvalid, failure.ErrorCode);
+        Assert.Contains("Directory", failure.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>Configuration keys are case-insensitive, so a differently cased setting is the defined one.</summary>
     [Fact]
     public void ReadFrom_DifferentlyCasedSetting_NamesTheProvisionedPath()
