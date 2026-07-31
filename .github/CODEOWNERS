@@ -13,18 +13,9 @@
 
 *       @Krzysztof318
 
-# The four directories below decide how every other change is judged rather than being judged by it:
-# `.github/` names who approves a change and which checks the `main` ruleset waits for, `.config/`
-# decides which API calls the build bans and what the coverage gate demands, and `.agents/` holds the
-# skills that define the task, review, and completion contract, which `.claude/` links to.
-#
-# The rule above already reaches all of them, so these entries change no ownership today. They state
-# that ownership deliberately rather than by inheritance, which is what the last-matching-pattern
-# rule makes worth writing down: whoever adds a path rule under one of these directories later sees
-# the requirement it has to keep, instead of discovering it from a review that no longer asks for the
-# owner. The `Protected paths` check refuses the same change from the other side, before a reviewer
-# is involved.
-/.github/       @Krzysztof318
-/.config/       @Krzysztof318
-/.agents/       @Krzysztof318
-/.claude/       @Krzysztof318
+# `.github/`, `.config/`, `.agents/`, and `.claude/` decide how every other change is judged, and the
+# `Protected paths` workflow refuses a change to them from anyone but the repository owner. They get
+# no entry of their own here, because the rule above already makes the owner their code owner and a
+# restatement would neither add to that nor survive a path rule added below it; the last matching
+# pattern wins either way. The place to name a directory as needing the owner is a rule that gives it
+# other owners too.
