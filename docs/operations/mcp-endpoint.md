@@ -340,6 +340,10 @@ An anchor that stops loading — a deleted file, a corrupted certificate — is 
 other anchors of that profile keep working. A profile whose anchors all fail to load refuses every certificate rather
 than accepting one, because an anchor that has become unreadable must never widen what a profile trusts.
 
+That refusal is the *profile's*, not the endpoint's. Another profile still accepts a certificate its own anchors verify,
+because the broken material took no part in that verdict — one deleted file closes the clients it belongs to, not the
+ones whose trust material is intact.
+
 ## What the endpoint records
 
 Every tool call is logged once with the tool name, whether it ended in an error, and how long it took. Nothing else:

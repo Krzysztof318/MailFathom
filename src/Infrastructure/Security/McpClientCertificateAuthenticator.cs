@@ -20,27 +20,40 @@ namespace MailMcp.Infrastructure.Security;
 /// that accepts ends the walk.
 /// </para>
 /// <para>
-/// A profile whose anchors have all become unloadable refuses the request rather than falling through to the next
-/// profile's answer being the deployment's answer. Startup proved every anchor loads, so reaching that state means the
-/// deployment changed underneath a running process, and widening what is accepted is never the right response to it.
+/// One instant is read per request and every profile judges against that one, so a certificate cannot be inside its
+/// validity period for one profile and outside it for the next. It comes from the injected clock rather than from the
+/// chain builder's ambient one, which is what makes the expiry boundary a thing a test can stand on.
+/// </para>
+/// <para>
+/// A profile whose anchors have all become unloadable accepts nothing: it refuses the certificate and the failure is
+/// recorded, so unreadable material can never widen what that profile trusts. It does not refuse the request on behalf
+/// of the other profiles, because a certificate a later profile accepts was judged entirely on that profile's own
+/// anchors and the broken material took no part in the verdict. Refusing everything instead would let one deleted file
+/// close the endpoint to clients whose trust material is intact. Startup proves every anchor loads, so reaching this
+/// state at all means the deployment changed underneath a running process, which is why it is recorded at error level.
 /// </para>
 /// </remarks>
 public sealed partial class McpClientCertificateAuthenticator
 {
     private readonly TrustAnchorLoader trustAnchorLoader;
+    private readonly TimeProvider timeProvider;
     private readonly ILogger<McpClientCertificateAuthenticator> logger;
 
     /// <summary>Initializes a new client certificate authenticator.</summary>
     /// <param name="trustAnchorLoader">The loader that turns configured material into a trust anchor.</param>
+    /// <param name="timeProvider">The clock every certificate's validity period is judged against.</param>
     /// <param name="logger">The log a refusal and an unloadable anchor are recorded in.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="trustAnchorLoader" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="trustAnchorLoader" /> or <paramref name="timeProvider" /> is <see langword="null" />.</exception>
     public McpClientCertificateAuthenticator(
         TrustAnchorLoader trustAnchorLoader,
+        TimeProvider timeProvider,
         ILogger<McpClientCertificateAuthenticator> logger)
     {
         ArgumentNullException.ThrowIfNull(trustAnchorLoader);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.trustAnchorLoader = trustAnchorLoader;
+        this.timeProvider = timeProvider;
         this.logger = logger;
     }
 
@@ -70,13 +83,18 @@ public sealed partial class McpClientCertificateAuthenticator
                 : McpClientCertificateAuthenticationResult.AcceptedWithoutCertificate;
         }
 
-        McpClientCertificateRejection? firstObjection = null;
+        var verificationTime = this.timeProvider.GetUtcNow();
+        var objections = new List<McpClientCertificateRejection>(profiles.Count);
 
         // A loop rather than a query: each step awaits the retrieval of that profile's anchor material, and the walk
         // stops at the first profile that accepts.
         foreach (var profile in profiles)
         {
-            var rejection = await this.FindRejectionAsync(profile, presentedCertificate, cancellationToken);
+            var rejection = await this.FindRejectionAsync(
+                profile,
+                presentedCertificate,
+                verificationTime,
+                cancellationToken);
 
             if (rejection is null)
             {
@@ -84,14 +102,27 @@ public sealed partial class McpClientCertificateAuthenticator
             }
 
             this.LogProfileRefusedCertificate(profile.Name, rejection.Value, presentedCertificate.Thumbprint);
-            firstObjection ??= rejection;
+            objections.Add(rejection.Value);
         }
 
-        var reportedRejection = firstObjection ?? McpClientCertificateRejection.ChainNotTrusted;
+        var reportedRejection = ReportedObjection(objections);
         this.LogClientCertificateRefused(presentedCertificate.Thumbprint, reportedRejection, profiles.Count);
 
         return McpClientCertificateAuthenticationResult.Rejected(reportedRejection);
     }
+
+    /// <summary>Picks the objection that describes what an operator has to repair.</summary>
+    /// <remarks>
+    /// A deployment serving several clients produces a name mismatch from every profile the certificate was not meant
+    /// for, and those say nothing about the certificate: they say the walk passed a profile describing somebody else.
+    /// The objection worth reporting therefore comes from a profile that did name this client, and the mismatch is
+    /// reported only when no profile did — which is itself the accurate answer for a client this deployment does not
+    /// serve at all.
+    /// </remarks>
+    private static McpClientCertificateRejection ReportedObjection(IReadOnlyList<McpClientCertificateRejection> objections) =>
+        objections.FirstOrDefault(
+            objection => objection != McpClientCertificateRejection.SubjectAlternativeNameMismatch,
+            McpClientCertificateRejection.SubjectAlternativeNameMismatch);
 
     /// <summary>Judges one certificate against one profile.</summary>
     /// <remarks>
@@ -101,6 +132,7 @@ public sealed partial class McpClientCertificateAuthenticator
     private async Task<McpClientCertificateRejection?> FindRejectionAsync(
         McpClientCertificateTrustProfile profile,
         X509Certificate2 presentedCertificate,
+        DateTimeOffset verificationTime,
         CancellationToken cancellationToken)
     {
         if (!McpClientCertificateChainValidator.CarriesClientAuthenticationUsage(presentedCertificate))
@@ -120,7 +152,8 @@ public sealed partial class McpClientCertificateAuthenticator
             return loadedAnchors.Count > 0
                 ? McpClientCertificateChainValidator.FindChainRejection(
                     [.. loadedAnchors.Select(anchor => anchor.TrustAnchor!)],
-                    presentedCertificate)
+                    presentedCertificate,
+                    verificationTime)
                 : McpClientCertificateRejection.TrustAnchorUnavailable;
         }
         finally
@@ -134,10 +167,17 @@ public sealed partial class McpClientCertificateAuthenticator
 
     /// <summary>Loads the anchors of one profile, keeping the ones that loaded.</summary>
     /// <remarks>
+    /// <para>
     /// An anchor that fails to load is recorded and skipped rather than failing the profile outright, because a profile
     /// carries several anchors precisely so an authority can be replaced by overlap, and half a rotation must not stop
     /// the certificates the other half still signs for. A profile whose anchors all fail refuses every certificate,
     /// which the caller reports.
+    /// </para>
+    /// <para>
+    /// Ownership of what has already loaded passes to the caller only on the way out. A retrieval that throws —
+    /// a cancelled request being the ordinary case — releases the anchors gathered so far here, because the caller's
+    /// own release runs on a result it never received.
+    /// </para>
     /// </remarks>
     private async Task<IReadOnlyList<TrustAnchorLoadResult>> LoadTrustAnchorsAsync(
         McpClientCertificateTrustProfile profile,
@@ -145,19 +185,31 @@ public sealed partial class McpClientCertificateAuthenticator
     {
         var loadedAnchors = new List<TrustAnchorLoadResult>(profile.TrustAnchors.Count);
 
-        foreach (var configuredAnchor in profile.TrustAnchors)
+        try
         {
-            var loadResult = await this.trustAnchorLoader.LoadAsync(configuredAnchor, cancellationToken);
-
-            if (loadResult.TrustAnchor is not null)
+            foreach (var configuredAnchor in profile.TrustAnchors)
             {
-                loadedAnchors.Add(loadResult);
+                var loadResult = await this.trustAnchorLoader.LoadAsync(configuredAnchor, cancellationToken);
 
-                continue;
+                if (loadResult.TrustAnchor is not null)
+                {
+                    loadedAnchors.Add(loadResult);
+
+                    continue;
+                }
+
+                loadResult.Dispose();
+                this.LogTrustAnchorUnavailable(profile.Name, loadResult.Failure);
+            }
+        }
+        catch
+        {
+            foreach (var loadedAnchor in loadedAnchors)
+            {
+                loadedAnchor.Dispose();
             }
 
-            loadResult.Dispose();
-            this.LogTrustAnchorUnavailable(profile.Name, loadResult.Failure);
+            throw;
         }
 
         return loadedAnchors;

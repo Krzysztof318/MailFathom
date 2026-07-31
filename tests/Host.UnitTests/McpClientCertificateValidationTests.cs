@@ -9,6 +9,7 @@ using MailMcp.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailMcp.Host.UnitTests;
@@ -23,6 +24,9 @@ namespace MailMcp.Host.UnitTests;
 public sealed class McpClientCertificateValidationTests
 {
     private const string ClientDnsName = "client.example.test";
+
+    /// <summary>The instant the certificates here are judged at, inside the validity period the test certificates carry.</summary>
+    private static readonly DateTimeOffset JudgedAt = new(2026, 7, 31, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly string[] CertificateLikeHeaderNames =
     [
@@ -132,6 +136,7 @@ public sealed class McpClientCertificateValidationTests
 
         return new McpClientCertificateAuthenticator(
             new TrustAnchorLoader(resolver),
+            new FakeTimeProvider(JudgedAt),
             NullLogger<McpClientCertificateAuthenticator>.Instance);
     }
 

@@ -6,6 +6,7 @@ using MailMcp.Infrastructure.Secrets;
 using MailMcp.Infrastructure.Security;
 using MailMcp.TestSupport;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailMcp.Infrastructure.UnitTests;
@@ -25,6 +26,9 @@ public sealed class McpClientCertificateAuthenticatorTests
     private const string ConnectorAnchorReference = "file:/run/secrets/connector-ca.pem";
 
     private const string ReportingAnchorReference = "file:/run/secrets/reporting-ca.pem";
+
+    /// <summary>The instant every certificate here is judged at, inside the validity period the test certificates carry.</summary>
+    private static readonly DateTimeOffset JudgedAt = new(2026, 7, 31, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>Several profiles stand beside each other, so one client's authority says nothing about another's.</summary>
     [Fact]
@@ -258,6 +262,67 @@ public sealed class McpClientCertificateAuthenticatorTests
         Assert.Equal(McpClientCertificateRejection.ChainNotTrusted, result.Rejection);
     }
 
+    /// <summary>The validity period is judged against the injected clock, not the machine's, which is what makes the expiry boundary reachable at all.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_ACertificateJudgedBeyondItsValidityPeriod_IsRefusedAsExpired()
+    {
+        // Arrange
+        using var harness = new TrustProfileHarness();
+        using var connectorCertificate = harness.IssueConnectorCertificate();
+
+        // Act
+        var whileValid = await harness.AuthenticateAsync([harness.ConnectorProfile()], connectorCertificate);
+        harness.Clock.SetUtcNow(new DateTimeOffset(2101, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var afterExpiry = await harness.AuthenticateAsync([harness.ConnectorProfile()], connectorCertificate);
+
+        // Assert
+        Assert.True(whileValid.Succeeded);
+        Assert.False(afterExpiry.Succeeded);
+        Assert.Equal(McpClientCertificateRejection.CertificateExpired, afterExpiry.Rejection);
+    }
+
+    /// <summary>
+    /// A profile the certificate was never meant for objects that the name does not match, which says nothing about the
+    /// certificate. Reporting that would send an operator to fix a name while the actual fault is elsewhere.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_ANameMismatchFromAnotherProfile_ReportsWhatTheProfileNamingTheClientObjectedTo()
+    {
+        // Arrange
+        using var harness = new TrustProfileHarness();
+        using var expiredConnectorCertificate = TestCertificates.IssueExpiredClientAuthenticationCertificate(
+            harness.ConnectorAuthority,
+            ConnectorDnsName);
+
+        // Act
+        var result = await harness.AuthenticateAsync(
+            [harness.ReportingProfile(), harness.ConnectorProfile()],
+            expiredConnectorCertificate);
+
+        // Assert
+        Assert.False(result.Succeeded);
+        Assert.Equal(McpClientCertificateRejection.CertificateExpired, result.Rejection);
+    }
+
+    /// <summary>A certificate no profile names is exactly what a name mismatch describes, so that is what is reported.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_ACertificateNoProfileNames_ReportsTheNameMismatch()
+    {
+        // Arrange
+        using var harness = new TrustProfileHarness();
+        using var strangerCertificate = TestCertificates.IssueClientAuthenticationCertificate(
+            harness.ConnectorAuthority,
+            "someone-else.example.test");
+
+        // Act
+        var result = await harness.AuthenticateAsync(
+            [harness.ReportingProfile(), harness.ConnectorProfile()],
+            strangerCertificate);
+
+        // Assert
+        Assert.Equal(McpClientCertificateRejection.SubjectAlternativeNameMismatch, result.Rejection);
+    }
+
     /// <summary>Rotating an authority is an overlap: both are listed, both are accepted, and the predecessor is removed once clients have moved.</summary>
     [Fact]
     public async Task AuthenticateAsync_TwoAnchorsDuringARotation_AcceptsCertificatesFromBoth()
@@ -397,8 +462,10 @@ public sealed class McpClientCertificateAuthenticatorTests
             this.loggerFactory = LoggerFactory.Create(logging => logging
                 .SetMinimumLevel(LogLevel.Debug)
                 .AddProvider(this.Logs));
+            this.Clock = new FakeTimeProvider(JudgedAt);
             this.Authenticator = new McpClientCertificateAuthenticator(
                 new TrustAnchorLoader(this.resolver),
+                this.Clock,
                 this.loggerFactory.CreateLogger<McpClientCertificateAuthenticator>());
         }
 
@@ -407,6 +474,8 @@ public sealed class McpClientCertificateAuthenticatorTests
         internal X509Certificate2 ReportingAuthority { get; }
 
         internal RecordingLoggerProvider Logs { get; }
+
+        internal FakeTimeProvider Clock { get; }
 
         internal McpClientCertificateAuthenticator Authenticator { get; }
 

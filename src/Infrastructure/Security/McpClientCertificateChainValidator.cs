@@ -109,11 +109,13 @@ internal static class McpClientCertificateChainValidator
     /// <summary>Builds the certificate's chain against a profile's anchors.</summary>
     /// <param name="trustAnchors">The anchors that were loaded for the profile, at least one.</param>
     /// <param name="certificate">The certificate the connection presented.</param>
+    /// <param name="verificationTime">The instant every validity period in the chain is judged against, taken from the caller's injected clock.</param>
     /// <returns><see langword="null" /> when the certificate is trusted; otherwise why it is not.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="trustAnchors" /> or <paramref name="certificate" /> is <see langword="null" />.</exception>
     internal static McpClientCertificateRejection? FindChainRejection(
         IReadOnlyList<X509Certificate2> trustAnchors,
-        X509Certificate2 certificate)
+        X509Certificate2 certificate,
+        DateTimeOffset verificationTime)
     {
         ArgumentNullException.ThrowIfNull(trustAnchors);
         ArgumentNullException.ThrowIfNull(certificate);
@@ -144,6 +146,11 @@ internal static class McpClientCertificateChainValidator
         // Pinned rather than left at its default, so no later edit can relax expiry or basic-constraint checking without
         // deleting a line that says what it is doing.
         chain.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;
+
+        // Supplied rather than left to the chain builder, which would otherwise read the machine's own clock — the one
+        // ambient clock the analyzers cannot see. Setting it keeps the moment a certificate expires a decision of the
+        // injected clock, which is what makes the boundary reachable from a test.
+        chain.ChainPolicy.VerificationTime = verificationTime.UtcDateTime;
 
         return chain.Build(certificate) ? null : DescribeChainFailure(chain);
     }
