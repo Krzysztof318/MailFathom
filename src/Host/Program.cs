@@ -27,6 +27,12 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
+    // Before anything reads configuration, so a mounted ConfigMap is ordinary configuration to every binding below
+    // rather than a second source consulted afterwards. The files land beneath the environment-variable provider, which
+    // keeps an environment variable an override of a mounted file rather than something a stale mount can beat.
+    var provisionedConfigurationFileCount = builder.Configuration.AddProvisionedConfiguration();
+    bootstrapLogger.RecordProvisionedConfigurationFiles(provisionedConfigurationFileCount);
+
     builder.AddServiceDefaults();
     builder.Services.AddProblemDetails();
     builder.Services.AddSingleton(TimeProvider.System);

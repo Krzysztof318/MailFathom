@@ -41,6 +41,9 @@ public readonly record struct MailMcpErrorCode
     /// <summary>Gets subcategory 1, transport security policy: a configured combination would weaken protection in a way no opt-in allows.</summary>
     public static MailMcpErrorCode MailTransportSecurityPolicyViolated { get; } = new(11001);
 
+    /// <summary>Gets subcategory 2, configuration sources: the deployment's configuration-source settings name a path that is absent or a setting that does not exist.</summary>
+    public static MailMcpErrorCode ProvisionedConfigurationSourceInvalid { get; } = new(12001);
+
     #endregion
 
     #region Category 2 — Mail protocol
@@ -136,6 +139,7 @@ public readonly record struct MailMcpErrorCode
     public static IReadOnlyList<MailMcpErrorCode> All { get; } =
     [
         MailTransportSecurityPolicyViolated,
+        ProvisionedConfigurationSourceInvalid,
         MailAuthenticationMechanismUnavailable,
         MailboxUnavailable,
         MailboxFolderRecreated,

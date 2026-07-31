@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.Reflection;
 using System.Text.Json;
 using MailMcp.Domain.Failures;
 using Xunit;
@@ -20,6 +21,27 @@ public sealed class MailMcpErrorCodeTests
         Assert.Equal(MailMcpErrorCode.All.Count, distinctValues);
     }
 
+    /// <summary>
+    /// A declared code left out of the registry is invisible to every other assertion here, because they all iterate
+    /// the registry. It is also silently unpublishable: <see cref="MailMcpErrorCode.TryParse" /> and JSON reading
+    /// resolve a number through the registry alone, so a boundary would reject the very code it just raised.
+    /// </summary>
+    [Fact]
+    public void All_ListsEveryDeclaredCode()
+    {
+        // Arrange
+        var declaredCodes = typeof(MailMcpErrorCode)
+            .GetProperties(BindingFlags.Public | BindingFlags.Static)
+            .Where(property => property.PropertyType == typeof(MailMcpErrorCode))
+            .Select(property => (MailMcpErrorCode)property.GetValue(null)!);
+
+        // Act
+        var unregistered = declaredCodes.Where(code => !MailMcpErrorCode.All.Contains(code)).ToArray();
+
+        // Assert
+        Assert.Empty(unregistered);
+    }
+
     /// <summary>A code shorter or longer than five digits would not decompose into a category and a subcategory.</summary>
     [Fact]
     public void All_CodesAreFiveDigits()
@@ -33,6 +55,7 @@ public sealed class MailMcpErrorCodeTests
 
     [Theory]
     [InlineData(11001, 1, 1)]
+    [InlineData(12001, 1, 2)]
     [InlineData(21001, 2, 1)]
     [InlineData(22001, 2, 2)]
     [InlineData(23001, 2, 3)]
