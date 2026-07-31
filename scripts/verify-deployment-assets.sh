@@ -125,6 +125,23 @@ verify_the_image_definition() {
   else
     fail "${dockerignore_file} does not start from an exclude-everything rule, so a new file at the repository root would reach the build context."
   fi
+
+  # The identifier is asserted rather than merely the label's presence: a label naming terms other than the root
+  # LICENSE's is the failure worth catching, and a registry reports it to everyone who pulls the image.
+  if grep -qE '^[^#]*org\.opencontainers\.image\.licenses="Apache-2\.0"' "$dockerfile"; then
+    pass 'The image declares its Apache-2.0 license.'
+  else
+    fail 'The Dockerfile carries no org.opencontainers.image.licenses="Apache-2.0" label, so a pulled image names no terms.'
+  fi
+
+  # The label is the claim; LICENSE and NOTICE are the terms themselves, and the exclude-everything rule above means
+  # they reach the image only because the ignore-file names them. Without them the publish inside the build fails on
+  # Host.csproj's own check, which is a slower and less obvious way to learn that the allow-list lost a line.
+  if grep -qx '!/LICENSE' "$dockerignore_file" && grep -qx '!/NOTICE' "$dockerignore_file"; then
+    pass 'The build context carries LICENSE and NOTICE.'
+  else
+    fail "${dockerignore_file} excludes LICENSE or NOTICE, so the publish inside the image build has none to copy."
+  fi
 }
 
 verify_the_compose_deployment() {
@@ -293,18 +310,12 @@ verify_the_chart() {
     pass 'The chart renders no schema Job.'
   fi
 
-  # An image or a chart declaring a license the project has not published would make a distribution claim the
-  # copyright holder never granted. #113 owns that decision; until it lands, neither says anything.
-  if grep -qE '^[^#]*org\.opencontainers\.image\.licenses' "$dockerfile"; then
-    fail 'The Dockerfile declares an image license. MailMcp has published none; #113 owns that decision.'
+  # MailMcp is Apache-2.0, and the identifier is asserted rather than merely its presence: a chart that names terms
+  # other than the root LICENSE's is the failure worth catching, and it reads exactly like a correct one.
+  if grep -qE '^[[:space:]]*artifacthub\.io/license:[[:space:]]*Apache-2\.0[[:space:]]*$' "$chart_directory/Chart.yaml"; then
+    pass 'The chart declares its Apache-2.0 license.'
   else
-    pass 'The image declares no license it does not have.'
-  fi
-
-  if grep -qE '^[[:space:]]*artifacthub\.io/license' "$chart_directory/Chart.yaml"; then
-    fail 'Chart.yaml declares a license. MailMcp has published none; #113 owns that decision.'
-  else
-    pass 'The chart declares no license it does not have.'
+    fail 'Chart.yaml carries no artifacthub.io/license: Apache-2.0 annotation, so an installed chart names no terms.'
   fi
 
   local nightly_render

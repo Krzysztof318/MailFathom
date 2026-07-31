@@ -30,11 +30,12 @@
     <InternalsVisibleTo Include="MailMcp.Host.UnitTests" />
   </ItemGroup>
 
-  <!-- The native artifact is this project's publish output, so the Apache-2.0 grant and the original-author
-       attribution travel with it rather than being attached by a release step nobody runs the same way twice. -->
+  <!-- The native artifact is this project's publish output, and so is the container image, which copies that output
+       and nothing else. The Apache-2.0 grant and the original-author attribution therefore travel with both, rather
+       than being attached by a release step nobody runs the same way twice. -->
   <ItemGroup>
-    <None Include="$(RepositoryRoot)/LICENSE" Link="LICENSE" CopyToPublishDirectory="PreserveNewest" />
-    <None Include="$(RepositoryRoot)/NOTICE" Link="NOTICE" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="$(RepositoryRoot)LICENSE" Link="LICENSE" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="$(RepositoryRoot)NOTICE" Link="NOTICE" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- A missing source file makes the items above resolve to nothing and publish silently succeeds, which is the one

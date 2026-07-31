@@ -4,15 +4,18 @@ This file records the license review for the third-party components MailMcp actu
 
 It describes software in use and nothing else. A planned, evaluated, or rejected component has no row here, because a row asserts a completed review of something that exists in the repository today.
 
-Three documents describe MailMcp's licensing, and each answers a different question:
+Four documents describe MailMcp's licensing, and each answers a different question:
 
 | Document | Question it answers | Status |
 |---|---|---|
-| `LICENSE` | Which rights MailMcp grants for its own code | Not present yet. Issue #113 owns the choice of license and the file. |
+| `LICENSE` | Which rights MailMcp grants for its own code | The unmodified Apache-2.0 text. Never edit it: GitHub detects the license by matching that file, and an edit turns a detected `Apache-2.0` into `NOASSERTION`. |
+| `NOTICE` | Who originally created the work, which section 4(d) asks a derivative distribution to preserve | Present, and informational only. Third-party notice text belongs beside it in the bundle below, never inside it. |
 | `THIRD_PARTY_LICENSES.md` — this file | Which third-party components MailMcp uses, under which terms, and whether those terms fit both distribution models | Maintained here. |
-| A generated third-party notice bundle | The full license texts and attribution notices that must travel with a distributed binary, container, or source artifact | Not produced yet. Issue #113 owns the packaging mechanism; the obligations it must satisfy are the ones recorded in this file. |
+| A generated third-party notice bundle | The full license texts and attribution notices that must travel with a distributed binary, container, or source artifact | Not produced yet. Issue #123 owns producing it, because the artifact that has to carry it is the image; the obligations it must satisfy are the ones recorded in this file. |
 
 The register is deliberately not the notice bundle. A notice bundle is generated from the resolved dependency graph of a specific artifact and contains verbatim license texts; this file is the human decision record behind it, and it exists whether or not an artifact has been built.
+
+A redistribution therefore carries three separate things: the project grant in `LICENSE`, the original-author attribution in `NOTICE`, and whatever notices the components below require. Never merge third-party notice text into `NOTICE`, because that would attribute third-party work to MailMcp's author.
 
 MailMcp is pre-release, so nothing here has been distributed yet. The redistribution obligations are recorded now because the first release is what makes them due, not because they are already outstanding.
 
@@ -154,7 +157,7 @@ Installed on a developer machine, referenced by no project, and distributed by n
 
 | Component and exact version | Use in this repository | License terms verified | Compatibility decision and obligations | Sources reviewed |
 |---|---|---|---|---|
-| Aspire.ProjectTemplates 13.4.6, service-defaults template | The scaffold for health checks, telemetry, resilience, and service discovery, vendored and then rewritten as `src/Host/ServiceDefaultsExtensions.cs`. The file is maintained as MailMcp source and has diverged from the template it started as. | MIT, declared as a license expression in the NuGet package metadata and in the upstream repository. The emitted template carries no copyright header of its own, and Microsoft publishes no exception waiving MIT's notice condition for template output. | Allowed. MIT permits use and modification under both distribution models, and the resulting file is redistributed as part of `MailMcp.Host`. Treat the notice obligation as live rather than waived: a missing header in generated output is not a grant, so a distribution must carry Aspire's MIT copyright notice and license text for whatever substantial portion of the template survives in this file. Issue #113 resolves it either by including that notice or by citing an explicit upstream exception; leaving it out on the strength of the missing header alone is the one option this row rules out. | <https://www.nuget.org/packages/Aspire.ProjectTemplates/13.4.6>, <https://github.com/microsoft/aspire/blob/main/LICENSE.TXT> |
+| Aspire.ProjectTemplates 13.4.6, service-defaults template | The scaffold for health checks, telemetry, resilience, and service discovery, vendored and then rewritten as `src/Host/ServiceDefaultsExtensions.cs`. The file is maintained as MailMcp source and has diverged from the template it started as. | MIT, declared as a license expression in the NuGet package metadata and in the upstream repository. The emitted template carries no copyright header of its own, and Microsoft publishes no exception waiving MIT's notice condition for template output. | Allowed. MIT permits use and modification under both distribution models, and the resulting file is redistributed as part of `MailMcp.Host`. Treat the notice obligation as live rather than waived: a missing header in generated output is not a grant, so a distribution must carry Aspire's MIT copyright notice and license text for whatever substantial portion of the template survives in this file. The notice bundle resolves it either by including that notice or by citing an explicit upstream exception; leaving it out on the strength of the missing header alone is the one option this row rules out. MailMcp's own Apache-2.0 header now sits on the file, which states MailMcp's grant over what it has become and settles nothing about the MIT-licensed portion it started as. | <https://www.nuget.org/packages/Aspire.ProjectTemplates/13.4.6>, <https://github.com/microsoft/aspire/blob/main/LICENSE.TXT> |
 
 ## Hosted services
 
@@ -171,7 +174,7 @@ These are called, not linked. None is a redistributable dependency, and none sup
 
 Every component above resolves to MIT, Apache-2.0, BSD-3-Clause, or the PostgreSQL License, all of which the acceptance policy allows, with one exception that changes nothing about distribution: the Claude Code CLI the `Claude review` workflow installs on a runner is proprietary software used under Anthropic's own terms. It is executed rather than linked, and no artifact carries it. Nothing here blocks the first release on licensing grounds. Two obligations are live and owned elsewhere:
 
-- The BSD-3-Clause and Apache-2.0 components in the redistributed set, and the Aspire service-defaults template, require their notices to travel with an artifact. Issue #113 owns the notice bundle that satisfies this, and issue #123 owns the container image that carries it.
+- The BSD-3-Clause and Apache-2.0 components in the redistributed set, and the Aspire service-defaults template, require their notices to travel with an artifact. Issue #123 owns both the notice bundle that satisfies this and the container image that carries it. MailMcp's own `LICENSE` and `NOTICE` already travel with every artifact — the publish output copies them and fails without them — and they discharge MailMcp's obligation, not the components'.
 - `Aspire.Hosting.EntityFrameworkCore` stays on a prerelease pin until a stable build exists. Recheck its license when moving to one.
 
 ## Operational rules for future changes

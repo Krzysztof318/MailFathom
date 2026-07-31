@@ -73,8 +73,11 @@
     <RestorePackagesWithLockFile Condition="'$(MSBuildProjectName)' != 'AppHost' And '$(MSBuildProjectName)' != 'IntegrationTests'">true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
+  <!-- This file is the repository root, so it locates itself rather than searching for a marker file above it. The
+       previous definition looked for .gitignore, which the container build context deliberately does not carry: the
+       property then resolved to nothing and the LICENSE and NOTICE items below it silently matched no file. -->
   <PropertyGroup>
-    <RepositoryRoot>$([System.IO.Path]::GetDirectoryName($([MSBuild]::GetPathOfFileAbove('.gitignore', '$(MSBuildThisFileDirectory)'))))</RepositoryRoot>
+    <RepositoryRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)'))</RepositoryRoot>
   </PropertyGroup>
 
   <ItemGroup>
