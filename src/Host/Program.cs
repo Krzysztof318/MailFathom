@@ -178,7 +178,7 @@ try
     // Ahead of the workers so no unit of work reads or writes mail before the schema this build expects is proven, and
     // after the infrastructure that registers the inspector it resolves.
     builder.Services.AddHostedService<MailMcp.Host.Hosting.DatabaseSchemaStartupGate>();
-    builder.Services.AddHostedService<MailMcp.Host.Hosting.MailSynchronizationWorker>();
+    builder.Services.AddHostedService<MailMcp.Host.Hosting.MailSynchronizationCoordinator>();
     builder.Services.AddHostedService<MailMcp.Host.Hosting.MailExtractionBackfillWorker>();
     // Registered whether or not the endpoint is enabled, because it is the warning that decides whether it has anything
     // to say. Registering it conditionally would put the same condition in two places.

@@ -148,7 +148,7 @@ attempt number, and the delay — never a message, an address, an identifier, or
 The instance is the configured account identifier and the operation is the folder alias, or the fixed name
 `folder-discovery` for a connection that pins no folder, both carried into the callbacks by the pipeline key and by
 `ResilienceContext.OperationKey`. Neither is mailbox content, and neither is the server's own folder path: they are
-the same deployment vocabulary the synchronization worker already logs, and they are what makes a degrading dependency
+the same deployment vocabulary synchronization already logs, and they are what makes a degrading dependency
 attributable to one account and one folder rather than to "IMAP".
 
 ## Configuration

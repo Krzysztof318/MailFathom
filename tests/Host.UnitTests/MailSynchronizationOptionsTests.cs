@@ -1,5 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
+using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Folders;
@@ -41,6 +42,67 @@ public sealed class MailSynchronizationOptionsTests
         // Assert
         var result = Assert.Single(results);
         Assert.Contains("At least one account", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>A ceiling below the interval would defer a failing account by less than a healthy one waits.</summary>
+    [Fact]
+    public void ValidateForSynchronization_FailureBackoffCeilingBelowTheInterval_IsRejected()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions
+        {
+            Interval = TimeSpan.FromMinutes(10),
+            MaxFailureBackoff = TimeSpan.FromMinutes(5),
+        };
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains("shorter than the synchronization interval", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>No backoff at all is a legitimate choice, and it is the one a ceiling equal to the interval expresses.</summary>
+    [Fact]
+    public void ValidateForSynchronization_FailureBackoffCeilingEqualsTheInterval_ReportsNoError()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions
+        {
+            Interval = TimeSpan.FromMinutes(10),
+            MaxFailureBackoff = TimeSpan.FromMinutes(10),
+        };
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        Assert.Empty(results);
+    }
+
+    /// <summary>Both bounds are enforced at run time, so a value outside their range has to fail startup rather than reach a scheduler.</summary>
+    [Theory]
+    [InlineData("MaxConcurrentAccounts", 0)]
+    [InlineData("MaxConcurrentAccounts", 101)]
+    [InlineData("MaxConcurrentFoldersPerAccount", 0)]
+    [InlineData("MaxConcurrentFoldersPerAccount", 21)]
+    public void Bind_ConcurrencyBoundOutsideItsRange_FailsDataAnnotationValidation(string settingName, int configuredValue)
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions();
+        new ConfigurationBuilder()
+            .AddInMemoryCollection([
+                new KeyValuePair<string, string?>(settingName, configuredValue.ToString(CultureInfo.InvariantCulture)),
+            ])
+            .Build()
+            .Bind(options);
+
+        // Act
+        var results = Validator.TryValidateObject(options, new ValidationContext(options), null, validateAllProperties: true);
+
+        // Assert
+        Assert.False(results);
     }
 
     /// <summary>Configuration defines the served accounts, normalized and ordered the way a resolved query scope needs them.</summary>

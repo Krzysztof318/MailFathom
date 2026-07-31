@@ -15,7 +15,7 @@ MailMcp now includes the first vertical slice for read-only IMAP synchronization
 - A write repository takes its EF Core context from the `IPersistenceSession` it is handed, and injects none of its own. The write is therefore always issued on that session's own context, whichever scope the session came from, so "this write joined the caller's transaction" is structurally true instead of being an effect of both objects happening to resolve from the same DI scope. A session backed by a different persistence provider cannot supply a context at all and is rejected outright. Read methods take no session and use the scoped context, because a read joins no transaction.
 - Lookups that must see an insert still pending in the open session use the change tracker before the database, since EF Core never flushes pending changes before a query. Primary-key lookups rely on `FindAsync`, which already does this; alternate-key lookups go through one shared two-pass helper driven by a single predicate expression. The one hand-written exception is the raw MIME row, where materializing the existing `bytea` is precisely the cost being avoided.
 - Mutable tracked email metadata and synchronization checkpoints carry an infrastructure-only `ConcurrencyVersion`. It is a `uint` row version, which is how Npgsql maps a property onto the PostgreSQL `xmin` system column, so the token is server-generated and no concurrency column exists in either table. A stale tracked update is translated from `DbUpdateConcurrencyException` into an application-owned commit result at the session boundary, which is the only place a conflict is an ordinary branch: its consumer is the retry policy's loop. Synchronization retries a complete idempotent metadata/content write in a fresh persistence session, never repeats the preceding IMAP fetch, and uses cancellation-aware exponential backoff with jitter between bounded attempts. Checkpoint writes are attempted once and only when their durable UIDVALIDITY and last-seen UID still equal the progress read at the start of the run; timestamp precision differences are ignored, while the later synchronization timestamp is retained. `xmin` detects a later race before commit, and two named unique violations are treated narrowly as the same conflict: a concurrent first checkpoint of a folder, and a concurrent first binding of an alias. Both mean another run got there first rather than that the data is wrong; every other unique violation stays a failure.
-- Once bounded attempts are spent, or a checkpoint moved under the run, the conflict leaves `SynchronizeAsync` as `PersistenceConcurrencyConflictException` instead of being restated as a result value by each layer it passes. Progress the run already committed stays durable. The worker catches it per folder, logs a deferral with the reason, and continues with the remaining folders; the next interval rereads the last committed checkpoint. The attempt bound is one deployment-wide setting, not a synchronization option, because writers compete for shared rows rather than for anything a single service owns.
+- Once bounded attempts are spent, or a checkpoint moved under the run, the conflict leaves `SynchronizeAsync` as `PersistenceConcurrencyConflictException` instead of being restated as a result value by each layer it passes. Progress the run already committed stays durable. The account's supervisor catches it per folder, logs a deferral with the reason, and continues with the remaining folders; the next run rereads the last committed checkpoint. The attempt bound is one deployment-wide setting, not a synchronization option, because writers compete for shared rows rather than for anything a single service owns.
 - The MailKit adapter resolves folders asynchronously, caps UID progress with the opened folder UIDNEXT value, normalizes email sent dates to UTC before persistence, and rejects occurrence identities that do not belong to the open account, alias binding, and UIDVALIDITY scope. A previous generation of the same alias is as foreign there as another account.
 - A connection the adapter has declared unusable — a failed setup, or one being replaced after a transient failure — is closed rather than asked for a graceful logout. A logout is a command, and a server that stopped answering can hold it far past the attempt budget on a call no cancellation reaches, while the pipeline starts the next attempt against the same connection object. Its cleanup failure never replaces the failure being retried. Orderly session disposal still disconnects and disposes, and reports the first cleanup failure.
 - A mailbox session survives a mail server that drops its connection. `MailKitImapConnection` owns the client, and no hand-written retry loop exists anywhere in the adapter: the [outbound resilience pipelines](../architecture/outbound-resilience.md) do the repeating, and the adapter only decides what is safe to repeat and how the session recovers. The applied pipelines and the failure classification are documented in the next section.
@@ -29,7 +29,76 @@ MailMcp now includes the first vertical slice for read-only IMAP synchronization
 - Every message whose raw MIME was stored is also read for normalized metadata — participants by role, sent and received timestamps, subject, thread identifiers, and an attachment summary. The read happens on the payload the run already fetched, so enrichment costs no second IMAP round trip and cannot reach the remote `\Seen` flag. [MIME metadata extraction](#mime-metadata-extraction) describes what is extracted and how each part is classified, and [Stored email schema](../architecture/stored-email-schema.md) describes which of it the row keeps. A message whose MIME no reader could parse is still stored, carrying only what the server's envelope reported; the same holds for one whose payload was never fetched because it exceeded the size limit.
 - The same read also derives the message's searchable text from its body and stores it, together with a bounded copy of the subject and of the normalized participant addresses, in a `email_search_documents` row whose PostgreSQL-generated `tsvector` column carries the GIN index lexical search will query. [Body text and the lexical index](#body-text-and-the-lexical-index) describes which part supplies the text, when a derivation is marked lossy, and what a message with no readable body records instead.
 - A bounded background backfill re-reads the raw MIME of messages stored before extraction existed, writes the classification markers and the text it finds, and records the position it reached so an interrupted run resumes rather than restarts. It reaches no mail server, and it ends itself once no stored message awaits extraction.
-- `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, secret resolution and trust anchor loading before any hosted service starts, a validated snapshot every consumer reads instead of the raw bound one, and a periodic scoped background worker that isolates failures per account/folder work unit. A second worker, configured under `MailExtractionBackfill`, runs the extraction backfill on the same scoped-work-unit terms.
+- `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, secret resolution and trust anchor loading before any hosted service starts, a validated snapshot every consumer reads instead of the raw bound one, and one supervised synchronization schedule per configured account that isolates failures per account and per folder work unit. [Per-account supervision](#per-account-supervision) describes the coordinator, the two concurrency bounds, the backoff layering, and the shutdown drain. A second worker, configured under `MailExtractionBackfill`, runs the extraction backfill on the same scoped-work-unit terms.
+
+## Per-account supervision
+
+`MailSynchronizationCoordinator` is a hosted service that reaches no mail server and holds no scoped service. It
+starts one `AccountSynchronizationSupervisor` per configured account and supervises those supervisors; everything a
+run actually does belongs to the supervisor of the account it runs for.
+
+Each supervisor owns its own schedule, its own consecutive-failure count, and its own backoff, and creates a scope per
+folder work unit. A server that stops answering therefore costs its own account and nothing else — the accounts beside
+it keep their own intervals and never queue behind it. The only thing supervisors share is the slot count that bounds
+how many of them run at once.
+
+### Two bounds, and what each one is for
+
+| Bound | Setting | Default | What it admits |
+| --- | --- | --- | --- |
+| Accounts at once | `MaxConcurrentAccounts` | 4 | How many accounts may be inside a run at the same time |
+| Folders at once, within one account | `MaxConcurrentFoldersPerAccount` | 1 | How many folder work units of one account run at the same time |
+
+Both are validated at startup and enforced at run time, and they multiply: the process never has more than
+`MaxConcurrentAccounts × MaxConcurrentFoldersPerAccount` folder work units in flight. The account bound is what keeps
+the length of an operator's account list from deciding how much database and network work synchronization does at
+once; a supervisor waiting for a slot is delayed by the runs holding them and never by another account's backoff.
+
+The folder default of one is deliberate. A single IMAP connection per account is the conservative, server-friendly
+choice, and every folder of an account already shares that account's session-establishment budget and its circuit
+breaker, so raising the bound spends one account's resilience budget faster rather than buying independent capacity.
+A deployment with a fast server and many folders raises it; nothing in the current design needs more than one.
+
+### Backoff is layered, and the layers never wrap each other
+
+Two different decisions are made about a failure, at two levels, and each is made exactly once:
+
+| Layer | Decides | Mechanism |
+| --- | --- | --- |
+| Operation | Whether one IMAP command is worth repeating | The [outbound resilience pipelines](../architecture/outbound-resilience.md), per account |
+| Run | When this account's next whole run is worth starting | `SynchronizationRunBackoff`, per account |
+
+A run that failed has already spent its pipeline budget, so the supervisor never repeats the operation the adapter
+retried. It only defers: the delay before the next run grows from the configured `Interval`, doubling once per
+consecutive failed run, capped at `MaxFailureBackoff`, and drawn from a jittered range so accounts that share a server
+do not all return to it in the same instant. A run that succeeds resets the count, which returns the account to its
+configured interval immediately.
+
+The interval is measured between runs rather than on a fixed grid, so a run that outlives its interval delays the
+account instead of overlapping itself. A run counts as failed when at least one of its folders failed — an unreachable
+server, a refused folder, an unresolved persistence conflict. An alias that matched no advertised folder, or several,
+does **not** count: it is a configuration mistake whose remedy is an edit rather than a wait, and backing the account
+off for it would slow the folders that are working.
+
+### Shutdown stops scheduling first and drains second
+
+Host shutdown cancels scheduling for every supervisor at once, so no further run and no further folder starts. The work
+units already under way are then given `ShutdownDrainTimeout` to finish, and only what outlasts the drain is cancelled.
+That is what keeps a run from being torn down between persisting an email's content and advancing the folder
+checkpoint — and when the drain does expire, the progress already committed is durable and idempotent, so the next
+start resumes from the committed checkpoint rather than losing or duplicating anything.
+
+### The account set is re-read rather than fixed at startup
+
+The coordinator re-reads the published snapshot on the configured interval and starts a supervisor for any configured
+account that has none running. One mechanism therefore covers three things: an account a configuration reload adds
+begins synchronizing without a restart, a supervisor that ended unexpectedly is started again instead of leaving one
+account silently unsynchronized, and an account a reload removes ends its own supervision at the start of its next run
+— the mail already stored for it stays readable, as `ServedAccountIds` requires.
+
+Supervisor logs and run records carry the account identifier, the folder alias, counts, the run duration, the
+consecutive failure count, and the current backoff, and never message-level data. They are structured log records;
+first-party metering instruments for the same values are still [pending](#pending-work).
 
 ## Folder aliases and discovery
 
@@ -117,14 +186,14 @@ Failure classification is explicit rather than inherited from a library's guess:
   terminal too.
 - **Transient.** A dropped socket, a server-initiated disconnect, a desynchronized protocol stream, and an attempt the
   pipeline abandoned at its per-attempt timeout.
-- **Neither.** The caller's own cancellation. It stays an `OperationCanceledException` so the worker can tell a host
+- **Neither.** The caller's own cancellation. It stays an `OperationCanceledException` so the supervisor can tell a host
   shutting down from a mail server that stopped answering; the latter reaches it as `MailboxUnavailableException` and
   is logged as a deferral naming the account and folder.
 
 Two outcomes produce that `MailboxUnavailableException`: a limit the pipeline imposed, and a transient failure that
 survived every attempt. The second needs saying because a retry strategy that runs out of attempts rethrows the last
 failure rather than a rejection, so without the translation the most ordinary exhaustion — three dropped connections in
-a row — would bypass the worker's deferral branch and put a mail-library exception through an application port.
+a row — would bypass the supervisor's deferral branch and put a mail-library exception through an application port.
 Terminal failures still surface as themselves, because a rejected credential is the operator's to see.
 
 A retried read re-establishes the session when the previous attempt lost the connection. It also re-establishes when
@@ -140,7 +209,7 @@ peeking fetch, and requested no flag update on either folder.
 A recovered connection re-selects the folder, and a server may answer with a new UIDVALIDITY. That folder is not the
 one the run started on — its UIDs name different emails — so the session refuses it with
 `MailboxFolderRecreatedException` instead of attaching the recovered folder's emails to the previous folder's
-checkpoint. The worker logs the failure and the next run starts the folder over from an empty checkpoint.
+checkpoint. The supervisor logs the failure and the next run starts the folder over from an empty checkpoint.
 
 Budgets are the operator settings described in [outbound resilience](../architecture/outbound-resilience.md) and are
 bound from `Resilience:MailboxSessionEstablishment` and `Resilience:MailboxDataRetrieval`.
@@ -276,7 +345,7 @@ formed mail is expected: the occurrence is still stored with its content, the fo
 and the run reports how many stored messages carried MIME it could not read. Content that defeats the bounded scan for
 embedded-resource references is reported the same way, because the alternative is worse than an imprecise label — an
 exception there would leave the occurrence unstored and its checkpoint unmoved, so one crafted message would block its
-folder on every later run. The worker logs that count alongside the
+folder on every later run. The supervisor logs that count alongside the
 stored and oversized counts. An occurrence stored without content has no MIME to read and is counted as neither
 enriched nor unreadable.
 
@@ -354,6 +423,10 @@ Synchronization is disabled by default:
   "MailSynchronization": {
     "Enabled": false,
     "Interval": "00:05:00",
+    "MaxFailureBackoff": "00:30:00",
+    "MaxConcurrentAccounts": 4,
+    "MaxConcurrentFoldersPerAccount": 1,
+    "ShutdownDrainTimeout": "00:00:10",
     "MaxMetadataBatchSize": 100,
     "MaxRawMimeBytes": 26214400,
     "MaxMetadataBatchesPerRun": 10,
@@ -412,7 +485,7 @@ The extraction backfill has a section of its own rather than a block inside the 
 }
 ```
 
-When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. Each entry of `Folders` names an alias and exactly one of `RemotePath` and `SpecialUse`; naming both, naming neither, or naming a role that does not exist fails startup with a message identifying the alias. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, and `Important`. If an account omits `Folders`, the worker applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
+When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. Each entry of `Folders` names an alias and exactly one of `RemotePath` and `SpecialUse`; naming both, naming neither, or naming a role that does not exist fails startup with a message identifying the alias. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, and `Important`. If an account omits `Folders`, its supervisor applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
 
 ### Bounding how far back a run reaches
 
@@ -470,7 +543,21 @@ Secret resolution is not gated on `Enabled`, unlike the transport security rules
 above what real mail declares — a message with a thousand parts or thirty levels of nesting was constructed rather than
 written — so lowering them refuses more and raising them costs work per message rather than buying anything.
 
-Account identifiers and folder aliases must be unique after domain normalization, IMAP ports must be between 1 and 65535, and `MaximumConcurrencyCommitAttempts` must be between 1 and 10. The default of two attempts covers the single lost race that a rare conflict represents; a folder deferred after that is retried by the next interval anyway.
+Account identifiers and folder aliases must be unique after domain normalization, IMAP ports must be between 1 and 65535, and `MaximumConcurrencyCommitAttempts` must be between 1 and 10. The default of two attempts covers the single lost race that a rare conflict represents; a folder deferred after that is retried by the next run anyway.
+
+### Supervision bounds
+
+`MaxConcurrentAccounts` must be between 1 and 100 and `MaxConcurrentFoldersPerAccount` between 1 and 20;
+[Per-account supervision](#per-account-supervision) states what each admits and why the folder default is one.
+
+`MaxFailureBackoff` bounds how far the delay between an account's runs may grow while its runs keep failing, and it
+must not be shorter than `Interval` — a shorter ceiling would ask backoff to run a failing account more often than a
+healthy one, so it fails startup naming both values. A deployment that wants no backoff at all sets it equal to the
+interval, which leaves every wait exactly one interval long.
+
+`ShutdownDrainTimeout` is how long shutdown waits for the work units already under way after it has stopped scheduling
+new ones. It accepts anything from zero to two minutes and defaults to ten seconds, which sits inside the host's own
+shutdown timeout. Zero cancels in-flight work immediately; what a run had already committed stays durable either way.
 
 ### Transport security
 
@@ -552,7 +639,7 @@ Every rule above is enforced twice: in the domain policy object and again during
 
 Each reported error carries the domain's `MailTransportSecurityViolation` alongside its operator sentence, and the startup message appends that identity in brackets — for example `Account 'primary': An unencrypted connection requires AllowInsecureConnection. [UnencryptedConnectionRequiresExplicitOptIn]`. The bracketed name is the stable half: an operator or log query can match on it while the surrounding prose stays free to change. An unsupported SASL mechanism name carries no violation and is reported without brackets, because it is a parse failure rather than a violated rule.
 
-Secret resolution is the one rule that cannot join `ValidateOnStart`, because options validation is synchronous while resolution is not — the contract is asynchronous so a network-backed secret store needs no breaking change later. It runs instead in the host's starting phase, which completes before any hosted service starts, so the worker never runs against an unresolvable secret.
+Secret resolution is the one rule that cannot join `ValidateOnStart`, because options validation is synchronous while resolution is not — the contract is asynchronous so a network-backed secret store needs no breaking change later. It runs instead in the host's starting phase, which completes before any hosted service starts, so no run ever starts against an unresolvable secret.
 
 ## Safety assumptions
 
@@ -564,7 +651,7 @@ Every consumer reads a published snapshot rather than the raw bound options. A c
 
 Validation never runs on the thread that reported the reload. It is handed to a single background reader through a channel that keeps only the newest candidate, so a burst of reloads costs one validation rather than a queue of stale ones, and an older candidate can never overwrite a newer one that already published. A reload that fails unexpectedly is logged and dropped; it never terminates the process.
 
-Snapshots are read once per operation, and one operation means one snapshot end to end. The worker takes accounts and folders when a run begins and hands that same snapshot down to each folder's scope, so a folder scheduled from one account list can never connect with another's endpoint, policy, and credentials. Each work unit's scope therefore holds one snapshot — the transport security policy it validates against and the material it connects with therefore always come from the same reload, which two independent reads of the published snapshot could not guarantee. Whether synchronization runs at all and how often are read once at start, because both shape the worker loop itself.
+Snapshots are read once per operation, and one operation means one snapshot end to end. A supervisor takes its account, that account's folders, and the bounds a run obeys when the run begins, and hands that same snapshot down to each folder's scope, so a folder scheduled from one account list can never connect with another's endpoint, policy, and credentials. Each work unit's scope therefore holds one snapshot — the transport security policy it validates against and the material it connects with therefore always come from the same reload, which two independent reads of the published snapshot could not guarantee. Whether synchronization runs at all, how often the account set is re-read, how many accounts may run at once, and how long shutdown drains are read once at start, because all four shape the coordinator loop itself rather than the work one run does.
 
 The database secrets reload on the same terms. `Persistence:Password` and `Persistence:ConnectionString` are read from their own published snapshot each time a physical connection needs a credential, so repointing a reference takes effect without a restart, and a reload whose reference does not resolve is rejected with the previous one left active. Two further checks run before that snapshot publishes, because resolving a reference proves less for a connection string than for a password: the material must parse as a PostgreSQL connection string and, when it is what supplies the credential, still carry one. Changing *which* setting supplies the credential is refused outright — the pool attaches its password provider once, so that change is restart-required and is reported as such instead of being adopted with no effect.
 
@@ -578,7 +665,13 @@ A rejected reload is logged with the configuration path and the failure identity
 
 - Per-account discovery. Every folder currently resolves on its own short-lived connection, so a run costs one extra
   IMAP login per configured folder on top of its synchronization session. The listing is the same for every folder of
-  an account, so the per-account synchronization supervisor is where one listing can serve them all.
+  an account, and the per-account supervisor a run now belongs to is where one listing can serve them all.
+- Metering instruments for a supervised run. Run duration, stored and skipped counts, the consecutive failure count,
+  and the current backoff are recorded as structured log properties today. Publishing them through a first-party
+  `Meter` is a separate change, because MailMcp declares no meter of its own yet and the one the service defaults
+  export is Polly's.
+- Long-lived push connections. IDLE and NOTIFY are hosted by the per-account supervisor when they land; the supervisor
+  exists so they have somewhere to live that is already isolated per account.
 - A durable audit store for mapping changes. The log-backed sink cannot join the transaction that commits a binding,
   so a sink failure loses the record of a change that already happened.
 - Adapters for external managed secret stores. Kubernetes and container deployments need none, because their secrets are files.

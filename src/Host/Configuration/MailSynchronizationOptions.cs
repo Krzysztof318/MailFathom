@@ -24,9 +24,48 @@ internal sealed class MailSynchronizationOptions
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
 
-    /// <summary>Gets or sets the interval between reconciliation runs.</summary>
+    /// <summary>Gets or sets the interval between reconciliation runs of one account.</summary>
+    /// <remarks>The interval is measured from the end of one run to the start of the next, so a run that outlives it delays the account rather than overlapping itself.</remarks>
     [Range(typeof(TimeSpan), "00:00:10", "1.00:00:00")]
     public TimeSpan Interval { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>Gets or sets the longest an account waits between runs while its runs keep failing.</summary>
+    /// <remarks>
+    /// It bounds the run-level backoff described on <see cref="SynchronizationRunBackoff" />, which grows from
+    /// <see cref="Interval" /> and returns to it after a successful run. A value below the interval would ask backoff
+    /// to run a failing account more often than a healthy one, so it fails startup.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:10", "1.00:00:00")]
+    public TimeSpan MaxFailureBackoff { get; set; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>Gets or sets how many accounts may synchronize at the same time.</summary>
+    /// <remarks>
+    /// Each account is supervised independently, so this bound is what keeps the number of accounts, rather than the
+    /// operator's account list, from deciding how much of the database and the network synchronization consumes at
+    /// once. An account waiting for a slot is not delayed by a failing account's backoff, only by the runs that hold
+    /// the slots.
+    /// </remarks>
+    [Range(1, 100)]
+    public int MaxConcurrentAccounts { get; set; } = 4;
+
+    /// <summary>Gets or sets how many folders of one account may synchronize at the same time.</summary>
+    /// <remarks>
+    /// The default of one is deliberate: a single IMAP connection per account is the conservative, server-friendly
+    /// choice, and every folder of an account shares that account's session establishment budget and its circuit
+    /// breaker. Raising it multiplies with <see cref="MaxConcurrentAccounts" /> to give the number of folder work
+    /// units that can be in flight across the process.
+    /// </remarks>
+    [Range(1, 20)]
+    public int MaxConcurrentFoldersPerAccount { get; set; } = 1;
+
+    /// <summary>Gets or sets how long shutdown waits for the work units already under way before cancelling them.</summary>
+    /// <remarks>
+    /// Shutdown stops scheduling immediately and only then waits, so this bounds the drain rather than delaying every
+    /// stop by its own length. Zero cancels in-flight work at once, which is safe but discards the run's remaining
+    /// progress; the stored occurrences and the checkpoint a run already committed are durable either way.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:00", "00:02:00")]
+    public TimeSpan ShutdownDrainTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
     /// <summary>Gets or sets the maximum number of messages requested from one IMAP metadata batch.</summary>
     [Range(1, 1000)]
@@ -143,6 +182,13 @@ internal sealed class MailSynchronizationOptions
 
     internal IEnumerable<ValidationResult> ValidateForSynchronization()
     {
+        if (this.MaxFailureBackoff < this.Interval)
+        {
+            yield return new ValidationResult(
+                $"The maximum failure backoff {this.MaxFailureBackoff} is shorter than the synchronization interval {this.Interval}, so a failing account would run more often than a healthy one.",
+                [nameof(this.MaxFailureBackoff)]);
+        }
+
         if (this.Accounts is null)
         {
             yield return new ValidationResult("Account configuration must be a list.", [nameof(this.Accounts)]);
@@ -171,11 +217,24 @@ internal sealed class MailSynchronizationOptions
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.ValidateForSynchronization();
 
-    private MailSynchronizationAccountOptions FindAccount(string normalizedAccountId) => this.Accounts.Single(
-        candidate => !string.IsNullOrWhiteSpace(candidate.AccountId)
-            && StringComparer.Ordinal.Equals(
-                MailAccountId.Create(candidate.AccountId).Value,
-                normalizedAccountId));
+    /// <summary>Finds the account a supervisor runs, reporting its absence rather than failing on it.</summary>
+    /// <param name="accountId">The local account identifier.</param>
+    /// <returns>The configured account, or <see langword="null" /> when this snapshot no longer names it.</returns>
+    /// <remarks>
+    /// A reload can remove an account while its supervisor is between runs, which is an ordinary configuration change
+    /// rather than a failure: the supervisor ends itself instead of connecting to a server the operator withdrew.
+    /// Every other reader wants the account it was handed to exist, and keeps failing when it does not.
+    /// </remarks>
+    internal MailSynchronizationAccountOptions? FindConfiguredAccount(MailAccountId accountId) =>
+        (this.Accounts ?? []).SingleOrDefault(
+            candidate => !string.IsNullOrWhiteSpace(candidate.AccountId)
+                && StringComparer.Ordinal.Equals(
+                    MailAccountId.Create(candidate.AccountId).Value,
+                    accountId.Value));
+
+    private MailSynchronizationAccountOptions FindAccount(string normalizedAccountId) =>
+        this.FindConfiguredAccount(MailAccountId.Create(normalizedAccountId))
+        ?? throw new InvalidOperationException($"Account '{normalizedAccountId}' is not configured.");
 }
 
 /// <summary>Configures one account for periodic IMAP synchronization.</summary>
