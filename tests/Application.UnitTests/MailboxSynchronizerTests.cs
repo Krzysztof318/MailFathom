@@ -1340,6 +1340,69 @@ public sealed class MailboxSynchronizerTests
             timeProvider);
     }
 
+    /// <summary>
+    /// The backward pass belongs to the run rather than to a worker of its own, so it runs over the session the forward
+    /// pass opened and under the UIDVALIDITY that session reported.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_FolderHoldsEmailsAwaitingReconciliation_ChecksThemOverTheSameSessionAndReportsWhatItFound()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var folder = InboxFolder;
+        var uidValidity = ImapUidValidity.Create(5);
+        var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
+        var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
+        var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        sessionScopeFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(persistenceSession);
+        persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var session = Substitute.For<IMailboxSession>();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 31, 12, 0, 0, TimeSpan.Zero));
+        var reconciliationStore = Substitute.For<IStoredEmailReconciliationStore>();
+        IReadOnlyList<StoredEmailAwaitingReconciliation> window =
+            [new StoredEmailAwaitingReconciliation(storedEmailId, ImapUid.Create(10))];
+        reconciliationStore
+            .GetReconciliationWindowAsync(accountId, folder.Id, uidValidity, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(window));
+        checkpointStore.GetCheckpointAsync(accountId, folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
+        sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
+        session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        session
+            .GetEmailBatchAfterAsync(null, Arg.Any<int>(), MailSynchronizationWindow.Unbounded, CancellationToken.None)
+            .Returns(new RemoteEmailMetadataBatch([], InspectedThroughUid: null, HasMore: false));
+        session
+            .GetRemoteFlagsWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<RemoteEmailFlagObservation>>([]));
+        var synchronizer = CreateSynchronizer(
+            sessionFactory,
+            checkpointStore,
+            sessionScopeFactory,
+            metadataRepository: Substitute.For<IEmailMetadataRepository>(),
+            contentStore: Substitute.For<IEmailContentStore>(),
+            clock,
+            new MailboxSynchronizationOptions(),
+            reconciliationStore: reconciliationStore);
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.Reconciliation.RemotelyDeletedEmailCount);
+        await reconciliationStore.Received(1).ApplyReconciliationOutcomeAsync(
+            persistenceSession,
+            Arg.Is<ReconciledFolderOutcome>(applied =>
+                applied!.Disappeared.Single() == storedEmailId
+                && applied.Disposition == RemotelyDeletedEmailDisposition.RetainTombstone),
+            Arg.Any<CancellationToken>());
+        await sessionFactory.Received(1).OpenReadOnlyAsync(
+            accountId,
+            folder,
+            Arg.Any<MailTransportSecurityPolicy>(),
+            CancellationToken.None);
+    }
+
     private static IMailTransportSecurityPolicyReader CreateTransportSecurityPolicyReader(MailTransportSecurityPolicy policy)
     {
         var reader = Substitute.For<IMailTransportSecurityPolicyReader>();
@@ -1367,8 +1430,15 @@ public sealed class MailboxSynchronizerTests
         IMailTransportSecurityPolicyReader? transportSecurityPolicyReader = null,
         MailFolderResolver? folderResolver = null,
         IEmailMimeReader? mimeReader = null,
-        MailSynchronizationWindow synchronizationWindow = default) =>
-        new(
+        MailSynchronizationWindow synchronizationWindow = default,
+        IStoredEmailReconciliationStore? reconciliationStore = null)
+    {
+        var concurrencyRetryPolicy = new OptimisticConcurrencyRetryPolicy(
+            persistenceSessionFactory,
+            new PersistenceConcurrencyOptions(),
+            timeProvider);
+
+        return new MailboxSynchronizer(
             folderResolver ?? CreateFolderResolverBoundToInbox(persistenceSessionFactory, timeProvider),
             mailboxSessionFactory,
             transportSecurityPolicyReader ?? CreateTransportSecurityPolicyReader(RequiredTlsPolicy),
@@ -1378,12 +1448,41 @@ public sealed class MailboxSynchronizerTests
             metadataRepository,
             contentStore,
             mimeReader ?? CreateMimeReaderThatExtractsEverything(),
-            new OptimisticConcurrencyRetryPolicy(
-                persistenceSessionFactory,
-                new PersistenceConcurrencyOptions(),
-                timeProvider),
+            new MailboxReconciler(
+                reconciliationStore ?? CreateReconciliationStoreWithNothingToDo(),
+                CreateDispositionReader(RemotelyDeletedEmailDisposition.RetainTombstone),
+                concurrencyRetryPolicy,
+                timeProvider,
+                options),
+            concurrencyRetryPolicy,
             timeProvider,
             options);
+    }
+
+    /// <summary>Builds a store whose folders hold nothing awaiting reconciliation, which is the case every forward-pass test is about.</summary>
+    private static IStoredEmailReconciliationStore CreateReconciliationStoreWithNothingToDo()
+    {
+        var reconciliationStore = Substitute.For<IStoredEmailReconciliationStore>();
+        reconciliationStore
+            .GetReconciliationWindowAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolutionId>(),
+                Arg.Any<ImapUidValidity>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingReconciliation>>([]));
+
+        return reconciliationStore;
+    }
+
+    private static IRemotelyDeletedEmailDispositionReader CreateDispositionReader(
+        RemotelyDeletedEmailDisposition disposition)
+    {
+        var reader = Substitute.For<IRemotelyDeletedEmailDispositionReader>();
+        reader.GetDisposition(Arg.Any<MailAccountId>()).Returns(disposition);
+
+        return reader;
+    }
 
     /// <summary>Builds a reader whose messages all parse, which is the case every other behavior here is about.</summary>
     private static IEmailMimeReader CreateMimeReaderThatExtractsEverything()

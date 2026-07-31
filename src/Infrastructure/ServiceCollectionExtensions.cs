@@ -135,6 +135,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDatabaseSchemaInspector, EfCoreDatabaseSchemaInspector>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();
         services.AddScoped<IStoredEmailExtractionBackfillStore, StoredEmailExtractionBackfillStore>();
+        services.AddScoped<IStoredEmailReconciliationStore, StoredEmailReconciliationStore>();
         // The read side takes no persistence session and joins no transaction, so its ports are registered beside the
         // write repositories rather than through one of them.
         services.AddScoped<IStoredEmailTimelineReader, StoredEmailTimelineReader>();
@@ -158,6 +159,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<MailFolderResolver>();
         services.AddScoped<MailboxSynchronizer>();
+        services.AddScoped<MailboxReconciler>();
         services.AddScoped<StoredEmailExtractionBackfill>();
         services.AddScoped<MailboxScopeResolver>();
         services.AddScoped<MailboxTimelineReader>();
@@ -167,7 +169,8 @@ public static class ServiceCollectionExtensions
             static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
-            provider.GetRequiredService<ITransientFailureClassifier>()));
+            provider.GetRequiredService<ITransientFailureClassifier>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IRemoteFolderCatalog>(provider => new MailKitRemoteFolderCatalog(
             static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),

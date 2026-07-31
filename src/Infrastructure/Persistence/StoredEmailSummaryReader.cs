@@ -9,9 +9,16 @@ namespace MailMcp.Infrastructure.Persistence;
 
 /// <summary>Reads one stored email's summary out of PostgreSQL by its primary key.</summary>
 /// <remarks>
+/// <para>
 /// The lookup is a projection rather than a <c>FindAsync</c>, which is the privacy control the listing query applies for
 /// the same reason: the query names the columns a summary publishes, so nothing here can reach the stored raw MIME, and
 /// no entity enters the change tracker on a path that only reads.
+/// </para>
+/// <para>
+/// A tombstone answers as an absent email, which is what keeps the content read consistent with the listing that led a
+/// caller to it. It also makes the identifier of a deleted email indistinguishable from one that never existed, on the
+/// same terms as an account this deployment no longer serves.
+/// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class StoredEmailSummaryReader(MailMcpDbContext dbContext) : IStoredEmailSummaryReader
@@ -21,7 +28,7 @@ internal sealed class StoredEmailSummaryReader(MailMcpDbContext dbContext) : ISt
     {
         var row = await dbContext.StoredEmails
             .AsNoTracking()
-            .Where(email => email.Id == storedEmailId.Value)
+            .Where(email => email.Id == storedEmailId.Value && email.RemoteExpungeObservedAt == null)
             .Select(StoredEmailSummaryRow.Projection)
             .SingleOrDefaultAsync(cancellationToken);
 

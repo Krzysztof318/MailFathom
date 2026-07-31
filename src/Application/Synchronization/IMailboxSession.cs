@@ -40,6 +40,34 @@ public interface IMailboxSession : IAsyncDisposable
         MailSynchronizationWindow synchronizationWindow,
         CancellationToken cancellationToken);
 
+    /// <summary>Reports which of the supplied occurrences the folder still holds, with the flags the server shows for them.</summary>
+    /// <param name="uids">The UIDs to ask about, which must belong to this session's folder and UIDVALIDITY.</param>
+    /// <param name="cancellationToken">Cancels the read and every remaining attempt.</param>
+    /// <returns>One observation per UID the server answered about, in no guaranteed order and never more than <paramref name="uids" /> asked for.</returns>
+    /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the read within its configured resilience budget.</exception>
+    /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
+    /// <exception cref="MailboxAnswerIncompleteException">Thrown when the server answered for an email without the flags this operation requested.</exception>
+    /// <remarks>
+    /// <para>
+    /// A UID the answer omits is one the folder no longer holds. That is the whole detection mechanism for a message
+    /// deleted on the server, so an implementation must never invent an entry for a UID the server said nothing about,
+    /// and must never omit one it did answer for.
+    /// </para>
+    /// <para>
+    /// An answer that names a UID without its flags is refused rather than dropped, because dropping it would turn a
+    /// message the server proved exists into the silence a deleted message produces. An implementation reports that as
+    /// a failure and lets the caller's next run ask again; nothing local may be derived from a partial answer.
+    /// </para>
+    /// <para>
+    /// The operation reads flags and nothing else. It must not request a message body, a header, or any other item whose
+    /// retrieval sets the remote <c>\Seen</c> flag, and it must not write a flag back: this is the path that inspects
+    /// mail somebody has already stored, and a careless fetch here would mark a whole mailbox as read.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<RemoteEmailFlagObservation>> GetRemoteFlagsWithoutSettingSeenAsync(
+        IReadOnlyList<ImapUid> uids,
+        CancellationToken cancellationToken);
+
     /// <summary>Fetches raw MIME content with a BODY.PEEK-style operation that preserves the remote Seen flag.</summary>
     /// <param name="occurrenceId">The occurrence to fetch, which must belong to this session's account, folder, and UIDVALIDITY.</param>
     /// <param name="maxRawMimeBytes">The size beyond which the payload is abandoned rather than buffered.</param>

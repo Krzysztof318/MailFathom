@@ -119,11 +119,22 @@ full participant set belongs to reading it.
 
 `RemoteEmailFlagSnapshot` reports the flags a server last showed, together with when they were read. The timestamp is
 what separates "the server reported none of these flags" from "nobody has looked yet", which no combination of the
-booleans can express on its own. Until reconciliation lands (specification 10) every row carries the never-observed
-value, so an email that has never been looked at matches the unseen side of `IsRemotelySeen` — and `WasObserved` is how a
-caller tells the two apart.
+booleans can express on its own. Reconciliation refreshes the snapshot one bounded window per run, so a row it has not
+reached yet still carries the never-observed value and matches the unseen side of `IsRemotelySeen` — and `WasObserved` is
+how a caller tells the two apart.
 
 The snapshot travels in one direction only. Nothing in any read path turns a flag into an IMAP `STORE`.
+
+### Mail the server no longer holds
+
+Every query here — the timeline, search, and the single-email lookup a content read starts from — excludes an email
+reconciliation found gone from its remote folder. The exclusion is written once, in the predicate both read models
+share, and no filter can opt out of it: an email the server deleted is not part of any mailbox a reader may see. An
+account configured to erase local copies leaves no row to exclude at all.
+
+`IsRemotelyDeleted` is a different question and is not that exclusion. It is reported on every result and filtered on by
+nothing, because it is the server's `\Deleted` flag on a message the folder still holds and still serves — a message a
+reader can legitimately ask for, and one whose flag they can then read.
 
 ## Ordering and pagination
 

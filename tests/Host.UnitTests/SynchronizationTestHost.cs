@@ -77,6 +77,7 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<IEmailMetadataRepository>());
         services.AddSingleton(Substitute.For<IEmailContentStore>());
         services.AddSingleton(CreateMimeReaderThatExtractsEverything());
+        services.AddSingleton(CreateReconciliationStoreWithNothingToDo());
         services.AddSingleton(new PersistenceConcurrencyOptions());
         services.AddSingleton(new MailboxSynchronizationOptions());
         services.AddSingleton(timeProvider);
@@ -88,6 +89,7 @@ internal static class SynchronizationTestHost
         services.AddScoped<MailFolderResolver>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<MailboxSynchronizer>();
+        services.AddScoped<MailboxReconciler>();
 
         // Each run hands its own snapshot to the scopes it opens, and every per-account reader answers from that
         // snapshot rather than from the one the container was composed with. The host wires it exactly this way, which
@@ -97,6 +99,7 @@ internal static class SynchronizationTestHost
         services.AddScoped(provider => provider.GetRequiredService<ScopedMailSynchronizationSettings>().Current);
         services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         services.AddScoped<IMailSynchronizationWindowReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
 
         return services.BuildServiceProvider();
     }
@@ -183,6 +186,26 @@ internal static class SynchronizationTestHost
         {
             return null;
         }
+    }
+
+    /// <summary>Builds a store whose folders hold nothing awaiting reconciliation, so a run's backward pass reaches no server.</summary>
+    /// <remarks>
+    /// These tests are about how a supervisor schedules and isolates folder work units, not about what reconciliation
+    /// finds, and an unconfigured substitute would answer the window query with a null task the run then faults on.
+    /// </remarks>
+    private static IStoredEmailReconciliationStore CreateReconciliationStoreWithNothingToDo()
+    {
+        var reconciliationStore = Substitute.For<IStoredEmailReconciliationStore>();
+        reconciliationStore
+            .GetReconciliationWindowAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolutionId>(),
+                Arg.Any<ImapUidValidity>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingReconciliation>>([]));
+
+        return reconciliationStore;
     }
 
     /// <summary>Builds a reader whose messages all parse, because these tests are about how a supervisor isolates folders.</summary>

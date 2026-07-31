@@ -3,6 +3,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Synchronization;
 using MailMcp.Domain.Transport;
@@ -372,6 +373,112 @@ public sealed class MailSynchronizationOptionsTests
 
         // Assert
         Assert.Equal(MailSynchronizationWindow.Unbounded, window);
+    }
+
+    /// <summary>The two accounts of one deployment can answer differently, which is the reason the setting is per account.</summary>
+    [Fact]
+    public void GetDisposition_AccountsConfiguringDifferentDispositions_AnswersPerAccount()
+    {
+        // Arrange
+        var followingServer = CreateAccount("following-server");
+        followingServer.RemotelyDeletedEmailDisposition = RemotelyDeletedEmailDisposition.EraseLocalCopy;
+        var options = new MailSynchronizationOptions { Accounts = [followingServer, CreateAccount("archive")] };
+
+        // Act
+        var dispositions = options.ServedAccountIds
+            .Select(options.GetDisposition)
+            .ToArray();
+
+        // Assert
+        Assert.Equal(
+            [RemotelyDeletedEmailDisposition.RetainTombstone, RemotelyDeletedEmailDisposition.EraseLocalCopy],
+            dispositions);
+    }
+
+    /// <summary>Configuring nothing keeps the reversible outcome, so no deployment loses mail by omission.</summary>
+    [Fact]
+    public void GetDisposition_AccountConfiguringNoDisposition_KeepsTheLocalRowAsATombstone()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions { Accounts = [CreateAccount("primary")] };
+
+        // Act
+        var disposition = options.GetDisposition(MailAccountId.Create("primary"));
+
+        // Assert
+        Assert.Equal(RemotelyDeletedEmailDisposition.RetainTombstone, disposition);
+    }
+
+    [Fact]
+    public void Bind_RemotelyDeletedEmailDisposition_ReadsItByName()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:RemotelyDeletedEmailDisposition"] = "EraseLocalCopy",
+            })
+            .Build();
+
+        // Act
+        var options = configuration.GetSection("MailSynchronization").Get<MailSynchronizationOptions>()!;
+
+        // Assert
+        Assert.Equal(
+            RemotelyDeletedEmailDisposition.EraseLocalCopy,
+            Assert.Single(options.Accounts).RemotelyDeletedEmailDisposition);
+    }
+
+    /// <summary>
+    /// This setting decides whether stored mail is destroyed, so a name nobody can interpret must fail startup rather
+    /// than fall back to a default or take the account out of synchronization altogether.
+    /// </summary>
+    [Fact]
+    public void Bind_RemotelyDeletedEmailDispositionThatNamesNothing_FailsInsteadOfDroppingTheAccount()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:RemotelyDeletedEmailDisposition"] = "delete",
+            })
+            .Build();
+        var options = new MailSynchronizationOptions();
+
+        // Act, Assert
+        Assert.Throws<InvalidOperationException>(() => configuration
+            .GetSection("MailSynchronization")
+            .Bind(options, binderOptions => binderOptions.ErrorOnUnknownConfiguration = true));
+    }
+
+    /// <summary>
+    /// A bare number binds onto an enum whether or not a member carries it, and strict binding does not catch that
+    /// because the conversion succeeds. Left unvalidated, an undefined value would reach reconciliation, which reads
+    /// anything that is not <c>EraseLocalCopy</c> as the tombstone — a destructive setting silently doing the other
+    /// thing.
+    /// </summary>
+    [Fact]
+    public void ValidateForSynchronization_DispositionNumberNoMemberCarries_IsRejected()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:RemotelyDeletedEmailDisposition"] = "2",
+            })
+            .Build();
+        var options = configuration.GetSection("MailSynchronization").Get<MailSynchronizationOptions>()!;
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains("RetainTombstone", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("EraseLocalCopy", result.ErrorMessage, StringComparison.Ordinal);
     }
 
     [Fact]

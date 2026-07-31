@@ -7,6 +7,7 @@ using MailMcp.Application.Accounts;
 using MailMcp.Application.Mail;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
 using MailMcp.Domain.Synchronization;
 using MailMcp.Domain.Transport;
@@ -19,7 +20,11 @@ namespace MailMcp.Host.Configuration;
 /// <summary>Configures periodic IMAP synchronization.</summary>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class MailSynchronizationOptions
-    : IValidatableObject, IMailTransportSecurityPolicyReader, IMailSynchronizationWindowReader, IMailAccountCatalog
+    : IValidatableObject,
+        IMailTransportSecurityPolicyReader,
+        IMailSynchronizationWindowReader,
+        IRemotelyDeletedEmailDispositionReader,
+        IMailAccountCatalog
 {
     /// <summary>The shutdown budget the .NET Generic Host applies when nothing configures one.</summary>
     private static readonly TimeSpan DefaultHostShutdownTimeout = TimeSpan.FromSeconds(30);
@@ -88,6 +93,16 @@ internal sealed class MailSynchronizationOptions
     /// <summary>Gets or sets the maximum number of bounded metadata batches processed by one synchronization run.</summary>
     [Range(1, 1000)]
     public int MaxMetadataBatchesPerRun { get; set; } = 10;
+
+    /// <summary>Gets or sets how many already-stored emails one folder run re-checks against the mail server.</summary>
+    /// <remarks>
+    /// It bounds the backward pass that notices a deletion or a flag change, in the same way the batch settings above
+    /// bound the forward pass that notices new mail. A folder holding more emails than this is reconciled over several
+    /// runs, oldest observation first, so raising it shortens the time a remote deletion stays unnoticed and lengthens
+    /// each run; the whole window is one <c>UID FETCH</c> of flags, which is why the ceiling can be generous.
+    /// </remarks>
+    [Range(1, 10000)]
+    public int MaxReconciledEmailsPerRun { get; set; } = 500;
 
     /// <summary>Gets or sets the maximum number of MIME entities one message may declare before extraction abandons it.</summary>
     [Range(1, 100000)]
@@ -181,6 +196,14 @@ internal sealed class MailSynchronizationOptions
         var account = this.FindAccount(accountId.Value);
 
         return account.CreateSynchronizationWindow();
+    }
+
+    /// <inheritdoc />
+    public RemotelyDeletedEmailDisposition GetDisposition(MailAccountId accountId)
+    {
+        var account = this.FindAccount(accountId.Value);
+
+        return account.RemotelyDeletedEmailDisposition;
     }
 
     /// <inheritdoc />
@@ -302,6 +325,24 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// </remarks>
     public DateOnly? EarliestEmailReceivedDate { get; set; }
 
+    /// <summary>Gets or sets what happens to the local copy of an email this account's mail server no longer holds.</summary>
+    /// <remarks>
+    /// <para>
+    /// It binds as one of the two names <see cref="RemotelyDeletedEmailDisposition" /> declares, and a value that is
+    /// neither fails startup rather than silently selecting a default: this setting decides whether stored mail is
+    /// destroyed, and a typo in it must never be the reason mail survives or does not. The default keeps the local row
+    /// as a tombstone that mailbox queries exclude.
+    /// </para>
+    /// <para>
+    /// The setting is per account because the accounts of one deployment answer to different providers and serve
+    /// different purposes; one mailbox may be followed exactly while another is the copy that has to outlive the
+    /// server's own retention. Changing it governs the disappearances observed from then on and leaves everything
+    /// already recorded exactly as it is.
+    /// </para>
+    /// </remarks>
+    public RemotelyDeletedEmailDisposition RemotelyDeletedEmailDisposition { get; set; } =
+        RemotelyDeletedEmailDisposition.RetainTombstone;
+
     /// <summary>Gets or sets the configured folder aliases. When omitted, the worker synchronizes the inbox only.</summary>
     public List<MailFolderMappingOptions> Folders { get; set; } = [];
 
@@ -318,6 +359,17 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
         if (this.Port is < 1 or > 65535)
         {
             yield return new ValidationResult("IMAP port must be between 1 and 65535.", [nameof(this.Port)]);
+        }
+
+        // The binder converts a bare number onto an enum without asking whether any member carries it, and
+        // ErrorOnUnknownConfiguration does not catch that: it rejects unknown keys and failed conversions, and this
+        // conversion succeeds. Left unchecked, an undefined value would reach reconciliation, which treats anything
+        // that is not EraseLocalCopy as the tombstone — a destructive setting silently doing the other thing.
+        if (!Enum.IsDefined(this.RemotelyDeletedEmailDisposition))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the remotely deleted email disposition must be one of {string.Join(", ", Enum.GetNames<RemotelyDeletedEmailDisposition>())}.",
+                [nameof(this.RemotelyDeletedEmailDisposition)]);
         }
 
         if (this.Folders is null)

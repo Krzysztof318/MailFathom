@@ -11,6 +11,7 @@ using MailMcp.Domain.Folders;
 using MailMcp.Domain.Synchronization;
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
+using MailMcp.Infrastructure.Mail.MailKit;
 using NSubstitute;
 using Xunit;
 using static MailMcp.Infrastructure.UnitTests.MailKitImapSessionTestContext;
@@ -589,6 +590,112 @@ public sealed class MailKitImapMailboxSessionTests
         Assert.Single(folder.ReceivedCalls()
             .Where(call => call.GetMethodInfo().Name == nameof(IMailFolder.SearchAsync))
             .Select(call => (SearchQuery)call.GetArguments()[0]!));
+
+    [Fact]
+    public async Task GetRemoteFlagsWithoutSettingSeenAsync_ServerAnswersForSomeUids_ReportsOnlyThoseAndRequestsNoSeenSettingItem()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient();
+        var folder = CreateSelectedFolder();
+
+        // The summary is built before the folder is configured with it: constructing a substitute writes to
+        // NSubstitute's ambient call context, so building one inside the Returns argument configures the wrong call.
+        var summary = CreateFlaggedSummary(new UniqueId(10), MessageFlags.Seen | MessageFlags.Answered);
+        folder.FetchAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IFetchRequest>(),
+            Arg.Any<CancellationToken>()).Returns([summary]);
+        await using var session = await OpenSessionAsync(resilience, client, folder);
+
+        // Act
+        var observations = await session.GetRemoteFlagsWithoutSettingSeenAsync(
+            [ImapUid.Create(10), ImapUid.Create(11)],
+            CancellationToken.None);
+
+        // Assert
+        var observation = Assert.Single(observations);
+        Assert.Equal(10U, observation.Uid.Value);
+        Assert.Equal(ObservedAt, observation.Snapshot.ObservedAt);
+        Assert.True(observation.Snapshot.IsSeen);
+        Assert.True(observation.Snapshot.IsAnswered);
+        Assert.False(observation.Snapshot.IsDeleted);
+
+        // The UID the server said nothing about is what a deleted message looks like, so it must be absent rather than
+        // reported with every flag unset. The requested items are asserted for the reason the content fetch asserts its
+        // own: FLAGS and UID are answered out of folder state, while any body or header item would set \Seen on every
+        // message this pass inspects. StoreAsync is the only member able to write a flag back.
+        Assert.Equal(
+            MailKitImapMailboxSession.ReconciliationSummaryItems,
+            RequestedFetchItems(folder));
+        await folder.DidNotReceive().GetStreamAsync(Arg.Any<UniqueId>(), Arg.Any<CancellationToken>());
+        await folder.DidNotReceive().StoreAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IStoreFlagsRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetRemoteFlagsWithoutSettingSeenAsync_NoUids_AnswersWithoutReachingTheServer()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient();
+        var folder = CreateSelectedFolder();
+        await using var session = await OpenSessionAsync(resilience, client, folder);
+
+        // Act
+        var observations = await session.GetRemoteFlagsWithoutSettingSeenAsync([], CancellationToken.None);
+
+        // Assert
+        Assert.Empty(observations);
+        await folder.DidNotReceive().FetchAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IFetchRequest>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The dangerous shape: the server answers for a UID but withholds its flags. Dropping that answer would leave the
+    /// UID indistinguishable from one the server never mentioned, which reconciliation reads as a deleted message.
+    /// </summary>
+    [Fact]
+    public async Task GetRemoteFlagsWithoutSettingSeenAsync_ServerAnswersWithoutFlags_FailsRatherThanReportingTheEmailAsAbsent()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient();
+        var folder = CreateSelectedFolder();
+        var flaglessSummary = Substitute.For<IMessageSummary>();
+        flaglessSummary.UniqueId.Returns(new UniqueId(10));
+        folder.FetchAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IFetchRequest>(),
+            Arg.Any<CancellationToken>()).Returns([flaglessSummary]);
+        await using var session = await OpenSessionAsync(resilience, client, folder);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<MailboxAnswerIncompleteException>(() =>
+            session.GetRemoteFlagsWithoutSettingSeenAsync([ImapUid.Create(10)], CancellationToken.None));
+
+        // Assert
+        Assert.Equal("FLAGS", exception.MissingDataItem);
+        Assert.Equal(PrimaryAccount, exception.AccountId);
+        Assert.Equal(InboxFolder.Alias, exception.FolderAlias);
+    }
+
+    /// <summary>Reads the summary items the adapter asked the folder for, out of the request it actually issued.</summary>
+    private static MessageSummaryItems RequestedFetchItems(IMailFolder folder) => folder
+        .ReceivedCalls()
+        .Where(call => call.GetMethodInfo().Name == nameof(IMailFolder.FetchAsync))
+        .Select(call => ((IFetchRequest)call.GetArguments()[1]!).Items)
+        .Single();
+
+    private static IMessageSummary CreateFlaggedSummary(UniqueId uid, MessageFlags flags)
+    {
+        var summary = Substitute.For<IMessageSummary>();
+        summary.UniqueId.Returns(uid);
+        summary.Flags.Returns(flags);
+
+        return summary;
+    }
 
     // Building a substitute configures NSubstitute's ambient call context rather than only the returned object, so the
     // construction stays in a loop instead of a Select whose deferred execution could interleave it with another

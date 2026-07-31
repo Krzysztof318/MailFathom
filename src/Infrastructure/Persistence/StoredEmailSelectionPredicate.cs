@@ -30,15 +30,24 @@ internal static class StoredEmailSelectionPredicate
     /// <param name="selection">The validated structural filters.</param>
     /// <returns>The narrowed query, which PostgreSQL evaluates in full.</returns>
     /// <remarks>
+    /// <para>
     /// Each nullable filter is unwrapped into a local before it enters an expression, so the predicate PostgreSQL
     /// receives compares a value rather than an optional one. A recipient filter tests the <c>To</c> and <c>Cc</c>
     /// arrays for containment, which is the operation their GIN indexes serve; the provider emits <c>@&gt;</c> for a
     /// <c>Contains</c> over a GIN-indexed array column and <c>= ANY</c> for one without an index.
+    /// </para>
+    /// <para>
+    /// The tombstone exclusion leads and no caller can turn it off, which is why it is written here rather than left to
+    /// each read model. An email the mail server no longer holds is not part of any mailbox a reader may see, and a
+    /// filter that could opt out of that would be a way to read deleted mail.
+    /// </para>
     /// </remarks>
     internal static IQueryable<StoredEmailEntity> Matching(
         IQueryable<StoredEmailEntity> emails,
         MailboxEmailSelection selection)
     {
+        emails = emails.Where(email => email.RemoteExpungeObservedAt == null);
+
         if (selection.Scope.AccountIds.Count > 0)
         {
             var accountIds = selection.Scope.AccountIds.Select(static accountId => accountId.Value).ToArray();

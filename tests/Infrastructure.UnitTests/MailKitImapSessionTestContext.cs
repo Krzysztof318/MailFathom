@@ -11,6 +11,7 @@ using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
 using MailMcp.Infrastructure.Mail.MailKit;
 using MailMcp.Infrastructure.Secrets;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 
 namespace MailMcp.Infrastructure.UnitTests;
@@ -18,6 +19,9 @@ namespace MailMcp.Infrastructure.UnitTests;
 /// <summary>Builds the account, policy, folder, and session factory the MailKit adapter tests arrange around.</summary>
 internal static class MailKitImapSessionTestContext
 {
+    /// <summary>The instant the adapter's clock reports, which every flag observation a test reads is stamped with.</summary>
+    internal static DateTimeOffset ObservedAt { get; } = new(2026, 7, 31, 12, 0, 0, TimeSpan.Zero);
+
     internal static MailAccountId PrimaryAccount { get; } = MailAccountId.Create("primary");
 
     internal static MailAccountId SecondaryAccount { get; } = MailAccountId.Create("secondary");
@@ -111,7 +115,8 @@ internal static class MailKitImapSessionTestContext
             clientFactory,
             settingsProvider,
             resilience.Executor,
-            resilience.TransientFailureClassifier);
+            resilience.TransientFailureClassifier,
+            new FakeTimeProvider(ObservedAt));
 
     /// <summary>Hands out one client per establishment attempt, in the order a test scripted the reconnections.</summary>
     /// <remarks>A request beyond the scripted sequence is a test asserting on a reconnection it did not intend, so it fails loudly.</remarks>

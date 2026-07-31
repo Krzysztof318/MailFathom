@@ -22,7 +22,8 @@ internal sealed class MailKitImapMailboxSessionFactory(
     Func<IImapClient> clientFactory,
     IImapAccountSettingsProvider settingsProvider,
     OutboundOperationExecutor operationExecutor,
-    ITransientFailureClassifier transientFailureClassifier) : IMailboxSessionFactory
+    ITransientFailureClassifier transientFailureClassifier,
+    TimeProvider timeProvider) : IMailboxSessionFactory
 {
     /// <inheritdoc />
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the connection passes to the returned session; an establishment failure disposes it here instead.")]
@@ -53,7 +54,7 @@ internal sealed class MailKitImapMailboxSessionFactory(
             throw;
         }
 
-        return new MailKitImapMailboxSession(accountId, folder, connection);
+        return new MailKitImapMailboxSession(accountId, folder, connection, timeProvider);
     }
 }
 
@@ -66,8 +67,20 @@ internal sealed class MailKitImapMailboxSessionFactory(
 internal sealed class MailKitImapMailboxSession(
     MailAccountId accountId,
     MailFolderResolution folder,
-    MailKitImapConnection connection) : IMailboxSession
+    MailKitImapConnection connection,
+    TimeProvider timeProvider) : IMailboxSession
 {
+    /// <summary>The only items the reconciliation fetch may ever ask for.</summary>
+    /// <remarks>
+    /// Both are answered out of the folder's own state and neither retrieves a message, so the command IMAP receives is
+    /// <c>UID FETCH &lt;set&gt; (FLAGS UID)</c> and no part of it can set <c>\Seen</c>. Adding any body, header, or
+    /// <c>RFC822</c> item to this set would silently mark every reconciled message as read — the exact failure the
+    /// read-only invariant exists to prevent — so it is a named constant that one test asserts against rather than an
+    /// argument spelled out at a call site.
+    /// </remarks>
+    internal const MessageSummaryItems ReconciliationSummaryItems =
+        MessageSummaryItems.Flags | MessageSummaryItems.UniqueId;
+
     /// <inheritdoc />
     public ValueTask DisposeAsync() => connection.DisposeAsync();
 
@@ -100,6 +113,23 @@ internal sealed class MailKitImapMailboxSession(
                 maxEmailCount,
                 synchronizationWindow,
                 attemptToken),
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<RemoteEmailFlagObservation>> GetRemoteFlagsWithoutSettingSeenAsync(
+        IReadOnlyList<ImapUid> uids,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(uids);
+
+        if (uids.Count == 0)
+        {
+            return Task.FromResult<IReadOnlyList<RemoteEmailFlagObservation>>([]);
+        }
+
+        return connection.ExecuteFolderReadAsync(
+            (openFolder, attemptToken) => this.FetchFlagsAsync(openFolder, uids, attemptToken),
             cancellationToken);
     }
 
@@ -162,6 +192,57 @@ internal sealed class MailKitImapMailboxSession(
 
         return new RemoteEmailMetadataBatch(messages, ImapUid.Create(inspectedThroughUid), hasMore);
     }
+
+    /// <summary>Asks the folder for the flags of the supplied UIDs and reports one observation per UID it answered for.</summary>
+    /// <remarks>
+    /// <para>
+    /// IMAP requires a server to ignore a UID a <c>UID FETCH</c> names that the folder no longer holds, rather than to
+    /// fail the command, so the answer describes exactly the messages that still exist. That silence is the detection
+    /// mechanism for a message deleted on the server, which is why nothing here fills a missing UID in with a default.
+    /// </para>
+    /// <para>
+    /// A summary that answers for a UID without the flags the command requested is refused rather than dropped, and that
+    /// is the whole reason this method can throw. Dropping it would turn a message the server just proved exists into
+    /// the same silence a deleted message produces, and an account configured to erase local copies would then destroy
+    /// mail on the strength of an answer the server never gave.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="MailboxAnswerIncompleteException">Thrown when the server answered for an email without its flags.</exception>
+    private async Task<IReadOnlyList<RemoteEmailFlagObservation>> FetchFlagsAsync(
+        IMailFolder openFolder,
+        IReadOnlyList<ImapUid> uids,
+        CancellationToken cancellationToken)
+    {
+        var requestedUids = uids.Select(uid => new UniqueId(uid.Value)).ToArray();
+        var summaries = await openFolder.FetchAsync(requestedUids, ReconciliationSummaryItems, cancellationToken);
+        var observedAt = timeProvider.GetUtcNow();
+
+        if (summaries.Any(static summary => summary.Flags is null))
+        {
+            throw new MailboxAnswerIncompleteException(accountId, folder.Alias, "FLAGS");
+        }
+
+        return
+        [
+            .. summaries.Select(summary => new RemoteEmailFlagObservation(
+                ImapUid.Create(summary.UniqueId.Id),
+                SnapshotOf(summary.Flags!.Value, observedAt))),
+        ];
+    }
+
+    /// <summary>Reads the five flags the stored snapshot keeps out of what the server reported.</summary>
+    /// <remarks>
+    /// Only the system flags a mailbox reader asks about are kept. Keywords a server or another client defines are
+    /// deliberately not stored: they are mail-derived data nothing queries, and copying them would widen what a
+    /// deletion or an export has to account for.
+    /// </remarks>
+    private static RemoteEmailFlagSnapshot SnapshotOf(MessageFlags flags, DateTimeOffset observedAt) => new(
+        observedAt,
+        flags.HasFlag(MessageFlags.Seen),
+        flags.HasFlag(MessageFlags.Answered),
+        flags.HasFlag(MessageFlags.Flagged),
+        flags.HasFlag(MessageFlags.Draft),
+        flags.HasFlag(MessageFlags.Deleted));
 
     private async Task<RemoteEmailContentFetchResult> FetchRawMimeWithPeekAsync(
         IMailFolder openFolder,

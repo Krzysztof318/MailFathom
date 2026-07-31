@@ -28,6 +28,7 @@ MailMcp now includes the first vertical slice for read-only IMAP synchronization
 - Secrets are re-resolved per operation rather than cached, and the configuration snapshot that names them is republished only after every reference in it has resolved. A rotated credential, trust anchor, or database password therefore reaches the next operation without a restart, and a reload that cannot resolve leaves the previous snapshot active. [Secret rotation](../operations/secret-rotation.md) is the operator procedure.
 - Every message whose raw MIME was stored is also read for normalized metadata — participants by role, sent and received timestamps, subject, thread identifiers, and an attachment summary. The read happens on the payload the run already fetched, so enrichment costs no second IMAP round trip and cannot reach the remote `\Seen` flag. [MIME metadata extraction](#mime-metadata-extraction) describes what is extracted and how each part is classified, and [Stored email schema](../architecture/stored-email-schema.md) describes which of it the row keeps. A message whose MIME no reader could parse is still stored, carrying only what the server's envelope reported; the same holds for one whose payload was never fetched because it exceeded the size limit.
 - The same read also derives the message's searchable text from its body and stores it, together with a bounded copy of the subject and of the normalized participant addresses, in a `email_search_documents` row whose PostgreSQL-generated `tsvector` column carries the GIN index lexical search will query. [Body text and the lexical index](#body-text-and-the-lexical-index) describes which part supplies the text, when a derivation is marked lossy, and what a message with no readable body records instead.
+- Each run ends with a bounded backward pass over mail that is already stored, so a message deleted on the server stops being served locally and a flag changed elsewhere stops being stale. It reuses the run's own read-only session, asks for flags and the UID and nothing that could set `\Seen`, and treats a UID the server declines to answer for as a message that left the folder. What becomes of that message locally is the account's choice between a tombstone every query excludes and erasing the local copy outright; a UIDVALIDITY change selects no window at all and can therefore never delete anything. [Reconciling against the server](#reconciling-against-the-server) describes the window, the ordering that advances it without a cursor, the two dispositions, and the audit lines.
 - A bounded background backfill re-reads the raw MIME of messages stored before extraction existed, writes the classification markers and the text it finds, and records the position it reached so an interrupted run resumes rather than restarts. It reaches no mail server, and it ends itself once no stored message awaits extraction.
 - `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, secret resolution and trust anchor loading before any hosted service starts, a validated snapshot every consumer reads instead of the raw bound one, and one supervised synchronization schedule per configured account that isolates failures per account and per folder work unit. [Per-account supervision](#per-account-supervision) describes the coordinator, the two concurrency bounds, the backoff layering, and the shutdown drain. A second worker, configured under `MailExtractionBackfill`, runs the extraction backfill on the same scoped-work-unit terms.
 
@@ -436,6 +437,97 @@ Each batch commits its extractions together with the position it reached, so a c
 
 The walk reaches no mail server — every byte it reads was fetched and stored by an earlier synchronization run — so it cannot touch a remote `\Seen` flag however long it runs. A run is bounded by `BatchSize` and `MaxBatchesPerRun` and then yields; the worker ends itself once a run finds nothing left, because every message synchronized from then on is extracted as it is written. A failed run keeps the worker alive: the database being briefly unavailable says nothing about whether work remains, and the committed position means the next interval resumes.
 
+## Reconciling against the server
+
+A synchronization run has two halves. The forward pass only ever moves past the checkpoint, so it discovers new mail and
+can never notice that an old message is gone or that its flags changed. The backward pass walks a bounded window of what
+is **already stored** and asks the server about it, over the same read-only session the forward pass opened.
+
+### Choosing the window, and why there is no cursor
+
+The window is bounded by `MaxReconciledEmailsPerRun` and ordered by `remote_flags_observed_at`, oldest first. Writing an
+observation is what moves a row to the back of that queue, so the pass advances by doing its work rather than by
+recording where it stopped. An interrupted run therefore resumes rather than restarting or skipping, and no second
+piece of state can drift out of step with the rows it describes.
+
+**Half the window is reserved for mail that has been observed before.** Without that reserve the two groups would not
+compete fairly, because the run refills one of them itself: the forward pass can store a thousand new occurrences under
+the default batch settings while the window holds five hundred, and every one of them arrives never-observed. Taking
+the window in observation order alone would therefore spend all of it on mail that has just arrived, for as long as
+mail keeps arriving, and a deletion or a flag change among the mail stored last month would never be noticed again.
+Only as much of the reserve as there is mail to fill it is held back, so a mailbox being synchronized for the first
+time still gives its whole window to new mail rather than leaving half of it idle.
+
+That is why the window is read as two queries rather than one ordered scan. Both are served by an index scan with no
+sort step: the previously observed group by `ix_stored_emails_reconciliation_queue`, which is
+`(mail_folder_id, remote_flags_observed_at, uid)` filtered to the rows that are not tombstoned, and the never-observed
+group by the occurrence index that already orders a folder by UID. Measured against a folder of 200,000 rows, each
+query reads only the rows its limit asks for.
+
+The window is selected under the UIDVALIDITY the open session reports. That is what makes a server-side renumbering
+cost nothing locally: rows stored under the previous UIDVALIDITY name a UID space the server abandoned, so they fall
+outside every window instead of being reported as missing. **A UIDVALIDITY change can never cause mass local deletion**,
+and it is left to the existing invalidation rule.
+
+### What the answer means
+
+The pass issues one `UID FETCH <set> (FLAGS UID)`. IMAP requires a server to ignore a UID that names a message the
+folder no longer holds rather than to fail the command, so the answer describes exactly the messages that still exist —
+and **silence is the finding**. A UID the server answered for has its stored flag snapshot refreshed; a UID it said
+nothing about is a message that left the folder.
+
+The `\Deleted` flag is deliberately not that signal. It marks a message the folder still holds and still serves, so it
+is recorded as a flag and nothing more. Only disappearance from the folder is a deletion here.
+
+An answer that names a UID **without** the flags the command asked for is refused rather than acted on, and the folder's
+run ends. That is the one case where the pass fails instead of recording something: the protocol requires a server to
+return every data item a `FETCH` named, and an incomplete answer cannot be allowed to degrade into the silence a deleted
+message produces — an account configured to erase local copies would otherwise destroy mail on the strength of an answer
+the server never gave. The next run asks again.
+
+Everything in this pass is read-only. It asks for flags and for the UID, both of which a server answers out of folder
+state, so nothing it issues can set the remote `\Seen` flag — and the requested item set is a named constant that a
+test asserts against, because adding any body or header item to it would silently mark every message the pass inspects
+as read. The pass holds no port that could write a flag back.
+
+### What becomes of a message the server no longer holds
+
+Each account chooses, through `RemotelyDeletedEmailDisposition`:
+
+| Value | What happens locally |
+|---|---|
+| `RetainTombstone` (default) | The row stays and records `remote_expunge_observed_at`. Every mailbox query — the timeline, search, and the content read — excludes it from that moment, and so does every later reconciliation window. Its raw MIME and derived text stay in the database. |
+| `EraseLocalCopy` | The row is removed as the disappearance is observed, and PostgreSQL removes the raw MIME, the search document, and any outstanding repair request with it. Nothing of the message survives locally. |
+
+The setting is per account because the accounts of one deployment are not interchangeable: a mailbox whose provider is
+the system of record can be followed exactly, while a mailbox MailMcp is the durable copy of must not lose mail because
+a server dropped it. The default is the reversible one, so a server that misreports a folder costs a hidden row rather
+than a destroyed local copy.
+
+**Changing the setting governs what is observed from then on, and touches nothing already recorded.** A message already
+tombstoned under `RetainTombstone` is outside every later window — the server has nothing left to say about it — so
+switching an account to `EraseLocalCopy` erases the disappearances observed after the change and leaves the existing
+tombstones exactly as they are. Cleaning those up is deliberately not automatic; [#170](https://github.com/Krzysztof318/MailMcp/issues/170)
+tracks the retention grace period and the bounded garbage collection that will own it, and that is also where a delay
+between observing a disappearance and erasing the local copy will come from.
+
+The whole window is applied as one set of writes against rows read in one query, so a pass costs one round trip rather
+than one per email inside an open write transaction.
+
+Every write is idempotent and none of them moves state backwards, which is what makes replaying a window after a commit
+conflict safe. A tombstone keeps the timestamp of the run that first observed the disappearance rather than being
+restamped, and a row already removed is not an error to remove again. An email whose stored observation is **newer** than
+the window being applied is left alone entirely: another writer has since asked the same server, its answer supersedes
+this one, and that includes the case where this window would have deleted the email.
+
+### What a run reports
+
+The counts reach the log and nothing else does. A window that observed something logs how many snapshots it refreshed
+and whether the folder has more to reconcile; a window that found messages gone logs that at warning level, with the
+account, the folder alias, the count, and the disposition that was applied. No subject, address, or fragment of a
+message takes part in deciding whether a message still exists, so none of it is read to decide it and none of it can
+reach an audit line.
+
 ## Configuration
 
 Synchronization is disabled by default:
@@ -452,6 +544,7 @@ Synchronization is disabled by default:
     "MaxMetadataBatchSize": 100,
     "MaxRawMimeBytes": 26214400,
     "MaxMetadataBatchesPerRun": 10,
+    "MaxReconciledEmailsPerRun": 500,
     "MaxMimePartCount": 1000,
     "MaxMimeNestingDepth": 30,
     "MaxExtractedTextCharacters": 100000,
@@ -462,6 +555,7 @@ Synchronization is disabled by default:
         "Port": 993,
         "UserName": "mailmcp@example.test",
         "EarliestEmailReceivedDate": "2024-01-01",
+        "RemotelyDeletedEmailDisposition": "RetainTombstone",
         "Secrets": {
           "Password": {
             "Name": "imap-primary-password",
@@ -512,6 +606,8 @@ The extraction backfill has a section of its own rather than a block inside the 
   }
 }
 ```
+
+`MaxReconciledEmailsPerRun` bounds the backward pass the way the batch settings bound the forward one, and `RemotelyDeletedEmailDisposition` is the per-account choice [Reconciling against the server](#reconciling-against-the-server) describes. It binds as one of the two names `RetainTombstone` and `EraseLocalCopy`, and a value that is neither **fails startup** rather than falling back to a default: the setting decides whether stored mail is destroyed, and a typo in it must never be the reason mail survives or does not. That check is explicit rather than left to the binder, because a bare number binds onto an enum whether or not any member carries it — strict binding rejects unknown keys and failed conversions, and this conversion succeeds.
 
 When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. Each entry of `Folders` names an alias and exactly one of `RemotePath` and `SpecialUse`; naming both, naming neither, or naming a role that does not exist fails startup with a message identifying the alias. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, and `Important`. If an account omits `Folders`, its supervisor applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
 
@@ -712,7 +808,10 @@ A rejected reload is logged with the configuration path and the failure identity
 - OAuth mailbox authentication. `XOAUTH2` and `OAUTHBEARER` are deliberately absent from the allow-list because no token source exists yet.
 - IMAP IDLE and NOTIFY support.
 - Explicit EF Core migrations after schema review.
-- Reconciliation of the remote flag snapshot, which is why every stored row still carries the never-observed value.
+- A retention grace period for a message the server no longer holds, and the bounded garbage collection that would act
+  on it. Erasing a local copy happens as the disappearance is observed, and a tombstone keeps its content
+  indefinitely; [#170](https://github.com/Krzysztof318/MailMcp/issues/170) owns both, together with clearing the
+  tombstones an account accumulated before it switched to erasing.
 - Chaos-tested resilience pipelines. The composition has unit coverage; what is missing is proof that an adapter survives a
   dependency misbehaving, which belongs with the adapters now that they are under integration coverage.
 - RAG indexing and SMTP outbox integration. The MCP protocol surface has landed, with `list_emails` and the conventions

@@ -100,11 +100,30 @@ internal sealed class StoredEmailEntity
     /// looked yet", which no combination of the booleans can express on its own.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The snapshot records server state and is never written towards the server: MailMcp reads mail read-only, so no
-    /// application path turns any of these into an IMAP <c>STORE</c>. Reconciliation refreshes them in specification 10;
-    /// until then every row carries the never-observed value.
+    /// application path turns any of these into an IMAP <c>STORE</c>. Reconciliation refreshes them one bounded window
+    /// per run, and a row nobody has reached yet carries the never-observed value.
+    /// </para>
+    /// <para>
+    /// The column is also the reconciliation queue. Windows are selected by the oldest value first with the
+    /// never-observed rows leading, so writing an observation is what moves a row to the back of the queue and what
+    /// makes the pass advance without a cursor of its own.
+    /// </para>
     /// </remarks>
     public DateTimeOffset? RemoteFlagsObservedAt { get; set; }
+
+    /// <summary>
+    /// Gets or sets when reconciliation found this occurrence gone from its remote folder, or <see langword="null" />
+    /// while the server still holds it. A row carrying a value is a tombstone that every mailbox query excludes.
+    /// </summary>
+    /// <remarks>
+    /// This is a different statement from <see cref="IsRemotelyDeleted" />, and the two must not be read as one. That
+    /// flag says the server reported <c>\Deleted</c> for a message the folder still holds and still serves; this
+    /// timestamp says the folder no longer holds the message at all. An occurrence whose local copy is erased rather
+    /// than tombstoned has no row to carry either.
+    /// </remarks>
+    public DateTimeOffset? RemoteExpungeObservedAt { get; set; }
 
     public bool IsRemotelySeen { get; set; }
 
