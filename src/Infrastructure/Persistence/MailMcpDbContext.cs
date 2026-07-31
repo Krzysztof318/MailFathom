@@ -12,6 +12,14 @@ namespace MailMcp.Infrastructure.Persistence;
 [RequiresIntegrationCoverage]
 internal sealed class MailMcpDbContext : DbContext
 {
+    /// <summary>The mailbox account primary key, kept at the name EF Core's own convention gave the applied baseline.</summary>
+    /// <remarks>
+    /// Stated by the mapping rather than left implicit, because a losing writer is recognized by the constraint its
+    /// insert violated and a rename that only the convention knew about would silently turn a resolvable race into a
+    /// failure. The value is the conventional one so the model states the name without asking the schema to change.
+    /// </remarks>
+    internal const string MailboxAccountPrimaryKeyConstraintName = "PK_mailbox_accounts";
+
     internal const string SynchronizationCheckpointPrimaryKeyConstraintName = "pk_synchronization_checkpoints";
 
     internal const string MailFolderBindingUniqueIndexName = "ix_mail_folders_account_alias_generation";
@@ -92,7 +100,12 @@ internal sealed class MailMcpDbContext : DbContext
         modelBuilder.Entity<MailboxAccountEntity>(entity =>
         {
             entity.ToTable("mailbox_accounts");
-            entity.HasKey(account => account.Id);
+
+            // The account row is created by whichever run first binds one of the account's folders, so two overlapping
+            // first runs insert it together and one of them loses. The key is therefore named for the same reason the
+            // alias binding index below is: the loser is recognized by the constraint it violated and reported as a
+            // race to resolve rather than as a failure.
+            entity.HasKey(account => account.Id).HasName(MailboxAccountPrimaryKeyConstraintName);
             entity.Property(account => account.Id).HasMaxLength(128);
         });
 

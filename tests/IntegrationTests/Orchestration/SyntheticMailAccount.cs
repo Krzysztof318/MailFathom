@@ -5,6 +5,7 @@ using MailMcp.AppHost;
 using MailMcp.Application.Mail;
 using MailMcp.Application.Synchronization;
 using MailMcp.Domain.Accounts;
+using MailMcp.Domain.Emails;
 using MailMcp.Domain.Synchronization;
 using MailMcp.Domain.Transport;
 using MailMcp.Infrastructure.Mail;
@@ -28,7 +29,10 @@ namespace MailMcp.IntegrationTests.Orchestration;
 /// </para>
 /// </remarks>
 internal sealed class SyntheticMailAccount(OrchestratedMailServerEndpoints endpoints)
-    : IImapAccountSettingsProvider, IMailTransportSecurityPolicyReader, IMailSynchronizationWindowReader
+    : IImapAccountSettingsProvider,
+    IMailTransportSecurityPolicyReader,
+    IMailSynchronizationWindowReader,
+    IRemotelyDeletedEmailDispositionReader
 {
     /// <summary>Gets the account identifier every occurrence this suite stores belongs to.</summary>
     public static MailAccountId AccountId { get; } = MailAccountId.Create("integration");
@@ -40,6 +44,16 @@ internal sealed class SyntheticMailAccount(OrchestratedMailServerEndpoints endpo
     /// synchronization defect rather than like the arrangement it was.
     /// </remarks>
     public MailSynchronizationWindow GetWindow(MailAccountId accountId) => MailSynchronizationWindow.Unbounded;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The configured default, and the only disposition under which a test can read back what an earlier run stored:
+    /// erasing a local copy would let a folder this suite recreates take the mail an ordered test asserts on with it.
+    /// What the other disposition does is decided by <c>MailboxReconciler</c> and covered where that decision is, in
+    /// the unit suite.
+    /// </remarks>
+    public RemotelyDeletedEmailDisposition GetDisposition(MailAccountId accountId) =>
+        RemotelyDeletedEmailDisposition.RetainTombstone;
 
     /// <inheritdoc />
     public MailTransportSecurityPolicy GetPolicy(MailAccountId accountId) => MailTransportSecurityPolicy.Create(
