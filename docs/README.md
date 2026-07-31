@@ -8,6 +8,7 @@ This documentation set explains the durable design and operating model for MailM
 - [Stored email schema](architecture/stored-email-schema.md) documents the `stored_emails` table, its indexes, and the timeline ordering contract keyset pagination depends on.
 - [Features](features/initial-scope.md) summarizes the first scaffolded capability scope.
 - [Operations](operations/local-development.md) covers local .NET and Aspire development commands.
+- [Configuration sources](operations/configuration-sources.md) covers the source precedence, the deployment-provisioned JSON directory and file, and the Kubernetes ConfigMap and Secret mapping.
 - [Secret provisioning](operations/secret-provisioning.md) covers secret references, the systemd and container provisioning paths, and in-memory exposure.
 - [Host startup telemetry](operations/host-startup-telemetry.md) describes the bootstrap logging pipeline that reports process start, startup failure, and shutdown.
 - [MCP endpoint](operations/mcp-endpoint.md) covers enabling the protocol surface and the interim posture of an endpoint with no transport authentication.

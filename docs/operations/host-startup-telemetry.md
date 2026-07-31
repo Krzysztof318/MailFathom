@@ -13,13 +13,16 @@ The bootstrap pipeline closes both gaps: it is composed before `CreateBuilder`, 
 
 ## What it emits
 
-Three records, all under the category `MailMcp.Host.Startup`:
+Four records, all under the category `MailMcp.Host.Startup`:
 
 | Record | Level | Named properties |
 | --- | --- | --- |
 | Host is starting | `Information` | `ServiceName`, `EnvironmentName`, `ServiceVersion` |
+| Host layered provisioned configuration files | `Information` | `ServiceName`, `FileCount` |
 | Host ended with an unhandled exception | `Critical` | `ServiceName`, plus the exception |
 | Host stopped | `Information` | `ServiceName` |
+
+The configuration record is a count and never a path, and it is written here rather than through the container pipeline for the same reason the others are: it describes what the host read before a container existed to log it. A `0` against a deployment that mounts a ConfigMap is how an empty or misplaced mount becomes visible; [configuration sources](configuration-sources.md) states what is counted.
 
 Those properties are the whole payload the host composes. Nothing reads a configuration value, a connection string, an account, or secret material into a startup record, and the failure record carries the exception as structured exception data rather than interpolated into its message text.
 
@@ -40,4 +43,4 @@ The resource is whatever the OpenTelemetry SDK resolves on its own — `OTEL_SER
 
 The application name and version are therefore properties of the startup records rather than resource attributes. That is where they are useful in any case, including on a console with no resource attached at all.
 
-Records go through a simple export processor rather than the default batching one. Startup emits three records per process, so the throughput the batch processor exists to protect is irrelevant here, while its scheduled delay is precisely the failure mode being avoided.
+Records go through a simple export processor rather than the default batching one. Startup emits a handful of records per process, so the throughput the batch processor exists to protect is irrelevant here, while its scheduled delay is precisely the failure mode being avoided.

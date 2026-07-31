@@ -127,6 +127,12 @@ secrets:
 
 A Secret mounted as a read-only tmpfs volume becomes one file per key at the path the operator chose, so the reference is `file:/etc/mailmcp-secrets/imap-primary-password`. A Secret projected into the environment block is `env:` instead, subject to the caveat below.
 
+Mounting is the shape to prefer, for a reason beyond memory hygiene: because material is resolved per use rather than cached, a Secret the cluster rotates behind an unchanged mount path reaches the next connection without a restart and without a configuration reload. A Secret projected into the environment block is fixed for the life of the pod, so rotating it means replacing the pod.
+
+A Secrets Store CSI driver — Vault, Azure Key Vault, AWS Secrets Manager — needs no MailMcp adapter for the same reason no Kubernetes scheme exists: it mounts files, so the reference is `file:` and the store's own authentication stays the driver's concern.
+
+[Configuration sources](configuration-sources.md#kubernetes) states the whole mapping, including how the non-secret half of a deployment reaches MailMcp through a mounted ConfigMap.
+
 ### Non-production automation
 
 `env:MAILMCP_IMAP_PRIMARY_PASSWORD` reads a CI or orchestrator environment variable. It is not recommended in production, for the memory reason stated below as well as for the usual visibility of an environment block to anything that can read `/proc`.

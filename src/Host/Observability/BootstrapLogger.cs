@@ -17,7 +17,7 @@ namespace MailMcp.Host.Observability;
 /// exporter batches records for five seconds by default. When host startup throws, nothing disposes the application,
 /// and the runtime does not guarantee that <c>finally</c> blocks run for an unhandled exception, so the record that
 /// explains the crash would never leave the process. Every record written here is therefore exported synchronously,
-/// which makes delivery independent of process teardown; three records per process make the cost irrelevant.
+/// which makes delivery independent of process teardown; a handful of records per process make the cost irrelevant.
 /// </para>
 /// <para>
 /// The pipeline is composed before <c>WebApplication.CreateBuilder</c>, which is where a malformed
@@ -67,6 +67,16 @@ internal sealed partial class BootstrapLogger : IDisposable
     /// <summary>Reports that the host process has begun composing itself.</summary>
     public void RecordHostStarting() =>
         this.LogHostStarting(this.settings.ServiceName, this.settings.EnvironmentName, this.settings.ServiceVersion);
+
+    /// <summary>Reports how many deployment-provisioned configuration files were layered into the host's configuration.</summary>
+    /// <param name="fileCount">The number of files layered in, which is zero when the deployment provisioned none.</param>
+    /// <remarks>
+    /// The count is what makes a mount that did not arrive visible at the moment it matters. A directory the deployment
+    /// named is required to exist, so an absent one already fails startup; a mounted directory that is empty is a
+    /// legitimate intermediate state during a rollout and reports itself here as zero rather than as a failure.
+    /// </remarks>
+    public void RecordProvisionedConfigurationFiles(int fileCount) =>
+        this.LogProvisionedConfigurationFiles(this.settings.ServiceName, fileCount);
 
     /// <summary>Reports that the host process is ending because of an exception that escaped composition or the run.</summary>
     /// <param name="exception">The exception that ended the process.</param>
@@ -122,6 +132,11 @@ internal sealed partial class BootstrapLogger : IDisposable
         Level = LogLevel.Information,
         Message = "Host {ServiceName} is starting in environment {EnvironmentName} at version {ServiceVersion}.")]
     private partial void LogHostStarting(string serviceName, string environmentName, string serviceVersion);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Host {ServiceName} layered {FileCount} deployment-provisioned configuration files below the environment.")]
+    private partial void LogProvisionedConfigurationFiles(string serviceName, int fileCount);
 
     [LoggerMessage(
         Level = LogLevel.Critical,

@@ -1,0 +1,17 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+
+namespace MailMcp.Host.Configuration;
+
+/// <summary>Reports the real file system to the provisioned-configuration layering policy.</summary>
+internal sealed class ProvisionedConfigurationFileSystem : IProvisionedConfigurationFileSystem
+{
+    /// <inheritdoc />
+    public bool DirectoryExists(string directoryPath) => Directory.Exists(directoryPath);
+
+    /// <inheritdoc />
+    public bool FileExists(string filePath) => File.Exists(filePath);
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> ListFileNames(string directoryPath) =>
+        [.. Directory.EnumerateFiles(directoryPath).Select(filePath => Path.GetFileName(filePath))];
+}
