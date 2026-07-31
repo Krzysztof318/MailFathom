@@ -1,4 +1,24 @@
 <Project>
+  <!-- The project's own licensing and attribution, declared once so no project restates or contradicts it. The root
+       LICENSE carries the unmodified Apache-2.0 text GitHub's license detection matches, the root NOTICE carries the
+       original-author attribution Apache-2.0 section 4(d) asks derivative distributions to preserve, and the values
+       below are the machine-readable form of both: PackageLicenseExpression is the SPDX slot MSBuild publishes, and
+       the assembly metadata puts the same identifier into what actually ships, since nothing here is packed. -->
+  <PropertyGroup>
+    <Product>MailMcp</Product>
+    <Authors>Krzysztof Kasprowicz</Authors>
+    <Company>Krzysztof Kasprowicz</Company>
+    <Copyright>Copyright © 2026 Krzysztof Kasprowicz</Copyright>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Krzysztof318/MailMcp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Krzysztof318/MailMcp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="SPDX-License-Identifier" Value="Apache-2.0" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>MailMcp.$(MSBuildProjectName)</AssemblyName>
@@ -53,8 +73,11 @@
     <RestorePackagesWithLockFile Condition="'$(MSBuildProjectName)' != 'AppHost' And '$(MSBuildProjectName)' != 'IntegrationTests'">true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
+  <!-- This file is the repository root, so it locates itself rather than searching for a marker file above it. The
+       previous definition looked for .gitignore, which the container build context deliberately does not carry: the
+       property then resolved to nothing and the LICENSE and NOTICE items below it silently matched no file. -->
   <PropertyGroup>
-    <RepositoryRoot>$([System.IO.Path]::GetDirectoryName($([MSBuild]::GetPathOfFileAbove('.gitignore', '$(MSBuildThisFileDirectory)'))))</RepositoryRoot>
+    <RepositoryRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)'))</RepositoryRoot>
   </PropertyGroup>
 
   <ItemGroup>

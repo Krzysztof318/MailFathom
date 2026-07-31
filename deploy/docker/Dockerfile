@@ -53,6 +53,12 @@ COPY src/ src/
 RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
     dotnet restore src/Host/Host.csproj --locked-mode
 
+# The project's own licensing, which `Host` publishes beside the assemblies. It is copied after the restore rather
+# than with the layer above because it is not a restore input: a corrected NOTICE would otherwise discard the restore
+# layer for nothing. `VerifyPublishedLicenseAndNotice` in Host.csproj inspects the publish output, so a context that
+# omits these files fails this build instead of producing an image that ships without its license.
+COPY LICENSE NOTICE ./
+
 # `UseAppHost=false` is what keeps the output architecture-neutral: an apphost is a native executable for one runtime
 # identifier, and producing one here would tie the image to the build machine's. The entrypoint therefore invokes the
 # managed assembly through `dotnet`.
@@ -85,10 +91,12 @@ ARG IMAGE_VERSION=0.0.0-unversioned
 ARG IMAGE_REVISION=unknown
 ARG IMAGE_CREATED=1970-01-01T00:00:00Z
 
-# `org.opencontainers.image.licenses` is deliberately absent. MailMcp has published no license of its own — #113 owns
-# that decision — and a label naming one would make a distribution claim the copyright holder has not granted. Add it
-# in the change that adds the LICENSE file, so the two can never disagree.
-LABEL org.opencontainers.image.title="MailMcp" \
+# `org.opencontainers.image.licenses` is the SPDX identifier a registry and a scanner read without unpacking the
+# image, and it says the same thing as the root LICENSE, the SPDX assembly metadata, and every source header. The
+# label is only the claim; what discharges the obligation is the LICENSE and NOTICE copied in with the publish output
+# below, which is where a reader of a pulled image finds the terms themselves.
+LABEL org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.title="MailMcp" \
       org.opencontainers.image.description="Read-only MCP server over synchronized IMAP mailboxes." \
       org.opencontainers.image.source="https://github.com/Krzysztof318/MailMcp" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \

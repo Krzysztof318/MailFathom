@@ -122,7 +122,7 @@ build_startup_project
 report "Generating the ${migration_name} migration."
 run_migration_command ef-migrations-add -- --name "$migration_name"
 
-report 'Writing the copyright header into the generated files.'
+report 'Writing the copyright and license header into the generated files.'
 write_the_file_header
 
 report 'Rebuilding so the tool applies what is in the assembly.'

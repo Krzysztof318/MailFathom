@@ -22,7 +22,8 @@ almost nothing to use. `-extra` carries ICU and tzdata, which the plain chiseled
 internationalized headers, folds case for search, and formats instants for several time zones, and the invariant
 globalization the smaller image forces would quietly change how mail from outside one alphabet is read.
 
-It contains the published application and nothing else. No SDK, no source tree, no repository history, no test
+It contains the published application and nothing else — plus the two files that licensing requires travel with it,
+`/app/LICENSE` and `/app/NOTICE`. No SDK, no source tree, no repository history, no test
 artifacts, no build cache, no credential, and no certificate. The XML documentation files every project generates are
 dropped at publish, because none is read at run time and shipping them would put the repository's commentary about its
 own internal contracts into an artifact an operator can unpack. The portable symbol files stay, because they are what
@@ -90,9 +91,15 @@ deployments in `deploy/` allow 60 seconds against a 10-second default; raise the
 ### Labels
 
 The image carries the OCI labels that let a pulled image be traced back to the commit it was built from —
-`org.opencontainers.image.source`, `.revision`, `.version`, `.created`, `.licenses` — supplied as build arguments.
+`org.opencontainers.image.source`, `.revision`, `.version`, `.created` — supplied as build arguments.
 `IMAGE_VERSION` currently defaults to `0.0.0-unversioned`: MailMcp has published no release, and what a version means
 here is still an open decision. The application does not yet report its own version at run time either.
+
+`org.opencontainers.image.licenses` is fixed rather than passed in, at `Apache-2.0`, because it states MailMcp's own
+license and a build must not be able to say otherwise. The label is only the claim a registry indexes; the terms
+themselves are `/app/LICENSE` and `/app/NOTICE`, which arrive as part of the publish output the runtime stage copies.
+`Host` fails its own publish when either is missing, so the image cannot be built without them. The third-party
+notices that must accompany them are not in the image yet — see `THIRD_PARTY_LICENSES.md` and issue #123.
 
 ## The schema
 
@@ -109,7 +116,7 @@ has to be one.
 ## Verification
 
 ```bash
-bash scripts/verify-deployment-assets.sh   # reads the files: pins, privileges, rendering, schema guards
+bash scripts/verify-deployment-assets.sh   # reads the files: pins, privileges, rendering, schema and license guards
 bash scripts/smoke-deployment.sh compose   # starts the real thing and asserts what only a running one can answer
 ```
 

@@ -26,10 +26,12 @@ maintainers:
   - name: Krzysztof Kasprowicz
     url: https://github.com/Krzysztof318
 
+# MailMcp's own license, in the SPDX form Artifact Hub reads, matching the image's `org.opencontainers.image.licenses`
+# label and the root LICENSE. It covers the chart and the application it deploys, both of which are this repository,
+# and says nothing about the PostgreSQL server the operator supplies under its own terms.
+annotations:
+  artifacthub.io/license: Apache-2.0
+
 # No dependencies, deliberately. The chart installs no database: MailMcp needs PostgreSQL with the `vector` extension,
 # and a subchart bundled here would make the chart responsible for the durability, backup, and upgrade of the store
 # that holds every synchronized message. `database` in values.yaml points at one the operator owns.
-#
-# No `artifacthub.io/license` annotation either, and for the same reason the image carries no `image.licenses` label:
-# MailMcp has published no license of its own. #113 owns that decision, and declaring one here would make a claim the
-# copyright holder has not granted.
