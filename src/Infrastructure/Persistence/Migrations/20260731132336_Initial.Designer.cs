@@ -13,7 +13,7 @@ using NpgsqlTypes;
 namespace MailMcp.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailMcpDbContext))]
-    [Migration("20260731123140_Initial")]
+    [Migration("20260731132336_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -321,16 +321,15 @@ namespace MailMcp.Infrastructure.Persistence.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("ToAddresses"), "GIN");
 
-                    b.HasIndex("MailFolderId", "RemoteFlagsObservedAt")
-                        .HasDatabaseName("ix_stored_emails_reconciliation_queue");
-
-                    NpgsqlIndexBuilderExtensions.HasNullSortOrder(b.HasIndex("MailFolderId", "RemoteFlagsObservedAt"), new[] { NullSortOrder.Unspecified, NullSortOrder.NullsFirst });
-
                     b.HasIndex("MailFolderId", "ReceivedAt", "Id")
                         .IsDescending(false, true, true)
                         .HasDatabaseName("ix_stored_emails_folder_timeline");
 
                     NpgsqlIndexBuilderExtensions.HasNullSortOrder(b.HasIndex("MailFolderId", "ReceivedAt", "Id"), new[] { NullSortOrder.Unspecified, NullSortOrder.NullsLast, NullSortOrder.Unspecified });
+
+                    b.HasIndex("MailFolderId", "RemoteFlagsObservedAt", "Uid")
+                        .HasDatabaseName("ix_stored_emails_reconciliation_queue")
+                        .HasFilter("\"RemoteExpungeObservedAt\" IS NULL");
 
                     b.HasIndex("MailFolderId", "UidValidity", "Uid")
                         .IsUnique()

@@ -10,19 +10,19 @@ namespace MailMcp.Application.Synchronization;
 /// <summary>The local state reconciliation reads to choose a window and writes once the server has answered.</summary>
 /// <remarks>
 /// <para>
-/// The three operations describe one bounded backward pass: which stored occurrences have gone longest without being
-/// checked, what the server said about the ones it still holds, and what becomes of the ones it no longer holds. They
-/// belong to one port because a caller holding only some of them could not make the pass terminate.
+/// The two operations describe one bounded backward pass: which stored occurrences this run should ask about, and what
+/// the server said about them. They belong to one port because a caller holding only one of them could not make the
+/// pass terminate.
 /// </para>
 /// <para>
-/// There is no cursor to keep. The window is chosen by how long ago each occurrence was last observed, so writing an
-/// observation is itself what advances the pass, and a run interrupted between two windows resumes where it stopped
-/// rather than restarting or skipping.
+/// There is no cursor to keep. A window is chosen by how long ago each occurrence was last observed, so writing the
+/// outcome is itself what advances the pass, and a run interrupted between two windows resumes where it stopped rather
+/// than restarting or skipping.
 /// </para>
 /// </remarks>
 public interface IStoredEmailReconciliationStore
 {
-    /// <summary>Reads the stored occurrences of one folder binding that have gone longest without a flag observation.</summary>
+    /// <summary>Reads the occurrences of one folder binding that this run should ask the server about.</summary>
     /// <param name="accountId">The account the folder belongs to.</param>
     /// <param name="folderResolutionId">The alias binding whose occurrences are reconciled.</param>
     /// <param name="uidValidity">The UIDVALIDITY the open session reports, which the returned occurrences must have been stored under.</param>
@@ -30,6 +30,14 @@ public interface IStoredEmailReconciliationStore
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The occurrences to ask about, never more than <paramref name="maxEmailCount" />.</returns>
     /// <remarks>
+    /// <para>
+    /// The window leads with the occurrences observed longest ago and the never-observed ones before them, but it is
+    /// not simply the first <paramref name="maxEmailCount" /> of that order. Part of it is reserved for occurrences
+    /// that have been observed before, because the forward pass can store more new mail per run than one window holds:
+    /// an order that took never-observed rows first would then spend every window on newly arrived mail, and a deletion
+    /// or a flag change in the mail stored last month would never be noticed again. An implementation returns as much
+    /// of each group as exists, so a folder with only one of them still fills the window.
+    /// </para>
     /// <para>
     /// The UIDVALIDITY is a filter rather than a formality, and it is what keeps a server-side renumbering from
     /// emptying the local mailbox. Occurrences stored under a UIDVALIDITY the folder no longer reports name messages
@@ -40,47 +48,38 @@ public interface IStoredEmailReconciliationStore
     /// to say about it, and asking again would spend the window on work whose answer is already durable.
     /// </para>
     /// </remarks>
-    Task<IReadOnlyList<StoredEmailAwaitingReconciliation>> GetLeastRecentlyObservedAsync(
+    Task<IReadOnlyList<StoredEmailAwaitingReconciliation>> GetReconciliationWindowAsync(
         MailAccountId accountId,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         int maxEmailCount,
         CancellationToken cancellationToken);
 
-    /// <summary>Writes the flags the server reported for one occurrence it still holds.</summary>
-    /// <param name="session">The explicit persistence session this write participates in.</param>
-    /// <param name="storedEmailId">The occurrence the flags were read for.</param>
-    /// <param name="snapshot">What the server reported, and when it was read.</param>
+    /// <summary>Applies everything one window learned, as one bounded set of writes.</summary>
+    /// <param name="session">The explicit persistence session the whole outcome participates in.</param>
+    /// <param name="outcome">What the window found, and what becomes of the emails the folder no longer holds.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>A task that completes when the write has been staged.</returns>
+    /// <returns>A task that completes when the writes have been staged.</returns>
     /// <remarks>
-    /// The observation timestamp is written with the flags rather than beside them, because it is what places the
-    /// occurrence at the back of the reconciliation queue. Writing the flags without it would leave the same window
-    /// selected on every run.
+    /// <para>
+    /// The whole window is applied at once so the work is bounded by the window rather than by a query per email held
+    /// inside an open write transaction. An implementation reads the rows it needs in one bounded query keyed by the
+    /// identities the outcome names.
+    /// </para>
+    /// <para>
+    /// Every write is idempotent and none of them moves state backwards, which is what makes replaying a window after a
+    /// commit conflict safe. An occurrence whose stored observation is newer than this window's is left alone: another
+    /// writer has since asked the same server and its answer supersedes this one, including when this window would have
+    /// deleted the email. A tombstone keeps the timestamp of the run that first observed the disappearance, and a row
+    /// another writer already removed is not an error to remove again.
+    /// </para>
+    /// <para>
+    /// Removing a row removes the raw MIME, the derived text and index entry, and every other artifact derived from the
+    /// message with it, because a deletion that leaves derived data behind is not one.
+    /// </para>
     /// </remarks>
-    Task RecordFlagObservationAsync(
+    Task ApplyReconciliationOutcomeAsync(
         IPersistenceSession session,
-        StoredEmailId storedEmailId,
-        RemoteEmailFlagSnapshot snapshot,
-        CancellationToken cancellationToken);
-
-    /// <summary>Records that the server no longer holds one occurrence, in the form the configured disposition names.</summary>
-    /// <param name="session">The explicit persistence session this write participates in.</param>
-    /// <param name="storedEmailId">The occurrence the folder no longer holds.</param>
-    /// <param name="disposition">Whether the local row survives as a tombstone or is removed with everything derived from it.</param>
-    /// <param name="observedAt">When the disappearance was observed.</param>
-    /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>A task that completes when the write has been staged.</returns>
-    /// <remarks>
-    /// The write is idempotent for both dispositions: a tombstone keeps the timestamp of the run that first observed
-    /// the disappearance rather than being restamped, and an occurrence already removed is not an error to remove
-    /// again. An implementation removing the row removes the raw MIME, the derived text and index entry, and every
-    /// other artifact derived from the message with it, because a deletion that leaves derived data behind is not one.
-    /// </remarks>
-    Task RecordRemoteDeletionAsync(
-        IPersistenceSession session,
-        StoredEmailId storedEmailId,
-        RemotelyDeletedEmailDisposition disposition,
-        DateTimeOffset observedAt,
+        ReconciledFolderOutcome outcome,
         CancellationToken cancellationToken);
 }

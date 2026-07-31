@@ -197,7 +197,7 @@ internal static class SynchronizationTestHost
     {
         var reconciliationStore = Substitute.For<IStoredEmailReconciliationStore>();
         reconciliationStore
-            .GetLeastRecentlyObservedAsync(
+            .GetReconciliationWindowAsync(
                 Arg.Any<MailAccountId>(),
                 Arg.Any<MailFolderResolutionId>(),
                 Arg.Any<ImapUidValidity>(),

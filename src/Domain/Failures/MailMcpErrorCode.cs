@@ -57,6 +57,9 @@ public readonly record struct MailMcpErrorCode
     /// <summary>Gets subcategory 3, folder identity: a folder was reselected with a UIDVALIDITY that makes the session's identities name different emails.</summary>
     public static MailMcpErrorCode MailboxFolderRecreated { get; } = new(23001);
 
+    /// <summary>Gets subcategory 4, answer completeness: a mail server answered for an email without the data items the command requested.</summary>
+    public static MailMcpErrorCode MailboxAnswerIncomplete { get; } = new(24001);
+
     #endregion
 
     #region Category 3 — Persistence
@@ -143,6 +146,7 @@ public readonly record struct MailMcpErrorCode
         MailAuthenticationMechanismUnavailable,
         MailboxUnavailable,
         MailboxFolderRecreated,
+        MailboxAnswerIncomplete,
         PersistenceConcurrencyConflict,
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,

@@ -12,7 +12,7 @@ namespace MailMcp.Infrastructure.Persistence;
 
 /// <summary>EF Core state for the bounded backward pass that re-checks stored emails against their mail server.</summary>
 /// <remarks>
-/// The read path uses the scoped context because it joins no transaction. Both write paths use the context enlisted in
+/// The read path uses the scoped context because it joins no transaction. The write path uses the context enlisted in
 /// the caller's session, so one window's observations and deletions commit or roll back together.
 /// </remarks>
 [RequiresIntegrationCoverage]
@@ -20,12 +20,11 @@ internal sealed class StoredEmailReconciliationStore(MailMcpDbContext readContex
 {
     /// <inheritdoc />
     /// <remarks>
-    /// The ordering is the one <see cref="MailMcpDbContext.StoredEmailReconciliationQueueIndexName" /> is declared with,
-    /// so a window is an index scan of its first rows rather than a sort over the folder. The leading key is what places
-    /// the never-observed emails first: PostgreSQL orders nulls last under <c>ASC</c>, which is the opposite of the
-    /// decision, and EF Core publishes no way to state a null sort order in a query.
+    /// The two groups are read as two bounded queries rather than as one ordered scan, because the reservation the port
+    /// describes is not expressible as an ordering: it has to stop newly stored mail from filling every window. Both
+    /// queries are ordered and limited by PostgreSQL and neither can return more than the window holds.
     /// </remarks>
-    public async Task<IReadOnlyList<StoredEmailAwaitingReconciliation>> GetLeastRecentlyObservedAsync(
+    public async Task<IReadOnlyList<StoredEmailAwaitingReconciliation>> GetReconciliationWindowAsync(
         MailAccountId accountId,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
@@ -34,98 +33,140 @@ internal sealed class StoredEmailReconciliationStore(MailMcpDbContext readContex
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxEmailCount);
 
-        var alias = folderResolutionId.Alias.Value;
-        var generation = folderResolutionId.Generation.Value;
-        var uidValidityValue = uidValidity.Value;
+        var eligible = this.EligibleEmails(accountId, folderResolutionId, uidValidity);
 
-        var candidates = await readContext.StoredEmails
-            .AsNoTracking()
-            .Where(email => email.MailFolder.MailboxAccountId == accountId.Value
-                && email.MailFolder.Alias == alias
-                && email.MailFolder.ResolutionGeneration == generation
-                && email.UidValidity == uidValidityValue
-                && email.RemoteExpungeObservedAt == null)
-            .OrderBy(email => email.RemoteFlagsObservedAt != null)
-            .ThenBy(email => email.RemoteFlagsObservedAt)
+        // Read first so the never-observed budget can be computed from how many previously observed emails actually
+        // exist: a folder that has none must still fill its whole window with new mail rather than leave it empty.
+        var previouslyObserved = await eligible
+            .Where(email => email.RemoteFlagsObservedAt != null)
+            .OrderBy(email => email.RemoteFlagsObservedAt)
             .ThenBy(email => email.Uid)
             .Take(maxEmailCount)
             .Select(email => new { email.Id, email.Uid })
             .ToArrayAsync(cancellationToken);
 
+        var neverObserved = await eligible
+            .Where(email => email.RemoteFlagsObservedAt == null)
+            .OrderBy(email => email.Uid)
+            .Take(ReconciliationWindowBudget.NeverObservedShareOf(maxEmailCount, previouslyObserved.Length))
+            .Select(email => new { email.Id, email.Uid })
+            .ToArrayAsync(cancellationToken);
+
         return
         [
-            .. candidates.Select(candidate => new StoredEmailAwaitingReconciliation(
-                StoredEmailId.Create(candidate.Id),
-                ImapUid.Create(candidate.Uid))),
+            .. neverObserved
+                .Concat(previouslyObserved.Take(maxEmailCount - neverObserved.Length))
+                .Select(static candidate => new StoredEmailAwaitingReconciliation(
+                    StoredEmailId.Create(candidate.Id),
+                    ImapUid.Create(candidate.Uid))),
         ];
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// A row that no longer exists is nothing to observe rather than a failure. Reconciliation is the operation that
-    /// removes rows, so a competing writer erasing the same email between this window's query and its commit is an
-    /// ordinary race whose outcome both writers agree on; faulting the folder's run over it would only defer the same
-    /// answer to the next interval.
-    /// </remarks>
-    public async Task RecordFlagObservationAsync(
+    public async Task ApplyReconciliationOutcomeAsync(
         IPersistenceSession session,
-        StoredEmailId storedEmailId,
-        RemoteEmailFlagSnapshot snapshot,
+        ReconciledFolderOutcome outcome,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(outcome);
 
         var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
-        var storedEmail = await sessionContext.StoredEmails.FindAsync([storedEmailId.Value], cancellationToken);
+        var rowsById = await LoadWindowRowsAsync(sessionContext, outcome, cancellationToken);
 
-        if (storedEmail is null)
+        foreach (var observed in outcome.StillPresent)
         {
+            if (rowsById.TryGetValue(observed.StoredEmailId.Value, out var row)
+                && !HasNewerObservationThan(row, observed.Snapshot.ObservedAt ?? outcome.ObservedAt))
+            {
+                ApplyFlagSnapshot(row, observed.Snapshot);
+            }
+        }
+
+        var disappeared = outcome.Disappeared
+            .Select(storedEmailId => rowsById.GetValueOrDefault(storedEmailId.Value))
+            .OfType<StoredEmailEntity>()
+            .Where(row => !HasNewerObservationThan(row, outcome.ObservedAt))
+            .ToArray();
+
+        if (outcome.Disposition is RemotelyDeletedEmailDisposition.EraseLocalCopy)
+        {
+            // One RemoveRange rather than a remove per row: the raw MIME, the search document, and any outstanding
+            // repair request are declared with OnDelete(Cascade) from this row, so PostgreSQL removes them too.
+            sessionContext.StoredEmails.RemoveRange(disappeared);
+
             return;
         }
 
-        storedEmail.RemoteFlagsObservedAt = snapshot.ObservedAt;
-        storedEmail.IsRemotelySeen = snapshot.IsSeen;
-        storedEmail.IsRemotelyAnswered = snapshot.IsAnswered;
-        storedEmail.IsRemotelyFlagged = snapshot.IsFlagged;
-        storedEmail.IsRemotelyDraft = snapshot.IsDraft;
-        storedEmail.IsRemotelyDeleted = snapshot.IsDeleted;
+        foreach (var row in disappeared)
+        {
+            row.RemoteExpungeObservedAt ??= outcome.ObservedAt;
+
+            // The tombstone leaves the reconciliation queue as well as the mailbox queries, and the observation
+            // timestamp is what takes it out: a window is ordered by that column, so a row left never-observed would be
+            // selected again on every run for an email the server will never answer about.
+            row.RemoteFlagsObservedAt ??= outcome.ObservedAt;
+        }
     }
 
-    /// <inheritdoc />
+    /// <summary>Narrows the stored emails to the ones one folder binding's window may select from.</summary>
+    private IQueryable<StoredEmailEntity> EligibleEmails(
+        MailAccountId accountId,
+        MailFolderResolutionId folderResolutionId,
+        ImapUidValidity uidValidity)
+    {
+        var alias = folderResolutionId.Alias.Value;
+        var generation = folderResolutionId.Generation.Value;
+        var uidValidityValue = uidValidity.Value;
+
+        return readContext.StoredEmails
+            .AsNoTracking()
+            .Where(email => email.MailFolder.MailboxAccountId == accountId.Value
+                && email.MailFolder.Alias == alias
+                && email.MailFolder.ResolutionGeneration == generation
+                && email.UidValidity == uidValidityValue
+                && email.RemoteExpungeObservedAt == null);
+    }
+
+    /// <summary>Reads every row the outcome names in one query, so applying a window costs one round trip rather than one per email.</summary>
     /// <remarks>
-    /// A row that is already gone is not an error to remove again, and a row that already carries an expunge timestamp
-    /// keeps it, so replaying a window commits the same state it would have committed the first time. Removing the row
-    /// takes the raw MIME, the search document, and any outstanding repair request with it: all three are declared with
-    /// <c>OnDelete(Cascade)</c> from this row, so PostgreSQL removes them in the same statement rather than leaving
-    /// derived data behind the message it was derived from.
+    /// The rows are tracked on purpose: this is the write path, and the whole point of loading them together is that
+    /// the updates and removals below are staged against entities the session already holds. A row the query does not
+    /// return was removed by another writer, which the callers above treat as nothing left to do.
     /// </remarks>
-    public async Task RecordRemoteDeletionAsync(
-        IPersistenceSession session,
-        StoredEmailId storedEmailId,
-        RemotelyDeletedEmailDisposition disposition,
-        DateTimeOffset observedAt,
+    private static async Task<Dictionary<Guid, StoredEmailEntity>> LoadWindowRowsAsync(
+        MailMcpDbContext sessionContext,
+        ReconciledFolderOutcome outcome,
         CancellationToken cancellationToken)
     {
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
-        var storedEmail = await sessionContext.StoredEmails.FindAsync([storedEmailId.Value], cancellationToken);
+        var windowIds = outcome.StillPresent
+            .Select(static observed => observed.StoredEmailId.Value)
+            .Concat(outcome.Disappeared.Select(static storedEmailId => storedEmailId.Value))
+            .ToArray();
 
-        if (storedEmail is null)
-        {
-            return;
-        }
+        var rows = await sessionContext.StoredEmails
+            .Where(email => windowIds.Contains(email.Id))
+            .ToArrayAsync(cancellationToken);
 
-        if (disposition is RemotelyDeletedEmailDisposition.EraseLocalCopy)
-        {
-            sessionContext.StoredEmails.Remove(storedEmail);
+        return rows.ToDictionary(static row => row.Id);
+    }
 
-            return;
-        }
+    /// <summary>Reports whether another writer has already recorded an observation at least as recent as this one.</summary>
+    /// <remarks>
+    /// This is what makes a window safe to replay after a commit conflict, and it is a correctness rule rather than an
+    /// optimization. A retried window carries the answer a server gave before the conflict, so applying it
+    /// unconditionally could move the queue timestamp backwards, overwrite fresher flags, or — worst of the three —
+    /// delete an email that a later run has since proved the server still holds.
+    /// </remarks>
+    private static bool HasNewerObservationThan(StoredEmailEntity row, DateTimeOffset observedAt) =>
+        row.RemoteFlagsObservedAt is { } recordedAt && recordedAt > observedAt;
 
-        storedEmail.RemoteExpungeObservedAt ??= observedAt;
-
-        // The tombstone leaves the reconciliation queue as well as the mailbox queries, and the observation timestamp is
-        // what takes it out: a window is ordered by that column, so a row left never-observed would be selected again on
-        // every run for an email the server will never answer about.
-        storedEmail.RemoteFlagsObservedAt ??= observedAt;
+    private static void ApplyFlagSnapshot(StoredEmailEntity row, RemoteEmailFlagSnapshot snapshot)
+    {
+        row.RemoteFlagsObservedAt = snapshot.ObservedAt;
+        row.IsRemotelySeen = snapshot.IsSeen;
+        row.IsRemotelyAnswered = snapshot.IsAnswered;
+        row.IsRemotelyFlagged = snapshot.IsFlagged;
+        row.IsRemotelyDraft = snapshot.IsDraft;
+        row.IsRemotelyDeleted = snapshot.IsDeleted;
     }
 }

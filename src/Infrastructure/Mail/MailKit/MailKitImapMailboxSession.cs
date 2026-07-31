@@ -195,11 +195,19 @@ internal sealed class MailKitImapMailboxSession(
 
     /// <summary>Asks the folder for the flags of the supplied UIDs and reports one observation per UID it answered for.</summary>
     /// <remarks>
+    /// <para>
     /// IMAP requires a server to ignore a UID a <c>UID FETCH</c> names that the folder no longer holds, rather than to
     /// fail the command, so the answer describes exactly the messages that still exist. That silence is the detection
-    /// mechanism for a message deleted on the server, which is why nothing here fills a missing UID in with a default
-    /// and why a summary carrying no flags at all is dropped instead of being read as a message with no flags set.
+    /// mechanism for a message deleted on the server, which is why nothing here fills a missing UID in with a default.
+    /// </para>
+    /// <para>
+    /// A summary that answers for a UID without the flags the command requested is refused rather than dropped, and that
+    /// is the whole reason this method can throw. Dropping it would turn a message the server just proved exists into
+    /// the same silence a deleted message produces, and an account configured to erase local copies would then destroy
+    /// mail on the strength of an answer the server never gave.
+    /// </para>
     /// </remarks>
+    /// <exception cref="MailboxAnswerIncompleteException">Thrown when the server answered for an email without its flags.</exception>
     private async Task<IReadOnlyList<RemoteEmailFlagObservation>> FetchFlagsAsync(
         IMailFolder openFolder,
         IReadOnlyList<ImapUid> uids,
@@ -209,13 +217,16 @@ internal sealed class MailKitImapMailboxSession(
         var summaries = await openFolder.FetchAsync(requestedUids, ReconciliationSummaryItems, cancellationToken);
         var observedAt = timeProvider.GetUtcNow();
 
+        if (summaries.Any(static summary => summary.Flags is null))
+        {
+            throw new MailboxAnswerIncompleteException(accountId, folder.Alias, "FLAGS");
+        }
+
         return
         [
-            .. summaries
-                .Where(static summary => summary.Flags is not null)
-                .Select(summary => new RemoteEmailFlagObservation(
-                    ImapUid.Create(summary.UniqueId.Id),
-                    SnapshotOf(summary.Flags!.Value, observedAt))),
+            .. summaries.Select(summary => new RemoteEmailFlagObservation(
+                ImapUid.Create(summary.UniqueId.Id),
+                SnapshotOf(summary.Flags!.Value, observedAt))),
         ];
     }
 

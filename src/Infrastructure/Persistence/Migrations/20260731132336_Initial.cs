@@ -244,8 +244,8 @@ namespace MailMcp.Infrastructure.Persistence.Migrations
             migrationBuilder.CreateIndex(
                 name: "ix_stored_emails_reconciliation_queue",
                 table: "stored_emails",
-                columns: new[] { "MailFolderId", "RemoteFlagsObservedAt" })
-                .Annotation("Npgsql:IndexNullSortOrder", new[] { NullSortOrder.Unspecified, NullSortOrder.NullsFirst });
+                columns: new[] { "MailFolderId", "RemoteFlagsObservedAt", "Uid" },
+                filter: "\"RemoteExpungeObservedAt\" IS NULL");
 
             migrationBuilder.CreateIndex(
                 name: "ix_stored_emails_reply_to_addresses",

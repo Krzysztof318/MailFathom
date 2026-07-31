@@ -445,12 +445,24 @@ is **already stored** and asks the server about it, over the same read-only sess
 
 ### Choosing the window, and why there is no cursor
 
-The window is the folder's rows ordered by `remote_flags_observed_at`, oldest first, with the never-observed ones
-leading, bounded by `MaxReconciledEmailsPerRun`. Writing an observation is what moves a row to the back of that queue,
-so the pass advances by doing its work rather than by recording where it stopped. An interrupted run therefore resumes
-rather than restarting or skipping, and no second piece of state can drift out of step with the rows it describes.
-`ix_stored_emails_reconciliation_queue` reproduces that order column for column, so a window is an index scan of its
-first rows rather than a sort over the folder.
+The window is bounded by `MaxReconciledEmailsPerRun` and ordered by `remote_flags_observed_at`, oldest first. Writing an
+observation is what moves a row to the back of that queue, so the pass advances by doing its work rather than by
+recording where it stopped. An interrupted run therefore resumes rather than restarting or skipping, and no second
+piece of state can drift out of step with the rows it describes.
+
+**Half the window is reserved for mail that has been observed before.** Without that reserve the two groups would not
+compete fairly, because the run refills one of them itself: the forward pass can store a thousand new occurrences under
+the default batch settings while the window holds five hundred, and every one of them arrives never-observed. Taking
+the window in observation order alone would therefore spend all of it on mail that has just arrived, for as long as
+mail keeps arriving, and a deletion or a flag change among the mail stored last month would never be noticed again.
+Only as much of the reserve as there is mail to fill it is held back, so a mailbox being synchronized for the first
+time still gives its whole window to new mail rather than leaving half of it idle.
+
+That is why the window is read as two queries rather than one ordered scan. Both are served by an index scan with no
+sort step: the previously observed group by `ix_stored_emails_reconciliation_queue`, which is
+`(mail_folder_id, remote_flags_observed_at, uid)` filtered to the rows that are not tombstoned, and the never-observed
+group by the occurrence index that already orders a folder by UID. Measured against a folder of 200,000 rows, each
+query reads only the rows its limit asks for.
 
 The window is selected under the UIDVALIDITY the open session reports. That is what makes a server-side renumbering
 cost nothing locally: rows stored under the previous UIDVALIDITY name a UID space the server abandoned, so they fall
@@ -466,6 +478,12 @@ nothing about is a message that left the folder.
 
 The `\Deleted` flag is deliberately not that signal. It marks a message the folder still holds and still serves, so it
 is recorded as a flag and nothing more. Only disappearance from the folder is a deletion here.
+
+An answer that names a UID **without** the flags the command asked for is refused rather than acted on, and the folder's
+run ends. That is the one case where the pass fails instead of recording something: the protocol requires a server to
+return every data item a `FETCH` named, and an incomplete answer cannot be allowed to degrade into the silence a deleted
+message produces — an account configured to erase local copies would otherwise destroy mail on the strength of an answer
+the server never gave. The next run asks again.
 
 Everything in this pass is read-only. It asks for flags and for the UID, both of which a server answers out of folder
 state, so nothing it issues can set the remote `\Seen` flag — and the requested item set is a named constant that a
@@ -493,9 +511,14 @@ tombstones exactly as they are. Cleaning those up is deliberately not automatic;
 tracks the retention grace period and the bounded garbage collection that will own it, and that is also where a delay
 between observing a disappearance and erasing the local copy will come from.
 
-Both writes are idempotent, so replaying a window after a commit conflict commits the same state: a tombstone keeps the
-timestamp of the run that first observed the disappearance rather than being restamped, and a row already removed is not
-an error to remove again.
+The whole window is applied as one set of writes against rows read in one query, so a pass costs one round trip rather
+than one per email inside an open write transaction.
+
+Every write is idempotent and none of them moves state backwards, which is what makes replaying a window after a commit
+conflict safe. A tombstone keeps the timestamp of the run that first observed the disappearance rather than being
+restamped, and a row already removed is not an error to remove again. An email whose stored observation is **newer** than
+the window being applied is left alone entirely: another writer has since asked the same server, its answer supersedes
+this one, and that includes the case where this window would have deleted the email.
 
 ### What a run reports
 
@@ -584,7 +607,7 @@ The extraction backfill has a section of its own rather than a block inside the 
 }
 ```
 
-`MaxReconciledEmailsPerRun` bounds the backward pass the way the batch settings bound the forward one, and `RemotelyDeletedEmailDisposition` is the per-account choice [Reconciling against the server](#reconciling-against-the-server) describes. It binds as one of the two names `RetainTombstone` and `EraseLocalCopy`, and a value that is neither **fails startup** rather than falling back to a default: the setting decides whether stored mail is destroyed, and a typo in it must never be the reason mail survives or does not.
+`MaxReconciledEmailsPerRun` bounds the backward pass the way the batch settings bound the forward one, and `RemotelyDeletedEmailDisposition` is the per-account choice [Reconciling against the server](#reconciling-against-the-server) describes. It binds as one of the two names `RetainTombstone` and `EraseLocalCopy`, and a value that is neither **fails startup** rather than falling back to a default: the setting decides whether stored mail is destroyed, and a typo in it must never be the reason mail survives or does not. That check is explicit rather than left to the binder, because a bare number binds onto an enum whether or not any member carries it — strict binding rejects unknown keys and failed conversions, and this conversion succeeds.
 
 When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. Each entry of `Folders` names an alias and exactly one of `RemotePath` and `SpecialUse`; naming both, naming neither, or naming a role that does not exist fails startup with a message identifying the alias. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, and `Important`. If an account omits `Folders`, its supervisor applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
 

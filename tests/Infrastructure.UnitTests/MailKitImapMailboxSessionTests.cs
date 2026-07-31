@@ -652,6 +652,35 @@ public sealed class MailKitImapMailboxSessionTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// The dangerous shape: the server answers for a UID but withholds its flags. Dropping that answer would leave the
+    /// UID indistinguishable from one the server never mentioned, which reconciliation reads as a deleted message.
+    /// </summary>
+    [Fact]
+    public async Task GetRemoteFlagsWithoutSettingSeenAsync_ServerAnswersWithoutFlags_FailsRatherThanReportingTheEmailAsAbsent()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient();
+        var folder = CreateSelectedFolder();
+        var flaglessSummary = Substitute.For<IMessageSummary>();
+        flaglessSummary.UniqueId.Returns(new UniqueId(10));
+        folder.FetchAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IFetchRequest>(),
+            Arg.Any<CancellationToken>()).Returns([flaglessSummary]);
+        await using var session = await OpenSessionAsync(resilience, client, folder);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<MailboxAnswerIncompleteException>(() =>
+            session.GetRemoteFlagsWithoutSettingSeenAsync([ImapUid.Create(10)], CancellationToken.None));
+
+        // Assert
+        Assert.Equal("FLAGS", exception.MissingDataItem);
+        Assert.Equal(PrimaryAccount, exception.AccountId);
+        Assert.Equal(InboxFolder.Alias, exception.FolderAlias);
+    }
+
     /// <summary>Reads the summary items the adapter asked the folder for, out of the request it actually issued.</summary>
     private static MessageSummaryItems RequestedFetchItems(IMailFolder folder) => folder
         .ReceivedCalls()

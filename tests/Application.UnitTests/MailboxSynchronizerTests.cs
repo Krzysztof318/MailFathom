@@ -1364,7 +1364,7 @@ public sealed class MailboxSynchronizerTests
         IReadOnlyList<StoredEmailAwaitingReconciliation> window =
             [new StoredEmailAwaitingReconciliation(storedEmailId, ImapUid.Create(10))];
         reconciliationStore
-            .GetLeastRecentlyObservedAsync(accountId, folder.Id, uidValidity, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .GetReconciliationWindowAsync(accountId, folder.Id, uidValidity, Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(window));
         checkpointStore.GetCheckpointAsync(accountId, folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
         sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
@@ -1390,11 +1390,11 @@ public sealed class MailboxSynchronizerTests
 
         // Assert
         Assert.Equal(1, result.Reconciliation.RemotelyDeletedEmailCount);
-        await reconciliationStore.Received(1).RecordRemoteDeletionAsync(
+        await reconciliationStore.Received(1).ApplyReconciliationOutcomeAsync(
             persistenceSession,
-            storedEmailId,
-            RemotelyDeletedEmailDisposition.RetainTombstone,
-            Arg.Any<DateTimeOffset>(),
+            Arg.Is<ReconciledFolderOutcome>(applied =>
+                applied!.Disappeared.Single() == storedEmailId
+                && applied.Disposition == RemotelyDeletedEmailDisposition.RetainTombstone),
             Arg.Any<CancellationToken>());
         await sessionFactory.Received(1).OpenReadOnlyAsync(
             accountId,
@@ -1464,7 +1464,7 @@ public sealed class MailboxSynchronizerTests
     {
         var reconciliationStore = Substitute.For<IStoredEmailReconciliationStore>();
         reconciliationStore
-            .GetLeastRecentlyObservedAsync(
+            .GetReconciliationWindowAsync(
                 Arg.Any<MailAccountId>(),
                 Arg.Any<MailFolderResolutionId>(),
                 Arg.Any<ImapUidValidity>(),

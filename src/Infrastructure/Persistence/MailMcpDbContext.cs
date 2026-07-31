@@ -281,13 +281,23 @@ internal sealed class MailMcpDbContext : DbContext
             .IsDescending(false, true, true)
             .HasNullSortOrder(NullSortOrder.Unspecified, NullSortOrder.NullsLast, NullSortOrder.Unspecified);
 
-        // The reconciliation queue, ordered exactly as the window that reads it: within one folder, the emails observed
-        // longest ago come first and the never-observed ones lead. NULLS FIRST is stated for the reason the timeline
-        // indexes state NULLS LAST — PostgreSQL's default under ASC is the opposite of the decision, and an email
-        // nobody has ever asked the server about is precisely the one a window must reach first.
-        entity.HasIndex(email => new { email.MailFolderId, email.RemoteFlagsObservedAt })
+        // The reconciliation queue, ordered exactly as the query that reads it: within one folder, by the moment the
+        // server was last asked and then by UID. The UID is a key rather than a decoration, because the query orders by
+        // it too, and without it a folder whose emails were observed in one batch would tie on the timestamp and make a
+        // bounded window cost a sort of the whole folder.
+        //
+        // No null sort order is stated, and that is deliberate rather than an omission. The window is read as two
+        // queries — one for the emails observed before, one for those never observed — so neither of them orders a null
+        // against a value, and both take PostgreSQL's default. Declaring NULLS FIRST here instead would leave the index
+        // ordered the one way the ASC query does not ask for, which is not a near miss: the planner cannot use an index
+        // whose null placement differs from the ordering, and the measured plan degraded to a parallel sequential scan
+        // and a top-N sort over every eligible row in the folder.
+        //
+        // The filter is what keeps the index proportionate to the queue rather than to the mailbox: a tombstoned email
+        // is outside every window, so it has no place in the structure a window is read from.
+        entity.HasIndex(email => new { email.MailFolderId, email.RemoteFlagsObservedAt, email.Uid })
             .HasDatabaseName(StoredEmailReconciliationQueueIndexName)
-            .HasNullSortOrder(NullSortOrder.Unspecified, NullSortOrder.NullsFirst);
+            .HasFilter($"\"{nameof(StoredEmailEntity.RemoteExpungeObservedAt)}\" IS NULL");
 
         entity.HasIndex(email => email.SenderNormalizedAddress)
             .HasDatabaseName(StoredEmailSenderIndexName);

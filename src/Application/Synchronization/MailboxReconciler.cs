@@ -90,7 +90,7 @@ public sealed class MailboxReconciler
         ArgumentNullException.ThrowIfNull(mailboxSession);
         ArgumentNullException.ThrowIfNull(folder);
 
-        var window = await this.reconciliationStore.GetLeastRecentlyObservedAsync(
+        var window = await this.reconciliationStore.GetReconciliationWindowAsync(
             accountId,
             folder.Id,
             uidValidity,
@@ -106,9 +106,19 @@ public sealed class MailboxReconciler
             [.. window.Select(candidate => candidate.Uid)],
             cancellationToken);
 
-        var outcome = ClassifyWindow(window, observations);
+        var outcome = ClassifyWindow(
+            window,
+            observations,
+            this.dispositionReader.GetDisposition(accountId),
+            this.timeProvider.GetUtcNow());
 
-        await this.CommitWindowAsync(outcome, this.dispositionReader.GetDisposition(accountId), cancellationToken);
+        await this.concurrencyRetryPolicy.CommitAsync(
+            (persistenceSession, attemptCancellationToken) =>
+                this.reconciliationStore.ApplyReconciliationOutcomeAsync(
+                    persistenceSession,
+                    outcome,
+                    attemptCancellationToken),
+            cancellationToken);
 
         return new MailboxReconciliationResult(
             outcome.StillPresent.Count,
@@ -129,9 +139,11 @@ public sealed class MailboxReconciler
     /// this classification reads out of it.
     /// </para>
     /// </remarks>
-    private static ReconciledWindow ClassifyWindow(
+    private static ReconciledFolderOutcome ClassifyWindow(
         IReadOnlyList<StoredEmailAwaitingReconciliation> window,
-        IReadOnlyList<RemoteEmailFlagObservation> observations)
+        IReadOnlyList<RemoteEmailFlagObservation> observations,
+        RemotelyDeletedEmailDisposition disposition,
+        DateTimeOffset observedAt)
     {
         var snapshotsByUid = observations
             .DistinctBy(static observation => observation.Uid)
@@ -141,61 +153,15 @@ public sealed class MailboxReconciler
 
         var stillPresent = window
             .Where(candidate => snapshotsByUid.ContainsKey(candidate.Uid))
-            .Select(candidate => new ObservedOccurrence(candidate.StoredEmailId, snapshotsByUid[candidate.Uid]))
+            .Select(candidate => new ObservedEmailFlags(candidate.StoredEmailId, snapshotsByUid[candidate.Uid]))
             .ToArray();
         var disappeared = window
             .Where(candidate => !snapshotsByUid.ContainsKey(candidate.Uid))
             .Select(static candidate => candidate.StoredEmailId)
             .ToArray();
 
-        return new ReconciledWindow(stillPresent, disappeared);
+        return new ReconciledFolderOutcome(stillPresent, disappeared, disposition, observedAt);
     }
-
-    /// <summary>Commits one window's findings in a single session, so a run either records the window or records none of it.</summary>
-    /// <remarks>
-    /// The writes are idempotent, which is what makes the whole window safe to replay after a conflict: refreshing a
-    /// snapshot overwrites it with the same reading, and recording a disappearance twice keeps the first observation's
-    /// timestamp or finds nothing left to remove.
-    /// </remarks>
-    private Task CommitWindowAsync(
-        ReconciledWindow outcome,
-        RemotelyDeletedEmailDisposition disposition,
-        CancellationToken cancellationToken)
-    {
-        var observedAt = this.timeProvider.GetUtcNow();
-
-        return this.concurrencyRetryPolicy.CommitAsync(
-            async (persistenceSession, attemptCancellationToken) =>
-            {
-                foreach (var occurrence in outcome.StillPresent)
-                {
-                    await this.reconciliationStore.RecordFlagObservationAsync(
-                        persistenceSession,
-                        occurrence.StoredEmailId,
-                        occurrence.Snapshot,
-                        attemptCancellationToken);
-                }
-
-                foreach (var storedEmailId in outcome.Disappeared)
-                {
-                    await this.reconciliationStore.RecordRemoteDeletionAsync(
-                        persistenceSession,
-                        storedEmailId,
-                        disposition,
-                        observedAt,
-                        attemptCancellationToken);
-                }
-            },
-            cancellationToken);
-    }
-
-    /// <summary>Pairs one still-present occurrence with the snapshot to write onto it.</summary>
-    private sealed record ObservedOccurrence(StoredEmailId StoredEmailId, RemoteEmailFlagSnapshot Snapshot);
-
-    /// <summary>What one window's answers meant, before any of it was committed.</summary>
-    private sealed record ReconciledWindow(
-        IReadOnlyList<ObservedOccurrence> StillPresent,
-        IReadOnlyList<StoredEmailId> Disappeared);
 }
 
 /// <summary>Summarizes one bounded reconciliation window.</summary>

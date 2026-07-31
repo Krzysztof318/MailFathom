@@ -453,6 +453,34 @@ public sealed class MailSynchronizationOptionsTests
             .Bind(options, binderOptions => binderOptions.ErrorOnUnknownConfiguration = true));
     }
 
+    /// <summary>
+    /// A bare number binds onto an enum whether or not a member carries it, and strict binding does not catch that
+    /// because the conversion succeeds. Left unvalidated, an undefined value would reach reconciliation, which reads
+    /// anything that is not <c>EraseLocalCopy</c> as the tombstone — a destructive setting silently doing the other
+    /// thing.
+    /// </summary>
+    [Fact]
+    public void ValidateForSynchronization_DispositionNumberNoMemberCarries_IsRejected()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:RemotelyDeletedEmailDisposition"] = "2",
+            })
+            .Build();
+        var options = configuration.GetSection("MailSynchronization").Get<MailSynchronizationOptions>()!;
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains("RetainTombstone", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("EraseLocalCopy", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void FindSynchronizationWindowErrors_DateLaterThanToday_ReportsTheAccountAndTheProperty()
     {

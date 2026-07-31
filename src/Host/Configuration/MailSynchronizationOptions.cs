@@ -361,6 +361,17 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return new ValidationResult("IMAP port must be between 1 and 65535.", [nameof(this.Port)]);
         }
 
+        // The binder converts a bare number onto an enum without asking whether any member carries it, and
+        // ErrorOnUnknownConfiguration does not catch that: it rejects unknown keys and failed conversions, and this
+        // conversion succeeds. Left unchecked, an undefined value would reach reconciliation, which treats anything
+        // that is not EraseLocalCopy as the tombstone — a destructive setting silently doing the other thing.
+        if (!Enum.IsDefined(this.RemotelyDeletedEmailDisposition))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the remotely deleted email disposition must be one of {string.Join(", ", Enum.GetNames<RemotelyDeletedEmailDisposition>())}.",
+                [nameof(this.RemotelyDeletedEmailDisposition)]);
+        }
+
         if (this.Folders is null)
         {
             yield return new ValidationResult("Folder configuration must be a list.", [nameof(this.Folders)]);
