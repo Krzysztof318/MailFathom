@@ -33,6 +33,15 @@ Connection, in the order this script looks for one:
   MAILMCP_MIGRATION_PASSWORD_FILE  A file holding only the password.
   PGPASSWORD                       The password, inline, with the same caveat as MAILMCP_MIGRATION_DSN.
 
+libpq reads PGSSLMODE, PGSSLROOTCERT, and its other TLS variables directly, so a verified connection needs no setting
+of ours.
+
+  MAILMCP_RUNTIME_ROLE         The role MailMcp itself connects as, when that is not the role applying this schema.
+                               PostgreSQL makes whoever runs the DDL the owner of what it creates, and ownership
+                               grants nothing to anybody else, so a split without this leaves the Job succeeding and
+                               the service failing on permissions afterwards. Naming the role grants it the DML
+                               privileges it needs, here and for whatever a later migration adds.
+
 The role this connects as needs more privilege than the service's own: the schema creates the `vector` extension,
 which PostgreSQL does not permit an ordinary role to install. That asymmetry is the point of a separate, explicitly
 invoked step — grant the service a role that can read and write rows and nothing more.
@@ -47,6 +56,11 @@ fail() {
 # Reads material the deployment provisioned as a file, stripping exactly one trailing newline. `LoadCredential=`,
 # Compose secrets, and Kubernetes Secret files routinely end with one, and an untrimmed byte presents as a wrong
 # password. MailMcp's own secret resolution strips one and only one for the same reason.
+#
+# The `x` sentinel is what makes "exactly one" true. Command substitution strips *every* trailing newline, so a
+# credential that genuinely ends in two would lose both here and one in MailMcp, and the two would authenticate
+# differently. Appending a byte the substitution cannot strip, then removing that byte, preserves the material as it
+# was written; only the explicit `%$'\n'` below takes a newline off.
 read_provisioned_file() {
   local path="$1"
   local setting_name="$2"
@@ -54,7 +68,8 @@ read_provisioned_file() {
   [[ -r "$path" ]] || fail "${setting_name} names ${path}, which this container cannot read."
 
   local material
-  material="$(cat -- "$path")"
+  material="$(cat -- "$path"; printf 'x')"
+  material="${material%x}"
 
   printf '%s' "${material%$'\n'}"
 }
@@ -100,7 +115,44 @@ apply_schema() {
     psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 --file "$schema_script"
   fi
 
+  grant_the_runtime_role_access
+
   printf 'apply-schema: done.\n'
+}
+
+# Gives the service's role the privileges it needs on what the migration just created, and nothing more.
+#
+# It exists because the least-privilege split has a consequence that is easy to miss: PostgreSQL makes the role that
+# runs the DDL the owner of every table, sequence, and index it creates, and ownership grants nothing to anybody else.
+# A deployment that gives the migration its own more privileged role would therefore watch the Job succeed and then
+# watch MailMcp fail on permission errors against a schema that exists.
+#
+# Grants rather than a transfer of ownership, deliberately. Handing the tables to the runtime role would leave the
+# migrator unable to alter them on the next migration without being a member of that role or a superuser, which is the
+# privilege the split exists to avoid. `ALTER DEFAULT PRIVILEGES` then covers what future migrations create, so this
+# does not have to be remembered again.
+#
+# Skipped entirely when the two roles are the same, which is the ordinary case: an owner already has everything.
+grant_the_runtime_role_access() {
+  [[ -n "${MAILMCP_RUNTIME_ROLE:-}" ]] || return 0
+
+  printf 'apply-schema: granting %s access to the migrated objects\n' "$MAILMCP_RUNTIME_ROLE"
+
+  local -a psql_command=(psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 --set runtime_role="$MAILMCP_RUNTIME_ROLE")
+  [[ -n "$resolved_connection" ]] && psql_command+=(-- "$resolved_connection")
+
+  "${psql_command[@]}" <<'GRANT_RUNTIME_ACCESS'
+GRANT USAGE ON SCHEMA public TO :"runtime_role";
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO :"runtime_role";
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO :"runtime_role";
+
+-- For everything a later migration creates. `FOR ROLE CURRENT_USER` is what keeps this within the migrator's own
+-- authority: a role may always set the default privileges of objects it will itself create.
+ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"runtime_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO :"runtime_role";
+GRANT_RUNTIME_ACCESS
 }
 
 main() {

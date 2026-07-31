@@ -16,6 +16,9 @@ set -euo pipefail
 # and the kind cluster it creates and deletes.
 
 readonly compose_project='mailmcp-smoke'
+# compose.yaml names its volume globally rather than letting Compose prefix it with the project, so the project name
+# alone does not isolate this run from a developer's data. This is what does.
+readonly smoke_postgres_volume='mailmcp-smoke-postgres-data'
 readonly kind_cluster='mailmcp-smoke'
 readonly runtime_image='mailmcp:smoke'
 readonly migrations_image='mailmcp-migrations:smoke'
@@ -78,9 +81,31 @@ build_the_images() {
 # Docker Compose
 ########################################################################################################################
 
+# Where this run's credentials and configuration live. Set by provision_smoke_workspace and removed on the way out.
+smoke_workspace=''
+
+# Every Compose invocation goes through here, and three of its arguments are what keep this run away from anything an
+# operator owns:
+#
+#   * a smoke-only project name, which isolates containers and networks;
+#   * MAILMCP_POSTGRES_VOLUME, because compose.yaml gives the volume an explicit global name — the project name does
+#     *not* scope it, so without this the teardown below would delete the volume holding a developer's synchronized
+#     mail on the same daemon;
+#   * an override file whose secret and configuration paths point into a temporary directory, so nothing is read from
+#     or written to deploy/compose/secrets/ and deploy/compose/config/.
+#
+# The override is passed second and the repository's own file first, which is also what keeps the build contexts
+# resolving: Compose takes the project directory from the first file it is given.
 compose_command() {
-  (cd deploy/compose && MAILMCP_IMAGE="$runtime_image" MAILMCP_MIGRATIONS_IMAGE="$migrations_image" \
-    docker compose --project-name "$compose_project" "$@")
+  (cd deploy/compose \
+    && MAILMCP_IMAGE="$runtime_image" \
+       MAILMCP_MIGRATIONS_IMAGE="$migrations_image" \
+       MAILMCP_POSTGRES_VOLUME="$smoke_postgres_volume" \
+    docker compose \
+      --project-name "$compose_project" \
+      --file compose.yaml \
+      --file "$smoke_workspace/compose.smoke.yaml" \
+      "$@")
 }
 
 # A named function rather than an inline `bash -c`, because wait_until calls what it is given in this shell: a nested
@@ -90,22 +115,64 @@ compose_logs_mention() {
   compose_command logs mailmcp 2>&1 | grep -q "$1"
 }
 
-provision_compose_secrets() {
-  mkdir -p deploy/compose/secrets/mailmcp
-  (
-    umask 077
-    head -c 24 /dev/urandom | base64 | tr -d '\n' > deploy/compose/secrets/postgres-superuser-password
-    head -c 24 /dev/urandom | base64 | tr -d '\n' > deploy/compose/secrets/mailmcp-database-password
-  )
+# Builds the throwaway workspace. Nothing here touches the tracked deployment directory: a developer who has already
+# provisioned the supported deployment keeps their credentials, and this run cannot authenticate against their volume
+# by accident either, because it does not use it.
+provision_smoke_workspace() {
+  smoke_workspace="$(mktemp --directory --tmpdir mailmcp-smoke.XXXXXXXX)"
+
+  mkdir -p "$smoke_workspace/secrets/mailmcp" "$smoke_workspace/config"
+  chmod 700 "$smoke_workspace/secrets"
+
+  head -c 24 /dev/urandom | base64 | tr -d '\n' > "$smoke_workspace/secrets/postgres-superuser-password"
+  head -c 24 /dev/urandom | base64 | tr -d '\n' > "$smoke_workspace/secrets/mailmcp-database-password"
+
+  # The directory restricts access; the files are readable. Compose bind-mounts a file secret with the host's own
+  # permissions — outside Swarm it ignores `mode`, `uid`, and `gid` — and the service runs as an unprivileged account
+  # that is nobody's host user, so a 0600 file it cannot read presents as an unresolvable secret reference. This is
+  # the arrangement docs/operations/deployment-compose.md asks an operator for, and the smoke uses it so the two
+  # cannot diverge.
+  chmod 444 "$smoke_workspace/secrets/postgres-superuser-password" "$smoke_workspace/secrets/mailmcp-database-password"
+
+  # The configuration directory is deliberately left empty. An operator's own `config/10-mailmcp.json` would otherwise
+  # be mounted into this run, and a real mailbox account in it would make the smoke synchronize somebody's mail.
+  cat > "$smoke_workspace/compose.smoke.yaml" <<SMOKE_OVERRIDE
+services:
+  mailmcp:
+    volumes: !override
+      - type: bind
+        source: $smoke_workspace/config
+        target: /etc/mailmcp/config
+        read_only: true
+      - type: bind
+        source: $smoke_workspace/secrets/mailmcp
+        target: /etc/mailmcp/secrets
+        read_only: true
+
+secrets:
+  postgres-superuser-password:
+    file: $smoke_workspace/secrets/postgres-superuser-password
+  mailmcp-database-password:
+    file: $smoke_workspace/secrets/mailmcp-database-password
+SMOKE_OVERRIDE
+}
+
+remove_smoke_workspace() {
+  [[ -n "$smoke_workspace" && -d "$smoke_workspace" ]] || return 0
+
+  rm -rf -- "$smoke_workspace"
+  smoke_workspace=''
 }
 
 smoke_the_compose_deployment() {
   report 'Docker Compose deployment'
 
-  trap 'compose_command --profile migrate down --volumes --remove-orphans >/dev/null 2>&1 || true' RETURN
+  # The workspace exists before the first teardown, because compose_command cannot run without the override file it
+  # names — and a teardown issued against the repository file alone would be the very thing this isolation prevents.
+  provision_smoke_workspace
+  trap 'compose_command --profile migrate down --volumes --remove-orphans >/dev/null 2>&1 || true; remove_smoke_workspace' RETURN
 
   compose_command --profile migrate down --volumes --remove-orphans >/dev/null 2>&1 || true
-  provision_compose_secrets
 
   compose_command up --detach --wait postgres >/dev/null
   pass 'PostgreSQL reports healthy, so its initialization script created the role and the database.'
@@ -122,6 +189,14 @@ smoke_the_compose_deployment() {
 
   compose_command --profile migrate run --rm migrations >/dev/null
   pass 'Running it again changed nothing, so it is idempotent.'
+
+  # The grant path a deployment reaches when the migration role differs from the service's. The role named here is the
+  # same one, which a deployment would never do — granting to yourself is a no-op — but it is what executes the
+  # statements, and executing them is the risk: `ALTER DEFAULT PRIVILEGES` and the `GRANT ... ON ALL` forms are where a
+  # syntax or privilege mistake would otherwise only surface in a cluster running the split for real.
+  compose_command --profile migrate run --rm \
+    --env MAILMCP_RUNTIME_ROLE="${MAILMCP_DATABASE_ROLE:-mailmcp}" migrations >/dev/null
+  pass 'The runtime-role grant runs against the migrated schema.'
 
   compose_command up --detach --wait mailmcp >/dev/null
   pass 'The host became healthy against the migrated schema.'

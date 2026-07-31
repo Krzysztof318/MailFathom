@@ -38,9 +38,13 @@ services:
       # installs the `vector` extension while a superuser is still the one connected.
       - ./postgres/10-create-mailmcp-database.sh:/docker-entrypoint-initdb.d/10-create-mailmcp-database.sh:ro
     healthcheck:
-      # Asks for the database MailMcp will use rather than for the server as a whole, so the check does not report
-      # ready while the initialization script is still creating it.
-      test: ["CMD-SHELL", "pg_isready --quiet --username postgres --dbname \"$${MAILMCP_DATABASE}\""]
+      # Over TCP on purpose. The image's entrypoint runs `docker-entrypoint-initdb.d` against a temporary server that
+      # listens on a Unix socket only, so a socket check can report ready while the initialization script has not yet
+      # created the role, the database, or the extension — and `depends_on: service_healthy` would then start MailMcp
+      # against a database that does not exist. Naming a host forces the check onto the final, TCP-listening server.
+      # The database and user are given for readability rather than for enforcement: pg_isready reports the server's
+      # state and does not verify either.
+      test: ["CMD-SHELL", "pg_isready --quiet --host 127.0.0.1 --port 5432 --username postgres --dbname \"$${MAILMCP_DATABASE}\""]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -69,6 +73,12 @@ services:
       context: ../..
       dockerfile: Dockerfile
       target: runtime
+    # Build rather than pull. Without this, Compose treats a service carrying both `image` and `build` as pullable
+    # first and only builds when the pull fails — and `mailmcp:local` is an unqualified name, so the attempt goes to
+    # the configured registry, where an unrelated image published under that name would silently replace the checkout
+    # this file promises to run. Set MAILMCP_PULL_POLICY=missing in the same edit that points MAILMCP_IMAGE at a
+    # published release, so the two decisions stay one decision.
+    pull_policy: ${MAILMCP_PULL_POLICY:-build}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -144,6 +154,9 @@ services:
       context: ../..
       dockerfile: Dockerfile
       target: migrations
+    # For the reason the service above gives, and it matters more here: an image pulled instead of built would be
+    # applying a schema.
+    pull_policy: ${MAILMCP_PULL_POLICY:-build}
     depends_on:
       postgres:
         condition: service_healthy

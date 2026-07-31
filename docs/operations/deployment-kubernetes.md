@@ -32,8 +32,13 @@ kubectl --namespace mailmcp create secret generic mailmcp-secrets \
 ```
 
 It is mounted read-only at `/etc/mailmcp/secrets`, one file per key, so every credential is a `file:` reference — the
-same path and the same references the Compose deployment uses. A Secrets Store CSI driver needs nothing more, because
-it mounts files too.
+same path and the same references the Compose deployment uses.
+
+A Secrets Store CSI driver works, with one step this chart does not take for you. The pod mounts a Kubernetes `secret`
+volume and exposes no CSI volume of its own, so configure the driver's `secretObjects` to **synchronize** into the
+Secret named by `secrets.existingSecret`; the chart then mounts it like any other. Mounting the CSI volume directly
+would need `extraVolumes` and `extraVolumeMounts` values, which the chart deliberately does not have — an arbitrary
+volume list is how a chart stops being able to say what its pod reads.
 
 ## Installing
 
@@ -124,6 +129,10 @@ kubectl --namespace mailmcp rollout restart deployment/mailmcp
 The Job is named with the release revision, so re-enabling it creates a new one rather than colliding with the
 completed one — a Job's pod template is immutable and a same-named apply would fail instead of running.
 
+`migrations.image.tag` must equal `image.tag`. The two images come out of one Dockerfile and one restore, and applying
+a schema from another version is not repaired by naming the right image afterwards — only from a backup. Set
+`migrations.allowVersionMismatch=true` if a pairing is genuinely deliberate.
+
 **The migration role needs privileges the service's does not.** The schema installs the `vector` extension, which
 PostgreSQL does not permit an ordinary role to create. Provision a second, more privileged credential and name it:
 
@@ -134,6 +143,25 @@ migrations:
 ```
 
 Leaving both empty reuses the service's credential, which is simpler and less contained.
+
+Naming a separate role has a consequence the Job handles for you, and it is worth knowing about: PostgreSQL makes
+whoever runs the DDL the **owner** of every table, sequence, and index it creates, and ownership grants nothing to
+anybody else. A split without more would leave the Job succeeding and MailMcp then failing on permission errors
+against a schema that plainly exists. The Job therefore grants `database.user` the DML privileges it needs, and sets
+`ALTER DEFAULT PRIVILEGES` so whatever a later migration creates is covered without this being remembered again. It
+grants rather than transfers ownership, because handing the tables over would leave the migrator unable to alter them
+next time without membership in the runtime role — the privilege the split exists to avoid.
+
+**TLS for the migration is configured separately.** `database.extraConnectionParameters` are Npgsql keywords and reach
+only the application's connection; the Job speaks libpq, which reads none of them and would otherwise fall back to
+`sslmode=prefer` while applying privileged DDL. The chart refuses to render when the application configures TLS and
+the Job does not:
+
+```yaml
+migrations:
+  sslMode: verify-full
+  sslRootCertSecretKey: postgres-ca.pem   # a key in the same mounted Secret
+```
 
 ## TLS and reaching it
 

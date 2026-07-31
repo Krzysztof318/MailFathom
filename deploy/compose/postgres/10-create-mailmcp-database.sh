@@ -22,8 +22,11 @@ if [[ ! -r "$password_file" ]]; then
 fi
 
 # One trailing newline is stripped, because a secret file written by an editor almost always ends with one and an
-# untrimmed byte becomes part of the password. This is the same rule MailMcp's own secret resolution applies.
-database_password="$(cat -- "$password_file")"
+# untrimmed byte becomes part of the password. This is the same rule MailMcp's own secret resolution applies, and the
+# `x` sentinel is what keeps it to one: command substitution strips every trailing newline on its own, so a password
+# genuinely ending in two would be created here with both removed and then presented by MailMcp with only one.
+database_password="$(cat -- "$password_file"; printf 'x')"
+database_password="${database_password%x}"
 database_password="${database_password%$'\n'}"
 
 if [[ -z "$database_password" ]]; then

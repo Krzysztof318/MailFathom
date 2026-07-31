@@ -69,6 +69,30 @@ spec:
                    by anything in the pod and stays in memory for the life of the process. */}}
             - name: MAILMCP_MIGRATION_PASSWORD_FILE
               value: {{ printf "%s/%s" $secretsMountPath $passwordSecretKey | quote }}
+            {{- if ne (default .Values.database.user .Values.migrations.user) .Values.database.user }}
+            {{- /*
+              Only when the two roles differ. PostgreSQL makes the role that runs the DDL the owner of every table and
+              sequence it creates, and ownership grants nothing to anyone else, so without this the Job would succeed
+              and MailMcp would then fail on permissions against a schema that exists. The entrypoint grants rather
+              than transfers, so the migrator can still alter these objects next time.
+            */}}
+            - name: MAILMCP_RUNTIME_ROLE
+              value: {{ .Values.database.user | quote }}
+            {{- end }}
+            {{- /*
+              libpq reads these directly. `database.extraConnectionParameters` configures Npgsql and reaches only the
+              application's connection, so a database behind verified TLS would accept the service and refuse — or,
+              worse, silently not verify — the connection that applies privileged DDL. The chart's validation refuses
+              to render when the application configures TLS and this does not.
+            */}}
+            {{- with .Values.migrations.sslMode }}
+            - name: PGSSLMODE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.migrations.sslRootCertSecretKey }}
+            - name: PGSSLROOTCERT
+              value: {{ printf "%s/%s" $secretsMountPath . | quote }}
+            {{- end }}
           volumeMounts:
             - name: secrets
               mountPath: {{ .Values.secrets.mountPath }}

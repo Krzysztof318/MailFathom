@@ -16,13 +16,22 @@ cd deploy/compose
 cp .env.example .env
 
 mkdir -p secrets/mailmcp
-umask 077
+chmod 700 secrets secrets/mailmcp
+
 openssl rand -base64 33 | tr -d '\n' > secrets/postgres-superuser-password
 openssl rand -base64 33 | tr -d '\n' > secrets/mailmcp-database-password
+chmod 444 secrets/postgres-superuser-password secrets/mailmcp-database-password
 
 cp config/10-mailmcp.json.example config/10-mailmcp.json
 $EDITOR config/10-mailmcp.json
 ```
+
+**The directory restricts access and the files are readable — not the other way round.** MailMcp runs as an
+unprivileged account inside the container that corresponds to no user on the host, and Compose bind-mounts a secret
+with the host's own permissions: outside Swarm it ignores `mode`, `uid`, and `gid`. A `0600` file therefore presents
+to MailMcp as a secret reference that cannot be resolved, and startup fails naming the setting. The `0700` directory
+is what keeps other users on the host out; only root and you can reach through it at all. Every file you add under
+`secrets/mailmcp/` needs the same treatment.
 
 `.env`, `secrets/`, and `config/*.json` are all ignored by Git. The two `.example` files are tracked and contain
 placeholders only.
@@ -179,6 +188,11 @@ docker compose -f compose.yaml -f compose.nightly.yaml up -d
 
 Leaving either variable out fails immediately with the reason. Containers started this way carry
 `io.mailmcp.release-channel=ghcr-nightly-unsupported`, so one started months ago still says what it is.
+
+Compose can require that the acknowledgement *has* a value and nothing more — it has no equality operator — so the
+phrase above is the one to use rather than one that is checked. The Helm chart does compare it exactly, because a
+template function can. Neither is a security control: what both buy is that nobody reaches a nightly image without
+reading a sentence saying it is not a release.
 
 ## Bounds
 

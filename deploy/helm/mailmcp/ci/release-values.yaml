@@ -51,3 +51,6 @@ migrations:
   image:
     repository: example/mailmcp-migrations
     tag: 0.1.0-verification
+  # A separate, more privileged role, so the render covers the grant the Job makes when the two differ.
+  user: mailmcp_migrator
+  passwordSecretKey: mailmcp-migrator-password

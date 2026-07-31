@@ -268,6 +268,47 @@ verify_the_chart() {
     'secrets.existingSecret' \
     helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml --set secrets.existingSecret=
 
+  expect_rejection \
+    'A liveness probe pointed at the database-consulting endpoint is refused.' \
+    'probes/liveness/path' \
+    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml --set probes.liveness.path=/health
+
+  expect_rejection \
+    'A misspelled values key is refused rather than silently ignored.' \
+    "additional properties 'pullPolcy' not allowed" \
+    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml --set image.pullPolcy=Always
+
+  expect_rejection \
+    'A deployment-owned setting in extraEnvironment is refused, so a credential cannot reach the environment block.' \
+    "invalid propertyName 'ConnectionStrings__mailmcp'" \
+    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml \
+    --set 'config.extraEnvironment.ConnectionStrings__mailmcp=Host=x;Password=y'
+
+  expect_rejection \
+    'A migration image from another version is refused.' \
+    'allowVersionMismatch' \
+    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml --set migrations.image.tag=0.0.1-other
+
+  expect_rejection \
+    'A migration Job without TLS is refused when the application connection requires it.' \
+    'migrations.sslMode' \
+    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml \
+    --set 'database.extraConnectionParameters=SslMode=VerifyFull'
+
+  # An image or a chart declaring a license the project has not published would make a distribution claim the
+  # copyright holder never granted. #113 owns that decision; until it lands, neither says anything.
+  if grep -qE '^[^#]*org\.opencontainers\.image\.licenses' Dockerfile; then
+    fail 'The Dockerfile declares an image license. MailMcp has published none; #113 owns that decision.'
+  else
+    pass 'The image declares no license it does not have.'
+  fi
+
+  if grep -qE '^[[:space:]]*artifacthub\.io/license' "$chart_directory/Chart.yaml"; then
+    fail 'Chart.yaml declares a license. MailMcp has published none; #113 owns that decision.'
+  else
+    pass 'The chart declares no license it does not have.'
+  fi
+
   # The migration Job carries no Helm hook, so an upgrade cannot run it.
   # Anchored to an annotation key at the start of a line, so the template's own explanation of why it carries no
   # hook does not read as one.

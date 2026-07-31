@@ -14,6 +14,13 @@
 # Leaving either variable out fails immediately with the reason. Nothing in compose.yaml reads GHCR, so a deployment
 # that does not name this file cannot reach a nightly image however it is configured.
 #
+# What the acknowledgement is, precisely: Compose's `${VAR:?…}` can require that a variable *has* a value and nothing
+# more — it has no equality operator — so any non-empty string gets past it and the phrase above is the one to use
+# rather than one that is checked. That is the whole guarantee here, and it is deliberately a smaller one than the
+# chart's: the Helm equivalent runs a template function and does compare the phrase exactly. What both actually buy is
+# the same thing, and it is not enforcement — it is that nobody reaches a nightly image without reading a sentence
+# saying it is not a release.
+#
 # The nightly identifiers themselves are #156's, and neither the registry path below nor any tag under it exists yet.
 
 services:
@@ -25,7 +32,7 @@ services:
       # overlay months ago still says what it is.
       io.mailmcp.release-channel: "ghcr-nightly-unsupported"
     environment:
-      MAILMCP_NIGHTLY_ACKNOWLEDGED: ${MAILMCP_NIGHTLY_ACKNOWLEDGED:?Set MAILMCP_NIGHTLY_ACKNOWLEDGED=i-understand-this-is-unsupported to deploy a nightly build. It is not a release, its schema and configuration may move without notice, and no support or upgrade path applies to it.}
+      MAILMCP_NIGHTLY_ACKNOWLEDGED: ${MAILMCP_NIGHTLY_ACKNOWLEDGED:?Set MAILMCP_NIGHTLY_ACKNOWLEDGED=i-understand-this-is-unsupported to deploy a nightly build. It is not a release, its schema and configuration may move without notice, and no support or upgrade path applies to it. Compose can only require that this variable is set; it cannot compare the phrase, which the Helm chart does.}
 
   migrations:
     image: ghcr.io/krzysztof318/mailmcp-migrations:${MAILMCP_NIGHTLY_TAG:?Name the nightly identifier to deploy. Nightly builds are unsupported development output and carry no release promise.}

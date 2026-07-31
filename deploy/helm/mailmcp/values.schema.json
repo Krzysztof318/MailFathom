@@ -1,24 +1,47 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "MailMcp chart values",
-  "description": "Shape and value constraints for the MailMcp chart. This file rejects what can be decided from one field: a wrong type, an empty required string, a moving image tag, a configuration file name MailMcp would never read, an environment variable that looks like a credential. Constraints that hold between two fields — a nightly image needing its acknowledgement, a tag disagreeing with the chart's application version — are enforced by the chart's own validation helper, because a draft-07 schema can only state those as nested conditionals that report which subschema failed rather than what is wrong.",
+  "description": "Shape and value constraints for the MailMcp chart. This file rejects what can be decided from one field: a wrong type, an empty required string, a moving image tag, a configuration file name MailMcp would never read, an environment variable that looks like a credential. Constraints that hold between two fields \u2014 a nightly image needing its acknowledgement, a tag disagreeing with the chart's application version \u2014 are enforced by the chart's own validation helper, because a draft-07 schema can only state those as nested conditionals that report which subschema failed rather than what is wrong.",
   "type": "object",
-  "required": ["image", "database", "secrets", "config", "service", "probes", "migrations"],
+  "required": [
+    "image",
+    "database",
+    "secrets",
+    "config",
+    "service",
+    "probes",
+    "migrations"
+  ],
   "properties": {
-    "nameOverride": { "type": "string" },
-    "fullnameOverride": { "type": "string" },
-    "replicaCount": { "type": "integer", "minimum": 0 },
-
+    "nameOverride": {
+      "type": "string"
+    },
+    "fullnameOverride": {
+      "type": "string"
+    },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 0
+    },
     "image": {
       "type": "object",
-      "required": ["channel", "repository", "pullPolicy"],
+      "required": [
+        "channel",
+        "repository",
+        "pullPolicy"
+      ],
       "properties": {
         "channel": {
           "type": "string",
-          "enum": ["release", "nightly"],
+          "enum": [
+            "release",
+            "nightly"
+          ],
           "description": "'release' is a published Docker Hub image and the only supported channel. 'nightly' is unsupported development output published to GHCR."
         },
-        "registry": { "type": "string" },
+        "registry": {
+          "type": "string"
+        },
         "repository": {
           "type": "string",
           "minLength": 1,
@@ -27,7 +50,14 @@
         "tag": {
           "type": "string",
           "not": {
-            "enum": ["latest", "main", "master", "stable", "edge", "nightly"],
+            "enum": [
+              "latest",
+              "main",
+              "master",
+              "stable",
+              "edge",
+              "nightly"
+            ],
             "description": "A moving tag makes what a cluster runs depend on when a node last pulled, and makes a rollback go somewhere other than where it came from."
           }
         },
@@ -35,31 +65,66 @@
           "type": "string",
           "pattern": "^$|^sha256:[a-f0-9]{64}$"
         },
-        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        },
         "pullSecrets": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["name"],
-            "properties": { "name": { "type": "string", "minLength": 1 } }
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
           }
         },
-        "nightlyAcknowledgement": { "type": "string" },
-        "allowVersionMismatch": { "type": "boolean" }
-      }
+        "nightlyAcknowledgement": {
+          "type": "string"
+        },
+        "allowVersionMismatch": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
     },
-
     "database": {
       "type": "object",
-      "required": ["host", "port", "name", "user", "passwordSecretKey"],
+      "required": [
+        "host",
+        "port",
+        "name",
+        "user",
+        "passwordSecretKey"
+      ],
       "properties": {
         "host": {
           "type": "string",
           "description": "The chart installs no database. MailMcp needs PostgreSQL with the vector extension, and the store holding every synchronized message belongs to whoever operates it."
         },
-        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "name": { "type": "string", "minLength": 1 },
-        "user": { "type": "string", "minLength": 1 },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "user": {
+          "type": "string",
+          "minLength": 1
+        },
         "extraConnectionParameters": {
           "type": "string",
           "not": {
@@ -67,25 +132,37 @@
             "description": "The password arrives as a mounted file. Putting one here would place a credential into a ConfigMap-visible connection string and leave two sources for one secret."
           }
         },
-        "passwordSecretKey": { "type": "string", "minLength": 1 }
-      }
+        "passwordSecretKey": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
     },
-
     "secrets": {
       "type": "object",
-      "required": ["existingSecret", "mountPath"],
+      "required": [
+        "existingSecret",
+        "mountPath"
+      ],
       "properties": {
         "existingSecret": {
           "type": "string",
           "description": "The chart creates no Secret and templates no credential. Name one the cluster already holds."
         },
-        "mountPath": { "type": "string", "pattern": "^/.+" }
-      }
+        "mountPath": {
+          "type": "string",
+          "pattern": "^/.+"
+        }
+      },
+      "additionalProperties": false
     },
-
     "config": {
       "type": "object",
-      "required": ["files", "mountPath"],
+      "required": [
+        "files",
+        "mountPath"
+      ],
       "properties": {
         "files": {
           "type": "object",
@@ -93,164 +170,320 @@
             "pattern": "\\.json$",
             "description": "MailMcp layers in *.json only, so a key with another extension would be a setting that silently never applied."
           },
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": {
+            "type": "string"
+          }
         },
-        "mountPath": { "type": "string", "pattern": "^/.+" },
+        "mountPath": {
+          "type": "string",
+          "pattern": "^/.+"
+        },
         "extraEnvironment": {
           "type": "object",
           "propertyNames": {
-            "not": {
-              "pattern": "(?i)(password|secret|credential|token|apikey|api_key|privatekey|private_key)"
-            },
-            "description": "An environment variable is readable through /proc by anything in the pod and cannot be erased from process memory. Credentials arrive as mounted files."
+            "allOf": [
+              {
+                "not": {
+                  "pattern": "(?i)(password|secret|credential|token|apikey|api_key|privatekey|private_key)"
+                },
+                "description": "An environment variable is readable through /proc by anything in the pod and cannot be erased from process memory. Credentials arrive as mounted files."
+              },
+              {
+                "not": {
+                  "pattern": "^(ConnectionStrings__|Persistence__Password__|ConfigurationSources__|ASPNETCORE_)"
+                },
+                "description": "These settings are the chart's, not an override's. The environment block outranks every mounted file, so re-declaring one of them here would silently replace what the templates emit \u2014 and `ConnectionStrings__mailmcp` is the one that matters: the conventional Npgsql form carries `Password=`, which would put a credential into the rendered Deployment and bypass the mounted-file path entirely. Change `database`, `config`, and `secrets` instead."
+              }
+            ]
           },
-          "additionalProperties": { "type": ["string", "number", "boolean"] }
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
         },
-        "pollForChanges": { "type": "boolean" }
-      }
+        "pollForChanges": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
     },
-
     "service": {
       "type": "object",
-      "required": ["type", "port"],
+      "required": [
+        "type",
+        "port"
+      ],
       "properties": {
-        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
-        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "annotations": { "type": "object" }
-      }
+        "type": {
+          "type": "string",
+          "enum": [
+            "ClusterIP",
+            "NodePort",
+            "LoadBalancer"
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "annotations": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
     },
-
     "ingress": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "className": { "type": "string" },
-        "annotations": { "type": "object" },
+        "enabled": {
+          "type": "boolean"
+        },
+        "className": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object"
+        },
         "hosts": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["host", "paths"],
+            "required": [
+              "host",
+              "paths"
+            ],
             "properties": {
-              "host": { "type": "string", "minLength": 1 },
+              "host": {
+                "type": "string",
+                "minLength": 1
+              },
               "paths": {
                 "type": "array",
                 "items": {
                   "type": "object",
-                  "required": ["path", "pathType"],
+                  "required": [
+                    "path",
+                    "pathType"
+                  ],
                   "properties": {
-                    "path": { "type": "string", "pattern": "^/" },
-                    "pathType": { "type": "string", "enum": ["Exact", "Prefix", "ImplementationSpecific"] }
-                  }
+                    "path": {
+                      "type": "string",
+                      "pattern": "^/"
+                    },
+                    "pathType": {
+                      "type": "string",
+                      "enum": [
+                        "Exact",
+                        "Prefix",
+                        "ImplementationSpecific"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
                 }
               }
-            }
+            },
+            "additionalProperties": false
           }
         },
         "tls": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["secretName"],
+            "required": [
+              "secretName"
+            ],
             "properties": {
               "secretName": {
                 "type": "string",
                 "minLength": 1,
                 "description": "A Secret the cluster already holds. The chart never issues or stores certificate material."
               },
-              "hosts": { "type": "array", "items": { "type": "string" } }
-            }
+              "hosts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
-
-    "resources": { "type": "object" },
-
+    "resources": {
+      "type": "object"
+    },
     "podSecurityContext": {
       "type": "object",
-      "required": ["runAsNonRoot", "seccompProfile"],
+      "required": [
+        "runAsNonRoot",
+        "seccompProfile"
+      ],
       "properties": {
         "runAsNonRoot": {
           "const": true,
           "description": "The Restricted Pod Security Standard requires it, and MailMcp has no reason to be root: the image runs as an unprivileged account and writes only to a mounted tmpfs."
         },
-        "runAsUser": { "type": "integer", "minimum": 1 },
-        "runAsGroup": { "type": "integer", "minimum": 1 },
-        "fsGroup": { "type": "integer", "minimum": 1 },
+        "runAsUser": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runAsGroup": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fsGroup": {
+          "type": "integer",
+          "minimum": 1
+        },
         "seccompProfile": {
           "type": "object",
-          "required": ["type"],
+          "required": [
+            "type"
+          ],
           "properties": {
-            "type": { "type": "string", "enum": ["RuntimeDefault", "Localhost"] }
-          }
+            "type": {
+              "type": "string",
+              "enum": [
+                "RuntimeDefault",
+                "Localhost"
+              ]
+            }
+          },
+          "additionalProperties": false
         }
-      }
+      },
+      "additionalProperties": false
     },
-
     "containerSecurityContext": {
       "type": "object",
-      "required": ["allowPrivilegeEscalation", "readOnlyRootFilesystem", "capabilities"],
+      "required": [
+        "allowPrivilegeEscalation",
+        "readOnlyRootFilesystem",
+        "capabilities"
+      ],
       "properties": {
-        "allowPrivilegeEscalation": { "const": false },
+        "allowPrivilegeEscalation": {
+          "const": false
+        },
         "readOnlyRootFilesystem": {
           "const": true,
           "description": "The image needs no writable path of its own; /tmp is a mounted emptyDir. A deployment that needed to relax this would be working around something else."
         },
         "capabilities": {
           "type": "object",
-          "required": ["drop"],
+          "required": [
+            "drop"
+          ],
           "properties": {
             "drop": {
               "type": "array",
-              "contains": { "const": "ALL" }
+              "contains": {
+                "const": "ALL"
+              }
             },
-            "add": { "type": "array", "maxItems": 0 }
-          }
+            "add": {
+              "type": "array",
+              "maxItems": 0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "serviceAccount": {
+      "type": "object",
+      "required": [
+        "create",
+        "automountToken"
+      ],
+      "properties": {
+        "create": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object"
+        },
+        "automountToken": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "temporaryDirectory": {
+      "type": "object",
+      "required": [
+        "sizeLimit"
+      ],
+      "properties": {
+        "sizeLimit": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "terminationGracePeriodSeconds": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "probes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "readiness",
+        "liveness",
+        "startup"
+      ],
+      "properties": {
+        "readiness": {
+          "$ref": "#/definitions/readinessProbe"
+        },
+        "liveness": {
+          "$ref": "#/definitions/processProbe"
+        },
+        "startup": {
+          "$ref": "#/definitions/processProbe"
         }
       }
     },
-
-    "serviceAccount": {
-      "type": "object",
-      "required": ["create", "automountToken"],
-      "properties": {
-        "create": { "type": "boolean" },
-        "name": { "type": "string" },
-        "annotations": { "type": "object" },
-        "automountToken": { "type": "boolean" }
-      }
+    "nodeSelector": {
+      "type": "object"
     },
-
-    "temporaryDirectory": {
-      "type": "object",
-      "required": ["sizeLimit"],
-      "properties": { "sizeLimit": { "type": "string", "minLength": 1 } }
+    "tolerations": {
+      "type": "array"
     },
-
-    "terminationGracePeriodSeconds": { "type": "integer", "minimum": 1 },
-
-    "probes": {
-      "type": "object",
-      "required": ["readiness", "liveness", "startup"],
-      "properties": {
-        "readiness": { "$ref": "#/definitions/probe" },
-        "liveness": { "$ref": "#/definitions/probe" },
-        "startup": { "$ref": "#/definitions/probe" }
-      }
+    "affinity": {
+      "type": "object"
     },
-
-    "nodeSelector": { "type": "object" },
-    "tolerations": { "type": "array" },
-    "affinity": { "type": "object" },
-    "topologySpreadConstraints": { "type": "array" },
-    "priorityClassName": { "type": "string" },
-    "podAnnotations": { "type": "object" },
-    "podLabels": { "type": "object" },
-
+    "topologySpreadConstraints": {
+      "type": "array"
+    },
+    "priorityClassName": {
+      "type": "string"
+    },
+    "podAnnotations": {
+      "type": "object"
+    },
+    "podLabels": {
+      "type": "object"
+    },
     "migrations": {
       "type": "object",
-      "required": ["enabled", "image"],
+      "required": [
+        "enabled",
+        "image"
+      ],
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -259,35 +492,134 @@
         "image": {
           "type": "object",
           "properties": {
-            "repository": { "type": "string" },
-            "tag": { "type": "string", "not": { "enum": ["latest", "main", "master", "stable", "edge"] } },
-            "digest": { "type": "string", "pattern": "^$|^sha256:[a-f0-9]{64}$" }
-          }
+            "repository": {
+              "type": "string"
+            },
+            "tag": {
+              "type": "string",
+              "not": {
+                "enum": [
+                  "latest",
+                  "main",
+                  "master",
+                  "stable",
+                  "edge"
+                ]
+              }
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^$|^sha256:[a-f0-9]{64}$"
+            }
+          },
+          "additionalProperties": false
         },
-        "passwordSecretKey": { "type": "string" },
-        "user": { "type": "string" },
-        "backoffLimit": { "type": "integer", "minimum": 0 },
-        "ttlSecondsAfterFinished": { "type": "integer", "minimum": 0 },
-        "resources": { "type": "object" }
+        "passwordSecretKey": {
+          "type": "string"
+        },
+        "user": {
+          "type": "string"
+        },
+        "sslMode": {
+          "type": "string",
+          "enum": ["", "disable", "allow", "prefer", "require", "verify-ca", "verify-full"],
+          "description": "A libpq value, not an Npgsql one. The Job speaks libpq and reads none of database.extraConnectionParameters, so TLS for the connection that applies privileged DDL is configured here."
+        },
+        "sslRootCertSecretKey": {
+          "type": "string",
+          "description": "The key in the mounted Secret holding the authority to verify the server against. Needed only for verify-ca and verify-full against a private authority."
+        },
+        "allowVersionMismatch": {
+          "type": "boolean"
+        },
+        "backoffLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ttlSecondsAfterFinished": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "resources": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "global": {
+      "type": "object",
+      "description": "Helm injects this when a chart is used as a subchart. MailMcp has none, so nothing reads it; it is declared only so a parent chart's global values do not fail this schema."
+    }
+  },
+  "definitions": {
+    "probeTiming": {
+      "initialDelaySeconds": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "periodSeconds": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "timeoutSeconds": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "failureThreshold": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "readinessProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "const": "/health",
+          "description": "Readiness consults every registered check, the database included, so a pod that cannot serve leaves the Service's endpoints. /alive would report a process that is running but cannot answer, which is the opposite of what readiness decides."
+        },
+        "initialDelaySeconds": {
+          "$ref": "#/definitions/probeTiming/initialDelaySeconds"
+        },
+        "periodSeconds": {
+          "$ref": "#/definitions/probeTiming/periodSeconds"
+        },
+        "timeoutSeconds": {
+          "$ref": "#/definitions/probeTiming/timeoutSeconds"
+        },
+        "failureThreshold": {
+          "$ref": "#/definitions/probeTiming/failureThreshold"
+        }
+      }
+    },
+    "processProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "const": "/alive",
+          "description": "Liveness and startup consult only the checks that report the process itself. /health is refused rather than discouraged: it consults the database, so an outage would fail liveness and Kubernetes would restart a healthy process repeatedly without repairing the dependency."
+        },
+        "initialDelaySeconds": {
+          "$ref": "#/definitions/probeTiming/initialDelaySeconds"
+        },
+        "periodSeconds": {
+          "$ref": "#/definitions/probeTiming/periodSeconds"
+        },
+        "timeoutSeconds": {
+          "$ref": "#/definitions/probeTiming/timeoutSeconds"
+        },
+        "failureThreshold": {
+          "$ref": "#/definitions/probeTiming/failureThreshold"
+        }
       }
     }
   },
-
-  "definitions": {
-    "probe": {
-      "type": "object",
-      "required": ["path"],
-      "properties": {
-        "path": {
-          "type": "string",
-          "enum": ["/health", "/alive"],
-          "description": "/health consults every check including the database; /alive consults only the checks that report the process itself. Pointing liveness at /health turns a database outage into a restart loop that cannot fix it."
-        },
-        "initialDelaySeconds": { "type": "integer", "minimum": 0 },
-        "periodSeconds": { "type": "integer", "minimum": 1 },
-        "timeoutSeconds": { "type": "integer", "minimum": 1 },
-        "failureThreshold": { "type": "integer", "minimum": 1 }
-      }
-    }
-  }
+  "additionalProperties": false
 }
