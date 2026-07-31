@@ -1,16 +1,28 @@
 name: Protected paths
 
-# `.github/` decides how every other change is judged: who has to approve it, which checks the `main`
-# ruleset waits for, and which dependency updates open themselves. A pull request that edits it is
-# editing the gate it has to pass, so the repository owner is the only author for whom that is
-# ordinary work. `CODEOWNERS` says the same thing to the reviewer; this job says it to the author,
-# within seconds of the push and without a reviewer having to notice.
+# Four directories decide how every other change is judged rather than being judged by it, which is
+# what makes them one set:
+#
+#   `.github/`  who has to approve a change, which checks the `main` ruleset waits for, and which
+#               dependency updates open themselves
+#   `.config/`  which API calls the build bans, what the coverage gate demands, which local tools
+#               restore, and how the test runner is configured
+#   `.agents/`  the skills that define the task, review, verification, and completion contract
+#   `.claude/`  the tracked entry points to those same skills
+#
+# A pull request that edits any of them is editing the gate it has to pass, so the repository owner
+# is the only author for whom that is ordinary work. `CODEOWNERS` says this to the reviewer; this job
+# says it to the author, within seconds of the push and without a reviewer having to notice.
 #
 # It is not a security boundary on its own. A `pull_request` run uses the workflow file as the pull
 # request would leave it, so a change to this file changes the check that judges it. The pair is what
 # holds: weakening the check means editing `.github/`, which needs the code owner's approval, and
 # deleting or renaming this job leaves the required check permanently unreported, which the ruleset
 # refuses to merge past. Both ways out are closed; neither of them is closed by this file alone.
+#
+# The set is a list rather than a pattern because each entry was added for a reason that had to be
+# stated. A directory joins it when a change to it decides what the repository enforces on every
+# other change; a dotted directory is not protected merely for being dotted.
 on:
   pull_request:
     types:
@@ -58,14 +70,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          protected_prefix='.github/'
+          protected_prefixes=('.github/' '.agents/' '.claude/' '.config/')
+          protected_directories="${protected_prefixes[*]}"
           reportable_file_limit=3000
 
           # The changed-files endpoint stops at 3000 entries, so a larger pull request cannot be shown
           # to leave the protected paths alone. An answer that could not be computed is not an answer
           # that clears this check.
           if (( CHANGED_FILE_COUNT > reportable_file_limit )); then
-            echo "::error::This pull request changes ${CHANGED_FILE_COUNT} files, more than the ${reportable_file_limit} the changed-files endpoint reports, so its ${protected_prefix} paths cannot be verified."
+            echo "::error::This pull request changes ${CHANGED_FILE_COUNT} files, more than the ${reportable_file_limit} the changed-files endpoint reports, so its changes under ${protected_directories} cannot be verified."
             exit 1
           fi
 
@@ -76,30 +89,33 @@ jobs:
               --paginate --jq '.[] | .filename, (.previous_filename // empty)'
           )"
 
-          # Prefix matching rather than a regular expression, so the leading dot of `.github/` is a
-          # dot and a sibling directory whose name merely ends that way is not protected by accident.
+          # Prefix matching rather than a regular expression, so the leading dot of each directory is
+          # a dot and a sibling whose name merely ends that way is not protected by accident.
           protected_changes=()
           while IFS= read -r changed_path; do
-            if [[ "$changed_path" == "${protected_prefix}"* ]]; then
-              protected_changes+=("$changed_path")
-            fi
+            for protected_prefix in "${protected_prefixes[@]}"; do
+              if [[ "$changed_path" == "${protected_prefix}"* ]]; then
+                protected_changes+=("$changed_path")
+                break
+              fi
+            done
           done <<< "$changed_paths"
 
           if (( ${#protected_changes[@]} == 0 )); then
-            echo "This pull request changes nothing under ${protected_prefix}."
+            echo "This pull request changes nothing under ${protected_directories}."
             exit 0
           fi
 
           # GitHub logins are compared case-insensitively, because the same account is addressable
           # under either casing and the two spellings must not decide a gate differently.
           if [[ "${PULL_REQUEST_AUTHOR,,}" == "${REPOSITORY_OWNER,,}" ]]; then
-            echo "The repository owner authored this pull request, so its changes under ${protected_prefix} are allowed."
+            echo "The repository owner authored this pull request, so its changes under ${protected_directories} are allowed."
             exit 0
           fi
 
           for protected_change in "${protected_changes[@]}"; do
-            echo "::error file=${protected_change}::${protected_change} is under ${protected_prefix} and only ${REPOSITORY_OWNER} may change it in a pull request."
+            echo "::error file=${protected_change}::${protected_change} is repository configuration and only ${REPOSITORY_OWNER} may change it in a pull request."
           done
 
-          echo "::error::This pull request is authored by ${PULL_REQUEST_AUTHOR} and changes ${protected_prefix}. Open the repository-configuration change separately, or ask ${REPOSITORY_OWNER} to make it."
+          echo "::error::This pull request is authored by ${PULL_REQUEST_AUTHOR} and changes repository configuration under ${protected_directories}. Open that change separately, or ask ${REPOSITORY_OWNER} to make it."
           exit 1
