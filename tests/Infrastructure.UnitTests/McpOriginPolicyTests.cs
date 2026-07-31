@@ -110,31 +110,10 @@ public sealed class McpOriginPolicyTests
         Assert.False(policy.Permits("null"));
     }
 
-    /// <summary>Serving no browser is a posture a deployment states deliberately, so it is a named policy rather than an empty list handed to <see cref="McpOriginPolicy.Restricting" />.</summary>
     [Fact]
-    public void Restricting_NoOrigin_ThrowsBecauseTheServeNoBrowserPostureIsNamedSeparately()
+    public void Restricting_NoOrigin_ThrowsBecauseItWouldServeNoBrowserAtAll()
     {
         // Arrange, Act, Assert
         Assert.Throws<ArgumentException>(() => McpOriginPolicy.Restricting([]));
-    }
-
-    /// <summary>
-    /// The posture that closes DNS rebinding: every request a browser makes carries an origin and none of them is
-    /// served, while a non-browser client — which sends no <c>Origin</c> at all — keeps being served exactly as before.
-    /// That asymmetry is the whole point, so both halves are asserted together.
-    /// </summary>
-    [Theory]
-    [InlineData("https://client.example.test")]
-    [InlineData("http://localhost:3000")]
-    [InlineData("null")]
-    public void Permits_TheRefuseEveryBrowserOriginPolicy_ServesOnlyARequestCarryingNoOrigin(string presentedOrigin)
-    {
-        // Arrange
-        var policy = McpOriginPolicy.RefusingEveryBrowserOrigin;
-
-        // Act, Assert
-        Assert.False(policy.Permits(presentedOrigin));
-        Assert.True(policy.Permits(null));
-        Assert.False(policy.AllowsAnyOrigin);
     }
 }

@@ -16,13 +16,7 @@ namespace MailMcp.Host.Configuration;
 /// <para>
 /// The two settings are alternatives rather than layers. An operator who lists origins while leaving
 /// <see cref="AllowAnyOrigin" /> on has stated two policies, and guessing which one they meant would either widen a
-/// deployment they narrowed or narrow one they widened; that combination is refused at startup instead.
-/// </para>
-/// <para>
-/// Turning <see cref="AllowAnyOrigin" /> off and listing nothing is the third posture rather than a mistake: no browser
-/// origin is served at all. It is what a deployment whose clients are not browsers wants, since such a client sends no
-/// <c>Origin</c> and is served regardless, and it is the only posture that closes DNS rebinding for an endpoint running
-/// under <see cref="McpTransportAuthenticationMode.None" />.
+/// deployment they narrowed or narrow one they widened; both are refused at startup instead.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
@@ -33,7 +27,6 @@ internal sealed class McpCorsOptions
     public bool AllowAnyOrigin { get; set; } = true;
 
     /// <summary>Gets the exact origins served when <see cref="AllowAnyOrigin" /> is off, for example <c>https://client.example.test</c>.</summary>
-    /// <remarks>Left empty with <see cref="AllowAnyOrigin" /> off, no browser origin is served and only clients that send no <c>Origin</c> reach the endpoint.</remarks>
     public IList<string> AllowedOrigins { get; } = [];
 
     /// <summary>Finds everything an operator must fix before this policy can be applied.</summary>
@@ -45,6 +38,11 @@ internal sealed class McpCorsOptions
         if (this.AllowAnyOrigin && this.AllowedOrigins.Count > 0)
         {
             errors.Add($"{nameof(this.AllowAnyOrigin)} — every origin is served and an exact origin list is configured; state one policy or the other.");
+        }
+
+        if (!this.AllowAnyOrigin && this.AllowedOrigins.Count == 0)
+        {
+            errors.Add($"{nameof(this.AllowedOrigins)} — no origin is served and none is listed, so no browser client could reach the endpoint.");
         }
 
         errors.AddRange(this.FindAllowedOriginErrors());
@@ -62,14 +60,9 @@ internal sealed class McpCorsOptions
             return McpOriginPolicy.AllowingAnyOrigin;
         }
 
-        if (this.AllowedOrigins.Count == 0)
-        {
-            return McpOriginPolicy.RefusingEveryBrowserOrigin;
-        }
-
         var normalizedOrigins = this.NormalizedAllowedOrigins().ToArray();
 
-        return normalizedOrigins.Length == this.AllowedOrigins.Count
+        return normalizedOrigins.Length == this.AllowedOrigins.Count && normalizedOrigins.Length > 0
             ? McpOriginPolicy.Restricting(normalizedOrigins)
             : throw new InvalidOperationException(
                 "The configured origins were mapped before they were validated, so at least one of them is unusable.");

@@ -23,9 +23,7 @@ public sealed class McpTransportAuthenticationWarningTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var warning = WarningFor(
-            new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMode.None },
-            logs);
+        var warning = WarningFor(UnauthenticatedServingOneBrowserOrigin(), logs);
 
         // Act
         await warning.StartAsync(TestContext.Current.CancellationToken);
@@ -36,6 +34,32 @@ public sealed class McpTransportAuthenticationWarningTests
         Assert.Contains("read the synchronized mailboxes", record.Message, StringComparison.Ordinal);
         Assert.Contains("API keys", record.Message, StringComparison.Ordinal);
         Assert.Equal("/mcp", Assert.Contains("McpEndpointPath", record.Properties));
+    }
+
+    /// <summary>
+    /// The combination that makes DNS rebinding work, and the one a deployment behind a reverse proxy or on a trusted
+    /// network legitimately runs. It is therefore reported rather than refused, and reported separately: an operator who
+    /// narrowed the origins has already answered this question and must not be told the same thing twice.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_UnauthenticatedEndpointServingEveryBrowserOrigin_AlsoWarnsAboutDnsRebinding()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var warning = WarningFor(
+            new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMode.None },
+            logs);
+
+        // Act
+        await warning.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, logs.Records.Count);
+        Assert.All(logs.Records, record => Assert.Equal(LogLevel.Warning, record.Level));
+        var browserWarning = Assert.Single(
+            logs.Records,
+            record => record.Message.Contains("DNS rebinding", StringComparison.Ordinal));
+        Assert.Contains("McpEndpoint:Cors:AllowedOrigins", browserWarning.Message, StringComparison.Ordinal);
     }
 
     /// <summary>A deployment that requires a credential has the posture the warning exists to ask for, so repeating it would be noise.</summary>
@@ -105,6 +129,21 @@ public sealed class McpTransportAuthenticationWarningTests
 
         // Assert
         Assert.Empty(logs.Records);
+    }
+
+    /// <summary>The unauthenticated posture with the origin question already answered, so only the credential warning is left to fire.</summary>
+    private static McpEndpointOptions UnauthenticatedServingOneBrowserOrigin()
+    {
+        var settings = new McpEndpointOptions
+        {
+            Enabled = true,
+            Authentication = McpTransportAuthenticationMode.None,
+            Cors = new McpCorsOptions { AllowAnyOrigin = false },
+        };
+
+        settings.Cors.AllowedOrigins.Add("https://client.example.test");
+
+        return settings;
     }
 
     private static McpTransportAuthenticationWarning WarningFor(McpEndpointOptions settings, RecordingLoggerProvider logs)

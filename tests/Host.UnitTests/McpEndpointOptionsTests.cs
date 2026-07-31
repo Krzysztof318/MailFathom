@@ -97,41 +97,17 @@ public sealed class McpEndpointOptionsTests
         Assert.StartsWith("McpEndpoint:Authentication", error, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void FindConfigurationErrors_ExplicitlyUnauthenticatedServingNoBrowserOrigin_IsAccepted()
-    {
-        // Arrange
-        var options = UnauthenticatedServingNoBrowser();
-
-        // Act, Assert
-        Assert.Empty(options.FindConfigurationErrors());
-    }
-
     /// <summary>
-    /// With no credential required, the origin list is the only thing left between a web page and the mailbox. A page
-    /// the user never visited reaches a loopback or private address through DNS rebinding and the browser attaches its
-    /// own origin, so serving every origin serves that page — and the permissive CORS headers let it read the answer.
+    /// Serving every browser origin with no credential required is the combination that makes DNS rebinding work, and
+    /// it is deliberately not a configuration error: it is what a deployment behind a reverse proxy or on a trusted
+    /// network runs, and refusing it would make the simple case the one that needs extra settings. The operator is told
+    /// instead, by <c>McpTransportAuthenticationWarning</c>, which is where that judgement belongs.
     /// </summary>
     [Fact]
-    public void FindConfigurationErrors_UnauthenticatedWhileServingEveryBrowserOrigin_IsRefused()
+    public void FindConfigurationErrors_ExplicitlyUnauthenticated_IsAccepted()
     {
         // Arrange
         var options = EnabledWith(McpTransportAuthenticationMode.None);
-
-        // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
-
-        // Assert
-        Assert.StartsWith("McpEndpoint:Cors:AllowAnyOrigin", error, StringComparison.Ordinal);
-    }
-
-    /// <summary>The same combination under a credential is ordinary, because the page has none to present and none is ambient.</summary>
-    [Fact]
-    public void FindConfigurationErrors_ApiKeyAuthenticationServingEveryBrowserOrigin_IsAccepted()
-    {
-        // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMode.ApiKey);
-        options.ApiKeys.Add(Key("workstation"));
 
         // Act, Assert
         Assert.Empty(options.FindConfigurationErrors());
@@ -142,7 +118,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_KeysConfiguredWhileAuthenticationIsNone_IsRefused()
     {
         // Arrange
-        var options = UnauthenticatedServingNoBrowser();
+        var options = EnabledWith(McpTransportAuthenticationMode.None);
         options.ApiKeys.Add(Key("workstation"));
 
         // Act
@@ -156,8 +132,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnUnusableCorsPolicy_IsReportedUnderTheSectionThatCarriesIt()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMode.ApiKey);
-        options.ApiKeys.Add(Key("workstation"));
+        var options = EnabledWith(McpTransportAuthenticationMode.None);
         options.Cors.AllowedOrigins.Add("https://client.example.test");
 
         // Act
@@ -172,13 +147,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_SeveralFaults_ReportsThemAllAtOnce()
     {
         // Arrange
-        var options = new McpEndpointOptions
-        {
-            Enabled = true,
-            Authentication = McpTransportAuthenticationMode.ApiKey,
-            Cors = new McpCorsOptions { AllowAnyOrigin = false },
-        };
-        options.Cors.AllowedOrigins.Add("https://client.example.test/mcp");
+        var options = new McpEndpointOptions { Enabled = true, Cors = new McpCorsOptions { AllowAnyOrigin = false } };
 
         // Act
         var errors = options.FindConfigurationErrors();
@@ -199,14 +168,6 @@ public sealed class McpEndpointOptionsTests
 
     private static McpEndpointOptions EnabledWith(McpTransportAuthenticationMode authentication) =>
         new() { Enabled = true, Authentication = authentication };
-
-    /// <summary>The only unauthenticated posture the validator accepts: no credential, and no browser origin served either.</summary>
-    private static McpEndpointOptions UnauthenticatedServingNoBrowser() => new()
-    {
-        Enabled = true,
-        Authentication = McpTransportAuthenticationMode.None,
-        Cors = new McpCorsOptions { AllowAnyOrigin = false },
-    };
 
     private static ConfiguredSecret Key(string name) => new()
     {

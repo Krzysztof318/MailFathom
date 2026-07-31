@@ -17,10 +17,18 @@ namespace MailMcp.Host.Hosting;
 /// reach its address.
 /// </para>
 /// <para>
-/// It says nothing about the origin policy, and it will say nothing about a client certificate when those arrive.
-/// Neither identifies the person whose mail is being read: an origin restricts which page a browser will let make the
-/// request, and a client certificate names the application making it. Treating either as a reason to stay quiet here
-/// would report an authenticated deployment to an operator who has none.
+/// Neither the origin policy nor a client certificate, when those arrive, can silence it. Neither identifies the person
+/// whose mail is being read: an origin restricts which page a browser will let make the request, and a client
+/// certificate names the application making it. Treating either as a reason to stay quiet here would report an
+/// authenticated deployment to an operator who has none.
+/// </para>
+/// <para>
+/// The origin policy does earn a second warning, because under this posture it is the only thing left between a web
+/// page and the mailbox. Serving every browser origin with no credential required is what makes DNS rebinding work: a
+/// page the user never visited reaches a loopback or private address, the browser attaches its own <c>Origin</c>, and
+/// the permissive CORS headers then let the page read what came back. That combination is deliberately allowed rather
+/// than refused at startup, because it is what makes the endpoint work behind a reverse proxy or on a trusted network
+/// without further configuration — so it is reported, and the judgement stays the operator's.
 /// </para>
 /// <para>
 /// It runs as a hosted service so it reports during startup, next to the other startup diagnostics an operator reads,
@@ -51,9 +59,16 @@ internal sealed partial class McpTransportAuthenticationWarning : IHostedService
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (this.endpointSettings is { Enabled: true, Authentication: McpTransportAuthenticationMode.None })
+        if (this.endpointSettings is not { Enabled: true, Authentication: McpTransportAuthenticationMode.None })
         {
-            this.LogEndpointServedWithoutTransportAuthentication(McpEndpointRoute.Path);
+            return Task.CompletedTask;
+        }
+
+        this.LogEndpointServedWithoutTransportAuthentication(McpEndpointRoute.Path);
+
+        if (this.endpointSettings.Cors.AllowAnyOrigin)
+        {
+            this.LogEveryBrowserOriginServedWithoutTransportAuthentication();
         }
 
         return Task.CompletedTask;
@@ -70,4 +85,13 @@ internal sealed partial class McpTransportAuthenticationWarning : IHostedService
             + "certificate substitutes for this: the first restricts which page a browser will let call, the second names "
             + "the application calling, and neither identifies the person whose mail is served.")]
     private partial void LogEndpointServedWithoutTransportAuthentication(string mcpEndpointPath);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Every browser origin is served while no credential is required, so a web page the user never visited "
+            + "can reach this endpoint through DNS rebinding and read what it returns. This is the right posture only "
+            + "where the address is unreachable from a browser that could be aimed at it, such as an intranet or a "
+            + "reverse proxy that authenticates. Turn McpEndpoint:Cors:AllowAnyOrigin off and list the origins served "
+            + "in McpEndpoint:Cors:AllowedOrigins wherever a browser could be pointed at this address.")]
+    private partial void LogEveryBrowserOriginServedWithoutTransportAuthentication();
 }

@@ -1,7 +1,6 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 
 using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Security;
 using Xunit;
 
 namespace MailMcp.Host.UnitTests;
@@ -57,23 +56,17 @@ public sealed class McpCorsOptionsTests
         Assert.StartsWith(nameof(McpCorsOptions.AllowAnyOrigin), error, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Not a mistake but the third posture: the deployment whose clients are not browsers. Such a client sends no
-    /// <c>Origin</c> and keeps being served, so what this refuses is exactly the page a browser was talked into loading
-    /// — and it is the only posture that closes DNS rebinding for an endpoint requiring no credential.
-    /// </summary>
     [Fact]
-    public void FindConfigurationErrors_NeitherAllowAnyOriginNorAList_IsTheServeNoBrowserPosture()
+    public void FindConfigurationErrors_NeitherAllowAnyOriginNorAList_IsRefusedBecauseNoBrowserCouldReachIt()
     {
         // Arrange
         var options = new McpCorsOptions { AllowAnyOrigin = false };
 
         // Act
-        var errors = options.FindConfigurationErrors();
+        var error = Assert.Single(options.FindConfigurationErrors());
 
         // Assert
-        Assert.Empty(errors);
-        Assert.Same(McpOriginPolicy.RefusingEveryBrowserOrigin, options.ToOriginPolicy());
+        Assert.StartsWith(nameof(McpCorsOptions.AllowedOrigins), error, StringComparison.Ordinal);
     }
 
     [Theory]

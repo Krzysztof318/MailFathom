@@ -29,8 +29,8 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
 | `Enabled` | `false` | Whether the Streamable HTTP endpoint is mapped at all |
 | `Authentication` | none — an enabled endpoint must state one | `ApiKey` or `None` |
 | `ApiKeys` | empty | The keys a client may present, each a named secret with its own lifetime |
-| `Cors.AllowAnyOrigin` | `true` | Whether every browser origin is served. Refused under `Authentication: None` |
-| `Cors.AllowedOrigins` | empty | The exact origins served when `AllowAnyOrigin` is off; empty serves no browser at all |
+| `Cors.AllowAnyOrigin` | `true` | Whether every browser origin is served |
+| `Cors.AllowedOrigins` | empty | The exact origins served when `AllowAnyOrigin` is off |
 
 The endpoint always answers on **`/mcp`**, which is a constant rather than a setting. An MCP client is configured with a
 server URL, so a deployment could only move the path in step with every client pointed at it — the configurability would
@@ -127,24 +127,12 @@ failed secret resolution, or any other fallback:
 
 ```json
 {
-  "McpEndpoint": {
-    "Enabled": true,
-    "Authentication": "None",
-    "Cors": { "AllowAnyOrigin": false }
-  }
+  "McpEndpoint": { "Enabled": true, "Authentication": "None" }
 }
 ```
 
 Configuring keys alongside it is a startup failure rather than a silent no-op, because keys nothing checks are a deployment
 believing it is protected — which is worse than one that knows it is not.
-
-**`None` requires an origin policy that serves no browser by default.** `AllowAnyOrigin` left on under `None` is a startup
-failure, because with no credential required the origin list is the only thing left between a web page and the mailbox: a
-page the user never visited can reach a loopback or private address through DNS rebinding, the browser attaches its own
-`Origin`, and permissive CORS headers then let the page read what came back. Turning `AllowAnyOrigin` off and listing
-nothing is the posture for a non-browser deployment — such a client sends no `Origin` and is served exactly as before. List
-origins instead when a browser-hosted client is meant to reach it. Under `ApiKey` the same combination is ordinary and
-stays allowed, because the page has no credential to present and none is ambient.
 
 Whenever an enabled endpoint runs under `None`, startup logs one warning:
 
@@ -156,6 +144,22 @@ warn: MailMcp.Host.Hosting.McpTransportAuthenticationWarning
       restricts which page a browser will let call, the second names the application calling, and neither identifies the
       person whose mail is served.
 ```
+
+Leaving `Cors.AllowAnyOrigin` on under `None` — which is the default, and what makes the endpoint work behind a reverse
+proxy or on a trusted network without further configuration — adds a second warning rather than a startup failure:
+
+```text
+warn: MailMcp.Host.Hosting.McpTransportAuthenticationWarning
+      Every browser origin is served while no credential is required, so a web page the user never visited can reach this
+      endpoint through DNS rebinding and read what it returns. This is the right posture only where the address is
+      unreachable from a browser that could be aimed at it, such as an intranet or a reverse proxy that authenticates.
+      Turn McpEndpoint:Cors:AllowAnyOrigin off and list the origins served in McpEndpoint:Cors:AllowedOrigins wherever a
+      browser could be pointed at this address.
+```
+
+Refusing that combination would make the ordinary intranet and reverse-proxy deployment the one needing extra settings,
+so it stays a decision the operator makes with the risk stated. Listing the origins silences the second warning; only
+requiring a credential silences the first.
 
 The operational consequences are the ones that always applied to an unauthenticated endpoint:
 
@@ -210,18 +214,9 @@ fragment, or user information means a URL was written where an origin belongs an
 that is not an origin at all. Entries are normalized to the form a browser sends, so `https://Client.Example.Test:443/`
 and `https://client.example.test` are one entry and listing both is refused rather than quietly collapsed.
 
-There are three postures, and each is written down rather than inferred:
-
-| `AllowAnyOrigin` | `AllowedOrigins` | What is served |
-|---|---|---|
-| `true` | empty | Every browser origin. Refused at startup under `Authentication: None` |
-| `false` | one or more | Exactly the origins listed |
-| `false` | empty | No browser origin at all; only clients that send no `Origin` |
-
-`AllowAnyOrigin` together with a list is refused as ambiguous rather than guessed at, because guessing would either widen
-a deployment an operator narrowed or narrow one they widened. The third row is a posture rather than an oversight: it is
-the shape of an MCP server run beside the agent that uses it, and the only origin policy that closes DNS rebinding for an
-endpoint requiring no credential.
+Two combinations are refused as ambiguous rather than guessed at: `AllowAnyOrigin` together with a list, and
+`AllowAnyOrigin` off with an empty list. Guessing would either widen a deployment an operator narrowed or narrow one they
+widened.
 
 A request whose `Origin` is outside the configured list is answered `403` before any tool runs. Preflight is handled by
 the CORS middleware ahead of that check, so a browser's `OPTIONS` never reaches it as a request to refuse, and handling
