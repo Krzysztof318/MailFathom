@@ -20,6 +20,32 @@ public static class OrchestrationContract
     /// <summary>The MailMcp host project resource.</summary>
     public const string HostResourceName = "mailmcp-host";
 
+    /// <summary>The HTTP endpoint the MailMcp host serves its surface on, including the MCP endpoint.</summary>
+    public const string HostHttpEndpointName = "http";
+
+    /// <summary>The name the integration-test topology configures its one MCP API key under.</summary>
+    /// <remarks>Present only under <see cref="IntegrationTestingArgument" />, like the key itself.</remarks>
+    public const string McpApiKeyName = "integration-tests";
+
+    /// <summary>The MCP API key the integration-test topology's host accepts.</summary>
+    /// <remarks>
+    /// A literal for the same reason <see cref="MailServerAccountPassword" /> is one, and under the same restriction.
+    /// It authenticates against one host that exists for the duration of one test run, is reachable only from that run,
+    /// and is destroyed with it; there is no deployment it could also unlock. Declaring it here is what keeps the app
+    /// model that configures the endpoint and the suite that calls it reading one value, so a change cannot reach only
+    /// one side and surface as an authentication failure that says nothing about the behavior under test. Nothing
+    /// outside the ephemeral topology may use it.
+    /// </remarks>
+    public const string McpApiKey = "integration-tests-only-mcp-api-key";
+
+    /// <summary>The one browser origin the integration-test topology's MCP endpoint serves.</summary>
+    /// <remarks>
+    /// The topology narrows the origins deliberately rather than leaving the permissive default, because a suite that
+    /// only ever saw allow-any could not tell an origin check that works from one that is not wired in at all. The
+    /// domain is reserved for testing.
+    /// </remarks>
+    public const string McpPermittedOrigin = "https://client.mailmcp.test";
+
     /// <summary>The EF Core migration tool resource.</summary>
     public const string MigrationsResourceName = "mailmcp-migrations";
 

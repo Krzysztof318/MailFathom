@@ -10,6 +10,7 @@ namespace MailMcp.Host.UnitTests;
 internal static class ConfiguredAccounts
 {
     /// <summary>Binds one account per supplied identifier, each carrying the given password reference.</summary>
+    /// <remarks>The secret is named after the account it belongs to, which is what a real deployment does and what keeps the names unique across the bound section.</remarks>
     internal static MailSynchronizationOptions WithPasswordReferences(
         params (string AccountId, string SecretReference)[] accounts) => new()
         {
@@ -20,7 +21,11 @@ internal static class ConfiguredAccounts
                 UserName = "mailmcp@example.test",
                 Secrets = new MailAccountSecretOptions
                 {
-                    Password = new ConfiguredSecret { SecretReference = account.SecretReference },
+                    Password = new ConfiguredSecret
+                    {
+                        Name = $"{account.AccountId}-password",
+                        SecretReference = account.SecretReference,
+                    },
                 },
             })],
         };

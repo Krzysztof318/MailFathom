@@ -463,7 +463,10 @@ Synchronization is disabled by default:
         "UserName": "mailmcp@example.test",
         "EarliestEmailReceivedDate": "2024-01-01",
         "Secrets": {
-          "Password": { "SecretReference": "systemd-credential:imap-primary-password" }
+          "Password": {
+            "Name": "imap-primary-password",
+            "SecretReference": "systemd-credential:imap-primary-password"
+          }
         },
         "TransportSecurity": {
           "ConnectionSecurity": "TlsOnConnect",
@@ -489,7 +492,10 @@ Optimistic concurrency is configured once for the whole deployment, outside the 
   "Persistence": {
     "MaximumConcurrencyCommitAttempts": 2,
     "TextSearchConfiguration": "simple",
-    "Password": { "SecretReference": "file:/run/secrets/postgres-password" }
+    "Password": {
+      "Name": "postgres-password",
+      "SecretReference": "file:/run/secrets/postgres-password"
+    }
   }
 }
 ```
@@ -555,7 +561,7 @@ a typo in this one setting would remove the whole account from synchronization.
 
 ### Secrets
 
-Every secret-bearing setting — the account password, the trust anchor, the database password — binds to a block whose `SecretReference` property holds a `<scheme>:<target>` reference rather than the credential. The host resolves every reference before any hosted service starts and reports all failures at once, each naming its configuration path and a stable failure identity and nothing else. Each actual connection attempt resolves again and erases the material when it finishes, so no long-lived copy exists and a rotated credential is observed without a restart.
+Every secret-bearing setting — the account password, the trust anchor, the database password — binds to a block whose `SecretReference` property holds a `<scheme>:<target>` reference rather than the credential, and which names itself through a required `Name` and states its own `Lifetime`. The host resolves every reference before any hosted service starts and reports all failures at once, each naming its configuration path and a stable failure identity and nothing else. Each actual connection attempt resolves again and erases the material when it finishes, so no long-lived copy exists and a rotated credential is observed without a restart.
 
 Secret resolution is not gated on `Enabled`, unlike the transport security rules. Every configured account's password reference is resolved at startup even when synchronization is disabled, because a reference an operator wrote is a reference they intend to work, and discovering it broken at the moment synchronization is switched on is worse than discovering it now. An account that is configured but has no reachable password therefore fails startup; remove the account rather than disabling synchronization around it.
 
@@ -620,8 +626,12 @@ A protected bundle takes its password from the nested `Password` block, which is
 ```json
 {
   "TrustedCertificateAuthority": {
+    "Name": "primary-private-ca",
     "SecretReference": "systemd-credential:private-ca-bundle",
-    "Password": { "SecretReference": "systemd-credential:private-ca-bundle-password" }
+    "Password": {
+      "Name": "primary-private-ca-bundle-password",
+      "SecretReference": "systemd-credential:private-ca-bundle-password"
+    }
   }
 }
 ```

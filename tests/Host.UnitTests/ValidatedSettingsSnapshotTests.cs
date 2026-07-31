@@ -9,6 +9,7 @@ using MailMcp.Infrastructure.Certificates;
 using MailMcp.Infrastructure.Persistence;
 using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailMcp.Host.UnitTests;
@@ -90,7 +91,7 @@ public sealed class ValidatedSettingsSnapshotTests
         var brokenCandidate = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
         brokenCandidate.Accounts[0].TransportSecurity.CertificateTrust = MailServerCertificateTrust.AdditionalTrustedAuthority;
         brokenCandidate.Accounts[0].TransportSecurity.TrustedCertificateAuthority =
-            new ConfiguredSecret { SecretReference = "plaintext:not-a-certificate" };
+            new ConfiguredSecret { Name = "primary-ca", SecretReference = "plaintext:not-a-certificate" };
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
@@ -272,6 +273,7 @@ public sealed class ValidatedSettingsSnapshotTests
             new StubDatabaseConnectionSettingsValidator(),
             PostgresTextSearchConfiguration.Default,
             new DatabaseCommandTimeout(TimeSpan.FromSeconds(HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds)),
+            new FakeTimeProvider(new DateTimeOffset(2026, 7, 31, 12, 0, 0, TimeSpan.Zero)),
             new RecordingLogger<SecretConfigurationValidator>());
 
         var settings = new ValidatedSettingsSnapshot<MailSynchronizationOptions>(

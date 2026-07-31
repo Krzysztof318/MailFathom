@@ -1,6 +1,6 @@
 # Secret rotation
 
-A rotated mailbox password, trust anchor, or database credential takes effect without restarting MailMcp. Rotation is an ordinary operational act, not a maintenance window, and shortening the window in which any single credential is valid is a security and privacy improvement rather than a cost.
+A rotated mailbox password, trust anchor, database credential, or MCP API key takes effect without restarting MailMcp. Rotation is an ordinary operational act, not a maintenance window, and shortening the window in which any single credential is valid is a security and privacy improvement rather than a cost.
 
 Two independent things can change, and both are covered.
 
@@ -18,8 +18,24 @@ Material is applied at operation boundaries, never mid-operation:
 | Mailbox password | The next connection attempt. A synchronization run that has already authenticated finishes with the credential it authenticated with. |
 | Trust anchor | The next connection attempt, which loads the anchor alongside the password. |
 | Database credential | The next **physical** connection the pool opens. Connections already open finish with the credential they authenticated with, and a pooled logical connection reusing an open physical one keeps it too. |
+| MCP API key | The next MCP request. Every configured key is read again on each one, so a rotated file takes effect immediately. |
 
 A long-lived authenticated session has no next connect to pick up a rotation, so its operation boundary is the *connection*: a session whose secrets have rotated is recycled at the next safe point rather than left running for the process lifetime. No such session exists yet — IMAP IDLE is later work — but that is the rule it will be built to.
+
+## Lifetimes and what they do
+
+Every secret block states a `Lifetime`: `NoLimit`, or the absolute instant it stops being usable. The instant is absolute rather than a duration precisely so a restart or a configuration reload cannot revive an expired credential.
+
+**Only the MCP API keys enforce it.** An expired key authenticates nothing; a mailbox password, a database credential, and a trust anchor keep working past their stated lifetime and are reported instead:
+
+```
+warn: Configuration setting MailSynchronization:Accounts:0:Secrets:Password carries the secret
+      imap-primary-password, whose configured lifetime ended at 2026-07-30T00:00:00Z.
+```
+
+That line is the reminder that a rotation is due, not the thing that forces it. Setting a lifetime on a secret nothing enforces is still worth doing — the warning is what surfaces a forgotten credential — but it will not take a deployment offline, and it must not be relied on as though it would.
+
+An expired secret never fails startup, in any section. Leaving an expired entry beside its replacement is what a completed rotation looks like.
 
 ## Rotating a mailbox password
 
@@ -61,6 +77,26 @@ Replace the certificate behind the reference the account names, exactly as for a
 Provision the replacement **before** the current one expires and keep the server's own certificate chaining to whichever anchor is active at that moment. There is no overlap mechanism: one anchor is configured at a time, so the cut-over is the moment the file changes.
 
 Because the chain rebuild does not check revocation, replacing the provisioned material is how a compromised private authority is retired. That is the reason this rotation path matters more for a trust anchor than the equivalent path would for a publicly trusted one.
+
+## Rotating an MCP API key
+
+This is the one secret with a real overlap mechanism, because several keys are configured at once and any of them authenticates.
+
+1. Provision the replacement and add it to `McpEndpoint:ApiKeys` under a **new** `Name`.
+2. Restart the host. The endpoint section is read once during composition, so a new entry needs one; the material behind an existing entry does not.
+3. Move each client onto the new key. Both authenticate in between, so nothing is refused while the change is in flight.
+4. Remove the old entry, or give it a `Lifetime` in the past, and restart.
+
+Step 4 has two spellings on purpose. Removing the entry is the clean end state; dating it in the past leaves a record of what was retired and when, and an expired entry authenticates nothing. Either way the retired key stops working and the endpoint stays up throughout.
+
+Rotating the *material* behind an unchanged reference needs no restart at all: every configured key is resolved again on every MCP request, so rewriting the credential file takes effect on the next one. That is the fastest path when a key has to be replaced urgently and the entry itself can stay as it is.
+
+A key whose material disappears is logged by name and refuses requests presenting it; other keys keep working:
+
+```
+fail: The material behind MCP API key chatgpt-connector could not be retrieved, so that key cannot authenticate a
+      request [MaterialNotFound].
+```
 
 ## Rotating the database credential
 

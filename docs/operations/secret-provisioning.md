@@ -6,7 +6,7 @@ That guarantee is a property of how a deployment is configured, not of MailMcp. 
 
 ## The secret block
 
-Every secret-bearing setting is a JSON object whose `SecretReference` property carries the reference:
+Every secret-bearing setting is a JSON object carrying a `Name`, a `SecretReference`, and a `Lifetime`:
 
 ```json
 {
@@ -18,35 +18,86 @@ Every secret-bearing setting is a JSON object whose `SecretReference` property c
         "Port": 993,
         "UserName": "mailmcp@example.test",
         "Secrets": {
-          "Password": { "SecretReference": "systemd-credential:imap-primary-password" }
+          "Password": {
+            "Name": "imap-primary-password",
+            "SecretReference": "systemd-credential:imap-primary-password"
+          }
         },
         "TransportSecurity": {
           "ConnectionSecurity": "TlsOnConnect",
           "CertificateTrust": "AdditionalTrustedAuthority",
-          "TrustedCertificateAuthority": { "SecretReference": "file:/run/secrets/private-ca.pem" }
+          "TrustedCertificateAuthority": {
+            "Name": "primary-private-ca",
+            "SecretReference": "file:/run/secrets/private-ca.pem"
+          }
         },
         "Folders": [ { "Alias": "inbox", "SpecialUse": "Inbox" } ]
       }
     ]
   },
   "Persistence": {
-    "Password": { "SecretReference": "file:/run/secrets/postgres-password" }
+    "Password": {
+      "Name": "postgres-password",
+      "SecretReference": "file:/run/secrets/postgres-password"
+    }
   }
 }
 ```
 
-The object rather than a bare string is the unit so that a sibling property can be added later — a bundle password, a format hint, a managed-store version pin — without changing the JSON type of a setting an operator already configured. One sibling exists today: an optional nested `Password` block, itself a secret block, for material that is protected by its own password. A password-protected PKCS#12 trust anchor is the case that uses it:
+| Property | Required | Meaning |
+| --- | --- | --- |
+| `Name` | yes | The identity every diagnostic, rotation instruction, and audit record names this secret by |
+| `SecretReference` | yes | The `<scheme>:<target>` reference, or the material itself under an inline interpretation mode |
+| `Lifetime` | no, defaults to `NoLimit` | `NoLimit`, or the instant the secret stops being usable |
+| `Password` | no | A nested secret block holding the password of material that is itself protected |
+
+The object rather than a bare string is the unit so that a sibling property can be added later without changing the JSON type of a setting an operator already configured. The nested `Password` is one such sibling, for material protected by its own password. A password-protected PKCS#12 trust anchor is the case that uses it, and the nested block is a secret in its own right, so it carries its own name:
 
 ```json
 {
   "TrustedCertificateAuthority": {
+    "Name": "primary-private-ca",
     "SecretReference": "systemd-credential:private-ca-bundle",
-    "Password": { "SecretReference": "systemd-credential:private-ca-bundle-password" }
+    "Password": {
+      "Name": "primary-private-ca-bundle-password",
+      "SecretReference": "systemd-credential:private-ca-bundle-password"
+    }
   }
 }
 ```
 
-A setting is secret-bearing because it binds to this block type, not because it was annotated. Startup discovers every block by walking the bound configuration, so the rules below apply to settings added in future releases without anyone registering them. The same walk rejects a plain `string` setting whose name contains `Password`, `Secret`, `Credential`, `PrivateKey`, or `Token`, because such a setting would bypass validation, resolution, and erasure alike.
+A setting is secret-bearing because it binds to this block type, not because it was annotated. Startup discovers every block by walking the bound configuration, so the rules below apply to settings added in future releases without anyone registering them. The same walk rejects a plain `string` setting whose name contains `Password`, `Secret`, `Credential`, `PrivateKey`, `Token`, or `ApiKey`, because such a setting would bypass validation, resolution, and erasure alike.
+
+### Names
+
+A name is required because the alternatives are worse. An array position renumbers the moment an entry is inserted, so a log line naming position 2 describes a different credential after the next edit; and naming a secret by its value is what the rest of this machinery exists to prevent. The name is what a rotation instruction, an expiry warning, and an audit record can all agree on.
+
+It may carry up to 64 letters, digits, dots, dashes, and underscores, and must begin with a letter or a digit. The set is narrow on purpose: the name is written into logs, metric labels, and audit records without escaping, so a name that could carry a newline or a quotation mark would let a configuration file decide how a log line parses.
+
+Names must be unique within one bound configuration root — within `MailSynchronization`, within `Persistence`, within `McpEndpoint`. Uniqueness stops at the section boundary so that adding a section to a working deployment cannot collide with a name it cannot see. A duplicate, a missing name, and an unacceptable one all fail startup naming the exact setting.
+
+### Lifetimes
+
+Every secret states how long it stays usable. The default is the literal `NoLimit`, written out rather than left absent, so "this credential never expires" is something the configuration says rather than something its silence implies:
+
+```json
+{
+  "Name": "workstation",
+  "SecretReference": "systemd-credential:mailmcp-mcp-workstation-key",
+  "Lifetime": "2027-01-31T00:00:00Z"
+}
+```
+
+A bounded lifetime is an **absolute instant carrying an explicit offset**, never a duration. A duration would restart at every process start and every configuration reload, so a credential retired for a week would come back with the next deployment. An instant without an offset is refused rather than read in the host's local time, because the same configuration would then expire at a different moment on every machine that runs it. `2027-01-31T00:00:00Z` and `2027-01-31T01:00:00+01:00` are the same instant and both are accepted; `2027-01-31T00:00:00` and `2027-01-31` are not.
+
+**A lifetime is enforced where the consumer can act on one.** Today that is the MCP API keys: an expired key authenticates nothing, which is what makes two overlapping keys a rotation rather than an outage. Everywhere else — a mailbox password, the database credential, a trust anchor — the lifetime is recorded and reported, and nothing stops using the credential when it passes. It is a statement of intent that shows up in the log, not a kill switch:
+
+```
+warn: Configuration setting MailSynchronization:Accounts:0:Secrets:Password carries the secret
+      imap-primary-password, whose configured lifetime ended at 2026-07-30T00:00:00Z.
+```
+
+An expired secret never fails startup, in any section. An expired entry left beside its replacement is exactly what a completed rotation looks like, and refusing to start over one would make rotating a credential harder than never rotating it.
 
 `UserName` is deliberately not a secret block. A mailbox user name is an identifier the operator already writes next to the host; it is excluded from logs as personal data, but turning it into a reference would double the provisioning burden for no confidentiality gain.
 
@@ -82,7 +133,10 @@ Three shapes are supported, because provisioning systems differ and none of them
 ```json
 {
   "Persistence": {
-    "ConnectionString": { "SecretReference": "systemd-credential:mailmcp-connection-string" }
+    "ConnectionString": {
+      "Name": "mailmcp-connection-string",
+      "SecretReference": "systemd-credential:mailmcp-connection-string"
+    }
   }
 }
 ```
@@ -189,6 +243,7 @@ Secret resolution runs before any hosted service starts, so no synchronization r
 ```
 MailSynchronization:Accounts:0:Secrets:Password — the secret reference could not be resolved [MaterialNotFound].
 MailSynchronization:Accounts:1:Secrets:Password — the secret reference could not be resolved [SchemeMissing].
+MailSynchronization:Accounts:2:Secrets:Password:Name — every secret needs a name, which is the identity a rotation, an expiry, and an audit record name it by.
 ```
 
 The path and the identity are the whole vocabulary. No message, log line, or exception carries the reference target, the environment variable's value, or any part of the material.
