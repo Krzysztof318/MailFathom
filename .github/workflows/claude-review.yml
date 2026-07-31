@@ -291,6 +291,7 @@ jobs:
           echo "Collected ${collected_files} changed files and ${fetched} head-content files."
 
       - name: Review the change
+        id: review
         uses: anthropics/claude-code-action@v1
         with:
           # A Claude Code OAuth token rather than an API key: the review runs on the owner's Claude
@@ -586,6 +587,62 @@ jobs:
             --allowedTools "Read,Grep,Glob,Write"
             --setting-sources user
 
+      # The action hides everything the reviewer produced, which is right: that output is model
+      # text derived from an untrusted diff. It hides the run's own error string with it, and that
+      # string is the only place the cause of a failure is written — an expired credential, an
+      # exhausted subscription, a model the plan cannot use. Without it a failed run is a red job
+      # with nothing to act on, and the only alternative the action offers is `show_full_output`,
+      # which would print the whole review into the log to recover one sentence. The saved
+      # execution log holds that sentence, so this reads it and prints nothing else.
+      - name: Report why the reviewer stopped
+        if: failure() && steps.review.outcome == 'failure'
+        shell: bash
+        env:
+          EXECUTION_FILE: ${{ runner.temp }}/claude-execution-output.json
+          WORKFLOW_TOKEN: ${{ github.token }}
+          CLAUDE_CREDENTIAL: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! -s "$EXECUTION_FILE" ]]; then
+            echo '::error::The reviewer wrote no execution log, so it stopped before the model answered.'
+            exit 0
+          fi
+
+          # The error text of the last result message, flattened to one line because an annotation
+          # is one line, and bounded because a model can be made to say a great deal.
+          reason="$(
+            jq -r '[.[] | select(.type == "result")]
+                   | last
+                   | (.result // .error // "the result message carried no error text")' \
+              "$EXECUTION_FILE" 2>/dev/null || true
+          )"
+          reason="${reason//$'\n'/ }"
+          reason="${reason:0:500}"
+
+          if [[ -z "$reason" || "$reason" == 'null' ]]; then
+            reason='the execution log holds no result message, so the run ended before the model answered'
+          fi
+
+          # The reviewer holds no credential and this text comes from the service rather than from
+          # the change, so a match here is not expected. It is still checked, because printing is
+          # publishing and this is the one step that prints anything the model produced. An empty
+          # secret is reported rather than compared: `grep -F ''` matches everything, which would
+          # turn a missing secret into a permanent false positive.
+          if [[ -z "$CLAUDE_CREDENTIAL" ]]; then
+            echo '::error::CLAUDE_CODE_OAUTH_TOKEN is not set, which is why the reviewer could not run.'
+            exit 0
+          fi
+
+          if grep -qE 'gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{16,}' <<< "$reason" \
+            || grep -qF "$WORKFLOW_TOKEN" <<< "$reason" \
+            || grep -qF "$CLAUDE_CREDENTIAL" <<< "$reason"; then
+            echo '::error::The reviewer stopped, and its reason is shaped like a credential, so it is not printed.'
+            exit 0
+          fi
+
+          printf '::error::The reviewer stopped: %s\n' "$reason"
+
       - name: Submit the review
         if: always() && steps.collect.outcome == 'success'
         shell: bash
@@ -599,6 +656,9 @@ jobs:
           # credential the reviewer was never able to read still cannot be published if it somehow
           # reaches the findings.
           CLAUDE_CREDENTIAL: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Whether the reviewer got as far as an answer, which decides whether a missing findings
+          # file is this step's failure to report or the previous step's, already reported.
+          REVIEW_OUTCOME: ${{ steps.review.outcome }}
           # The two paths the collection step wrote, restated here for the reason given there.
           REVIEW_DIRECTORY: ${{ runner.temp }}/review
           FINDINGS_FILE: ${{ runner.temp }}/findings/findings.json
@@ -608,13 +668,28 @@ jobs:
           payload_file="$(mktemp)"
 
           if [[ ! -s "$FINDINGS_FILE" ]] || ! jq -e '.' "$FINDINGS_FILE" > /dev/null 2>&1; then
-            echo "::error::The reviewer produced no valid ${FINDINGS_FILE}, so there is nothing to submit."
+            # A reviewer that never answered has already failed and said why, and repeating the
+            # consequence as a second error buries the cause. A reviewer that answered and still
+            # produced nothing valid is this workflow's own defect, and fails here.
+            if [[ "$REVIEW_OUTCOME" != 'success' ]]; then
+              echo '::notice::The reviewer did not finish, so there are no findings to submit.'
+              exit 0
+            fi
+
+            echo "::error::The reviewer finished but produced no valid ${FINDINGS_FILE}, so there is nothing to submit."
             exit 1
           fi
 
           # A credential in the payload would be published by the very call that posts it. The
           # reviewer is denied the paths that hold one, and this refuses the review outright if one
           # appears anyway, because a redacted review is not worth the risk of a wrong redaction.
+          # An unset secret is refused rather than compared: `grep -F ''` matches every file, so
+          # comparing against it would reject every review this workflow ever produced.
+          if [[ -z "$CLAUDE_CREDENTIAL" ]]; then
+            echo '::error::CLAUDE_CODE_OAUTH_TOKEN is not set, so the findings cannot be checked against it.'
+            exit 1
+          fi
+
           if grep -qE 'gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{16,}' "$FINDINGS_FILE" \
             || grep -qF "$WORKFLOW_TOKEN" "$FINDINGS_FILE" \
             || grep -qF "$CLAUDE_CREDENTIAL" "$FINDINGS_FILE"; then
