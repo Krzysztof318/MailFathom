@@ -64,6 +64,15 @@ published wire values: sharing the domain's type would make a rename inside the 
 Timestamps are ISO 8601 and property names are camel-cased, both of which follow from the single `JsonSerializerOptions`
 every tool registration is given, so the schema that was advertised and the payload that is serialized cannot diverge.
 
+These stay plain C# enumerations rather than the closed enumerations the repository requires of a value that publishes an
+identity, and the reason is what that rule is about. A closed enumeration exists where the identity and the member name
+are different things — a SASL mechanism spelled `PLAIN`, a failure numbered `51002` — so the type has to carry the
+identity because the name cannot produce it. Here the name *is* the identity, converted by one shared policy, and a
+`readonly record struct` would add a second serialization path without adding a fact. What the rule protects against is
+a rename changing the contract in silence, and that is closed by assertion instead: `Mcp.UnitTests` pins the advertised
+spellings of every enumeration this surface publishes, on the input and the output side alike, so a rename fails the
+build. An enumeration added here without that assertion is the actual defect the rule is warning about.
+
 Sizes are published in bytes and named for it — `sizeBytes`, `totalSizeBytes` — even though the application and the
 stored schema call the same quantity octets. The two words mean one thing here, and the protocol uses the one a client
 reads without pausing.
@@ -375,6 +384,16 @@ A query that matches nothing returns an empty `matches` array with the same `ret
 be used to establish that an account or a folder holds mail the caller was not already entitled to see. An account this
 deployment does not serve is still refused with `53001` before anything is read, for the reason a listing refuses one:
 an empty result would confirm the identifier.
+
+What that guarantee covers is worth stating exactly, because it is narrower than "a search reveals nothing". It covers
+everything outside the served scope: the account authorization is resolved before any read, and a folder alias is only
+ever matched within the accounts already resolved, so no query — matching or empty — reports on an account this
+deployment does not serve for this caller. It deliberately does not hide the folder names *inside* a served account.
+`folderFreshness` publishes one entry per folder in scope, and a request that names no folder therefore lists every
+folder those accounts have; that is the field doing its job rather than leaking, since a caller who cannot see which
+folders are stale cannot tell an empty result from an unsynchronized one. A caller who guesses an alias and receives no
+freshness entry has learned that no such folder exists in their own mailbox, which the unscoped call would have told
+them outright.
 
 The query text is never logged and no failure message repeats it. What somebody is searching their own mailbox for is
 personal data of a particularly revealing kind, and the refusals this tool raises name the filter and its limit rather
