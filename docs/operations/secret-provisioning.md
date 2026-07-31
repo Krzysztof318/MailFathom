@@ -281,4 +281,4 @@ Adding one is a registration rather than a refactor:
 - one registration extension called beside `AddSecretResolution`;
 - its own timeouts, retry policy, endpoint configuration, and caching, which stay inside the adapter;
 - authentication through platform-issued identity — an Azure managed identity, a Kubernetes ServiceAccount token, a Vault role — never through a MailMcp-held credential, which would be circular;
-- a `LICENSES.md` entry in the same change set, plus review of the SDK license, service terms, telemetry behavior, and data-processing implications.
+- a `THIRD_PARTY_LICENSES.md` entry in the same change set, plus review of the SDK license, service terms, telemetry behavior, and data-processing implications.

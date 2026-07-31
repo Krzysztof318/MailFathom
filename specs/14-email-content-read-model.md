@@ -33,7 +33,7 @@ HTML sanitization treats message HTML as hostile input. The sanitized output per
 
 Attachment file names are attacker-controlled and reach a model through specification 17, so they are returned in the normalized form specification 06 defines and are never returned as a path or resolved against one.
 
-Sanitization needs a library rather than hand-written parsing. The evaluation was completed while writing this specification and is recorded below; the selected component is pinned centrally and recorded in `LICENSES.md` in the same change as the implementation.
+Sanitization needs a library rather than hand-written parsing. The evaluation was completed while writing this specification and is recorded below; the selected component is pinned centrally and recorded in `THIRD_PARTY_LICENSES.md` in the same change as the implementation.
 
 Errors returned by this use case carry stable codes and safe messages, never exception types, stack traces, provider payloads, or internal identifiers.
 
@@ -43,7 +43,7 @@ Errors returned by this use case carry stable codes and safe messages, never exc
 
 **Implemented against 9.1.974**, published 2026-07-30, rather than the 9.0.967 this section originally selected. The 9.1 line replaced the exact `AngleSharp` `0.17.1` and `AngleSharp.Css` `0.17.0` pins with `AngleSharp` 1.6.0 and `AngleSharp.Css` 1.0.0, taken as floors rather than exact versions, and AngleSharp 1.6.0 publishes a `net10.0` target of its own. Two of the three consequences recorded below therefore no longer hold: **nothing forecloses referencing AngleSharp 1.x directly**, and the transitive stack is current rather than several major versions behind. The third stands.
 
-- `LICENSES.md` needs three entries, not one: `HtmlSanitizer`, `AngleSharp`, and `AngleSharp.Css`.
+- `THIRD_PARTY_LICENSES.md` needs three entries, not one: `HtmlSanitizer`, `AngleSharp`, and `AngleSharp.Css`.
 - The library has a security history worth knowing: CVE-2026-25543 (GHSA-j92c-7v7g-gj3f, moderate, published 2026-02-03) was a bypass where the contents of a `<template>` element went unsanitized, exploitable when `template` and `shadowrootmode` were explicitly allowed. It is fixed in 9.0.892, so every 9.1 build carries the fix, and the default configuration was never affected because `template` is disallowed by default. The lesson for this specification is directional: the allow-list stays minimal, `template` is never added to it, and the pinned version is watched for advisories rather than pinned and forgotten.
 
 **Rejected: AngleSharp 1.5.2 alone.** MIT, actively maintained, and the newer stack, but it is a parser, not a sanitizer. Using it would mean writing the allow-list enforcement, CSS filtering, and URI-scheme handling by hand — exactly the hand-rolled sanitizer this specification refuses.
@@ -68,6 +68,6 @@ Returning attachment bytes, which draft section 3.2 excludes from the first rele
 - Sanitized HTML contains no script, no event handler, no external reference, and no `cid:` reference.
 - Truncation is always explicit in the result, and an unreadable encrypted body is explicit rather than empty.
 - Per-attachment metadata is re-derived from raw MIME, is consistent with the persisted summary, and carries normalized file names.
-- `HtmlSanitizer`, `AngleSharp`, and `AngleSharp.Css` are pinned in `Directory.Packages.props` and recorded in `LICENSES.md`, and the sanitizer type does not escape the adapter that owns it.
+- `HtmlSanitizer`, `AngleSharp`, and `AngleSharp.Css` are pinned in `Directory.Packages.props` and recorded in `THIRD_PARTY_LICENSES.md`, and the sanitizer type does not escape the adapter that owns it.
 - `docs/features/` documents the representations, the sanitization policy, and the consistency-error behavior.
 - `dotnet msbuild .config/CodeCoverage.proj -t:Collect` passes the 85% whole-scope gate.

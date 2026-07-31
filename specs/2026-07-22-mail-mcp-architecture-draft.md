@@ -706,11 +706,11 @@ A later MinIO migration would be performed online in controlled stages:
 5. Switch MinIO to authoritative reads only after coverage and consistency metrics reach the required threshold.
 6. Retain PostgreSQL MIME for a safety interval, then remove migrated `bytea` values in bounded maintenance batches.
 
-No MinIO package, credentials, process, bucket, deployment volume, or object-storage test fixture is included in the first release. Any future MinIO SDK, container image, or hosted object-storage dependency must be pinned, license-reviewed, and recorded in `LICENSES.md` before adoption.
+No MinIO package, credentials, process, bucket, deployment volume, or object-storage test fixture is included in the first release. Any future MinIO SDK, container image, or hosted object-storage dependency must be pinned, license-reviewed, and recorded in `THIRD_PARTY_LICENSES.md` before adoption.
 
 ### 21.3 Future integration testing with smtp4dev
 
-A future integration-test suite should include smtp4dev as the controlled SMTP target for delivery scenarios. smtp4dev is a fake SMTP server intended for development and testing, is available as Docker/OCI images and a .NET tool, and its NuGet package currently declares the BSD-3-Clause license. Before adding it to the repository, the exact package, container image, or tool version must be pinned and recorded in `LICENSES.md`.
+A future integration-test suite should include smtp4dev as the controlled SMTP target for delivery scenarios. smtp4dev is a fake SMTP server intended for development and testing, is available as Docker/OCI images and a .NET tool, and its NuGet package currently declares the BSD-3-Clause license. Before adding it to the repository, the exact package, container image, or tool version must be pinned and recorded in `THIRD_PARTY_LICENSES.md`.
 
 The smtp4dev-based tests should validate SMTP connection policy, STARTTLS behavior where supported by the selected test setup, authentication settings, MIME envelope/content emitted by MailMcp, outbox retry classification, idempotency behavior, and failure handling. smtp4dev does not replace unit tests and does not validate IMAP semantics; any IMAP integration fixture remains a separate future decision.
 
@@ -720,7 +720,7 @@ The first release still does not add integration-test projects, Testcontainers, 
 
 The dedicated administration CLI is named `mcpmail` and is a future operational interface rather than an initial implementation requirement. The first release can be administered through validated JSON configuration plus deployment secret references, with account-test and migration workflows added only when their application services exist.
 
-When the CLI is introduced, it should use Microsoft's `System.CommandLine` package rather than a custom parser or a non-official command-line framework. `System.CommandLine` provides command parsing, help output, validation, and shell-completion support for .NET command-line applications, and the package must be centrally pinned and entered in `LICENSES.md` before use.
+When the CLI is introduced, it should use Microsoft's `System.CommandLine` package rather than a custom parser or a non-official command-line framework. `System.CommandLine` provides command parsing, help output, validation, and shell-completion support for .NET command-line applications, and the package must be centrally pinned and entered in `THIRD_PARTY_LICENSES.md` before use.
 
 Candidate future commands:
 

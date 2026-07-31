@@ -13,7 +13,7 @@ Paying that debt off is what this specification enables, not what it defines. Th
 
 ## Approach
 
-Integration tests drive the existing `AppHost` through `DistributedApplicationTestingBuilder.CreateAsync<Projects.AppHost>` from the `Aspire.Hosting.Testing` package, then build and start the distributed application and wait on resource health before asserting. This reuses the orchestration the repository already defines — the pgvector-backed PostgreSQL resource and the host project — instead of maintaining a second, parallel container definition. `Aspire.Hosting.Testing` is pinned to the Aspire version already used, and recorded in `LICENSES.md` in the same change.
+Integration tests drive the existing `AppHost` through `DistributedApplicationTestingBuilder.CreateAsync<Projects.AppHost>` from the `Aspire.Hosting.Testing` package, then build and start the distributed application and wait on resource health before asserting. This reuses the orchestration the repository already defines — the pgvector-backed PostgreSQL resource and the host project — instead of maintaining a second, parallel container definition. `Aspire.Hosting.Testing` is pinned to the Aspire version already used, and recorded in `THIRD_PARTY_LICENSES.md` in the same change.
 
 The test project targets xUnit v3 on Microsoft Testing Platform v2, matching the rest of the repository rather than the xUnit v2 examples in the upstream Aspire documentation. It lives at `tests/IntegrationTests/`, named for what it is rather than after a production boundary, because it verifies how the boundaries behave together. It is excluded from the unit-test conventions that forbid network, container, and database access, since those conventions govern unit tests specifically.
 
@@ -71,5 +71,5 @@ Polly's chaos strategies, raised as a follow-up to specification 03 on issue #54
 - The suite is absent from the fast loop, the enforced coverage gate, and every pull-request workflow, and leaves no container or volume behind.
 - The coverage report exists, is scoped to the marked classes, and enforces nothing.
 - `tests/AGENTS.md` reflects the new integration-test boundary.
-- `LICENSES.md` records `Aspire.Hosting.Testing`.
+- `THIRD_PARTY_LICENSES.md` records `Aspire.Hosting.Testing`.
 - `docs/operations/` documents how to run the suite locally and what it leaves behind.

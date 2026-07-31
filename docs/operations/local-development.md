@@ -114,7 +114,7 @@ dotnet tool install --global csharp-ls --version 0.26.0
 
 `dotnet ef` runs EF Core migrations and design-time commands. `aspire` is only required for Aspire CLI workflows against the AppHost. `csharp-ls` is the C# language server that editors and agent tooling launch to resolve symbols before editing, instead of discovering a misspelled type at build time.
 
-`csharp-ls` is installed globally rather than pinned in `.config/dotnet-tools.json` because a manifest-local tool is only reachable as `dotnet tool run csharp-ls`; it never lands on `PATH`, so a client that launches the bare `csharp-ls` executable still fails with `ENOENT`. A global install puts it in `~/.dotnet/tools`, which is on `PATH`, and keeps the language server out of the `dotnet tool restore` that continuous integration runs for the coverage gate. All three versions are recorded in `LICENSES.md`; keep the register aligned when you move to a newer one.
+`csharp-ls` is installed globally rather than pinned in `.config/dotnet-tools.json` because a manifest-local tool is only reachable as `dotnet tool run csharp-ls`; it never lands on `PATH`, so a client that launches the bare `csharp-ls` executable still fails with `ENOENT`. A global install puts it in `~/.dotnet/tools`, which is on `PATH`, and keeps the language server out of the `dotnet tool restore` that continuous integration runs for the coverage gate. All three versions are recorded in `THIRD_PARTY_LICENSES.md`; keep the register aligned when you move to a newer one.
 
 ### EF Core design-time commands
 
@@ -165,13 +165,13 @@ On a machine that is already authenticated, add the scope to the stored credenti
 gh auth refresh -s project
 ```
 
-Confirm the result with `gh auth status`, which must list `project` among the token scopes. Its reviewed version is recorded in `LICENSES.md` alongside the other developer tooling.
+Confirm the result with `gh auth status`, which must list `project` among the token scopes. Its reviewed version is recorded in `THIRD_PARTY_LICENSES.md` alongside the other developer tooling.
 
 ## Package sources and lock files
 
 Three files decide what a restore produces, and each answers a different question. `Directory.Packages.props` pins the version of every directly referenced package. The repository-root `NuGet.config` decides which sources those packages may come from. Each project's `packages.lock.json` records the transitive closure the pins resolve to, one `resolved` version and one content hash per package.
 
-`NuGet.config` exists because NuGet merges every configuration file on the path from the drive root down to the working directory. Without a repository-owned file the source list is whatever the developer machine defines, so a privately configured feed would be searched for every package here and a restore could resolve a dependency from a source `LICENSES.md` never reviewed. The file clears that inherited list and declares `nuget.org` alone. Its package source mapping then requires every package identifier, transitive ones included, to match a pattern before it can be restored; the single `*` pattern costs nothing while there is one source, and it makes a second source fail closed rather than silently join the search.
+`NuGet.config` exists because NuGet merges every configuration file on the path from the drive root down to the working directory. Without a repository-owned file the source list is whatever the developer machine defines, so a privately configured feed would be searched for every package here and a restore could resolve a dependency from a source `THIRD_PARTY_LICENSES.md` never reviewed. The file clears that inherited list and declares `nuget.org` alone. Its package source mapping then requires every package identifier, transitive ones included, to match a pattern before it can be restored; the single `*` pattern costs nothing while there is one source, and it makes a second source fail closed rather than silently join the search.
 
 Lock files close the gap central pinning leaves open. The 46 pins in `Directory.Packages.props` are direct references; `src/Infrastructure` alone resolves 47 further packages transitively, and nothing recorded those before. The content hash also means a package republished under a version already pinned no longer passes unnoticed, and a dependency bump shows every transitive move in the pull request diff.
 

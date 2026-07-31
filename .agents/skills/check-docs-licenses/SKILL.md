@@ -31,9 +31,11 @@ For every affected item, verify current official upstream evidence for:
 - .NET compatibility when applicable;
 - separate service, model, telemetry, data-use, trademark, and data-processing terms when applicable.
 
-Ensure `LICENSES.md` is updated in the same change. A permissive SDK does not approve its hosted service. Unknown, conflicting, or unofficial evidence is a failure. Use `n/a` only when the inventory is empty.
+Ensure `THIRD_PARTY_LICENSES.md` is updated in the same change. A permissive SDK does not approve its hosted service. Unknown, conflicting, or unofficial evidence is a failure. Use `n/a` only when the inventory is empty.
 
-`LICENSES.md` records what the repository actually pins, bundles, or calls. A component the change only mentions, plans, or might adopt later does not belong in the register, because a row implies a review that a future adoption would have to redo anyway. The `Planned dependency review` section holds the deliberate exceptions the owner has already accepted; do not add to it for a dependency the change does not introduce.
+`THIRD_PARTY_LICENSES.md` records what the repository actually pins, bundles, or calls, and is not the project's own `LICENSE` or a generated notice bundle. Put an entry in the section that matches the component's exposure — redistributed, build-time, test-only, orchestration, continuous integration, developer tooling, externally sourced source, or hosted service — because that is what decides whether a release obligation follows.
+
+Register only what the change actually introduces. A component it mentions, plans, evaluates, or rejects gets no row anywhere in the file, in any wording: a row asserts a completed review of software in use, and a rejected or deferred candidate would have to be reviewed again at adoption. Record that reasoning in the specification, ADR, or issue that owns the future work. Removing a component removes its row in the same change.
 
 ## Verdict
 
@@ -44,7 +46,7 @@ Docs: pass|n/a|fail
 <files checked and required actions>
 
 Licenses: pass|n/a|fail
-<official evidence, LICENSES.md entries, and required actions>
+<official evidence, THIRD_PARTY_LICENSES.md entries, and required actions>
 ```
 
 Any `fail` blocks completion.

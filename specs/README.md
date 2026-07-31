@@ -97,4 +97,4 @@ Specification 16 shipped the MCP endpoint with no transport authentication at al
 | 20 | `Aspire.Hosting.Testing` | MIT | Pinned to the Aspire version already in use |
 | 21 | a containerized IMAP server image | to be verified | Selected and license-reviewed as part of that work |
 
-Every entry is recorded in `LICENSES.md` in the same change set that adds the dependency.
+Every entry is recorded in `THIRD_PARTY_LICENSES.md` in the same change set that adds the dependency.

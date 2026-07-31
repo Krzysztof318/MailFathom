@@ -105,7 +105,7 @@ This ADR does not choose how configuration is stored. File-based configuration, 
 
 Secrets remain outside ordinary source-controlled configuration. The configuration access layer may reference secret identifiers or consume already-bound secret values at the host boundary, but it must not normalize broad secret access into application code or log secret material.
 
-This ADR also does not permit adding new third-party packages. Any future provider package, hosted configuration service, or secret-store integration requires separate official documentation, license, service-terms, telemetry, and data-processing review, plus `LICENSES.md` updates when applicable.
+This ADR also does not permit adding new third-party packages. Any future provider package, hosted configuration service, or secret-store integration requires separate official documentation, license, service-terms, telemetry, and data-processing review, plus `THIRD_PARTY_LICENSES.md` updates when applicable.
 
 ## Amendments
 
