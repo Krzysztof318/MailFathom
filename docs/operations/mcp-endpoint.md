@@ -2,7 +2,8 @@
 
 The MCP endpoint is how an agent reaches MailMcp. This page records what enabling it means operationally, what a client
 has to present to reach it, which browser origins it answers, which client applications it accepts a certificate from,
-and how much traffic it accepts before it starts refusing. The tools it serves are described in
+how much traffic it accepts before it starts refusing, and how it is served over your own domain and certificate. The
+tools it serves are described in
 `docs/features/mcp-tools.md`.
 
 ## The endpoint is off by default
@@ -33,6 +34,7 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
 | `Cors.AllowedOrigins` | `["*"]` | The browser origins served: `*` for every one, a list for exactly those, an empty list for none |
 | `ClientCertificateProfiles` | empty | The client applications whose certificates are accepted, each with its own authorities and expected names |
 | `RateLimiting` | bounded — see [Rate limiting](#rate-limiting) | How much traffic the endpoint accepts, per process and per client |
+| `Https.Endpoints` | empty | The domains MailMcp terminates TLS for; empty serves the endpoint over the host's ordinary listener |
 
 The endpoint always answers on **`/mcp`**, which is a constant rather than a setting. An MCP client is configured with a
 server URL, so a deployment could only move the path in step with every client pointed at it — the configurability would
@@ -250,11 +252,287 @@ would let a page act as whoever is logged in somewhere else, and the endpoint ha
 bearer token a client sets deliberately. Allowed methods and headers are the minimum the Streamable HTTP transport and
 bearer authentication need, rather than everything a browser might ask to send.
 
+## HTTPS and your own domain
+
+**MailMcp terminates no TLS by default.** With `Https.Endpoints` empty the endpoint is served over whatever listener the
+host is already configured with, which is clear-text HTTP unless something in front supplies HTTPS. That default is kept
+deliberately, because two ordinary deployments run it:
+
+- **Local development**, where the endpoint is reachable only from the machine it runs on.
+- **Behind a TLS-terminating reverse proxy**, where the proxy already holds your certificate and a second TLS layer
+  inside the trust boundary protects nothing.
+
+Neither of those is something MailMcp can detect, so the clear-text posture is reported rather than refused. Whenever an
+enabled endpoint terminates no TLS, startup logs one warning:
+
+```text
+warn: MailMcp.Host.Hosting.McpTransportEncryptionWarning
+      The MCP endpoint is enabled on /mcp and no HTTPS profile is configured, so it is served over whichever listener
+      this host was started with — clear text unless that listener or something in front of this process supplies
+      HTTPS. On a clear-text hop anything on the network path can read the API key a client presents and every message
+      the tools return, and a client certificate never arrives at all. This is the expected posture for local
+      development and for a deployment behind a TLS-terminating reverse proxy; anywhere else, configure
+      McpEndpoint:Https:Endpoints so this process presents your domain's certificate itself.
+```
+
+It fires whatever authentication mode is configured. An API key travels in a request header, so on a clear-text hop the
+credential is as readable as the mail it protects.
+
+### One domain
+
+A profile names the domain clients connect to, the socket to bind, and where the certificate comes from. A PKCS#12 bundle:
+
+```json
+{
+  "McpEndpoint": {
+    "Enabled": true,
+    "Authentication": "ApiKey",
+    "ApiKeys": [{ "Name": "workstation", "SecretReference": "systemd-credential:mailmcp-mcp-workstation-key" }],
+    "Https": {
+      "Endpoints": [
+        {
+          "Name": "public",
+          "Domain": "mail.example.com",
+          "BindAddress": "0.0.0.0",
+          "Port": 8443,
+          "ServerCertificate": {
+            "Bundle": {
+              "Name": "public-bundle",
+              "SecretReference": "file:/etc/mailmcp/tls/mail.example.com.pfx",
+              "Password": {
+                "Name": "public-bundle-password",
+                "SecretReference": "systemd-credential:mailmcp-tls-bundle-password"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+A PEM chain beside its private key, which is what a certificate authority usually delivers:
+
+```json
+{
+  "ServerCertificate": {
+    "CertificateChain": {
+      "Name": "public-chain",
+      "SecretReference": "file:/etc/mailmcp/tls/fullchain.pem"
+    },
+    "PrivateKey": {
+      "Name": "public-key",
+      "SecretReference": "file:/etc/mailmcp/tls/privkey.pem"
+    }
+  }
+}
+```
+
+State one or the other. Configuring both is a startup failure, because which of them supplies the identity would
+otherwise be decided by nothing you wrote. The `CertificateChain` value is the whole `fullchain.pem`: its first
+certificate is the identity and the rest are the intermediates MailMcp presents after it, so a client that does not
+already hold the issuing authority can still build a path to a root it trusts. An encrypted private key takes its
+password through a nested `Password` block, exactly as a protected bundle does.
+
+Clients are then configured with **`https://mail.example.com:8443/mcp`** — the domain, the port, and the fixed path.
+
+A profile is also what makes [client certificates](#client-certificates) reachable without a reverse proxy: mutual TLS
+needs a handshake this process terminated, and configuring one here is how it gets one.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `Name` | required | The profile's name, which every diagnostic about it reports |
+| `Domain` | required | The exact DNS domain published and selected on |
+| `BindAddress` | `0.0.0.0` | The IP address to bind; `::` binds IPv6 |
+| `Port` | `8443` | The TCP port to bind |
+| `MinimumTlsVersion` | `Tls12` | `Tls12` or `Tls13` |
+| `HttpProtocols` | absent — HTTP/1.1 and HTTP/2 | Any of `Http1`, `Http2`, `Http3` |
+| `ServerCertificate` | required | `Bundle`, or `CertificateChain` beside `PrivateKey` |
+
+### Configuring a profile takes over the host's listeners
+
+Binding a listener explicitly replaces whatever URLs the host was otherwise configured with, so **no clear-text listener
+stays open behind an HTTPS profile**. That applies to everything this process serves, the health endpoints included,
+because one Kestrel serves them all. There is no mixed posture in which the MCP route is protected while a second
+listener offers the same mailbox without protection.
+
+`ASPNETCORE_URLS`, `--urls`, and the Aspire-issued endpoints are therefore all ignored once a profile is configured.
+A deployment that needs a plain HTTP health endpoint beside HTTPS should keep the clear-text posture and terminate TLS
+at a reverse proxy instead.
+
+Kestrel's own `Kestrel:Endpoints` section is the one listener a profile cannot displace: those endpoints are bound
+alongside the ones bound in code rather than replaced by them, so an endpoint configured there would keep its socket and
+serve the same MCP route without the TLS a profile adds. Configuring both is therefore a startup failure that names
+each side, because only an operator can decide which one the deployment meant:
+
+```text
+Kestrel:Endpoints:Http — a Kestrel endpoint is configured beside McpEndpoint:Https, and Kestrel binds both: this
+listener would stay open alongside the HTTPS profiles and serve the same MCP endpoint without the TLS they were
+configured to add. Remove the endpoint, or remove the HTTPS profiles and let this listener serve the endpoint.
+```
+
+### Several domains on one address
+
+Profiles that name the same `BindAddress` and `Port` share one listener and are told apart by the server name the client
+sends during the TLS handshake:
+
+```json
+{
+  "Https": {
+    "Endpoints": [
+      {
+        "Name": "public",
+        "Domain": "mail.example.com",
+        "Port": 443,
+        "ServerCertificate": { "Bundle": { "Name": "public-bundle", "SecretReference": "file:/etc/mailmcp/tls/public.pfx" } }
+      },
+      {
+        "Name": "connector",
+        "Domain": "connector.example.com",
+        "Port": 443,
+        "MinimumTlsVersion": "Tls13",
+        "ServerCertificate": { "Bundle": { "Name": "connector-bundle", "SecretReference": "file:/etc/mailmcp/tls/connector.pfx" } }
+      }
+    ]
+  }
+}
+```
+
+**A handshake naming something else is refused.** There is no default profile and no catch-all: a client that asks for an
+unconfigured name, or that sends no server name at all, gets its connection ended rather than an unrelated domain's
+certificate. Wildcard names are not accepted in `Domain` either — each profile publishes one exact name. A *certificate*
+whose subject alternative name is a wildcard is fine and covers one label, as clients read it.
+
+Two rules follow from where each setting takes effect during the handshake:
+
+- **`MinimumTlsVersion` may differ per profile**, because the floor is applied once the server name is known.
+- **`HttpProtocols` may not**, because ALPN offers what the listener was bound with and HTTP/3 is a second socket the
+  listener either opens or does not — both settled before any server name is known. Profiles sharing an address and port
+  must name the same versions, and startup refuses them if they do not.
+
+Sharing a port means naming the *same* address. A wildcard address beside a specific one on a single port — `0.0.0.0`
+beside `127.0.0.1`, or the dual-mode `::` beside any IPv4 address — asks for two sockets the operating system grants one
+of, because the wildcard already accepts the connections the second listener was bound for. Startup reports that as the
+profile configuration it is rather than letting Kestrel fail on an address-in-use error that names a socket:
+
+```text
+McpEndpoint:Https:Endpoints — profiles on port 8443 bind 0.0.0.0 as well as 127.0.0.1; 0.0.0.0 already accepts the
+connections those addresses would receive, so only one of the two listeners could bind. State one address for a port,
+or move a profile to a port of its own.
+```
+
+### TLS versions and HTTP versions
+
+`MinimumTlsVersion` is a floor, not a selection. `Tls12` is the default and still negotiates TLS 1.3 with a client that
+offers it; `Tls13` refuses everything older. TLS 1.0, TLS 1.1, and SSL are not reachable through this setting at all —
+they are deprecated by RFC 8996, and a setting able to express them would be a way to weaken the endpoint rather than to
+configure it.
+
+`HttpProtocols` defaults to HTTP/1.1 and HTTP/2, which is what every MCP client speaks and what ALPN negotiates on the
+TLS connection. HTTP/3 is opt-in, runs over QUIC on UDP rather than on the TLS connection, and needs the host platform to
+provide QUIC. Selecting it where the platform cannot is a startup failure rather than a quiet fall back to HTTP/2:
+
+```text
+McpEndpoint:Https:Endpoints:0:HttpProtocols — 'Http3' is configured and this host cannot provide the QUIC transport it
+needs; install the platform's QUIC support or remove the version rather than have it quietly fall back.
+```
+
+Selecting HTTP/3 does not change the TLS floor for the other versions. QUIC always uses TLS 1.3 of its own accord.
+
+### What startup proves before a listener opens
+
+Certificates are loaded and checked **before the server starts**, so a profile that cannot serve is a host that does not
+start rather than a listener that fails every handshake. Each profile's material has to satisfy all of:
+
+- the reference resolves, and the material parses in the encoding its setting is for;
+- the leaf carries a private key, and that key belongs to that leaf;
+- the certificate is inside its validity period now;
+- a subject alternative name covers the configured `Domain` exactly, or by a single wildcard label;
+- the extended key usage permits server authentication;
+- the key usage, where the certificate declares one, permits `digitalSignature`;
+- the chain material states one leaf, not several;
+- every certificate supplied after the leaf is a certificate authority, is inside its own validity period, and issues
+  either the leaf or another supplied certificate.
+
+The key usage is checked because a server authenticates itself by signing the handshake transcript under TLS 1.3 and
+under every key exchange TLS 1.2 still negotiates. A certificate limited to `keyEncipherment` would load, open a
+listener, and then fail every handshake reaching it. An absent key-usage extension leaves the key unconstrained and is
+accepted, which is what a private authority commonly issues.
+
+The certificates after the leaf are checked for what is provable without a trust anchor — the root lives in the client's
+store, not in the deployment's material — so their signatures are not verified. What is proved is that each one can take
+part in the path a client builds: an end-entity certificate pasted into a chain file issues nothing, an expired
+authority breaks the path whatever the leaf says, and an authority that issues nothing in the chain means the wrong
+material was provisioned. Order is not something the material has to state. Neither source carries a reliable one — a
+PKCS#12 bundle states none at all — so the sequence presented to clients is rebuilt from the issuer each certificate
+names, leading from the leaf outwards.
+
+The subject common name is never consulted. Every current client ignores it, so a certificate accepted on the strength of
+one would still be refused by everything that connects.
+
+A failure names the profile and the reason, and nothing else:
+
+```text
+McpEndpoint:Https:Endpoints:0 — the HTTPS profile 'public' has no usable server certificate
+[DomainNotCoveredBySubjectAlternativeName].
+```
+
+Every profile is checked before the host gives up, so two misconfigured endpoints are reported in one message rather than
+one restart at a time. If any profile fails, none is served.
+
+### Secrets, provisioning, and rotation
+
+Certificate material is named through the same secret blocks everything else uses, so each part carries a required `Name`
+and a `Lifetime`, and each is provisioned by reference rather than written into configuration. `docs/operations/secret-provisioning.md`
+covers the schemes; a private key or a bundle password written directly into a configuration value fails startup under
+the default `ReferenceOnly` interpretation.
+
+A private key is imported into memory only. MailMcp never writes one to an operating-system key store as a side effect of
+loading it. A certificate chain is public material and may be supplied inline under an inline interpretation mode; a
+PKCS#12 bundle may not, because it is binary and has no faithful representation in a configuration value.
+
+Startup records what each profile presents and when it stops working:
+
+```text
+info: MailMcp.Host.Security.McpServerCertificateStore
+      The MCP HTTPS profile public presents a server certificate valid until 2027-01-31 00:00:00Z.
+```
+
+Within thirty days of expiry the same line is a warning instead. Neither carries the certificate's subject, serial
+number, or thumbprint: an operator renewing it needs to know which profile and by when, not which certificate it was.
+
+**Replacing certificate material takes a restart.** The profiles are read once while the host is composed, like the rest
+of this section, and the loaded certificates are held for the process lifetime. Renew the material, then restart; startup
+validates the new certificate before anything listens, so a bad renewal is a host that refuses to start rather than an
+endpoint that has stopped working. Rotating certificates without a restart is tracked separately.
+
+### What stays yours
+
+Provisioning the DNS record, proving ownership of the domain, and obtaining and renewing the certificate are all outside
+MailMcp. It has no ACME client and issues nothing. Startup only refuses a `Domain` that could not be a DNS name at all —
+an IP address, a wildcard, a name with characters a DNS name cannot carry, or a name a second profile already publishes.
+An internationalized domain is configured in its punycode A-label form, because that is what a client sends and what a
+certificate's names carry.
+
 ## Client certificates
 
 Mutual TLS is off unless `McpEndpoint:ClientCertificateProfiles` names at least one client. A profile identifies a client
 *application* — the ChatGPT connector, a reporting service, a workstation fleet — and it composes with `ApiKey` or
 `None` rather than replacing either. A certificate says which program is calling; it never says on whose behalf.
+
+**A client certificate only arrives over a TLS connection this process terminated.** That is either an HTTPS profile
+from the section above, or a listener the host was started with that serves HTTPS of its own — a `https://` entry in
+`ASPNETCORE_URLS` with a certificate configured under Kestrel's own `Certificates` section. Where TLS is terminated by a
+reverse proxy in front, the handshake happened somewhere else and no certificate reaches here; the headers a proxy sets
+to describe what it saw are ignored, deliberately and permanently. A `Required` profile in that deployment refuses every
+request, which is the honest outcome rather than a silent one.
+
+Asking for the certificate is a decision taken while the connection is being established, so it follows whichever
+listener shape the deployment has. Configuring an HTTPS profile takes over the host's listeners entirely, and those
+listeners supply their own TLS settings rather than reading Kestrel's HTTPS defaults — so the request for a client
+certificate is made by the profile's own handshake. Nothing about this is configured twice: one fact, that at least one
+trust profile exists, reaches whichever listener is actually serving.
 
 ```json
 {
@@ -354,6 +632,11 @@ than accepting one, because an anchor that has become unreadable must never wide
 That refusal is the *profile's*, not the endpoint's. Another profile still accepts a certificate its own anchors verify,
 because the broken material took no part in that verdict — one deleted file closes the clients it belongs to, not the
 ones whose trust material is intact.
+
+They will need MailMcp to terminate TLS itself, which is what the HTTPS profiles above make possible: a client
+certificate is presented during the handshake, and a deployment that terminates TLS at a reverse proxy has no handshake
+here to read one from. Certificate-like HTTP headers are ignored and will stay ignored; trusting a proxy to assert a
+client's identity is its own reviewed design, not something a header enables.
 
 ## Rate limiting
 

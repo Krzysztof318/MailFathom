@@ -70,9 +70,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISecretSchemeResolver, EnvironmentVariableSecretReferenceResolver>();
         services.AddSingleton<ISecretSchemeResolver, PlaintextSecretReferenceResolver>();
         services.AddSingleton<ISecretReferenceResolver, CompositeSecretReferenceResolver>();
-        // The loader belongs here rather than beside the mail adapter: it turns resolved bytes into typed material and
-        // knows nothing about IMAP, so a future material kind joins it instead of touching a scheme adapter.
+        // The loaders belong here rather than beside the mail adapter or the endpoint: they turn resolved bytes into
+        // typed material and know nothing about IMAP or about hosting, so a future material kind joins them instead of
+        // touching a scheme adapter. The two are separate types because they enforce opposite rules about a private
+        // key — an anchor must not carry one, a server identity must.
         services.AddSingleton<TrustAnchorLoader>();
+        services.AddSingleton<TlsServerCertificateLoader>();
 
         return services;
     }

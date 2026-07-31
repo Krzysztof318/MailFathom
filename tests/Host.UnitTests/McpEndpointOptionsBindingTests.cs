@@ -229,6 +229,81 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.ThrowsAny<InvalidOperationException>(() => McpEndpointOptions.ReadFrom(configuration));
     }
 
+    /// <summary>
+    /// The HTTPS profiles bind through three shapes that each fail quietly when they are wrong: a getter-only list of
+    /// objects, a list of enum members, and the nested secret blocks the certificate material is named through. A
+    /// profile that bound empty would leave the endpoint on the clear-text posture while an operator read a configured
+    /// certificate.
+    /// </summary>
+    [Fact]
+    public void ReadFrom_ConfiguredHttpsProfiles_ReadsTheDomainsProtocolsAndCertificateMaterial()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+            ["McpEndpoint:Authentication"] = "None",
+            ["McpEndpoint:Https:Endpoints:0:Name"] = "public",
+            ["McpEndpoint:Https:Endpoints:0:Domain"] = "mail.example.test",
+            ["McpEndpoint:Https:Endpoints:0:Port"] = "443",
+            ["McpEndpoint:Https:Endpoints:0:MinimumTlsVersion"] = "Tls13",
+            ["McpEndpoint:Https:Endpoints:0:HttpProtocols:0"] = "Http1",
+            ["McpEndpoint:Https:Endpoints:0:HttpProtocols:1"] = "Http2",
+            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:CertificateChain:Name"] = "public-chain",
+            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:CertificateChain:SecretReference"] = "file:/etc/mailmcp/tls/fullchain.pem",
+            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:PrivateKey:Name"] = "public-key",
+            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:PrivateKey:SecretReference"] = "file:/etc/mailmcp/tls/privkey.pem",
+            ["McpEndpoint:Https:Endpoints:1:Name"] = "connector",
+            ["McpEndpoint:Https:Endpoints:1:Domain"] = "connector.example.test",
+            ["McpEndpoint:Https:Endpoints:1:Port"] = "443",
+            ["McpEndpoint:Https:Endpoints:1:ServerCertificate:Bundle:Name"] = "connector-bundle",
+            ["McpEndpoint:Https:Endpoints:1:ServerCertificate:Bundle:SecretReference"] = "file:/etc/mailmcp/tls/connector.pfx",
+            ["McpEndpoint:Https:Endpoints:1:ServerCertificate:Bundle:Password:Name"] = "connector-bundle-password",
+            ["McpEndpoint:Https:Endpoints:1:ServerCertificate:Bundle:Password:SecretReference"] = "systemd-credential:mailmcp-tls-password",
+        });
+
+        // Act
+        var options = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.True(options.Https.TerminatesTls);
+        Assert.Equal(["public", "connector"], options.Https.Endpoints.Select(endpoint => endpoint.Name));
+        Assert.Equal(McpMinimumTlsVersion.Tls13, options.Https.Endpoints[0].MinimumTlsVersion);
+        Assert.Equal(
+            [McpHttpProtocol.Http1, McpHttpProtocol.Http2],
+            options.Https.Endpoints[0].ServedHttpProtocols);
+        Assert.Equal(
+            "file:/etc/mailmcp/tls/privkey.pem",
+            options.Https.Endpoints[0].ServerCertificate.PrivateKey?.SecretReference);
+        Assert.Equal(
+            "systemd-credential:mailmcp-tls-password",
+            options.Https.Endpoints[1].ServerCertificate.Bundle?.Password?.SecretReference);
+        Assert.Empty(options.FindConfigurationErrors());
+    }
+
+    /// <summary>Absent is the documented default of HTTP/1.1 and HTTP/2, and it has to stay distinguishable from a list an operator emptied.</summary>
+    [Fact]
+    public void ReadFrom_AProfileNamingNoHttpVersions_LeavesTheListUnsetRatherThanEmpty()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+            ["McpEndpoint:Authentication"] = "None",
+            ["McpEndpoint:Https:Endpoints:0:Name"] = "public",
+            ["McpEndpoint:Https:Endpoints:0:Domain"] = "mail.example.test",
+            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:Name"] = "bundle",
+            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:SecretReference"] = "file:/etc/mailmcp/tls/bundle.pfx",
+        });
+
+        // Act
+        var profile = Assert.Single(McpEndpointOptions.ReadFrom(configuration).Https.Endpoints);
+
+        // Assert
+        Assert.Null(profile.HttpProtocols);
+        Assert.Equal([McpHttpProtocol.Http1, McpHttpProtocol.Http2], profile.ServedHttpProtocols);
+    }
+
     private static IConfiguration ConfigurationFrom(Dictionary<string, string?> values) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(values)
