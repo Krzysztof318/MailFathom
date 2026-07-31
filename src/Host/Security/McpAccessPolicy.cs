@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Security.Claims;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Infrastructure.Security;
 
-namespace MailMcp.Host.Security;
+namespace MailFathom.Host.Security;
 
 /// <summary>What an authenticated caller must satisfy before a tool runs.</summary>
 /// <remarks>
@@ -24,7 +24,7 @@ namespace MailMcp.Host.Security;
 internal static class McpAccessPolicy
 {
     /// <summary>The name the endpoint's authorization requirement is registered under.</summary>
-    internal const string PolicyName = "MailMcpEndpoint";
+    internal const string PolicyName = "MailFathomEndpoint";
 
     /// <summary>Judges an authenticated principal against the people the deployment serves and the scopes it requires.</summary>
     /// <param name="principal">The principal a validated credential produced.</param>

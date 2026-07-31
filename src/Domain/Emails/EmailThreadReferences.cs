@@ -3,7 +3,7 @@
 
 using System.Collections.ObjectModel;
 
-namespace MailMcp.Domain.Emails;
+namespace MailFathom.Domain.Emails;
 
 /// <summary>Holds the message identifiers that place one email in a conversation.</summary>
 /// <remarks>

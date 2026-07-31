@@ -271,7 +271,7 @@ to test code. Each nested `CLAUDE.md` imports its sibling `AGENTS.md`.
 - `NU1004: The packages lock file is inconsistent with the project dependencies`
   means a pin moved without the lock files being regenerated. Both scripts
   restore in locked mode, so this is the intended result rather than a tooling
-  fault. Run `dotnet restore MailMcp.slnx --force-evaluate`, review the
+  fault. Run `dotnet restore MailFathom.slnx --force-evaluate`, review the
   transitive changes it writes, stage them with the pin, and rerun.
 - `.NET SDK: unavailable` means the `global.json` SDK selection failed. Install
   the pinned SDK and confirm `dotnet --version` before verification.

@@ -3,13 +3,13 @@
 
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Emails.ListEmails;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Failures;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.ListEmails;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
 using ModelContextProtocol.Server;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes the <c>list_emails</c> tool over the <see cref="MailboxTimelineReader" /> use case.</summary>
 /// <param name="mailboxTimelineReader">Answers the listing from the local mailbox copy.</param>
@@ -53,7 +53,7 @@ internal sealed class ListEmailsTool(MailboxTimelineReader mailboxTimelineReader
     /// <param name="cancellationToken">Cancels the read when the caller disconnects or the host shuts down.</param>
     /// <returns>The page, with the cursor of the next one and how current each covered folder is.</returns>
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when an account identifier or folder alias is not a value this system could have issued.</exception>
-    /// <exception cref="MailMcpException">
+    /// <exception cref="MailFathomException">
     /// Raised by the use case for a filter, page size, account, or cursor it refuses. The call-tool filter turns every one
     /// of them into the coded result a client reads, so this tool neither catches nor re-describes any.
     /// </exception>
@@ -66,16 +66,16 @@ internal sealed class ListEmailsTool(MailboxTimelineReader mailboxTimelineReader
         OpenWorld = false,
         UseStructuredContent = true)]
     [Description(
-        "Lists summaries of emails already synchronized into MailMcp's local mailbox copy, newest received first by "
+        "Lists summaries of emails already synchronized into MailFathom's local mailbox copy, newest received first by "
         + "default. Filters by account, folder, sender address, recipient address, subject text, received date range, "
         + "remote seen state, and attachment presence. Reads the local copy only: it never contacts a mail server, never "
         + "marks mail as read, and never returns body text, raw MIME, or attachment content. Returns at most 100 "
         + "summaries per call, with an opaque cursor for the next page and a per-folder statement of how current the "
         + "local copy is.")]
     public async Task<ListEmailsToolResult> ListEmailsAsync(
-        [Description("Configured MailMcp account identifiers to read. Omit to read every account this deployment serves. At most 64 may be named, and an identifier this deployment does not serve is refused rather than answered with an empty page.")]
+        [Description("Configured MailFathom account identifiers to read. Omit to read every account this deployment serves. At most 64 may be named, and an identifier this deployment does not serve is refused rather than answered with an empty page.")]
         string[]? accountIds = null,
-        [Description("MailMcp folder aliases to read, such as INBOX. Omit to read every folder of the accounts in scope. At most 64 may be named. An alias is MailMcp's own name for a folder and is matched without regard to case.")]
+        [Description("MailFathom folder aliases to read, such as INBOX. Omit to read every folder of the accounts in scope. At most 64 may be named. An alias is MailFathom's own name for a folder and is matched without regard to case.")]
         string[]? folderAliases = null,
         [Description("Return only emails sent from this mail address. Matched as a whole address rather than as a fragment, without regard to case; a non-empty value that is not a usable mail address is refused. Omit to match any sender, which an empty string does too.")]
         string? senderAddress = null,

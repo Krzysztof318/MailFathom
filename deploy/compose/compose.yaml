@@ -1,4 +1,4 @@
-# The supported Docker Compose deployment for MailMcp.
+# The supported Docker Compose deployment for MailFathom.
 #
 # Read deploy/compose/.env.example before the first start: every value this file reads has a documented default, and
 # the three files under secrets/ have to exist before anything comes up.
@@ -8,45 +8,45 @@
 #   # apply the database schema — see docs/operations/deployment-compose.md
 #   docker compose up -d
 #
-# This file applies no schema and contains nothing that can. MailMcp never applies a schema change while starting — it
+# This file applies no schema and contains nothing that can. MailFathom never applies a schema change while starting — it
 # verifies the schema and refuses to serve against one it does not recognize — so bringing the stack up after a version
 # change tells you whether a migration is outstanding rather than silently applying one. The reviewed artifact that
 # answers that refusal is #126's, and until it exists the schema step is an explicit operator action the documentation
 # describes.
 
-name: mailmcp
+name: mailfathom
 
 services:
   postgres:
     # pgvector rather than plain postgres: the schema declares the `vector` extension, and the stock image cannot
     # create it. This is the same pin the local Aspire orchestration uses, so a schema reviewed locally is reviewed
     # against this server version.
-    image: ${MAILMCP_POSTGRES_IMAGE:-pgvector/pgvector:0.8.2-pg17}
+    image: ${MAILFATHOM_POSTGRES_IMAGE:-pgvector/pgvector:0.8.2-pg17}
     restart: unless-stopped
     environment:
-      # The superuser of this container, used by initdb and by nothing else afterwards. The role MailMcp connects as is
+      # The superuser of this container, used by initdb and by nothing else afterwards. The role MailFathom connects as is
       # created by the script below and is deliberately not this one.
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres-superuser-password
       POSTGRES_DB: postgres
-      MAILMCP_DATABASE: ${MAILMCP_DATABASE:-mailmcp}
-      MAILMCP_DATABASE_ROLE: ${MAILMCP_DATABASE_ROLE:-mailmcp}
+      MAILFATHOM_DATABASE: ${MAILFATHOM_DATABASE:-mailfathom}
+      MAILFATHOM_DATABASE_ROLE: ${MAILFATHOM_DATABASE_ROLE:-mailfathom}
     secrets:
       - postgres-superuser-password
-      - mailmcp-database-password
+      - mailfathom-database-password
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      # Runs once, on an empty data directory. It creates the unprivileged role and the database MailMcp uses, and
+      # Runs once, on an empty data directory. It creates the unprivileged role and the database MailFathom uses, and
       # installs the `vector` extension while a superuser is still the one connected.
-      - ./postgres/10-create-mailmcp-database.sh:/docker-entrypoint-initdb.d/10-create-mailmcp-database.sh:ro
+      - ./postgres/10-create-mailfathom-database.sh:/docker-entrypoint-initdb.d/10-create-mailfathom-database.sh:ro
     healthcheck:
       # Over TCP on purpose. The image's entrypoint runs `docker-entrypoint-initdb.d` against a temporary server that
       # listens on a Unix socket only, so a socket check can report ready while the initialization script has not yet
-      # created the role, the database, or the extension — and `depends_on: service_healthy` would then start MailMcp
+      # created the role, the database, or the extension — and `depends_on: service_healthy` would then start MailFathom
       # against a database that does not exist. Naming a host forces the check onto the final, TCP-listening server.
       # The database and user are given for readability rather than for enforcement: pg_isready reports the server's
       # state and does not verify either.
-      test: ["CMD-SHELL", "pg_isready --quiet --host 127.0.0.1 --port 5432 --username postgres --dbname \"$${MAILMCP_DATABASE}\""]
+      test: ["CMD-SHELL", "pg_isready --quiet --host 127.0.0.1 --port 5432 --username postgres --dbname \"$${MAILFATHOM_DATABASE}\""]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -59,29 +59,29 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: ${MAILMCP_LOG_MAX_SIZE:-10m}
-        max-file: ${MAILMCP_LOG_MAX_FILES:-3}
+        max-size: ${MAILFATHOM_LOG_MAX_SIZE:-10m}
+        max-file: ${MAILFATHOM_LOG_MAX_FILES:-3}
     deploy:
       resources:
         limits:
-          cpus: ${MAILMCP_POSTGRES_CPU_LIMIT:-2}
-          memory: ${MAILMCP_POSTGRES_MEMORY_LIMIT:-1g}
+          cpus: ${MAILFATHOM_POSTGRES_CPU_LIMIT:-2}
+          memory: ${MAILFATHOM_POSTGRES_MEMORY_LIMIT:-1g}
 
-  mailmcp:
-    # `mailmcp:local` is a name no registry can serve, so an operator who has configured nothing gets the image this
-    # checkout builds and never a tag pulled from somewhere. Point MAILMCP_IMAGE at a published release when one
+  mailfathom:
+    # `mailfathom:local` is a name no registry can serve, so an operator who has configured nothing gets the image this
+    # checkout builds and never a tag pulled from somewhere. Point MAILFATHOM_IMAGE at a published release when one
     # exists; the release channels and the tags they carry are #156 and #116 and do not exist yet.
-    image: ${MAILMCP_IMAGE:-mailmcp:local}
+    image: ${MAILFATHOM_IMAGE:-mailfathom:local}
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
       target: runtime
     # Build rather than pull. Without this, Compose treats a service carrying both `image` and `build` as pullable
-    # first and only builds when the pull fails — and `mailmcp:local` is an unqualified name, so the attempt goes to
+    # first and only builds when the pull fails — and `mailfathom:local` is an unqualified name, so the attempt goes to
     # the configured registry, where an unrelated image published under that name would silently replace the checkout
-    # this file promises to run. Set MAILMCP_PULL_POLICY=missing in the same edit that points MAILMCP_IMAGE at a
+    # this file promises to run. Set MAILFATHOM_PULL_POLICY=missing in the same edit that points MAILFATHOM_IMAGE at a
     # published release, so the two decisions stay one decision.
-    pull_policy: ${MAILMCP_PULL_POLICY:-build}
+    pull_policy: ${MAILFATHOM_PULL_POLICY:-build}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -91,33 +91,33 @@ services:
       ASPNETCORE_HTTP_PORTS: "8080"
       # The directory of JSON files below becomes ordinary configuration, layered under the environment block. See
       # docs/operations/configuration-sources.md for the precedence and for what a directory contributes.
-      ConfigurationSources__Directory: /etc/mailmcp/config
+      ConfigurationSources__Directory: /etc/mailfathom/config
       # Composed here from parts the operator configures separately, so the file holding the password stays a file:
       # only the password arrives through Persistence__Password, as a reference to the mounted secret.
-      ConnectionStrings__mailmcp: "Host=postgres;Port=5432;Database=${MAILMCP_DATABASE:-mailmcp};Username=${MAILMCP_DATABASE_ROLE:-mailmcp}"
-      Persistence__Password__Name: mailmcp-database-password
-      Persistence__Password__SecretReference: file:/run/secrets/mailmcp-database-password
+      ConnectionStrings__mailfathom: "Host=postgres;Port=5432;Database=${MAILFATHOM_DATABASE:-mailfathom};Username=${MAILFATHOM_DATABASE_ROLE:-mailfathom}"
+      Persistence__Password__Name: mailfathom-database-password
+      Persistence__Password__SecretReference: file:/run/secrets/mailfathom-database-password
     secrets:
-      - mailmcp-database-password
+      - mailfathom-database-password
     volumes:
       - type: bind
         source: ./config
-        target: /etc/mailmcp/config
+        target: /etc/mailfathom/config
         read_only: true
       # Whatever the operator provisions: mailbox passwords, MCP API keys, a private trust anchor. A directory rather
       # than one Compose secret per credential, because adding an account would otherwise mean editing this tracked
-      # file, and because /etc/mailmcp/secrets is the same path the Kubernetes deployment mounts its Secret at — a
+      # file, and because /etc/mailfathom/secrets is the same path the Kubernetes deployment mounts its Secret at — a
       # `SecretReference` therefore reads identically in both shapes. The two database credentials stay Compose
       # secrets below, so the database superuser password is never on a path this service can read.
       - type: bind
-        source: ./secrets/mailmcp
-        target: /etc/mailmcp/secrets
+        source: ./secrets/mailfathom
+        target: /etc/mailfathom/secrets
         read_only: true
     ports:
-      # Bound to loopback by default. MailMcp speaks plain HTTP and terminates no TLS of its own, so exposing this
+      # Bound to loopback by default. MailFathom speaks plain HTTP and terminates no TLS of its own, so exposing this
       # port to a network means exposing synchronized mail without transport protection; put a reverse proxy in front
-      # of it and change MAILMCP_HTTP_BIND only once that proxy is what listens publicly.
-      - "${MAILMCP_HTTP_BIND:-127.0.0.1}:${MAILMCP_HTTP_PORT:-8080}:8080"
+      # of it and change MAILFATHOM_HTTP_BIND only once that proxy is what listens publicly.
+      - "${MAILFATHOM_HTTP_BIND:-127.0.0.1}:${MAILFATHOM_HTTP_PORT:-8080}:8080"
     # No health check. The image declares none — a chiseled image has no shell or HTTP client to run one in — and one
     # written here would need the same thing: a client inside the container. `/health` and `/alive` are served on the
     # published port and can be asked from outside; #179 is what makes the probe surface something a deployment
@@ -141,30 +141,30 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: ${MAILMCP_LOG_MAX_SIZE:-10m}
-        max-file: ${MAILMCP_LOG_MAX_FILES:-3}
+        max-size: ${MAILFATHOM_LOG_MAX_SIZE:-10m}
+        max-file: ${MAILFATHOM_LOG_MAX_FILES:-3}
     deploy:
       resources:
         limits:
-          cpus: ${MAILMCP_CPU_LIMIT:-2}
-          memory: ${MAILMCP_MEMORY_LIMIT:-1g}
+          cpus: ${MAILFATHOM_CPU_LIMIT:-2}
+          memory: ${MAILFATHOM_MEMORY_LIMIT:-1g}
 
 networks:
   # What the database is reachable on, and nothing that is not on it can reach the database. `internal` keeps this
   # network without a route out of the host.
   backend:
     internal: true
-  # What the published port attaches to. Put a reverse proxy on this network to terminate TLS in front of MailMcp.
+  # What the published port attaches to. Put a reverse proxy on this network to terminate TLS in front of MailFathom.
   frontend:
 
 volumes:
   postgres-data:
     # Named rather than anonymous, so `docker compose down` leaves the mail behind and only `down --volumes` destroys
     # it. Synchronized mail is expensive to rebuild: a lost volume costs a full IMAP resynchronization.
-    name: ${MAILMCP_POSTGRES_VOLUME:-mailmcp-postgres-data}
+    name: ${MAILFATHOM_POSTGRES_VOLUME:-mailfathom-postgres-data}
 
 secrets:
   postgres-superuser-password:
     file: ./secrets/postgres-superuser-password
-  mailmcp-database-password:
-    file: ./secrets/mailmcp-database-password
+  mailfathom-database-password:
+    file: ./secrets/mailfathom-database-password

@@ -3,7 +3,7 @@
 
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Orchestration;
+namespace MailFathom.IntegrationTests.Orchestration;
 
 /// <summary>Groups every test that runs against the one orchestrated database and the one orchestrated mailbox.</summary>
 /// <remarks>

@@ -54,10 +54,10 @@ list_changed_paths() {
 # Locked mode here and not only in the final gate, for the same reason formatting runs here: a pin
 # moved without regenerating the lock files fails restore with NU1004, and discovering that after the
 # whole coverage collection has already run wastes the loop this script exists to shorten. Regenerate
-# with `dotnet restore MailMcp.slnx --force-evaluate` as part of the change that moves the pin.
-dotnet restore MailMcp.slnx --locked-mode
-dotnet build MailMcp.slnx --configuration Release --no-restore
-dotnet test --solution MailMcp.slnx --configuration Release --no-build
+# with `dotnet restore MailFathom.slnx --force-evaluate` as part of the change that moves the pin.
+dotnet restore MailFathom.slnx --locked-mode
+dotnet build MailFathom.slnx --configuration Release --no-restore
+dotnet test --solution MailFathom.slnx --configuration Release --no-build
 
 # Formatting runs in the fast loop as well as the final gate. Style diagnostics such as IDE0005 are
 # reported by `dotnet format` rather than by the build, so leaving them to full verification means
@@ -79,7 +79,7 @@ if ((${#changed_csharp_files[@]} > 0)); then
   # Two passes, because neither reports what the other does. The first rewrites everything that has
   # a code fix, but exits 0 and names no file when a diagnostic has none. The second turns whatever
   # survived into the `file(line,col): error IDEnnnn` the loop can act on, and fails the run.
-  dotnet format MailMcp.slnx --no-restore --include "${changed_csharp_files[@]}"
-  dotnet format MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic \
+  dotnet format MailFathom.slnx --no-restore --include "${changed_csharp_files[@]}"
+  dotnet format MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic \
     --include "${changed_csharp_files[@]}"
 fi

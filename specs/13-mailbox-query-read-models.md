@@ -11,7 +11,7 @@ Implement the `ListEmails` application use case with the filters, bounded page s
 
 ## Current state
 
-The application layer has a write path only. There is no query use case, no read model, no cursor, and no pagination contract. `MailMcpDbContext` is used exclusively by the synchronizer's repositories.
+The application layer has a write path only. There is no query use case, no read model, no cursor, and no pagination contract. `MailFathomDbContext` is used exclusively by the synchronizer's repositories.
 
 ## Approved scope
 

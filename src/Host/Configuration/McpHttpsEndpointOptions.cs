@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Net;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Secrets;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>One HTTPS listener profile: the domain it publishes, the socket it binds, and the identity it presents.</summary>
 /// <remarks>

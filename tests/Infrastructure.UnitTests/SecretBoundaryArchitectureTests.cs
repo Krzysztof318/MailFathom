@@ -3,12 +3,12 @@
 
 using System.Collections;
 using System.Reflection;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Infrastructure.Secrets;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Keeps the secret-resolution boundary and the secret block marker enforced at build time.</summary>
 public sealed class SecretBoundaryArchitectureTests

@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Emails;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Application.Synchronization;
+namespace MailFathom.Application.Synchronization;
 
 /// <summary>Pairs one remote occurrence the server still holds with the flags it reported for it.</summary>
 /// <param name="Uid">The UID the flags were read for, within the session's folder and UIDVALIDITY.</param>

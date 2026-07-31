@@ -4,10 +4,10 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
-using MailMcp.TestSupport;
+using MailFathom.TestSupport;
 using Xunit;
 
-namespace MailMcp.SharedSources.UnitTests;
+namespace MailFathom.SharedSources.UnitTests;
 
 /// <summary>
 /// Proves the shared HTTP test double, because a fault in it reports a false result in every adapter suite that

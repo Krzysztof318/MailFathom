@@ -1,18 +1,18 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Accounts;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Emails.ListEmails;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Failures;
-using MailMcp.Domain.Folders;
-using MailMcp.Mcp.Tools;
+using MailFathom.Application.Accounts;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.ListEmails;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
+using MailFathom.Mcp.Tools;
 using Xunit;
 
-namespace MailMcp.Mcp.UnitTests;
+namespace MailFathom.Mcp.UnitTests;
 
 /// <summary>Covers what the <c>list_emails</c> tool itself owns: converting arguments and publishing a page.</summary>
 /// <remarks>
@@ -91,7 +91,7 @@ public sealed class ListEmailsToolTests
         Assert.Equal(11, timeline.LastLimit);
     }
 
-    /// <summary>An alias is MailMcp's own name for a folder, so a caller's spelling is normalized rather than matched literally.</summary>
+    /// <summary>An alias is MailFathom's own name for a folder, so a caller's spelling is normalized rather than matched literally.</summary>
     [Fact]
     public async Task ListEmailsAsync_OneFolderSpelledSeveralWays_NamesThatFolderOnce()
     {
@@ -123,7 +123,7 @@ public sealed class ListEmailsToolTests
             () => tool.ListEmailsAsync(accountIds: [blank], cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
         Assert.Equal("accounts", failure.FilterName);
         Assert.NotNull(failure.InnerException);
         Assert.Equal(0, timeline.ReadCount);
@@ -144,7 +144,7 @@ public sealed class ListEmailsToolTests
             () => tool.ListEmailsAsync(folderAliases: [unusable], cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
         Assert.Equal("folder aliases", failure.FilterName);
         Assert.Equal(0, timeline.ReadCount);
     }
@@ -205,7 +205,7 @@ public sealed class ListEmailsToolTests
             () => tool.ListEmailsAsync(accountIds: [unusable], cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
         Assert.DoesNotContain("victim@example.test", failure.Message, StringComparison.Ordinal);
         Assert.Equal(0, timeline.ReadCount);
     }
@@ -261,7 +261,7 @@ public sealed class ListEmailsToolTests
                 cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailAccountNotAccessible, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailAccountNotAccessible, failure.ErrorCode);
         Assert.Equal(0, timeline.ReadCount);
     }
 
@@ -281,7 +281,7 @@ public sealed class ListEmailsToolTests
             () => tool.ListEmailsAsync(pageSize: pageSize, cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailboxQueryPageSizeOutOfRange, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailboxQueryPageSizeOutOfRange, failure.ErrorCode);
         Assert.Equal(0, timeline.ReadCount);
     }
 
@@ -296,7 +296,7 @@ public sealed class ListEmailsToolTests
             () => tool.ListEmailsAsync(cursor: "not-a-cursor", cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailboxQueryCursorMalformed, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailboxQueryCursorMalformed, failure.ErrorCode);
     }
 
     /// <summary>A blank cursor is the first page, so a client that carries the field with nothing in it is not refused.</summary>

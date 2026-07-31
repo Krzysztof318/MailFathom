@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Host.Configuration;
+using MailFathom.Host.Configuration;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 public sealed class MailSynchronizationWindowValidatorTests
 {
@@ -87,7 +87,7 @@ public sealed class MailSynchronizationWindowValidatorTests
     {
         AccountId = accountId,
         Host = "imap.example.test",
-        UserName = "mailmcp@example.test",
+        UserName = "mailfathom@example.test",
         EarliestEmailReceivedDate = earliestEmailReceivedDate,
     };
 }

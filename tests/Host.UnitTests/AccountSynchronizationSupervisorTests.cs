@@ -1,23 +1,23 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Folders;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Synchronization;
-using MailMcp.Domain.Transport;
-using MailMcp.Host.Configuration;
-using MailMcp.Host.Hosting;
+using MailFathom.Application.Folders;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Synchronization;
+using MailFathom.Domain.Transport;
+using MailFathom.Host.Configuration;
+using MailFathom.Host.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 public sealed class AccountSynchronizationSupervisorTests
 {
@@ -212,7 +212,7 @@ public sealed class AccountSynchronizationSupervisorTests
 
         // Assert
         var logged = string.Join(' ', harness.Logger.Messages);
-        Assert.DoesNotContain("mailmcp@example.test", logged, StringComparison.Ordinal);
+        Assert.DoesNotContain("mailfathom@example.test", logged, StringComparison.Ordinal);
         Assert.DoesNotContain("imap-primary-password", logged, StringComparison.Ordinal);
     }
 

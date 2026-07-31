@@ -1,14 +1,14 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Folders;
+using MailFathom.Application.Folders;
 using Microsoft.Extensions.Logging;
 
-namespace MailMcp.Infrastructure.Folders;
+namespace MailFathom.Infrastructure.Folders;
 
 /// <summary>Writes mapping changes to the structured log as the deployment's audit record.</summary>
 /// <remarks>
-/// This is the one place in MailMcp that writes a remote folder path outside the database. It is deliberate: an
+/// This is the one place in MailFathom that writes a remote folder path outside the database. It is deliberate: an
 /// operator who repointed an alias needs both paths to recognize the change, and a folder that resynchronizes from
 /// the beginning is otherwise unexplained. Everything else — every ordinary synchronization log line — names the
 /// alias only. A durable audit store replaces this implementation without any caller changing.

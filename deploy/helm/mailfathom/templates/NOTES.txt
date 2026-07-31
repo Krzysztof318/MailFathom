@@ -1,6 +1,6 @@
-MailMcp {{ include "mailmcp.versionLabel" . }} is installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+MailFathom {{ include "mailfathom.versionLabel" . }} is installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
 
-Image:    {{ include "mailmcp.image" . }}
+Image:    {{ include "mailfathom.image" . }}
 Database: {{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }} as {{ .Values.database.user }}
 Secrets:  {{ .Values.secrets.existingSecret }}, mounted read-only at {{ .Values.secrets.mountPath }}
 {{ if eq .Values.image.channel "nightly" }}
@@ -16,16 +16,16 @@ Secrets:  {{ .Values.secrets.existingSecret }}, mounted read-only at {{ .Values.
 {{ end }}
 Watch it become ready:
 
-  kubectl --namespace {{ .Release.Namespace }} rollout status deployment/{{ include "mailmcp.fullname" . }}
+  kubectl --namespace {{ .Release.Namespace }} rollout status deployment/{{ include "mailfathom.fullname" . }}
 
-MailMcp verifies the database schema while starting and refuses to serve against one it does not recognize. It never
+MailFathom verifies the database schema while starting and refuses to serve against one it does not recognize. It never
 applies a migration itself, in any environment, and neither does this chart. If the pod reports a pending migration,
 apply the schema to {{ .Values.database.name }} yourself and let the rollout continue; the reviewed schema artifact and
-the Job that runs it are tracked by MailMcp issue #126.
+the Job that runs it are tracked by MailFathom issue #126.
 {{ if not .Values.ingress.enabled }}
 No Ingress is configured, so the endpoint is reachable only from inside the cluster. Reach it for a check with:
 
-  kubectl --namespace {{ .Release.Namespace }} port-forward service/{{ include "mailmcp.fullname" . }} 8080:{{ .Values.service.port }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward service/{{ include "mailfathom.fullname" . }} 8080:{{ .Values.service.port }}
 {{- else }}
 {{- range .Values.ingress.hosts }}
 Reachable at {{ if $.Values.ingress.tls }}https{{ else }}http{{ end }}://{{ .host }}/mcp

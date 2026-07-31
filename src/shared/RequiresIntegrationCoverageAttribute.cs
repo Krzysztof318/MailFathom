@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.CodeCoverage;
+namespace MailFathom.CodeCoverage;
 
 /// <summary>
 /// Marks production code whose meaningful verification requires real infrastructure or cross-component behavior,

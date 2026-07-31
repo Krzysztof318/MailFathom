@@ -2,12 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Linq.Expressions;
-using MailMcp.Application.Emails;
-using MailMcp.CodeCoverage;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.Emails;
+using MailFathom.CodeCoverage;
+using MailFathom.Domain.Emails;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Writes the derived search document of one stored email inside the caller's open session.</summary>
 /// <remarks>
@@ -27,7 +27,7 @@ internal static class EmailSearchDocumentWriter
     /// <returns>A task that completes when the write has been issued or staged.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any reference argument is <see langword="null" />.</exception>
     public static async Task SaveAsync(
-        MailMcpDbContext dbContext,
+        MailFathomDbContext dbContext,
         StoredEmailEntity storedEmail,
         ExtractedEmailMetadata metadata,
         DateTimeOffset extractedAt,
@@ -97,7 +97,7 @@ internal static class EmailSearchDocumentWriter
     /// </para>
     /// </remarks>
     public static async Task SaveEnvelopeOnlyAsync(
-        MailMcpDbContext dbContext,
+        MailFathomDbContext dbContext,
         StoredEmailEntity storedEmail,
         string? subject,
         DateTimeOffset recordedAt,
@@ -133,11 +133,11 @@ internal static class EmailSearchDocumentWriter
     private static Expression<Func<EmailSearchDocumentEntity, bool>> MatchesStoredEmail(Guid storedEmailId) =>
         candidate => candidate.StoredEmailId == storedEmailId;
 
-    private static EmailSearchDocumentEntity? FindTracked(MailMcpDbContext dbContext, Guid storedEmailId) =>
+    private static EmailSearchDocumentEntity? FindTracked(MailFathomDbContext dbContext, Guid storedEmailId) =>
         dbContext.EmailSearchDocuments.Local.AsQueryable().SingleOrDefault(MatchesStoredEmail(storedEmailId));
 
     private static void Insert(
-        MailMcpDbContext dbContext,
+        MailFathomDbContext dbContext,
         StoredEmailEntity storedEmail,
         DerivedDocument document)
     {

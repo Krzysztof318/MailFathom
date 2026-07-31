@@ -38,7 +38,7 @@
         "resolved": "4.13.1",
         "contentHash": "V9gCt0T1Tnu+jMWJDLiUV/vOTmGzmofEdVeUPKPdh8MJW7f3kkhFXSeDotwl8Ob88OxrBf+4LrV/D7OA4tAluA=="
       },
-      "MailMcp.Domain": {
+      "MailFathom.Domain": {
         "type": "Project"
       }
     }

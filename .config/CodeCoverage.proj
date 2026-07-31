@@ -22,13 +22,13 @@
            Text="No test projects were found under $(RepositoryRoot)tests." />
 
     <!-- The item above discovers what exists on disk; the run below executes what the solution
-         lists. A test project missing from MailMcp.slnx would disappear from every gate silently —
+         lists. A test project missing from MailFathom.slnx would disappear from every gate silently —
          from this one and its coverage for a unit suite, and from the build and formatting checks
          for the integration suite — so the mismatch fails here instead. Project file names are
          compared rather than paths, because a solution cannot hold two projects of the same name
          and the comparison then survives the directory-separator differences between the recorded
          solution paths and the globbed item identities. -->
-    <XmlPeek XmlInputPath="$(RepositoryRoot)MailMcp.slnx" Query="//Project/@Path">
+    <XmlPeek XmlInputPath="$(RepositoryRoot)MailFathom.slnx" Query="//Project/@Path">
       <Output TaskParameter="Result" ItemName="SolutionProjectPath" />
     </XmlPeek>
 
@@ -39,13 +39,13 @@
     </ItemGroup>
 
     <Error Condition="'@(UnlistedTestProject)' != ''"
-           Text="These test projects exist under $(RepositoryRoot)tests but are missing from MailMcp.slnx, so the solution-wide run would skip them: @(UnlistedTestProject, ', ')." />
+           Text="These test projects exist under $(RepositoryRoot)tests but are missing from MailFathom.slnx, so the solution-wide run would skip them: @(UnlistedTestProject, ', ')." />
 
     <!-- One solution-wide run rather than an Exec batched over the test projects, which MSBuild
          executes one item at a time: eight sequential processes cost about 50 seconds here against
          about 11 for the single run that starts them together. Coverlet timestamps each Cobertura
          file, so the reports stay distinct without the per-project prefix the batch supplied. -->
-    <Exec Command="dotnet test --solution &quot;$(RepositoryRoot)MailMcp.slnx&quot; --configuration $(Configuration) --no-build --results-directory &quot;$(RawCoverageDirectory)&quot; -- --report-xunit-trx --coverlet" />
+    <Exec Command="dotnet test --solution &quot;$(RepositoryRoot)MailFathom.slnx&quot; --configuration $(Configuration) --no-build --results-directory &quot;$(RawCoverageDirectory)&quot; -- --report-xunit-trx --coverlet" />
     <CallTarget Targets="GenerateAndEnforceReport" />
   </Target>
 
@@ -56,7 +56,7 @@
        points, which would have hidden a real regression anywhere else. Attribute-based exclusion is unavailable here
        because the files carry no attribute the generator would preserve. -->
   <Target Name="GenerateAndEnforceReport">
-    <Exec Command="dotnet tool run reportgenerator &quot;-reports:$(RawCoverageDirectory)/**/*.cobertura.*.xml&quot; &quot;-targetdir:$(CoverageReportDirectory)&quot; &quot;-reporttypes:Cobertura;HtmlInline&quot; &quot;-assemblyfilters:+MailMcp.*;-MailMcp.Host;-MailMcp.AppHost;-MailMcp.*.UnitTests&quot; &quot;-filefilters:-**/Persistence/Migrations/*.cs&quot;" />
+    <Exec Command="dotnet tool run reportgenerator &quot;-reports:$(RawCoverageDirectory)/**/*.cobertura.*.xml&quot; &quot;-targetdir:$(CoverageReportDirectory)&quot; &quot;-reporttypes:Cobertura;HtmlInline&quot; &quot;-assemblyfilters:+MailFathom.*;-MailFathom.Host;-MailFathom.AppHost;-MailFathom.*.UnitTests&quot; &quot;-filefilters:-**/Persistence/Migrations/*.cs&quot;" />
     <CallTarget Targets="Enforce" />
   </Target>
 

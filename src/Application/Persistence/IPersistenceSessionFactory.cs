@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Application.Persistence;
+namespace MailFathom.Application.Persistence;
 
 /// <summary>Creates explicit persistence sessions for local write operations that span multiple stores.</summary>
 /// <remarks>

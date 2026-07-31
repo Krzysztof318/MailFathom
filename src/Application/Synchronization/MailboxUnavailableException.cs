@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Failures;
-using MailMcp.Domain.Folders;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Application.Synchronization;
+namespace MailFathom.Application.Synchronization;
 
 /// <summary>Indicates that a mail server did not serve an operation within the resilience budget configured for it.</summary>
 /// <remarks>
@@ -21,7 +21,7 @@ namespace MailMcp.Application.Synchronization;
 /// stopping and the other says one mail server is struggling.
 /// </para>
 /// </remarks>
-public sealed class MailboxUnavailableException : MailMcpException
+public sealed class MailboxUnavailableException : MailFathomException
 {
     /// <summary>Initializes a new mailbox unavailability failure naming the account and folder alias it stopped.</summary>
     /// <param name="accountId">The account whose mail server did not serve the operation.</param>
@@ -50,7 +50,7 @@ public sealed class MailboxUnavailableException : MailMcpException
         this.AccountId = accountId;
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.MailboxUnavailable;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.MailboxUnavailable;
 
     /// <summary>Gets the account whose mail server was unavailable.</summary>
     public MailAccountId AccountId { get; }

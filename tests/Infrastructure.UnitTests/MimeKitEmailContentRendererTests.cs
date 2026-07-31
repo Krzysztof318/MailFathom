@@ -2,13 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Text;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Domain.Emails;
-using MailMcp.Infrastructure.Mail.Mime;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Domain.Emails;
+using MailFathom.Infrastructure.Mail.Mime;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Covers what a stored message yields for a reader: its headers, its body, and what it carries besides.</summary>
 public sealed class MimeKitEmailContentRendererTests

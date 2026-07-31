@@ -3,7 +3,7 @@
 
 using System.Collections.ObjectModel;
 
-namespace MailMcp.Domain.Transport;
+namespace MailFathom.Domain.Transport;
 
 /// <summary>Defines which SASL mechanisms a mail account may authenticate with and which weakenings are permitted.</summary>
 /// <remarks>

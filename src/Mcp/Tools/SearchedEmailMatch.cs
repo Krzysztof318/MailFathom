@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.ComponentModel;
-using MailMcp.Application.Emails;
+using MailFathom.Application.Emails;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes one email a search matched, with why it ranked where it did and what matched.</summary>
 /// <remarks>
@@ -17,7 +17,7 @@ namespace MailMcp.Mcp.Tools;
 /// <para>
 /// The extracts are message content. They are returned as data and nothing here interprets them, formats them, or
 /// surrounds them with text a model could read as instruction — a snippet is mail somebody else wrote, arriving in the
-/// same response as MailMcp's own fields, and the only markup it carries is the <c>**</c> the use case put around what
+/// same response as MailFathom's own fields, and the only markup it carries is the <c>**</c> the use case put around what
 /// matched.
 /// </para>
 /// </remarks>
@@ -27,7 +27,7 @@ internal sealed record SearchedEmailMatch
     /// <summary>How much longer than the configured character bound an extract may be before this boundary cuts it.</summary>
     /// <remarks>
     /// The bound the use case applies counts the characters of the message and deliberately does not count the highlight
-    /// markers, which are MailMcp's own. Those markers are indistinguishable here from a message that writes <c>**</c>
+    /// markers, which are MailFathom's own. Those markers are indistinguishable here from a message that writes <c>**</c>
     /// itself, so this boundary cannot reproduce that count exactly and does not try to. It applies a ceiling derived
     /// from it instead: a marked run needs a character of its own and a character separating it from the next, so an
     /// extract carries at most half as many marked runs as message characters and its four-character markup adds at most

@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Security;
-using MailMcp.Mcp;
+using MailFathom.Infrastructure.Security;
+using MailFathom.Mcp;
 
-namespace MailMcp.Host.Security;
+namespace MailFathom.Host.Security;
 
 /// <summary>Refuses an MCP request whose client certificate no configured trust profile accepts.</summary>
 /// <remarks>

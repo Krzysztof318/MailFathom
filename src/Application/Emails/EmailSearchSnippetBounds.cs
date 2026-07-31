@@ -3,7 +3,7 @@
 
 using System.Globalization;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>How much of a message's body one search result may show.</summary>
 /// <remarks>

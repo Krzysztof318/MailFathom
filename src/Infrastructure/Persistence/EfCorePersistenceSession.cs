@@ -3,10 +3,10 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
-using MailMcp.Application.Persistence;
+using MailFathom.Application.Persistence;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Provides the EF Core and transaction operations owned by one persistence session.</summary>
 /// <remarks>
@@ -20,7 +20,7 @@ namespace MailMcp.Infrastructure.Persistence;
 internal interface IEfCorePersistenceSessionResources : IAsyncDisposable
 {
     /// <summary>Gets the context used by repositories participating in the session.</summary>
-    MailMcpDbContext DbContext { get; }
+    MailFathomDbContext DbContext { get; }
 
     /// <summary>Persists tracked changes through EF Core.</summary>
     Task SaveChangesAsync(CancellationToken cancellationToken);
@@ -45,7 +45,7 @@ internal sealed class EfCorePersistenceSession(IEfCorePersistenceSessionResource
     private bool completed;
 
     /// <inheritdoc />
-    public MailMcpDbContext DbContext => resources.DbContext;
+    public MailFathomDbContext DbContext => resources.DbContext;
 
     /// <inheritdoc />
     public async Task<PersistenceCommitResult> CommitAsync(CancellationToken cancellationToken)

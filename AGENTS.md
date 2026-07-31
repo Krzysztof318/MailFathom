@@ -1,12 +1,12 @@
-# Mail MCP Development Instructions
+# MailFathom Development Instructions
 
 These instructions apply to the entire repository.
 
-The product and solution name is `MailMcp`. The solution file is `MailMcp.slnx`; project directory and file names use short boundary names such as `Domain`, `Application`, and `Host`, while `Directory.Build.props` applies the `MailMcp.*` prefix to assembly names and root namespaces.
+The product and solution name is `MailFathom`. The solution file is `MailFathom.slnx`; project directory and file names use short boundary names such as `Domain`, `Application`, and `Host`, while `Directory.Build.props` applies the `MailFathom.*` prefix to assembly names and root namespaces.
 
 ## Project status
 
-MailMcp is under continuous development and has not had a first release. Nothing is published, no version is stamped, no deployment runs it, and no consumer outside this repository depends on any of its contracts. The first release is milestone `0.1.0 — first public release`, tracked by the checklist in #112.
+MailFathom is under continuous development and has not had a first release. Nothing is published, no version is stamped, no deployment runs it, and no consumer outside this repository depends on any of its contracts. The first release is milestone `0.1.0 — first public release`, tracked by the checklist in #112.
 
 This is a working constraint, not a disclaimer. A breaking change to a configuration key, a database schema, an MCP tool contract, or a public API is taken now, in full, while it costs one edit and nothing has to be migrated — deferring it behind a compatibility shim trades a free change today for a permanent one later. It cuts the other way too: do not write versioning machinery, migration paths, deprecation shims, or fallbacks for a released version that does not exist. Say plainly in the change that a contract moved, and correct every caller in the same change set.
 
@@ -15,9 +15,9 @@ None of this relaxes the rest of these instructions. Pre-release is a reason to 
 ## Development environment
 
 - Development runs locally. The repository does not provision agent environments, so install the SDK pinned in `global.json` and any command-line tooling such as `dotnet-ef` or the Aspire CLI on the developer machine. `docs/operations/local-development.md` lists the commands that must work.
-- Never invoke `dotnet ef` directly. EF Core design-time and migration commands run through the AppHost's `mailmcp-migrations` resource — `aspire resource mailmcp-migrations <command>` — so they see the orchestrated resources and the connection string the AppHost issues rather than an ad-hoc local environment that can differ from every real one. Aspire 13 has no `aspire exec` command; the migration resource replaces it.
-- Use `$add-migration` for any model change that needs a migration. While MailMcp is pre-release the repository keeps exactly one migration, `Initial`, and a model change regenerates it rather than adding a second one, which destroys local data by design. Reviewing the resulting schema as SQL is part of that workflow, not an optional extra.
-- The host never applies migrations, in any environment. It verifies the migration history at startup and fails fast on a pending migration. Applying is the `mailmcp-migrations` resource locally and an explicit deployment step elsewhere; do not add a second mechanism that applies them.
+- Never invoke `dotnet ef` directly. EF Core design-time and migration commands run through the AppHost's `mailfathom-migrations` resource — `aspire resource mailfathom-migrations <command>` — so they see the orchestrated resources and the connection string the AppHost issues rather than an ad-hoc local environment that can differ from every real one. Aspire 13 has no `aspire exec` command; the migration resource replaces it.
+- Use `$add-migration` for any model change that needs a migration. While MailFathom is pre-release the repository keeps exactly one migration, `Initial`, and a model change regenerates it rather than adding a second one, which destroys local data by design. Reviewing the resulting schema as SQL is part of that workflow, not an optional extra.
+- The host never applies migrations, in any environment. It verifies the migration history at startup and fails fast on a pending migration. Applying is the `mailfathom-migrations` resource locally and an explicit deployment step elsewhere; do not add a second mechanism that applies them.
 
 ## Critical repository rules
 
@@ -27,11 +27,11 @@ None of this relaxes the rest of these instructions. Pre-release is a reason to 
 - Preserve unrelated user changes. Stage only files that belong to the current task.
 - Make architectural decisions before implementation. Keep changes small, reviewable, and aligned with the architecture draft in `specs/`.
 - Treat ADRs under `docs/decisions/` as required architectural context for AI agents. Before changing architecture, boundaries, configuration, persistence, provider integration, governance, security-sensitive behavior, or cross-cutting infrastructure, read the relevant ADRs and keep the change consistent with their current status and rationale.
-- Treat MailMcp as an enterprise-grade system even during early scaffolding: preserve seams for governance, auditability, privacy controls, operational hardening, compliance evidence, and future Agent Governance Toolkit (AGT) adoption without prematurely adding runtime dependencies.
+- Treat MailFathom as an enterprise-grade system even during early scaffolding: preserve seams for governance, auditability, privacy controls, operational hardening, compliance evidence, and future Agent Governance Toolkit (AGT) adoption without prematurely adding runtime dependencies.
 
 ## The project's own license
 
-MailMcp is licensed under the Apache License, Version 2.0. That decision is recorded in five places and each one has a single job, so a change that touches licensing keeps them consistent rather than picking whichever is nearest.
+MailFathom is licensed under the Apache License, Version 2.0. That decision is recorded in five places and each one has a single job, so a change that touches licensing keeps them consistent rather than picking whichever is nearest.
 
 - The root `LICENSE` is the unmodified official Apache-2.0 text. Never edit it, never append attribution, third-party terms, or commentary to it: GitHub detects the license by matching that file against the known text, and an edit turns a detected `Apache-2.0` into `NOASSERTION`.
 - The root `NOTICE` names Krzysztof Kasprowicz as the original author, which is what Apache-2.0 section 4(d) asks a derivative distribution to preserve. It stays informational — it adds no use restriction, changes no license term, and claims nothing about contributions by other copyright holders. Third-party notice text may join the distributed bundle beside it, never inside it.
@@ -39,18 +39,18 @@ MailMcp is licensed under the Apache License, Version 2.0. That decision is reco
 - `.editorconfig` holds the two-line `file_header_template` that IDE0073 enforces on every source file. Changing it rewrites every file in the repository, so treat it as a repository-wide change rather than a formatting tweak.
 - The deployment assets state the same identifier where their own ecosystems read it: `org.opencontainers.image.licenses` in `deploy/docker/Dockerfile` and `artifacthub.io/license` in the chart's `Chart.yaml`. Those are claims about terms rather than the terms themselves, so `scripts/verify-deployment-assets.sh` asserts the exact identifier in both and also that the build context still admits `LICENSE` and `NOTICE` — a label that outlived the files it names is the failure it exists to catch.
 
-`THIRD_PARTY_LICENSES.md` is none of the above. It reviews what MailMcp consumes; the rules below govern it.
+`THIRD_PARTY_LICENSES.md` is none of the above. It reviews what MailFathom consumes; the rules below govern it.
 
 ## Third-party licensing
 
-- MailMcp must remain compatible with both commercial closed-source distribution and open-source publication.
+- MailFathom must remain compatible with both commercial closed-source distribution and open-source publication.
 - Before adding, upgrading, replacing, bundling, or distributing a third-party component, verify the current upstream license from official project, package, or vendor sources.
-- Only use third-party components whose licenses permit commercial use and do not require MailMcp itself to be relicensed or distributed as source code. Prefer permissive licenses such as MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, and PostgreSQL License.
+- Only use third-party components whose licenses permit commercial use and do not require MailFathom itself to be relicensed or distributed as source code. Prefer permissive licenses such as MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, and PostgreSQL License.
 - Do not introduce GPL, AGPL, SSPL, BUSL, Commons Clause, PolyForm Noncommercial, source-available-only, field-of-use-restricted, or otherwise non-permissive dependencies without explicit owner approval.
 - Treat hosted services, AI models, provider APIs, container images, generated assets, and copied code samples as separately reviewable from SDK licenses. A permissive SDK license does not approve the service terms, model terms, data-use policy, trademark terms, or redistribution conditions.
 - Keep the root `THIRD_PARTY_LICENSES.md` third-party license register current. Add or update its entries in the same change set as any dependency, service, protocol SDK, container image, generated asset, or externally sourced code sample change.
 - The register describes software the repository actually uses, never software it plans to use. A component that is proposed, evaluated, rejected, or merely named in a specification gets no row and no "planned" section, because a row asserts a completed review, and a review of something not yet adopted has to be redone at adoption anyway. Keep that reasoning in the specification, ADR, or issue that tracks the future work, and add the row in the change that introduces the dependency.
-- The register is not MailMcp's own license and not a notice bundle. It records which third-party components are used and under which terms; MailMcp's own grant is the root `LICENSE` above, and the third-party notices that must travel with a distributed artifact are a third document that does not exist yet. #191 owns generating it from each artifact's resolved dependency graph; what it must satisfy is what the register already records.
+- The register is not MailFathom's own license and not a notice bundle. It records which third-party components are used and under which terms; MailFathom's own grant is the root `LICENSE` above, and the third-party notices that must travel with a distributed artifact are a third document that does not exist yet. #191 owns generating it from each artifact's resolved dependency graph; what it must satisfy is what the register already records.
 - Record a component in the register section that matches its exposure. What ships carries redistribution and notice obligations, and what only builds, tests, or runs on a developer machine does not; a register that states exposure per row rather than by structure lets the two blur.
 - When a dependency is pinned in `Directory.Packages.props`, record the exact package name, version, license expression, upstream URL, and any required attribution or NOTICE handling in `THIRD_PARTY_LICENSES.md`. Record the version the artifact's own graph resolves when nearest-wins resolution raises a pin that is only a floor.
 
@@ -58,7 +58,7 @@ MailMcp is licensed under the Apache License, Version 2.0. That decision is reco
 
 - Before using or changing a library, framework, protocol, CLI, or external API, consult its latest official documentation. Prefer Microsoft Learn, official project documentation, specifications, and upstream repositories.
 - Confirm .NET 10 compatibility and pin package versions centrally in `Directory.Packages.props`. Do not use floating versions.
-- Regenerate the lock files in the same change that moves a pin. `Directory.Packages.props` fixes the direct versions and the committed `packages.lock.json` files fix the transitive closure those versions resolve to, so the two are one decision recorded in two places. `AppHost` and `IntegrationTests` deliberately carry none, because the Aspire SDK picks part of their graph from the host platform's runtime identifier; do not add one back. Restore runs in locked mode everywhere it is gated, which fails with `NU1004` rather than quietly rewriting the closure; `dotnet restore MailMcp.slnx --force-evaluate` is what updates it. Review the resulting transitive diff, because that is the part central pinning never showed.
+- Regenerate the lock files in the same change that moves a pin. `Directory.Packages.props` fixes the direct versions and the committed `packages.lock.json` files fix the transitive closure those versions resolve to, so the two are one decision recorded in two places. `AppHost` and `IntegrationTests` deliberately carry none, because the Aspire SDK picks part of their graph from the host platform's runtime identifier; do not add one back. Restore runs in locked mode everywhere it is gated, which fails with `NU1004` rather than quietly rewriting the closure; `dotnet restore MailFathom.slnx --force-evaluate` is what updates it. Review the resulting transitive diff, because that is the part central pinning never showed.
 - Unit tests are part of every behavior change, feature, and bug fix. Read `tests/AGENTS.md` before adding or changing tests.
 - Develop and verify tests and production code before documenting the implemented behavior. Update affected durable documentation in the same reviewable change set; stale guidance is a defect.
 - Read `docs/AGENTS.md` before changing documentation. Create or modify ADRs only with explicit owner approval.
@@ -96,7 +96,7 @@ Add a mechanically checkable rule to the mechanism, not to this file: a severity
 - Maintain one repository `.editorconfig` and let automated formatting define whitespace and layout. Do not hand-format against configured rules.
 - Give every enum member an explicit, unique integral value starting at `0` and increasing contiguously in declaration order. Never reorder, renumber, or reuse an existing value; append new members with the next value. Apply this to every enum, including private and currently non-persisted types, so a future numeric persistence representation cannot silently change meaning after refactoring.
 - A `[Flags]` enum is exempt from contiguity and from nothing else. Its members are powers of two starting at `1`, with `None = 0` for the empty set, and each value is still explicit, never reordered, and never reused — which is what the contiguity rule was protecting. Declare one only where the values genuinely compose: a set an operator writes as one configuration value beats a collection whose elements a binder can drop one at a time, and `McpTransportAuthenticationMethods` is the worked example. A set of alternatives that never combine stays an ordinary enum.
-- Keep a plain `enum` for a set whose members are only names the process reads. When a member has to carry data, expose behavior, or publish an identity that must survive a rename — a SASL name, a five-digit error code — the enum is the wrong shape, and the value becomes a closed enumeration instead: a `readonly record struct` with a private constructor, one static member per value, and its own serialization. Use `$closed-enumeration` for the required shape and the reasoning; `MailAuthenticationMechanism` and `MailMcpErrorCode` are the worked examples.
+- Keep a plain `enum` for a set whose members are only names the process reads. When a member has to carry data, expose behavior, or publish an identity that must survive a rename — a SASL name, a five-digit error code — the enum is the wrong shape, and the value becomes a closed enumeration instead: a `readonly record struct` with a private constructor, one static member per value, and its own serialization. Use `$closed-enumeration` for the required shape and the reasoning; `MailAuthenticationMechanism` and `MailFathomErrorCode` are the worked examples.
 - Prefer immutable records or value objects for data that represents values; use entities only when identity and lifecycle matter.
 - Use domain-correct, descriptive names for types, methods, parameters, variables, fields, and files. Avoid abbreviations except established terms such as IMAP, SMTP, MIME, MCP, UID, TLS, and RAG.
 - Prefer a longer name that communicates intent, constraints, or result over a short ambiguous name. Long method names are acceptable when every word adds useful domain meaning.
@@ -195,7 +195,7 @@ Add a mechanically checkable rule to the mechanism, not to this file: a severity
 
 ## Issue tracking and the roadmap board
 
-Work is tracked as GitHub issues on the `MailMcp roadmap` project board (project number `4`, owner `Krzysztof318`), which is the owner's view of progress. The board reflects the repository; it never becomes a second source of truth. `specs/` remains authoritative for what a change must do, and an issue links to its specification instead of restating it.
+Work is tracked as GitHub issues on the `MailFathom roadmap` project board (project number `4`, owner `Krzysztof318`), which is the owner's view of progress. The board reflects the repository; it never becomes a second source of truth. `specs/` remains authoritative for what a change must do, and an issue links to its specification instead of restating it.
 
 This repository is worked by agents. Issues are opened, filled in, labeled, placed on the board, and closed by an agent rather than by a person, so the conventions below are the whole mechanism rather than a description of one. Nothing here is tidied up afterwards by hand: an issue that arrives without its label and its board fields simply stops being visible in the views the owner reads. Apply every rule in this section as part of opening the issue, decide the values from the rules given, and state in the task brief what was set. Ask the owner only where a rule below says the choice is theirs.
 

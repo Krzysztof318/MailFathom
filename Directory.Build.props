@@ -5,13 +5,13 @@
        below are the machine-readable form of both: PackageLicenseExpression is the SPDX slot MSBuild publishes, and
        the assembly metadata puts the same identifier into what actually ships, since nothing here is packed. -->
   <PropertyGroup>
-    <Product>MailMcp</Product>
+    <Product>MailFathom</Product>
     <Authors>Krzysztof Kasprowicz</Authors>
     <Company>Krzysztof Kasprowicz</Company>
     <Copyright>Copyright © 2026 Krzysztof Kasprowicz</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/Krzysztof318/MailMcp</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/Krzysztof318/MailMcp</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/Krzysztof318/MailFathom</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Krzysztof318/MailFathom</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
@@ -21,8 +21,8 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <AssemblyName>MailMcp.$(MSBuildProjectName)</AssemblyName>
-    <RootNamespace>MailMcp.$(MSBuildProjectName)</RootNamespace>
+    <AssemblyName>MailFathom.$(MSBuildProjectName)</AssemblyName>
+    <RootNamespace>MailFathom.$(MSBuildProjectName)</RootNamespace>
     <RunAnalyzersDuringBuild>true</RunAnalyzersDuringBuild>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <Nullable>enable</Nullable>

@@ -322,23 +322,23 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
-      "MailMcp.AI": {
+      "MailFathom.AI": {
         "type": "Project",
         "dependencies": {
-          "MailMcp.Application": "[1.0.0, )",
-          "MailMcp.Domain": "[1.0.0, )",
+          "MailFathom.Application": "[1.0.0, )",
+          "MailFathom.Domain": "[1.0.0, )",
           "Microsoft.Agents.AI": "[1.15.0, )",
           "Microsoft.Extensions.AI": "[10.8.1, )",
           "Microsoft.Extensions.AI.Abstractions": "[10.8.1, )"
         }
       },
-      "MailMcp.Application": {
+      "MailFathom.Application": {
         "type": "Project",
         "dependencies": {
-          "MailMcp.Domain": "[1.0.0, )"
+          "MailFathom.Domain": "[1.0.0, )"
         }
       },
-      "MailMcp.Domain": {
+      "MailFathom.Domain": {
         "type": "Project"
       },
       "Microsoft.Agents.AI": {

@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.ComponentModel.DataAnnotations;
-using MailMcp.Application.Emails;
-using MailMcp.Host.Configuration;
+using MailFathom.Application.Emails;
+using MailFathom.Host.Configuration;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers the bounds a deployment may configure on what a search result shows.</summary>
 public sealed class MailboxSearchOptionsTests

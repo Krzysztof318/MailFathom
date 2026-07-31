@@ -32,7 +32,7 @@ the same comment. The two rules state the same requirement, and the repository h
 
 ### A common parent
 
-The seven types gain an abstract base class, `MailMcpException`, in `src/Domain/Failures/`.
+The seven types gain an abstract base class, `MailFathomException`, in `src/Domain/Failures/`.
 
 It is a class and not an interface. A `catch` clause filters on a class directly, while an interface needs
 `catch (Exception failure) when (failure is IStableErrorCodeFailure coded)` at every boundary that maps a failure. More
@@ -55,7 +55,7 @@ classes, because none of those are common to all six.
 
 ### The error code
 
-`MailMcpErrorCode` is a `readonly record struct` in `Domain/Failures` over a five-digit integer, with a private
+`MailFathomErrorCode` is a `readonly record struct` in `Domain/Failures` over a five-digit integer, with a private
 constructor and one static member per failure. Each concrete type overrides `ErrorCode` with its own member, so the code
 sits next to the type that raises it.
 
@@ -102,7 +102,7 @@ every intermediate boundary would oblige layers with no stake in the decision to
 
 ### The redaction rule
 
-The rule is stated once, in the XML documentation of `MailMcpException`, and repeated as a rule for new exceptions in
+The rule is stated once, in the XML documentation of `MailFathomException`, and repeated as a rule for new exceptions in
 `src/AGENTS.md`. It leaves the remarks of the individual types, which is where it was previously stated by two of seven
 and omitted by five.
 
@@ -110,7 +110,7 @@ The base constructor's parameter is named `operatorSafeMessage`, so every derive
 is written rather than in prose elsewhere.
 
 A shared test helper in `tests/shared/` asserts that every non-abstract, externally visible type deriving from
-`Exception` in a production assembly derives from `MailMcpException`. Every unit-test project calls it for its own
+`Exception` in a production assembly derives from `MailFathomException`. Every unit-test project calls it for its own
 production assembly, so `Domain`, `Application`, `Infrastructure`, `AI`, `Mcp`, and `Host` are all covered rather than
 only the three that declare an exception today. `AI` and `Mcp` hold no type yet to anchor a `typeof` on, so those two
 load the assembly by name. The helper reads types reflectively, which the repository otherwise avoids; the

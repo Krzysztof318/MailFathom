@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
-using MailMcp.CodeCoverage;
+using MailFathom.Application.Emails;
+using MailFathom.CodeCoverage;
 using NpgsqlTypes;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>The derived text one stored email contributes to lexical search, and the vector built from it.</summary>
 /// <remarks>
@@ -71,7 +71,7 @@ internal sealed class EmailSearchDocumentEntity
 
     /// <summary>Gets or sets the search vector PostgreSQL generates from the columns above.</summary>
     /// <remarks>
-    /// Never assigned by MailMcp. The column is <c>GENERATED ALWAYS ... STORED</c>, so PostgreSQL recomputes it from
+    /// Never assigned by MailFathom. The column is <c>GENERATED ALWAYS ... STORED</c>, so PostgreSQL recomputes it from
     /// this row on every insert and update and no code path can leave it disagreeing with the text beside it.
     /// </remarks>
     public NpgsqlTsVector SearchVector { get; set; } = null!;

@@ -58,7 +58,7 @@ jobs:
               - 'Directory.Build.props'
               - 'Directory.Build.targets'
               - 'Directory.Packages.props'
-              - 'MailMcp.slnx'
+              - 'MailFathom.slnx'
               - 'NuGet.config'
               - 'global.json'
             # `dotnet format` without a subcommand runs the whitespace, style, and analyzer passes, so
@@ -77,7 +77,7 @@ jobs:
               - 'Directory.Build.props'
               - 'Directory.Build.targets'
               - 'Directory.Packages.props'
-              - 'MailMcp.slnx'
+              - 'MailFathom.slnx'
               - 'global.json'
 
   build-and-unit-test:
@@ -113,13 +113,13 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
 
       - name: Restore dependencies
-        run: dotnet restore MailMcp.slnx --locked-mode
+        run: dotnet restore MailFathom.slnx --locked-mode
 
       - name: Restore local tools
         run: dotnet tool restore
 
       - name: Build solution
-        run: dotnet build MailMcp.slnx --configuration Release --no-restore
+        run: dotnet build MailFathom.slnx --configuration Release --no-restore
 
       - name: Run unit tests and enforce code coverage
         run: dotnet msbuild .config/CodeCoverage.proj -t:Collect
@@ -173,10 +173,10 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
 
       - name: Restore dependencies
-        run: dotnet restore MailMcp.slnx --locked-mode
+        run: dotnet restore MailFathom.slnx --locked-mode
 
       - name: Verify formatting
-        run: dotnet format MailMcp.slnx --verify-no-changes --verbosity diagnostic
+        run: dotnet format MailFathom.slnx --verify-no-changes --verbosity diagnostic
 
   required-ci:
     name: Required CI

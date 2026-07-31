@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Resilience;
-using MailMcp.Domain.Failures;
+using MailFathom.Application.Resilience;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Infrastructure.Resilience;
+namespace MailFathom.Infrastructure.Resilience;
 
 /// <summary>Indicates that a resilience pipeline declined to serve an operation any further.</summary>
 /// <remarks>
@@ -20,7 +20,7 @@ namespace MailMcp.Infrastructure.Resilience;
 /// refusing work.
 /// </para>
 /// </remarks>
-public sealed class OutboundDependencyUnavailableException : MailMcpException
+public sealed class OutboundDependencyUnavailableException : MailFathomException
 {
     /// <summary>Initializes a new dependency unavailability failure naming the class whose limit was reached.</summary>
     /// <param name="dependency">The dependency class whose pipeline declined the operation.</param>
@@ -32,7 +32,7 @@ public sealed class OutboundDependencyUnavailableException : MailMcpException
         this.Dependency = dependency;
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.OutboundDependencyUnavailable;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.OutboundDependencyUnavailable;
 
     /// <summary>Gets the dependency class whose pipeline declined the operation.</summary>
     public OutboundDependency Dependency { get; }

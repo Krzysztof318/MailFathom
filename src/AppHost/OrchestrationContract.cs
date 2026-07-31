@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.AppHost;
+namespace MailFathom.AppHost;
 
 /// <summary>The resource names and switches this app model publishes to anything that drives it.</summary>
 /// <remarks>
@@ -16,12 +16,12 @@ public static class OrchestrationContract
     public const string PostgresResourceName = "postgres";
 
     /// <summary>The database the connection string is issued for.</summary>
-    public const string DatabaseResourceName = "mailmcp";
+    public const string DatabaseResourceName = "mailfathom";
 
-    /// <summary>The MailMcp host project resource.</summary>
-    public const string HostResourceName = "mailmcp-host";
+    /// <summary>The MailFathom host project resource.</summary>
+    public const string HostResourceName = "mailfathom-host";
 
-    /// <summary>The HTTP endpoint the MailMcp host serves its surface on, including the MCP endpoint.</summary>
+    /// <summary>The HTTP endpoint the MailFathom host serves its surface on, including the MCP endpoint.</summary>
     public const string HostHttpEndpointName = "http";
 
     /// <summary>The name the integration-test topology configures its one MCP API key under.</summary>
@@ -80,10 +80,10 @@ public static class OrchestrationContract
     /// only ever saw allow-any could not tell an origin check that works from one that is not wired in at all. The
     /// domain is reserved for testing.
     /// </remarks>
-    public const string McpPermittedOrigin = "https://client.mailmcp.test";
+    public const string McpPermittedOrigin = "https://client.mailfathom.test";
 
     /// <summary>The EF Core migration tool resource.</summary>
-    public const string MigrationsResourceName = "mailmcp-migrations";
+    public const string MigrationsResourceName = "mailfathom-migrations";
 
     /// <summary>The IMAP and SMTP server the integration-test topology synchronizes against.</summary>
     /// <remarks>
@@ -103,11 +103,11 @@ public static class OrchestrationContract
     public const string MailServerApiEndpointName = "api";
 
     /// <summary>The IMAP and SMTP login of the one synthetic mailbox the integration-test topology serves.</summary>
-    public const string MailServerAccountUserName = "mailmcp";
+    public const string MailServerAccountUserName = "mailfathom";
 
     /// <summary>The address mail is addressed to in order to reach <see cref="MailServerAccountUserName" />.</summary>
     /// <remarks>The domain is reserved for testing, so nothing addressed here can leave the container it is delivered in.</remarks>
-    public const string MailServerAccountEmailAddress = "mailmcp@mailmcp.test";
+    public const string MailServerAccountEmailAddress = "mailfathom@mailfathom.test";
 
     /// <summary>The password of that synthetic mailbox.</summary>
     /// <remarks>
@@ -137,5 +137,5 @@ public static class OrchestrationContract
     /// filtered command rather than a decision per resource; <c>scripts/run-integration-tests.sh</c> makes exactly that
     /// removal part of every run.
     /// </remarks>
-    public const string EphemeralResourceNamePrefix = "mailmcp-integrationtests";
+    public const string EphemeralResourceNamePrefix = "mailfathom-integrationtests";
 }

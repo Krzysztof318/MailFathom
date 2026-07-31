@@ -1,4 +1,4 @@
-# Code owners for MailMcp.
+# Code owners for MailFathom.
 #
 # GitHub applies the last matching pattern in this file, so the repository-wide
 # rule stays first and any path-specific rule added below it overrides ownership

@@ -3,7 +3,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-namespace MailMcp.Infrastructure.Security;
+namespace MailFathom.Infrastructure.Security;
 
 /// <summary>The shape OAuth requires of a URL used as a name rather than as something to fetch.</summary>
 /// <remarks>
@@ -19,12 +19,12 @@ namespace MailMcp.Infrastructure.Security;
 /// token's <c>iss</c>, a resource against its <c>aud</c> — and the difference is who writes the other side.
 /// </para>
 /// <para>
-/// The resource is named by MailMcp itself: it is published in the protected resource metadata document, a client copies
+/// The resource is named by MailFathom itself: it is published in the protected resource metadata document, a client copies
 /// it into the <c>resource</c> parameter, and the authorization server puts it back in the token. Every appearance
 /// originates here, so bringing it to one canonical form makes two spellings of it impossible.
 /// </para>
 /// <para>
-/// An issuer is the opposite. The authorization server emits <c>iss</c> in a form it chose, MailMcp only recognizes it,
+/// An issuer is the opposite. The authorization server emits <c>iss</c> in a form it chose, MailFathom only recognizes it,
 /// and several widely deployed servers publish an issuer whose path is a single trailing slash. Canonicalizing that away
 /// would leave a configuration that looks right and refuses every token the server issues, so an issuer is validated for
 /// shape and then compared exactly as the operator copied it from the server.
@@ -38,7 +38,7 @@ namespace MailMcp.Infrastructure.Security;
 public static class OAuthIdentifierUri
 {
     /// <summary>Reports whether a configured value has the shape OAuth requires of an identifier.</summary>
-    /// <param name="configuredValue">The configured identifier, for example <c>https://sso.example.test/realms/mailmcp</c>.</param>
+    /// <param name="configuredValue">The configured identifier, for example <c>https://sso.example.test/realms/mailfathom</c>.</param>
     /// <returns><see langword="true" /> when the value is usable as an OAuth identifier; otherwise <see langword="false" />.</returns>
     public static bool IsWellFormed([NotNullWhen(true)] string? configuredValue) =>
         TryReadIdentifier(configuredValue, out _);
@@ -52,7 +52,7 @@ public static class OAuthIdentifierUri
     /// MCP authorization specification asks an implementation to accept an uppercase scheme or host for robustness. A
     /// trailing slash is dropped where the path is empty, which is the form that specification asks implementations to
     /// settle on; on a path that identifies something, a trailing slash is part of what it identifies and is left alone.
-    /// Use this for a value MailMcp itself publishes, never for one an authorization server emits.
+    /// Use this for a value MailFathom itself publishes, never for one an authorization server emits.
     /// </remarks>
     public static bool TryCanonicalize(string? configuredValue, out string canonicalIdentifier)
     {

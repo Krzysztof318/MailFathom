@@ -1,13 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Secrets;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers the one listener an HTTPS profile cannot displace, and therefore has to refuse to start beside.</summary>
 /// <remarks>
@@ -103,7 +103,7 @@ public sealed class ConfiguredKestrelEndpointsTests
                 Bundle = new ConfiguredSecret
                 {
                     Name = "bundle",
-                    SecretReference = "file:/etc/mailmcp/tls/bundle.pfx",
+                    SecretReference = "file:/etc/mailfathom/tls/bundle.pfx",
                 },
             },
         });

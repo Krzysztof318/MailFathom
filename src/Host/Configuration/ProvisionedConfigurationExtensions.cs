@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Configuration.Json;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>Layers deployment-provisioned JSON configuration into the sources the host builder has already composed.</summary>
 internal static class ProvisionedConfigurationExtensions

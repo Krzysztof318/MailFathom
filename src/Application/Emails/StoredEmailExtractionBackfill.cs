@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Persistence;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Persistence;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>Re-derives normalized metadata and searchable text from the raw MIME of emails stored before extraction existed.</summary>
 /// <remarks>

@@ -1,26 +1,26 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Mail;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.Infrastructure;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.Infrastructure.Resilience;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Mail;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Infrastructure;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Resilience;
+using MailFathom.Infrastructure.Secrets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace MailMcp.IntegrationTests.Orchestration;
+namespace MailFathom.IntegrationTests.Orchestration;
 
 /// <summary>The production registrations, resolved against the orchestrated database and mail server.</summary>
 /// <remarks>
 /// <para>
 /// A real host rather than a bare service provider, because infrastructure composes the connection string during
-/// hosted-service startup so that resolving a secret reference stays asynchronous. Everything MailMcp itself
+/// hosted-service startup so that resolving a secret reference stays asynchronous. Everything MailFathom itself
 /// registers comes from <see cref="ServiceCollectionExtensions.AddInfrastructure" />, so what a test exercises is the
 /// wiring a deployment gets; only the inputs a composition root binds from configuration are supplied here, because the
 /// suite deliberately does not start the host resource.
@@ -31,18 +31,18 @@ namespace MailMcp.IntegrationTests.Orchestration;
 /// page of it.
 /// </para>
 /// </remarks>
-internal sealed class OrchestratedMailMcpServices : IAsyncDisposable
+internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
 {
     private readonly IHost host;
 
-    private OrchestratedMailMcpServices(IHost host) => this.host = host;
+    private OrchestratedMailFathomServices(IHost host) => this.host = host;
 
     /// <summary>Starts the composed services against the orchestrated infrastructure.</summary>
     /// <param name="orchestration">The running orchestration whose database and mail server are used.</param>
     /// <param name="cancellationToken">Cancels the startup.</param>
     /// <returns>The composed services, which the caller owns and must dispose.</returns>
-    internal static async Task<OrchestratedMailMcpServices> StartAsync(
-        MailMcpOrchestrationFixture orchestration,
+    internal static async Task<OrchestratedMailFathomServices> StartAsync(
+        MailFathomOrchestrationFixture orchestration,
         CancellationToken cancellationToken)
     {
         var builder = new HostApplicationBuilder();
@@ -76,7 +76,7 @@ internal sealed class OrchestratedMailMcpServices : IAsyncDisposable
         var host = builder.Build();
         await host.StartAsync(cancellationToken);
 
-        return new OrchestratedMailMcpServices(host);
+        return new OrchestratedMailFathomServices(host);
     }
 
     /// <summary>Runs one unit of work in its own dependency-injection scope, the way a worker does.</summary>

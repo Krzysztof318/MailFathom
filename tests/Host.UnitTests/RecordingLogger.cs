@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Captures formatted log messages so a test can assert what startup told the operator — and what it did not.</summary>
 /// <remarks>

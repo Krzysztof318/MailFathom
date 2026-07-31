@@ -3,7 +3,7 @@
 
 using System.Globalization;
 
-namespace MailMcp.Infrastructure.Secrets;
+namespace MailFathom.Infrastructure.Secrets;
 
 /// <summary>How long a configured secret stays usable: without limit, or until an absolute instant.</summary>
 /// <remarks>

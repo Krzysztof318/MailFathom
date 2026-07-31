@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.TestSupport;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
-namespace MailMcp.SharedSources.UnitTests;
+namespace MailFathom.SharedSources.UnitTests;
 
 /// <summary>
 /// Proves the shared log recorder, because every suite that asserts what a component logged — or kept out of a log —
@@ -13,7 +13,7 @@ namespace MailMcp.SharedSources.UnitTests;
 /// </summary>
 public sealed class RecordingLoggerProviderTests
 {
-    private const string Category = "MailMcp.Infrastructure.Resilience";
+    private const string Category = "MailFathom.Infrastructure.Resilience";
 
     [Fact]
     public void Records_WrittenWithAFailure_CaptureCategoryLevelMessageAndFailure()

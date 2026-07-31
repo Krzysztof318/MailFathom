@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Globalization;
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>The failure raised when one filter of a mailbox query carries something the query does not accept.</summary>
 /// <remarks>
@@ -20,7 +20,7 @@ namespace MailMcp.Application.Emails;
 /// assembly rather than from the request.
 /// </para>
 /// </remarks>
-public sealed class MailboxQueryFilterInvalidException : MailMcpException
+public sealed class MailboxQueryFilterInvalidException : MailFathomException
 {
     private MailboxQueryFilterInvalidException(string operatorSafeMessage, string filterName)
         : base(operatorSafeMessage) => this.FilterName = filterName;
@@ -32,7 +32,7 @@ public sealed class MailboxQueryFilterInvalidException : MailMcpException
     public string FilterName { get; }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.MailboxQueryFilterInvalid;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.MailboxQueryFilterInvalid;
 
     /// <summary>Refuses a filter whose value is not an address any stored participant could carry.</summary>
     /// <param name="filterName">How this assembly names the filter, for example <c>sender address</c>.</param>

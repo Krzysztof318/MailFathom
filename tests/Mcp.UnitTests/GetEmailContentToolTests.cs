@@ -3,18 +3,18 @@
 
 using System.Security.Cryptography;
 using System.Text;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Emails.GetEmailContent;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Failures;
-using MailMcp.Domain.Folders;
-using MailMcp.Mcp.Tools;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.GetEmailContent;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
+using MailFathom.Mcp.Tools;
 using NSubstitute;
 using Xunit;
 
-namespace MailMcp.Mcp.UnitTests;
+namespace MailFathom.Mcp.UnitTests;
 
 /// <summary>Covers what the <c>get_email_content</c> tool itself owns: naming one email and publishing what was read.</summary>
 /// <remarks>
@@ -242,7 +242,7 @@ public sealed class GetEmailContentToolTests
                 cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.StoredEmailNotFound, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.StoredEmailNotFound, failure.ErrorCode);
         Assert.Equal(0, contentStore.ReadCount);
     }
 
@@ -263,7 +263,7 @@ public sealed class GetEmailContentToolTests
                 cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.StoredEmailNotFound, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.StoredEmailNotFound, failure.ErrorCode);
         Assert.Equal(0, contentStore.ReadCount);
     }
 
@@ -282,8 +282,8 @@ public sealed class GetEmailContentToolTests
                 cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.EmailContentUnavailable, failure.ErrorCode);
-        Assert.NotEqual(MailMcpErrorCode.StoredEmailNotFound, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.EmailContentUnavailable, failure.ErrorCode);
+        Assert.NotEqual(MailFathomErrorCode.StoredEmailNotFound, failure.ErrorCode);
         Assert.Equal(EmailContentDefect.Missing, failure.Defect);
         await repairRequests.Received(1).RecordAsync(
             Arg.Is<EmailContentRepairRequest>(request => request != null && request.Defect == EmailContentDefect.Missing),
@@ -305,7 +305,7 @@ public sealed class GetEmailContentToolTests
                 cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.EmailContentUnavailable, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.EmailContentUnavailable, failure.ErrorCode);
         Assert.Equal(EmailContentDefect.HashMismatch, failure.Defect);
     }
 
@@ -337,7 +337,7 @@ public sealed class GetEmailContentToolTests
         Assert.True(attachment.WasFileNameNormalized);
     }
 
-    /// <summary>An unnamed part is reported as unnamed rather than given a name MailMcp invented.</summary>
+    /// <summary>An unnamed part is reported as unnamed rather than given a name MailFathom invented.</summary>
     [Fact]
     public async Task GetEmailContentAsync_UnnamedAttachment_PublishesNoFileName()
     {
@@ -400,7 +400,7 @@ public sealed class GetEmailContentToolTests
             () => tool.GetEmailContentAsync(unusable, cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.StoredEmailIdentifierMalformed, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.StoredEmailIdentifierMalformed, failure.ErrorCode);
         Assert.Equal(0, summaryReader.ReadCount);
     }
 
@@ -421,7 +421,7 @@ public sealed class GetEmailContentToolTests
             () => tool.GetEmailContentAsync(overlongIdentifier, cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.StoredEmailIdentifierMalformed, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.StoredEmailIdentifierMalformed, failure.ErrorCode);
         Assert.Equal(0, summaryReader.ReadCount);
     }
 

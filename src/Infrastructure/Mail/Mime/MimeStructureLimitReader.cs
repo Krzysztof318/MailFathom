@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Application.Emails;
+using MailFathom.Application.Emails;
 using MimeKit;
 
-namespace MailMcp.Infrastructure.Mail.Mime;
+namespace MailFathom.Infrastructure.Mail.Mime;
 
 /// <summary>Names the structural limit a message crossed, if it crossed one.</summary>
 internal enum ExceededMimeStructureLimit

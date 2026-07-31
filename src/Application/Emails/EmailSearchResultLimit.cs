@@ -3,7 +3,7 @@
 
 using System.Globalization;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>How many ranked emails one lexical search returns.</summary>
 /// <remarks>

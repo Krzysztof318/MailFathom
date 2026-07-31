@@ -24,15 +24,15 @@ Migrations are generated through Aspire so the command runs with the connection 
 **This section was written against `aspire exec`, which Aspire 13 does not have.** Earlier Aspire versions offered that command; the pinned CLI 13.4.6 does not, and its documentation is gone. The replacement is the `Aspire.Hosting.EntityFrameworkCore` package, which declares a migration resource in the app model. The AppHost adds it against the host project, points it at `src/Infrastructure` for the migrations, and calls `RunDatabaseUpdateOnStart`, so a local run applies pending migrations before the host starts. Commands are run against the resource:
 
 ```bash
-aspire resource mailmcp-migrations ef-migrations-add --apphost src/AppHost/AppHost.csproj --non-interactive -- --name Initial
-aspire resource mailmcp-migrations ef-database-update --apphost src/AppHost/AppHost.csproj --non-interactive
+aspire resource mailfathom-migrations ef-migrations-add --apphost src/AppHost/AppHost.csproj --non-interactive -- --name Initial
+aspire resource mailfathom-migrations ef-database-update --apphost src/AppHost/AppHost.csproj --non-interactive
 ```
 
 The package ships no stable build, so it is the repository's only prerelease pin. It is referenced by `AppHost` alone, so nothing it carries reaches a deployed assembly.
 
 Apply policy is one rule rather than a per-environment pair, which is stricter than this specification originally described. **The host never applies migrations, in any environment, including Development.** It verifies at startup that the database carries every migration the running build defines and fails fast when any are pending, so an instance either serves traffic against a known schema or does not serve traffic at all. The Development branch this specification once allowed is unnecessary now that the orchestration applies migrations before the host starts, and it would have made two mechanisms own one concern, so that a given local schema could not be attributed to either. Outside Development, applying is an explicit deployment step, or the future `mcpmail` CLI when it exists.
 
-While MailMcp is pre-release the baseline is regenerated rather than extended: a model change deletes `Initial` and recreates it, which destroys local data by design. The `add-migration` skill is that workflow. Making it additive is first-release work and is tracked separately.
+While MailFathom is pre-release the baseline is regenerated rather than extended: a model change deletes `Initial` and recreates it, which destroys local data by design. The `add-migration` skill is that workflow. Making it additive is first-release work and is tracked separately.
 
 Draft section 17 currently states that the service applies pending migrations automatically at first-release startup, calling that an arbitrary initial policy. That conflicts with the repository rule forbidding automatic production migrations during ordinary host startup, and the repository rule wins: an application instance that mutates schema while starting can race a second instance, can apply a destructive change no one reviewed at deploy time, and gives the operator no point at which to take a backup. This specification updates the draft accordingly rather than implementing the weaker policy.
 
@@ -56,7 +56,7 @@ Zero-downtime migration strategy, migration squashing after release, and moving 
 
 - One reviewed baseline migration reproduces the full schema on an empty database.
 - The Development-only bootstrap no longer exists.
-- The `mailmcp-migrations` workflow for adding and applying migrations is documented and is the only documented workflow.
+- The `mailfathom-migrations` workflow for adding and applying migrations is documented and is the only documented workflow.
 - No configuration setting exists that lets any host apply migrations at startup; pending migrations fail startup instead.
 - Draft section 17 is updated to match this policy.
 - `docs/operations/` documents the workflow and the per-environment policy.

@@ -6,7 +6,7 @@ using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 
-namespace MailMcp.Infrastructure.Security;
+namespace MailFathom.Infrastructure.Security;
 
 /// <summary>Reads the issuer a JSON Web Token claims, before anything has been verified.</summary>
 /// <remarks>

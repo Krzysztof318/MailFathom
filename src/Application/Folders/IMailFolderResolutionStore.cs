@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Persistence;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
+using MailFathom.Application.Persistence;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Application.Folders;
+namespace MailFathom.Application.Folders;
 
 /// <summary>Persists which remote folder each alias is currently bound to.</summary>
 /// <remarks>

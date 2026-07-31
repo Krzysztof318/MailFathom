@@ -258,7 +258,7 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
-      "MailMcp.Domain": {
+      "MailFathom.Domain": {
         "type": "Project"
       },
       "Microsoft.Extensions.Configuration": {

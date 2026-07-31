@@ -1,16 +1,16 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Accounts;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Emails.SearchEmails;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
+using MailFathom.Application.Accounts;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.SearchEmails;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
 using NSubstitute;
 using Xunit;
 
-namespace MailMcp.Application.UnitTests;
+namespace MailFathom.Application.UnitTests;
 
 /// <summary>Covers the lexical search use case: what it validates, how it orders, and what it bounds.</summary>
 public sealed class MailboxSearchReaderTests

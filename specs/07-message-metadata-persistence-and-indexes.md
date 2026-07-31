@@ -11,7 +11,7 @@ Persist the metadata extracted in specification 06 with the indexes draft sectio
 
 ## Current state
 
-`StoredEmailEntity` stores identity, message identifier, subject, sent timestamp, size, and content availability. `MailMcpDbContext` configures those mappings. There are no participant columns, no attachment summary, no remote flag snapshot, and none of the timeline or full-text indexes the draft specifies.
+`StoredEmailEntity` stores identity, message identifier, subject, sent timestamp, size, and content availability. `MailFathomDbContext` configures those mappings. There are no participant columns, no attachment summary, no remote flag snapshot, and none of the timeline or full-text indexes the draft specifies.
 
 ## Approved scope
 

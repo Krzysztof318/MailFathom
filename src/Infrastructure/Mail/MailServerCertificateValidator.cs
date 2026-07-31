@@ -5,7 +5,7 @@ using System.Net.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-namespace MailMcp.Infrastructure.Mail;
+namespace MailFathom.Infrastructure.Mail;
 
 /// <summary>Decides whether a mail server certificate is trusted once a deployment-provisioned authority is configured.</summary>
 /// <remarks>

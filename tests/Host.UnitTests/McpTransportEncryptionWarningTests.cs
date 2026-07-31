@@ -1,18 +1,18 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Host.Configuration;
-using MailMcp.Host.Hosting;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.TestSupport;
+using MailFathom.Host.Configuration;
+using MailFathom.Host.Hosting;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
-/// <summary>Covers what an operator is told when the endpoint is served without MailMcp terminating any TLS.</summary>
+/// <summary>Covers what an operator is told when the endpoint is served without MailFathom terminating any TLS.</summary>
 /// <remarks>
 /// Clear text is a supported posture, so this reports rather than refuses — and its silence is as much a contract as
 /// its text. A warning that also fired for a deployment presenting its own certificate would be one more line an
@@ -70,7 +70,7 @@ public sealed class McpTransportEncryptionWarningTests
             Domain = "mail.example.test",
             ServerCertificate = new TlsServerCertificateOptions
             {
-                Bundle = new ConfiguredSecret { Name = "bundle", SecretReference = "file:/etc/mailmcp/tls/bundle.pfx" },
+                Bundle = new ConfiguredSecret { Name = "bundle", SecretReference = "file:/etc/mailfathom/tls/bundle.pfx" },
             },
         });
         var warning = WarningFor(settings, logs);

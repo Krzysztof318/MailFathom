@@ -35,7 +35,7 @@ A trust anchor that does not parse, or parses but is unusable as a trust anchor,
 
 ### Inline certificate material
 
-A trust anchor is a public certificate, not a private key, so writing one into configuration leaks nothing. Under `ReferenceOrInline` or `InlineOnly` the block therefore accepts the PEM text directly, which is what makes an Azure App Configuration deployment work end to end: the store holds the certificate, the provider binds it, and MailMcp parses what it was given.
+A trust anchor is a public certificate, not a private key, so writing one into configuration leaks nothing. Under `ReferenceOrInline` or `InlineOnly` the block therefore accepts the PEM text directly, which is what makes an Azure App Configuration deployment work end to end: the store holds the certificate, the provider binds it, and MailFathom parses what it was given.
 
 Two limits are stated rather than discovered:
 
@@ -52,14 +52,14 @@ The rebuild reuses the intermediate certificates the server supplied. A private 
 
 ### Rotation without restart
 
-Secrets reload on the same terms as the configuration that references them. An operator who rotates a mailbox password, replaces an expiring trust anchor, or re-issues a database credential must not have to restart MailMcp and interrupt synchronization to do it.
+Secrets reload on the same terms as the configuration that references them. An operator who rotates a mailbox password, replaces an expiring trust anchor, or re-issues a database credential must not have to restart MailFathom and interrupt synchronization to do it.
 
 Two independent things can change, and both are covered:
 
 - **The reference changes.** A configuration reload delivers a new `SecretReference` inside one of the secret blocks. The candidate snapshot is validated by resolving every reference in it before it is published; a snapshot containing an unresolvable reference is rejected and the last known good snapshot stays active, exactly as ADR 0002 requires for reloadable groups. A rejected reload is logged with the configuration path and the failure identity, never with material.
 - **The material behind an unchanged reference changes.** Rotating the credential file, the systemd credential, or the vault entry leaves configuration untouched, so no configuration reload fires. Resolution therefore moves from once-at-startup to per use, and the next operation that needs the secret observes the rotated value. A network-backed provider that cannot afford per-use retrieval caches inside its own adapter with its own expiry, which is why caching policy is an adapter concern rather than a contract concern.
 
-The database credential needs its own treatment, because it is composed into a connection source once rather than read per operation. Without explicit handling, neither a changed reference nor rotated material would reach a connection opened afterwards, and revoking the old credential would take MailMcp offline until restart — the outcome rotation exists to prevent. The connection source is therefore rebuilt when the resolved credential changes, and superseded sources are disposed only after their in-flight connections drain.
+The database credential needs its own treatment, because it is composed into a connection source once rather than read per operation. Without explicit handling, neither a changed reference nor rotated material would reach a connection opened afterwards, and revoking the old credential would take MailFathom offline until restart — the outcome rotation exists to prevent. The connection source is therefore rebuilt when the resolved credential changes, and superseded sources are disposed only after their in-flight connections drain.
 
 Material is applied at operation boundaries, not mid-operation: a synchronization run that has authenticated continues with the credential it authenticated with, and the next run picks up the rotation. This is ADR 0002's "reloadable for new operations" classification, chosen over "reloadable during running operations" because swapping a credential or a trust anchor underneath an open IMAP session has no coherent meaning.
 
@@ -89,7 +89,7 @@ Reload tests cover a rotated reference being adopted, a candidate snapshot with 
 
 ## Out of scope
 
-Presenting a client certificate. This specification loads PKCS#12 material and proves the bundle-password path works, but MailMcp presents no certificate of its own; MCP client certificates and the ChatGPT mTLS profile are stage 9 work.
+Presenting a client certificate. This specification loads PKCS#12 material and proves the bundle-password path works, but MailFathom presents no certificate of its own; MCP client certificates and the ChatGPT mTLS profile are stage 9 work.
 
 Certificate revocation policy beyond what the chain rebuild requires, certificate expiry monitoring and alerting, and automatic renewal.
 

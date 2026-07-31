@@ -3,41 +3,41 @@
 
 using System.Reflection;
 using System.Text.Json;
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Failures;
 using Xunit;
 
-namespace MailMcp.Domain.UnitTests;
+namespace MailFathom.Domain.UnitTests;
 
 /// <summary>Covers the five-digit error-code contract a boundary publishes.</summary>
-public sealed class MailMcpErrorCodeTests
+public sealed class MailFathomErrorCodeTests
 {
     /// <summary>Two failures sharing a code would be indistinguishable in every log and every error response.</summary>
     [Fact]
     public void All_CodesAreUnique()
     {
         // Act
-        var distinctValues = MailMcpErrorCode.All.Select(code => code.Value).Distinct().Count();
+        var distinctValues = MailFathomErrorCode.All.Select(code => code.Value).Distinct().Count();
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.All.Count, distinctValues);
+        Assert.Equal(MailFathomErrorCode.All.Count, distinctValues);
     }
 
     /// <summary>
     /// A declared code left out of the registry is invisible to every other assertion here, because they all iterate
-    /// the registry. It is also silently unpublishable: <see cref="MailMcpErrorCode.TryParse" /> and JSON reading
+    /// the registry. It is also silently unpublishable: <see cref="MailFathomErrorCode.TryParse" /> and JSON reading
     /// resolve a number through the registry alone, so a boundary would reject the very code it just raised.
     /// </summary>
     [Fact]
     public void All_ListsEveryDeclaredCode()
     {
         // Arrange
-        var declaredCodes = typeof(MailMcpErrorCode)
+        var declaredCodes = typeof(MailFathomErrorCode)
             .GetProperties(BindingFlags.Public | BindingFlags.Static)
-            .Where(property => property.PropertyType == typeof(MailMcpErrorCode))
-            .Select(property => (MailMcpErrorCode)property.GetValue(null)!);
+            .Where(property => property.PropertyType == typeof(MailFathomErrorCode))
+            .Select(property => (MailFathomErrorCode)property.GetValue(null)!);
 
         // Act
-        var unregistered = declaredCodes.Where(code => !MailMcpErrorCode.All.Contains(code)).ToArray();
+        var unregistered = declaredCodes.Where(code => !MailFathomErrorCode.All.Contains(code)).ToArray();
 
         // Assert
         Assert.Empty(unregistered);
@@ -48,7 +48,7 @@ public sealed class MailMcpErrorCodeTests
     public void All_CodesAreFiveDigits()
     {
         // Act
-        var outsideTheRange = MailMcpErrorCode.All.Where(code => code.Value is < 10000 or > 99999).ToArray();
+        var outsideTheRange = MailFathomErrorCode.All.Where(code => code.Value is < 10000 or > 99999).ToArray();
 
         // Assert
         Assert.Empty(outsideTheRange);
@@ -69,7 +69,7 @@ public sealed class MailMcpErrorCodeTests
     public void CategoryAndSubcategory_AreTheFirstTwoDigits(int allocatedValue, int expectedCategory, int expectedSubcategory)
     {
         // Arrange
-        var code = Assert.Single(MailMcpErrorCode.All, allocated => allocated.Value == allocatedValue);
+        var code = Assert.Single(MailFathomErrorCode.All, allocated => allocated.Value == allocatedValue);
 
         // Assert
         Assert.Equal(expectedCategory, code.Category);
@@ -80,11 +80,11 @@ public sealed class MailMcpErrorCodeTests
     public void TryParse_AllocatedNumber_ReturnsTheCode()
     {
         // Act
-        var parsed = MailMcpErrorCode.TryParse(22001, out var code);
+        var parsed = MailFathomErrorCode.TryParse(22001, out var code);
 
         // Assert
         Assert.True(parsed);
-        Assert.Equal(MailMcpErrorCode.MailboxUnavailable, code);
+        Assert.Equal(MailFathomErrorCode.MailboxUnavailable, code);
     }
 
     /// <summary>A retired or mistyped number is unknown rather than reconstructed as a value nothing raises.</summary>
@@ -92,7 +92,7 @@ public sealed class MailMcpErrorCodeTests
     public void TryParse_UnallocatedNumber_ReportsUnspecified()
     {
         // Act
-        var parsed = MailMcpErrorCode.TryParse(99999, out var code);
+        var parsed = MailFathomErrorCode.TryParse(99999, out var code);
 
         // Assert
         Assert.False(parsed);
@@ -103,7 +103,7 @@ public sealed class MailMcpErrorCodeTests
     public void Default_NamesNoFailure()
     {
         // Arrange
-        var code = default(MailMcpErrorCode);
+        var code = default(MailFathomErrorCode);
 
         // Assert
         Assert.False(code.IsSpecified);
@@ -117,7 +117,7 @@ public sealed class MailMcpErrorCodeTests
     public void ToString_IsTheFiveDigitNumber()
     {
         // Act
-        var recorded = MailMcpErrorCode.MailboxUnavailable.ToString();
+        var recorded = MailFathomErrorCode.MailboxUnavailable.ToString();
 
         // Assert
         Assert.Equal("22001", recorded);
@@ -127,23 +127,23 @@ public sealed class MailMcpErrorCodeTests
     public void JsonRoundTrip_PreservesTheCode()
     {
         // Act
-        var json = JsonSerializer.Serialize(MailMcpErrorCode.MailboxFolderRecreated);
-        var restored = JsonSerializer.Deserialize<MailMcpErrorCode>(json);
+        var json = JsonSerializer.Serialize(MailFathomErrorCode.MailboxFolderRecreated);
+        var restored = JsonSerializer.Deserialize<MailFathomErrorCode>(json);
 
         // Assert
         Assert.Equal("23001", json);
-        Assert.Equal(MailMcpErrorCode.MailboxFolderRecreated, restored);
+        Assert.Equal(MailFathomErrorCode.MailboxFolderRecreated, restored);
     }
 
     [Fact]
     public void JsonRoundTrip_AsAPropertyName_PreservesTheCode()
     {
         // Arrange
-        var codes = new Dictionary<MailMcpErrorCode, string> { [MailMcpErrorCode.MailboxUnavailable] = "retry later" };
+        var codes = new Dictionary<MailFathomErrorCode, string> { [MailFathomErrorCode.MailboxUnavailable] = "retry later" };
 
         // Act
         var json = JsonSerializer.Serialize(codes);
-        var restored = JsonSerializer.Deserialize<Dictionary<MailMcpErrorCode, string>>(json);
+        var restored = JsonSerializer.Deserialize<Dictionary<MailFathomErrorCode, string>>(json);
 
         // Assert
         Assert.Equal("{\"22001\":\"retry later\"}", json);
@@ -156,7 +156,7 @@ public sealed class MailMcpErrorCodeTests
     public void JsonRead_TokenThatNamesNoAllocatedCode_IsRejected(string json)
     {
         // Act, Assert
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<MailMcpErrorCode>(json));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<MailFathomErrorCode>(json));
     }
 
     /// <summary>A key the converter never writes must not read back as a code, or two spellings would name one failure.</summary>
@@ -168,13 +168,13 @@ public sealed class MailMcpErrorCodeTests
     public void JsonRead_PropertyNameThatIsNotTheCanonicalFiveDigits_IsRejected(string json)
     {
         // Act, Assert
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Dictionary<MailMcpErrorCode, string>>(json));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Dictionary<MailFathomErrorCode, string>>(json));
     }
 
     [Fact]
     public void JsonWrite_UnspecifiedCode_IsRejected()
     {
         // Act, Assert
-        Assert.Throws<JsonException>(() => JsonSerializer.Serialize(default(MailMcpErrorCode)));
+        Assert.Throws<JsonException>(() => JsonSerializer.Serialize(default(MailFathomErrorCode)));
     }
 }

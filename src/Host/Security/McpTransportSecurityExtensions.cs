@@ -3,8 +3,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -16,7 +16,7 @@ using Microsoft.Net.Http.Headers;
 using ModelContextProtocol.AspNetCore.Authentication;
 using ModelContextProtocol.Authentication;
 
-namespace MailMcp.Host.Security;
+namespace MailFathom.Host.Security;
 
 /// <summary>Composes the controls that stand in front of the MCP endpoint.</summary>
 /// <remarks>
@@ -36,7 +36,7 @@ namespace MailMcp.Host.Security;
 internal static class McpTransportSecurityExtensions
 {
     /// <summary>The CORS policy the MCP endpoint requires, named so the endpoint asks for this one rather than a default.</summary>
-    internal const string CorsPolicyName = "MailMcpEndpoint";
+    internal const string CorsPolicyName = "MailFathomEndpoint";
 
     private const string McpSessionHeaderName = "Mcp-Session-Id";
 
@@ -183,7 +183,7 @@ internal static class McpTransportSecurityExtensions
                     AuthorizationServers = [.. oauthSettings.AuthorizationServers.Select(server => server.ValidatedIssuer())],
                     ScopesSupported = [.. oauthSettings.RequiredScopes],
                     BearerMethodsSupported = ["header"],
-                    ResourceName = "MailMcp",
+                    ResourceName = "MailFathom",
                 };
             });
 
@@ -281,7 +281,7 @@ internal static class McpTransportSecurityExtensions
         return Task.CompletedTask;
     }
 
-    /// <summary>Reduces a validated token to the identity MailMcp keeps of it.</summary>
+    /// <summary>Reduces a validated token to the identity MailFathom keeps of it.</summary>
     /// <remarks>
     /// The validated principal carries every claim the authorization server chose to include, which routinely means a
     /// name, an address, and a set of groups. Replacing it here means nothing downstream can read one, so a later change

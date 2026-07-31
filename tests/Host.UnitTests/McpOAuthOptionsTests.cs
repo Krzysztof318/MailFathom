@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Host.Configuration;
+using MailFathom.Host.Configuration;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers what this deployment is called in OAuth terms and where it says so.</summary>
 public sealed class McpOAuthOptionsTests
@@ -79,11 +79,11 @@ public sealed class McpOAuthOptionsTests
         oauth.AuthorizationServers.Add(new McpAuthorizationServerOptions
         {
             Name = "workforce",
-            Issuer = "https://sso.example.test/realms/mailmcp",
+            Issuer = "https://sso.example.test/realms/mailfathom",
             AuthorizedSubjects = { "9f2c" },
         });
-        oauth.RequiredScopes.Add("mailmcp.read");
-        oauth.RequiredScopes.Add("mailmcp.read");
+        oauth.RequiredScopes.Add("mailfathom.read");
+        oauth.RequiredScopes.Add("mailfathom.read");
 
         // Act
         var error = Assert.Single(oauth.FindConfigurationErrors());
@@ -101,7 +101,7 @@ public sealed class McpOAuthOptionsTests
         oauth.AuthorizationServers.Add(new McpAuthorizationServerOptions
         {
             Name = "workforce",
-            Issuer = "https://sso.example.test/realms/mailmcp",
+            Issuer = "https://sso.example.test/realms/mailfathom",
             AuthorizedSubjects = { "9f2c" },
         });
         oauth.AuthorizationServers.Add(new McpAuthorizationServerOptions

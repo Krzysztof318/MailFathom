@@ -2,18 +2,18 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Security.Cryptography.X509Certificates;
-using MailMcp.Host.Security;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.Infrastructure.Security;
-using MailMcp.TestSupport;
+using MailFathom.Host.Security;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Security;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers where the certificate an MCP request is judged by comes from.</summary>
 /// <remarks>

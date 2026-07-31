@@ -1,13 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Host.Security;
+using MailFathom.Host.Security;
 using Microsoft.IdentityModel.Protocols;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers finding one authorization server's discovery document across the addresses the MCP specification names.</summary>
 /// <remarks>
@@ -19,13 +19,13 @@ public sealed class OAuthAuthorizationServerMetadataRetrieverTests
 {
     private const string ProfileName = "workforce";
 
-    private const string Issuer = "https://sso.example.test/realms/mailmcp";
+    private const string Issuer = "https://sso.example.test/realms/mailfathom";
 
     private static readonly string[] CandidateAddresses =
     [
-        "https://sso.example.test/.well-known/oauth-authorization-server/realms/mailmcp",
-        "https://sso.example.test/.well-known/openid-configuration/realms/mailmcp",
-        "https://sso.example.test/realms/mailmcp/.well-known/openid-configuration",
+        "https://sso.example.test/.well-known/oauth-authorization-server/realms/mailfathom",
+        "https://sso.example.test/.well-known/openid-configuration/realms/mailfathom",
+        "https://sso.example.test/realms/mailfathom/.well-known/openid-configuration",
     ];
 
     /// <summary>

@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Security;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers one authorization server profile: what it must state, whose tokens it serves, and where it then looks for that server.</summary>
 public sealed class McpAuthorizationServerOptionsTests
@@ -16,7 +16,7 @@ public sealed class McpAuthorizationServerOptionsTests
     public void FindConfigurationErrors_ANamedProfileWithAnIssuer_IsAccepted()
     {
         // Arrange
-        var profile = Profile("workforce", "https://sso.example.test/realms/mailmcp");
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
 
         // Act, Assert
         Assert.Empty(profile.FindConfigurationErrors());
@@ -30,7 +30,7 @@ public sealed class McpAuthorizationServerOptionsTests
     public void FindConfigurationErrors_AProfileWithNoName_IsRefused(string? name)
     {
         // Arrange
-        var profile = Profile(name, "https://sso.example.test/realms/mailmcp");
+        var profile = Profile(name, "https://sso.example.test/realms/mailfathom");
 
         // Act
         var error = Assert.Single(profile.FindConfigurationErrors());
@@ -43,7 +43,7 @@ public sealed class McpAuthorizationServerOptionsTests
     [InlineData(null)]
     [InlineData("sso.example.test")]
     [InlineData("http://sso.example.test")]
-    [InlineData("https://sso.example.test?realm=mailmcp")]
+    [InlineData("https://sso.example.test?realm=mailfathom")]
     public void FindConfigurationErrors_AProfileWhoseIssuerIsNotAnIdentifier_IsRefused(string? issuer)
     {
         // Arrange
@@ -74,7 +74,7 @@ public sealed class McpAuthorizationServerOptionsTests
     public void MetadataAddresses_NoOverride_LooksWhereTheSpecificationSaysTo()
     {
         // Arrange
-        var profile = Profile("workforce", "https://sso.example.test/realms/mailmcp");
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
 
         // Act
         var addresses = profile.MetadataAddresses();
@@ -82,9 +82,9 @@ public sealed class McpAuthorizationServerOptionsTests
         // Assert
         Assert.Equal(
             [
-                "https://sso.example.test/.well-known/oauth-authorization-server/realms/mailmcp",
-                "https://sso.example.test/.well-known/openid-configuration/realms/mailmcp",
-                "https://sso.example.test/realms/mailmcp/.well-known/openid-configuration",
+                "https://sso.example.test/.well-known/oauth-authorization-server/realms/mailfathom",
+                "https://sso.example.test/.well-known/openid-configuration/realms/mailfathom",
+                "https://sso.example.test/realms/mailfathom/.well-known/openid-configuration",
             ],
             addresses);
     }
@@ -93,7 +93,7 @@ public sealed class McpAuthorizationServerOptionsTests
     public void MetadataAddresses_AnOverride_LooksNowhereElse()
     {
         // Arrange
-        var profile = Profile("workforce", "https://sso.example.test/realms/mailmcp");
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
         profile.MetadataAddress = "https://sso.example.test/metadata.json";
 
         // Act
@@ -115,7 +115,7 @@ public sealed class McpAuthorizationServerOptionsTests
     public void FindConfigurationErrors_AMetadataAddressAwayFromTheIssuersServer_IsRefused(string metadataAddress)
     {
         // Arrange
-        var profile = Profile("workforce", "https://sso.example.test/realms/mailmcp");
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
         profile.MetadataAddress = metadataAddress;
 
         // Act
@@ -134,7 +134,7 @@ public sealed class McpAuthorizationServerOptionsTests
     public void FindConfigurationErrors_AMalformedIssuer_IsReportedWithoutQuotingTheValue()
     {
         // Arrange
-        var profile = Profile("workforce", "https://operator:s3cret@sso.example.test/realms/mailmcp?token=abc");
+        var profile = Profile("workforce", "https://operator:s3cret@sso.example.test/realms/mailfathom?token=abc");
 
         // Act
         var error = Assert.Single(profile.FindConfigurationErrors());
@@ -156,7 +156,7 @@ public sealed class McpAuthorizationServerOptionsTests
         var profile = new McpAuthorizationServerOptions
         {
             Name = "workforce",
-            Issuer = "https://sso.example.test/realms/mailmcp",
+            Issuer = "https://sso.example.test/realms/mailfathom",
         };
 
         // Act
@@ -172,7 +172,7 @@ public sealed class McpAuthorizationServerOptionsTests
     public void FindConfigurationErrors_ABlankSubject_IsRefusedByItsPosition(string subject)
     {
         // Arrange
-        var profile = Profile("workforce", "https://sso.example.test/realms/mailmcp");
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
         profile.AuthorizedSubjects.Add(subject);
 
         // Act
@@ -186,7 +186,7 @@ public sealed class McpAuthorizationServerOptionsTests
     public void FindConfigurationErrors_ARepeatedSubject_IsRefused()
     {
         // Arrange
-        var profile = Profile("workforce", "https://sso.example.test/realms/mailmcp");
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
         profile.AuthorizedSubjects.Add(OwnerSubject);
 
         // Act
@@ -201,7 +201,7 @@ public sealed class McpAuthorizationServerOptionsTests
     public void AuthorizedIdentities_AConfiguredSubject_IsPairedWithTheProfilesIssuer()
     {
         // Arrange
-        var profile = Profile("workforce", "https://sso.example.test/realms/mailmcp");
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
         profile.AuthorizedSubjects.Add("  4b81  ");
 
         // Act
@@ -210,8 +210,8 @@ public sealed class McpAuthorizationServerOptionsTests
         // Assert
         Assert.Equal(
             [
-                McpOAuthIdentity.IdentityOf("https://sso.example.test/realms/mailmcp", OwnerSubject),
-                McpOAuthIdentity.IdentityOf("https://sso.example.test/realms/mailmcp", "4b81"),
+                McpOAuthIdentity.IdentityOf("https://sso.example.test/realms/mailfathom", OwnerSubject),
+                McpOAuthIdentity.IdentityOf("https://sso.example.test/realms/mailfathom", "4b81"),
             ],
             identities);
     }

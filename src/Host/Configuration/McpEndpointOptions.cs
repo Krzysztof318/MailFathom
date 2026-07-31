@@ -3,16 +3,16 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Quic;
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Security;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>Configures whether the MCP protocol surface is served, and what a client must present to reach it.</summary>
 /// <remarks>
 /// <para>
 /// Whether and to whom are the questions this section answers. The path is a constant published by the protocol
-/// surface, and the transport is always stateless, because every MailMcp tool answers one request from the local
+/// surface, and the transport is always stateless, because every MailFathom tool answers one request from the local
 /// mailbox copy and needs no server-initiated message — which is the shape MCP deployments take today. Should a tool
 /// that pushes notifications ever need sessions, that is a change to the surface rather than a knob an operator was
 /// expected to find.

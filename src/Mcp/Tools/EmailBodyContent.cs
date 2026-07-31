@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.ComponentModel;
-using MailMcp.Application.EmailContent;
+using MailFathom.Application.EmailContent;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes the body representations of one email, or the reason there are none.</summary>
 /// <remarks>
@@ -22,7 +22,7 @@ namespace MailMcp.Mcp.Tools;
 internal sealed record EmailBodyContent
 {
     /// <summary>Gets whether the body could be read, or why it could not.</summary>
-    [Description("Whether the body could be read: 'readable' when the text below is the message, 'encryptedNotReadableLocally' when the body arrived inside a cryptographic envelope MailMcp cannot open, or 'notStoredExceededSizeLimit' when the email was deliberately stored without its content. In the two latter states the text is empty because nothing could be read, not because the message displayed nothing.")]
+    [Description("Whether the body could be read: 'readable' when the text below is the message, 'encryptedNotReadableLocally' when the body arrived inside a cryptographic envelope MailFathom cannot open, or 'notStoredExceededSizeLimit' when the email was deliberately stored without its content. In the two latter states the text is empty because nothing could be read, not because the message displayed nothing.")]
     public required EmailBodyAvailabilityState Availability { get; init; }
 
     /// <summary>Gets the plain-text representation, which is empty whenever the body could not be read.</summary>

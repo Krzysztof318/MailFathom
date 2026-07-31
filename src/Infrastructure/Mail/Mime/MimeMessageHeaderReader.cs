@@ -2,12 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Collections.ObjectModel;
-using MailMcp.Application.EmailContent;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.EmailContent;
+using MailFathom.Domain.Emails;
 using MimeKit;
 using MimeKit.Utils;
 
-namespace MailMcp.Infrastructure.Mail.Mime;
+namespace MailFathom.Infrastructure.Mail.Mime;
 
 /// <summary>Reads the normalized headers of one parsed message.</summary>
 /// <remarks>

@@ -3,24 +3,24 @@
 
 using System.Buffers.Text;
 using System.Text;
-using MailMcp.Domain.Transport;
-using MailMcp.Host.Configuration;
-using MailMcp.Host.Hosting;
-using MailMcp.Infrastructure;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Domain.Transport;
+using MailFathom.Host.Configuration;
+using MailFathom.Host.Hosting;
+using MailFathom.Infrastructure;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Security;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 public sealed class SecretConfigurationStartupValidatorTests
 {
-    private const string WorkforceIssuer = "https://sso.example.test/realms/mailmcp";
+    private const string WorkforceIssuer = "https://sso.example.test/realms/mailfathom";
 
     private static readonly DateTimeOffset ValidatedAt = new(2026, 7, 31, 12, 0, 0, TimeSpan.Zero);
 
@@ -311,7 +311,7 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         var failure = Assert.Single(exception.Failures);
-        Assert.Contains("is not a PostgreSQL text search configuration MailMcp supports", failure, StringComparison.Ordinal);
+        Assert.Contains("is not a PostgreSQL text search configuration MailFathom supports", failure, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -496,7 +496,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         endpoint.ApiKeys.Add(new ConfiguredSecret
         {
             Name = "workstation",
-            SecretReference = $"plaintext:{TokenShapedKeyIssuedBy("https://sso.other.test/realms/mailmcp")}",
+            SecretReference = $"plaintext:{TokenShapedKeyIssuedBy("https://sso.other.test/realms/mailfathom")}",
         });
         var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
 

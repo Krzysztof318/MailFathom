@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Secrets;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>Supplies IMAP connection settings from the snapshot its scope captured, resolving each account's material per use.</summary>
 /// <remarks>

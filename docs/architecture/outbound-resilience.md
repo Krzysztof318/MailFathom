@@ -1,6 +1,6 @@
 # Outbound resilience
 
-MailMcp calls dependencies it does not control: IMAP servers, SMTP servers, PostgreSQL, and chat and embedding
+MailFathom calls dependencies it does not control: IMAP servers, SMTP servers, PostgreSQL, and chat and embedding
 providers. Each of them fails in ways that clear on their own and in ways that never will, and the difference decides
 whether repeating a call is recovery or damage. This page describes the one model that decision is made in.
 
@@ -88,7 +88,7 @@ without depending on Polly. `Infrastructure` implements it per protocol family:
   connection lost between the message data and the final reply is reported as an ordinary protocol, socket, or I/O
   failure, indistinguishable from one that happened before submission, so repeating it risks a second copy in the
   recipient's mailbox. Everything that is not a temporary rejection is therefore terminal and left to the outbox.
-- **Database** — the provider answers through `DbException.IsTransient`, so MailMcp keeps no second SQLSTATE table.
+- **Database** — the provider answers through `DbException.IsTransient`, so MailFathom keeps no second SQLSTATE table.
   A `PersistenceConcurrencyConflictException` is terminal here on purpose; see the single-layer rule below.
 - **Provider** — the HTTP status is the provider's own statement about whether the request may be sent again. `408`,
   `429`, and the `5xx` class are transient, an absent status means the response never arrived, and everything else is
@@ -108,7 +108,7 @@ for the duration of an execution, and re-entering the same class on the same asy
 layer.
 
 The rule also governs three places where .NET already provides resilience, and in each of them the built-in mechanism
-is the layer rather than something MailMcp re-implements:
+is the layer rather than something MailFathom re-implements:
 
 - **HTTP.** `AddStandardResilienceHandler` in the host's service defaults already wraps every `HttpClient`. A provider
   client that reaches its model over `HttpClient` is therefore already protected, and must not also be wrapped in the

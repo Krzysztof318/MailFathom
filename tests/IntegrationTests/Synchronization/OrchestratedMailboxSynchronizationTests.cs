@@ -1,18 +1,18 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Folders;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Synchronization;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.IntegrationTests.Mailbox;
-using MailMcp.IntegrationTests.Orchestration;
+using MailFathom.Application.Folders;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Synchronization;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.IntegrationTests.Mailbox;
+using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Synchronization;
+namespace MailFathom.IntegrationTests.Synchronization;
 
 /// <summary>Runs whole synchronizations against a real mail server and a real database, twice over the same folder.</summary>
 /// <remarks>
@@ -23,7 +23,7 @@ namespace MailMcp.IntegrationTests.Synchronization;
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 [TestCaseOrderer(typeof(MailboxStateSequenceOrderer))]
-public sealed class OrchestratedMailboxSynchronizationTests(MailMcpOrchestrationFixture orchestration)
+public sealed class OrchestratedMailboxSynchronizationTests(MailFathomOrchestrationFixture orchestration)
 {
     /// <summary>The folder this class owns, so its two runs are not disturbed by mail another test delivers to the inbox.</summary>
     private const string SynchronizedFolderName = "Synchronized";
@@ -55,7 +55,7 @@ public sealed class OrchestratedMailboxSynchronizationTests(MailMcpOrchestration
             await mailbox.AppendAsync(SynchronizedFolderName, subject, cancellationToken);
         }
 
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
 
         // Act
         var result = await SynchronizeAsync(services, cancellationToken);
@@ -81,7 +81,7 @@ public sealed class OrchestratedMailboxSynchronizationTests(MailMcpOrchestration
         var cancellationToken = TestContext.Current.CancellationToken;
         var mailbox = new OrchestratedMailbox(orchestration.MailServer);
 
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var committedCheckpoint = await ReadCheckpointAsync(services, cancellationToken);
 
         // Act
@@ -117,7 +117,7 @@ public sealed class OrchestratedMailboxSynchronizationTests(MailMcpOrchestration
         var mailbox = new OrchestratedMailbox(orchestration.MailServer);
         var uidValidityBefore = await mailbox.ReadUidValidityAsync(SynchronizedFolderName, cancellationToken);
 
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var checkpointBefore = await ReadCheckpointAsync(services, cancellationToken);
 
         var uidValidityAfter = await mailbox.RecreateFolderAsync(SynchronizedFolderName, cancellationToken);
@@ -144,7 +144,7 @@ public sealed class OrchestratedMailboxSynchronizationTests(MailMcpOrchestration
     }
 
     private static Task<MailboxSynchronizationResult> SynchronizeAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxSynchronizer>().SynchronizeAsync(
                 SyntheticMailAccount.AccountId,
@@ -154,9 +154,9 @@ public sealed class OrchestratedMailboxSynchronizationTests(MailMcpOrchestration
 
     /// <summary>Reads back what the run actually persisted, rather than only what its result claims it did.</summary>
     private static Task<IReadOnlyList<string>> ReadStoredSubjectsAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         CancellationToken cancellationToken) => services.InScopeAsync(
-            async (scope, token) => (IReadOnlyList<string>)await scope.GetRequiredService<MailMcpDbContext>()
+            async (scope, token) => (IReadOnlyList<string>)await scope.GetRequiredService<MailFathomDbContext>()
                 .StoredEmails
                 .AsNoTracking()
                 .Where(storedEmail => storedEmail.MailFolder.Alias == FolderMapping.Alias.Value)
@@ -166,7 +166,7 @@ public sealed class OrchestratedMailboxSynchronizationTests(MailMcpOrchestration
             cancellationToken);
 
     private static Task<SynchronizationCheckpoint?> ReadCheckpointAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         CancellationToken cancellationToken) => services.InScopeAsync(
             async (scope, token) =>
             {

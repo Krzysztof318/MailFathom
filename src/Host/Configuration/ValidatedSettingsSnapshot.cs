@@ -5,7 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Threading.Channels;
 using Microsoft.Extensions.Options;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>Publishes the settings snapshot new operations run with, and adopts a reloaded one once it is proven usable.</summary>
 /// <typeparam name="TSettings">The bound settings group this publishes.</typeparam>

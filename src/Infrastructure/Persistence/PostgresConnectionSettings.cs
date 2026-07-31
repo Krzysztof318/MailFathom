@@ -1,13 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Names where the PostgreSQL connection string and its password come from.</summary>
 /// <param name="ConfiguredConnectionString">
-/// The connection string from ordinary configuration, typically <c>ConnectionStrings:mailmcp</c>, or
+/// The connection string from ordinary configuration, typically <c>ConnectionStrings:mailfathom</c>, or
 /// <see langword="null" /> when <paramref name="ConnectionStringSecret" /> supplies it.
 /// </param>
 /// <param name="ConnectionStringSecret">

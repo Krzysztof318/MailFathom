@@ -1,18 +1,18 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Folders;
-using MailMcp.Application.Mail;
-using MailMcp.Application.Persistence;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Synchronization;
-using MailMcp.Domain.Transport;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Folders;
+using MailFathom.Application.Mail;
+using MailFathom.Application.Persistence;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Synchronization;
+using MailFathom.Domain.Transport;
 
-namespace MailMcp.Application.Synchronization;
+namespace MailFathom.Application.Synchronization;
 
 /// <summary>Coordinates read-only mailbox folder synchronization into local persistence.</summary>
 public sealed class MailboxSynchronizer

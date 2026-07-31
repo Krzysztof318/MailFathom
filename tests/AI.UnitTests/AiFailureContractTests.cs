@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Reflection;
-using MailMcp.Domain.Failures;
-using MailMcp.TestSupport;
+using MailFathom.Domain.Failures;
+using MailFathom.TestSupport;
 using Xunit;
 
-namespace MailMcp.AI.UnitTests;
+namespace MailFathom.AI.UnitTests;
 
 /// <summary>Covers the failure contract the AI boundary is bound by like every other assembly.</summary>
 public sealed class AiFailureContractTests
@@ -17,12 +17,12 @@ public sealed class AiFailureContractTests
     /// the assertion has to exist before the first exception is written rather than after.
     /// </summary>
     [Fact]
-    public void AiAssembly_EveryDeclaredException_DerivesFromMailMcpException()
+    public void AiAssembly_EveryDeclaredException_DerivesFromMailFathomException()
     {
         // Arrange
-        var aiAssembly = Assembly.Load("MailMcp.AI");
+        var aiAssembly = Assembly.Load("MailFathom.AI");
 
         // Act, Assert
-        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(aiAssembly, typeof(MailMcpException));
+        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(aiAssembly, typeof(MailFathomException));
     }
 }

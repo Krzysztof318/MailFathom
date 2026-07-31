@@ -1,31 +1,31 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.GetEmailContent;
+using MailFathom.Application.Emails.ListEmails;
+using MailFathom.Application.Emails.SearchEmails;
+using MailFathom.Application.Folders;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Resilience;
+using MailFathom.Application.Synchronization;
+using MailFathom.CodeCoverage;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Folders;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Mail.MailKit;
+using MailFathom.Infrastructure.Mail.Mime;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Resilience;
+using MailFathom.Infrastructure.Secrets;
 using MailKit.Net.Imap;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Emails.GetEmailContent;
-using MailMcp.Application.Emails.ListEmails;
-using MailMcp.Application.Emails.SearchEmails;
-using MailMcp.Application.Folders;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Resilience;
-using MailMcp.Application.Synchronization;
-using MailMcp.CodeCoverage;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Folders;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Mail.MailKit;
-using MailMcp.Infrastructure.Mail.Mime;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.Infrastructure.Resilience;
-using MailMcp.Infrastructure.Secrets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
-namespace MailMcp.Infrastructure;
+namespace MailFathom.Infrastructure;
 
 /// <summary>Infrastructure dependency registration.</summary>
 [RequiresIntegrationCoverage]
@@ -131,7 +131,7 @@ public static class ServiceCollectionExtensions
         // every write at session start rather than merely leave it un-retried. Adopting it instead means handing each
         // unit of work to Database.CreateExecutionStrategy().ExecuteAsync so the strategy can replay it whole, and
         // dropping OutboundDependency.DatabaseCommandExecution from those paths so the two never stack.
-        services.AddDbContext<MailMcpDbContext>((provider, options) =>
+        services.AddDbContext<MailFathomDbContext>((provider, options) =>
             options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()));
         services.AddScoped<IPersistenceSessionFactory, PersistenceSessionFactory>();
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();

@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Folders;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Application.Folders;
+namespace MailFathom.Application.Folders;
 
 /// <summary>States what happened when an alias was resolved against the folders a server advertises.</summary>
 public enum MailFolderResolutionOutcome

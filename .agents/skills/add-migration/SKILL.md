@@ -7,7 +7,7 @@ description: Use when an EF Core model change needs a migration, or when the bas
 
 Regenerates the single baseline migration from the current EF Core model, through the Aspire orchestration.
 
-**This workflow is development-only and destroys local data.** While MailMcp is pre-release the repository keeps exactly
+**This workflow is development-only and destroys local data.** While MailFathom is pre-release the repository keeps exactly
 one migration, `Initial`. A model change does not add a second migration; it replaces the first one. That keeps the
 schema reviewable as one artifact against a model that is still moving, instead of accumulating incremental migrations
 that partially revert each other. The first release replaces this workflow with an additive one — see the issue linked
@@ -71,10 +71,10 @@ aspire start --apphost src/AppHost/AppHost.csproj --non-interactive
 aspire describe --apphost src/AppHost/AppHost.csproj --non-interactive
 ```
 
-`mailmcp-host` must reach `Running` and `Healthy`. The host verifies the migration history and the lexical index's text
+`mailfathom-host` must reach `Running` and `Healthy`. The host verifies the migration history and the lexical index's text
 search configuration at startup and refuses to run against a schema it does not recognize, so a healthy host is the
-evidence that the migration and the model agree. A host stuck in `Waiting` with `mailmcp-migrations` in `FailedToStart`
-means the migration did not apply; read `aspire logs mailmcp-migrations`.
+evidence that the migration and the model agree. A host stuck in `Waiting` with `mailfathom-migrations` in `FailedToStart`
+means the migration did not apply; read `aspire logs mailfathom-migrations`.
 
 ### 4. Commit it with the model change
 
@@ -106,7 +106,7 @@ the reason for it is in the other commit.
   waits for it; a hand-run command has to wait too.
 
 - **`The name 'Initial' is used by an existing migration`.** The startup project was not rebuilt after the migration
-  files were deleted. `dotnet-ef` loads `MailMcp.Infrastructure.dll` from `Host`'s output directory, so `Host` is what
+  files were deleted. `dotnet-ef` loads `MailFathom.Infrastructure.dll` from `Host`'s output directory, so `Host` is what
   has to be rebuilt — never `Infrastructure` on its own. The script does this; a hand-run command has to as well.
 
 - **`error IDE0073` on a generated migration.** The formatter did not reach it. `--include` has to name the files

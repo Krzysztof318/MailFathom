@@ -1,21 +1,21 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Accounts;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Emails.GetEmailContent;
-using MailMcp.Application.Emails.ListEmails;
-using MailMcp.Application.Emails.SearchEmails;
-using MailMcp.Application.Synchronization;
+using MailFathom.Application.Accounts;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.GetEmailContent;
+using MailFathom.Application.Emails.ListEmails;
+using MailFathom.Application.Emails.SearchEmails;
+using MailFathom.Application.Synchronization;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using NSubstitute;
 
-namespace MailMcp.Mcp.UnitTests;
+namespace MailFathom.Mcp.UnitTests;
 
-/// <summary>Composes the MailMcp protocol surface and hands back what it advertises.</summary>
+/// <summary>Composes the MailFathom protocol surface and hands back what it advertises.</summary>
 /// <remarks>
 /// The composition is shared by every descriptor test, because the descriptors are produced by the registration rather
 /// than by any one tool: a test that built its own container would assert against a surface no host composes. The
@@ -44,7 +44,7 @@ internal static class RegisteredMcpToolSurface
         services.AddSingleton<MailboxTimelineReader>();
         services.AddSingleton<EmailContentReader>();
         services.AddSingleton<MailboxSearchReader>();
-        services.AddMailMcpServer();
+        services.AddMailFathomServer();
 
         using var provider = services.BuildServiceProvider();
 

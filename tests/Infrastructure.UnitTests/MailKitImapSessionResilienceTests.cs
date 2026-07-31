@@ -1,18 +1,18 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Synchronization;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Synchronization;
 using NSubstitute;
 using Xunit;
-using static MailMcp.Infrastructure.UnitTests.MailKitImapSessionTestContext;
+using static MailFathom.Infrastructure.UnitTests.MailKitImapSessionTestContext;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Covers what the configured pipelines do to an IMAP session when a mail server misbehaves.</summary>
 public sealed class MailKitImapSessionResilienceTests

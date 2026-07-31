@@ -45,7 +45,7 @@ ln -s "$scripts_directory/test-agent-workflow.sh" "$fake_bin_directory/dotnet"
 git -C "$repository_root" init --initial-branch=main --quiet
 git -C "$repository_root" config user.email agent-workflow@example.invalid
 git -C "$repository_root" config user.name 'Agent Workflow Tests'
-printf '<Solution />\n' > "$repository_root/MailMcp.slnx"
+printf '<Solution />\n' > "$repository_root/MailFathom.slnx"
 printf 'clean\n' > "$repository_root/tracked.txt"
 printf '%s\n' \
   '#!/usr/bin/env bash' \
@@ -55,7 +55,7 @@ printf '%s\n' \
   'if [[ -n "${FAKE_WORKFLOW_FAIL:-}" ]]; then exit 23; fi' \
   > "$repository_root/scripts/test-agent-workflow.sh"
 chmod +x "$repository_root/scripts/test-agent-workflow.sh"
-git -C "$repository_root" add MailMcp.slnx scripts/test-agent-workflow.sh tracked.txt
+git -C "$repository_root" add MailFathom.slnx scripts/test-agent-workflow.sh tracked.txt
 git -C "$repository_root" commit --quiet -m 'test fixture'
 
 git clone --quiet "$repository_root" "$remote_repository_root"
@@ -127,7 +127,7 @@ verify_fast_runs_restore_build_tests_and_formatting() {
   )
 
   assert_file_content \
-    $'restore MailMcp.slnx --locked-mode\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build\nformat MailMcp.slnx --no-restore --include src/Sample.cs\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic --include src/Sample.cs' \
+    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\ntest --solution MailFathom.slnx --configuration Release --no-build\nformat MailFathom.slnx --no-restore --include src/Sample.cs\nformat MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic --include src/Sample.cs' \
     "$invocation_log"
 }
 
@@ -140,7 +140,7 @@ verify_full_runs_tests_once_through_coverage() {
   )
 
   assert_file_content \
-    $'tool restore\nrestore MailMcp.slnx --locked-mode\nbuild MailMcp.slnx --configuration Release --no-restore\nmsbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic' \
+    $'tool restore\nrestore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\nmsbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release\nformat MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic' \
     "$invocation_log"
 }
 
@@ -399,7 +399,7 @@ verify_fast_accepts_a_detached_head() {
   fi
 
   assert_file_content \
-    $'restore MailMcp.slnx --locked-mode\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build\nformat MailMcp.slnx --no-restore --include src/Sample.cs\nformat MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic --include src/Sample.cs' \
+    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\ntest --solution MailFathom.slnx --configuration Release --no-build\nformat MailFathom.slnx --no-restore --include src/Sample.cs\nformat MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic --include src/Sample.cs' \
     "$invocation_log"
 }
 
@@ -422,7 +422,7 @@ verify_fast_skips_formatting_when_no_csharp_file_changed() {
   fi
 
   assert_file_content \
-    $'restore MailMcp.slnx --locked-mode\nbuild MailMcp.slnx --configuration Release --no-restore\ntest --solution MailMcp.slnx --configuration Release --no-build' \
+    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\ntest --solution MailFathom.slnx --configuration Release --no-build' \
     "$invocation_log"
 }
 
@@ -430,7 +430,7 @@ verification_stops_after_first_failure() {
   : > "$invocation_log"
 
   if (
-    export FAKE_DOTNET_FAIL_MATCH='build MailMcp.slnx'
+    export FAKE_DOTNET_FAIL_MATCH='build MailFathom.slnx'
     cd "$repository_root"
     "$scripts_directory/verify-fast.sh"
   ); then
@@ -439,7 +439,7 @@ verification_stops_after_first_failure() {
   fi
 
   assert_file_content \
-    $'restore MailMcp.slnx --locked-mode\nbuild MailMcp.slnx --configuration Release --no-restore' \
+    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore' \
     "$invocation_log"
 }
 

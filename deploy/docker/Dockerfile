@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-### The MailMcp container image.
+### The MailFathom container image.
 #
 # One image comes out of this file: the service, built with `--target runtime`. It applies no schema change, ever. It
 # carries no migration tool, no SQL, and no credential that could apply one, which is what makes "the host never
@@ -18,7 +18,7 @@
 # Base images are pinned to explicit patch versions rather than to a floating `10.0`, so a rebuild months from now
 # resolves what this change was reviewed against. Both are recorded in THIRD_PARTY_LICENSES.md.
 ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.302-noble
-# `-extra` carries ICU and tzdata. MailMcp decodes internationalized headers, folds case for search, and formats
+# `-extra` carries ICU and tzdata. MailFathom decodes internationalized headers, folds case for search, and formats
 # instants for several time zones, so invariant globalization — what the plain chiseled image forces — would quietly
 # change how mail from outside one alphabet is read. The size saved is not worth that.
 ARG DOTNET_ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0.10-noble-chiseled-extra
@@ -96,9 +96,9 @@ ARG IMAGE_CREATED=1970-01-01T00:00:00Z
 # label is only the claim; what discharges the obligation is the LICENSE and NOTICE copied in with the publish output
 # below, which is where a reader of a pulled image finds the terms themselves.
 LABEL org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.title="MailMcp" \
+      org.opencontainers.image.title="MailFathom" \
       org.opencontainers.image.description="Read-only MCP server over synchronized IMAP mailboxes." \
-      org.opencontainers.image.source="https://github.com/Krzysztof318/MailMcp" \
+      org.opencontainers.image.source="https://github.com/Krzysztof318/MailFathom" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.revision="${IMAGE_REVISION}" \
       org.opencontainers.image.created="${IMAGE_CREATED}"
@@ -132,4 +132,4 @@ USER $APP_UID
 # chiseled image has no shell and no HTTP client for one to be written in. Asking the endpoint would therefore mean
 # adding a probe mode to the application itself, which is #179's: it decides the listener, the transport, and whether
 # the probes are served at all. A check written here would be replaced by that change rather than extended by it.
-ENTRYPOINT ["dotnet", "/app/MailMcp.Host.dll"]
+ENTRYPOINT ["dotnet", "/app/MailFathom.Host.dll"]

@@ -1,14 +1,14 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
-/// <summary>Indicates that the deployment's configuration-source settings do not describe configuration MailMcp can load.</summary>
+/// <summary>Indicates that the deployment's configuration-source settings do not describe configuration MailFathom can load.</summary>
 /// <remarks>
 /// <para>
-/// One failure covers a path that is not there and a setting name MailMcp does not define, because both are the same
+/// One failure covers a path that is not there and a setting name MailFathom does not define, because both are the same
 /// mistake seen from two sides: the deployment believes it provisioned configuration and the host would not read it.
 /// Nothing acts differently on the two, so splitting them would publish an identity no caller distinguishes.
 /// </para>
@@ -24,7 +24,7 @@ namespace MailMcp.Host.Configuration;
 /// out of every diagnostic; a configuration path names where non-secret settings live and is useless without them.
 /// </para>
 /// </remarks>
-public sealed class ProvisionedConfigurationSourceInvalidException : MailMcpException
+public sealed class ProvisionedConfigurationSourceInvalidException : MailFathomException
 {
     /// <summary>Initializes a new failure naming the configuration key that does not describe loadable configuration.</summary>
     /// <param name="operatorSafeMessage">A message naming the configuration key and, where one is involved, the path.</param>
@@ -34,5 +34,5 @@ public sealed class ProvisionedConfigurationSourceInvalidException : MailMcpExce
     }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.ProvisionedConfigurationSourceInvalid;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.ProvisionedConfigurationSourceInvalid;
 }

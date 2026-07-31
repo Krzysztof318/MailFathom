@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Accounts;
-using MailMcp.Application.Synchronization;
+using MailFathom.Application.Accounts;
+using MailFathom.Application.Synchronization;
 
-namespace MailMcp.Application.Emails.SearchEmails;
+namespace MailFathom.Application.Emails.SearchEmails;
 
 /// <summary>Searches the local mailbox copy for text and returns one bounded, ranked window of results.</summary>
 /// <remarks>

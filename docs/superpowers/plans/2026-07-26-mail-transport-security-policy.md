@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Governing issue:** [#35 — Spec 01 — Mail transport security policy](https://github.com/Krzysztof318/MailMcp/issues/35)
+**Governing issue:** [#35 — Spec 01 — Mail transport security policy](https://github.com/Krzysztof318/MailFathom/issues/35)
 **Governing specification:** [`specs/01-mail-transport-security-policy.md`](../../../specs/01-mail-transport-security-policy.md)
-**Architectural context:** `specs/2026-07-22-mail-mcp-architecture-draft.md` sections 7.1–7.3, ADR `docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md`
+**Architectural context:** `specs/2026-07-22-mail-fathom-architecture-draft.md` sections 7.1–7.3, ADR `docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md`
 
 **Goal:** Replace the boolean `UseSslOnConnect` switch with a provider-neutral connection-security and SASL authentication policy that makes an unencrypted channel and clear-text authentication explicit, opt-in, and fail-fast at startup.
 
@@ -35,7 +35,7 @@ The owner accepted decision 3 as written and changed the other two:
 Accepted after the pull request review:
 
 - **The configuration error keeps the domain's violation identity.** `MailAccountTransportSecurityConfigurationError` discarded the `MailTransportSecurityViolation` the domain had already computed and kept only a prose sentence, which conflicts with the `src/AGENTS.md` rule requiring a stable machine-readable code beside the human-readable message. The violation now travels on the record as a nullable property — null for an unsupported SASL mechanism name, which is a parse failure rather than a violated rule — and `Host` appends it in brackets to the startup message. No shared configuration-error abstraction was introduced: there is one producer and one consumer.
-- **The `MailKit` prefix is reserved for types that traffic in MailKit types.** `MailKitImapAccountSettings` and `IMailKitImapAccountSettingsProvider` describe a host, a port, and credentials in plain IMAP vocabulary, so they became `ImapAccountSettings` and `IImapAccountSettingsProvider` under `src/Infrastructure/Mail/`. `MailAuthenticationMechanismUnavailableException` moved to the same folder; only its location had been wrong. `IMailKitImapClient`, `MailKitImapClientAdapter`, `MailKitImapMailboxSession`, `MailKitImapMailboxSessionFactory`, and `MailKitTransportSecurityMapping` keep the prefix, because each takes or returns `SecureSocketOptions`, `IMailFolder`, or `ImapClient`. The repository sweep found no other offender: the `EfCore*` persistence types all expose `MailMcpDbContext` or `DbUpdateException`, so those names are accurate.
+- **The `MailKit` prefix is reserved for types that traffic in MailKit types.** `MailKitImapAccountSettings` and `IMailKitImapAccountSettingsProvider` describe a host, a port, and credentials in plain IMAP vocabulary, so they became `ImapAccountSettings` and `IImapAccountSettingsProvider` under `src/Infrastructure/Mail/`. `MailAuthenticationMechanismUnavailableException` moved to the same folder; only its location had been wrong. `IMailKitImapClient`, `MailKitImapClientAdapter`, `MailKitImapMailboxSession`, `MailKitImapMailboxSessionFactory`, and `MailKitTransportSecurityMapping` keep the prefix, because each takes or returns `SecureSocketOptions`, `IMailFolder`, or `ImapClient`. The repository sweep found no other offender: the `EfCore*` persistence types all expose `MailFathomDbContext` or `DbUpdateException`, so those names are accurate.
 
 ## Design decisions locked before implementation
 
@@ -544,7 +544,7 @@ builder.Services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provi
 - [ ] **Step 5: Verify the whole solution builds and the removal is complete**
 
 ```bash
-dotnet build MailMcp.slnx
+dotnet build MailFathom.slnx
 grep -ri "UseSslOnConnect" --exclude-dir=artifacts --exclude-dir=.git .
 ```
 
@@ -588,7 +588,7 @@ Run `$review-change` over the working-tree diff. Check specifically: no `Domain`
 
 - [ ] **Step 5: Finish**
 
-Run `$finish-change`: commit, push `agent/mail-transport-security-policy`, and open a draft pull request whose body contains `Closes #35`. Patch the body through `gh api repos/Krzysztof318/MailMcp/pulls/<number> -X PATCH -f body="$(cat body.md)"` because `gh pr edit` fails against this repository.
+Run `$finish-change`: commit, push `agent/mail-transport-security-policy`, and open a draft pull request whose body contains `Closes #35`. Patch the body through `gh api repos/Krzysztof318/MailFathom/pulls/<number> -X PATCH -f body="$(cat body.md)"` because `gh pr edit` fails against this repository.
 
 ---
 

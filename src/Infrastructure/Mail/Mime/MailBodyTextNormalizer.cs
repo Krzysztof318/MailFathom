@@ -3,7 +3,7 @@
 
 using System.Text;
 
-namespace MailMcp.Infrastructure.Mail.Mime;
+namespace MailFathom.Infrastructure.Mail.Mime;
 
 /// <summary>Turns the text a message body carries into text every consumer of it can hold.</summary>
 /// <remarks>

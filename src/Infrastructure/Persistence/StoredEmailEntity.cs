@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.CodeCoverage;
-using MailMcp.Domain.Emails;
+using MailFathom.CodeCoverage;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 [RequiresIntegrationCoverage]
 internal sealed class StoredEmailEntity
@@ -102,7 +102,7 @@ internal sealed class StoredEmailEntity
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The snapshot records server state and is never written towards the server: MailMcp reads mail read-only, so no
+    /// The snapshot records server state and is never written towards the server: MailFathom reads mail read-only, so no
     /// application path turns any of these into an IMAP <c>STORE</c>. Reconciliation refreshes them one bounded window
     /// per run, and a row nobody has reached yet carries the never-observed value.
     /// </para>

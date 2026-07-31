@@ -2,13 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Text.Json;
-using MailMcp.Mcp.Tools;
+using MailFathom.Mcp.Tools;
 using ModelContextProtocol.Protocol;
 using Xunit;
 
-namespace MailMcp.Mcp.UnitTests;
+namespace MailFathom.Mcp.UnitTests;
 
-/// <summary>Covers the descriptor MailMcp advertises for <c>list_emails</c>.</summary>
+/// <summary>Covers the descriptor MailFathom advertises for <c>list_emails</c>.</summary>
 /// <remarks>
 /// The annotations are contract metadata rather than documentation: a client decides whether a tool is safe to call, safe
 /// to retry, and confined to local state by reading them before it calls anything. Asserting the advertised descriptor is
@@ -17,7 +17,7 @@ namespace MailMcp.Mcp.UnitTests;
 public sealed class ListEmailsToolMetadataTests
 {
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheListEmailsToolUnderItsProtocolName()
+    public void AddMailFathomServer_AdvertisesTheListEmailsToolUnderItsProtocolName()
     {
         // Arrange, Act
         var advertisedTool = AdvertisedListEmailsTool();
@@ -29,7 +29,7 @@ public sealed class ListEmailsToolMetadataTests
 
     /// <summary>The four hints the architecture draft requires of every read-only tool.</summary>
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheReadOnlyLocalStateAnnotations()
+    public void AddMailFathomServer_AdvertisesTheReadOnlyLocalStateAnnotations()
     {
         // Arrange, Act
         var annotations = AdvertisedListEmailsTool().Annotations;
@@ -44,7 +44,7 @@ public sealed class ListEmailsToolMetadataTests
 
     /// <summary>A description is what a model reads to decide whether the tool answers its question at all.</summary>
     [Fact]
-    public void AddMailMcpServer_AdvertisesADescriptionStatingTheLocalReadOnlyBoundsOfTheTool()
+    public void AddMailFathomServer_AdvertisesADescriptionStatingTheLocalReadOnlyBoundsOfTheTool()
     {
         // Arrange, Act
         var description = AdvertisedListEmailsTool().Description;
@@ -56,7 +56,7 @@ public sealed class ListEmailsToolMetadataTests
     }
 
     [Fact]
-    public void AddMailMcpServer_AdvertisesEveryFilterAsAnInputSchemaProperty()
+    public void AddMailFathomServer_AdvertisesEveryFilterAsAnInputSchemaProperty()
     {
         // Arrange
         string[] expectedProperties =
@@ -89,7 +89,7 @@ public sealed class ListEmailsToolMetadataTests
 
     /// <summary>An argument nobody can interpret is an argument a model guesses at, so every one carries its own description.</summary>
     [Fact]
-    public void AddMailMcpServer_DescribesEveryInputSchemaProperty()
+    public void AddMailFathomServer_DescribesEveryInputSchemaProperty()
     {
         // Arrange, Act
         var describedProperties = AdvertisedListEmailsTool()
@@ -105,7 +105,7 @@ public sealed class ListEmailsToolMetadataTests
 
     /// <summary>The cancellation token the tool takes is the host's concern and must never become a protocol argument.</summary>
     [Fact]
-    public void AddMailMcpServer_DoesNotAdvertiseTheCancellationTokenAsAnArgument()
+    public void AddMailFathomServer_DoesNotAdvertiseTheCancellationTokenAsAnArgument()
     {
         // Arrange, Act
         var advertisedProperties = AdvertisedListEmailsTool().InputSchema.GetProperty("properties");
@@ -116,7 +116,7 @@ public sealed class ListEmailsToolMetadataTests
 
     /// <summary>An enumeration travels as its name, so a client reads a value rather than this assembly's declaration order.</summary>
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheReadingDirectionAsItsNamedValues()
+    public void AddMailFathomServer_AdvertisesTheReadingDirectionAsItsNamedValues()
     {
         // Arrange, Act
         var direction = AdvertisedListEmailsTool()
@@ -136,7 +136,7 @@ public sealed class ListEmailsToolMetadataTests
     /// the input side.
     /// </summary>
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheContentAvailabilityAsItsNamedValues()
+    public void AddMailFathomServer_AdvertisesTheContentAvailabilityAsItsNamedValues()
     {
         // Arrange
         var outputSchema = AdvertisedListEmailsTool().OutputSchema;
@@ -150,7 +150,7 @@ public sealed class ListEmailsToolMetadataTests
     }
 
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheResultShapeAsAnOutputSchema()
+    public void AddMailFathomServer_AdvertisesTheResultShapeAsAnOutputSchema()
     {
         // Arrange, Act
         var outputSchema = AdvertisedListEmailsTool().OutputSchema;
@@ -165,7 +165,7 @@ public sealed class ListEmailsToolMetadataTests
 
     /// <summary>The surface is the three read-only tools of this release, so a fourth arriving unnoticed is a change to the published contract.</summary>
     [Fact]
-    public void AddMailMcpServer_RegistersTheListingTheContentAndTheSearchTool()
+    public void AddMailFathomServer_RegistersTheListingTheContentAndTheSearchTool()
     {
         // Arrange, Act
         var registeredNames = RegisteredMcpToolSurface

@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Transport;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Secrets;
 
-namespace MailMcp.Infrastructure.Mail;
+namespace MailFathom.Infrastructure.Mail;
 
 /// <summary>Describes one configuration error in an account's transport security settings.</summary>
 /// <param name="PropertyName">The setting the operator must correct.</param>

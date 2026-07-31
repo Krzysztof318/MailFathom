@@ -2,24 +2,24 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.ComponentModel;
-using MailMcp.Application.Emails;
+using MailFathom.Application.Emails;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes one attachment of an email without any of its content.</summary>
 /// <remarks>
 /// <para>
 /// Carrying no bytes is a property of this type rather than of a caller's discipline: there is nowhere here to put
-/// them, and downloading an attachment is a capability MailMcp deliberately does not publish.
+/// them, and downloading an attachment is a capability MailFathom deliberately does not publish.
 /// </para>
 /// <para>
 /// A file name is attacker-controlled text that reaches a model directly through this contract, so what is published is
 /// the normalized form the domain produced: never a path, never a traversal segment, never a control character or a
 /// bidirectional override, and never longer than the bound. <see cref="WasFileNameNormalized" /> travels beside it so a
-/// reader can tell a plain name from one MailMcp had to rewrite, which is exactly the case worth treating carefully.
+/// reader can tell a plain name from one MailFathom had to rewrite, which is exactly the case worth treating carefully.
 /// </para>
 /// </remarks>
-[Description("One attachment of the email, described and never returned. MailMcp publishes no attachment content, so a file's bytes are not available through any tool.")]
+[Description("One attachment of the email, described and never returned. MailFathom publishes no attachment content, so a file's bytes are not available through any tool.")]
 internal sealed record EmailAttachmentMetadata
 {
     /// <summary>Gets the normalized file name, or <see langword="null" /> when the part is unnamed.</summary>

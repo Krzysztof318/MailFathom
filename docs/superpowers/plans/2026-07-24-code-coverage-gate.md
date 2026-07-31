@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Enforce at least 85% aggregate line coverage across all testable MailMcp production libraries for pull requests targeting `main` that change code, tests, or files capable of changing the build or coverage result.
+**Goal:** Enforce at least 85% aggregate line coverage across all testable MailFathom production libraries for pull requests targeting `main` that change code, tests, or files capable of changing the build or coverage result.
 
 **Architecture:** Coverlet's native Microsoft Testing Platform extension emits one uniquely prefixed Cobertura report per unit-test project. A repository-local ReportGenerator tool merges those reports, and an MSBuild target reads the merged report and fails the existing build-and-test check when whole-scope line coverage is below 85%.
 
@@ -64,8 +64,8 @@ Create `testconfig.json` with:
 {
   "platformOptions": {
     "Coverlet": {
-      "Include": "[MailMcp.*]*",
-      "Exclude": "[MailMcp.Host]*,[MailMcp.AppHost]*,[MailMcp.*.UnitTests]*,[coverlet.*]*,[xunit.*]*,[Microsoft.Testing.*]*,[Microsoft.TestPlatform.*]*,[Microsoft.VisualStudio.TestPlatform.*]*,[testhost*]*",
+      "Include": "[MailFathom.*]*",
+      "Exclude": "[MailFathom.Host]*,[MailFathom.AppHost]*,[MailFathom.*.UnitTests]*,[coverlet.*]*,[xunit.*]*,[Microsoft.Testing.*]*,[Microsoft.TestPlatform.*]*,[Microsoft.VisualStudio.TestPlatform.*]*,[testhost*]*",
       "ExcludeByAttribute": "ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,GeneratedCodeAttribute",
       "Format": "cobertura",
       "IncludeTestAssembly": false,
@@ -101,7 +101,7 @@ Run:
 
 ```bash
 dotnet tool restore
-dotnet restore MailMcp.slnx
+dotnet restore MailFathom.slnx
 ```
 
 Expected: both commands exit 0; restore resolves `coverlet.MTP` 10.0.1 with the repository's .NET 10 SDK and MTP runner.
@@ -123,7 +123,7 @@ Expected: every unit-test project contains the pinned Coverlet package and the l
 - Create: `.config/CodeCoverage.proj`
 
 **Interfaces:**
-- Consumes: `MailMcp.slnx`, the local `reportgenerator` tool, raw Coverlet Cobertura reports, and the five configured source boundaries.
+- Consumes: `MailFathom.slnx`, the local `reportgenerator` tool, raw Coverlet Cobertura reports, and the five configured source boundaries.
 - Produces: uniquely prefixed raw reports, `artifacts/coverage/report/Cobertura.xml`, `artifacts/coverage/report/index.html`, TRX results, and a failing process exit code below 85%.
 
 - [ ] **Step 1: Create the coverage orchestration project**
@@ -159,7 +159,7 @@ Create `.config/CodeCoverage.proj` with:
   </Target>
 
   <Target Name="GenerateAndEnforceReport">
-    <Exec Command="dotnet tool run reportgenerator &quot;-reports:$(RawCoverageDirectory)/**/*.cobertura.*.xml&quot; &quot;-targetdir:$(CoverageReportDirectory)&quot; &quot;-reporttypes:Cobertura;HtmlInline&quot; &quot;-assemblyfilters:+MailMcp.*;-MailMcp.Host;-MailMcp.AppHost;-MailMcp.*.UnitTests&quot;" />
+    <Exec Command="dotnet tool run reportgenerator &quot;-reports:$(RawCoverageDirectory)/**/*.cobertura.*.xml&quot; &quot;-targetdir:$(CoverageReportDirectory)&quot; &quot;-reporttypes:Cobertura;HtmlInline&quot; &quot;-assemblyfilters:+MailFathom.*;-MailFathom.Host;-MailFathom.AppHost;-MailFathom.*.UnitTests&quot;" />
     <CallTarget Targets="Enforce" />
   </Target>
 
@@ -202,9 +202,9 @@ Create `.config/CodeCoverage.proj` with:
 Create a temporary Cobertura file outside the repository:
 
 ```bash
-mkdir -p /tmp/mailmcp-coverage-test
-printf '%s\n' '<?xml version="1.0" ?><coverage line-rate="0.85" lines-covered="85" lines-valid="100" />' > /tmp/mailmcp-coverage-test/Cobertura.xml
-dotnet msbuild .config/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/Cobertura.xml
+mkdir -p /tmp/mailfathom-coverage-test
+printf '%s\n' '<?xml version="1.0" ?><coverage line-rate="0.85" lines-covered="85" lines-valid="100" />' > /tmp/mailfathom-coverage-test/Cobertura.xml
+dotnet msbuild .config/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailfathom-coverage-test/Cobertura.xml
 ```
 
 Expected: exit 0 and a diagnostic showing `85% (85/100); required: 85%`.
@@ -214,8 +214,8 @@ Expected: exit 0 and a diagnostic showing `85% (85/100); required: 85%`.
 Run:
 
 ```bash
-printf '%s\n' '<?xml version="1.0" ?><coverage line-rate="0.8499" lines-covered="8499" lines-valid="10000" />' > /tmp/mailmcp-coverage-test/Cobertura.xml
-dotnet msbuild .config/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/Cobertura.xml
+printf '%s\n' '<?xml version="1.0" ?><coverage line-rate="0.8499" lines-covered="8499" lines-valid="10000" />' > /tmp/mailfathom-coverage-test/Cobertura.xml
+dotnet msbuild .config/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailfathom-coverage-test/Cobertura.xml
 ```
 
 Expected: non-zero exit and an error stating that `84.99%` is below the required `85%`.
@@ -236,10 +236,10 @@ Expected: one report for every unit-test project, each beginning with its projec
 Run:
 
 ```bash
-mkdir -p /tmp/mailmcp-coverage-test
-printf '%s\n' '<?xml version="1.0" ?><coverage />' > /tmp/mailmcp-coverage-test/Cobertura.xml
-dotnet msbuild .config/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/Cobertura.xml
-dotnet msbuild .config/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailmcp-coverage-test/missing.xml
+mkdir -p /tmp/mailfathom-coverage-test
+printf '%s\n' '<?xml version="1.0" ?><coverage />' > /tmp/mailfathom-coverage-test/Cobertura.xml
+dotnet msbuild .config/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailfathom-coverage-test/Cobertura.xml
+dotnet msbuild .config/CodeCoverage.proj -t:Enforce -p:MergedCoverageReport=/tmp/mailfathom-coverage-test/missing.xml
 ```
 
 Expected: both invocations fail, respectively for a missing `line-rate` and a missing report.
@@ -249,7 +249,7 @@ Expected: both invocations fail, respectively for a missing `line-rate` and a mi
 Run:
 
 ```bash
-dotnet build MailMcp.slnx --configuration Release --no-restore
+dotnet build MailFathom.slnx --configuration Release --no-restore
 dotnet msbuild .config/CodeCoverage.proj -t:Collect
 ```
 
@@ -282,7 +282,7 @@ on:
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
       - 'Directory.Packages.props'
-      - 'MailMcp.slnx'
+      - 'MailFathom.slnx'
       - 'NuGet.config'
       - '.config/**'
       - 'global.json'
@@ -437,11 +437,11 @@ Expected: the exact threshold, scope, command, exclusion constraint, versions, a
 Run:
 
 ```bash
-dotnet restore MailMcp.slnx
-dotnet build MailMcp.slnx --configuration Release --no-restore
-dotnet test --solution MailMcp.slnx --configuration Release --no-build
+dotnet restore MailFathom.slnx
+dotnet build MailFathom.slnx --configuration Release --no-restore
+dotnet test --solution MailFathom.slnx --configuration Release --no-build
 dotnet msbuild .config/CodeCoverage.proj -t:Collect
-dotnet format MailMcp.slnx --verify-no-changes --verbosity diagnostic
+dotnet format MailFathom.slnx --verify-no-changes --verbosity diagnostic
 ```
 
 Expected: all commands exit 0; coverage reports the explicit empty-scaffold behavior until production code appears in the included boundaries.
@@ -492,11 +492,11 @@ Summary:
 - document the narrow ExcludeFromCodeCoverage policy and register development-tool licenses
 
 Verification:
-- dotnet restore MailMcp.slnx
-- dotnet build MailMcp.slnx --configuration Release --no-restore
-- dotnet test --solution MailMcp.slnx --configuration Release --no-build
+- dotnet restore MailFathom.slnx
+- dotnet build MailFathom.slnx --configuration Release --no-restore
+- dotnet test --solution MailFathom.slnx --configuration Release --no-build
 - dotnet msbuild .config/CodeCoverage.proj -t:Collect
-- dotnet format MailMcp.slnx --verify-no-changes --verbosity diagnostic
+- dotnet format MailFathom.slnx --verify-no-changes --verbosity diagnostic
 ```
 
 Then inspect the PR base, head, draft state, changed files, and initial check state.

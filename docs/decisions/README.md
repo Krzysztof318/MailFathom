@@ -4,7 +4,7 @@ An Architectural Decision is a justified software design choice that addresses a
 
 For background on ADRs, see <https://adr.github.io/>.
 
-## How MailMcp uses ADRs
+## How MailFathom uses ADRs
 
 1. Create or modify an ADR only after explicit owner approval for that documentation change.
 2. Copy `docs/decisions/adr-template.md` to `docs/decisions/NNNN-title-with-dashes.md`, where `NNNN` is the next sequence number.

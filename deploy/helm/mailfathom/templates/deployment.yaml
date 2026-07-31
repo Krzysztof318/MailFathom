@@ -1,21 +1,21 @@
-{{- include "mailmcp.validate" . -}}
+{{- include "mailfathom.validate" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "mailmcp.fullname" . }}
+  name: {{ include "mailfathom.fullname" . }}
   labels:
-    {{- include "mailmcp.labels" . | nindent 4 }}
+    {{- include "mailfathom.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "mailmcp.selectorLabels" . | nindent 6 }}
+      {{- include "mailfathom.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
         {{- /*
           Restarts the pods when the configuration they mount changes. A ConfigMap edit is picked up without one for
-          the settings MailMcp classifies reloadable, but adding or removing a *key* is restart-required: the directory
+          the settings MailFathom classifies reloadable, but adding or removing a *key* is restart-required: the directory
           is enumerated once while the host composes itself, so a new key produces a file no provider reads.
         */}}
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
@@ -23,12 +23,12 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "mailmcp.selectorLabels" . | nindent 8 }}
+        {{- include "mailfathom.selectorLabels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      serviceAccountName: {{ include "mailmcp.serviceAccountName" . }}
+      serviceAccountName: {{ include "mailfathom.serviceAccountName" . }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automountToken }}
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
@@ -57,8 +57,8 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-        - name: mailmcp
-          image: {{ include "mailmcp.image" . | quote }}
+        - name: mailfathom
+          image: {{ include "mailfathom.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
@@ -82,10 +82,10 @@ spec:
             - name: DOTNET_USE_POLLING_FILE_WATCHER
               value: "1"
             {{- end }}
-            - name: ConnectionStrings__mailmcp
-              value: {{ include "mailmcp.connectionString" . | quote }}
+            - name: ConnectionStrings__mailfathom
+              value: {{ include "mailfathom.connectionString" . | quote }}
             {{- /*
-              The password is never read into this object. MailMcp resolves the reference below per use and erases the
+              The password is never read into this object. MailFathom resolves the reference below per use and erases the
               material immediately, which is also why a Secret the cluster rotates behind an unchanged mount path
               reaches the next database connection without a restart.
             */}}
@@ -135,7 +135,7 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ include "mailmcp.fullname" . }}-config
+            name: {{ include "mailfathom.fullname" . }}-config
         - name: secrets
           secret:
             secretName: {{ .Values.secrets.existingSecret }}

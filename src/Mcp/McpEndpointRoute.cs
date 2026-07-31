@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Mcp;
+namespace MailFathom.Mcp;
 
-/// <summary>Names where the MailMcp protocol surface answers.</summary>
+/// <summary>Names where the MailFathom protocol surface answers.</summary>
 /// <remarks>
 /// The route is a constant rather than a setting. An MCP client is configured with a server URL, so a deployment that
 /// could move the path would only be able to move it in step with every client pointed at it — the configurability would

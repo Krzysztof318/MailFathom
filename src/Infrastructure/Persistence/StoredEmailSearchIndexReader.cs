@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Globalization;
-using MailMcp.Application.Emails;
-using MailMcp.CodeCoverage;
+using MailFathom.Application.Emails;
+using MailFathom.CodeCoverage;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Reads bounded, ranked windows of matching mail out of the PostgreSQL lexical index.</summary>
 /// <remarks>
@@ -30,7 +30,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class StoredEmailSearchIndexReader(
-    MailMcpDbContext dbContext,
+    MailFathomDbContext dbContext,
     PostgresTextSearchConfiguration textSearchConfiguration) : IEmailSearchIndexReader
 {
     /// <summary>Marks the start of a matched run of words in what PostgreSQL returns.</summary>
@@ -253,7 +253,7 @@ internal sealed class StoredEmailSearchIndexReader(
     /// <summary>Cuts an extract once it has carried as many characters of the message as the bound allows.</summary>
     /// <remarks>
     /// The markers are not counted, because the bound exists to limit how much of a message one result publishes and a
-    /// marker is MailMcp's own. Counting them would also make the bound depend on how often the query matched inside the
+    /// marker is MailFathom's own. Counting them would also make the bound depend on how often the query matched inside the
     /// extract, so the same setting would show less of a message the better it matched — which is the opposite of what
     /// a reader wants and tells an operator nothing about what the number protects.
     /// </remarks>

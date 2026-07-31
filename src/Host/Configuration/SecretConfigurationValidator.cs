@@ -1,13 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Security;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>Proves that every secret-bearing setting of a configuration snapshot can actually be used.</summary>
 /// <remarks>
@@ -110,7 +110,7 @@ internal sealed partial class SecretConfigurationValidator
     {
         if (!PostgresTextSearchConfiguration.IsSupported(candidate.TextSearchConfiguration))
         {
-            yield return $"{PersistenceConfigurationPath}:{nameof(PersistenceOptions.TextSearchConfiguration)} — '{candidate.TextSearchConfiguration}' is not a PostgreSQL text search configuration MailMcp supports.";
+            yield return $"{PersistenceConfigurationPath}:{nameof(PersistenceOptions.TextSearchConfiguration)} — '{candidate.TextSearchConfiguration}' is not a PostgreSQL text search configuration MailFathom supports.";
 
             yield break;
         }
@@ -403,7 +403,7 @@ internal sealed partial class SecretConfigurationValidator
     /// <remarks>
     /// The anchor is discarded once it has proven loadable, because each connection attempt loads its own. A loaded
     /// anchor is logged by subject and thumbprint, which is public certificate material and the detail an operator
-    /// needs to confirm that the authority MailMcp trusts is the one they provisioned.
+    /// needs to confirm that the authority MailFathom trusts is the one they provisioned.
     /// </remarks>
     private async Task<IReadOnlyList<string>> FindTrustAnchorErrorsAsync(
         MailSynchronizationOptions candidate,

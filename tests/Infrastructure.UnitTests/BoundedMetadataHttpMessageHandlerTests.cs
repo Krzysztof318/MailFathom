@@ -3,11 +3,11 @@
 
 using System.Net;
 using System.Text;
-using MailMcp.Infrastructure.Security;
-using MailMcp.TestSupport;
+using MailFathom.Infrastructure.Security;
+using MailFathom.TestSupport;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Covers the bounds on the one thing this process fetches from a machine it does not own.</summary>
 /// <remarks>

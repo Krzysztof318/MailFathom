@@ -1,15 +1,15 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Failures;
-using MailMcp.Host.Configuration;
+using MailFathom.Domain.Failures;
+using MailFathom.Host.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
 using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.Configuration.Memory;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers which provisioned configuration files are layered in, and where among the host's own sources.</summary>
 /// <remarks>
@@ -19,7 +19,7 @@ namespace MailMcp.Host.UnitTests;
 /// </remarks>
 public sealed class ProvisionedConfigurationLayerTests
 {
-    private const string MountPath = "/etc/mailmcp/config";
+    private const string MountPath = "/etc/mailfathom/config";
 
     [Fact]
     public void FindFiles_NothingProvisioned_LayersNoFile()
@@ -97,7 +97,7 @@ public sealed class ProvisionedConfigurationLayerTests
     public void FindFiles_MountedFileBesideADirectory_LayersTheFileLast()
     {
         // Arrange
-        var overridePath = "/etc/mailmcp/override.json";
+        var overridePath = "/etc/mailfathom/override.json";
         var fileSystem = new FakeProvisionedConfigurationFileSystem()
             .WithDirectory(MountPath, "settings.json")
             .WithFile(overridePath);
@@ -123,7 +123,7 @@ public sealed class ProvisionedConfigurationLayerTests
             () => ProvisionedConfigurationLayer.FindFiles(paths, new FakeProvisionedConfigurationFileSystem()));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.ProvisionedConfigurationSourceInvalid, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.ProvisionedConfigurationSourceInvalid, failure.ErrorCode);
         Assert.Contains(ProvisionedConfigurationPaths.DirectoryKey, failure.Message, StringComparison.Ordinal);
         Assert.Contains(MountPath, failure.Message, StringComparison.Ordinal);
     }
@@ -132,7 +132,7 @@ public sealed class ProvisionedConfigurationLayerTests
     public void FindFiles_FileThatDoesNotExist_FailsNamingTheConfigurationKeyAndThePath()
     {
         // Arrange
-        var missingPath = "/etc/mailmcp/override.json";
+        var missingPath = "/etc/mailfathom/override.json";
         var paths = new ProvisionedConfigurationPaths(null, missingPath);
 
         // Act
@@ -140,7 +140,7 @@ public sealed class ProvisionedConfigurationLayerTests
             () => ProvisionedConfigurationLayer.FindFiles(paths, new FakeProvisionedConfigurationFileSystem()));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.ProvisionedConfigurationSourceInvalid, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.ProvisionedConfigurationSourceInvalid, failure.ErrorCode);
         Assert.Contains(ProvisionedConfigurationPaths.FileKey, failure.Message, StringComparison.Ordinal);
         Assert.Contains(missingPath, failure.Message, StringComparison.Ordinal);
     }

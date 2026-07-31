@@ -4,7 +4,7 @@
 using System.Reflection;
 using Xunit;
 
-namespace MailMcp.Mcp.UnitTests;
+namespace MailFathom.Mcp.UnitTests;
 
 /// <summary>Covers what the protocol boundary is allowed to depend on.</summary>
 /// <remarks>
@@ -24,18 +24,18 @@ public sealed class McpDependencyBoundaryTests
     public void McpAssembly_ReferencesNoAiBoundary()
     {
         // Arrange
-        var mcpAssembly = Assembly.Load("MailMcp.Mcp");
+        var mcpAssembly = Assembly.Load("MailFathom.Mcp");
 
         // Act
-        var referencedMailMcpAssemblies = mcpAssembly
+        var referencedMailFathomAssemblies = mcpAssembly
             .GetReferencedAssemblies()
             .Select(reference => reference.Name)
             .OfType<string>()
-            .Where(name => name.StartsWith("MailMcp.", StringComparison.Ordinal))
+            .Where(name => name.StartsWith("MailFathom.", StringComparison.Ordinal))
             .Order(StringComparer.Ordinal)
             .ToArray();
 
         // Assert
-        Assert.Equal(["MailMcp.Application", "MailMcp.Domain"], referencedMailMcpAssemblies);
+        Assert.Equal(["MailFathom.Application", "MailFathom.Domain"], referencedMailFathomAssemblies);
     }
 }

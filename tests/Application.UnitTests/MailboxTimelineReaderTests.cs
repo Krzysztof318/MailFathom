@@ -3,17 +3,17 @@
 
 using System.Buffers.Text;
 using System.Text;
-using MailMcp.Application.Accounts;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Emails.ListEmails;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
+using MailFathom.Application.Accounts;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.ListEmails;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using NSubstitute;
 using Xunit;
 
-namespace MailMcp.Application.UnitTests;
+namespace MailFathom.Application.UnitTests;
 
 /// <summary>Covers the mailbox listing use case: its filters, its bounds, and the keyset walk it issues cursors for.</summary>
 public sealed class MailboxTimelineReaderTests

@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Application.Persistence;
+namespace MailFathom.Application.Persistence;
 
 /// <summary>Indicates that the database is missing migrations the running build was compiled against.</summary>
 /// <remarks>
@@ -13,11 +13,11 @@ namespace MailMcp.Application.Persistence;
 /// write mail data into a shape the deletion and retention paths do not reach, and would do so silently.
 /// </para>
 /// <para>
-/// The message names migration identifiers only. Those are MailMcp's own build-time names for schema versions and
+/// The message names migration identifiers only. Those are MailFathom's own build-time names for schema versions and
 /// carry no credential, host name, or personal data.
 /// </para>
 /// </remarks>
-public sealed class DatabaseSchemaOutOfDateException : MailMcpException
+public sealed class DatabaseSchemaOutOfDateException : MailFathomException
 {
     /// <summary>Initializes a new stale-schema failure for the migrations the database has not applied.</summary>
     /// <param name="operatorSafeMessage">A message naming migration identifiers and the command that applies them.</param>
@@ -34,7 +34,7 @@ public sealed class DatabaseSchemaOutOfDateException : MailMcpException
     }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.DatabaseSchemaOutOfDate;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.DatabaseSchemaOutOfDate;
 
     /// <summary>Gets the migrations the build defines that the database does not carry, in the order they would be applied.</summary>
     public IReadOnlyList<string> PendingMigrationIdentifiers { get; }

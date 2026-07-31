@@ -1,14 +1,14 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Folders;
-using MailMcp.Application.Persistence;
-using MailMcp.Domain.Folders;
-using MailMcp.IntegrationTests.Orchestration;
+using MailFathom.Application.Folders;
+using MailFathom.Application.Persistence;
+using MailFathom.Domain.Folders;
+using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Persistence;
+namespace MailFathom.IntegrationTests.Persistence;
 
 /// <summary>Commits the alias binding every folder-scoped write has to be attached to.</summary>
 /// <remarks>
@@ -29,7 +29,7 @@ internal static class OrchestratedFolderBinding
     /// binding afterwards.
     /// </remarks>
     internal static async Task<MailFolderResolution> CommitAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         string alias,
         CancellationToken cancellationToken)
     {

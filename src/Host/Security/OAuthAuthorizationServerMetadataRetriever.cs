@@ -4,7 +4,7 @@
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
-namespace MailMcp.Host.Security;
+namespace MailFathom.Host.Security;
 
 /// <summary>Finds one authorization server's discovery document across the addresses the MCP specification names.</summary>
 /// <remarks>
@@ -81,7 +81,7 @@ internal sealed class OAuthAuthorizationServerMetadataRetriever : IConfiguration
         }
 
         // Neither the addresses nor the issuer appear in the message. Both name the operator's identity provider, and an
-        // exception message travels further than the configuration that produced it; the profile name is MailMcp's own
+        // exception message travels further than the configuration that produced it; the profile name is MailFathom's own
         // and is enough to say which section to look at.
         throw new InvalidOperationException(
             $"No discovery document reporting the configured issuer was found for authorization server '{this.authorizationServerName}'.");

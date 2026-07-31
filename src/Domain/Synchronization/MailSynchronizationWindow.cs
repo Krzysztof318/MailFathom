@@ -1,13 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Domain.Synchronization;
+namespace MailFathom.Domain.Synchronization;
 
 /// <summary>States how far back into a folder's history synchronization may reach.</summary>
 /// <remarks>
 /// <para>
 /// The bound compares against the date the mail server received an email, which IMAP keeps as its
-/// <c>INTERNALDATE</c>, and never against the <c>Date</c> header that MailMcp stores as the sent timestamp. The two
+/// <c>INTERNALDATE</c>, and never against the <c>Date</c> header that MailFathom stores as the sent timestamp. The two
 /// disagree for imported and forwarded mail: an archive copied onto a new server carries the arrival date of the copy,
 /// and a message forwarded today carries the old header date of what it quotes. Arrival is what decides whether an
 /// email is part of the backlog this bound exists to keep out of a first run, it grows with the UID sequence a run

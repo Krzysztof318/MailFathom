@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.ComponentModel;
-using MailMcp.Application.Synchronization;
+using MailFathom.Application.Synchronization;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes how current the local copy of one folder is.</summary>
 /// <remarks>
@@ -12,15 +12,15 @@ namespace MailMcp.Mcp.Tools;
 /// is. Without it a caller cannot tell a folder that holds no matching mail from one whose synchronization has been
 /// failing for a week, and both look like an answer about the mailbox.
 /// </remarks>
-[Description("How current the local copy of one folder is. Every MailMcp read answers from this local copy and never contacts a mail server, so a result can be stale or incomplete and this states which.")]
+[Description("How current the local copy of one folder is. Every MailFathom read answers from this local copy and never contacts a mail server, so a result can be stale or incomplete and this states which.")]
 internal sealed record FolderCopyFreshness
 {
     /// <summary>Gets the account the folder belongs to.</summary>
-    [Description("The configured MailMcp account identifier the folder belongs to.")]
+    [Description("The configured MailFathom account identifier the folder belongs to.")]
     public required string AccountId { get; init; }
 
-    /// <summary>Gets MailMcp's own name for the folder.</summary>
-    [Description("The MailMcp folder alias, such as INBOX.")]
+    /// <summary>Gets MailFathom's own name for the folder.</summary>
+    [Description("The MailFathom folder alias, such as INBOX.")]
     public required string FolderAlias { get; init; }
 
     /// <summary>Gets when progress was last committed for the folder, or <see langword="null" /> when it never was.</summary>

@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Synchronization;
+using MailFathom.Application.Synchronization;
 
-namespace MailMcp.Application.Emails.ListEmails;
+namespace MailFathom.Application.Emails.ListEmails;
 
 /// <summary>One page of a mailbox listing, together with what continues it and how current it is.</summary>
 /// <param name="Emails">The page, in the timeline order the request asked for, holding no more than the effective page size.</param>

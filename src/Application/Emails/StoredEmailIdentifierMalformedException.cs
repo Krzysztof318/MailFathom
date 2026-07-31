@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>The failure raised when a request names an email with text that is no identifier this system issues.</summary>
 /// <remarks>
@@ -24,7 +24,7 @@ namespace MailMcp.Application.Emails;
 /// that text is the caller's own input, on its way into a client-readable result and the log beside it.
 /// </para>
 /// </remarks>
-public sealed class StoredEmailIdentifierMalformedException : MailMcpException
+public sealed class StoredEmailIdentifierMalformedException : MailFathomException
 {
     /// <summary>Initializes the failure for text that names no stored email.</summary>
     public StoredEmailIdentifierMalformedException()
@@ -33,5 +33,5 @@ public sealed class StoredEmailIdentifierMalformedException : MailMcpException
     }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.StoredEmailIdentifierMalformed;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.StoredEmailIdentifierMalformed;
 }

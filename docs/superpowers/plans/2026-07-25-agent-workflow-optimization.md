@@ -4,7 +4,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a fast, deterministic, cross-agent MailMcp development workflow with layered instructions, shared repository skills, and one complete local verification command.
+**Goal:** Add a fast, deterministic, cross-agent MailFathom development workflow with layered instructions, shared repository skills, and one complete local verification command.
 
 **Architecture:** Keep deterministic Git and .NET command sequences in four small Bash scripts under root `scripts/`. Keep task routing and review judgment in four concise skills under `.agents/skills/`, expose the entire directory to Claude Code through one relative symlink, and move conditional guidance from the root instruction file to path-scoped instruction files.
 
@@ -78,7 +78,7 @@ git commit -m "test: define agent workflow script contracts"
 - Modify: `scripts/test-agent-workflow.sh`
 
 **Interfaces:**
-- Consumes: a Git worktree containing `MailMcp.slnx`, `origin/main` when available, and .NET SDK 10.
+- Consumes: a Git worktree containing `MailFathom.slnx`, `origin/main` when available, and .NET SDK 10.
 - Produces: three zero-argument executable Bash entrypoints.
 
 - [ ] **Step 1: Implement shared root resolution in each entrypoint**
@@ -116,9 +116,9 @@ fetch or mutate Git.
 Run exactly:
 
 ```bash
-dotnet restore MailMcp.slnx
-dotnet build MailMcp.slnx --configuration Release --no-restore
-dotnet test --solution MailMcp.slnx --configuration Release --no-build
+dotnet restore MailFathom.slnx
+dotnet build MailFathom.slnx --configuration Release --no-restore
+dotnet test --solution MailFathom.slnx --configuration Release --no-build
 ```
 
 - [ ] **Step 4: Implement full verification**
@@ -129,10 +129,10 @@ suite, then run exactly:
 ```bash
 bash scripts/test-agent-workflow.sh
 dotnet tool restore
-dotnet restore MailMcp.slnx
-dotnet build MailMcp.slnx --configuration Release --no-restore
+dotnet restore MailFathom.slnx
+dotnet build MailFathom.slnx --configuration Release --no-restore
 dotnet msbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release
-dotnet format MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic
+dotnet format MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic
 git diff --check origin/main...HEAD
 git diff --cached --check
 git diff --check

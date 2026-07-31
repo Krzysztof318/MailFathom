@@ -1,17 +1,17 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.CodeCoverage;
-using MailMcp.Domain.Emails;
+using MailFathom.CodeCoverage;
+using MailFathom.Domain.Emails;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
-/// <summary>EF Core context for local MailMcp persistence.</summary>
+/// <summary>EF Core context for local MailFathom persistence.</summary>
 [RequiresIntegrationCoverage]
-internal sealed class MailMcpDbContext : DbContext
+internal sealed class MailFathomDbContext : DbContext
 {
     /// <summary>The mailbox account primary key, kept at the name EF Core's own convention gave the applied baseline.</summary>
     /// <remarks>
@@ -45,7 +45,7 @@ internal sealed class MailMcpDbContext : DbContext
 
     private readonly PostgresTextSearchConfiguration textSearchConfiguration;
 
-    /// <summary>Initializes a new MailMcp EF Core context.</summary>
+    /// <summary>Initializes a new MailFathom EF Core context.</summary>
     /// <param name="options">The provider and connection configuration.</param>
     /// <param name="textSearchConfiguration">The validated text search configuration the lexical index is built with.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="textSearchConfiguration" /> is <see langword="null" />.</exception>
@@ -55,8 +55,8 @@ internal sealed class MailMcpDbContext : DbContext
     /// EF caches one model per context type, which is correct here because the composition root binds exactly one
     /// configuration per process and validates it before the container is built.
     /// </remarks>
-    public MailMcpDbContext(
-        DbContextOptions<MailMcpDbContext> options,
+    public MailFathomDbContext(
+        DbContextOptions<MailFathomDbContext> options,
         PostgresTextSearchConfiguration textSearchConfiguration)
         : base(options)
     {
@@ -224,7 +224,7 @@ internal sealed class MailMcpDbContext : DbContext
     /// <summary>Declares the derived search document and the lexical index built over it.</summary>
     /// <remarks>
     /// <para>
-    /// The search vector is a stored generated column rather than a column MailMcp writes, so it cannot drift from the
+    /// The search vector is a stored generated column rather than a column MailFathom writes, so it cannot drift from the
     /// text beside it: no code path, migration, or ad-hoc update can leave a row whose vector describes text the row no
     /// longer holds. PostgreSQL requires such an expression to be immutable, which is why the text search configuration
     /// is named explicitly and why the participant addresses are a text column here rather than the arrays on the

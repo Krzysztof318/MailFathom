@@ -2,14 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Infrastructure.Security;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>What this deployment is called in OAuth terms, and which authorization servers may speak for it.</summary>
 /// <remarks>
 /// <para>
-/// MailMcp is a resource server and never an authorization server. It stores no password, issues no token, redeems no
+/// MailFathom is a resource server and never an authorization server. It stores no password, issues no token, redeems no
 /// authorization code, and holds no refresh token. What it owns is the other half of the arrangement: a name it is known
 /// by, a list of servers whose signatures it trusts, and the scopes a token must carry to reach a mailbox.
 /// </para>

@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.ComponentModel;
-using MailMcp.Application.Emails.GetEmailContent;
+using MailFathom.Application.Emails.GetEmailContent;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes one email as a reader receives it.</summary>
 /// <remarks>
@@ -15,7 +15,7 @@ namespace MailMcp.Mcp.Tools;
 /// built from have nowhere to put them.
 /// </para>
 /// <para>
-/// This is the most sensitive result MailMcp publishes. Nothing in it may be logged, and every part of it inherits the
+/// This is the most sensitive result MailFathom publishes. Nothing in it may be logged, and every part of it inherits the
 /// classification, retention, access, and erasure constraints of the mail it was read from.
 /// </para>
 /// </remarks>
@@ -27,11 +27,11 @@ internal sealed record GetEmailContentToolResult
     public required string StoredEmailId { get; init; }
 
     /// <summary>Gets the configured account the email was read from.</summary>
-    [Description("The configured MailMcp account identifier the email was synchronized from.")]
+    [Description("The configured MailFathom account identifier the email was synchronized from.")]
     public required string AccountId { get; init; }
 
     /// <summary>Gets the folder alias the email was read from.</summary>
-    [Description("The MailMcp folder alias the email was synchronized under, such as INBOX. This is MailMcp's own name for the folder rather than the path the mail server advertises.")]
+    [Description("The MailFathom folder alias the email was synchronized under, such as INBOX. This is MailFathom's own name for the folder rather than the path the mail server advertises.")]
     public required string FolderAlias { get; init; }
 
     /// <summary>Gets the size the mail server reported for the whole email.</summary>

@@ -3,11 +3,11 @@
 
 using System.Buffers.Text;
 using System.Text;
-using MailMcp.Application.Emails;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.Emails;
+using MailFathom.Domain.Emails;
 using Xunit;
 
-namespace MailMcp.Application.UnitTests;
+namespace MailFathom.Application.UnitTests;
 
 /// <summary>Covers the continuation cursor: what it preserves across an encode, and what it refuses to read back.</summary>
 public sealed class EmailTimelineCursorTests

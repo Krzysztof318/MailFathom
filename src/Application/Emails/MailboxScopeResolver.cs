@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Accounts;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
+using MailFathom.Application.Accounts;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>Decides which accounts and folders a mailbox read actually runs against.</summary>
 /// <remarks>

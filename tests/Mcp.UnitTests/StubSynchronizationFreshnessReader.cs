@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
-using MailMcp.Application.Synchronization;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Synchronization;
 
-namespace MailMcp.Mcp.UnitTests;
+namespace MailFathom.Mcp.UnitTests;
 
 /// <summary>Answers a freshness read with fixed entries and records the scope it was asked about.</summary>
 internal sealed class StubSynchronizationFreshnessReader(params MailboxFolderFreshness[] entries)

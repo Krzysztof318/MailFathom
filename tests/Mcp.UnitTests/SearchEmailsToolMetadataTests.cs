@@ -1,13 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Mcp.Tools;
+using MailFathom.Mcp.Tools;
 using ModelContextProtocol.Protocol;
 using Xunit;
 
-namespace MailMcp.Mcp.UnitTests;
+namespace MailFathom.Mcp.UnitTests;
 
-/// <summary>Covers the descriptor MailMcp advertises for <c>search_emails</c>.</summary>
+/// <summary>Covers the descriptor MailFathom advertises for <c>search_emails</c>.</summary>
 /// <remarks>
 /// The annotations are contract metadata rather than documentation: a client decides whether a tool is safe to call,
 /// safe to retry, and confined to local state by reading them before it calls anything. <c>openWorldHint</c> matters
@@ -17,7 +17,7 @@ namespace MailMcp.Mcp.UnitTests;
 public sealed class SearchEmailsToolMetadataTests
 {
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheSearchEmailsToolUnderItsProtocolName()
+    public void AddMailFathomServer_AdvertisesTheSearchEmailsToolUnderItsProtocolName()
     {
         // Arrange, Act
         var advertisedTool = AdvertisedSearchEmailsTool();
@@ -29,7 +29,7 @@ public sealed class SearchEmailsToolMetadataTests
 
     /// <summary>The four hints the architecture draft requires of every read-only tool.</summary>
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheReadOnlyLocalStateAnnotations()
+    public void AddMailFathomServer_AdvertisesTheReadOnlyLocalStateAnnotations()
     {
         // Arrange, Act
         var annotations = AdvertisedSearchEmailsTool().Annotations;
@@ -44,7 +44,7 @@ public sealed class SearchEmailsToolMetadataTests
 
     /// <summary>A model reads this to decide whether the tool answers its question, so it states what retrieval can and cannot find.</summary>
     [Fact]
-    public void AddMailMcpServer_AdvertisesADescriptionStatingTheLocalLexicalBoundsOfTheTool()
+    public void AddMailFathomServer_AdvertisesADescriptionStatingTheLocalLexicalBoundsOfTheTool()
     {
         // Arrange, Act
         var description = AdvertisedSearchEmailsTool().Description;
@@ -57,7 +57,7 @@ public sealed class SearchEmailsToolMetadataTests
     }
 
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheQueryAndEveryFilterAsAnInputSchemaProperty()
+    public void AddMailFathomServer_AdvertisesTheQueryAndEveryFilterAsAnInputSchemaProperty()
     {
         // Arrange
         string[] expectedProperties =
@@ -89,7 +89,7 @@ public sealed class SearchEmailsToolMetadataTests
 
     /// <summary>The snippet bounds are a deployment control, so no argument may exist through which a caller could raise them.</summary>
     [Fact]
-    public void AddMailMcpServer_AdvertisesNoArgumentThatWidensWhatOneResultShowsOfAMessage()
+    public void AddMailFathomServer_AdvertisesNoArgumentThatWidensWhatOneResultShowsOfAMessage()
     {
         // Arrange
         string[] snippetArguments = ["snippetsPerEmail", "wordsPerSnippet", "snippetLength", "includeBody"];
@@ -107,7 +107,7 @@ public sealed class SearchEmailsToolMetadataTests
 
     /// <summary>The text is the one argument a search cannot be called without, so the schema has to say so.</summary>
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheQueryTextAsTheOneRequiredArgument()
+    public void AddMailFathomServer_AdvertisesTheQueryTextAsTheOneRequiredArgument()
     {
         // Arrange, Act
         var required = AdvertisedSearchEmailsTool()
@@ -123,7 +123,7 @@ public sealed class SearchEmailsToolMetadataTests
 
     /// <summary>An argument nobody can interpret is an argument a model guesses at, so every one carries its own description.</summary>
     [Fact]
-    public void AddMailMcpServer_DescribesEveryInputSchemaProperty()
+    public void AddMailFathomServer_DescribesEveryInputSchemaProperty()
     {
         // Arrange, Act
         var describedProperties = AdvertisedSearchEmailsTool()
@@ -139,7 +139,7 @@ public sealed class SearchEmailsToolMetadataTests
 
     /// <summary>The cancellation token the tool takes is the host's concern and must never become a protocol argument.</summary>
     [Fact]
-    public void AddMailMcpServer_DoesNotAdvertiseTheCancellationTokenAsAnArgument()
+    public void AddMailFathomServer_DoesNotAdvertiseTheCancellationTokenAsAnArgument()
     {
         // Arrange, Act
         var advertisedProperties = AdvertisedSearchEmailsTool().InputSchema.GetProperty("properties");
@@ -149,7 +149,7 @@ public sealed class SearchEmailsToolMetadataTests
     }
 
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheResultShapeAsAnOutputSchema()
+    public void AddMailFathomServer_AdvertisesTheResultShapeAsAnOutputSchema()
     {
         // Arrange, Act
         var outputSchema = AdvertisedSearchEmailsTool().OutputSchema;
@@ -167,7 +167,7 @@ public sealed class SearchEmailsToolMetadataTests
     /// see the later hybrid work widen the set rather than reshape the response.
     /// </summary>
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheRetrievalModeAsItsNamedValues()
+    public void AddMailFathomServer_AdvertisesTheRetrievalModeAsItsNamedValues()
     {
         // Arrange
         var outputSchema = AdvertisedSearchEmailsTool().OutputSchema;

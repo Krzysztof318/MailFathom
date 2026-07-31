@@ -1,11 +1,11 @@
 # IMAP synchronization
 
-MailMcp now includes the first vertical slice for read-only IMAP synchronization. The implemented slice is intentionally limited to periodic reconciliation so the persistence model, authenticated IMAP adapter seam, application ports, and safety invariants can be reviewed before adding long-lived IDLE or NOTIFY workers.
+MailFathom now includes the first vertical slice for read-only IMAP synchronization. The implemented slice is intentionally limited to periodic reconciliation so the persistence model, authenticated IMAP adapter seam, application ports, and safety invariants can be reviewed before adding long-lived IDLE or NOTIFY workers.
 
 ## Implemented behavior
 
 - `Domain` models stable IMAP email occurrence identity as `EmailOccurrenceId`, keyed by `(account, folder, UIDVALIDITY, UID)`. The folder component is a `MailFolderResolutionId` — an alias together with the generation it was bound under — rather than a folder name, for the reason [folder aliases and discovery](#folder-aliases-and-discovery) explains. `Email` is the repository-wide term for the mail artifact; `Message` is reserved so it stays unambiguous once AI conversation types exist.
-- `Application` owns IMAP, metadata repository, content store, and checkpoint ports, the folder-discovery, binding-store, and mapping-audit ports in `MailMcp.Application.Folders`, plus the `IPersistenceSession` write-transaction port in `MailMcp.Application.Persistence`. The persistence session is named separately from `IMailboxSession` because both would otherwise be "the session" at a call site.
+- `Application` owns IMAP, metadata repository, content store, and checkpoint ports, the folder-discovery, binding-store, and mapping-audit ports in `MailFathom.Application.Folders`, plus the `IPersistenceSession` write-transaction port in `MailFathom.Application.Persistence`. The persistence session is named separately from `IMailboxSession` because both would otherwise be "the session" at a call site.
 - `MailboxSynchronizer` resolves the configured alias against the folders the server currently advertises before it reads anything, then opens folders through a read-only session port and requests bounded metadata batches. It retains at most one fetched MIME payload at a time: each seen-preserving remote fetch finishes before a short local session atomically upserts that occurrence's metadata, uses the returned local stored-email identifier for its content, and commits and disposes before the next remote fetch starts. After the inspected batch finishes, a separate short session advances the checkpoint only when the mailbox adapter reports a non-speculative UID cursor known safe from the opened folder state.
 - How far back a run reaches is bounded per account by an optional earliest date, which travels into the IMAP search itself rather than filtering what came back. An account that names one pays no `FETCH`, no MIME read, no `bytea` write, and no search-vector computation for the mail it excludes, and the folder checkpoint still advances across the excluded range so a run ends instead of rescanning it every interval. [Bounding how far back a run reaches](#bounding-how-far-back-a-run-reaches) states which date the bound compares against and what widening one later does not do.
 - Batches are bounded by email count, not by UID-space width. The adapter searches the whole remaining assigned UID range — a UID SEARCH returns identifiers only — and then fetches envelopes for at most `MaxMetadataBatchSize` emails. A folder whose UIDs are sparse after deletions therefore still advances a full batch per iteration instead of crawling the UID space, which keeps an initial backfill practical.
@@ -126,7 +126,7 @@ first-party metering instruments for the same values are still [pending](#pendin
 ## Folder aliases and discovery
 
 Configuration never names a remote folder path unless the operator chooses to. It names an **alias** — the stable
-operator-facing folder name MailMcp owns, which appears in configuration, in logs, and in future MCP filters, and
+operator-facing folder name MailFathom owns, which appears in configuration, in logs, and in future MCP filters, and
 which keeps its meaning when the server renames or recreates the folder behind it. Aliases are trimmed and
 upper-cased when they are read, so recasing one in configuration is not a second alias.
 
@@ -284,7 +284,7 @@ nobody wrote would end up in a filter someone trusts.
 
 ### What counts as an attachment
 
-The rule is MailMcp's, not a library default. MimeKit's own `Attachments` keys off `Content-Disposition`, and inheriting
+The rule is MailFathom's, not a library default. MimeKit's own `Attachments` keys off `Content-Disposition`, and inheriting
 that would report an `smime.p7s` attachment on every signed message and would leave an embedded logo counting or not
 counting depending on how the sender wrote one header. The classification runs in a fixed order, and the order is the
 rule — several ordinary parts satisfy more than one of these at once:
@@ -500,14 +500,14 @@ Each account chooses, through `RemotelyDeletedEmailDisposition`:
 | `EraseLocalCopy` | The row is removed as the disappearance is observed, and PostgreSQL removes the raw MIME, the search document, and any outstanding repair request with it. Nothing of the message survives locally. |
 
 The setting is per account because the accounts of one deployment are not interchangeable: a mailbox whose provider is
-the system of record can be followed exactly, while a mailbox MailMcp is the durable copy of must not lose mail because
+the system of record can be followed exactly, while a mailbox MailFathom is the durable copy of must not lose mail because
 a server dropped it. The default is the reversible one, so a server that misreports a folder costs a hidden row rather
 than a destroyed local copy.
 
 **Changing the setting governs what is observed from then on, and touches nothing already recorded.** A message already
 tombstoned under `RetainTombstone` is outside every later window — the server has nothing left to say about it — so
 switching an account to `EraseLocalCopy` erases the disappearances observed after the change and leaves the existing
-tombstones exactly as they are. Cleaning those up is deliberately not automatic; [#170](https://github.com/Krzysztof318/MailMcp/issues/170)
+tombstones exactly as they are. Cleaning those up is deliberately not automatic; [#170](https://github.com/Krzysztof318/MailFathom/issues/170)
 tracks the retention grace period and the bounded garbage collection that will own it, and that is also where a delay
 between observing a disappearance and erasing the local copy will come from.
 
@@ -553,7 +553,7 @@ Synchronization is disabled by default:
         "AccountId": "primary",
         "Host": "imap.example.test",
         "Port": 993,
-        "UserName": "mailmcp@example.test",
+        "UserName": "mailfathom@example.test",
         "EarliestEmailReceivedDate": "2024-01-01",
         "RemotelyDeletedEmailDisposition": "RetainTombstone",
         "Secrets": {
@@ -621,7 +621,7 @@ recent arrived. It binds as a plain date — `2024-01-01` — and the date itsel
 
 **The bound compares against arrival, not against the sent date.** It becomes the IMAP `SINCE` key, which compares the
 server-assigned `INTERNALDATE`, disregarding time and time zone. It deliberately does not compare the envelope `Date`
-header that MailMcp stores as the email's sent timestamp, and the two disagree for imported and forwarded mail:
+header that MailFathom stores as the email's sent timestamp, and the two disagree for imported and forwarded mail:
 
 - An archive copied onto a new server carries the arrival date of the copy, so a migrated mailbox is *not* bounded by
   what its mail says it was sent on. A migration that has to be bounded needs the date the migration ran, not the date
@@ -734,7 +734,7 @@ A protected bundle takes its password from the nested `Password` block, which is
 
 The configured value decides only whether an anchor is *present*; whether it is usable is the loader's question. A non-blank value is an anchor the operator supplied, whether or not it is a `<scheme>:<target>` reference, so the inline shape below passes the presence rule and then gets a named load failure if the material is wrong — rather than being reported as a missing anchor, which it is not. What crosses into the domain policy is never the raw value: a parsed reference crosses masked, and anything else as a fixed `***`.
 
-Under `ReferenceOrInline` or `InlineOnly` the block may carry the PEM text directly, which is what makes an Azure App Configuration deployment work end to end: the store holds the certificate, the provider binds it, and MailMcp parses what it was given. A trust anchor is a public certificate, so writing one into configuration leaks nothing. Only PEM works that way — DER and PKCS#12 are binary and have no faithful representation in a configuration value, so an inline block carrying them fails startup with `InlineEncodingNotSupported`, naming the encoding rather than surfacing a parse error further down. PEM is multi-line, so a JSON document has to escape the newlines; a store-backed provider has no such problem, because the value is transported rather than authored in JSON.
+Under `ReferenceOrInline` or `InlineOnly` the block may carry the PEM text directly, which is what makes an Azure App Configuration deployment work end to end: the store holds the certificate, the provider binds it, and MailFathom parses what it was given. A trust anchor is a public certificate, so writing one into configuration leaks nothing. Only PEM works that way — DER and PKCS#12 are binary and have no faithful representation in a configuration value, so an inline block carrying them fails startup with `InlineEncodingNotSupported`, naming the encoding rather than surfacing a parse error further down. PEM is multi-line, so a JSON document has to escape the newlines; a store-backed provider has no such problem, because the value is transported rather than authored in JSON.
 
 Material is imported with ephemeral key storage, and an anchor that carries a private key is **rejected**. A trust anchor needs only a public certificate; a private key would sit outside the buffer whose lifetime the secret machinery controls, and with default key-storage flags the import could persist it to a key store on disk. Material that does not parse, or parses but is unusable, fails startup with a named failure and never with the material itself:
 
@@ -750,7 +750,7 @@ Material is imported with ephemeral key storage, and an anchor that carries a pr
 | `BundleCarriesNoCertificate` | The bundle parsed but holds no certificate. |
 | `TrustAnchorCarriesPrivateKey` | The certificate carries a private key. |
 
-The platform reports a wrong bundle password, a missing one, and corrupt bundle contents identically, so the last two are told apart by what was configured rather than by what the platform said. It is a diagnostic refinement that points at the part an operator controls, not a claim about the material. A loaded anchor is logged by subject and thumbprint, which is public information and the detail that confirms MailMcp trusts the authority the operator provisioned.
+The platform reports a wrong bundle password, a missing one, and corrupt bundle contents identically, so the last two are told apart by what was configured rather than by what the platform said. It is a diagnostic refinement that points at the part an operator controls, not a claim about the material. A loaded anchor is logged by subject and thumbprint, which is public information and the detail that confirms MailFathom trusts the authority the operator provisioned.
 
 #### How the anchor is used
 
@@ -798,7 +798,7 @@ A rejected reload is logged with the configuration path and the failure identity
   an account, and the per-account supervisor a run now belongs to is where one listing can serve them all.
 - Metering instruments for a supervised run. Run duration, stored and skipped counts, the consecutive failure count,
   and the current backoff are recorded as structured log properties today. Publishing them through a first-party
-  `Meter` is a separate change, because MailMcp declares no meter of its own yet and the one the service defaults
+  `Meter` is a separate change, because MailFathom declares no meter of its own yet and the one the service defaults
   export is Polly's.
 - Long-lived push connections. IDLE and NOTIFY are hosted by the per-account supervisor when they land; the supervisor
   exists so they have somewhere to live that is already isolated per account.
@@ -810,7 +810,7 @@ A rejected reload is logged with the configuration path and the failure identity
 - Explicit EF Core migrations after schema review.
 - A retention grace period for a message the server no longer holds, and the bounded garbage collection that would act
   on it. Erasing a local copy happens as the disappearance is observed, and a tombstone keeps its content
-  indefinitely; [#170](https://github.com/Krzysztof318/MailMcp/issues/170) owns both, together with clearing the
+  indefinitely; [#170](https://github.com/Krzysztof318/MailFathom/issues/170) owns both, together with clearing the
   tombstones an account accumulated before it switched to erasing.
 - Chaos-tested resilience pipelines. The composition has unit coverage; what is missing is proof that an adapter survives a
   dependency misbehaving, which belongs with the adapters now that they are under integration coverage.

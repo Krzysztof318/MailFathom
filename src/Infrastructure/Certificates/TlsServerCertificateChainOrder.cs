@@ -3,7 +3,7 @@
 
 using System.Security.Cryptography.X509Certificates;
 
-namespace MailMcp.Infrastructure.Certificates;
+namespace MailFathom.Infrastructure.Certificates;
 
 /// <summary>The certificates presented after a leaf, ordered towards a root, or the reason they form no chain.</summary>
 /// <remarks>

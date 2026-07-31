@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Text.Json;
-using MailMcp.Domain.Transport;
+using MailFathom.Domain.Transport;
 using Xunit;
 
-namespace MailMcp.Domain.UnitTests;
+namespace MailFathom.Domain.UnitTests;
 
 public sealed class MailAuthenticationMechanismJsonConverterTests
 {

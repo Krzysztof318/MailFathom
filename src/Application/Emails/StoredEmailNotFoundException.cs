@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Globalization;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>The failure raised when a request names an email the local mailbox copy holds no row for.</summary>
 /// <remarks>
@@ -15,11 +15,11 @@ namespace MailMcp.Application.Emails;
 /// exist by asking, and none of the three is anything they can act on differently.
 /// </para>
 /// <para>
-/// The message names the identifier the caller supplied, which is MailMcp's own handle for the email and carries
+/// The message names the identifier the caller supplied, which is MailFathom's own handle for the email and carries
 /// nothing the caller did not already write.
 /// </para>
 /// </remarks>
-public sealed class StoredEmailNotFoundException : MailMcpException
+public sealed class StoredEmailNotFoundException : MailFathomException
 {
     /// <summary>Initializes the failure for one unknown email identifier.</summary>
     /// <param name="storedEmailId">The email identifier the request named.</param>
@@ -33,5 +33,5 @@ public sealed class StoredEmailNotFoundException : MailMcpException
     public StoredEmailId StoredEmailId { get; }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.StoredEmailNotFound;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.StoredEmailNotFound;
 }

@@ -11,9 +11,9 @@ informed:
 
 ## Context and Problem Statement
 
-MailMcp will need configuration for mail accounts, synchronization limits, security policy, storage adapters, AI providers, MCP endpoints, operational guardrails, and future governance controls. .NET configuration providers and the Options pattern are useful host-level mechanisms, but reading raw `IConfiguration` or injecting provider-shaped options directly into use cases would couple business behavior to transport keys, mutable provider state, binder constraints, and reload timing.
+MailFathom will need configuration for mail accounts, synchronization limits, security policy, storage adapters, AI providers, MCP endpoints, operational guardrails, and future governance controls. .NET configuration providers and the Options pattern are useful host-level mechanisms, but reading raw `IConfiguration` or injecting provider-shaped options directly into use cases would couple business behavior to transport keys, mutable provider state, binder constraints, and reload timing.
 
-The decision question is: should MailMcp read configuration directly from `IConfiguration` or `IOptions*` throughout the codebase, or should it introduce an intermediate configuration access layer that maps raw/options-shaped configuration into application-owned business settings and publishes safe automatic reload updates? This ADR is intentionally limited to the first-stage read path: source validation, options binding, mapping, validation, and reload behavior. It also records the intended future direction for programmatic configuration modification so the read model does not block a later write model, but it does not yet decide how configuration is stored, including whether future sources are files, a database-backed provider, a cloud configuration store, or another managed configuration service.
+The decision question is: should MailFathom read configuration directly from `IConfiguration` or `IOptions*` throughout the codebase, or should it introduce an intermediate configuration access layer that maps raw/options-shaped configuration into application-owned business settings and publishes safe automatic reload updates? This ADR is intentionally limited to the first-stage read path: source validation, options binding, mapping, validation, and reload behavior. It also records the intended future direction for programmatic configuration modification so the read model does not block a later write model, but it does not yet decide how configuration is stored, including whether future sources are files, a database-backed provider, a cloud configuration store, or another managed configuration service.
 
 ## Decision Drivers
 
@@ -93,7 +93,7 @@ Validation should happen in layers:
 
 ### Future programmatic modification
 
-MailMcp should eventually support controlled configuration modification by program code, but that capability is deliberately not part of the first read-focused implementation. The storage question for those writes is also deliberately postponed; a later ADR must decide whether the writable source is file-based, database-backed, a dedicated configuration store, a cloud configuration service, or another managed provider. The read layer should therefore expose business settings through contracts that can later be backed by a validated writable source without changing application use cases.
+MailFathom should eventually support controlled configuration modification by program code, but that capability is deliberately not part of the first read-focused implementation. The storage question for those writes is also deliberately postponed; a later ADR must decide whether the writable source is file-based, database-backed, a dedicated configuration store, a cloud configuration service, or another managed provider. The read layer should therefore expose business settings through contracts that can later be backed by a validated writable source without changing application use cases.
 
 The target write model should be command-oriented, not raw key mutation. Future APIs should accept intent-specific commands such as enabling a provider, changing synchronization limits, rotating a secret reference, or updating a tenant override. Each command should validate the proposed source configuration, map it to business settings, check authorization and policy, record audit evidence, and publish the change through the same reload path used by external provider changes.
 
@@ -142,7 +142,7 @@ A secret that is *not* reached through a reference — a password written into a
 - Microsoft Learn, "Options pattern in .NET," documents options validation, `IValidateOptions<TOptions>`, and `AddOptionsWithValidateOnStart<TOptions>` / `ValidateOnStart` startup validation: <https://learn.microsoft.com/en-us/dotnet/core/extensions/options>.
 - Microsoft Learn, "Detect changes with change tokens in ASP.NET Core," describes configuration reload change tokens and file-provider reload behavior: <https://learn.microsoft.com/en-us/aspnet/core/fundamentals/change-tokens?view=aspnetcore-10.0>.
 - Microsoft Learn, "Implement a custom configuration provider in .NET," documents custom providers backed by a database, which is relevant background for a future storage-backed read/write provider but is not adopted by this ADR: <https://learn.microsoft.com/en-us/dotnet/core/extensions/custom-configuration-provider>.
-- This ADR refines the MailMcp architecture rule that `Host` owns configuration and dependency injection, while `Application` and `Domain` remain independent of infrastructure frameworks: `specs/2026-07-22-mail-mcp-architecture-draft.md`.
+- This ADR refines the MailFathom architecture rule that `Host` owns configuration and dependency injection, while `Application` and `Domain` remain independent of infrastructure frameworks: `specs/2026-07-22-mail-fathom-architecture-draft.md`.
 
 ## Decision Outcome
 
@@ -161,6 +161,6 @@ Host/infrastructure code binds and validates provider-shaped options, maps them 
 - Good, because mapping creates one place to translate provider strings, defaults, units, ranges, sensitive-value handling, source-validation results, and reload classification into business semantics.
 - Good, because last-known-good reload behavior and safe operational diagnostics can be implemented once per setting group.
 - Neutral, because configuration DTOs and business settings will both exist and require explicit mapping tests.
-- Bad, because the layer adds code and design discipline before MailMcp has many configurable behaviors.
+- Bad, because the layer adds code and design discipline before MailFathom has many configurable behaviors.
 - Bad, because incorrect classification of reloadability can still cause inconsistent runtime behavior.
 - Bad, because this layer must stay narrow; a generic settings service or premature writer API would recreate raw configuration coupling under a different name.

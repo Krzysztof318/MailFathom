@@ -1,10 +1,10 @@
 # Secret rotation
 
-A rotated mailbox password, trust anchor, database credential, or MCP API key takes effect without restarting MailMcp. Rotation is an ordinary operational act, not a maintenance window, and shortening the window in which any single credential is valid is a security and privacy improvement rather than a cost.
+A rotated mailbox password, trust anchor, database credential, or MCP API key takes effect without restarting MailFathom. Rotation is an ordinary operational act, not a maintenance window, and shortening the window in which any single credential is valid is a security and privacy improvement rather than a cost.
 
 Two independent things can change, and both are covered.
 
-| What changed | What MailMcp does |
+| What changed | What MailFathom does |
 | --- | --- |
 | **The material behind an unchanged reference** — you rewrite the credential file, re-encrypt the systemd credential, or update the vault entry. | Nothing is cached, so the next operation resolves the reference again and observes the new material. No configuration reload is involved because no configuration changed. |
 | **The reference itself** — you edit configuration to point at a different credential name or path. | The configuration reload produces a candidate snapshot. It is published only after every reference in it resolves and every trust anchor in it loads; otherwise it is rejected and the previous configuration stays active. |
@@ -49,23 +49,23 @@ Rotating the reference instead — pointing `Secrets:Password` at a different cr
 ### Native systemd service
 
 ```bash
-systemd-creds encrypt --name=imap-primary-password new-password.txt /etc/mailmcp/imap-primary-password.cred
+systemd-creds encrypt --name=imap-primary-password new-password.txt /etc/mailfathom/imap-primary-password.cred
 ```
 
 `LoadCredential=` and `LoadCredentialEncrypted=` populate the credentials directory when the unit starts, so a *rotated file* is not visible to the running process. Reload the unit to republish the directory:
 
 ```bash
-sudo systemctl reload-or-restart mailmcp
+sudo systemctl reload-or-restart mailfathom
 ```
 
-This is the one place where the deployment shape, not MailMcp, decides. If uninterrupted rotation matters more than systemd's credential encryption, provision that secret as a file the service user can read and reference it with `file:` instead; MailMcp reads it on the next operation with no unit action at all.
+This is the one place where the deployment shape, not MailFathom, decides. If uninterrupted rotation matters more than systemd's credential encryption, provision that secret as a file the service user can read and reference it with `file:` instead; MailFathom reads it on the next operation with no unit action at all.
 
 ### Containers
 
 A Docker or Podman Compose secret and a Kubernetes Secret both surface as a file. Update the file — for Kubernetes, update the Secret and let the kubelet refresh the projected volume — and the next operation reads it. No restart, no rollout.
 
 ```bash
-kubectl create secret generic mailmcp-imap --from-literal=imap-primary-password='...' \
+kubectl create secret generic mailfathom-imap --from-literal=imap-primary-password='...' \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
@@ -157,7 +157,7 @@ Both provisioning shapes rotate: `Persistence:Password`, and `Persistence:Connec
 
 *Changing where the credential comes from.* The pool attaches its password provider once, when it is built, so adding `Persistence:Password` to a deployment that started without one — or removing it, or switching to `Persistence:ConnectionString` — is not a rotation. A reload that does so is rejected with `CredentialSourceChangeRequiresRestart` and the previous settings stay active, rather than being logged as adopted while every connection keeps using what startup composed. Restart to change the shape; rotate freely within it.
 
-*A password written into `ConnectionStrings:mailmcp` with no secret block* — an orchestrator-injected connection string. Nothing re-reads it, and under `ReferenceOnly` startup already logs a warning naming it. The same restriction applies to the non-credential parts of `Persistence:ConnectionString`: a rotated connection string that also changes host, database, or user name describes a different database rather than a rotated credential, and only its password is adopted in place.
+*A password written into `ConnectionStrings:mailfathom` with no secret block* — an orchestrator-injected connection string. Nothing re-reads it, and under `ReferenceOnly` startup already logs a warning naming it. The same restriction applies to the non-credential parts of `Persistence:ConnectionString`: a rotated connection string that also changes host, database, or user name describes a different database rather than a rotated credential, and only its password is adopted in place.
 
 A rotated `Persistence:ConnectionString` is also parsed before it is published. Material that resolves but is not a valid connection string, or that no longer carries a password when it is what supplies the credential, is rejected as `ConnectionStringNotParsable` or `ConnectionStringCarriesNoPassword` — otherwise it would replace working settings and then fail every connection opened afterwards.
 
@@ -177,4 +177,4 @@ Adopted a reloaded mail synchronization configuration; new operations use its se
 
 No log line, exception, or diagnostic carries the reference target, the environment variable's value, or any part of the material. A loaded trust anchor is the one exception and only in the sense that a certificate is public: it is logged by subject and thumbprint.
 
-Treat a rejection as an unfinished rotation. MailMcp keeps running on what it had, so nothing breaks immediately — but the deployment is now running configuration that differs from what is on disk, and revoking the old credential at that point is what would take it offline.
+Treat a rejection as an unfinished rotation. MailFathom keeps running on what it had, so nothing breaks immediately — but the deployment is now running configuration that differs from what is on disk, and revoking the old credential at that point is what would take it offline.

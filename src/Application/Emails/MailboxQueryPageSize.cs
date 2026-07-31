@@ -3,7 +3,7 @@
 
 using System.Globalization;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>How many emails one page of a mailbox query returns.</summary>
 /// <remarks>

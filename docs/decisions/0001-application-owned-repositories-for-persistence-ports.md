@@ -11,9 +11,9 @@ informed:
 
 ## Context and Problem Statement
 
-MailMcp follows clean architecture: `Application` owns use cases and ports, while `Infrastructure` owns EF Core, PostgreSQL, SQL details, and migrations. The initial architecture also requires fast isolated unit tests, future PostgreSQL-backed integration tests, explicit privacy/governance seams, and no leakage of EF Core or provider-specific types into `Application` or `Domain`.
+MailFathom follows clean architecture: `Application` owns use cases and ports, while `Infrastructure` owns EF Core, PostgreSQL, SQL details, and migrations. The initial architecture also requires fast isolated unit tests, future PostgreSQL-backed integration tests, explicit privacy/governance seams, and no leakage of EF Core or provider-specific types into `Application` or `Domain`.
 
-The decision question is: should application use cases depend directly on EF Core objects in unit tests and production code, or should MailMcp introduce a repository-style persistence port; if repositories are used, should they be simple use-case/aggregate-specific contracts, capability-segregated CRUD interfaces, or a generic repository plus specification model? A second question is how writes that touch multiple repositories should share a transaction boundary: by passing an explicit session object, by exposing repositories as properties on a Unit of Work object, or by relying on an ambient transient session such as an `AsyncLocal` context. A third question is whether concurrent writes should normally use optimistic version checks or pessimistic database locks, how PostgreSQL should generate the concurrency token, and where conflict translation and bounded retries belong.
+The decision question is: should application use cases depend directly on EF Core objects in unit tests and production code, or should MailFathom introduce a repository-style persistence port; if repositories are used, should they be simple use-case/aggregate-specific contracts, capability-segregated CRUD interfaces, or a generic repository plus specification model? A second question is how writes that touch multiple repositories should share a transaction boundary: by passing an explicit session object, by exposing repositories as properties on a Unit of Work object, or by relying on an ambient transient session such as an `AsyncLocal` context. A third question is whether concurrent writes should normally use optimistic version checks or pessimistic database locks, how PostgreSQL should generate the concurrency token, and where conflict translation and bounded retries belong.
 
 ## Decision Drivers
 
@@ -57,7 +57,7 @@ For signaling a detected conflict to application code, this ADR considers these 
 
 ## Decision Outcome
 
-Chosen option: "Simple application-owned repository/query ports implemented with EF Core in `Infrastructure`, coordinated by explicit application-owned Unit of Work sessions for multi-repository writes", because it gives MailMcp reliable application-layer unit-test seams without adopting a broad generic repository framework, exposing EF Core query composition, or hiding transaction lifetime in ambient state.
+Chosen option: "Simple application-owned repository/query ports implemented with EF Core in `Infrastructure`, coordinated by explicit application-owned Unit of Work sessions for multi-repository writes", because it gives MailFathom reliable application-layer unit-test seams without adopting a broad generic repository framework, exposing EF Core query composition, or hiding transaction lifetime in ambient state.
 
 Optimistic concurrency is the default for mutable EF Core-managed PostgreSQL records. Infrastructure persistence models use a `uint` property named `ConcurrencyVersion`, configured with EF Core's `IsRowVersion()`, which the Npgsql provider maps to PostgreSQL's implicit, server-generated `xmin` system column. Pessimistic row locking is an explicit exception that requires a concrete consistency or contention reason, a short transaction, and provider-level integration tests.
 
@@ -97,13 +97,13 @@ Repository methods should represent persistence operations required by a use cas
 
 ### CRUD capability interfaces
 
-Do not introduce cross-cutting CRUD capability interfaces such as `ICanCreate<T>`, `ICanDelete<T>`, `ICanUpdate<T>`, or `ICanList<T>` as a default pattern. They are too broad for MailMcp's persistence rules because delete, retention, erasure, synchronization writes, raw MIME storage, embedding cleanup, and SMTP outbox leasing all have different invariants, audit expectations, and idempotency requirements.
+Do not introduce cross-cutting CRUD capability interfaces such as `ICanCreate<T>`, `ICanDelete<T>`, `ICanUpdate<T>`, or `ICanList<T>` as a default pattern. They are too broad for MailFathom's persistence rules because delete, retention, erasure, synchronization writes, raw MIME storage, embedding cleanup, and SMTP outbox leasing all have different invariants, audit expectations, and idempotency requirements.
 
 A narrowly scoped capability interface may be introduced only when at least two real application ports need the same behavior and the shared contract can state meaningful domain constraints. Until then, prefer explicit methods on explicit ports.
 
 ### Specifications and query objects
 
-Do not adopt a generic specification framework at this stage. Specifications can be useful when clients need declarative query criteria submitted to a repository, but in MailMcp they also risk reintroducing query-language leakage, unbounded composition, and hard-to-review performance/privacy behavior.
+Do not adopt a generic specification framework at this stage. Specifications can be useful when clients need declarative query criteria submitted to a repository, but in MailFathom they also risk reintroducing query-language leakage, unbounded composition, and hard-to-review performance/privacy behavior.
 
 Use simple query criteria records owned by `Application` when a use case genuinely needs variable filters, for example `MessageTimelineQuery`, `SearchEmailsQuery`, or `MessagesReadyForEmbeddingQuery`. These criteria are data contracts, not executable EF Core expressions. The infrastructure adapter translates them to EF Core or SQL and owns all provider-specific optimization.
 
@@ -126,13 +126,13 @@ Do not introduce a generic Unit of Work abstraction only because EF Core has `Sa
 
 The preferred application-facing shape is an explicit Unit of Work session. A use case starts a session through a focused port such as `IPersistenceSessionFactory`, `IMailStoreUnitOfWorkFactory`, or a narrower use-case-specific transaction coordinator when that name better communicates intent. The returned session is passed explicitly to repository methods that must participate in the same transaction, and commit is an explicit asynchronous operation on the session or coordinator. Repository calls that are not part of that transaction do not receive the session.
 
-MailMcp implements this as `IPersistenceSession` and `IPersistenceSessionFactory` in `MailMcp.Application.Persistence`. The names deliberately avoid the bare word `Session`, which in this system also means an open IMAP mailbox session (`IMailboxSession`); an unqualified `ISession` in a signature does not tell a reader which of the two it is.
+MailFathom implements this as `IPersistenceSession` and `IPersistenceSessionFactory` in `MailFathom.Application.Persistence`. The names deliberately avoid the bare word `Session`, which in this system also means an open IMAP mailbox session (`IMailboxSession`); an unqualified `ISession` in a signature does not tell a reader which of the two it is.
 
 ### The session must be the write handle, not a marker parameter
 
 A session parameter that the implementation ignores provides no guarantee at all. If a repository injects its own `DbContext` and merely accepts an `IPersistenceSession` it never reads, the write happens to join the caller's transaction only because dependency injection handed both objects the same scoped context. A session obtained from a different scope would be accepted silently and the write would land outside the caller's transaction.
 
-Therefore a write repository must obtain its persistence context *through* the supplied session, and must fail loudly when handed a session it cannot write through. In MailMcp, `EfCorePersistenceSessionAccessor.DbContextOf` performs that resolution and write repositories consequently do not inject `DbContext` at all.
+Therefore a write repository must obtain its persistence context *through* the supplied session, and must fail loudly when handed a session it cannot write through. In MailFathom, `EfCorePersistenceSessionAccessor.DbContextOf` performs that resolution and write repositories consequently do not inject `DbContext` at all.
 
 The guarantee this buys is that the write is issued on the session's own context, so it cannot land outside the transaction the caller opened. It is not a scope check: a session created by the same factory in a different scope is accepted, and writing through its context is the correct outcome. The rejection path, an `ArgumentException`, covers only a session backed by a different persistence provider, which cannot supply an EF Core context at all.
 
@@ -187,7 +187,7 @@ Pessimistic concurrency is not the repository default. It may be used for a narr
 
 EF Core reports a failed optimistic update or delete as `DbUpdateConcurrencyException`. Infrastructure must catch that exception only at the repository or Unit of Work commit boundary and translate it into an application-owned `ConcurrencyConflict` result. Provider exception details, tracked entries, SQL, and database values must not cross into `Application`, `Domain`, MCP responses, or administrative endpoints.
 
-MailMcp signals that outcome at exactly two altitudes, and nowhere in between.
+MailFathom signals that outcome at exactly two altitudes, and nowhere in between.
 
 `IPersistenceSession.CommitAsync` returns `PersistenceCommitResult`. At that one port a conflict is not a failure but a loop condition: its only caller is the retry policy, which consumes the value immediately and decides whether another attempt is allowed. Keeping it in the signature makes the decision visible where it is actually made, and costs nothing because no code between the session and the policy has to carry it.
 
@@ -239,7 +239,7 @@ Use production EF Core entities, `DbContext`, `DbSet`, or fake EF Core providers
 
 Define narrow ports in `Application`; implement them with EF Core in `Infrastructure`; stub ports in application unit tests; verify EF Core behavior later in PostgreSQL integration tests.
 
-- Good, because it aligns with the existing MailMcp dependency rule and keeps persistence details behind adapters.
+- Good, because it aligns with the existing MailFathom dependency rule and keeps persistence details behind adapters.
 - Good, because tests can directly provide repository outputs and focus on use-case behavior rather than fake database semantics.
 - Good, because contracts can preserve bounded queries, deterministic ordering, authorization assumptions, privacy constraints, cancellation, and idempotency in domain language.
 - Neutral, because it requires a method or query criteria contract for each persisted behavior that must be tested without a database.
@@ -253,7 +253,7 @@ Create reusable generic interfaces such as `IRepository<T>`, `ICanCreate<T>`, `I
 - Good, because capability segregation can make mutation permissions visible at the type level.
 - Good, because common CRUD mechanics can be reused for simple entities.
 - Neutral, because capability interfaces may be acceptable for low-risk administrative lookup data if real duplication appears.
-- Bad, because generic CRUD names hide MailMcp-specific invariants for message occurrence identity, synchronization checkpoints, raw MIME content, embeddings, retention, deletion, and outbox leases.
+- Bad, because generic CRUD names hide MailFathom-specific invariants for message occurrence identity, synchronization checkpoints, raw MIME content, embeddings, retention, deletion, and outbox leases.
 - Bad, because broad capabilities are easy to over-inject, accidentally granting deletes or updates where only a narrow read or append operation is safe.
 - Bad, because CRUD interfaces encourage entity-centric persistence instead of use-case-centric contracts and can make audit/privacy behavior less explicit.
 
@@ -263,10 +263,10 @@ Expose a generic repository that accepts reusable specifications or query object
 
 - Good, because specifications can reduce method explosion when many queries share reusable criteria.
 - Good, because declarative criteria can separate query intent from infrastructure translation when carefully constrained.
-- Neutral, because MailMcp may eventually need richer query criteria for search, synchronization backlogs, retention, and indexing workflows.
+- Neutral, because MailFathom may eventually need richer query criteria for search, synchronization backlogs, retention, and indexing workflows.
 - Bad, because a specification model often leaks expression trees, includes, ordering, pagination, or provider assumptions back into the application layer.
 - Bad, because unbounded composition makes privacy filters, authorization predicates, deterministic ordering, and query cost harder to review.
-- Bad, because it introduces a framework-level abstraction before MailMcp has enough real queries to prove the need.
+- Bad, because it introduces a framework-level abstraction before MailFathom has enough real queries to prove the need.
 
 ## Pros and Cons of Unit of Work Coordination Options
 
@@ -302,7 +302,7 @@ A use case opens an ambient transaction scope, and repositories look up the curr
 - Neutral, because it relies on .NET async-flow behavior that is powerful but easy to misuse.
 - Bad, because transaction participation becomes hidden, making code review, authorization review, privacy review, and unit tests less direct.
 - Bad, because nested sessions, retries, background work, parallel fan-out, asynchronous continuations, and failure cleanup can accidentally reuse or lose the ambient session.
-- Bad, because hidden ambient state conflicts with MailMcp's preference for explicit dependencies and small application contracts.
+- Bad, because hidden ambient state conflicts with MailFathom's preference for explicit dependencies and small application contracts.
 
 ## Pros and Cons of Concurrency Options
 
@@ -379,4 +379,4 @@ Return `PersistenceCommitResult` from `IPersistenceSession.CommitAsync`, and rai
 - Microsoft Learn, "Testing without your production database system," shows repository interfaces returning `IAsyncEnumerable<T>` or `IEnumerable<T>` rather than `IQueryable<T>` so EF Core query translation does not leak into tests: <https://learn.microsoft.com/en-us/ef/core/testing/testing-without-the-database>.
 - Microsoft Learn, "Using Transactions," documents that one `SaveChanges` call is transactional by default when the provider supports transactions and describes explicit EF Core transaction control for multiple operations: <https://learn.microsoft.com/en-us/ef/core/saving/transactions>.
 - Martin Fowler's Repository catalog entry describes Repository as a mediator between domain and data-mapping layers and notes that clients may submit declarative query specifications to repositories: <https://martinfowler.com/eaaCatalog/repository.html>.
-- This ADR refines the MailMcp architecture draft's boundary rule that `Application` owns ports and `Infrastructure` owns persistence, EF Core, PostgreSQL, `bytea`, pgvector, and provider-specific mapping details: `specs/2026-07-22-mail-mcp-architecture-draft.md`.
+- This ADR refines the MailFathom architecture draft's boundary rule that `Application` owns ports and `Infrastructure` owns persistence, EF Core, PostgreSQL, `bytea`, pgvector, and provider-specific mapping details: `specs/2026-07-22-mail-fathom-architecture-draft.md`.

@@ -1,15 +1,15 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Mcp.Failures;
+namespace MailFathom.Mcp.Failures;
 
-/// <summary>Writes the one error text every failed MailMcp tool call is reported through.</summary>
+/// <summary>Writes the one error text every failed MailFathom tool call is reported through.</summary>
 /// <remarks>
 /// <para>
 /// The shape is defined once here and used for every failure the surface publishes, so a client parses one format and an
-/// operator reads one format. The text opens with the stable five-digit <see cref="MailMcpErrorCode" />, the machine-readable part
+/// operator reads one format. The text opens with the stable five-digit <see cref="MailFathomErrorCode" />, the machine-readable part
 /// and the only part a runbook, an alert, or a support conversation should match on; the sentence after it is written
 /// for whoever, or whatever, reads the message.
 /// </para>
@@ -38,10 +38,10 @@ internal static class McpToolFailure
     /// <remarks>
     /// The category is the whole rule, deliberately, rather than a list of exception types this boundary would have to be
     /// edited to extend. A failure from any other category — a schema mismatch, an IMAP authentication refusal, a
-    /// concurrency conflict — describes MailMcp's own internals to whoever asked, so it collapses into
-    /// <see cref="MailMcpErrorCode.McpToolFailedUnexpectedly" /> and stays in the server log.
+    /// concurrency conflict — describes MailFathom's own internals to whoever asked, so it collapses into
+    /// <see cref="MailFathomErrorCode.McpToolFailedUnexpectedly" /> and stays in the server log.
     /// </remarks>
-    public static bool CanDescribeToClient(MailMcpException failure)
+    public static bool CanDescribeToClient(MailFathomException failure)
     {
         ArgumentNullException.ThrowIfNull(failure);
 
@@ -58,7 +58,7 @@ internal static class McpToolFailure
     /// limit without naming the value, so restating it at this boundary would produce two texts for one failure that
     /// could drift apart, and the one a client reads would be the one no test of the use case covers.
     /// </remarks>
-    public static string Describe(MailMcpException failure)
+    public static string Describe(MailFathomException failure)
     {
         if (!CanDescribeToClient(failure))
         {
@@ -76,7 +76,7 @@ internal static class McpToolFailure
     /// <returns>The failure text, opening with the five-digit code.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="clientSafeMessage" /> is blank.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="errorCode" /> is the unspecified struct default, which names no failure a client could act on.</exception>
-    public static string Describe(MailMcpErrorCode errorCode, string clientSafeMessage)
+    public static string Describe(MailFathomErrorCode errorCode, string clientSafeMessage)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clientSafeMessage);
 
@@ -87,6 +87,6 @@ internal static class McpToolFailure
                 "A tool failure must be reported through an allocated error code.");
         }
 
-        return $"MailMcp error {errorCode}: {clientSafeMessage}";
+        return $"MailFathom error {errorCode}: {clientSafeMessage}";
     }
 }

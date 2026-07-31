@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.ComponentModel;
-using MailMcp.Application.Emails;
+using MailFathom.Application.Emails;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes what one listed email carries besides its body.</summary>
 /// <remarks>
@@ -15,8 +15,8 @@ namespace MailMcp.Mcp.Tools;
 [Description("What the email carries besides its body, as far as the stored row records it. File names and media types are not returned; a reader that needs them parses the stored raw content.")]
 internal sealed record ListedEmailAttachments
 {
-    /// <summary>Gets how many parts MailMcp's classification counted as attachments.</summary>
-    [Description("How many parts MailMcp classified as attachments. Inline images and cryptographic signature parts are not counted, so a signed message with a logo in its signature block reports zero.")]
+    /// <summary>Gets how many parts MailFathom's classification counted as attachments.</summary>
+    [Description("How many parts MailFathom classified as attachments. Inline images and cryptographic signature parts are not counted, so a signed message with a logo in its signature block reports zero.")]
     public required int AttachmentCount { get; init; }
 
     /// <summary>Gets the decoded size of those attachments together.</summary>
@@ -28,11 +28,11 @@ internal sealed record ListedEmailAttachments
     public required int InlineResourceCount { get; init; }
 
     /// <summary>Gets whether the body arrived inside a cryptographic envelope.</summary>
-    [Description("Whether the body arrived inside a cryptographic envelope and is therefore unreadable by MailMcp, which also means no text was extracted from it.")]
+    [Description("Whether the body arrived inside a cryptographic envelope and is therefore unreadable by MailFathom, which also means no text was extracted from it.")]
     public required bool IsEncrypted { get; init; }
 
     /// <summary>Gets whether a signature part is present, verified by nothing.</summary>
-    [Description("Whether a cryptographic signature part is present. MailMcp does not verify it, so this states presence and nothing about authenticity.")]
+    [Description("Whether a cryptographic signature part is present. MailFathom does not verify it, so this states presence and nothing about authenticity.")]
     public required bool CarriesUnverifiedSignature { get; init; }
 
     /// <summary>Gets whether a TNEF part was recorded without being expanded.</summary>

@@ -1,16 +1,16 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Secrets;
 using Npgsql;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class ConnectionStringComposerTests
 {
-    private const string ConnectionStringWithoutPassword = "Host=localhost;Database=mailmcp;Username=mailmcp";
+    private const string ConnectionStringWithoutPassword = "Host=localhost;Database=mailfathom;Username=mailfathom";
 
     [Fact]
     public async Task ComposeAsync_PasswordBlock_KeepsTheCredentialOutOfTheConnectionStringAndNamesItsSource()
@@ -23,7 +23,7 @@ public sealed class ConnectionStringComposerTests
 
         // Assert
         Assert.Null(composed.ConnectionSettings.Password);
-        Assert.Equal("mailmcp", composed.ConnectionSettings.Database);
+        Assert.Equal("mailfathom", composed.ConnectionSettings.Database);
         Assert.Equal(DatabasePasswordSource.PasswordSecret, composed.PasswordSource);
     }
 
@@ -35,7 +35,7 @@ public sealed class ConnectionStringComposerTests
 
         // Assert
         Assert.Null(composed.ConnectionSettings.Password);
-        Assert.Equal("mailmcp", composed.ConnectionSettings.Username);
+        Assert.Equal("mailfathom", composed.ConnectionSettings.Username);
         Assert.Equal(DatabasePasswordSource.None, composed.PasswordSource);
     }
 
@@ -55,7 +55,7 @@ public sealed class ConnectionStringComposerTests
 
         // Assert
         Assert.Null(composed.ConnectionSettings.Password);
-        Assert.Equal("mailmcp", composed.ConnectionSettings.Database);
+        Assert.Equal("mailfathom", composed.ConnectionSettings.Database);
         Assert.Equal(DatabasePasswordSource.ConnectionStringSecret, composed.PasswordSource);
     }
 

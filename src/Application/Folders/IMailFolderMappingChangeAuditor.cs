@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Application.Folders;
+namespace MailFathom.Application.Folders;
 
 /// <summary>Records that an alias started naming a different remote folder.</summary>
 /// <remarks>

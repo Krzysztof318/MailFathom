@@ -1,14 +1,14 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Folders;
-using MailMcp.Application.Persistence;
-using MailMcp.CodeCoverage;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
+using MailFathom.Application.Folders;
+using MailFathom.Application.Persistence;
+using MailFathom.CodeCoverage;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>EF Core implementation for durable alias bindings.</summary>
 /// <remarks>
@@ -16,7 +16,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// the caller's session, so a binding can only be written inside the transaction the caller opened.
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class MailFolderResolutionStore(MailMcpDbContext readContext) : IMailFolderResolutionStore
+internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext) : IMailFolderResolutionStore
 {
     /// <inheritdoc />
     public async Task<MailFolderResolution?> GetCurrentResolutionAsync(

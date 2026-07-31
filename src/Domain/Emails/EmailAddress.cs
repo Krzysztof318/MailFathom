@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Domain.Emails;
+namespace MailFathom.Domain.Emails;
 
 /// <summary>Names one mail participant by its address and, when the sender wrote one, its display name.</summary>
 /// <remarks>
@@ -29,7 +29,7 @@ public readonly record struct EmailAddress
     /// <summary>Gets the comparison form of <see cref="Address" />.</summary>
     /// <remarks>
     /// The form is upper-cased for the same reason a folder alias is: upper case round-trips in every culture, so the
-    /// key means the same thing in memory, in a query, and in a database whose collation MailMcp does not control. It
+    /// key means the same thing in memory, in a query, and in a database whose collation MailFathom does not control. It
     /// is a comparison key rather than something to display; <see cref="Address" /> is what a reader is shown.
     /// </remarks>
     public string NormalizedAddress { get; }

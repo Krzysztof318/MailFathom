@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Globalization;
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>The failure raised when a lexical search asks for more ranked results than the search serves.</summary>
 /// <remarks>
@@ -14,7 +14,7 @@ namespace MailMcp.Application.Emails;
 /// It is its own failure rather than the page-size one because a search returns a window and no cursor continues it, so
 /// a caller reading the code learns which control they met.
 /// </remarks>
-public sealed class EmailSearchResultLimitOutOfRangeException : MailMcpException
+public sealed class EmailSearchResultLimitOutOfRangeException : MailFathomException
 {
     /// <summary>Initializes the failure for one rejected result count.</summary>
     /// <param name="requestedResultLimit">The number of results the request asked for.</param>
@@ -37,5 +37,5 @@ public sealed class EmailSearchResultLimitOutOfRangeException : MailMcpException
     public int MaximumResultLimit { get; }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.EmailSearchResultLimitOutOfRange;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.EmailSearchResultLimitOutOfRange;
 }

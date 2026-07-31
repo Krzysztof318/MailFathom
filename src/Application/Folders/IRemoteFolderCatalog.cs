@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Transport;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Transport;
 
-namespace MailMcp.Application.Folders;
+namespace MailFathom.Application.Folders;
 
 /// <summary>Lists the folders a mail server advertises for one account.</summary>
 /// <remarks>

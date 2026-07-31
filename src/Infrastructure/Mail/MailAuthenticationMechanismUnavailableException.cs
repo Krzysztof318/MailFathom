@@ -1,17 +1,17 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Infrastructure.Mail;
+namespace MailFathom.Infrastructure.Mail;
 
 /// <summary>Indicates that a mail server advertises no authentication mechanism the account's policy permits.</summary>
 /// <remarks>
 /// The message names the account and the permitted mechanism names only. The mechanisms the server advertised are
 /// deliberately absent from it as well as from the payload, because recording them would document a downgrade path in
-/// logs; <see cref="MailMcpException" /> states the rest of what a message may carry.
+/// logs; <see cref="MailFathomException" /> states the rest of what a message may carry.
 /// </remarks>
-public sealed class MailAuthenticationMechanismUnavailableException : MailMcpException
+public sealed class MailAuthenticationMechanismUnavailableException : MailFathomException
 {
     /// <summary>Initializes a new unavailable-mechanism failure for one account.</summary>
     /// <param name="accountId">The local account identifier.</param>
@@ -25,7 +25,7 @@ public sealed class MailAuthenticationMechanismUnavailableException : MailMcpExc
     }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.MailAuthenticationMechanismUnavailable;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.MailAuthenticationMechanismUnavailable;
 
     /// <summary>Gets the local account identifier.</summary>
     public string AccountId { get; }

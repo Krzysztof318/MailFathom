@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.ComponentModel.DataAnnotations;
-using MailMcp.Host.Configuration;
+using MailFathom.Host.Configuration;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers the bound a deployment may configure on what one read of a message body returns.</summary>
 public sealed class EmailContentOptionsTests

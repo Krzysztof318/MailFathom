@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Security.Cryptography.X509Certificates;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets;
 
-namespace MailMcp.Infrastructure.Mail;
+namespace MailFathom.Infrastructure.Mail;
 
 /// <summary>Everything one account's connection attempt resolved from its configured references.</summary>
 /// <param name="Password">The mailbox password or app password.</param>

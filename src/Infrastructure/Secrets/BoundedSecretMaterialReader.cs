@@ -3,7 +3,7 @@
 
 using System.Security.Cryptography;
 
-namespace MailMcp.Infrastructure.Secrets;
+namespace MailFathom.Infrastructure.Secrets;
 
 /// <summary>Reads secret material from a stream under an explicit size ceiling, erasing every intermediate buffer.</summary>
 /// <remarks>

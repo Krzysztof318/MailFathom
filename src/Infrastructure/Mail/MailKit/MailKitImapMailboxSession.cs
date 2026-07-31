@@ -3,20 +3,20 @@
 
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Resilience;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Synchronization;
+using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Resilience;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Resilience;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Synchronization;
-using MailMcp.Domain.Transport;
-using MailMcp.Infrastructure.Resilience;
 
-namespace MailMcp.Infrastructure.Mail.MailKit;
+namespace MailFathom.Infrastructure.Mail.MailKit;
 
 /// <summary>MailKit-backed factory for authenticated read-only IMAP folder sessions.</summary>
 internal sealed class MailKitImapMailboxSessionFactory(
@@ -278,7 +278,7 @@ internal sealed class MailKitImapMailboxSession(
     /// The date condition travels with the range in the same command, so the server never reports an excluded UID and
     /// this run never fetches one. MailKit renders <c>DeliveredAfter</c> as the IMAP <c>SINCE</c> key, which compares
     /// the server-assigned <c>INTERNALDATE</c> disregarding time and time zone and includes the named day itself; the
-    /// envelope <c>Date</c> header MailMcp stores as the sent timestamp is deliberately not what is compared, for the
+    /// envelope <c>Date</c> header MailFathom stores as the sent timestamp is deliberately not what is compared, for the
     /// reason <see cref="MailSynchronizationWindow" /> records.
     /// </remarks>
     private static SearchQuery BuildRangeSearchQuery(

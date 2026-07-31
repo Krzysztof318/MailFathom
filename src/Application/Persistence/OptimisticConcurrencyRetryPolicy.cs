@@ -3,7 +3,7 @@
 
 using System.Security.Cryptography;
 
-namespace MailMcp.Application.Persistence;
+namespace MailFathom.Application.Persistence;
 
 /// <summary>Retries a safe local write after optimistic concurrency conflicts.</summary>
 /// <remarks>

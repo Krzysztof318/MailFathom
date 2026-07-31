@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Persistence;
+using MailFathom.Application.Persistence;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Exposes the EF Core context that backs one application persistence session.</summary>
 /// <remarks>
@@ -15,7 +15,7 @@ namespace MailMcp.Infrastructure.Persistence;
 internal interface IEfCorePersistenceSession
 {
     /// <summary>Gets the context enlisted in this session's transaction.</summary>
-    MailMcpDbContext DbContext { get; }
+    MailFathomDbContext DbContext { get; }
 }
 
 /// <summary>Resolves the EF Core context enlisted in an application persistence session.</summary>
@@ -31,7 +31,7 @@ internal static class EfCorePersistenceSessionAccessor
     /// valid: writing through its context is exactly the intended behavior, because that is the transaction its
     /// caller opened.
     /// </exception>
-    public static MailMcpDbContext DbContextOf(IPersistenceSession session)
+    public static MailFathomDbContext DbContextOf(IPersistenceSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
 

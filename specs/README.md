@@ -1,6 +1,6 @@
-# MailMcp Specifications
+# MailFathom Specifications
 
-[`2026-07-22-mail-mcp-architecture-draft.md`](2026-07-22-mail-mcp-architecture-draft.md) is the architecture draft: the durable description of what MailMcp is and why. The numbered specifications below decompose the gap between that draft and the implemented code into individually reviewable units of work.
+[`2026-07-22-mail-fathom-architecture-draft.md`](2026-07-22-mail-fathom-architecture-draft.md) is the architecture draft: the durable description of what MailFathom is and why. The numbered specifications below decompose the gap between that draft and the implemented code into individually reviewable units of work.
 
 Each specification is scoped to one pull request of roughly 1000 changed lines or fewer, including tests and documentation. Implementation plans are written per specification when that work starts, not in advance.
 
@@ -77,15 +77,15 @@ Beyond the draft, five capabilities are tracked as issues on the roadmap board w
 
 | Capability | Issue | What has to be settled first |
 |---|---|---|
-| Encrypted and signed email, S/MIME and OpenPGP | [#75](https://github.com/Krzysztof318/MailMcp/issues/75) | Whether local decryption is permitted at all, since it converts end-to-end protected mail into searchable plaintext; needs an ADR |
-| Spam and junk classification | [#76](https://github.com/Krzysztof318/MailMcp/issues/76) | The asynchronous job model from draft section 21.5, which nothing has built yet |
-| Antivirus scanning for stored attachments | [#77](https://github.com/Krzysztof318/MailMcp/issues/77) | Engine choice under the licensing constraint: ClamAV's `libclamav` is GPL-2.0 and cannot be linked |
-| OAuth for outbound IMAP and SMTP | [#78](https://github.com/Krzysztof318/MailMcp/issues/78) | The credential shape from #62 and #36, plus Gmail's restricted-scope assessment obligation |
-| Local secret detection before AI egress | [#79](https://github.com/Krzysztof318/MailMcp/issues/79) | Which egress points exist, which only becomes concrete once the RAG stages land |
+| Encrypted and signed email, S/MIME and OpenPGP | [#75](https://github.com/Krzysztof318/MailFathom/issues/75) | Whether local decryption is permitted at all, since it converts end-to-end protected mail into searchable plaintext; needs an ADR |
+| Spam and junk classification | [#76](https://github.com/Krzysztof318/MailFathom/issues/76) | The asynchronous job model from draft section 21.5, which nothing has built yet |
+| Antivirus scanning for stored attachments | [#77](https://github.com/Krzysztof318/MailFathom/issues/77) | Engine choice under the licensing constraint: ClamAV's `libclamav` is GPL-2.0 and cannot be linked |
+| OAuth for outbound IMAP and SMTP | [#78](https://github.com/Krzysztof318/MailFathom/issues/78) | The credential shape from #62 and #36, plus Gmail's restricted-scope assessment obligation |
+| Local secret detection before AI egress | [#79](https://github.com/Krzysztof318/MailFathom/issues/79) | Which egress points exist, which only becomes concrete once the RAG stages land |
 
-Attachment handling is not on that list. It is inside this roadmap, and [#80](https://github.com/Krzysztof318/MailMcp/issues/80) corrected specifications 06, 07, 08, 13, 14, 15, and 17 so the classification rule, file-name normalization, and structural parsing bounds are stated before any of that work starts.
+Attachment handling is not on that list. It is inside this roadmap, and [#80](https://github.com/Krzysztof318/MailFathom/issues/80) corrected specifications 06, 07, 08, 13, 14, 15, and 17 so the classification rule, file-name normalization, and structural parsing bounds are stated before any of that work starts.
 
-Specification 16 shipped the MCP endpoint with no transport authentication at all, disabled by default and warning at startup whenever it was enabled. [#140](https://github.com/Krzysztof318/MailMcp/issues/140) replaces that posture before the first release: [#164](https://github.com/Krzysztof318/MailMcp/issues/164) makes an enabled endpoint state whether it requires an API key or nothing, and [#165](https://github.com/Krzysztof318/MailMcp/issues/165) adds the mTLS trust profiles. Neither is OAuth 2.1, which stays where the table above puts it — an API key names a client rather than a person, and the owner authorization every tool call already performs is unchanged by both.
+Specification 16 shipped the MCP endpoint with no transport authentication at all, disabled by default and warning at startup whenever it was enabled. [#140](https://github.com/Krzysztof318/MailFathom/issues/140) replaces that posture before the first release: [#164](https://github.com/Krzysztof318/MailFathom/issues/164) makes an enabled endpoint state whether it requires an API key or nothing, and [#165](https://github.com/Krzysztof318/MailFathom/issues/165) adds the mTLS trust profiles. Neither is OAuth 2.1, which stays where the table above puts it — an API key names a client rather than a person, and the owner authorization every tool call already performs is unchanged by both.
 
 ## Dependencies these specifications add
 

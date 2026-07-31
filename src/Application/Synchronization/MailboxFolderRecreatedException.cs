@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Failures;
-using MailMcp.Domain.Folders;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Application.Synchronization;
+namespace MailFathom.Application.Synchronization;
 
 /// <summary>Indicates that a mailbox session was re-established onto a folder the server has recreated since it opened.</summary>
 /// <remarks>
@@ -15,7 +15,7 @@ namespace MailMcp.Application.Synchronization;
 /// attach the recovered folder's emails to the previous folder's checkpoint, so the run stops instead. Nothing is lost:
 /// the next run reads the new UIDVALIDITY from an empty checkpoint and re-synchronizes the folder from its start.
 /// </remarks>
-public sealed class MailboxFolderRecreatedException : MailMcpException
+public sealed class MailboxFolderRecreatedException : MailFathomException
 {
     /// <summary>Initializes a new recreated-folder failure naming both observed UIDVALIDITY values.</summary>
     /// <param name="accountId">The account whose folder was re-selected.</param>
@@ -37,7 +37,7 @@ public sealed class MailboxFolderRecreatedException : MailMcpException
     }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.MailboxFolderRecreated;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.MailboxFolderRecreated;
 
     /// <summary>Gets the account whose folder was recreated.</summary>
     public MailAccountId AccountId { get; }

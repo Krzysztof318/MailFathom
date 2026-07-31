@@ -1,24 +1,24 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Synchronization;
+using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Mail.MailKit;
+using MailFathom.TestSupport;
 using MailKit;
 using MailKit.Search;
 using MailKit.Security;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Synchronization;
-using MailMcp.Domain.Transport;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Mail.MailKit;
-using MailMcp.TestSupport;
 using NSubstitute;
 using Xunit;
-using static MailMcp.Infrastructure.UnitTests.MailKitImapSessionTestContext;
+using static MailFathom.Infrastructure.UnitTests.MailKitImapSessionTestContext;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class MailKitImapMailboxSessionTests
 {
@@ -321,7 +321,7 @@ public sealed class MailKitImapMailboxSessionTests
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
         var client = new FakeImapClient();
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var anchor = TestCertificates.WithoutPrivateKey(authority);
         var settingsProvider = CreateSettingsProvider(out _, anchor);
         client.AuthenticationMechanisms.Add("PLAIN");

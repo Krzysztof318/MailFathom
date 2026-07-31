@@ -39,7 +39,7 @@ Configuration carries the reference and nothing else. Every secret-bearing setti
       {
         "AccountId": "primary",
         "Host": "imap.example.test",
-        "UserName": "mailmcp@example.test",
+        "UserName": "mailfathom@example.test",
         "Secrets": {
           "Password": { "SecretReference": "systemd-credential:imap-primary-password" }
         },
@@ -84,7 +84,7 @@ This is what makes the `ReferenceOnly` guarantee complete rather than per-settin
 A secret-bearing setting does not always carry a reference. Two legitimate cases require the value itself to be accepted, and neither is a mistake to be prevented:
 
 - **The operator chooses to write the secret into configuration.** It is less safe and the documentation says so, but it is the operator's deployment and their call. Refusing it outright pushes people toward worse workarounds.
-- **A configuration provider already resolved the secret before binding.** Azure App Configuration with Key Vault references is the concrete example: App Configuration stores a URI rather than a value, but "because the client provider recognizes the key as a Key Vault reference, it uses Key Vault to retrieve its value", and application code then "access[es] the values of Key Vault references the same way [it] access[es] the values of regular App Configuration keys". By the time MailMcp binds the setting, the value *is* the secret, and it carries no scheme prefix that MailMcp could recognize. A resolver that insists on a scheme would break this integration outright.
+- **A configuration provider already resolved the secret before binding.** Azure App Configuration with Key Vault references is the concrete example: App Configuration stores a URI rather than a value, but "because the client provider recognizes the key as a Key Vault reference, it uses Key Vault to retrieve its value", and application code then "access[es] the values of Key Vault references the same way [it] access[es] the values of regular App Configuration keys". By the time MailFathom binds the setting, the value *is* the secret, and it carries no scheme prefix that MailFathom could recognize. A resolver that insists on a scheme would break this integration outright.
 
 Interpretation of a secret-bearing setting is therefore an explicit deployment choice, not an inference:
 
@@ -98,17 +98,17 @@ Modes make the earlier `plaintext:`-outside-Development rule unnecessary as a ha
 
 One consequence must be stated rather than hidden: an inline value arrives from the configuration system as a `string`, and a `string` cannot be erased from memory (see "Secret material in memory"). The inline modes therefore forfeit part of the in-memory protection that reference resolution provides. That is a real cost of the convenience, it is documented for the operator, and it is another reason `ReferenceOnly` is the default.
 
-Note that this also settles where a pre-resolving provider belongs architecturally. Azure App Configuration is **not** a scheme adapter: its Key Vault mapping happens below MailMcp in the configuration pipeline, so MailMcp needs no code for it beyond accepting the bound value. A provider MailMcp queries itself — direct Key Vault access, HashiCorp Vault — is a scheme adapter. The two integration shapes are different and should not be conflated.
+Note that this also settles where a pre-resolving provider belongs architecturally. Azure App Configuration is **not** a scheme adapter: its Key Vault mapping happens below MailFathom in the configuration pipeline, so MailFathom needs no code for it beyond accepting the bound value. A provider MailFathom queries itself — direct Key Vault access, HashiCorp Vault — is a scheme adapter. The two integration shapes are different and should not be conflated.
 
 ### The block must survive a flattening provider
 
 The secret block is a nested object in JSON, but nothing about it requires a JSON provider. Every hierarchical configuration provider addresses the same setting by its colon-separated path, so the block adds one path segment and nothing else. This specification is not complete until an Azure App Configuration store bound with Key Vault references works against it, which means the following must hold:
 
-- The App Config key is the full path, `MailSynchronization:Accounts:0:Secrets:Password:SecretReference`, and its value is the Key Vault reference the provider resolves before MailMcp binds it.
+- The App Config key is the full path, `MailSynchronization:Accounts:0:Secrets:Password:SecretReference`, and its value is the Key Vault reference the provider resolves before MailFathom binds it.
 - Environment variables address the same setting as `MailSynchronization__Accounts__0__Secrets__Password__SecretReference`, so a container platform that injects configuration through the environment reaches the block without a JSON file.
 - Binding is verified against an in-memory provider populated with flat colon-separated keys, not only against a JSON document, so a regression that makes the block depend on JSON document structure fails a test rather than a deployment.
 
-Combined with `InlineOnly`, this is the complete Azure App Configuration path: the store holds the key, Key Vault holds the secret, the provider maps one to the other, and MailMcp binds an already-resolved value into `SecretReference` and uses it as material.
+Combined with `InlineOnly`, this is the complete Azure App Configuration path: the store holds the key, Key Vault holds the secret, the provider maps one to the other, and MailFathom binds an already-resolved value into `SecretReference` and uses it as material.
 
 ## Secret material kinds
 
@@ -133,7 +133,7 @@ Resolution is asynchronous and accepts a cancellation token even though every sc
 
 ## Extensibility to external secret providers
 
-MailMcp will need more secret sources than the four schemes above — Kubernetes, Azure Key Vault, HashiCorp Vault, AWS Secrets Manager, and comparable managed stores are all plausible. None of them is in scope here, but the shape delivered now decides whether adding one later is an adapter or a refactor. It must be an adapter.
+MailFathom will need more secret sources than the four schemes above — Kubernetes, Azure Key Vault, HashiCorp Vault, AWS Secrets Manager, and comparable managed stores are all plausible. None of them is in scope here, but the shape delivered now decides whether adding one later is an adapter or a refactor. It must be an adapter.
 
 Three consequences bind this specification:
 
@@ -141,7 +141,7 @@ Three consequences bind this specification:
 - **The contract is asynchronous and cancellable from the start**, for the reason given above.
 - **Provider-specific concerns stay inside the provider's adapter.** Timeouts, retries, connection pooling, regional endpoints, SDK types, and any caching policy belong to the adapter that needs them. The resolver contract exposes none of it, so a provider that must cache aggressively and a provider that must never cache can coexist without the contract taking a position.
 
-Two things are deliberately *not* built now. A managed-store adapter needs its own authentication — an Azure managed identity, a Kubernetes ServiceAccount token, a Vault role — and that platform-issued identity must come from the platform rather than from a MailMcp secret, or the design becomes circular. And every such SDK is a new dependency subject to the root `AGENTS.md` licensing, service-terms, telemetry, and data-processing review, with a `THIRD_PARTY_LICENSES.md` entry in the same change set. Neither is prejudged here.
+Two things are deliberately *not* built now. A managed-store adapter needs its own authentication — an Azure managed identity, a Kubernetes ServiceAccount token, a Vault role — and that platform-issued identity must come from the platform rather than from a MailFathom secret, or the design becomes circular. And every such SDK is a new dependency subject to the root `AGENTS.md` licensing, service-terms, telemetry, and data-processing review, with a `THIRD_PARTY_LICENSES.md` entry in the same change set. Neither is prejudged here.
 
 Note that container and Kubernetes deployments need no new scheme at all. Docker and Podman Compose mount secrets as files under `/run/secrets/<name>`, and Kubernetes mounts a Secret as a read-only tmpfs directory of one file per key at an operator-chosen path; both are addressed by `file:`, and a Kubernetes Secret exposed as an environment variable is addressed by `env:`. A `docker-secret:` or `kubernetes-secret:` scheme would perform exactly the file read that `file:` already performs, so neither is added. Only a provider with genuinely different retrieval behavior earns a scheme.
 
@@ -149,15 +149,15 @@ Note that container and Kubernetes deployments need no new scheme at all. Docker
 
 Resolved material must live as briefly as possible and be erased when it stops being needed. Four rules follow from current .NET guidance, and one common approach is explicitly rejected.
 
-**`SecureString` is not used.** Microsoft's own documentation says "We recommend that you don't use the `SecureString` class for new development on .NET (Core)", and states that because of platform dependencies "`SecureString` does not encrypt the internal storage on non-Windows platform" — which is every environment MailMcp targets. The same documentation names the recommended alternative: "use an opaque handle to credentials that are stored outside of the process." That is precisely what a secret reference already is, so this specification's core design *is* the sanctioned approach and `SecureString` would add ceremony without protection.
+**`SecureString` is not used.** Microsoft's own documentation says "We recommend that you don't use the `SecureString` class for new development on .NET (Core)", and states that because of platform dependencies "`SecureString` does not encrypt the internal storage on non-Windows platform" — which is every environment MailFathom targets. The same documentation names the recommended alternative: "use an opaque handle to credentials that are stored outside of the process." That is precisely what a secret reference already is, so this specification's core design *is* the sanctioned approach and `SecureString` would add ceremony without protection.
 
-**Secret material MailMcp allocates is never held in a `string`.** A `string` is immutable, so it cannot be overwritten; it cannot be scheduled for deletion; and because its memory is not pinned, the garbage collector makes additional copies when it moves and compacts memory, each of which outlives any attempt to erase the original. Material is therefore held in a byte buffer, which is the other reason resolution is byte-oriented.
+**Secret material MailFathom allocates is never held in a `string`.** A `string` is immutable, so it cannot be overwritten; it cannot be scheduled for deletion; and because its memory is not pinned, the garbage collector makes additional copies when it moves and compacts memory, each of which outlives any attempt to erase the original. Material is therefore held in a byte buffer, which is the other reason resolution is byte-oriented.
 
 **The buffer is pinned and zeroed.** Material is allocated with `GC.AllocateArray<byte>(length, pinned: true)` so the collector cannot relocate it and leave an un-erased copy behind, and erased with `CryptographicOperations.ZeroMemory`, which exists — in its own documented words — "to future-proof against potential optimizations in the .NET runtime that could eliminate memory writes that aren't followed by memory reads." A plain loop assigning zeroes carries no such guarantee. Pooled buffers are not used for secret material at all, because a returned buffer that was not cleared hands the material to the next unrelated caller.
 
 **Resolved material is owned and disposed.** A resolved secret is disposable, is owned by the operation that resolved it, and is erased when that operation ends. Material exists for the length of one synchronization run or one connection attempt rather than for the process lifetime, so the window in which a dump could contain it is bounded by an operation rather than by uptime. Because each operation owns its own instance, the reload behavior specification 02b adds can publish new material without erasing what an in-flight operation is still using.
 
-Three exposures are accepted and must be documented rather than hidden. `env:` is the first: `Environment.GetEnvironmentVariable` returns a `string`, so an environment-sourced secret arrives already un-erasable and no amount of care downstream changes that. It is a further reason the documentation recommends against `env:` outside non-production automation, and it is why the guarantee above is scoped to material MailMcp allocates rather than material the platform hands it. An inline value under the two inline modes has the same property, for the same reason.
+Three exposures are accepted and must be documented rather than hidden. `env:` is the first: `Environment.GetEnvironmentVariable` returns a `string`, so an environment-sourced secret arrives already un-erasable and no amount of care downstream changes that. It is a further reason the documentation recommends against `env:` outside non-production automation, and it is why the guarantee above is scoped to material MailFathom allocates rather than material the platform hands it. An inline value under the two inline modes has the same property, for the same reason.
 
 Second, some framework contracts take a `string` — the IMAP client's authentication call and the database connection string among them — so a short-lived `string` copy is unavoidable at exactly those call sites; it is created as late as possible, at the boundary itself, and never stored, logged, or passed on. Third, managed memory remains readable through a process dump, a debugger, or swap. Those are operational controls rather than code: the deployment must disable core dumps for the service and keep its memory out of swap, and the operations documentation must say so. Locking pages with `mlock` is deliberately not attempted — it would require P/Invoke plus elevated capability in every deployment shape, against a repository rule that restricts unsafe and platform-invoke code to measured need, and it does not address dumps or debuggers anyway.
 
@@ -195,7 +195,7 @@ Adapters for external managed secret stores — Kubernetes, Azure Key Vault, Has
 - Resolution yields bytes, so a PKCS#12 bundle or DER certificate is representable without encoding damage, and text secrets are decoded and newline-trimmed only in the text view.
 - A new scheme can be added by registering one adapter, without editing the dispatch, an existing adapter, or any consumer.
 - The resolution contract is asynchronous and cancellable, so a network-backed provider needs no breaking change.
-- No secret material that MailMcp allocates is held in a `string`, a pooled buffer, or a `SecureString`; buffers are pinned and zeroed with `CryptographicOperations.ZeroMemory` when their owning operation ends, and no intermediate read buffer survives un-erased.
+- No secret material that MailFathom allocates is held in a `string`, a pooled buffer, or a `SecureString`; buffers are pinned and zeroed with `CryptographicOperations.ZeroMemory` when their owning operation ends, and no intermediate read buffer survives un-erased.
 - The residual exposures — `env:`, inline values, the two framework `string` boundaries, and process memory itself — are documented for the operator rather than implied away.
 - Reading material enforces an explicit maximum size, so a mistaken reference to a large file is a named failure rather than an allocation.
 - A successful resolution records whether its material came from an adapter or was accepted inline.

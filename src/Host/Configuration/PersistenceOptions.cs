@@ -3,11 +3,11 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Infrastructure;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Secrets;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>Configures deployment-wide local persistence behavior.</summary>
 /// <remarks>
@@ -41,11 +41,11 @@ internal sealed class PersistenceOptions : IValidatableObject
     [Range(1, 600)]
     public int CommandTimeoutSeconds { get; set; } = HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds;
 
-    /// <summary>Gets or sets the reference to a complete PostgreSQL connection string, or <see langword="null" /> when <c>ConnectionStrings:mailmcp</c> supplies it.</summary>
+    /// <summary>Gets or sets the reference to a complete PostgreSQL connection string, or <see langword="null" /> when <c>ConnectionStrings:mailfathom</c> supplies it.</summary>
     /// <remarks>
     /// A connection string is more than a password, so a deployment backed by a secret store usually keeps it whole and
     /// rotates one artifact instead of splitting the credential across two systems. Configuring this replaces
-    /// <c>ConnectionStrings:mailmcp</c> rather than adding to it.
+    /// <c>ConnectionStrings:mailfathom</c> rather than adding to it.
     /// </remarks>
     public ConfiguredSecret? ConnectionString { get; set; }
 
@@ -64,7 +64,7 @@ internal sealed class PersistenceOptions : IValidatableObject
         if (!PostgresTextSearchConfiguration.IsSupported(this.TextSearchConfiguration))
         {
             yield return new ValidationResult(
-                $"'{this.TextSearchConfiguration}' is not a PostgreSQL text search configuration MailMcp supports. Supported configurations are: {string.Join(", ", PostgresTextSearchConfiguration.SupportedNames)}.",
+                $"'{this.TextSearchConfiguration}' is not a PostgreSQL text search configuration MailFathom supports. Supported configurations are: {string.Join(", ", PostgresTextSearchConfiguration.SupportedNames)}.",
                 [nameof(this.TextSearchConfiguration)]);
         }
     }

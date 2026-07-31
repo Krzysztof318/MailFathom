@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Options;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Reports configuration reloads on demand, so a test drives them instead of waiting for a file watcher.</summary>
 internal sealed class TestOptionsMonitor<TOptions>(TOptions initialValue) : IOptionsMonitor<TOptions>

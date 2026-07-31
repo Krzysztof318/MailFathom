@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
+using MailFathom.Application.Emails;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Converts the accounts and folders a caller named into the domain identities a mailbox read is expressed in.</summary>
 /// <remarks>
@@ -57,7 +57,7 @@ internal static class MailboxScopeArguments
     /// </para>
     /// <para>
     /// The refused value is deliberately absent from it. An identifier a caller invented is that caller's own input rather
-    /// than one of MailMcp's configured names, and echoing input back is how a boundary starts reflecting content.
+    /// than one of MailFathom's configured names, and echoing input back is how a boundary starts reflecting content.
     /// </para>
     /// </remarks>
     private static IReadOnlyList<TIdentity> Parse<TIdentity>(

@@ -1,20 +1,20 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Folders;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.IntegrationTests.Orchestration;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Folders;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Persistence;
+namespace MailFathom.IntegrationTests.Persistence;
 
 /// <summary>Proves what the transaction a persistence session opens is worth, and which failures it reports as conflicts.</summary>
 /// <remarks>
@@ -33,7 +33,7 @@ namespace MailMcp.IntegrationTests.Persistence;
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixture orchestration)
+public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationFixture orchestration)
 {
     private const string FolderAlias = "persistence-session";
 
@@ -59,7 +59,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var occurrenceId = SyntheticEmail.OccurrenceIn(binding, RolledBackUid);
         var committedRawMime = SyntheticEmail.RawMimeOf("session-rollback-committed", 4096);
@@ -119,7 +119,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var contestedBinding = MailFolderResolution.FirstBindingOf(
             MailFolderAlias.Create(ContestedFolderAlias),
@@ -171,7 +171,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var unstoredAccountId = MailAccountId.Create(UnstoredAccountId);
         var firstBinding = MailFolderResolution.FirstBindingOf(
             MailFolderAlias.Create(FolderAlias),
@@ -213,7 +213,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
 
     /// <summary>Proves the <c>xmin</c> token detects a revision another transaction committed first.</summary>
     /// <remarks>
-    /// The stored email's concurrency token is PostgreSQL's own <c>xmin</c> system column rather than a column MailMcp
+    /// The stored email's concurrency token is PostgreSQL's own <c>xmin</c> system column rather than a column MailFathom
     /// writes, so nothing in the process updates it and no substitute can make it go stale. Reading a row in one
     /// transaction, letting another revise and commit it, and only then writing is the arrangement that makes the token
     /// the loser holds no longer the row's.
@@ -223,7 +223,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var occurrenceId = SyntheticEmail.OccurrenceIn(binding, ConflictingUid);
 
@@ -235,7 +235,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
             {
                 // The scoped context is the one the session enlists, so a row tracked here carries the token this
                 // session will write against.
-                var losingContext = losingScope.GetRequiredService<MailMcpDbContext>();
+                var losingContext = losingScope.GetRequiredService<MailFathomDbContext>();
 
                 await using var losingSession = await losingScope
                     .GetRequiredService<IPersistenceSessionFactory>()
@@ -268,7 +268,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
     }
 
     private static async Task<StoredEmailId> StoreMetadataAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         EmailOccurrenceId occurrenceId,
         string subject,
         CancellationToken cancellationToken)
@@ -292,7 +292,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
     }
 
     private static async Task<StoredEmailId> StoreMetadataAndContentAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         EmailOccurrenceId occurrenceId,
         string subject,
         ReadOnlyMemory<byte> rawMime,
@@ -314,7 +314,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
     }
 
     private static Task<int> CountBindingsOfAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         MailFolderResolution binding,
         CancellationToken cancellationToken)
     {
@@ -323,7 +323,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
 
         return services.InScopeAsync(
             (scope, token) => scope
-                .GetRequiredService<MailMcpDbContext>()
+                .GetRequiredService<MailFathomDbContext>()
                 .MailFolders
                 .AsNoTracking()
                 .CountAsync(
@@ -335,22 +335,22 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
     }
 
     private static Task<int> CountAccountRowsOfAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         MailAccountId accountId,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope
-                .GetRequiredService<MailMcpDbContext>()
+                .GetRequiredService<MailFathomDbContext>()
                 .MailboxAccounts
                 .AsNoTracking()
                 .CountAsync(account => account.Id == accountId.Value, token),
             cancellationToken);
 
     private static Task<string?> ReadSubjectAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope
-                .GetRequiredService<MailMcpDbContext>()
+                .GetRequiredService<MailFathomDbContext>()
                 .StoredEmails
                 .AsNoTracking()
                 .Where(storedEmail => storedEmail.Id == storedEmailId.Value)

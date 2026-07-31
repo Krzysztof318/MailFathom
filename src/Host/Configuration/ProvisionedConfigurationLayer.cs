@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>Decides which provisioned configuration files are layered in, and where among the host's own sources.</summary>
 /// <remarks>

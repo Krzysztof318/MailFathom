@@ -2,10 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Governing issue:** [#63 — Spec 02b — Certificate material and secret rotation](https://github.com/Krzysztof318/MailMcp/issues/63)
+**Governing issue:** [#63 — Spec 02b — Certificate material and secret rotation](https://github.com/Krzysztof318/MailFathom/issues/63)
 **Governing specification:** [`specs/02b-certificate-material-and-secret-rotation.md`](../../../specs/02b-certificate-material-and-secret-rotation.md)
-**Architectural context:** `specs/2026-07-22-mail-mcp-architecture-draft.md` sections 7.3 and 19, ADR `docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md`
-**Depends on:** [#36 — Spec 02a](https://github.com/Krzysztof318/MailMcp/issues/36) and its plan, [`2026-07-27-secret-reference-resolution-02a.md`](2026-07-27-secret-reference-resolution-02a.md) — this plan consumes that contract and changes none of it
+**Architectural context:** `specs/2026-07-22-mail-fathom-architecture-draft.md` sections 7.3 and 19, ADR `docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md`
+**Depends on:** [#36 — Spec 02a](https://github.com/Krzysztof318/MailFathom/issues/36) and its plan, [`2026-07-27-secret-reference-resolution-02a.md`](2026-07-27-secret-reference-resolution-02a.md) — this plan consumes that contract and changes none of it
 
 **Goal:** Load deployment-provisioned certificate material through the resolution contract 02a delivers, install a trusted certificate authority into the mail transport's validation path so a private server is supported with validation fully enabled, and let a rotated secret take effect without restarting the process.
 
@@ -319,7 +319,7 @@ For mail secrets no change is needed: 02a decision 16 already resolves per use, 
 
 - [ ] **Step 5: Rotate the database credential too**
 
-The database password is the exception, and it would otherwise silently break the promise this specification makes for it. 02a composes it once into a singleton `NpgsqlDataSource`, so neither a changed `Persistence:Password` reference nor rotated material behind it reaches a connection opened afterwards — revoking the old credential would take MailMcp offline until restart, which is exactly the outcome rotation exists to prevent.
+The database password is the exception, and it would otherwise silently break the promise this specification makes for it. 02a composes it once into a singleton `NpgsqlDataSource`, so neither a changed `Persistence:Password` reference nor rotated material behind it reaches a connection opened afterwards — revoking the old credential would take MailFathom offline until restart, which is exactly the outcome rotation exists to prevent.
 
 `NpgsqlDataSource` is registered behind a provider that rebuilds it when the persistence snapshot changes, disposing the superseded data source only after its in-flight connections drain. Connections already open keep the credential they authenticated with, which is decision 17's operation boundary applied to the database rather than an exception to it.
 

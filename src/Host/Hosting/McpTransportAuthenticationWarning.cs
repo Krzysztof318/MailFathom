@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Host.Configuration;
-using MailMcp.Mcp;
+using MailFathom.Host.Configuration;
+using MailFathom.Mcp;
 using Microsoft.Extensions.Options;
 
-namespace MailMcp.Host.Hosting;
+namespace MailFathom.Host.Hosting;
 
 /// <summary>States at startup that an enabled MCP endpoint requires no credential of the clients it serves.</summary>
 /// <remarks>

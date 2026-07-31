@@ -4,9 +4,9 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
-using MailMcp.Domain.Emails;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>Selects which stored emails a mailbox timeline query returns, and from which end it reads them.</summary>
 /// <remarks>

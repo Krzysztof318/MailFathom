@@ -3,15 +3,15 @@
 
 using System.Security.Claims;
 using System.Threading.RateLimiting;
-using MailMcp.Host.Security;
-using MailMcp.Infrastructure.Security;
-using MailMcp.Mcp;
+using MailFathom.Host.Security;
+using MailFathom.Infrastructure.Security;
+using MailFathom.Mcp;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Primitives;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers the limits the MCP endpoint admits traffic under.</summary>
 /// <remarks>

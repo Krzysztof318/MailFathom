@@ -1,15 +1,15 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.CodeCoverage;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.CodeCoverage;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>EF Core state for the bounded backward pass that re-checks stored emails against their mail server.</summary>
 /// <remarks>
@@ -17,7 +17,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// the caller's session, so one window's observations and deletions commit or roll back together.
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class StoredEmailReconciliationStore(MailMcpDbContext readContext) : IStoredEmailReconciliationStore
+internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readContext) : IStoredEmailReconciliationStore
 {
     /// <inheritdoc />
     /// <remarks>
@@ -135,7 +135,7 @@ internal sealed class StoredEmailReconciliationStore(MailMcpDbContext readContex
     /// return was removed by another writer, which the callers above treat as nothing left to do.
     /// </remarks>
     private static async Task<Dictionary<Guid, StoredEmailEntity>> LoadWindowRowsAsync(
-        MailMcpDbContext sessionContext,
+        MailFathomDbContext sessionContext,
         ReconciledFolderOutcome outcome,
         CancellationToken cancellationToken)
     {

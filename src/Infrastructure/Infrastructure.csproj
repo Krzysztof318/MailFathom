@@ -37,7 +37,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="MailMcp.Infrastructure.UnitTests" />
-    <InternalsVisibleTo Include="MailMcp.IntegrationTests" />
+    <InternalsVisibleTo Include="MailFathom.Infrastructure.UnitTests" />
+    <InternalsVisibleTo Include="MailFathom.IntegrationTests" />
   </ItemGroup>
 </Project>

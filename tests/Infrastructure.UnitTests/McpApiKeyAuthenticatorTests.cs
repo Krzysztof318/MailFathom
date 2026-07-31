@@ -1,14 +1,14 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.Infrastructure.Security;
-using MailMcp.TestSupport;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Security;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Covers which presented credentials authenticate, which do not, and what a refusal is allowed to reveal.</summary>
 public sealed class McpApiKeyAuthenticatorTests

@@ -3,10 +3,10 @@
 
 using System.Buffers.Text;
 using System.Text;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Infrastructure.Security;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Covers reading an issuer out of a token nothing has verified.</summary>
 /// <remarks>
@@ -20,14 +20,14 @@ public sealed class UnverifiedJsonWebTokenTests
     public void TryReadClaimedIssuer_ACompactTokenNamingAnIssuer_ReadsIt()
     {
         // Arrange
-        var token = TokenWithPayload("""{"iss":"https://sso.example.test/realms/mailmcp","sub":"1"}""");
+        var token = TokenWithPayload("""{"iss":"https://sso.example.test/realms/mailfathom","sub":"1"}""");
 
         // Act
         var wasRead = UnverifiedJsonWebToken.TryReadClaimedIssuer(token, out var claimedIssuer);
 
         // Assert
         Assert.True(wasRead);
-        Assert.Equal("https://sso.example.test/realms/mailmcp", claimedIssuer);
+        Assert.Equal("https://sso.example.test/realms/mailfathom", claimedIssuer);
     }
 
     /// <summary>An API key is an opaque string, and telling it apart from a token by shape is what routes each credential to the handler that understands it.</summary>

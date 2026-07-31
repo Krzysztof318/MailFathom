@@ -1,18 +1,18 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.IntegrationTests.Orchestration;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Persistence;
+namespace MailFathom.IntegrationTests.Persistence;
 
 /// <summary>Proves the mailbox listing query runs, orders, and pages against a real PostgreSQL database.</summary>
 /// <remarks>
@@ -31,7 +31,7 @@ namespace MailMcp.IntegrationTests.Persistence;
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrationFixture orchestration)
+public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchestrationFixture orchestration)
 {
     private const string FolderAlias = "timeline-read-model";
 
@@ -52,7 +52,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
     /// <summary>The fragment of that subject a caller would write, wildcards included.</summary>
     private const string WildcardSubjectFragment = "50%_DISCOUNT";
 
-    private const string CopiedRecipientAddress = "copied@mailmcp.test";
+    private const string CopiedRecipientAddress = "copied@mailfathom.test";
 
     private static readonly DateTimeOffset FirstReceivedAt = SyntheticEmail.ReceivedAt;
 
@@ -70,7 +70,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var filter = await SeededFilterAsync(services, direction, cancellationToken);
 
         // Act
@@ -109,7 +109,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var seeded = await SeededFilterAsync(services, EmailTimelineDirection.NewestFirst, cancellationToken);
 
         // Act
@@ -166,7 +166,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var filter = await SeededFilterAsync(services, EmailTimelineDirection.NewestFirst, cancellationToken);
 
         // Act
@@ -178,7 +178,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
 
                 Assert.Equal(PageSize, page.Count);
 
-                return scope.GetRequiredService<MailMcpDbContext>().ChangeTracker.Entries().Count();
+                return scope.GetRequiredService<MailFathomDbContext>().ChangeTracker.Entries().Count();
             },
             cancellationToken);
 
@@ -197,7 +197,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         _ = await SeededFilterAsync(services, EmailTimelineDirection.NewestFirst, cancellationToken);
         var seededAlias = MailFolderAlias.Create(FolderAlias);
 
@@ -223,7 +223,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
     }
 
     private static Task<IReadOnlyList<MailboxFolderFreshness>> ReadFreshnessAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         MailboxScope scope,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (serviceProvider, token) => serviceProvider.GetRequiredService<ISynchronizationFreshnessReader>()
@@ -231,7 +231,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
             cancellationToken);
 
     private static async Task<IReadOnlyList<IReadOnlyList<EmailSummary>>> WalkEveryPageAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         EmailTimelineFilter filter,
         CancellationToken cancellationToken)
     {
@@ -251,7 +251,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
     }
 
     private static Task<IReadOnlyList<EmailSummary>> ReadPageAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         EmailTimelineFilter filter,
         EmailTimelinePosition? continueAfter,
         CancellationToken cancellationToken) => services.InScopeAsync(
@@ -260,7 +260,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
             cancellationToken);
 
     private static Task<IReadOnlyList<EmailSummary>> ReadAllAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         EmailTimelineFilter filter,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IStoredEmailTimelineReader>()
@@ -269,7 +269,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
 
     /// <summary>Reads every email one filter selects, scoped to the folder this class seeded.</summary>
     private static Task<IReadOnlyList<EmailSummary>> ReadFilteredAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         string? recipientAddress = null,
         string? subjectFragment = null,
         DateTimeOffset? receivedOnOrAfter = null,
@@ -282,7 +282,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
                 MailboxScope.Create(
                     [SyntheticMailAccount.AccountId],
                     [MailFolderAlias.Create(FolderAlias)]),
-                senderAddress: "sender@mailmcp.test",
+                senderAddress: "sender@mailfathom.test",
                 recipientAddress,
                 subjectFragment,
                 receivedOnOrAfter,
@@ -294,7 +294,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
 
     /// <summary>Ensures the seeded folder exists and returns the filter every test in this class reads it through.</summary>
     private static async Task<EmailTimelineFilter> SeededFilterAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         EmailTimelineDirection direction,
         CancellationToken cancellationToken)
     {
@@ -304,7 +304,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
 
         return EmailTimelineFilter.Create(
             MailboxScope.Create([SyntheticMailAccount.AccountId], [binding.Alias]),
-            senderAddress: "sender@mailmcp.test",
+            senderAddress: "sender@mailfathom.test",
             recipientAddress: null,
             subjectFragment: null,
             receivedOnOrAfter: null,
@@ -320,7 +320,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
     /// first writes the folder and the others find it, so no test depends on having run after another.
     /// </remarks>
     private static async Task EnsureSeededAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         MailFolderResolution binding,
         CancellationToken cancellationToken)
     {
@@ -359,7 +359,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
                 occurrenceId,
                 subject,
                 SyntheticEmail.BodyTextContaining($"body{index}", wordCount: 20),
-                $"recipient{index % 4}@mailmcp.test");
+                $"recipient{index % 4}@mailfathom.test");
 
             return new SeededEmail(
                 SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
@@ -417,7 +417,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
     }
 
     private static Task<int> CountSeededEmailsAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         MailFolderResolution binding,
         CancellationToken cancellationToken)
     {
@@ -426,7 +426,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailMcpOrchestrat
 
         return services.InScopeAsync(
             (scope, token) => scope
-                .GetRequiredService<MailMcpDbContext>()
+                .GetRequiredService<MailFathomDbContext>()
                 .StoredEmails
                 .AsNoTracking()
                 .CountAsync(

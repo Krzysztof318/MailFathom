@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Collections.ObjectModel;
-using MailMcp.Application.Accounts;
-using MailMcp.Application.EmailContent;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.Accounts;
+using MailFathom.Application.EmailContent;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Application.Emails.GetEmailContent;
+namespace MailFathom.Application.Emails.GetEmailContent;
 
 /// <summary>Reads one email's content from the local mailbox copy.</summary>
 /// <remarks>

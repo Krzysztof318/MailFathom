@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+using MailFathom.Domain.Transport;
 using MailKit.Security;
-using MailMcp.Domain.Transport;
 
-namespace MailMcp.Infrastructure.Mail.MailKit;
+namespace MailFathom.Infrastructure.Mail.MailKit;
 
 /// <summary>Maps the domain transport security policy onto the MailKit client contract.</summary>
 /// <remarks>

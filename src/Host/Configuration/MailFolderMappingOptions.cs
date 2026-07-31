@@ -3,9 +3,9 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Domain.Folders;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>Configures how one folder alias finds its remote folder.</summary>
 /// <remarks>

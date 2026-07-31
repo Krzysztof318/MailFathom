@@ -1,19 +1,19 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Persistence;
-using MailMcp.Domain.Emails;
-using MailMcp.Host.Configuration;
-using MailMcp.Host.Hosting;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Persistence;
+using MailFathom.Domain.Emails;
+using MailFathom.Host.Configuration;
+using MailFathom.Host.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 public sealed class MailExtractionBackfillWorkerTests
 {

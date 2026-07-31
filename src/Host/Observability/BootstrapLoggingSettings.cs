@@ -3,7 +3,7 @@
 
 using System.Reflection;
 
-namespace MailMcp.Host.Observability;
+namespace MailFathom.Host.Observability;
 
 /// <summary>Describes the service identity and export destination that the bootstrap logging pipeline is built from.</summary>
 /// <param name="ServiceName">The application name reported with every startup record.</param>
@@ -58,7 +58,7 @@ internal sealed record BootstrapLoggingSettings(
     }
 
     private static string HostAssemblyName =>
-        typeof(BootstrapLoggingSettings).Assembly.GetName().Name ?? nameof(MailMcp);
+        typeof(BootstrapLoggingSettings).Assembly.GetName().Name ?? nameof(MailFathom);
 
     private static string FirstNonBlank(string? candidate, string fallback) =>
         string.IsNullOrWhiteSpace(candidate) ? fallback : candidate;

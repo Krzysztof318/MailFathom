@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Text;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets;
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Secrets;
+namespace MailFathom.IntegrationTests.Secrets;
 
 /// <summary>Proves the two readers that reach outside the process behave as their ports promise.</summary>
 /// <remarks>
@@ -30,7 +30,7 @@ public sealed class SecretMaterialReaderTests : IDisposable
 
     public SecretMaterialReaderTests()
     {
-        this.secretDirectory = Path.Combine(Path.GetTempPath(), $"mailmcp-secrets-{Guid.NewGuid():N}");
+        this.secretDirectory = Path.Combine(Path.GetTempPath(), $"mailfathom-secrets-{Guid.NewGuid():N}");
 
         Directory.CreateDirectory(this.secretDirectory);
     }
@@ -122,7 +122,7 @@ public sealed class SecretMaterialReaderTests : IDisposable
     public void GetValue_ForAVariableTheProcessCarries_ReturnsWhatWasSetOnIt()
     {
         // Arrange
-        var name = $"MAILMCP_INTEGRATION_SECRET_{Guid.NewGuid():N}";
+        var name = $"MAILFATHOM_INTEGRATION_SECRET_{Guid.NewGuid():N}";
         Environment.SetEnvironmentVariable(name, ProvisionedMaterial);
 
         try
@@ -143,7 +143,7 @@ public sealed class SecretMaterialReaderTests : IDisposable
     public void GetValue_ForAVariableTheProcessDoesNotCarry_ReturnsNull()
     {
         // Arrange
-        var name = $"MAILMCP_INTEGRATION_ABSENT_{Guid.NewGuid():N}";
+        var name = $"MAILFATHOM_INTEGRATION_ABSENT_{Guid.NewGuid():N}";
 
         // Act
         var value = new ProcessEnvironmentVariableReader().GetValue(name);

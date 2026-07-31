@@ -137,26 +137,26 @@ dotnet tool install --global csharp-ls --version 0.26.0
 
 ### EF Core design-time commands
 
-**Do not invoke `dotnet ef` directly.** Design-time and migration commands run through the AppHost's `mailmcp-migrations` resource, so they use the connection string the AppHost issues rather than a local environment that can differ from every real one.
+**Do not invoke `dotnet ef` directly.** Design-time and migration commands run through the AppHost's `mailfathom-migrations` resource, so they use the connection string the AppHost issues rather than a local environment that can differ from every real one.
 
 Aspire 13 has no `aspire exec` command; earlier versions offered one, and it is gone. Its replacement is the `Aspire.Hosting.EntityFrameworkCore` package, which declares a migration resource in the app model. `src/AppHost/Program.cs` adds it against the host project, points it at `src/Infrastructure` for the migrations, and calls `RunDatabaseUpdateOnStart`, so a local run applies pending migrations before the host starts and the host waits for that to finish.
 
 Commands are executed against the resource:
 
 ```bash
-aspire resource mailmcp-migrations ef-database-status --apphost src/AppHost/AppHost.csproj --non-interactive
-aspire resource mailmcp-migrations ef-database-update --apphost src/AppHost/AppHost.csproj --non-interactive
-aspire resource mailmcp-migrations ef-database-reset  --apphost src/AppHost/AppHost.csproj --non-interactive
-aspire resource mailmcp-migrations ef-migrations-add  --apphost src/AppHost/AppHost.csproj --non-interactive -- --name Initial
+aspire resource mailfathom-migrations ef-database-status --apphost src/AppHost/AppHost.csproj --non-interactive
+aspire resource mailfathom-migrations ef-database-update --apphost src/AppHost/AppHost.csproj --non-interactive
+aspire resource mailfathom-migrations ef-database-reset  --apphost src/AppHost/AppHost.csproj --non-interactive
+aspire resource mailfathom-migrations ef-migrations-add  --apphost src/AppHost/AppHost.csproj --non-interactive -- --name Initial
 ```
 
 The same commands are available from the dashboard. `dotnet-ef` itself is fetched by the tool resource, so the global install is only needed by an editor that runs design-time commands of its own.
 
 `Host` is the startup project, because it is the resource the orchestration issues the connection string to, and it therefore carries a design-time-only reference to `Microsoft.EntityFrameworkCore.Design`. `Infrastructure` owns the context, the design-time factory, and the migrations under `src/Infrastructure/Persistence/Migrations/`.
 
-`MailMcpDbContextDesignTimeFactory` gives EF Core a context without starting the host, which matters because the host composes its connection string during startup and design-time tooling never runs that. It reads `ConnectionStrings__mailmcp` when the orchestration supplies it, then `MAILMCP_DESIGN_TIME_CONNECTION_STRING` for a command run outside it, and falls back to `Host=localhost;Database=mailmcp;Username=mailmcp`. The orchestrated value wins so a stale override left in a shell cannot point a migration at a different database than the one being migrated.
+`MailFathomDbContextDesignTimeFactory` gives EF Core a context without starting the host, which matters because the host composes its connection string during startup and design-time tooling never runs that. It reads `ConnectionStrings__mailfathom` when the orchestration supplies it, then `MAILFATHOM_DESIGN_TIME_CONNECTION_STRING` for a command run outside it, and falls back to `Host=localhost;Database=mailfathom;Username=mailfathom`. The orchestrated value wins so a stale override left in a shell cannot point a migration at a different database than the one being migrated.
 
-While MailMcp is pre-release the repository keeps exactly one migration, `Initial`, and a model change regenerates it rather than adding a second one. `scripts/regenerate-migration.sh` does that in one command — it reuses a running orchestration, waits for the startup migration run to settle, regenerates the migration, and resets the database — and `scripts/dump-local-schema.sh` produces the schema dump the review then reads. The `add-migration` skill is the surrounding workflow, including that review, which no script performs. Making the workflow additive, and deciding how a released instance applies migrations, is tracked for the first release.
+While MailFathom is pre-release the repository keeps exactly one migration, `Initial`, and a model change regenerates it rather than adding a second one. `scripts/regenerate-migration.sh` does that in one command — it reuses a running orchestration, waits for the startup migration run to settle, regenerates the migration, and resets the database — and `scripts/dump-local-schema.sh` produces the schema dump the review then reads. The `add-migration` skill is the surrounding workflow, including that review, which no script performs. Making the workflow additive, and deciding how a released instance applies migrations, is tracked for the first release.
 
 The baseline migration also installs the `vector` extension. The `pgvector/pgvector` image ships it but does not install it, so without this the first vector column would fail on a type PostgreSQL does not know.
 
@@ -168,7 +168,7 @@ It then checks one thing the migration identifiers cannot express. `Persistence:
 
 Generating a migration for a non-default configuration is therefore a deliberate act: export `Persistence__TextSearchConfiguration` before running the `add-migration` workflow, and rebuild the search documents afterwards. The design-time factory reads that variable, which is the double-underscore encoding of the setting a deployment already has.
 
-Applying is one mechanism per environment: `mailmcp-migrations` locally, and an explicit deployment step elsewhere. A host that mutates schema while starting could race a second instance, could apply a destructive change nobody reviewed at deploy time, and would leave the operator no point at which to take a backup.
+Applying is one mechanism per environment: `mailfathom-migrations` locally, and an explicit deployment step elsewhere. A host that mutates schema while starting could race a second instance, could apply a destructive change nobody reviewed at deploy time, and would leave the operator no point at which to take a backup.
 
 The GitHub CLI (`gh`) is installed separately through the operating system package manager and is required for the issue and pull-request workflow in root `AGENTS.md`. It needs the `project` scope on top of its default scopes so it can read and update the roadmap board.
 
@@ -206,7 +206,7 @@ The packages lock file is inconsistent with the project dependencies so restore 
 That is the expected result of moving a pin without regenerating. Regenerate deliberately, in the same change:
 
 ```bash
-dotnet restore MailMcp.slnx --force-evaluate
+dotnet restore MailFathom.slnx --force-evaluate
 ```
 
 Then read the resulting diff before committing it. A bump that moves one direct version and forty transitive ones is a different review from one that moves only itself, and locked mode exists so that difference is visible rather than discovered later.
@@ -243,23 +243,23 @@ Arguments are forwarded to Microsoft Testing Platform, so `bash scripts/run-inte
 
 The whole suite takes a little over a minute after the images are pulled, and a filtered run is not much faster: the orchestration, the migration, and both containers start once for the assembly whatever the filter selects.
 
-The suite needs a container runtime. The script uses `docker`; set `MAILMCP_CONTAINER_RUNTIME` to use another one.
+The suite needs a container runtime. The script uses `docker`; set `MAILFATHOM_CONTAINER_RUNTIME` to use another one.
 
-It is deliberately not part of any other command. `scripts/verify-fast.sh` and `scripts/verify-full.sh` never start it, the 85% coverage gate never measures it, and no pull-request workflow runs it. The mechanism is one MSBuild property: `IsTestingPlatformApplication` is `false` for the project, which is what a solution-wide `dotnet test` uses to discover test projects, so neither the fast loop nor the coverage collection finds it. The project stays in `MailMcp.slnx` regardless, so it is built, analyzed, and formatted by exactly the same gates as everything else — a compile or style error in an integration test still fails an ordinary pull request.
+It is deliberately not part of any other command. `scripts/verify-fast.sh` and `scripts/verify-full.sh` never start it, the 85% coverage gate never measures it, and no pull-request workflow runs it. The mechanism is one MSBuild property: `IsTestingPlatformApplication` is `false` for the project, which is what a solution-wide `dotnet test` uses to discover test projects, so neither the fast loop nor the coverage collection finds it. The project stays in `MailFathom.slnx` regardless, so it is built, analyzed, and formatted by exactly the same gates as everything else — a compile or style error in an integration test still fails an ordinary pull request.
 
 ### Ephemeral resources
 
 The app host is started with the argument `IntegrationTesting=true`, which selects a second topology in `src/AppHost/Program.cs`:
 
-- the PostgreSQL container is named `mailmcp-integrationtests-postgres` and its data volume `mailmcp-integrationtests-postgres-data`, rather than taking Aspire's random postfix and the path-derived volume name a developer's orchestration uses;
-- a `mailserver` container named `mailmcp-integrationtests-mailserver` is added, which a developer's orchestration never gets — it exists so the suite has a real IMAP server to synchronize against, and starting one beside a developer's own accounts would advertise a mailbox nothing points at;
-- the `mailmcp-host` project resource is added to the model but never started, because the suite exercises classes against real infrastructure and a running MailMcp would synchronize mail underneath the data a test is asserting on.
+- the PostgreSQL container is named `mailfathom-integrationtests-postgres` and its data volume `mailfathom-integrationtests-postgres-data`, rather than taking Aspire's random postfix and the path-derived volume name a developer's orchestration uses;
+- a `mailserver` container named `mailfathom-integrationtests-mailserver` is added, which a developer's orchestration never gets — it exists so the suite has a real IMAP server to synchronize against, and starting one beside a developer's own accounts would advertise a mailbox nothing points at;
+- the `mailfathom-host` project resource is added to the model but never started, because the suite exercises classes against real infrastructure and a running MailFathom would synchronize mail underneath the data a test is asserting on.
 
 Both names come from `OrchestrationContract` in `src/AppHost`, and nothing else in the repository uses that prefix. The script removes every container and volume carrying it before the run as well as after it: before, because the baseline migration is only proven to apply cleanly when it applies to an empty database; after, because nothing the suite creates is meant to outlive it. A run killed with `SIGKILL` skips the trap, and the next run's opening removal is what cleans up after it. To check by hand:
 
 ```bash
-docker ps --all --filter name=mailmcp-integrationtests
-docker volume ls --filter name=mailmcp-integrationtests
+docker ps --all --filter name=mailfathom-integrationtests
+docker volume ls --filter name=mailfathom-integrationtests
 ```
 
 A developer's own orchestration is untouched by any of this: its container name and its volume name are derived from the AppHost project path and never carry the test prefix.
@@ -268,14 +268,14 @@ A developer's own orchestration is untouched by any of this: its container name 
 
 The `mailserver` resource is `greenmail/standalone:2.1.11`, configured through `GREENMAIL_OPTS` to start only SMTP on 3025, IMAP on 3143, and the API server on 8080. The API server is what the resource's health check polls — `/api/service/readiness` — so the suite waits for a server that is accepting rather than for a container that has started; without it the first test would race the listener and fail as a connection refusal that says nothing about the behavior under test.
 
-It serves one throwaway mailbox, `mailmcp` / `mailmcp@mailmcp.test`, whose credentials are constants in `OrchestrationContract`. They exist only in the ephemeral topology, unlock nothing outside the container, and are declared once so the app model that configures the server and the suite that logs into it cannot drift apart. GreenMail's own verbose logging stays off, because it transcribes the whole IMAP conversation — password included — into the orchestration log.
+It serves one throwaway mailbox, `mailfathom` / `mailfathom@mailfathom.test`, whose credentials are constants in `OrchestrationContract`. They exist only in the ephemeral topology, unlock nothing outside the container, and are declared once so the app model that configures the server and the suite that logs into it cannot drift apart. GreenMail's own verbose logging stays off, because it transcribes the whole IMAP conversation — password included — into the orchestration log.
 
 Two behaviors of this server are worth knowing when reading a failure:
 
 - It advertises `AUTH=XOAUTH2` and nothing else, so both the adapter under test and the suite's own observations empty MailKit's advertised mechanism set and authenticate with the IMAP `LOGIN` command. That is a legal server shape, and `MailKitTransportSecurityMapping` permits the fallback exactly when the account's policy already allows a clear-text mechanism.
 - Each folder carries a real UIDVALIDITY, `System.currentTimeMillis() / 1000` at creation, so replacing a folder hands out a new one. That is how the suite produces a UIDVALIDITY change without simulating anything. Two consequences are built into `OrchestratedMailbox.RecreateFolderAsync`: it waits past the next whole second, because a folder replaced inside the same second is handed back the value it just had, and it retires the old folder by renaming it rather than deleting it. GreenMail 2.1.11 crashes on `DELETE` of a folder an earlier session had selected — it notifies the folder's listeners and dereferences a response object a disconnected session no longer holds — and every folder this suite replaces has been selected by a synchronization run.
 
-smtp4dev was evaluated first and rejected. It advertises no SASL mechanism at all, which is workable, but its INBOX reports a hard-coded UIDVALIDITY that can never change, so the specification's UIDVALIDITY scenario would have been unverifiable. Separately, a `UID SEARCH UID 1:*` against it exhausts the container's memory and kills the process; MailMcp never sends that shape, because it computes a concrete upper bound from `UIDNEXT`, but it is worth recording for anyone who reaches for that image again.
+smtp4dev was evaluated first and rejected. It advertises no SASL mechanism at all, which is workable, but its INBOX reports a hard-coded UIDVALIDITY that can never change, so the specification's UIDVALIDITY scenario would have been unverifiable. Separately, a `UID SEARCH UID 1:*` against it exhausts the container's memory and kills the process; MailFathom never sends that shape, because it computes a concrete upper bound from `UIDNEXT`, but it is worth recording for anyone who reaches for that image again.
 
 ### Coverage
 
@@ -298,8 +298,8 @@ The `Integration tests` workflow runs the same script and is `workflow_dispatch`
 Two workflows run for every pull request targeting `main`, and both of them always run. `CI` carries four jobs:
 
 - `Detect changes` reads the pull request's changed files through the GitHub REST API with `dorny/paths-filter` and publishes two decisions: whether the change can affect the build, and whether it can affect formatting. It checks nothing out, needs `contents: read` and `pull-requests: read`, and takes seconds. A manual dispatch has no pull request to compare against, so both decisions are `true` there and an explicitly started run always does the work.
-- `Build and unit test` runs when the change touches production code, tests, the solution or SDK selection, shared build and package configuration, coverage tooling, or the workflow file. It restores `MailMcp.slnx` in locked mode and repository-local tools, builds the solution in Release configuration, runs all unit-test projects through Microsoft Testing Platform with unique coverage prefixes, merges their Cobertura reports, and fails below 85% aggregate line coverage for the complete configured production scope. It uploads raw and merged coverage artifacts and TRX results even when the threshold fails.
-- `dotnet format` runs when the change touches `src/**`, `tests/**`, `.editorconfig`, the workflow file, the shared build files, `Directory.Packages.props`, `MailMcp.slnx`, or `global.json`. It restores `MailMcp.slnx` in locked mode and verifies repository formatting without applying changes. The command runs its analyzer pass as well as its whitespace and style passes, so a centrally pinned analyzer version, a property set in a shared build file, a project added to the solution, or a different SDK can move its verdict without a single C# file changing; the trigger covers all four. `.config/**` and `NuGet.config` stay out, because they decide what the build rejects, restores, runs, and measures rather than how code is written.
+- `Build and unit test` runs when the change touches production code, tests, the solution or SDK selection, shared build and package configuration, coverage tooling, or the workflow file. It restores `MailFathom.slnx` in locked mode and repository-local tools, builds the solution in Release configuration, runs all unit-test projects through Microsoft Testing Platform with unique coverage prefixes, merges their Cobertura reports, and fails below 85% aggregate line coverage for the complete configured production scope. It uploads raw and merged coverage artifacts and TRX results even when the threshold fails.
+- `dotnet format` runs when the change touches `src/**`, `tests/**`, `.editorconfig`, the workflow file, the shared build files, `Directory.Packages.props`, `MailFathom.slnx`, or `global.json`. It restores `MailFathom.slnx` in locked mode and verifies repository formatting without applying changes. The command runs its analyzer pass as well as its whitespace and style passes, so a centrally pinned analyzer version, a property set in a shared build file, a project added to the solution, or a different SDK can move its verdict without a single C# file changing; the trigger covers all four. `.config/**` and `NuGet.config` stay out, because they decide what the build rejects, restores, runs, and measures rather than how code is written.
 - `Required CI` is this workflow's one required status check, and the only conclusion the ruleset reads from it. It depends on the other three, runs under `if: always()` so a cancelled or skipped dependency cannot skip it in turn, and reads their results: `Detect changes` must have succeeded, and each of the other two must have either succeeded or been skipped. `failure` and `cancelled` fail it.
 
 The second workflow, `Protected paths`, carries one job of the same name and answers a different question: not whether the change builds, but whether its author may make it at all. It reads the pull request's changed files through the GitHub REST API, checks nothing out, and fails when the pull request adds, modifies, deletes, or renames anything under `.github/`, `.config/`, `.agents/`, or `.claude/` and its author is not the repository owner. A rename is read from both ends, so moving a file out of one of those directories counts as changing it. A pull request larger than the 3000 files that endpoint reports fails rather than passing on a list that may be missing the change it was asked about. Everything else it sees passes in seconds, including drafts, which run it for the same reason: the fact it reports is worth having in the first minute rather than at the moment a draft is marked ready.

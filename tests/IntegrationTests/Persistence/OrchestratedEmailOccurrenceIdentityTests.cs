@@ -1,17 +1,17 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Emails;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.IntegrationTests.Orchestration;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Emails;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Persistence;
+namespace MailFathom.IntegrationTests.Persistence;
 
 /// <summary>Proves that the remote occurrence identity is enforced by PostgreSQL and survives its column mapping.</summary>
 /// <remarks>
@@ -28,7 +28,7 @@ namespace MailMcp.IntegrationTests.Persistence;
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-public sealed class OrchestratedEmailOccurrenceIdentityTests(MailMcpOrchestrationFixture orchestration)
+public sealed class OrchestratedEmailOccurrenceIdentityTests(MailFathomOrchestrationFixture orchestration)
 {
     /// <summary>The alias this class owns, so its rows are not disturbed by another class's writes.</summary>
     private const string FolderAlias = "occurrence-identity";
@@ -43,7 +43,7 @@ public sealed class OrchestratedEmailOccurrenceIdentityTests(MailMcpOrchestratio
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var occurrenceId = SyntheticEmail.OccurrenceIn(binding, HighestUid);
 
@@ -79,7 +79,7 @@ public sealed class OrchestratedEmailOccurrenceIdentityTests(MailMcpOrchestratio
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var occurrenceId = SyntheticEmail.OccurrenceIn(binding, DuplicatedUid);
 
@@ -104,7 +104,7 @@ public sealed class OrchestratedEmailOccurrenceIdentityTests(MailMcpOrchestratio
         var updateFailure = Assert.IsType<DbUpdateException>(refusal);
         var violation = Assert.IsType<PostgresException>(updateFailure.InnerException);
         Assert.Equal(PostgresErrorCodes.UniqueViolation, violation.SqlState);
-        Assert.Equal(MailMcpDbContext.StoredEmailOccurrenceUniqueIndexName, violation.ConstraintName);
+        Assert.Equal(MailFathomDbContext.StoredEmailOccurrenceUniqueIndexName, violation.ConstraintName);
 
         var storedRows = await ReadRowsForAsync(services, occurrenceId, cancellationToken);
         var storedRow = Assert.Single(storedRows);
@@ -112,7 +112,7 @@ public sealed class OrchestratedEmailOccurrenceIdentityTests(MailMcpOrchestratio
     }
 
     private static Task<PersistenceCommitResult> StoreAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         EmailOccurrenceId occurrenceId,
         string subject,
         CancellationToken cancellationToken) => services.CommitAsync(
@@ -135,7 +135,7 @@ public sealed class OrchestratedEmailOccurrenceIdentityTests(MailMcpOrchestratio
 
     /// <summary>Reads every row naming one occurrence, so a duplicate is reported as a count rather than assumed away.</summary>
     private static Task<IReadOnlyList<StoredOccurrenceRow>> ReadRowsForAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken)
     {
@@ -146,7 +146,7 @@ public sealed class OrchestratedEmailOccurrenceIdentityTests(MailMcpOrchestratio
 
         return services.InScopeAsync(
             async (scope, token) => (IReadOnlyList<StoredOccurrenceRow>)await scope
-                .GetRequiredService<MailMcpDbContext>()
+                .GetRequiredService<MailFathomDbContext>()
                 .StoredEmails
                 .AsNoTracking()
                 .Where(storedEmail => storedEmail.MailFolder.MailboxAccountId == SyntheticMailAccount.AccountId.Value
@@ -164,11 +164,11 @@ public sealed class OrchestratedEmailOccurrenceIdentityTests(MailMcpOrchestratio
     }
 
     private static Task<int> CountSearchDocumentsForAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         Guid storedEmailId,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope
-                .GetRequiredService<MailMcpDbContext>()
+                .GetRequiredService<MailFathomDbContext>()
                 .EmailSearchDocuments
                 .AsNoTracking()
                 .CountAsync(document => document.StoredEmailId == storedEmailId, token),

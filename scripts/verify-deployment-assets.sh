@@ -28,7 +28,7 @@ fi
 
 cd "$repository_root"
 
-readonly chart_directory='deploy/helm/mailmcp'
+readonly chart_directory='deploy/helm/mailfathom'
 readonly compose_directory='deploy/compose'
 readonly dockerfile='deploy/docker/Dockerfile'
 # The ignore-file lives beside the Dockerfile rather than at the context root. Docker looks for
@@ -151,7 +151,7 @@ verify_the_compose_deployment() {
   # credential to exist. The paths are created empty and removed again.
   local created_placeholders=()
   local secret_file
-  for secret_file in "$compose_directory/secrets/postgres-superuser-password" "$compose_directory/secrets/mailmcp-database-password"; do
+  for secret_file in "$compose_directory/secrets/postgres-superuser-password" "$compose_directory/secrets/mailfathom-database-password"; do
     if [[ ! -e "$secret_file" ]]; then
       mkdir -p "$(dirname "$secret_file")"
       : > "$secret_file"
@@ -176,14 +176,14 @@ verify_the_compose_deployment() {
   # reports whichever it reaches first, so leaving out both would prove only that one of them binds.
   expect_rejection \
     'The GHCR overlay refuses to render without an acknowledgement.' \
-    'MAILMCP_NIGHTLY_ACKNOWLEDGED' \
-    env --chdir="$compose_directory" --unset=MAILMCP_NIGHTLY_ACKNOWLEDGED MAILMCP_NIGHTLY_TAG=verification \
+    'MAILFATHOM_NIGHTLY_ACKNOWLEDGED' \
+    env --chdir="$compose_directory" --unset=MAILFATHOM_NIGHTLY_ACKNOWLEDGED MAILFATHOM_NIGHTLY_TAG=verification \
     docker compose --file compose.yaml --file compose.nightly.yaml config --quiet
 
   expect_rejection \
     'The GHCR overlay refuses to render without a named nightly identifier.' \
-    'MAILMCP_NIGHTLY_TAG' \
-    env --chdir="$compose_directory" --unset=MAILMCP_NIGHTLY_TAG MAILMCP_NIGHTLY_ACKNOWLEDGED=i-understand-this-is-unsupported \
+    'MAILFATHOM_NIGHTLY_TAG' \
+    env --chdir="$compose_directory" --unset=MAILFATHOM_NIGHTLY_TAG MAILFATHOM_NIGHTLY_ACKNOWLEDGED=i-understand-this-is-unsupported \
     docker compose --file compose.yaml --file compose.nightly.yaml config --quiet
 
   # Nothing in the supported deployment may reach GHCR, however it is configured.
@@ -204,19 +204,19 @@ verify_the_chart() {
 
   local values_file
   for values_file in release nightly; do
-    if helm_command lint mailmcp --values "mailmcp/ci/${values_file}-values.yaml" >/dev/null 2>&1; then
+    if helm_command lint mailfathom --values "mailfathom/ci/${values_file}-values.yaml" >/dev/null 2>&1; then
       pass "The chart lints against ci/${values_file}-values.yaml."
     else
       fail "The chart does not lint against ci/${values_file}-values.yaml."
-      helm_command lint mailmcp --values "mailmcp/ci/${values_file}-values.yaml" >&2 || true
+      helm_command lint mailfathom --values "mailfathom/ci/${values_file}-values.yaml" >&2 || true
     fi
   done
 
   # Rendered twice and compared, because a template that reaches for the current time, a random value, or map ordering
   # produces a diff on every deployment and makes a review of what changed impossible.
   local first_render second_render
-  first_render="$(helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml 2>&1)"
-  second_render="$(helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml 2>&1)"
+  first_render="$(helm_command template verification mailfathom --values mailfathom/ci/release-values.yaml 2>&1)"
+  second_render="$(helm_command template verification mailfathom --values mailfathom/ci/release-values.yaml 2>&1)"
 
   if [[ "$first_render" == "$second_render" ]]; then
     pass 'Rendering is deterministic.'
@@ -249,58 +249,58 @@ verify_the_chart() {
   expect_rejection \
     'Default values are refused, because no release image exists to default to.' \
     'image/repository' \
-    helm_command template verification mailmcp
+    helm_command template verification mailfathom
 
   expect_rejection \
     'A moving image tag is refused.' \
     'image/tag' \
-    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml --set image.tag=latest
+    helm_command template verification mailfathom --values mailfathom/ci/release-values.yaml --set image.tag=latest
 
   expect_rejection \
     'A nightly image without the acknowledgement is refused.' \
     'nightlyAcknowledgement' \
-    helm_command template verification mailmcp --values mailmcp/ci/nightly-values.yaml --set image.nightlyAcknowledgement=
+    helm_command template verification mailfathom --values mailfathom/ci/nightly-values.yaml --set image.nightlyAcknowledgement=
 
   expect_rejection \
     'A nightly image pointed at another registry is refused.' \
     'published only to ghcr.io' \
-    helm_command template verification mailmcp --values mailmcp/ci/nightly-values.yaml --set image.registry=docker.io
+    helm_command template verification mailfathom --values mailfathom/ci/nightly-values.yaml --set image.registry=docker.io
 
   expect_rejection \
     'A writable root filesystem is refused.' \
     'readOnlyRootFilesystem' \
-    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml --set containerSecurityContext.readOnlyRootFilesystem=false
+    helm_command template verification mailfathom --values mailfathom/ci/release-values.yaml --set containerSecurityContext.readOnlyRootFilesystem=false
 
   expect_rejection \
     'Running as root is refused.' \
     'runAsNonRoot' \
-    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml --set podSecurityContext.runAsNonRoot=false
+    helm_command template verification mailfathom --values mailfathom/ci/release-values.yaml --set podSecurityContext.runAsNonRoot=false
 
   expect_rejection \
     'An install without a database host is refused.' \
     'database.host' \
-    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml --set database.host=
+    helm_command template verification mailfathom --values mailfathom/ci/release-values.yaml --set database.host=
 
   expect_rejection \
     'An install without a provisioned Secret is refused.' \
     'secrets.existingSecret' \
-    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml --set secrets.existingSecret=
+    helm_command template verification mailfathom --values mailfathom/ci/release-values.yaml --set secrets.existingSecret=
 
   expect_rejection \
     'A liveness probe pointed at the database-consulting endpoint is refused.' \
     'probes/liveness/path' \
-    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml --set probes.liveness.path=/health
+    helm_command template verification mailfathom --values mailfathom/ci/release-values.yaml --set probes.liveness.path=/health
 
   expect_rejection \
     'A misspelled values key is refused rather than silently ignored.' \
     "additional properties 'pullPolcy' not allowed" \
-    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml --set image.pullPolcy=Always
+    helm_command template verification mailfathom --values mailfathom/ci/release-values.yaml --set image.pullPolcy=Always
 
   expect_rejection \
     'A deployment-owned setting in extraEnvironment is refused, so a credential cannot reach the environment block.' \
-    "invalid propertyName 'ConnectionStrings__mailmcp'" \
-    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml \
-    --set 'config.extraEnvironment.ConnectionStrings__mailmcp=Host=x;Password=y'
+    "invalid propertyName 'ConnectionStrings__mailfathom'" \
+    helm_command template verification mailfathom --values mailfathom/ci/release-values.yaml \
+    --set 'config.extraEnvironment.ConnectionStrings__mailfathom=Host=x;Password=y'
 
   # The chart applies no schema and renders nothing that could. A Job reintroduced here would be an automatic
   # migration the moment somebody gave it a Helm hook; #126 owns the artifact and the step that runs it.
@@ -310,7 +310,7 @@ verify_the_chart() {
     pass 'The chart renders no schema Job.'
   fi
 
-  # MailMcp is Apache-2.0, and the identifier is asserted rather than merely its presence: a chart that names terms
+  # MailFathom is Apache-2.0, and the identifier is asserted rather than merely its presence: a chart that names terms
   # other than the root LICENSE's is the failure worth catching, and it reads exactly like a correct one.
   if grep -qE '^[[:space:]]*artifacthub\.io/license:[[:space:]]*Apache-2\.0[[:space:]]*$' "$chart_directory/Chart.yaml"; then
     pass 'The chart declares its Apache-2.0 license.'
@@ -319,7 +319,7 @@ verify_the_chart() {
   fi
 
   local nightly_render
-  nightly_render="$(helm_command template verification mailmcp --values mailmcp/ci/nightly-values.yaml 2>&1)"
+  nightly_render="$(helm_command template verification mailfathom --values mailfathom/ci/nightly-values.yaml 2>&1)"
   if printf '%s' "$nightly_render" | grep -q 'ghcr-nightly-unsupported'; then
     pass 'A nightly deployment labels every object as unsupported.'
   else

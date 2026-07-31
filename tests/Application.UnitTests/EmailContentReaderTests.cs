@@ -4,18 +4,18 @@
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
-using MailMcp.Application.Accounts;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Emails.GetEmailContent;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Failures;
+using MailFathom.Application.Accounts;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.GetEmailContent;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
 using NSubstitute;
 using Xunit;
 
-namespace MailMcp.Application.UnitTests;
+namespace MailFathom.Application.UnitTests;
 
 /// <summary>Covers the email content use case: what it serves, what it refuses, and what it records when it refuses.</summary>
 public sealed class EmailContentReaderTests
@@ -225,7 +225,7 @@ public sealed class EmailContentReaderTests
             TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.StoredEmailNotFound, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.StoredEmailNotFound, failure.ErrorCode);
     }
 
     /// <summary>Stored mail of an account the deployment stopped serving is refused, and refused the same way.</summary>
@@ -245,7 +245,7 @@ public sealed class EmailContentReaderTests
             TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.StoredEmailNotFound, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.StoredEmailNotFound, failure.ErrorCode);
     }
 
     [Fact]
@@ -266,7 +266,7 @@ public sealed class EmailContentReaderTests
             TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.EmailContentUnavailable, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.EmailContentUnavailable, failure.ErrorCode);
         Assert.Equal(EmailContentDefect.Missing, failure.Defect);
         Assert.Equal(
             [new EmailContentRepairRequest(summary.StoredEmailId, EmailContentDefect.Missing)],

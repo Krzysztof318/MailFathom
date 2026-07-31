@@ -1,16 +1,16 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.CodeCoverage;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Synchronization;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.CodeCoverage;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Synchronization;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>EF Core implementation for synchronization checkpoints.</summary>
 /// <remarks>
@@ -18,7 +18,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// the caller's session, so a checkpoint can only be written inside the transaction the caller opened.
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContext) : ISynchronizationCheckpointStore
+internal sealed class SynchronizationCheckpointStore(MailFathomDbContext readContext) : ISynchronizationCheckpointStore
 {
     /// <inheritdoc />
     public async Task<SynchronizationCheckpoint?> GetCheckpointAsync(
@@ -107,7 +107,7 @@ internal sealed class SynchronizationCheckpointStore(MailMcpDbContext readContex
             : proposed;
 
     private static async Task<SynchronizationCheckpointEntity?> FindCheckpointForAsync(
-        MailMcpDbContext writeContext,
+        MailFathomDbContext writeContext,
         MailFolderEntity folder,
         CancellationToken cancellationToken)
     {

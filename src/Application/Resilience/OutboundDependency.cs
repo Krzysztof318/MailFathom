@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Application.Resilience;
+namespace MailFathom.Application.Resilience;
 
 /// <summary>Names one class of outbound dependency whose failures share a retry, timeout, and load-shedding budget.</summary>
 /// <remarks>

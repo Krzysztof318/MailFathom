@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Infrastructure.Secrets;
+namespace MailFathom.Infrastructure.Secrets;
 
 /// <summary>Everything one walk of a bound options graph found about its secret-bearing settings.</summary>
 /// <param name="Blocks">Every <see cref="ConfiguredSecret" /> the walk reached, in discovery order.</param>

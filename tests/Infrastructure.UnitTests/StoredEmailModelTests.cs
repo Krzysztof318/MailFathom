@@ -1,14 +1,14 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>
 /// Asserts the shape of the model the schema is generated from. The model is built in memory by the real PostgreSQL
@@ -22,12 +22,12 @@ public sealed class StoredEmailModelTests
     private static readonly string[] FolderTimelineColumns = ["MailFolderId", "ReceivedAt", "Id"];
 
     [Theory]
-    [InlineData(MailMcpDbContext.StoredEmailAccountTimelineIndexName)]
-    [InlineData(MailMcpDbContext.StoredEmailFolderTimelineIndexName)]
+    [InlineData(MailFathomDbContext.StoredEmailAccountTimelineIndexName)]
+    [InlineData(MailFathomDbContext.StoredEmailFolderTimelineIndexName)]
     public void StoredEmailModel_TimelineIndex_OrdersByTheReceivedTimestampDescendingWithTheIdentifierAsTiebreaker(string indexName)
     {
         // Arrange
-        var expectedColumns = indexName == MailMcpDbContext.StoredEmailAccountTimelineIndexName
+        var expectedColumns = indexName == MailFathomDbContext.StoredEmailAccountTimelineIndexName
             ? AccountTimelineColumns
             : FolderTimelineColumns;
 
@@ -44,8 +44,8 @@ public sealed class StoredEmailModelTests
     /// could date above the newest mail. The contract puts them last and the index has to spell that out.
     /// </summary>
     [Theory]
-    [InlineData(MailMcpDbContext.StoredEmailAccountTimelineIndexName)]
-    [InlineData(MailMcpDbContext.StoredEmailFolderTimelineIndexName)]
+    [InlineData(MailFathomDbContext.StoredEmailAccountTimelineIndexName)]
+    [InlineData(MailFathomDbContext.StoredEmailFolderTimelineIndexName)]
     public void StoredEmailModel_TimelineIndex_SortsAnUnknownReceivedTimestampLast(string indexName)
     {
         // Act
@@ -61,7 +61,7 @@ public sealed class StoredEmailModelTests
     public void StoredEmailModel_RemoteOccurrenceIdentity_IsUniqueOnFolderUidValidityAndUid()
     {
         // Act
-        var index = FindStoredEmailIndex(MailMcpDbContext.StoredEmailOccurrenceUniqueIndexName);
+        var index = FindStoredEmailIndex(MailFathomDbContext.StoredEmailOccurrenceUniqueIndexName);
 
         // Assert
         Assert.True(index.IsUnique);
@@ -70,9 +70,9 @@ public sealed class StoredEmailModelTests
 
     /// <summary>A recipient filter is a containment test over an array, which only a GIN index can serve.</summary>
     [Theory]
-    [InlineData(MailMcpDbContext.StoredEmailToAddressesIndexName, "ToAddresses")]
-    [InlineData(MailMcpDbContext.StoredEmailCcAddressesIndexName, "CcAddresses")]
-    [InlineData(MailMcpDbContext.StoredEmailReplyToAddressesIndexName, "ReplyToAddresses")]
+    [InlineData(MailFathomDbContext.StoredEmailToAddressesIndexName, "ToAddresses")]
+    [InlineData(MailFathomDbContext.StoredEmailCcAddressesIndexName, "CcAddresses")]
+    [InlineData(MailFathomDbContext.StoredEmailReplyToAddressesIndexName, "ReplyToAddresses")]
     public void StoredEmailModel_RecipientArrayIndex_UsesTheInvertedIndexMethod(string indexName, string columnName)
     {
         // Act
@@ -87,7 +87,7 @@ public sealed class StoredEmailModelTests
     public void StoredEmailModel_SenderIndex_CoversTheComparisonFormRatherThanTheWrittenAddress()
     {
         // Act
-        var index = FindStoredEmailIndex(MailMcpDbContext.StoredEmailSenderIndexName);
+        var index = FindStoredEmailIndex(MailFathomDbContext.StoredEmailSenderIndexName);
 
         // Assert
         Assert.Equal(["SenderNormalizedAddress"], index.Properties.Select(property => property.Name));
@@ -126,9 +126,9 @@ public sealed class StoredEmailModelTests
     /// Reads the design-time model rather than <c>DbContext.Model</c>, because the runtime model is trimmed to what a
     /// query needs and throws for the index configuration a schema is generated from.
     /// </summary>
-    private static IEntityType StoredEmailEntityType(MailMcpDbContext context) =>
+    private static IEntityType StoredEmailEntityType(MailFathomDbContext context) =>
         context.GetService<IDesignTimeModel>().Model.FindEntityType(typeof(StoredEmailEntity))!;
 
-    private static MailMcpDbContext CreateContext() =>
-        new MailMcpDbContextDesignTimeFactory().CreateDbContext([]);
+    private static MailFathomDbContext CreateContext() =>
+        new MailFathomDbContextDesignTimeFactory().CreateDbContext([]);
 }

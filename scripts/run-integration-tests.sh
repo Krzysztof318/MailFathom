@@ -17,12 +17,12 @@ integration_test_project='tests/IntegrationTests/IntegrationTests.csproj'
 # Must match OrchestrationContract.EphemeralResourceNamePrefix in src/AppHost. The app model names
 # the container and the volume it creates under test with this prefix precisely so that a filter can
 # find them again without knowing what a given run produced.
-ephemeral_resource_prefix='mailmcp-integrationtests'
+ephemeral_resource_prefix='mailfathom-integrationtests'
 
-container_runtime="${MAILMCP_CONTAINER_RUNTIME:-docker}"
+container_runtime="${MAILFATHOM_CONTAINER_RUNTIME:-docker}"
 
 if ! command -v "$container_runtime" > /dev/null; then
-  printf 'The integration suite needs a container runtime. %s was not found on PATH; set MAILMCP_CONTAINER_RUNTIME to the one to use.\n' \
+  printf 'The integration suite needs a container runtime. %s was not found on PATH; set MAILFATHOM_CONTAINER_RUNTIME to the one to use.\n' \
     "$container_runtime" >&2
   exit 1
 fi
@@ -109,7 +109,7 @@ if ((${#collected_coverage_reports[@]} > 0)); then
     "-targetdir:$coverage_report_directory" \
     '-reporttypes:Cobertura;HtmlInline;TextSummary' \
     "-filefilters:$coverage_file_filters" \
-    "-title:MailMcp integration coverage"
+    "-title:MailFathom integration coverage"
 
   printf '\nIntegration coverage over the %d classes marked [RequiresIntegrationCoverage]:\n\n' \
     "${#integration_covered_sources[@]}"

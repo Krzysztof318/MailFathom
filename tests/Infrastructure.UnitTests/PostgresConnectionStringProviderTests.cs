@@ -1,17 +1,17 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Secrets;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class PostgresConnectionStringProviderTests
 {
-    private const string ConnectionStringWithoutPassword = "Host=localhost;Database=mailmcp;Username=mailmcp";
+    private const string ConnectionStringWithoutPassword = "Host=localhost;Database=mailfathom;Username=mailfathom";
 
     [Fact]
     public void ConnectionString_BeforeStartup_ThrowsRatherThanFallingBackToAnUnresolvedOne()
@@ -33,7 +33,7 @@ public sealed class PostgresConnectionStringProviderTests
         await provider.StartingAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Contains("Username=mailmcp", provider.ConnectionString, StringComparison.Ordinal);
+        Assert.Contains("Username=mailfathom", provider.ConnectionString, StringComparison.Ordinal);
     }
 
     /// <summary>The credential is retrieved when a physical connection opens, so it must not be baked into the pool's connection string.</summary>
@@ -61,7 +61,7 @@ public sealed class PostgresConnectionStringProviderTests
         await provider.StartingAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Contains("Username=mailmcp", provider.ConnectionString, StringComparison.Ordinal);
+        Assert.Contains("Username=mailfathom", provider.ConnectionString, StringComparison.Ordinal);
     }
 
     /// <summary>A deployment with no rotatable credential source must not have a password provider attached at all.</summary>

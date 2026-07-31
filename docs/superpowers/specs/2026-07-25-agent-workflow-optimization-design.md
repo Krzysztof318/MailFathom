@@ -61,7 +61,7 @@ create worktrees, or remove stale worktrees.
 `scripts/verify-fast.sh` provides the repeatable inner loop:
 
 1. restore the solution;
-2. build `MailMcp.slnx` in `Release`;
+2. build `MailFathom.slnx` in `Release`;
 3. run the complete unit-test suite without rebuilding.
 
 `scripts/verify-full.sh` is the final gate:
@@ -70,7 +70,7 @@ create worktrees, or remove stale worktrees.
 2. run `scripts/test-agent-workflow.sh`;
 3. restore repository-local tools;
 4. restore the solution;
-5. build `MailMcp.slnx` in `Release`;
+5. build `MailFathom.slnx` in `Release`;
 6. run the existing coverage target, which executes the complete unit-test
    suite and enforces 85% aggregate line coverage;
 7. verify formatting without another restore;

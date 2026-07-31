@@ -3,12 +3,12 @@
 
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Emails.SearchEmails;
-using MailMcp.Domain.Failures;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.SearchEmails;
+using MailFathom.Domain.Failures;
 using ModelContextProtocol.Server;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes the <c>search_emails</c> tool over the <see cref="MailboxSearchReader" /> use case.</summary>
 /// <param name="mailboxSearchReader">Answers the search from the local mailbox copy.</param>
@@ -33,7 +33,7 @@ namespace MailMcp.Mcp.Tools;
 /// summarize a query.
 /// </para>
 /// <para>
-/// The query text is the most revealing argument any MailMcp tool takes — what somebody is looking for in their own
+/// The query text is the most revealing argument any MailFathom tool takes — what somebody is looking for in their own
 /// mailbox — so nothing here writes it to a log, and no failure this path raises repeats it.
 /// </para>
 /// </remarks>
@@ -62,7 +62,7 @@ internal sealed class SearchEmailsTool(
     /// <param name="cancellationToken">Cancels the search when the caller disconnects or the host shuts down.</param>
     /// <returns>The ranked window, how it was retrieved, and how current each covered folder is.</returns>
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when an account identifier or folder alias is not a value this system could have issued.</exception>
-    /// <exception cref="MailMcpException">
+    /// <exception cref="MailFathomException">
     /// Raised by the use case for a query text, a filter, a result count, or an account it refuses. The call-tool filter
     /// turns every one of them into the coded result a client reads, so this tool neither catches nor re-describes any.
     /// </exception>
@@ -75,7 +75,7 @@ internal sealed class SearchEmailsTool(
         OpenWorld = false,
         UseStructuredContent = true)]
     [Description(
-        "Searches the emails already synchronized into MailMcp's local mailbox copy for text, and returns the best "
+        "Searches the emails already synchronized into MailFathom's local mailbox copy for text, and returns the best "
         + "matches ranked by relevance with bounded extracts of the body around the matched words. Retrieval is lexical: "
         + "it finds the words a query contains rather than what they mean, and words that appear only inside an "
         + "attachment are not searchable. Narrows by account, folder, sender address, recipient address, subject text, "
@@ -86,9 +86,9 @@ internal sealed class SearchEmailsTool(
     public async Task<SearchEmailsToolResult> SearchEmailsAsync(
         [Description("The text to search for, up to 512 characters. Quoted phrases, OR, and a leading - to exclude a word are understood; every other punctuation mark is ordinary text. Required: a search with no text is a listing, which list_emails answers in a stable order and with a cursor.")]
         string queryText,
-        [Description("Configured MailMcp account identifiers to search. Omit to search every account this deployment serves. At most 64 may be named, and an identifier this deployment does not serve is refused rather than answered with an empty window.")]
+        [Description("Configured MailFathom account identifiers to search. Omit to search every account this deployment serves. At most 64 may be named, and an identifier this deployment does not serve is refused rather than answered with an empty window.")]
         string[]? accountIds = null,
-        [Description("MailMcp folder aliases to search, such as INBOX. Omit to search every folder of the accounts in scope. At most 64 may be named. An alias is MailMcp's own name for a folder and is matched without regard to case.")]
+        [Description("MailFathom folder aliases to search, such as INBOX. Omit to search every folder of the accounts in scope. At most 64 may be named. An alias is MailFathom's own name for a folder and is matched without regard to case.")]
         string[]? folderAliases = null,
         [Description("Return only emails sent from this mail address. Matched as a whole address rather than as a fragment, without regard to case; a non-empty value that is not a usable mail address is refused. Omit to match any sender, which an empty string does too.")]
         string? senderAddress = null,

@@ -19,10 +19,10 @@ artifacts/
 # Compose file bind-mounts one of them and a missing bind source is a start-up failure rather than an empty mount;
 # nothing inside them ever is.
 deploy/compose/secrets/*
-!deploy/compose/secrets/mailmcp/
-deploy/compose/secrets/mailmcp/*
-!deploy/compose/secrets/mailmcp/.gitkeep
-# The operator's own copy of the example beside it. The example is tracked; the file MailMcp actually reads is not,
+!deploy/compose/secrets/mailfathom/
+deploy/compose/secrets/mailfathom/*
+!deploy/compose/secrets/mailfathom/.gitkeep
+# The operator's own copy of the example beside it. The example is tracked; the file MailFathom actually reads is not,
 # because it names the mailboxes a person reads.
 deploy/compose/config/*.json
 deploy/compose/compose.override.yaml

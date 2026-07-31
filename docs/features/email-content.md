@@ -1,6 +1,6 @@
 # Email content
 
-MailMcp serves one email's content from its local copy. `EmailContentReader` is the second read use case: it takes the
+MailFathom serves one email's content from its local copy. `EmailContentReader` is the second read use case: it takes the
 stable local identifier a listing returned and answers with normalized headers, the body as plain text, optionally a
 sanitized HTML representation, per-attachment metadata without any bytes, the source account and folder alias, and the
 remote flag snapshot.
@@ -27,12 +27,12 @@ what most callers want: a model reading mail is better served by the words than 
 
 ## What a result carries
 
-`GetEmailContentResult` is the most sensitive projection MailMcp publishes. It is message content in full and inherits
+`GetEmailContentResult` is the most sensitive projection MailFathom publishes. It is message content in full and inherits
 every classification, retention, access, and erasure constraint of the mail it was read from. Nothing in it is logged.
 
 | Field | Meaning |
 |---|---|
-| `StoredEmailId`, `AccountId`, `FolderAlias` | Where the email is, in MailMcp's own names |
+| `StoredEmailId`, `AccountId`, `FolderAlias` | Where the email is, in MailFathom's own names |
 | `SizeOctets` | The size the mail server reported for the whole message |
 | `Headers` | Subject, sent and received timestamps, every participant under its header role, and the thread identifiers |
 | `Body` | The representations, or the reason there are none |
@@ -218,12 +218,12 @@ worth retrying.
 
 ## Where the pieces live
 
-- `MailMcp.Application.Emails.GetEmailContent` — the use case, its request, and its result.
-- `MailMcp.Application.EmailContent` — the content store port, the renderer port, the repair-request port, the body
+- `MailFathom.Application.Emails.GetEmailContent` — the use case, its request, and its result.
+- `MailFathom.Application.EmailContent` — the content store port, the renderer port, the repair-request port, the body
   representations, the headers, and the two failures.
-- `MailMcp.Infrastructure.Mail.Mime` — `MimeKitEmailContentRenderer` and `EmailHtmlSanitizer`, which own the MIME parser
+- `MailFathom.Infrastructure.Mail.Mime` — `MimeKitEmailContentRenderer` and `EmailHtmlSanitizer`, which own the MIME parser
   and the HTML sanitizer respectively. Neither type escapes that namespace.
-- `MailMcp.Infrastructure.Persistence` — `StoredEmailSummaryReader`, the content store's integrity-bearing read, and
+- `MailFathom.Infrastructure.Persistence` — `StoredEmailSummaryReader`, the content store's integrity-bearing read, and
   `EmailContentRepairRequestStore`.
 
 `MimeMessageHeaderReader` is shared with the extraction that fills the lexical index, so a message is indexed under

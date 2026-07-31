@@ -4,7 +4,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace MailMcp.Domain.Transport;
+namespace MailFathom.Domain.Transport;
 
 /// <summary>Identifies a SASL authentication mechanism a mail transport policy may permit.</summary>
 /// <remarks>

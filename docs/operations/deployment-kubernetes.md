@@ -1,6 +1,6 @@
 # Deploying to Kubernetes
 
-`deploy/helm/mailmcp/` is the chart. It installs MailMcp and the objects around it, and deliberately installs neither a
+`deploy/helm/mailfathom/` is the chart. It installs MailFathom and the objects around it, and deliberately installs neither a
 database nor a Secret: both belong to whoever operates the cluster, and the chart is written so that it cannot pretend
 otherwise.
 
@@ -14,7 +14,7 @@ otherwise.
 
 Two things have no default and the chart refuses to render without them.
 
-**An image.** MailMcp has published no release, so there is nothing to default to. A chart that guessed would deploy an
+**An image.** MailFathom has published no release, so there is nothing to default to. A chart that guessed would deploy an
 image nobody named.
 
 **A database.** PostgreSQL with the `vector` extension. A store holding every synchronized message needs backup,
@@ -23,15 +23,15 @@ durability, and an upgrade path that a subchart cannot own.
 A Secret is the third thing, and the chart names it rather than creating one.
 
 ```bash
-kubectl create namespace mailmcp
+kubectl create namespace mailfathom
 
-kubectl --namespace mailmcp create secret generic mailmcp-secrets \
-  --from-literal=mailmcp-database-password='…' \
+kubectl --namespace mailfathom create secret generic mailfathom-secrets \
+  --from-literal=mailfathom-database-password='…' \
   --from-file=imap-primary-password=./imap-primary-password \
   --from-file=mcp-workstation-key=./mcp-workstation-key
 ```
 
-It is mounted read-only at `/etc/mailmcp/secrets`, one file per key, so every credential is a `file:` reference — the
+It is mounted read-only at `/etc/mailfathom/secrets`, one file per key, so every credential is a `file:` reference — the
 same path and the same references the Compose deployment uses.
 
 A Secrets Store CSI driver works, with one step this chart does not take for you. The pod mounts a Kubernetes `secret`
@@ -46,20 +46,20 @@ volume list is how a chart stops being able to say what its pod reads.
 # values.yaml
 image:
   registry: docker.io
-  repository: <namespace>/mailmcp
+  repository: <namespace>/mailfathom
   digest: sha256:…              # or an immutable tag
 
 database:
   host: postgres.databases.svc.cluster.local
-  name: mailmcp
-  user: mailmcp
+  name: mailfathom
+  user: mailfathom
 
 secrets:
-  existingSecret: mailmcp-secrets
+  existingSecret: mailfathom-secrets
 
 config:
   files:
-    10-mailmcp.json: |
+    10-mailfathom.json: |
       {
         "MailSynchronization": {
           "Enabled": true,
@@ -72,7 +72,7 @@ config:
               "Secrets": {
                 "Password": {
                   "Name": "imap-primary-password",
-                  "SecretReference": "file:/etc/mailmcp/secrets/imap-primary-password"
+                  "SecretReference": "file:/etc/mailfathom/secrets/imap-primary-password"
                 }
               },
               "TransportSecurity": { "ConnectionSecurity": "TlsOnConnect" },
@@ -84,15 +84,15 @@ config:
           "Enabled": true,
           "Authentication": "ApiKey",
           "ApiKeys": [
-            { "Name": "workstation", "SecretReference": "file:/etc/mailmcp/secrets/mcp-workstation-key" }
+            { "Name": "workstation", "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key" }
           ]
         }
       }
 ```
 
 ```bash
-helm install mailmcp deploy/helm/mailmcp --namespace mailmcp --values values.yaml
-kubectl --namespace mailmcp rollout status deployment/mailmcp
+helm install mailfathom deploy/helm/mailfathom --namespace mailfathom --values values.yaml
+kubectl --namespace mailfathom rollout status deployment/mailfathom
 ```
 
 A digest is preferred over a tag: it is the only reference a registry cannot repoint, so a rollback goes back to the
@@ -104,7 +104,7 @@ verification script asserts that on every change.
 
 ## Applying the schema
 
-MailMcp verifies the schema while starting and refuses to serve against one it does not recognize. The first install
+MailFathom verifies the schema while starting and refuses to serve against one it does not recognize. The first install
 therefore does *not* become ready, and its log says why:
 
 ```
@@ -116,7 +116,7 @@ automatic migration this whole arrangement exists to prevent, and one without a 
 the project has not published.
 
 > **The schema artifact does not exist yet.** The reviewed, idempotent artifact and the step that applies it are
-> tracked by [issue #126](https://github.com/Krzysztof318/MailMcp/issues/126). Until it ships, apply the schema to the
+> tracked by [issue #126](https://github.com/Krzysztof318/MailFathom/issues/126). Until it ships, apply the schema to the
 > database yourself before the pod can become ready — a `psql` Job of your own, a migration run from outside the
 > cluster, or whatever your database's operations already use. Take a backup first, and read the SQL before applying
 > it.
@@ -128,14 +128,14 @@ not permit an ordinary role to create. Either install the extension out of band,
 initialization script does, or run the schema step as a more privileged role.
 
 **A separate role leaves ownership behind.** PostgreSQL makes whoever runs the DDL the **owner** of every table,
-sequence, and index it creates, and ownership grants nothing to anybody else — so a schema applied by `mailmcp_migrator`
-leaves MailMcp failing on permission errors against a schema that plainly exists. Grant `database.user` the DML
+sequence, and index it creates, and ownership grants nothing to anybody else — so a schema applied by `mailfathom_migrator`
+leaves MailFathom failing on permission errors against a schema that plainly exists. Grant `database.user` the DML
 privileges it needs and set `ALTER DEFAULT PRIVILEGES` so later migrations are covered too. Grant rather than transfer
 ownership: handing the tables over would leave the migrator unable to alter them next time.
 
 ## TLS and reaching it
 
-MailMcp speaks plain HTTP inside the cluster and terminates no TLS of its own. **The chart never issues, templates, or
+MailFathom speaks plain HTTP inside the cluster and terminates no TLS of its own. **The chart never issues, templates, or
 stores certificate material** — `secretName` names a Secret the cluster already holds, whether an operator created it
 or cert-manager did.
 
@@ -146,14 +146,14 @@ ingress:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt
   hosts:
-    - host: mailmcp.example.test
+    - host: mailfathom.example.test
       paths:
         - path: /mcp
           pathType: Prefix
   tls:
-    - secretName: mailmcp-tls
+    - secretName: mailfathom-tls
       hosts:
-        - mailmcp.example.test
+        - mailfathom.example.test
 ```
 
 An Ingress without a `tls` entry hands the API key and every message served to anything on the network path. The chart
@@ -162,7 +162,7 @@ renders it, because there are networks where that is a real choice, and warns in
 Without an Ingress the Service is reachable only inside the cluster:
 
 ```bash
-kubectl --namespace mailmcp port-forward service/mailmcp 8080:8080
+kubectl --namespace mailfathom port-forward service/mailfathom 8080:8080
 ```
 
 ## What the pod serves by default
@@ -172,7 +172,7 @@ Kubernetes arrangement — an ingress or a service mesh in front of the workload
 client authentication the cluster imposes — and it is why the chart neither templates certificate material nor asks
 for a credential to start.
 
-Every one of those is a MailMcp setting rather than a chart value, so turning one on is a ConfigMap entry under
+Every one of those is a MailFathom setting rather than a chart value, so turning one on is a ConfigMap entry under
 `config.files` and nothing else changes:
 
 | To turn on | Configure | Reference |
@@ -199,7 +199,7 @@ switched off by accident: `runAsNonRoot` must be `true`, `readOnlyRootFilesystem
 and `seccompProfile.type` must be `RuntimeDefault`. The pod runs as UID 1654 and mounts an in-memory `emptyDir` at
 `/tmp`, which is the only path the runtime writes to.
 
-`automountServiceAccountToken` is `false`. MailMcp calls no Kubernetes API, so a projected token would be a credential
+`automountServiceAccountToken` is `false`. MailFathom calls no Kubernetes API, so a projected token would be a credential
 with nothing to authenticate to and one more thing to steal.
 
 ## Probes
@@ -215,7 +215,7 @@ that turns an outage into a crash loop.
 
 ## Configuration reload
 
-A ConfigMap edit reaches the running process for the settings MailMcp classifies reloadable, and
+A ConfigMap edit reaches the running process for the settings MailFathom classifies reloadable, and
 `DOTNET_USE_POLLING_FILE_WATCHER` is set by default because `FileSystemWatcher` does not observe the symbolic-link swap
 the kubelet performs. Two things are restart-required and no setting changes that: **adding or removing a ConfigMap
 key**, and a `subPath` mount, which never updates at all. The chart mounts the whole volume and never uses `subPath`.
@@ -236,9 +236,9 @@ them together: a grace period shorter than the drain kills the process with the 
 ## Upgrading, rolling back, and uninstalling
 
 ```bash
-helm upgrade mailmcp deploy/helm/mailmcp --namespace mailmcp --values values.yaml
-helm rollback mailmcp <revision> --namespace mailmcp
-helm uninstall mailmcp --namespace mailmcp
+helm upgrade mailfathom deploy/helm/mailfathom --namespace mailfathom --values values.yaml
+helm rollback mailfathom <revision> --namespace mailfathom
+helm uninstall mailfathom --namespace mailfathom
 ```
 
 `helm rollback` returns the workload to a previous image. **It does not return the schema.** A migration only moves
@@ -254,7 +254,7 @@ Secret was created outside it and stays.
 version the chart is written against. They are separate, and a values default corrected without touching the image is a
 chart release on its own.
 
-`appVersion` currently reads `0.0.0-unreleased`, literally, because no MailMcp release exists. While it does, the chart
+`appVersion` currently reads `0.0.0-unreleased`, literally, because no MailFathom release exists. While it does, the chart
 makes no claim about which application version it deploys. Once a real version is stamped, the chart begins refusing an
 install whose `image.tag` disagrees with it, unless `image.allowVersionMismatch` says the combination is deliberate.
 
@@ -262,7 +262,7 @@ install whose `image.tag` disagrees with it, unless `image.allowVersionMismatch`
 
 `image.channel: nightly` deploys unsupported GHCR development output. It requires
 `image.nightlyAcknowledgement: i-understand-this-is-unsupported`, forces `ghcr.io` and rejects any other registry,
-labels every rendered object `io.mailmcp/release-channel: ghcr-nightly-unsupported`, prints a warning in the chart's
+labels every rendered object `io.mailfathom/release-channel: ghcr-nightly-unsupported`, prints a warning in the chart's
 notes, and labels the workload with the nightly identifier rather than with `appVersion` — so a nightly is never
 indistinguishable from a release in a query that reads that label.
 
@@ -277,7 +277,7 @@ The Kubernetes smoke stops where a deployment without a schema stops: the pod re
 own wiring and refuses to serve. Readiness joins that script in the change that supplies the schema step. Neither
 script runs on a pull request; the `Deployment assets` workflow that runs both is manual dispatch only.
 
-`deploy/helm/mailmcp/ci/` holds the two values files those use. They are excluded from the packaged chart and name no
+`deploy/helm/mailfathom/ci/` holds the two values files those use. They are excluded from the packaged chart and name no
 real image and no real database.
 
 ## Related

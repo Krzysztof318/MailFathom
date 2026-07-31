@@ -4,9 +4,9 @@
 using System.Buffers.Text;
 using System.Globalization;
 using System.Text;
-using MailMcp.Domain.Emails;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>Marks where one page of a mailbox timeline ended, so the next page continues from it.</summary>
 /// <remarks>

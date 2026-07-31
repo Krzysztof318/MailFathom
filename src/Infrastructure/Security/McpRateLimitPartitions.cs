@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets;
 
-namespace MailMcp.Infrastructure.Security;
+namespace MailFathom.Infrastructure.Security;
 
 /// <summary>Whose capacity an MCP request spends.</summary>
 /// <remarks>
@@ -61,7 +61,7 @@ public static class McpRateLimitPartitions
     /// <returns>The configured name of the authenticated client, a partition of the identified client application, or <see cref="AnonymousKey" />.</returns>
     /// <remarks>
     /// <para>
-    /// Both names are MailMcp's own configured identities, never a credential and never anything a certificate carried.
+    /// Both names are MailFathom's own configured identities, never a credential and never anything a certificate carried.
     /// They are chosen by the operator who wrote the configuration, so the partitions an identified deployment keeps
     /// number no more than its key list plus its profile list. A blank name is treated as no name at all rather than as
     /// a partition of its own.

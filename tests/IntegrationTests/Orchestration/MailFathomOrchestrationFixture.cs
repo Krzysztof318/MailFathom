@@ -4,10 +4,10 @@
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
-using MailMcp.AppHost;
+using MailFathom.AppHost;
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Orchestration;
+namespace MailFathom.IntegrationTests.Orchestration;
 
 /// <summary>The orchestrated PostgreSQL server, applied schema, and mail server the whole suite runs against.</summary>
 /// <remarks>
@@ -18,14 +18,14 @@ namespace MailMcp.IntegrationTests.Orchestration;
 /// never through a container of its own.
 /// </para>
 /// <para>
-/// The MailMcp host resource is present in the app model and does not start with it. Most of the suite verifies classes
+/// The MailFathom host resource is present in the app model and does not start with it. Most of the suite verifies classes
 /// against real infrastructure rather than the composed host, and every one of those tests owns the database and the
-/// mailbox exclusively; a second MailMcp reconciling folders underneath them would make its synchronization part of
-/// their environment. <see cref="StartMailMcpHostAsync" /> starts it on request, and the one collection that calls it
+/// mailbox exclusively; a second MailFathom reconciling folders underneath them would make its synchronization part of
+/// their environment. <see cref="StartMailFathomHostAsync" /> starts it on request, and the one collection that calls it
 /// is ordered after every other, so nothing is asserting on that infrastructure by the time the host touches it.
 /// </para>
 /// </remarks>
-public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
+public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
 {
     /// <summary>Bounds the whole start-up, which on a cold machine includes pulling the images and building the migration project.</summary>
     private static readonly TimeSpan StartupTimeout = TimeSpan.FromMinutes(10);
@@ -45,7 +45,7 @@ public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
     /// <summary>Gets or sets the mail server endpoints once the orchestration published them.</summary>
     private OrchestratedMailServerEndpoints? PublishedMailServerEndpoints { get; set; }
 
-    /// <summary>Gets the connection string the orchestration issued for the migrated MailMcp database.</summary>
+    /// <summary>Gets the connection string the orchestration issued for the migrated MailFathom database.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started yet.</exception>
     public string DatabaseConnectionString => this.IssuedDatabaseConnectionString
         ?? throw new InvalidOperationException(
@@ -101,7 +101,7 @@ public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
             OrchestrationContract.DatabaseResourceName,
             cancellationToken)
             ?? throw new InvalidOperationException(
-                "The orchestration started without issuing a connection string for the MailMcp database.");
+                "The orchestration started without issuing a connection string for the MailFathom database.");
 
         // Read once the resource is healthy, because the host port is allocated when the container starts rather than
         // when the app model describes it.
@@ -114,7 +114,7 @@ public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
                 OrchestrationContract.MailServerSmtpEndpointName));
     }
 
-    /// <summary>Starts the composed MailMcp host and reports the address it serves on.</summary>
+    /// <summary>Starts the composed MailFathom host and reports the address it serves on.</summary>
     /// <param name="cancellationToken">Cancels waiting for the host to become reachable.</param>
     /// <returns>The base address of the host's HTTP endpoint.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started, or when the host resource refused the start command.</exception>
@@ -131,7 +131,7 @@ public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
     /// command and the second would race a resource that is already leaving its stopped state.
     /// </para>
     /// </remarks>
-    public async Task<Uri> StartMailMcpHostAsync(CancellationToken cancellationToken)
+    public async Task<Uri> StartMailFathomHostAsync(CancellationToken cancellationToken)
     {
         await this.hostStartGate.WaitAsync(cancellationToken);
 
@@ -170,7 +170,7 @@ public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
     {
         var startedApplication = this.application
             ?? throw new InvalidOperationException(
-                "The MailMcp host is started before the suite started the application.");
+                "The MailFathom host is started before the suite started the application.");
 
         // The resource carries WithExplicitStart, so the app model created it and left it stopped. This is the command
         // the dashboard's own Start button issues, which keeps the suite starting the host the way an operator would.
@@ -182,7 +182,7 @@ public sealed class MailMcpOrchestrationFixture : IAsyncLifetime
         if (!startResult.Success)
         {
             throw new InvalidOperationException(
-                $"The MailMcp host resource refused to start [{startResult.Message}].");
+                $"The MailFathom host resource refused to start [{startResult.Message}].");
         }
 
         await startedApplication.ResourceNotifications.WaitForResourceHealthyAsync(

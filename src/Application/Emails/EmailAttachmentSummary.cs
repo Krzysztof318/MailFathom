@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>Summarizes what a message carries besides its body.</summary>
 /// <remarks>
-/// What counts as an attachment is MailMcp's rule rather than a mail library's default, because the count is shown to a
+/// What counts as an attachment is MailFathom's rule rather than a mail library's default, because the count is shown to a
 /// caller and filtered on. A signature part, an embedded image a body references, and the members of an alternative
 /// body are all things a mailbox owner does not call attachments, and each of them arrives with a
 /// <c>Content-Disposition</c> header that a disposition-driven rule would count.

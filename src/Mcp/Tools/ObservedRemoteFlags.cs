@@ -2,17 +2,17 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.ComponentModel;
-using MailMcp.Domain.Emails;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes the IMAP flags a synchronization run last observed for one email.</summary>
 /// <remarks>
 /// Every description on this type reaches the client inside the tool's output schema, so each one states what the value
 /// means on the wire rather than how it is stored. The wording is deliberate about the flags being an observation: a
-/// client that reads them as MailMcp's own state would expect writing them back to be possible, and it is not.
+/// client that reads them as MailFathom's own state would expect writing them back to be possible, and it is not.
 /// </remarks>
-[Description("The IMAP flags a mail server reported for the email when it was last synchronized. These are observations of the server's state, not local state, and reading mail through MailMcp never changes them.")]
+[Description("The IMAP flags a mail server reported for the email when it was last synchronized. These are observations of the server's state, not local state, and reading mail through MailFathom never changes them.")]
 internal sealed record ObservedRemoteFlags
 {
     /// <summary>Gets whether the server reported the email as read.</summary>

@@ -4,7 +4,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 
-namespace MailMcp.TestSupport;
+namespace MailFathom.TestSupport;
 
 /// <summary>Captures every log record a composed container produced, whichever category wrote it.</summary>
 /// <remarks>

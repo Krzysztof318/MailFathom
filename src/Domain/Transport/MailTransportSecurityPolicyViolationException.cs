@@ -2,13 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Collections.ObjectModel;
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Domain.Transport;
+namespace MailFathom.Domain.Transport;
 
 /// <summary>Indicates that a mail transport security policy would weaken transport protection in a way no opt-in allows.</summary>
-/// <remarks>The message lists violated rule identities only; <see cref="MailMcpException" /> states what a message may carry.</remarks>
-public sealed class MailTransportSecurityPolicyViolationException : MailMcpException
+/// <remarks>The message lists violated rule identities only; <see cref="MailFathomException" /> states what a message may carry.</remarks>
+public sealed class MailTransportSecurityPolicyViolationException : MailFathomException
 {
     /// <summary>Initializes a new transport security policy violation for the violated rules.</summary>
     /// <param name="violations">The violated transport security rules, of which there is at least one.</param>
@@ -21,7 +21,7 @@ public sealed class MailTransportSecurityPolicyViolationException : MailMcpExcep
     }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.MailTransportSecurityPolicyViolated;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.MailTransportSecurityPolicyViolated;
 
     /// <summary>Gets the violated transport security rules, of which there is at least one.</summary>
     public IReadOnlyList<MailTransportSecurityViolation> Violations { get; }

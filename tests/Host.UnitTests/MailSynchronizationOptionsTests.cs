@@ -3,19 +3,19 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Synchronization;
-using MailMcp.Domain.Transport;
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Synchronization;
+using MailFathom.Domain.Transport;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Secrets;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 public sealed class MailSynchronizationOptionsTests
 {
@@ -269,7 +269,7 @@ public sealed class MailSynchronizationOptionsTests
     {
         // Arrange
         var account = CreateAccount("primary", secretReference: "systemd-credential:imap-primary-password");
-        account.UserName = "mailmcp@example.test";
+        account.UserName = "mailfathom@example.test";
         account.TransportSecurity.ConnectionSecurity = MailConnectionSecurity.None;
         var options = new MailSynchronizationOptions { Enabled = true, Accounts = [account] };
 
@@ -277,7 +277,7 @@ public sealed class MailSynchronizationOptionsTests
         var messages = string.Join(' ', options.ValidateForSynchronization().Select(result => result.ErrorMessage));
 
         // Assert
-        Assert.DoesNotContain("mailmcp@example.test", messages, StringComparison.Ordinal);
+        Assert.DoesNotContain("mailfathom@example.test", messages, StringComparison.Ordinal);
         Assert.DoesNotContain("imap-primary-password", messages, StringComparison.Ordinal);
     }
 
@@ -523,7 +523,7 @@ public sealed class MailSynchronizationOptionsTests
         // Arrange
         var account = CreateAccount("  primary  ", secretReference: "plaintext:dev-password");
         account.Host = "  imap.example.test  ";
-        account.UserName = "mailmcp@example.test";
+        account.UserName = "mailfathom@example.test";
         var options = new MailSynchronizationOptions { Accounts = [account] };
 
         // Act
@@ -544,7 +544,7 @@ public sealed class MailSynchronizationOptionsTests
         var account = CreateAccount("primary", secretReference: "plaintext:dev-password");
         account.Host = " imap.example.test ";
         account.Port = 1993;
-        account.UserName = "mailmcp@example.test";
+        account.UserName = "mailfathom@example.test";
         var options = new MailSynchronizationOptions { Accounts = [account] };
 
         // Act
@@ -560,7 +560,7 @@ public sealed class MailSynchronizationOptionsTests
             Assert.Equal("primary", settings.AccountId);
             Assert.Equal("imap.example.test", settings.Host);
             Assert.Equal(1993, settings.Port);
-            Assert.Equal("mailmcp@example.test", settings.UserName);
+            Assert.Equal("mailfathom@example.test", settings.UserName);
         }
     }
 
@@ -591,7 +591,7 @@ public sealed class MailSynchronizationOptionsTests
                 ["MailSynchronization:Enabled"] = "true",
                 ["MailSynchronization:Accounts:0:AccountId"] = "primary",
                 ["MailSynchronization:Accounts:0:Host"] = "imap.example.test",
-                ["MailSynchronization:Accounts:0:UserName"] = "mailmcp@example.test",
+                ["MailSynchronization:Accounts:0:UserName"] = "mailfathom@example.test",
                 ["MailSynchronization:Accounts:0:Secrets:Password:SecretReference"] = "systemd-credential:imap-primary-password",
             })
             .Build();
@@ -657,7 +657,7 @@ public sealed class MailSynchronizationOptionsTests
         {
             AccountId = accountId,
             Host = "imap.example.test",
-            UserName = "mailmcp@example.test",
+            UserName = "mailfathom@example.test",
             Secrets = new MailAccountSecretOptions
             {
                 Password = new ConfiguredSecret { SecretReference = secretReference },

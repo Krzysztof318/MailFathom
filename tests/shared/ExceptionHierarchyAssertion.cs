@@ -4,7 +4,7 @@
 using System.Reflection;
 using Xunit;
 
-namespace MailMcp.TestSupport;
+namespace MailFathom.TestSupport;
 
 /// <summary>Asserts that every exception an assembly declares takes part in one required exception hierarchy.</summary>
 /// <remarks>

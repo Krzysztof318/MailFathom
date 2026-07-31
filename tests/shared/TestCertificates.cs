@@ -4,7 +4,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-namespace MailMcp.TestSupport;
+namespace MailFathom.TestSupport;
 
 /// <summary>Builds the certificates a certificate test needs, entirely in memory.</summary>
 /// <remarks>

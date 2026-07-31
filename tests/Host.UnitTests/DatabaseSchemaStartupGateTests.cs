@@ -1,16 +1,16 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Persistence;
-using MailMcp.Host.Hosting;
-using MailMcp.Infrastructure.Persistence;
+using MailFathom.Application.Persistence;
+using MailFathom.Host.Hosting;
+using MailFathom.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers the apply policy: the host proves the schema it will write through and never changes it.</summary>
 public sealed class DatabaseSchemaStartupGateTests
@@ -40,7 +40,7 @@ public sealed class DatabaseSchemaStartupGateTests
         // Assert
         Assert.Equal(["20260729_Initial", "20260730_AddSearch"], exception.PendingMigrationIdentifiers);
         Assert.Contains("20260729_Initial", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("mailmcp-migrations", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("mailfathom-migrations", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

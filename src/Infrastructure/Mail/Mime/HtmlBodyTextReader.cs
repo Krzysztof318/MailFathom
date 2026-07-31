@@ -4,7 +4,7 @@
 using System.Text;
 using MimeKit.Text;
 
-namespace MailMcp.Infrastructure.Mail.Mime;
+namespace MailFathom.Infrastructure.Mail.Mime;
 
 /// <summary>Derives readable text from an HTML message body.</summary>
 /// <remarks>

@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Domain.Folders;
+namespace MailFathom.Domain.Folders;
 
 /// <summary>States which of the two ways an alias names its remote folder a mapping uses.</summary>
 public enum MailFolderMappingTarget

@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Infrastructure.Secrets;
+namespace MailFathom.Infrastructure.Secrets;
 
 /// <summary>Selects how a configured secret-bearing value is interpreted before resolution.</summary>
 /// <remarks>
 /// Interpretation is an explicit deployment choice rather than an inference from the environment. A configuration
-/// provider that resolved the secret before MailMcp bound it — Azure App Configuration with Key Vault references is the
+/// provider that resolved the secret before MailFathom bound it — Azure App Configuration with Key Vault references is the
 /// concrete case — hands over the material itself with no scheme prefix, which only <see cref="InlineOnly" /> can
 /// accept without guessing.
 /// </remarks>

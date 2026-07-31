@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.CodeCoverage;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
+using MailFathom.CodeCoverage;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Resolves the row that carries one alias binding, which every folder-scoped write is attached to.</summary>
 /// <remarks>
@@ -18,7 +18,7 @@ namespace MailMcp.Infrastructure.Persistence;
 internal static class MailFolderEntityResolver
 {
     public static async Task<MailFolderEntity?> FindAsync(
-        MailMcpDbContext dbContext,
+        MailFathomDbContext dbContext,
         MailAccountId accountId,
         MailFolderResolutionId folderResolutionId,
         CancellationToken cancellationToken)
@@ -37,7 +37,7 @@ internal static class MailFolderEntityResolver
     }
 
     public static async Task<MailFolderEntity> GetRequiredAsync(
-        MailMcpDbContext dbContext,
+        MailFathomDbContext dbContext,
         MailAccountId accountId,
         MailFolderResolutionId folderResolutionId,
         CancellationToken cancellationToken) =>
@@ -46,7 +46,7 @@ internal static class MailFolderEntityResolver
             $"Folder alias {accountId.Value}/{folderResolutionId} has no recorded binding, so nothing can be stored under it.");
 
     public static async Task<MailFolderEntity> AddAsync(
-        MailMcpDbContext dbContext,
+        MailFathomDbContext dbContext,
         MailAccountId accountId,
         MailFolderResolution resolution,
         CancellationToken cancellationToken)

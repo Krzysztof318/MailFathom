@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace MailMcp.TestSupport;
+namespace MailFathom.TestSupport;
 
 /// <summary>A logging pipeline a test can hand to an owner and then prove was released.</summary>
 /// <remarks>

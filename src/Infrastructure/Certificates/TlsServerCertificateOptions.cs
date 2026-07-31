@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets;
 
-namespace MailMcp.Infrastructure.Certificates;
+namespace MailFathom.Infrastructure.Certificates;
 
-/// <summary>Configures where the TLS identity MailMcp presents to a client comes from.</summary>
+/// <summary>Configures where the TLS identity MailFathom presents to a client comes from.</summary>
 /// <remarks>
 /// <para>
 /// Two provisioning shapes exist because both occur: a certificate authority hands an operator a PEM chain beside a

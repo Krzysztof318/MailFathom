@@ -2,21 +2,21 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Security.Claims;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Infrastructure.Security;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
-/// <summary>Covers what MailMcp keeps of a validated token, and what it deliberately discards.</summary>
+/// <summary>Covers what MailFathom keeps of a validated token, and what it deliberately discards.</summary>
 /// <remarks>
 /// A claim that survives here is a claim something downstream can eventually be tempted to trust, so the tests that
 /// assert an absence are as load-bearing as the ones asserting a value.
 /// </remarks>
 public sealed class McpOAuthIdentityTests
 {
-    private const string Scheme = "MailMcpOAuth:workforce";
+    private const string Scheme = "MailFathomOAuth:workforce";
 
-    private const string Issuer = "https://sso.example.test/realms/mailmcp";
+    private const string Issuer = "https://sso.example.test/realms/mailfathom";
 
     [Fact]
     public void FromValidatedToken_ATokenNamingASubject_CarriesTheIssuerAndSubjectAsOneIdentity()
@@ -52,7 +52,7 @@ public sealed class McpOAuthIdentityTests
             partnerIdentity?.FindFirst(McpOAuthIdentity.SubjectClaimType)?.Value);
     }
 
-    /// <summary>Everything an authorization server chose to include beyond the three facts MailMcp acts on is dropped, so nothing downstream can start depending on a claim nobody mapped.</summary>
+    /// <summary>Everything an authorization server chose to include beyond the three facts MailFathom acts on is dropped, so nothing downstream can start depending on a claim nobody mapped.</summary>
     [Fact]
     public void FromValidatedToken_ATokenCarryingPersonalClaims_KeepsNoneOfThem()
     {
@@ -124,14 +124,14 @@ public sealed class McpOAuthIdentityTests
     public void FromValidatedToken_ASpaceDelimitedScopeClaim_BecomesOneClaimPerScope(string scopeClaimType)
     {
         // Arrange
-        var claims = TokenClaims(("iss", Issuer), ("sub", "9f2c"), (scopeClaimType, "mailmcp.read mailmcp.search"));
+        var claims = TokenClaims(("iss", Issuer), ("sub", "9f2c"), (scopeClaimType, "mailfathom.read mailfathom.search"));
 
         // Act
         var identity = McpOAuthIdentity.FromValidatedToken(claims, Scheme);
 
         // Assert
         Assert.Equal(
-            ["mailmcp.read", "mailmcp.search"],
+            ["mailfathom.read", "mailfathom.search"],
             identity!.FindAll(McpOAuthIdentity.ScopeClaimType).Select(scope => scope.Value));
     }
 
@@ -142,15 +142,15 @@ public sealed class McpOAuthIdentityTests
         var claims = TokenClaims(
             ("iss", Issuer),
             ("sub", "9f2c"),
-            ("scp", "mailmcp.read"),
-            ("scope", "mailmcp.read mailmcp.search"));
+            ("scp", "mailfathom.read"),
+            ("scope", "mailfathom.read mailfathom.search"));
 
         // Act
         var identity = McpOAuthIdentity.FromValidatedToken(claims, Scheme);
 
         // Assert
         Assert.Equal(
-            ["mailmcp.read", "mailmcp.search"],
+            ["mailfathom.read", "mailfathom.search"],
             identity!.FindAll(McpOAuthIdentity.ScopeClaimType).Select(scope => scope.Value));
     }
 
@@ -169,31 +169,31 @@ public sealed class McpOAuthIdentityTests
     public void CarriesEveryScope_EveryRequiredScopePresent_IsSatisfied()
     {
         // Arrange
-        var principal = PrincipalWithScopes("mailmcp.read", "mailmcp.search");
+        var principal = PrincipalWithScopes("mailfathom.read", "mailfathom.search");
 
         // Act, Assert
-        Assert.True(McpOAuthIdentity.CarriesEveryScope(principal, ["mailmcp.read"]));
+        Assert.True(McpOAuthIdentity.CarriesEveryScope(principal, ["mailfathom.read"]));
     }
 
     [Fact]
     public void CarriesEveryScope_OneRequiredScopeMissing_IsNotSatisfied()
     {
         // Arrange
-        var principal = PrincipalWithScopes("mailmcp.read");
+        var principal = PrincipalWithScopes("mailfathom.read");
 
         // Act, Assert
-        Assert.False(McpOAuthIdentity.CarriesEveryScope(principal, ["mailmcp.read", "mailmcp.search"]));
+        Assert.False(McpOAuthIdentity.CarriesEveryScope(principal, ["mailfathom.read", "mailfathom.search"]));
     }
 
-    /// <summary>Scopes are compared exactly, because a server issuing 'MailMcp.Read' has issued a different scope from the one configured.</summary>
+    /// <summary>Scopes are compared exactly, because a server issuing 'MailFathom.Read' has issued a different scope from the one configured.</summary>
     [Fact]
     public void CarriesEveryScope_AScopeDifferingOnlyInCase_IsNotSatisfied()
     {
         // Arrange
-        var principal = PrincipalWithScopes("MailMcp.Read");
+        var principal = PrincipalWithScopes("MailFathom.Read");
 
         // Act, Assert
-        Assert.False(McpOAuthIdentity.CarriesEveryScope(principal, ["mailmcp.read"]));
+        Assert.False(McpOAuthIdentity.CarriesEveryScope(principal, ["mailfathom.read"]));
     }
 
     /// <summary>

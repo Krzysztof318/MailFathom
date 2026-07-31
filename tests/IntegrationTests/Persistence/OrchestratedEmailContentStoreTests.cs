@@ -2,17 +2,17 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Security.Cryptography;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Emails;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.IntegrationTests.Orchestration;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Emails;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Persistence;
+namespace MailFathom.IntegrationTests.Persistence;
 
 /// <summary>Proves raw MIME survives the <c>bytea</c> column it is stored in, and that re-storing it replaces one row.</summary>
 /// <remarks>
@@ -22,7 +22,7 @@ namespace MailMcp.IntegrationTests.Persistence;
 /// the SQL the provider emits rather than about the code around it.
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-public sealed class OrchestratedEmailContentStoreTests(MailMcpOrchestrationFixture orchestration)
+public sealed class OrchestratedEmailContentStoreTests(MailFathomOrchestrationFixture orchestration)
 {
     private const string FolderAlias = "content-store";
 
@@ -41,7 +41,7 @@ public sealed class OrchestratedEmailContentStoreTests(MailMcpOrchestrationFixtu
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var occurrenceId = SyntheticEmail.OccurrenceIn(binding, RoundTrippedUid);
         var rawMime = SyntheticEmail.RawMimeOf("content-round-trip", OutOfLineByteCount);
@@ -84,7 +84,7 @@ public sealed class OrchestratedEmailContentStoreTests(MailMcpOrchestrationFixtu
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var occurrenceId = SyntheticEmail.OccurrenceIn(binding, OverwrittenUid);
         var firstRawMime = SyntheticEmail.RawMimeOf("content-overwrite-first", 4096);
@@ -125,7 +125,7 @@ public sealed class OrchestratedEmailContentStoreTests(MailMcpOrchestrationFixtu
 
     /// <summary>Stores one occurrence's metadata and its raw MIME in one session, the way synchronization does.</summary>
     private static async Task<StoredEmailId> StoreAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         EmailOccurrenceId occurrenceId,
         string subject,
         ReadOnlyMemory<byte> rawMime,
@@ -157,11 +157,11 @@ public sealed class OrchestratedEmailContentStoreTests(MailMcpOrchestrationFixtu
     }
 
     private static Task<ContentIntegrityMetadata> ReadIntegrityMetadataAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope
-                .GetRequiredService<MailMcpDbContext>()
+                .GetRequiredService<MailFathomDbContext>()
                 .EmailMessageContents
                 .AsNoTracking()
                 .Where(content => content.StoredEmailId == storedEmailId.Value)
@@ -171,11 +171,11 @@ public sealed class OrchestratedEmailContentStoreTests(MailMcpOrchestrationFixtu
 
     /// <summary>Asks PostgreSQL how many octets the column holds, rather than trusting the value it just returned.</summary>
     private static Task<long> ReadStoredOctetLengthAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken) => services.InScopeAsync(
             async (scope, token) => await scope
-                .GetRequiredService<MailMcpDbContext>()
+                .GetRequiredService<MailFathomDbContext>()
                 .Database
                 .SqlQuery<long>(
                     $"""
@@ -187,11 +187,11 @@ public sealed class OrchestratedEmailContentStoreTests(MailMcpOrchestrationFixtu
             cancellationToken);
 
     private static Task<int> CountContentRowsAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope
-                .GetRequiredService<MailMcpDbContext>()
+                .GetRequiredService<MailFathomDbContext>()
                 .EmailMessageContents
                 .AsNoTracking()
                 .CountAsync(content => content.StoredEmailId == storedEmailId.Value, token),

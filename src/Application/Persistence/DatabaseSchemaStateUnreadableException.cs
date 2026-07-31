@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Application.Persistence;
+namespace MailFathom.Application.Persistence;
 
 /// <summary>Indicates that the schema state could not be established, so the schema's shape is unknown.</summary>
 /// <remarks>
@@ -27,14 +27,14 @@ namespace MailMcp.Application.Persistence;
 /// <para>
 /// The inner exception is deliberate and does reach a log, including an exported one: this failure ends the process
 /// during startup, and which server was unreachable and as which user is the whole content of the diagnosis. That is
-/// the division <see cref="MailMcpException" /> defines — the message is what a boundary may publish, the inner
+/// the division <see cref="MailFathomException" /> defines — the message is what a boundary may publish, the inner
 /// exception is diagnostic detail for a log — and it is compatible with the repository's logging rule, which forbids
 /// credentials, tokens, message bodies, attachment content, and raw MIME. A connection endpoint is none of those, it
 /// is infrastructure topology the operator configured, and Npgsql does not put the password in its text. Dropping it
 /// would leave an unreachable database reported only as "unreadable".
 /// </para>
 /// </remarks>
-public sealed class DatabaseSchemaStateUnreadableException : MailMcpException
+public sealed class DatabaseSchemaStateUnreadableException : MailFathomException
 {
     /// <summary>Initializes a new unreadable-schema failure that preserves the provider's own failure.</summary>
     /// <param name="operatorSafeMessage">A message free of host names, user names, and provider text.</param>
@@ -57,5 +57,5 @@ public sealed class DatabaseSchemaStateUnreadableException : MailMcpException
     }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.DatabaseSchemaStateUnreadable;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.DatabaseSchemaStateUnreadable;
 }

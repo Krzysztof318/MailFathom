@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Composes the PostgreSQL connection string once, before anything opens a connection.</summary>
 /// <remarks>
@@ -131,7 +131,7 @@ internal sealed partial class PostgresConnectionStringProvider : IHostedLifecycl
     /// <para>
     /// The synchronous provider deliberately throws, as the provider's own documentation recommends. Retrieval is
     /// asynchronous by contract and can reach a file or one day a managed store, and satisfying a synchronous callback
-    /// would mean blocking a thread on it. Every MailMcp database access opens its connection asynchronously, so the
+    /// would mean blocking a thread on it. Every MailFathom database access opens its connection asynchronously, so the
     /// synchronous path is unreachable rather than merely discouraged.
     /// </para>
     /// </remarks>

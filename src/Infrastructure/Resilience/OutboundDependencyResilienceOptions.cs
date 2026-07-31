@@ -3,9 +3,9 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Application.Resilience;
+using MailFathom.Application.Resilience;
 
-namespace MailMcp.Infrastructure.Resilience;
+namespace MailFathom.Infrastructure.Resilience;
 
 /// <summary>Configures the resilience pipeline of one <see cref="OutboundDependency" />.</summary>
 /// <remarks>

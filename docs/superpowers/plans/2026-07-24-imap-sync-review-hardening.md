@@ -37,7 +37,7 @@ Add a two-message test whose second content-fetch callback asserts that the firs
 Run:
 
 ```bash
-/home/krzysztof/.dotnet/dotnet test tests/Application.UnitTests/Application.UnitTests.csproj --no-restore --filter-method "MailMcp.Application.UnitTests.MailboxSynchronizerTests.SynchronizeAsync_MultipleMessages_CommitsAndDisposesEachMessageBeforeFetchingTheNext"
+/home/krzysztof/.dotnet/dotnet test tests/Application.UnitTests/Application.UnitTests.csproj --no-restore --filter-method "MailFathom.Application.UnitTests.MailboxSynchronizerTests.SynchronizeAsync_MultipleMessages_CommitsAndDisposesEachMessageBeforeFetchingTheNext"
 ```
 
 Expected: failure because the current implementation fetches both contents before opening the first persistence session.
@@ -135,7 +135,7 @@ Expected: all infrastructure tests pass.
 - Modify: `src/Infrastructure/Mail/MailKit/MailKitImapMailboxSession.cs`
 - Modify: `src/Infrastructure/Persistence/MailboxAccountEntity.cs`
 - Modify: `src/Infrastructure/Persistence/MailFolderEntity.cs`
-- Modify: `src/Infrastructure/Persistence/MailMcpDbContext.cs`
+- Modify: `src/Infrastructure/Persistence/MailFathomDbContext.cs`
 - Modify: `src/Infrastructure/Persistence/EmailMessageContentEntity.cs`
 - Modify: `src/Infrastructure/Persistence/MessageContentStore.cs`
 - Modify: `src/Infrastructure/Persistence/StoredEmailEntity.cs`

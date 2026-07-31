@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Resilience;
+using MailFathom.Application.Resilience;
 
-namespace MailMcp.Infrastructure.Resilience;
+namespace MailFathom.Infrastructure.Resilience;
 
 /// <summary>Names one resilience pipeline: a dependency class and the remote instance whose health that pipeline tracks.</summary>
 /// <param name="Dependency">The dependency class whose configured budget the pipeline applies.</param>

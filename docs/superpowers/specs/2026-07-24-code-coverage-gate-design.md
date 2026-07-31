@@ -2,7 +2,7 @@
 
 ## Goal
 
-Configure reproducible code coverage for MailMcp and reject pull requests targeting `main` when aggregate line coverage across the complete testable production scope is below 85%.
+Configure reproducible code coverage for MailFathom and reject pull requests targeting `main` when aggregate line coverage across the complete testable production scope is below 85%.
 
 The threshold applies to the whole configured codebase on every run. It does not use patch coverage, changed-line coverage, or a comparison with the target branch.
 
@@ -10,13 +10,13 @@ The threshold applies to the whole configured codebase on every run. It does not
 
 The production coverage denominator includes all coverable code from these assemblies:
 
-- `MailMcp.Domain`
-- `MailMcp.Application`
-- `MailMcp.Infrastructure`
-- `MailMcp.AI`
-- `MailMcp.Mcp`
+- `MailFathom.Domain`
+- `MailFathom.Application`
+- `MailFathom.Infrastructure`
+- `MailFathom.AI`
+- `MailFathom.Mcp`
 
-The thin executable composition roots `MailMcp.Host` and `MailMcp.AppHost` are excluded. Their responsibilities are process startup, dependency composition, middleware and endpoint wiring, and development orchestration rather than application or domain behavior.
+The thin executable composition roots `MailFathom.Host` and `MailFathom.AppHost` are excluded. Their responsibilities are process startup, dependency composition, middleware and endpoint wiring, and development orchestration rather than application or domain behavior.
 
 Test assemblies, externally generated code marked with `GeneratedCodeAttribute`, and Coverlet infrastructure are excluded. Compiler-generated state machines and members are not broadly excluded because doing so could remove source behavior such as asynchronous methods from the denominator. Ordinary production behavior, branches, validation, mapping, policies, and invariants remain in scope.
 
@@ -28,11 +28,11 @@ Test assemblies, externally generated code marked with `GeneratedCodeAttribute`,
 
 Every unit-test project references `coverlet.MTP` as a private test-only dependency. The package is the native Coverlet extension for the Microsoft Testing Platform already used by the repository.
 
-A repository-level Coverlet configuration includes `MailMcp.*` production assemblies and excludes:
+A repository-level Coverlet configuration includes `MailFathom.*` production assemblies and excludes:
 
-- `MailMcp.Host`
-- `MailMcp.AppHost`
-- `MailMcp.*.UnitTests`
+- `MailFathom.Host`
+- `MailFathom.AppHost`
+- `MailFathom.*.UnitTests`
 - externally generated code marked with `GeneratedCodeAttribute`
 
 Each unit-test project runs explicitly with a project-specific `--coverlet-file-prefix` and produces a uniquely named Cobertura report. This prevents parallel or same-directory output collisions from silently removing a project from the aggregate.
@@ -66,7 +66,7 @@ The existing `Build and unit test` pull-request check remains the enforcement po
 1. Check out the pull-request revision.
 2. Install the SDK pinned by `global.json`.
 3. Restore packages and repository-local tools.
-4. Build `MailMcp.slnx` in `Release`.
+4. Build `MailFathom.slnx` in `Release`.
 5. Run every unit-test project with Coverlet enabled.
 6. Merge all raw reports.
 7. Enforce aggregate line coverage of at least 85%.

@@ -2,12 +2,12 @@
 # acknowledgement, forces ghcr.io, and marks every rendered object as unsupported. Nothing installs from this file.
 image:
   channel: nightly
-  repository: krzysztof318/mailmcp
+  repository: krzysztof318/mailfathom
   tag: nightly-00000000
   nightlyAcknowledgement: i-understand-this-is-unsupported
 
 database:
-  host: postgres.mailmcp.svc.cluster.local
+  host: postgres.mailfathom.svc.cluster.local
 
 secrets:
-  existingSecret: mailmcp-secrets
+  existingSecret: mailfathom-secrets

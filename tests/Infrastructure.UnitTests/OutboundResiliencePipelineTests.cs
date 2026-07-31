@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+using MailFathom.Application.Resilience;
+using MailFathom.Infrastructure.Resilience;
 using MailKit.Net.Imap;
 using MailKit.Security;
-using MailMcp.Application.Resilience;
-using MailMcp.Infrastructure.Resilience;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -12,7 +12,7 @@ using Polly.CircuitBreaker;
 using Polly.RateLimiting;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class OutboundResiliencePipelineTests
 {

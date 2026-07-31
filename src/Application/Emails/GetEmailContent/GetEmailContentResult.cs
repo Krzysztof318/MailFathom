@@ -1,17 +1,17 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.EmailContent;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
+using MailFathom.Application.EmailContent;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Application.Emails.GetEmailContent;
+namespace MailFathom.Application.Emails.GetEmailContent;
 
 /// <summary>One email as a reader receives it: its headers, its body, and what it carries besides.</summary>
 /// <remarks>
 /// <para>
-/// This is the most sensitive projection MailMcp publishes. It is message content in full, and it inherits every
+/// This is the most sensitive projection MailFathom publishes. It is message content in full, and it inherits every
 /// classification, retention, access, and erasure constraint of the mail it was read from. Nothing in it may be logged.
 /// </para>
 /// <para>
@@ -27,7 +27,7 @@ public sealed record GetEmailContentResult
     /// <summary>Gets the account whose mailbox the email was read from.</summary>
     public required MailAccountId AccountId { get; init; }
 
-    /// <summary>Gets the folder alias the email was read from, which is MailMcp's own name for that folder.</summary>
+    /// <summary>Gets the folder alias the email was read from, which is MailFathom's own name for that folder.</summary>
     public required MailFolderAlias FolderAlias { get; init; }
 
     /// <summary>Gets the size the mail server reported for the message.</summary>

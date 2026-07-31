@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Persistence;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Persistence;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Mcp.UnitTests;
+namespace MailFathom.Mcp.UnitTests;
 
 /// <summary>Answers a content read with one fixed stored payload and records that it was asked.</summary>
 /// <remarks>

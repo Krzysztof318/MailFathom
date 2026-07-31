@@ -57,9 +57,9 @@ Update call sites in `src/Host/Program.cs`, `src/Host/Configuration/MailSynchron
 5. Append a short section to the PR #58 body describing both changes. `gh pr edit` fails against this repository with a Projects-classic GraphQL error and silently drops the edit, so patch through the REST API:
 
    ```bash
-   gh api repos/Krzysztof318/MailMcp/pulls/58 --jq .body > body.md
+   gh api repos/Krzysztof318/MailFathom/pulls/58 --jq .body > body.md
    # append the new section to body.md
-   gh api repos/Krzysztof318/MailMcp/pulls/58 -X PATCH -f body="$(cat body.md)"
+   gh api repos/Krzysztof318/MailFathom/pulls/58 -X PATCH -f body="$(cat body.md)"
    ```
 
 6. Confirm `Closes #35` is still the first line of the published body and that the PR is still a draft.

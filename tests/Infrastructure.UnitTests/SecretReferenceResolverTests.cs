@@ -2,14 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Text;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class SecretReferenceResolverTests
 {
-    private const string CredentialsDirectory = "/run/credentials/mailmcp.service";
+    private const string CredentialsDirectory = "/run/credentials/mailfathom.service";
 
     [Fact]
     public async Task ResolveAsync_SystemdCredential_ReadsTheNameFromTheCredentialsDirectory()
@@ -152,12 +152,12 @@ public sealed class SecretReferenceResolverTests
         // Arrange
         var environment = new InMemoryEnvironmentVariableReader
         {
-            Variables = { ["MAILMCP_IMAP_PASSWORD"] = "ci-password" },
+            Variables = { ["MAILFATHOM_IMAP_PASSWORD"] = "ci-password" },
         };
         var resolver = CreateResolver(SecretValueInterpretation.ReferenceOnly, new InMemorySecretFileReader(), environment);
 
         // Act
-        var result = await resolver.ResolveAsync("env:MAILMCP_IMAP_PASSWORD", CancellationToken.None);
+        var result = await resolver.ResolveAsync("env:MAILFATHOM_IMAP_PASSWORD", CancellationToken.None);
 
         // Assert
         using var secret = result.Secret;
@@ -171,7 +171,7 @@ public sealed class SecretReferenceResolverTests
         var resolver = CreateResolver(SecretValueInterpretation.ReferenceOnly);
 
         // Act
-        var result = await resolver.ResolveAsync("env:MAILMCP_IMAP_PASSWORD", CancellationToken.None);
+        var result = await resolver.ResolveAsync("env:MAILFATHOM_IMAP_PASSWORD", CancellationToken.None);
 
         // Assert
         Assert.Equal(SecretResolutionFailure.MaterialNotFound, result.Failure);
@@ -181,11 +181,11 @@ public sealed class SecretReferenceResolverTests
     public async Task ResolveAsync_EnvironmentVariableEmpty_FailsWithMaterialEmpty()
     {
         // Arrange
-        var environment = new InMemoryEnvironmentVariableReader { Variables = { ["MAILMCP_IMAP_PASSWORD"] = string.Empty } };
+        var environment = new InMemoryEnvironmentVariableReader { Variables = { ["MAILFATHOM_IMAP_PASSWORD"] = string.Empty } };
         var resolver = CreateResolver(SecretValueInterpretation.ReferenceOnly, new InMemorySecretFileReader(), environment);
 
         // Act
-        var result = await resolver.ResolveAsync("env:MAILMCP_IMAP_PASSWORD", CancellationToken.None);
+        var result = await resolver.ResolveAsync("env:MAILFATHOM_IMAP_PASSWORD", CancellationToken.None);
 
         // Assert
         Assert.Equal(SecretResolutionFailure.MaterialEmpty, result.Failure);
@@ -388,7 +388,7 @@ public sealed class SecretReferenceResolverTests
     [InlineData("file:/run/secrets/absent")]
     [InlineData("azure-key-vault:imap")]
     [InlineData("systemd-credential:imap")]
-    [InlineData("env:MAILMCP_ABSENT")]
+    [InlineData("env:MAILFATHOM_ABSENT")]
     [InlineData("file:")]
     public async Task ResolveAsync_EveryFailure_ReturnsNoSecretMaterial(string configuredValue)
     {
@@ -429,12 +429,12 @@ public sealed class SecretReferenceResolverTests
         // Arrange
         var environment = new InMemoryEnvironmentVariableReader
         {
-            Variables = { ["MAILMCP_OVERSIZED"] = new string('p', SecretMaterialLimits.MaximumMaterialByteCount + 1) },
+            Variables = { ["MAILFATHOM_OVERSIZED"] = new string('p', SecretMaterialLimits.MaximumMaterialByteCount + 1) },
         };
         var resolver = CreateResolver(SecretValueInterpretation.ReferenceOnly, new InMemorySecretFileReader(), environment);
 
         // Act
-        var result = await resolver.ResolveAsync("env:MAILMCP_OVERSIZED", CancellationToken.None);
+        var result = await resolver.ResolveAsync("env:MAILFATHOM_OVERSIZED", CancellationToken.None);
 
         // Assert
         Assert.Equal(SecretResolutionFailure.MaterialTooLarge, result.Failure);

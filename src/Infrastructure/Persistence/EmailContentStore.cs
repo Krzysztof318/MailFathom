@@ -4,17 +4,17 @@
 using System.Linq.Expressions;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Persistence;
-using MailMcp.CodeCoverage;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Persistence;
+using MailFathom.CodeCoverage;
+using MailFathom.Domain.Emails;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>EF Core raw MIME content store.</summary>
 [RequiresIntegrationCoverage]
-internal sealed class EmailContentStore(MailMcpDbContext dbContext, TimeProvider timeProvider) : IEmailContentStore
+internal sealed class EmailContentStore(MailFathomDbContext dbContext, TimeProvider timeProvider) : IEmailContentStore
 {
     /// <inheritdoc />
     /// <remarks>

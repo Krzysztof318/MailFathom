@@ -1,15 +1,15 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Folders;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
-using MailMcp.Infrastructure.Folders;
-using MailMcp.TestSupport;
+using MailFathom.Application.Folders;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Folders;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class LoggedMailFolderMappingChangeAuditorTests
 {

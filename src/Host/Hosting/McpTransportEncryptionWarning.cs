@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Host.Configuration;
-using MailMcp.Mcp;
+using MailFathom.Host.Configuration;
+using MailFathom.Mcp;
 using Microsoft.Extensions.Options;
 
-namespace MailMcp.Host.Hosting;
+namespace MailFathom.Host.Hosting;
 
 /// <summary>States at startup that an enabled MCP endpoint terminates no TLS of its own.</summary>
 /// <remarks>
@@ -15,7 +15,7 @@ namespace MailMcp.Host.Hosting;
 /// does not refuse. Two deployments run it deliberately: local development, where the endpoint is reachable only from
 /// the machine it runs on, and a deployment behind a TLS-terminating reverse proxy, where the proxy already holds the
 /// operator's certificate and a second TLS layer inside the trust boundary protects nothing. Only an operator knows
-/// which of those they have, and neither is something MailMcp can detect.
+/// which of those they have, and neither is something MailFathom can detect.
 /// </para>
 /// <para>
 /// What it refuses to let happen is the third case: an endpoint reachable across a network that nobody meant to expose

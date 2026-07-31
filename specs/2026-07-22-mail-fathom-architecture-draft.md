@@ -1,17 +1,17 @@
-# Mail MCP Service — Architecture Draft
+# MailFathom Service — Architecture Draft
 
 **Status:** Draft for review
 **Date:** 2026-07-22
 **Target:** Debian/Ubuntu, .NET 10, single owner, many mail accounts
 **Enterprise posture:** Enterprise-grade architecture, GDPR-ready privacy posture, and future AGT governance seams from the beginning
 
-The product and solution name is `MailMcp`. The repository uses the XML solution format in `MailMcp.slnx`; project directory and file names use short boundary names, while `Directory.Build.props` applies the `MailMcp.*` prefix to assembly names and root namespaces.
+The product and solution name is `MailFathom`. The repository uses the XML solution format in `MailFathom.slnx`; project directory and file names use short boundary names, while `Directory.Build.props` applies the `MailFathom.*` prefix to assembly names and root namespaces.
 
 ## 1. Purpose
 
 The service synchronizes mail from multiple IMAP accounts, keeps a durable offline copy, sends mail through SMTP, indexes messages for lexical and semantic retrieval, and exposes controlled capabilities through a public MCP endpoint.
 
-MailMcp is designed as an enterprise-grade system even before the first release implements every enterprise feature. The architecture must preserve clear seams for governance, compliance evidence, privacy controls, operational hardening, auditability, and future Agent Governance Toolkit (AGT) adoption. These requirements influence boundaries and data handling from day one, but they do not justify premature dependencies or broad first-release scope.
+MailFathom is designed as an enterprise-grade system even before the first release implements every enterprise feature. The architecture must preserve clear seams for governance, compliance evidence, privacy controls, operational hardening, auditability, and future Agent Governance Toolkit (AGT) adoption. These requirements influence boundaries and data handling from day one, but they do not justify premature dependencies or broad first-release scope.
 
 The initial public MCP surface is read-only. Sending exists as an application capability but is not exposed as an MCP tool until its authorization and confirmation flow is reviewed separately.
 
@@ -32,7 +32,7 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 - Embeddings, chunks, snippets, audit events, and model/tool traces inherit the sensitivity and governance constraints of the source mailbox data unless a reviewed privacy design explicitly proves otherwise.
 - Unit tests are developed from the beginning with xUnit.net v3, Microsoft Testing Platform v2, and NSubstitute.
 - Integration tests are planned for a later phase but are not created in the initial solution.
-- The solution is named `MailMcp`, uses `MailMcp.slnx`, uses short project directory and file names, and applies the `MailMcp.*` prefix consistently to assemblies and root namespaces.
+- The solution is named `MailFathom`, uses `MailFathom.slnx`, uses short project directory and file names, and applies the `MailFathom.*` prefix consistently to assemblies and root namespaces.
 
 ## 2.1 Implementation status
 
@@ -109,9 +109,9 @@ HTTPS + OpenAI mTLS + OAuth           | HTTPS + OAuth
 
 ### 4.1 Enterprise-grade design posture
 
-Enterprise grade means MailMcp is operable, auditable, secure by default, privacy-aware, and maintainable under change. The initial repository should therefore prefer explicit contracts, deterministic behavior, bounded resource use, documented trade-offs, repeatable verification, least privilege, durable state transitions, and safe failure modes. Enterprise grade does not mean adding every enterprise subsystem immediately; it means first-release shortcuts must not close the path to later governance, compliance, recovery, or scale-out work.
+Enterprise grade means MailFathom is operable, auditable, secure by default, privacy-aware, and maintainable under change. The initial repository should therefore prefer explicit contracts, deterministic behavior, bounded resource use, documented trade-offs, repeatable verification, least privilege, durable state transitions, and safe failure modes. Enterprise grade does not mean adding every enterprise subsystem immediately; it means first-release shortcuts must not close the path to later governance, compliance, recovery, or scale-out work.
 
-GDPR readiness is treated as a design invariant rather than a post-release documentation exercise. MailMcp stores email bodies, headers, recipient data, attachments, search text, chunks, embeddings, and tool traces that may all contain personal data. The architecture must therefore keep ownership, purpose, retention, access, export, deletion, and audit boundaries explicit. The first release is not a complete compliance product, but it must avoid designs that make later compliance workflows impractical, such as untracked derived data, unbounded logs, provider-specific records in core contracts, or deletion paths that cannot reach chunks and embeddings.
+GDPR readiness is treated as a design invariant rather than a post-release documentation exercise. MailFathom stores email bodies, headers, recipient data, attachments, search text, chunks, embeddings, and tool traces that may all contain personal data. The architecture must therefore keep ownership, purpose, retention, access, export, deletion, and audit boundaries explicit. The first release is not a complete compliance product, but it must avoid designs that make later compliance workflows impractical, such as untracked derived data, unbounded logs, provider-specific records in core contracts, or deletion paths that cannot reach chunks and embeddings.
 
 AGT is reserved for future governance of agent-mediated and higher-risk tool calls. The first release keeps read-only MCP tools deterministic and application-authorized, while preserving an adapter seam where a future governance engine can evaluate tool invocations, policy decisions, contextual risk, and audit outcomes without changing domain or application contracts.
 
@@ -143,8 +143,8 @@ Cli           -> Application plus required adapters when introduced
 ## 5. Proposed project structure
 
 ```text
-mail-mcp/
-├── MailMcp.slnx
+mail-fathom/
+├── MailFathom.slnx
 ├── global.json
 ├── Directory.Build.props
 ├── Directory.Packages.props
@@ -209,7 +209,7 @@ mail-mcp/
 │   └── systemd/
 └── specs/
     ├── README.md                     # roadmap index over the numbered specifications
-    ├── 2026-07-22-mail-mcp-architecture-draft.md
+    ├── 2026-07-22-mail-fathom-architecture-draft.md
     └── NN-<topic>.md                 # one PR-sized specification per unit of work
 ```
 
@@ -234,7 +234,7 @@ Each unit-test project references only the production boundary it verifies and t
 | Observability | Aspire ServiceDefaults + OpenTelemetry + JSON console logging | Logs, metrics, traces, health checks, and OTLP export are scaffolded through the host's service-defaults extensions |
 | Unit testing | xUnit.net v3 + Microsoft Testing Platform v2 + NSubstitute | Isolated behavior tests and mocked protocol boundaries |
 | Integration testing | Aspire test mode via `Aspire.Hosting.Testing` | Deferred phase; drives the real `AppHost` app model rather than a parallel container definition |
-| Local orchestration | Aspire AppHost | First-release development-time orchestration and observability for MailMcp and PostgreSQL |
+| Local orchestration | Aspire AppHost | First-release development-time orchestration and observability for MailFathom and PostgreSQL |
 | Future CLI parser | `System.CommandLine` | Official Microsoft command-line parser for the later `mcpmail` administration CLI |
 
 Package versions are centrally pinned in `Directory.Packages.props`. The .NET SDK is pinned in `global.json`. Shared compiler, analyzer, nullable, documentation, warnings-as-errors, and test-project defaults belong in `Directory.Build.props` wherever they can be expressed once for the repository. Preview Agent Framework packages are acceptable, but every update is explicit and reviewed.
@@ -288,16 +288,16 @@ Clear-text password mechanisms are rejected over an unencrypted channel unless b
 
 ### 7.3 Configuration files and secret handling
 
-The first release uses .NET configuration for runtime settings and local JSON files for non-secret operational settings. ASP.NET Core's default configuration model has official Microsoft support for `appsettings.json` and `appsettings.{Environment}.json` through the JSON configuration provider, so MailMcp should not add a YAML parser or YAML configuration provider for first-release application configuration. JSON remains an operator-facing local source format only; domain, application, infrastructure, AI, and MCP projects consume validated options or mapped business settings and never parse configuration files directly. Durable write-side/admin configuration storage, including whether a future store is file-backed, database-backed, cloud-backed, or service-backed, is intentionally deferred.
+The first release uses .NET configuration for runtime settings and local JSON files for non-secret operational settings. ASP.NET Core's default configuration model has official Microsoft support for `appsettings.json` and `appsettings.{Environment}.json` through the JSON configuration provider, so MailFathom should not add a YAML parser or YAML configuration provider for first-release application configuration. JSON remains an operator-facing local source format only; domain, application, infrastructure, AI, and MCP projects consume validated options or mapped business settings and never parse configuration files directly. Durable write-side/admin configuration storage, including whether a future store is file-backed, database-backed, cloud-backed, or service-backed, is intentionally deferred.
 
 Configuration precedence is explicit: built-in defaults, committed example JSON, deployment JSON, environment-specific JSON overrides, environment variables for non-secret automation, and command-line overrides. The host validates all bound options at startup with fail-fast errors for missing TLS material, unsafe mail transport settings, invalid OAuth audience/resource values, unbounded result sizes, missing database settings, incompatible RAG profiles, or unresolved secret references.
 
 Secrets are never committed to JSON. JSON may contain secret references such as systemd credential names, protected file paths, container secret names, or external secret-provider keys. Development may use .NET Secret Manager for local-only convenience, but because user secrets are not encrypted and are not a production secret store, production deployments should prefer systemd credentials for native Linux services, container secrets for containerized deployments, an approved external secret provider, or protected files provisioned outside Git.
 
-For native systemd deployments, MailMcp should load sensitive values from systemd's service credential mechanism rather than environment variables. The systemd documentation describes credentials as a service-manager feature for passing sensitive keys, certificates, passwords, identity information, and similar data to services; it also notes that credentials avoid common environment-variable drawbacks such as inheritance through the process tree and provide per-service access checks. Unit files should use `LoadCredential=` or encrypted credentials managed with `systemd-creds` where appropriate, and the host should read the credential files via the runtime credentials directory exposed to the service. JSON configuration stores only the credential name or logical reference, not the secret value itself.
+For native systemd deployments, MailFathom should load sensitive values from systemd's service credential mechanism rather than environment variables. The systemd documentation describes credentials as a service-manager feature for passing sensitive keys, certificates, passwords, identity information, and similar data to services; it also notes that credentials avoid common environment-variable drawbacks such as inheritance through the process tree and provide per-service access checks. Unit files should use `LoadCredential=` or encrypted credentials managed with `systemd-creds` where appropriate, and the host should read the credential files via the runtime credentials directory exposed to the service. JSON configuration stores only the credential name or logical reference, not the secret value itself.
 
 - Account secrets are not stored as ordinary PostgreSQL configuration rows in the first release. If a later write-side/admin configuration store persists encrypted account secret material, that storage model must be approved by a separate ADR.
-- ASP.NET Core Data Protection protects any MailMcp-owned ciphertext with a persistent key ring.
+- ASP.NET Core Data Protection protects any MailFathom-owned ciphertext with a persistent key ring.
 - The key-ring protection certificate is injected through a systemd credential or container secret and is never stored in PostgreSQL or Git.
 - PostgreSQL, SMTP, and IMAP secrets never appear in logs, traces, MCP results, or exception messages.
 
@@ -514,7 +514,7 @@ Available only when chat and embedding profiles are healthy. It uses Agent Frame
 
 ### 13.5 Tool annotations and authorization
 
-Every MCP tool descriptor uses the current protocol metadata deliberately, including human-readable `title`, input and output schemas, safe descriptions, OAuth security scheme metadata, and behavior annotations. The read-only tools explicitly set `readOnlyHint=true`, `destructiveHint=false`, `idempotentHint=true`, and `openWorldHint=false` unless a future tool genuinely reaches outside MailMcp-controlled local state. These annotations are contract metadata, not comments; tests should verify the advertised `tools/list` metadata so clients can reason about read-only, destructive, idempotent, and external-world behavior before invoking a tool.
+Every MCP tool descriptor uses the current protocol metadata deliberately, including human-readable `title`, input and output schemas, safe descriptions, OAuth security scheme metadata, and behavior annotations. The read-only tools explicitly set `readOnlyHint=true`, `destructiveHint=false`, `idempotentHint=true`, and `openWorldHint=false` unless a future tool genuinely reaches outside MailFathom-controlled local state. These annotations are contract metadata, not comments; tests should verify the advertised `tools/list` metadata so clients can reason about read-only, destructive, idempotent, and external-world behavior before invoking a tool.
 
 - Read tools declare `readOnlyHint=true` and non-destructive semantics.
 - Each tool declares an OAuth security scheme and the required `mail.read` scope.
@@ -547,7 +547,7 @@ Every MCP tool descriptor uses the current protocol metadata deliberately, inclu
 
 #### ChatGPT profile
 
-- Dedicated hostname, for example `chatgpt.mail-mcp.example.com`.
+- Dedicated hostname, for example `chatgpt.mail-fathom.example.com`.
 - HTTPS and OAuth are mandatory.
 - mTLS client certificate is mandatory.
 - Trust store contains the OpenAI Root CA and OpenAI Connectors intermediate CA.
@@ -556,7 +556,7 @@ Every MCP tool descriptor uses the current protocol metadata deliberately, inclu
 
 #### General MCP profile
 
-- Dedicated hostname, for example `mcp.mail-mcp.example.com`.
+- Dedicated hostname, for example `mcp.mail-fathom.example.com`.
 - HTTPS and OAuth are mandatory.
 - mTLS is optional and can become required per registered client policy.
 - Trusted client CA bundles, expected SANs, and certificate policies are configuration entries, not code changes.
@@ -581,7 +581,7 @@ Certificate material and private keys are supplied through protected deployment 
 
 ## 16. GDPR and privacy architecture
 
-MailMcp is not launched as a complete GDPR automation product, but it must be GDPR-ready by design. Regulation (EU) 2016/679 establishes principles such as lawful, fair, transparent processing; purpose limitation; data minimization; accuracy; storage limitation; integrity and confidentiality; accountability; data protection by design and by default; records of processing activities; security of processing; and data-subject rights including access, erasure, restriction, and portability. The first-release architecture records these concerns explicitly so later compliance work extends known seams instead of retrofitting unknown data flows.
+MailFathom is not launched as a complete GDPR automation product, but it must be GDPR-ready by design. Regulation (EU) 2016/679 establishes principles such as lawful, fair, transparent processing; purpose limitation; data minimization; accuracy; storage limitation; integrity and confidentiality; accountability; data protection by design and by default; records of processing activities; security of processing; and data-subject rights including access, erasure, restriction, and portability. The first-release architecture records these concerns explicitly so later compliance work extends known seams instead of retrofitting unknown data flows.
 
 ### 16.1 Personal-data inventory
 
@@ -610,7 +610,7 @@ Derived search artifacts are not considered anonymous merely because they are tr
 The first release does not implement full data-subject request automation. It must nevertheless preserve application-level seams for later workflows:
 
 - access/export of mailbox metadata, selected message content, derived chunks, and audit records in structured machine-readable formats;
-- erasure and restriction across raw MIME, metadata, search text, chunks, embeddings, jobs, caches, and provider traces controlled by MailMcp;
+- erasure and restriction across raw MIME, metadata, search text, chunks, embeddings, jobs, caches, and provider traces controlled by MailFathom;
 - retention-policy execution with explicit treatment of remotely expunged mail, backups, and legal holds;
 - records of processing activities and evidence showing which systems, providers, scopes, and retention policies apply;
 - operator review steps for requests that may affect third-party correspondence or conflict with backup, legal, or security requirements.
@@ -637,7 +637,7 @@ A future AGT adapter can subscribe to the same governance seam before higher-ris
 
 ### 17.1 Resilience pipelines
 
-Retry, timeout, and circuit-breaking are one deliberate mechanism rather than a habit repeated per adapter. MailMcp uses Polly v8 resilience pipelines registered by key and resolved through `ResiliencePipelineProvider`, with one named pipeline per outbound dependency class: mailbox session establishment, mailbox data retrieval, message delivery, database command execution, and AI provider invocation. Each class has typed, startup-validated options for attempt count, backoff bounds, per-attempt and total timeout, circuit-breaker thresholds, and concurrency limits.
+Retry, timeout, and circuit-breaking are one deliberate mechanism rather than a habit repeated per adapter. MailFathom uses Polly v8 resilience pipelines registered by key and resolved through `ResiliencePipelineProvider`, with one named pipeline per outbound dependency class: mailbox session establishment, mailbox data retrieval, message delivery, database command execution, and AI provider invocation. Each class has typed, startup-validated options for attempt count, backoff bounds, per-attempt and total timeout, circuit-breaker thresholds, and concurrency limits.
 
 Polly types stay inside `Infrastructure`. `Application` expresses the question it actually has — whether a failure is worth retrying — through its own transient-failure classification port, so use cases and adapters never reference a resilience framework type.
 
@@ -647,7 +647,7 @@ Retry is restricted to operations that are safe to repeat. Authentication, permi
 
 ## 18. Observability
 
-- Aspire ServiceDefaults provide the initial scaffold for OpenTelemetry logs, metrics, traces, health checks, service discovery hooks where useful, and OTLP export configuration. MailMcp owns that source as `src/Host/ServiceDefaultsExtensions.cs` rather than in the template's repository-root `shared/` directory, because one executable service consumes it. MailMcp extends those defaults rather than duplicating per-project telemetry setup; a second executable service would promote the file to a project both reference, not to a linked source file.
+- Aspire ServiceDefaults provide the initial scaffold for OpenTelemetry logs, metrics, traces, health checks, service discovery hooks where useful, and OTLP export configuration. MailFathom owns that source as `src/Host/ServiceDefaultsExtensions.cs` rather than in the template's repository-root `shared/` directory, because one executable service consumes it. MailFathom extends those defaults rather than duplicating per-project telemetry setup; a second executable service would promote the file to a project both reference, not to a linked source file.
 - Structured JSON logs with account IDs and message IDs, never addresses, subjects, bodies, tokens, or credentials by default.
 - OpenTelemetry traces for MCP calls, database operations, IMAP push or time-based synchronization cycles, retrieval, embedding generation, agent runs, and SMTP delivery when SMTP is implemented.
 - Metrics include sync lag, reconnect count, cached messages, missing content, embedding backlog, retrieval latency, token usage when available, outbox depth when SMTP is implemented, and tool errors.
@@ -658,12 +658,12 @@ Retry is restricted to operations that are safe to repeat. Authentication, permi
 
 Default deployment uses Docker Compose or rootless Podman Compose managed by systemd:
 
-- `mail-mcp`
+- `mail-fathom`
 - `postgres` with pgvector
 
 Kestrel publishes only HTTPS on port 443 and does not listen on a public plain-HTTP endpoint. PostgreSQL, metrics, health, and administration endpoints remain private. The operating-system firewall permits the public MCP port and restricts database and management traffic.
 
-The `mail-mcp` process runs as a dedicated unprivileged identity. A container maps public port 443 to a non-privileged Kestrel container port; a native systemd deployment grants only `CAP_NET_BIND_SERVICE` when Kestrel binds directly to 443. The application never runs as root.
+The `mail-fathom` process runs as a dedicated unprivileged identity. A container maps public port 443 to a non-privileged Kestrel container port; a native systemd deployment grants only `CAP_NET_BIND_SERVICE` when Kestrel binds directly to 443. The application never runs as root.
 
 Persistent volumes:
 
@@ -687,9 +687,9 @@ These ideas are deliberately outside the first release. They are recorded here s
 
 ### 21.1 Agent Governance Toolkit (AGT)
 
-Microsoft Agent Governance Toolkit (AGT) may become useful when MailMcp exposes agent-mediated actions beyond read-only retrieval, especially if future MCP tools can send mail, mutate local state, delegate work, or call external systems. AGT is a governance layer for agents and MCP tool calls: it can help make policy checks, input/output inspection, and allow/deny decisions explicit instead of burying those decisions inside prompt text or ad-hoc tool handlers.
+Microsoft Agent Governance Toolkit (AGT) may become useful when MailFathom exposes agent-mediated actions beyond read-only retrieval, especially if future MCP tools can send mail, mutate local state, delegate work, or call external systems. AGT is a governance layer for agents and MCP tool calls: it can help make policy checks, input/output inspection, and allow/deny decisions explicit instead of burying those decisions inside prompt text or ad-hoc tool handlers.
 
-AGT is not part of the first release because the public MCP surface is read-only, deterministic tool authorization is enforced at the transport and application boundaries, and MailMcp already treats retrieved mail as untrusted input. Before adopting AGT, the team must verify package maturity, .NET 10 compatibility, license and service-term implications, policy authoring model, telemetry data exposure, and whether AGT decisions can be expressed without leaking provider-specific concepts into `Domain`, `Application`, or `Mcp`.
+AGT is not part of the first release because the public MCP surface is read-only, deterministic tool authorization is enforced at the transport and application boundaries, and MailFathom already treats retrieved mail as untrusted input. Before adopting AGT, the team must verify package maturity, .NET 10 compatibility, license and service-term implications, policy authoring model, telemetry data exposure, and whether AGT decisions can be expressed without leaking provider-specific concepts into `Domain`, `Application`, or `Mcp`.
 
 Potential AGT evaluation scenarios include governing a future `send_email` MCP tool, blocking prompt-injected tool escalation from message content, enforcing per-client tool policies, recording auditable governance decisions, mapping policy evidence to enterprise compliance controls, and validating that denied actions fail closed with safe MCP error codes. AGT must complement, not replace, OAuth scopes, mTLS, application authorization, and GDPR-aligned data minimization.
 
@@ -712,7 +712,7 @@ No MinIO package, credentials, process, bucket, deployment volume, or object-sto
 
 A future integration-test suite should include smtp4dev as the controlled SMTP target for delivery scenarios. smtp4dev is a fake SMTP server intended for development and testing, is available as Docker/OCI images and a .NET tool, and its NuGet package currently declares the BSD-3-Clause license. Before adding it to the repository, the exact package, container image, or tool version must be pinned and recorded in `THIRD_PARTY_LICENSES.md`.
 
-The smtp4dev-based tests should validate SMTP connection policy, STARTTLS behavior where supported by the selected test setup, authentication settings, MIME envelope/content emitted by MailMcp, outbox retry classification, idempotency behavior, and failure handling. smtp4dev does not replace unit tests and does not validate IMAP semantics; any IMAP integration fixture remains a separate future decision.
+The smtp4dev-based tests should validate SMTP connection policy, STARTTLS behavior where supported by the selected test setup, authentication settings, MIME envelope/content emitted by MailFathom, outbox retry classification, idempotency behavior, and failure handling. smtp4dev does not replace unit tests and does not validate IMAP semantics; any IMAP integration fixture remains a separate future decision.
 
 The first release still does not add integration-test projects, Testcontainers, Docker fixtures, smtp4dev packages, or smtp4dev container references.
 
@@ -742,7 +742,7 @@ The CLI requires local operating-system access and is not exposed through MCP.
 
 ### 21.5 Policy-driven mail processing and automation jobs
 
-MailMcp could evolve from passive synchronization and retrieval into an asynchronous mail-processing platform. A future automation subsystem would evaluate configured rules after a message and its required local content have been committed, then enqueue durable actions without extending the IMAP synchronization transaction or delaying MCP reads. It should support useful non-AI automation first and make AI an optional condition or transformation rather than the workflow authority.
+MailFathom could evolve from passive synchronization and retrieval into an asynchronous mail-processing platform. A future automation subsystem would evaluate configured rules after a message and its required local content have been committed, then enqueue durable actions without extending the IMAP synchronization transaction or delaying MCP reads. It should support useful non-AI automation first and make AI an optional condition or transformation rather than the workflow authority.
 
 Potential triggers include:
 
@@ -757,7 +757,7 @@ Deterministic conditions could match account, folder, sender or recipient domain
 
 Candidate actions should be introduced in increasing order of risk:
 
-1. Local-only actions: add a MailMcp label, record a classification, produce a private summary, enqueue embedding or extraction work, or route the message into a local review queue.
+1. Local-only actions: add a MailFathom label, record a classification, produce a private summary, enqueue embedding or extraction work, or route the message into a local review queue.
 2. Controlled integrations: emit a minimized webhook or create an application-owned work item after destination-specific authorization, payload filtering, timeout, and idempotency review.
 3. Remote mailbox mutations: apply a provider category, move or copy a message, or change a remote flag. These actions conflict with the initial read-only posture and require a separate design for authorization, synchronization feedback loops, and provider-specific semantics.
 4. External side effects: forward, reply, send, delete, or invoke another business system. These require explicit opt-in, approval and governance policy, durable idempotency, audit evidence, and safe compensation or operator recovery.
@@ -781,36 +781,36 @@ A future spike should select a minimal declarative rule representation, define t
 
 ### 21.6 Microsoft 365 and Outlook interoperability
 
-There are several materially different interpretations of making externally hosted mail behave like a normal mailbox in Microsoft 365. They must not be collapsed into a promise that MailMcp can expose arbitrary endpoints and become an Exchange server. Outlook clients, Exchange Online, Microsoft Graph, Outlook add-ins, and Microsoft 365 Copilot connectors solve different problems and provide different user experiences.
+There are several materially different interpretations of making externally hosted mail behave like a normal mailbox in Microsoft 365. They must not be collapsed into a promise that MailFathom can expose arbitrary endpoints and become an Exchange server. Outlook clients, Exchange Online, Microsoft Graph, Outlook add-ins, and Microsoft 365 Copilot connectors solve different problems and provide different user experiences.
 
 | Option | User-visible result | Where mail data lives | Main limitation |
 | --- | --- | --- | --- |
 | Add the external account to Outlook through IMAP/POP | A separate account and folder tree in supported Outlook clients | The external provider remains authoritative; some Outlook clients or providers can also synchronize a copy to Microsoft Cloud | It is not an Exchange Online mailbox and feature, policy, add-in, and client support differ |
-| Add a Microsoft Graph mailbox provider to MailMcp | MailMcp can synchronize real Exchange Online primary or shared mailboxes | Exchange Online and MailMcp local storage | It does not make an external IMAP mailbox appear in Outlook |
+| Add a Microsoft Graph mailbox provider to MailFathom | MailFathom can synchronize real Exchange Online primary or shared mailboxes | Exchange Online and MailFathom local storage | It does not make an external IMAP mailbox appear in Outlook |
 | Replicate external mail into an Exchange Online mailbox | A native Exchange Online mailbox in Outlook and Microsoft 365 | Both the external host and Exchange Online | Duplicate data, source-of-truth conflicts, licensing, compliance, and difficult bidirectional semantics |
-| Build an Outlook web add-in backed by MailMcp | MailMcp search, AI, and workflow commands appear in Outlook UI | The mailbox remains with its provider; requested data is processed by MailMcp | An add-in is a task pane or command surface, not a mailbox provider or folder tree |
+| Build an Outlook web add-in backed by MailFathom | MailFathom search, AI, and workflow commands appear in Outlook UI | The mailbox remains with its provider; requested data is processed by MailFathom | An add-in is a task pane or command surface, not a mailbox provider or folder tree |
 | Publish through a Microsoft 365 Copilot connector | External mail can be discoverable to supported Copilot or Microsoft Search experiences | Synced connectors copy indexed content to Microsoft Graph; federated MCP connectors retrieve at query time | It provides search and reasoning, not Outlook mailbox semantics |
-| Emulate Exchange protocols and Autodiscover | In theory, Outlook could treat MailMcp as an Exchange-like service | Depends on the implementation | Unsupported, security-sensitive, operationally disproportionate, and outside MailMcp's product boundary |
+| Emulate Exchange protocols and Autodiscover | In theory, Outlook could treat MailFathom as an Exchange-like service | Depends on the implementation | Unsupported, security-sensitive, operationally disproportionate, and outside MailFathom's product boundary |
 
-Microsoft documents other IMAP and POP accounts as supported account types in new Outlook for Windows, so the first feasibility check should be whether the existing externally hosted account can simply be added alongside the Microsoft 365 work account. This route needs no MailMcp endpoint and does not require moving the domain. It also does not create an Exchange Online mailbox. Microsoft separately documents that supported non-Microsoft account modes can synchronize a copy of mail, calendar, or contact data into Microsoft data centers; exact behavior varies by Outlook client and provider. A deployment that requires mail to remain exclusively outside Microsoft must therefore validate the target Outlook client, SKU, tenant policy, authentication method, and data-flow disclosure rather than assuming that configuring IMAP means direct client-to-provider traffic.
+Microsoft documents other IMAP and POP accounts as supported account types in new Outlook for Windows, so the first feasibility check should be whether the existing externally hosted account can simply be added alongside the Microsoft 365 work account. This route needs no MailFathom endpoint and does not require moving the domain. It also does not create an Exchange Online mailbox. Microsoft separately documents that supported non-Microsoft account modes can synchronize a copy of mail, calendar, or contact data into Microsoft data centers; exact behavior varies by Outlook client and provider. A deployment that requires mail to remain exclusively outside Microsoft must therefore validate the target Outlook client, SKU, tenant policy, authentication method, and data-flow disclosure rather than assuming that configuring IMAP means direct client-to-provider traffic.
 
-Microsoft Graph is valuable for the opposite direction: it gives MailMcp authorized access to mail already stored in Exchange Online. A future `MicrosoftGraph` infrastructure adapter could implement the same application-level synchronization purpose as the MailKit adapter while preserving provider-specific contracts at the edge. Graph change notifications can reduce polling, while per-folder delta queries provide initial and incremental reconciliation. Notifications must remain hints rather than durable truth: subscriptions expire and require renewal, delivery can be delayed or missed, delta tokens can become invalid, and throttling requires bounded backoff and resynchronization.
+Microsoft Graph is valuable for the opposite direction: it gives MailFathom authorized access to mail already stored in Exchange Online. A future `MicrosoftGraph` infrastructure adapter could implement the same application-level synchronization purpose as the MailKit adapter while preserving provider-specific contracts at the edge. Graph change notifications can reduce polling, while per-folder delta queries provide initial and incremental reconciliation. Notifications must remain hints rather than durable truth: subscriptions expire and require renewal, delivery can be delayed or missed, delta tokens can become invalid, and throttling requires bounded backoff and resynchronization.
 
 The Graph adapter introduces identity and authorization problems that cannot be hidden by reusing IMAP values. Graph message IDs and folder IDs do not have IMAP UIDVALIDITY/UID semantics, and default message IDs can change when an item is moved unless immutable IDs are requested. Delta state is scoped to provider collections rather than to an IMAP checkpoint. Supporting both providers would therefore require an explicit provider-neutral account boundary plus provider-owned occurrence and checkpoint records; it should not weaken the existing stable IMAP identity. Application permissions must be scoped to the required mailboxes and operations through least-privilege Microsoft Graph permissions and Exchange Online Application RBAC, without retaining an overlapping organization-wide Entra grant that defeats mailbox scoping.
 
 Microsoft Graph cannot act as a transparent bridge from an arbitrary external IMAP server into Outlook. Its mail APIs operate on primary and shared mailboxes stored in Exchange Online. If a native Exchange Online experience across Outlook clients and Microsoft 365 is mandatory, some mailbox data must exist in Exchange Online. The conventional Microsoft IMAP migration flow creates and licenses target mailboxes, copies supported mail folders, and ultimately changes mail routing; it is a migration path, not a permanent virtual mailbox backed by the source IMAP server.
 
-A MailMcp-managed replication bridge could be explored, but only as a separate product slice. A one-way mirror from the external authoritative mailbox into a dedicated Exchange Online mailbox is substantially safer than bidirectional synchronization. Even a one-way design must define duplicate detection, folder mapping, deletion and retention behavior, message fidelity, backfill limits, lag, failure repair, legal holds, and whether users may act on mirrored messages. Bidirectional synchronization additionally needs conflict resolution for moves, read and flag state, drafts, sent items, deletes, concurrent edits, and loops. Outbound mail raises accepted-domain, sender authorization, SPF, DKIM, DMARC, Sent Items, and idempotency questions. Calling this arrangement "hosted elsewhere" would be misleading because Exchange Online contains a second copy.
+A MailFathom-managed replication bridge could be explored, but only as a separate product slice. A one-way mirror from the external authoritative mailbox into a dedicated Exchange Online mailbox is substantially safer than bidirectional synchronization. Even a one-way design must define duplicate detection, folder mapping, deletion and retention behavior, message fidelity, backfill limits, lag, failure repair, legal holds, and whether users may act on mirrored messages. Bidirectional synchronization additionally needs conflict resolution for moves, read and flag state, drafts, sent items, deletes, concurrent edits, and loops. Outbound mail raises accepted-domain, sender authorization, SPF, DKIM, DMARC, Sent Items, and idempotency questions. Calling this arrangement "hosted elsewhere" would be misleading because Exchange Online contains a second copy.
 
-An Outlook add-in is useful when the desired outcome is access to MailMcp features inside Outlook rather than a mailbox replacement. It could expose local search, cited answers, classifications, approval queues, and automation commands through a task pane or contextual command. Current Microsoft documentation shows that add-in support for non-Microsoft accounts is limited across Outlook clients, so the add-in cannot be assumed to operate on the external IMAP account itself. It may still operate in the user's Microsoft 365 mailbox context and call an owner-authorized MailMcp API, but that provides a sidecar experience rather than native folders.
+An Outlook add-in is useful when the desired outcome is access to MailFathom features inside Outlook rather than a mailbox replacement. It could expose local search, cited answers, classifications, approval queues, and automation commands through a task pane or contextual command. Current Microsoft documentation shows that add-in support for non-Microsoft accounts is limited across Outlook clients, so the add-in cannot be assumed to operate on the external IMAP account itself. It may still operate in the user's Microsoft 365 mailbox context and call an owner-authorized MailFathom API, but that provides a sidecar experience rather than native folders.
 
-Microsoft 365 Copilot connectors create another future path. A synced connector could publish minimized, access-controlled external items for Microsoft Search and Copilot, at the cost of copying and semantically indexing data in Microsoft Graph. A federated connector can retrieve data from an MCP server at query time without indexing it in Graph, which aligns more closely with MailMcp's existing protocol boundary and data-residency goal, but availability, licensing, identity propagation, citation behavior, tenant administration, and privacy terms require a dedicated evaluation. Neither connector type creates an Outlook mailbox.
+Microsoft 365 Copilot connectors create another future path. A synced connector could publish minimized, access-controlled external items for Microsoft Search and Copilot, at the cost of copying and semantically indexing data in Microsoft Graph. A federated connector can retrieve data from an MCP server at query time without indexing it in Graph, which aligns more closely with MailFathom's existing protocol boundary and data-residency goal, but availability, licensing, identity propagation, citation behavior, tenant administration, and privacy terms require a dedicated evaluation. Neither connector type creates an Outlook mailbox.
 
 The recommended evaluation order is:
 
 1. Validate direct IMAP account support and actual data flow for the required Outlook clients, Microsoft 365 Business license, tenant policies, and external provider.
 2. Add a Microsoft Graph provider only for mailboxes genuinely hosted in Exchange Online, using change notifications plus delta reconciliation and mailbox-scoped application authorization.
-3. Evaluate an Outlook add-in or federated Microsoft 365 Copilot connector when the goal is to surface MailMcp capabilities inside the Microsoft ecosystem without copying a mailbox.
+3. Evaluate an Outlook add-in or federated Microsoft 365 Copilot connector when the goal is to surface MailFathom capabilities inside the Microsoft ecosystem without copying a mailbox.
 4. Prototype a one-way Exchange Online mirror only if a native mailbox is mandatory and the owner accepts a second copy in Microsoft 365.
 5. Do not pursue an Exchange protocol façade or general bidirectional bridge without a separate architecture decision, threat model, data-protection review, and narrowly proven business requirement.
 
@@ -818,22 +818,22 @@ No Microsoft Graph SDK, Outlook add-in package, Entra application, Exchange Onli
 
 ### 21.7 Standard mail-client gateway over IMAP and SMTP
 
-MailMcp could become an intermediary mail server for ordinary desktop and mobile clients by exposing its committed local mailbox state through IMAP and accepting authenticated SMTP Message Submission into its durable outbox. A user could then connect a standard mail client to MailMcp rather than configuring every upstream provider directly. This idea is distinct from emulating Exchange, accepting Internet mail through MX records, or operating an unrestricted SMTP relay.
+MailFathom could become an intermediary mail server for ordinary desktop and mobile clients by exposing its committed local mailbox state through IMAP and accepting authenticated SMTP Message Submission into its durable outbox. A user could then connect a standard mail client to MailFathom rather than configuring every upstream provider directly. This idea is distinct from emulating Exchange, accepting Internet mail through MX records, or operating an unrestricted SMTP relay.
 
 The product direction remains open between exactly two variants:
 
 | Variant | Client-visible behavior | Main advantage | Main unresolved cost |
 | --- | --- | --- | --- |
-| Local projection gateway | IMAP projects committed MailMcp state, while SMTP submission durably enqueues outgoing mail for delivery through the selected upstream account | Offline access, one provider-neutral client endpoint, and a smaller consistency boundary | Every mutating IMAP capability must be explicitly rejected or given local-only semantics that clients tolerate |
+| Local projection gateway | IMAP projects committed MailFathom state, while SMTP submission durably enqueues outgoing mail for delivery through the selected upstream account | Offline access, one provider-neutral client endpoint, and a smaller consistency boundary | Every mutating IMAP capability must be explicitly rejected or given local-only semantics that clients tolerate |
 | Provider-backed bidirectional gateway | The same endpoints also propagate supported client-side flags, moves, deletes, drafts, and other mailbox mutations to upstream providers | A more conventional mail-client experience | Conflict resolution, feedback-loop prevention, provider-specific behavior, idempotency, and upstream availability become part of the gateway contract |
 
 Neither variant is selected by this draft. A future spike must compare them against real user needs and actual client behavior before an ADR or implementation issue commits to one.
 
 The IMAP surface cannot expose a local database identifier or an upstream provider identifier as though either were already an IMAP UID. Each projected mailbox needs a durable, non-zero `UIDVALIDITY`, monotonically increasing UIDs, and stable identity across process restarts. Folder renames, deletion and recreation, copies, moves, deduplicated occurrences, and remapping an account or folder must preserve the IMAP identity rules or deliberately advance `UIDVALIDITY`. The namespace also needs an unambiguous projection of accounts, folders, special-use mailboxes, and messages that occur in more than one upstream folder.
 
-IMAP reads must use committed local state and must never cause a synchronous upstream fetch. The gateway therefore needs explicit freshness and incomplete-content behavior when synchronization is delayed, an upstream provider is unavailable, or a locally indexed message still lacks raw MIME content. Standard clients also assume more than read-only retrieval: flags such as `\Seen`, `\Answered`, `\Flagged`, and `\Deleted`; `APPEND` for drafts and sent mail; mailbox creation and rename; copy, move, expunge, and concurrent sessions all require defined capability advertisements and failure behavior. The local projection variant must decide which changes remain local and which commands are rejected. The bidirectional variant must additionally reconcile each supported mutation with remote changes without losing intent or creating synchronization loops. In particular, client reads must not silently weaken the existing invariant that MailMcp synchronization and content retrieval never set the upstream IMAP `\Seen` flag.
+IMAP reads must use committed local state and must never cause a synchronous upstream fetch. The gateway therefore needs explicit freshness and incomplete-content behavior when synchronization is delayed, an upstream provider is unavailable, or a locally indexed message still lacks raw MIME content. Standard clients also assume more than read-only retrieval: flags such as `\Seen`, `\Answered`, `\Flagged`, and `\Deleted`; `APPEND` for drafts and sent mail; mailbox creation and rename; copy, move, expunge, and concurrent sessions all require defined capability advertisements and failure behavior. The local projection variant must decide which changes remain local and which commands are rejected. The bidirectional variant must additionally reconcile each supported mutation with remote changes without losing intent or creating synchronization loops. In particular, client reads must not silently weaken the existing invariant that MailFathom synchronization and content retrieval never set the upstream IMAP `\Seen` flag.
 
-SMTP is a submission boundary, not proof of final delivery. MailMcp should acknowledge a message only after authentication, authorization, envelope and content validation, and durable outbox persistence have succeeded. It must validate sender identity, recipient and message-size limits, and account routing before acceptance. Later upstream rejection or exhausted delivery retries need a client-visible recovery design, such as a durable submission status or a dedicated failure mailbox; placing a message in Sent must not falsely imply successful delivery. The endpoint must not accept arbitrary relay traffic and is not an inbound SMTP or MX service.
+SMTP is a submission boundary, not proof of final delivery. MailFathom should acknowledge a message only after authentication, authorization, envelope and content validation, and durable outbox persistence have succeeded. It must validate sender identity, recipient and message-size limits, and account routing before acceptance. Later upstream rejection or exhausted delivery retries need a client-visible recovery design, such as a durable submission status or a dedicated failure mailbox; placing a message in Sent must not falsely imply successful delivery. The endpoint must not accept arbitrary relay traffic and is not an inbound SMTP or MX service.
 
 The gateway needs its own client authentication and authorization rather than exposing upstream mailbox credentials. Every authenticated principal must be restricted to its permitted accounts and folders. IMAP access and SMTP submission require TLS, with implicit TLS preferred as described by RFC 8314. Connection, session, command, recipient, message-size, concurrency, and submission-rate limits must prevent one client from exhausting synchronization, storage, or delivery capacity. Protocol logs must remain disabled or redacted by default, while security-relevant access and submission outcomes produce privacy-minimized audit evidence.
 
@@ -879,7 +879,7 @@ Stages 6 through 10 are decomposed into specifications when the current segment 
 - IMAP success, failure, disconnect, cancellation, push-sync, time-based sync, and capability scenarios are reproducible through NSubstitute-based protocol boundaries; SMTP scenarios are added when SMTP leaves deferred scope.
 - First-release configuration can be expressed in JSON without placing secrets or encrypted secret values in Git.
 - Future CLI work is explicitly deferred and uses `mcpmail` with `System.CommandLine` when implemented.
-- Aspire AppHost can start the local development environment for MailMcp and PostgreSQL without introducing production runtime coupling.
+- Aspire AppHost can start the local development environment for MailFathom and PostgreSQL without introducing production runtime coupling.
 - Future ideas are collected separately from first-release scope, including AGT governance evaluation, MinIO migration, `mcpmail`, smtp4dev-backed SMTP delivery verification, policy-driven mail automation, Microsoft 365 interoperability, and a standard mail-client gateway over IMAP and SMTP.
 - The draft identifies personal-data classes, derived-data sensitivity, first-release privacy controls, and deferred GDPR workflows so later compliance implementation has explicit seams.
 - Enterprise-grade posture is visible in boundaries for auditability, governance, privacy, operational hardening, deterministic policy enforcement, and safe failure modes without prematurely adding first-release dependencies.

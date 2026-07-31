@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Security;
+using MailFathom.Infrastructure.Security;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Covers the shape OAuth requires of an identifier, and the one place the two identifiers differ.</summary>
 /// <remarks>
@@ -17,8 +17,8 @@ public sealed class OAuthIdentifierUriTests
     [Theory]
     [InlineData("https://sso.example.test")]
     [InlineData("https://sso.example.test/")]
-    [InlineData("https://sso.example.test/realms/mailmcp")]
-    [InlineData("https://sso.example.test:8443/realms/mailmcp")]
+    [InlineData("https://sso.example.test/realms/mailfathom")]
+    [InlineData("https://sso.example.test:8443/realms/mailfathom")]
     public void IsWellFormed_AnHttpsIdentifierWithNoQueryOrFragment_IsAccepted(string identifier)
     {
         // Arrange, Act, Assert
@@ -31,7 +31,7 @@ public sealed class OAuthIdentifierUriTests
     [InlineData("   ")]
     [InlineData("sso.example.test")]
     [InlineData("http://sso.example.test")]
-    [InlineData("https://sso.example.test?realm=mailmcp")]
+    [InlineData("https://sso.example.test?realm=mailfathom")]
     [InlineData("https://sso.example.test#realm")]
     [InlineData("https://operator:secret@sso.example.test")]
     public void IsWellFormed_AnythingElse_IsRefused(string? identifier)

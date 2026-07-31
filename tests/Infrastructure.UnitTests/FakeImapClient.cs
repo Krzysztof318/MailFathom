@@ -8,7 +8,7 @@ using MailKit.Security;
 using NSubstitute;
 using NSubstitute.Core;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Scripts one IMAP connection to a server a test describes, including the ways that server misbehaves.</summary>
 /// <remarks>

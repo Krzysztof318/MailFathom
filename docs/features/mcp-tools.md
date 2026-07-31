@@ -1,6 +1,6 @@
 # MCP tools
 
-MailMcp publishes its read side as Model Context Protocol tools over the Streamable HTTP transport. This page records the
+MailFathom publishes its read side as Model Context Protocol tools over the Streamable HTTP transport. This page records the
 conventions every tool follows, the contract of the tools that exist, and what a client reads when a call fails.
 
 The endpoint is disabled by default, and enabling it requires stating whether a client presents an API key or nothing at all.
@@ -15,7 +15,7 @@ onto the published contract. It holds no query, no persistence, and no mail-prot
 `MailboxTimelineReader` use case and nothing else, `get_email_content` calls the `EmailContentReader` use case and
 nothing else, and `search_emails` calls the `MailboxSearchReader` use case and nothing else.
 
-It holds no AI code either, and cannot. The project references `Domain` and `Application` and no other MailMcp assembly,
+It holds no AI code either, and cannot. The project references `Domain` and `Application` and no other MailFathom assembly,
 which `Mcp.UnitTests` asserts against the compiled reference list rather than against a convention — so no tool on this
 surface can embed a query, rewrite it, or hand anything to a chat model, and a package that would make one able to has
 to be added and reviewed before that changes.
@@ -52,7 +52,7 @@ it calls anything:
 | `readOnlyHint` | `true` |
 | `destructiveHint` | `false` |
 | `idempotentHint` | `true` |
-| `openWorldHint` | `false` — every tool is confined to MailMcp-controlled local state |
+| `openWorldHint` | `false` — every tool is confined to MailFathom-controlled local state |
 
 The four annotations are contract metadata rather than documentation, so `Mcp.UnitTests` asserts the advertised
 `tools/list` output: the name, the title, the description, every input property, the descriptions on them, the output
@@ -82,14 +82,14 @@ reads without pausing.
 Expected failures are reported as a tool result with `isError` set, whose text is the one shape every tool uses:
 
 ```text
-MailMcp error 53001: Mail account 'shared-billing' is not accessible.
+MailFathom error 53001: Mail account 'shared-billing' is not accessible.
 ```
 
 The five-digit code is the machine-readable part and is stable: it is what a runbook, an alert, or a log search matches
 on. The sentence after it is the one the use case wrote, republished rather than restated here, so a client and an
 operator read the same wording and there is no second text to drift. It names the filter and, where there is one, its
 limit — never the value that was refused, because a filter value is itself sensitive and a boundary that reflects input
-back has started returning content. An account identifier is the exception the rule allows: it is MailMcp's own
+back has started returning content. An account identifier is the exception the rule allows: it is MailFathom's own
 configured name for an account and carries nothing the caller did not already write.
 
 | Code | Meaning | Typical cause |
@@ -108,7 +108,7 @@ configured name for an account and carries nothing the caller did not already wr
 Codes `51001` through `53002` and `55001` are the use cases' own, allocated in the MCP-boundary category because that is
 where they surface, and every one of them is written for a caller to read. That is the whole rule the boundary applies: a
 failure whose code belongs to that category is published as it stands, and a failure from any other category — a schema
-mismatch, an IMAP authentication refusal, a concurrency conflict — describes MailMcp's internals to whoever asked and
+mismatch, an IMAP authentication refusal, a concurrency conflict — describes MailFathom's internals to whoever asked and
 collapses into `54001`. Stating the rule as a category rather than as a list of exception types is what stops a failure
 added later from reaching a client because nobody remembered to add it to a list.
 
@@ -122,7 +122,7 @@ and the duration of every call, and it logs any undiagnosed exception in full on
 request already carries. Cancellation and protocol-level failures are recorded and then rethrown rather than converted,
 because a cancelled call is the caller's own doing and a JSON-RPC error has to be reported as one.
 
-The tool name a call arrived with is recorded only when it is spelled the way a MailMcp tool name is; anything else is
+The tool name a call arrived with is recorded only when it is spelled the way a MailFathom tool name is; anything else is
 recorded as one fixed placeholder. On an unknown tool that name is unvalidated caller input on its way into a retained
 log, and a log is not a place to let a caller write.
 
@@ -137,7 +137,7 @@ Every argument is optional.
 | Argument | Type | Meaning |
 |---|---|---|
 | `accountIds` | `string[]` | Accounts to read. Omitted reads every account this deployment serves; an account it does not serve is refused with `53001` |
-| `folderAliases` | `string[]` | MailMcp folder aliases such as `INBOX`. Omitted reads every folder of the accounts in scope. Case is normalized, so a repeated spelling names one folder |
+| `folderAliases` | `string[]` | MailFathom folder aliases such as `INBOX`. Omitted reads every folder of the accounts in scope. Case is normalized, so a repeated spelling names one folder |
 | `senderAddress` | `string` | The whole address the sender must carry, in any case — not a fragment |
 | `recipientAddress` | `string` | The whole address a `To` or `Cc` recipient must carry. `Reply-To` is stored and filterable through the use case but not searched here |
 | `subjectFragment` | `string` | Text the subject must contain, case-insensitively, up to 256 characters. Wildcards a caller writes match themselves |
@@ -184,7 +184,7 @@ Three parts of it are worth reading before a caller writes against them:
   are not returned at all. A listing exists to let a reader recognize a message; the full participant set belongs to
   reading one.
 - **`attachments` as a group rather than one flag.** `attachmentCount` and `inlineResourceCount` are separate values
-  beside the total size and the encrypted, unverified-signature, and unexpanded-TNEF markers, because MailMcp's
+  beside the total size and the encrypted, unverified-signature, and unexpanded-TNEF markers, because MailFathom's
   classification rule does not count an embedded logo or a signature part as an attachment. Without the second count a
   caller could not tell an email carrying a document from one carrying a picture in its signature block.
 - **`contentAvailability` rather than a bare flag.** An email deliberately stored without its MIME because it exceeded the
@@ -248,7 +248,7 @@ the last is worth repeating.
 
 | Field | Meaning |
 |---|---|
-| `storedEmailId`, `accountId`, `folderAlias` | Where the email is, in MailMcp's own names |
+| `storedEmailId`, `accountId`, `folderAlias` | Where the email is, in MailFathom's own names |
 | `sizeBytes` | The size of the whole email as the mail server reported it |
 | `headers` | Subject, sent and received timestamps, every participant with its header role, and the three threading identifiers |
 | `body` | The representations, or the reason there are none |
@@ -272,7 +272,7 @@ Four parts of it are worth reading before a caller writes against them:
   message export are out of scope for the first release.
 - **File names are normalized and may say so.** A file name is attacker-controlled text that reaches a model directly, so
   what is published is the domain's normalized form: a bare name, never a path or a traversal segment, never a control
-  character or a bidirectional override, at most 200 characters. `wasFileNameNormalized` states whether MailMcp had to
+  character or a bidirectional override, at most 200 characters. `wasFileNameNormalized` states whether MailFathom had to
   rewrite what the message wrote, and a part left with nothing usable is reported as unnamed rather than given an
   invented name.
 
@@ -285,7 +285,7 @@ supports.
 
 The tool holds one use case and that use case holds no mailbox port, so no branch of a content read can open an IMAP
 session. A missing local copy is answered with `55001` and a durable repair request the synchronizer acts on later,
-never with a fetch; reading mail through MailMcp therefore cannot download it and cannot set the remote `\Seen` flag.
+never with a fetch; reading mail through MailFathom therefore cannot download it and cannot set the remote `\Seen` flag.
 The `remoteFlags` a result carries are an observation from the last synchronization run, with `wasObserved` stating
 whether any run has looked.
 
@@ -306,7 +306,7 @@ how the extracts are cut, and why there is no cursor — where those are enforce
 |---|---|---|
 | `queryText` | `string` | **Required.** The text to search for, up to 512 characters. Blank is refused with `51002`, because a search with no text is a listing |
 | `accountIds` | `string[]` | Accounts to search. Omitted searches every account this deployment serves; an account it does not serve is refused with `53001` |
-| `folderAliases` | `string[]` | MailMcp folder aliases such as `INBOX`. Omitted searches every folder of the accounts in scope |
+| `folderAliases` | `string[]` | MailFathom folder aliases such as `INBOX`. Omitted searches every folder of the accounts in scope |
 | `senderAddress` | `string` | The whole address the sender must carry, in any case — not a fragment |
 | `recipientAddress` | `string` | The whole address a `To` or `Cc` recipient must carry |
 | `subjectFragment` | `string` | Text the subject must contain, case-insensitively, up to 256 characters |
@@ -341,7 +341,7 @@ Each match carries `summary`, which is the same shape `list_emails` publishes an
   so storing it or comparing it with a rank from another call compares two different scales.
 - **`snippets` are message text and are returned as data.** Each matched run is wrapped in `**` and nothing else is
   added: no interpretation, no summary, and no formatting that would let mail somebody else wrote read as instruction or
-  as one of MailMcp's own fields. A caller passing them to a model treats them as untrusted input, as it would any other
+  as one of MailFathom's own fields. A caller passing them to a model treats them as untrusted input, as it would any other
   message content.
 - **A match can carry no snippets at all.** An email that matched on its subject or a participant address carries none,
   because the summary publishes both whole, and an email with no indexed body text — encrypted mail, or mail whose
@@ -372,7 +372,7 @@ content passes before it reaches a model. The read model already applies them ag
 same reason, and a control a defective adapter could widen is not one.
 
 The character bound on a single extract is applied here as a ceiling rather than reproduced exactly. The use case counts
-the characters of the message and deliberately does not count the highlight markers, which are MailMcp's own; once those
+the characters of the message and deliberately does not count the highlight markers, which are MailFathom's own; once those
 markers are `**` they are indistinguishable from a message that writes `**` itself, so this boundary cannot repeat that
 count and does not pretend to. It cuts at a ceiling derived from that bound instead — three times it, plus the one
 character the use case's own truncation mark contributes — which is above every extract the use case can produce, since

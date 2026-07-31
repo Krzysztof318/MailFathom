@@ -2,16 +2,16 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Application.Persistence;
-using MailMcp.Infrastructure.Persistence;
+using MailFathom.Application.Persistence;
+using MailFathom.Infrastructure.Persistence;
 
-namespace MailMcp.Host.Hosting;
+namespace MailFathom.Host.Hosting;
 
 /// <summary>Refuses to start when the database is missing migrations this build was compiled against.</summary>
 /// <remarks>
 /// <para>
 /// The host verifies and never applies, in every environment including Development. Applying is owned by one mechanism
-/// — the AppHost's <c>mailmcp-migrations</c> resource locally, and a reviewed deployment step elsewhere — because an
+/// — the AppHost's <c>mailfathom-migrations</c> resource locally, and a reviewed deployment step elsewhere — because an
 /// instance that mutates schema while starting can race a second instance, can apply a destructive change nobody
 /// reviewed at deploy time, and leaves the operator no point at which to take a backup. Two mechanisms that both apply
 /// migrations would also make it impossible to say which one produced a given schema.
@@ -64,7 +64,7 @@ internal sealed partial class DatabaseSchemaStartupGate : IHostedService
         {
             throw new DatabaseSchemaOutOfDateException(
                 $"The database has not applied {pendingMigrations.Count} migration(s) this build defines: {string.Join(", ", pendingMigrations)}. "
-                + "Apply them through the AppHost's mailmcp-migrations resource locally, or as an explicit deployment step, and start the host again.",
+                + "Apply them through the AppHost's mailfathom-migrations resource locally, or as an explicit deployment step, and start the host again.",
                 pendingMigrations);
         }
 

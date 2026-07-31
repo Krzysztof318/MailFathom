@@ -3,10 +3,10 @@
 
 using System.Buffers.Text;
 using System.Text;
-using MailMcp.Host.Security;
+using MailFathom.Host.Security;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers which handler judges a presented credential when several kinds are accepted at once.</summary>
 /// <remarks>
@@ -16,15 +16,15 @@ namespace MailMcp.Host.UnitTests;
 /// </remarks>
 public sealed class McpCredentialSchemeSelectorTests
 {
-    private const string WorkforceIssuer = "https://sso.example.test/realms/mailmcp";
+    private const string WorkforceIssuer = "https://sso.example.test/realms/mailfathom";
 
-    private const string WorkforceScheme = "MailMcpOAuth:workforce";
+    private const string WorkforceScheme = "MailFathomOAuth:workforce";
 
     private const string PartnerIssuer = "https://partners.example.test";
 
-    private const string PartnerScheme = "MailMcpOAuth:partners";
+    private const string PartnerScheme = "MailFathomOAuth:partners";
 
-    private const string ApiKeyScheme = "MailMcpApiKey";
+    private const string ApiKeyScheme = "MailFathomApiKey";
 
     private const string MetadataScheme = "McpAuth";
 
