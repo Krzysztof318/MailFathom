@@ -113,6 +113,80 @@ Skills live under `.agents/skills/`. Claude Code consumes the same directory
 through the relative symlink `.claude/skills -> ../.agents/skills`; do not copy
 or maintain a second skill tree.
 
+## Review on the pull request
+
+`review-change` reviews the diff before it leaves the workspace. Two reviewers
+then comment on the pull request itself: Codex and Claude. Both post threads
+carrying a `P1`, `P2`, or `P3` severity, so one pass over the pull request's
+threads answers both rather than two passes reading two vocabularies.
+
+The Claude pass is the `Claude review` workflow. It runs by itself once, when a
+pull request whose branch is in this repository becomes reviewable: `opened`,
+`reopened`, or `ready_for_review`. A draft is skipped, because a draft is still
+being written and reviewing it spends subscription usage on a moving target. A
+later push is not reviewed either — it runs the required checks and nothing
+else, since those gate the merge while a re-review would mostly repeat findings
+the author is already answering. Two things ask for a review anyway:
+
+- a comment on the pull request containing `claude-review`, from an author with
+  write access. Adding `sonnet` to that comment selects the cheaper model;
+  `opus` is the default. The phrase is not `@claude`, which collides with GitHub
+  Copilot's own trigger;
+- the `claude-review` label, which is how a fork's pull request is reviewed at
+  all. A fork's own pushes never start a review, so a maintainer decides.
+
+The workflow reports no status check and is not in the `main` ruleset. It
+advises; nothing waits on it.
+
+### What the run is allowed to touch
+
+The branch under review is never checked out and nothing from it is executed.
+The workspace holds the base commit, which is code that already merged, and it
+is there so the reviewer can read the repository's own contract: root
+`AGENTS.md`, the recurring findings in the `review-change` skill, the
+specifications, and the ADRs, as `main` states them rather than as the branch
+would rewrite them.
+
+The change arrives as data. A collection step reads the pull request, its
+changed files with their patches, the resulting content of each changed file,
+the existing review and issue comments, and the governing issue, and writes them
+under `$RUNNER_TEMP/review` with an explicit ceiling on every one of them. What
+a ceiling drops is recorded and ends up in the review body, because a partial
+review that looks complete is worse than one that says what it did not see.
+
+Claude then runs with `Read`, `Grep`, `Glob`, and `Write` and nothing else: no
+shell, no editor, no network tool, no MCP tool, and no read access to `.git`,
+where the action leaves a token for its own use. It holds no credential it could
+use and posts nothing. It writes findings to one file, and the step after it
+validates them and submits a single review with `event: COMMENT`.
+
+That split is the point. Everything the reviewer reads about the change is
+untrusted — a diff, a comment, or an issue body can carry an instruction aimed
+at the model — and none of it reaches an authenticated API call. The prompt
+tells Claude to report such an instruction as a P1 finding rather than obey it,
+but the guarantee is structural rather than textual.
+
+Every trigger runs the workflow file from the default branch.
+`pull_request_target` and `issue_comment` both do, by definition, and there is
+deliberately no `workflow_dispatch`: a dispatch takes a ref, which would let the
+branch under review supply the job that receives the Claude credential.
+
+### What the submission step guarantees
+
+It validates each finding's anchor against the same patches the reviewer was
+given, so a line that moved cannot make GitHub reject the whole review; an
+unanchored finding moves into the review body instead of being dropped. It caps
+the review at fifteen findings, sets `start_side` alongside `start_line` for a
+ranged comment, submits with an explicit `POST`, and refuses to post at all if
+the findings contain either credential this workflow holds or anything shaped
+like one.
+
+Authentication is the `CLAUDE_CODE_OAUTH_TOKEN` repository secret, produced by
+`claude setup-token` against the owner's Claude subscription. Without it the run
+fails at the action step. `THIRD_PARTY_LICENSES.md` records exactly what the run
+sends and under whose terms, including the consumer-plan data-training setting
+that decides whether what is submitted this way trains future models.
+
 ## Instruction scope
 
 Root `AGENTS.md` and `CLAUDE.md` carry repository-wide rules. More specific
