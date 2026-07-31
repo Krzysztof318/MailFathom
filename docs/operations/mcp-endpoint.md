@@ -94,9 +94,10 @@ against a server record without learning what was searched for.
 
 ## Verifying an enabled endpoint
 
-With the endpoint enabled, the Streamable HTTP transport answers on `/mcp` and advertises two tools. Any MCP
-client that speaks Streamable HTTP can list them; `tools/list` should report `list_emails` and `get_email_content`, each
-with `readOnlyHint` true, `destructiveHint` false, `idempotentHint` true, and `openWorldHint` false.
+With the endpoint enabled, the Streamable HTTP transport answers on `/mcp` and advertises three tools. Any MCP
+client that speaks Streamable HTTP can list them; `tools/list` should report `list_emails`, `get_email_content`, and
+`search_emails`, each with `readOnlyHint` true, `destructiveHint` false, `idempotentHint` true, and `openWorldHint`
+false.
 
 A call answers from the local mailbox copy, so what it returns depends on what synchronization has stored rather than on
 whether a mail server is reachable. A deployment whose folders have never synchronized answers an empty page whose
@@ -106,3 +107,8 @@ a statement about the mailbox.
 `get_email_content` reads that same local copy: it takes a `storedEmailId` a listing returned and never fetches, so an
 email whose content is missing or damaged locally is answered with `55001` and a durable repair request rather than with
 a download. An operator reading `55001` in the log is reading a local-consistency problem, not a mail-server one.
+
+`search_emails` reads the lexical index built over that copy, so a folder that has synchronized but whose text
+extraction has not run yet answers an empty window rather than a failure — the same state `folderFreshness` is there to
+distinguish. Its `retrievalMode` reports `lexical`, and a request that asks for more than 50 ranked results is refused
+with `51003` rather than served a smaller window.

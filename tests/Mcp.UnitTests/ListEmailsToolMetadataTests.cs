@@ -141,9 +141,9 @@ public sealed class ListEmailsToolMetadataTests
         Assert.True(properties.TryGetProperty("folderFreshness", out _));
     }
 
-    /// <summary>The surface is two tools at this stage, so a third one arriving unnoticed is a change to the published contract.</summary>
+    /// <summary>The surface is the three read-only tools of this release, so a fourth arriving unnoticed is a change to the published contract.</summary>
     [Fact]
-    public void AddMailMcpServer_RegistersTheListingAndTheContentTool()
+    public void AddMailMcpServer_RegistersTheListingTheContentAndTheSearchTool()
     {
         // Arrange, Act
         var registeredNames = RegisteredMcpToolSurface
@@ -152,7 +152,9 @@ public sealed class ListEmailsToolMetadataTests
             .Order(StringComparer.Ordinal);
 
         // Assert
-        Assert.Equal([GetEmailContentTool.ToolName, ListEmailsTool.ToolName], registeredNames);
+        Assert.Equal(
+            [GetEmailContentTool.ToolName, ListEmailsTool.ToolName, SearchEmailsTool.ToolName],
+            registeredNames);
     }
 
     private static Tool AdvertisedListEmailsTool() =>
