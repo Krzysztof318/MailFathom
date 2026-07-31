@@ -53,6 +53,7 @@ internal sealed class OrchestratedMailMcpServices : IAsyncDisposable
         builder.Services.AddSingleton<IImapAccountSettingsProvider>(account);
         builder.Services.AddSingleton<IMailTransportSecurityPolicyReader>(account);
         builder.Services.AddSingleton<IMailSynchronizationWindowReader>(account);
+        builder.Services.AddSingleton<IRemotelyDeletedEmailDispositionReader>(account);
         builder.Services.AddSingleton(new MailboxSynchronizationOptions
         {
             MaxMetadataBatchSize = 50,

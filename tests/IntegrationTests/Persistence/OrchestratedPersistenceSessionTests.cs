@@ -4,6 +4,7 @@ using MailMcp.Application.EmailContent;
 using MailMcp.Application.Folders;
 using MailMcp.Application.Persistence;
 using MailMcp.Application.Synchronization;
+using MailMcp.Domain.Accounts;
 using MailMcp.Domain.Emails;
 using MailMcp.Domain.Folders;
 using MailMcp.Infrastructure.Persistence;
@@ -20,7 +21,9 @@ namespace MailMcp.IntegrationTests.Persistence;
 /// The session's contract is three claims a substitute can only restate: work that was never committed leaves nothing
 /// behind even when the provider already sent it to the server, a losing writer on a recognized unique constraint gets a
 /// result rather than an exception, and a stale <c>xmin</c> token is recognized as an optimistic conflict. All three are
-/// properties of PostgreSQL's behavior under two overlapping transactions.
+/// properties of PostgreSQL's behavior under two overlapping transactions. The middle one is proven twice, because one
+/// first binding violates a different constraint depending on whether the account it hangs from is already stored, and
+/// a single test would prove whichever of the two the suite's order happened to produce.
 /// </para>
 /// <para>
 /// Every one of them therefore uses two sessions whose lifetimes overlap, arranged so neither can see the other's
@@ -35,6 +38,9 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
 
     /// <summary>The alias the binding race binds for the first time, which no other test writes.</summary>
     private const string ContestedFolderAlias = "persistence-session-race";
+
+    /// <summary>The account the race over an account row runs under, which nothing else in the suite stores anything for.</summary>
+    private const string UnstoredAccountId = "persistence-session-unstored-account";
 
     private const uint RolledBackUid = 21;
 
@@ -102,7 +108,10 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
     /// <remarks>
     /// Two runs binding the same alias for the first time is a race to resolve, not bad data, which is why the session
     /// recognizes this one constraint by name and reports it as a result the caller loops on. The unique index is what
-    /// decides the winner, so nothing short of two real overlapping transactions can establish the behavior.
+    /// decides the winner, so nothing short of two real overlapping transactions can establish the behavior. The
+    /// account row is committed first, deliberately: the binding insert creates it when it is missing, and the two
+    /// writers would then collide on the account before either reached the alias — which is the race the test below
+    /// this one owns.
     /// </remarks>
     [Fact]
     public async Task CommitAsync_WhenAnotherWriterBoundTheSameAliasFirst_ReportsAConcurrencyConflict()
@@ -110,6 +119,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var contestedBinding = MailFolderResolution.FirstBindingOf(
             MailFolderAlias.Create(ContestedFolderAlias),
             RemoteFolderPath.Create(ContestedFolderAlias, hierarchyDelimiter: '.'));
@@ -146,6 +156,58 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
         // Assert
         Assert.Equal(PersistenceCommitResult.ConcurrencyConflict, losingCommit);
         Assert.Equal(1, await CountBindingsOfAsync(services, contestedBinding, cancellationToken));
+    }
+
+    /// <summary>Proves the same race under an account nothing has stored yet is reported as a conflict as well.</summary>
+    /// <remarks>
+    /// The first binding of an alias creates the account row it hangs from, so on an empty database the two runs
+    /// collide on the account's primary key rather than on the alias index: the account is inserted first, because the
+    /// binding references it. The account is one nothing else in the suite writes, which is what keeps this the first
+    /// binding under it however the suite is ordered.
+    /// </remarks>
+    [Fact]
+    public async Task CommitAsync_WhenAnotherWriterCreatedTheAccountRowFirst_ReportsAConcurrencyConflict()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        var unstoredAccountId = MailAccountId.Create(UnstoredAccountId);
+        var firstBinding = MailFolderResolution.FirstBindingOf(
+            MailFolderAlias.Create(FolderAlias),
+            RemoteFolderPath.Create(FolderAlias, hierarchyDelimiter: '.'));
+
+        // Act
+        var losingCommit = await services.InScopeAsync(
+            async (losingScope, token) =>
+            {
+                await using var losingSession = await losingScope
+                    .GetRequiredService<IPersistenceSessionFactory>()
+                    .BeginSessionAsync(token);
+
+                await losingScope.GetRequiredService<IMailFolderResolutionStore>().SaveResolutionAsync(
+                    losingSession,
+                    unstoredAccountId,
+                    firstBinding,
+                    token);
+
+                var winningCommit = await services.CommitAsync(
+                    (winningScope, winningSession, winningToken) => winningScope
+                        .GetRequiredService<IMailFolderResolutionStore>()
+                        .SaveResolutionAsync(
+                            winningSession,
+                            unstoredAccountId,
+                            firstBinding,
+                            winningToken),
+                    token);
+                Assert.Equal(PersistenceCommitResult.Committed, winningCommit);
+
+                return await losingSession.CommitAsync(token);
+            },
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(PersistenceCommitResult.ConcurrencyConflict, losingCommit);
+        Assert.Equal(1, await CountAccountRowsOfAsync(services, unstoredAccountId, cancellationToken));
     }
 
     /// <summary>Proves the <c>xmin</c> token detects a revision another transaction committed first.</summary>
@@ -270,6 +332,17 @@ public sealed class OrchestratedPersistenceSessionTests(MailMcpOrchestrationFixt
                     token),
             cancellationToken);
     }
+
+    private static Task<int> CountAccountRowsOfAsync(
+        OrchestratedMailMcpServices services,
+        MailAccountId accountId,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope
+                .GetRequiredService<MailMcpDbContext>()
+                .MailboxAccounts
+                .AsNoTracking()
+                .CountAsync(account => account.Id == accountId.Value, token),
+            cancellationToken);
 
     private static Task<string?> ReadSubjectAsync(
         OrchestratedMailMcpServices services,
