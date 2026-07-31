@@ -41,6 +41,10 @@ public sealed class McpEndpointOptionsBindingTests
             ["McpEndpoint:ApiKeys:1:Lifetime"] = "2027-01-31T00:00:00Z",
             ["McpEndpoint:Cors:AllowedOrigins:0"] = "https://client.example.test",
             ["McpEndpoint:Cors:AllowedOrigins:1"] = "https://console.example.test:8443",
+            ["McpEndpoint:RateLimiting:MaxConcurrentRequests"] = "12",
+            ["McpEndpoint:RateLimiting:TokenCapacity"] = "40",
+            ["McpEndpoint:RateLimiting:TokensPerReplenishmentPeriod"] = "10",
+            ["McpEndpoint:RateLimiting:ReplenishmentPeriod"] = "00:00:30",
         });
 
         // Act
@@ -56,6 +60,37 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Equal(
             ["https://client.example.test", "https://console.example.test:8443"],
             options.Cors.AllowedOrigins);
+        Assert.Equal(12, options.RateLimiting.MaxConcurrentRequests);
+        Assert.Equal(40, options.RateLimiting.TokenCapacity);
+        Assert.Equal(10, options.RateLimiting.TokensPerReplenishmentPeriod);
+        Assert.Equal(TimeSpan.FromSeconds(30), options.RateLimiting.ReplenishmentPeriod);
+        Assert.Empty(options.FindConfigurationErrors());
+    }
+
+    /// <summary>
+    /// The limits are the one part of this section with product defaults, so an operator narrowing a single value must
+    /// not silently reset the rest to zero the way a partially bound section otherwise would.
+    /// </summary>
+    [Fact]
+    public void ReadFrom_OneConfiguredLimit_LeavesTheRemainingLimitsAtTheirDefaults()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+            ["McpEndpoint:Authentication"] = "None",
+            ["McpEndpoint:RateLimiting:MaxConcurrentRequests"] = "5",
+        });
+
+        // Act
+        var options = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        var defaults = new McpRateLimitingOptions();
+        Assert.Equal(5, options.RateLimiting.MaxConcurrentRequests);
+        Assert.Equal(defaults.TokenCapacity, options.RateLimiting.TokenCapacity);
+        Assert.Equal(defaults.TokensPerReplenishmentPeriod, options.RateLimiting.TokensPerReplenishmentPeriod);
+        Assert.Equal(defaults.ReplenishmentPeriod, options.RateLimiting.ReplenishmentPeriod);
         Assert.Empty(options.FindConfigurationErrors());
     }
 
@@ -148,6 +183,9 @@ public sealed class McpEndpointOptionsBindingTests
     [InlineData("McpEndpoint:Authentication ", "None")]
     [InlineData("McpEndpoint:ApiKey", "workstation")]
     [InlineData("McpEndpoint:Cors:AllowedOrigin", "https://client.example.test")]
+    [InlineData("McpEndpoint:RateLimiting:Enabeld", "false")]
+    [InlineData("McpEndpoint:RateLimiting:MaxConcurrentRequest", "5")]
+    [InlineData("McpEndpoint:RateLimit:MaxConcurrentRequests", "5")]
     public void ReadFrom_AnUnrecognizedKey_FailsRatherThanBeingIgnored(string key, string value)
     {
         // Arrange

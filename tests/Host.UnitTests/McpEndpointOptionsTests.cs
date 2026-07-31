@@ -144,6 +144,37 @@ public sealed class McpEndpointOptionsTests
         Assert.StartsWith("McpEndpoint:Cors:AllowedOrigins", error, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void FindConfigurationErrors_AnUnusableRateLimit_IsReportedUnderTheSectionThatCarriesIt()
+    {
+        // Arrange
+        var options = EnabledWith(McpTransportAuthenticationMode.None);
+        options.RateLimiting.MaxConcurrentRequests = 0;
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith("McpEndpoint:RateLimiting:MaxConcurrentRequests", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The limits apply to an enabled endpoint whether or not an operator wrote any of them down, so a section nobody
+    /// configured has to pass validation rather than demanding numbers the product already has.
+    /// </summary>
+    [Fact]
+    public void FindConfigurationErrors_AnEndpointConfiguringNoLimits_ReportsNothing()
+    {
+        // Arrange
+        var options = EnabledWith(McpTransportAuthenticationMode.None);
+
+        // Act
+        var errors = options.FindConfigurationErrors();
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
     /// <summary>Every fault is reported together, so an operator fixing a section reads all of it rather than one restart at a time.</summary>
     [Fact]
     public void FindConfigurationErrors_SeveralFaults_ReportsThemAllAtOnce()

@@ -63,6 +63,56 @@ public sealed class McpClientCertificateValidationTests
         Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
     }
 
+    /// <summary>
+    /// The matched profile is the only identity a deployment authenticating with no API key has, and the rate limiter
+    /// reads it from this feature to keep one client application's capacity apart from another's. Nothing else carries
+    /// it: the certificate is judged before authentication runs, and <c>UseAuthentication</c> replaces the principal, so
+    /// a claim set here would be gone by the time the limiter looked.
+    /// </summary>
+    [Fact]
+    public async Task ServeWhenTheConnectionCertificateIsAccepted_AMatchedProfile_PublishesTheClientItIdentified()
+    {
+        // Arrange
+        using var authority = TestCertificates.CreateCertificateAuthority("Client Root");
+        using var clientCertificate = TestCertificates.IssueClientAuthenticationCertificate(authority, ClientDnsName);
+        var context = RequestCarrying(clientCertificate);
+
+        // Act
+        await McpClientCertificateValidation.ServeWhenTheConnectionCertificateIsAcceptedAsync(
+            context,
+            _ => Task.CompletedTask,
+            AuthenticatorTrusting(authority),
+            [RequiredProfile()]);
+
+        // Assert
+        var identity = context.Features.Get<McpClientCertificateIdentity>();
+        Assert.NotNull(identity);
+        Assert.Equal(RequiredProfile().Name, identity.ProfileName);
+    }
+
+    /// <summary>
+    /// A request served because every profile was content without a certificate identified nobody, so publishing a
+    /// client would name one the deployment never saw — and would give unauthenticated traffic a partition of its own.
+    /// </summary>
+    [Fact]
+    public async Task ServeWhenTheConnectionCertificateIsAccepted_NoCertificateAndNoProfileRequiringOne_PublishesNoClient()
+    {
+        // Arrange
+        using var authority = TestCertificates.CreateCertificateAuthority("Client Root");
+        var context = RequestCarrying(connectionCertificate: null);
+
+        // Act
+        await McpClientCertificateValidation.ServeWhenTheConnectionCertificateIsAcceptedAsync(
+            context,
+            _ => Task.CompletedTask,
+            AuthenticatorTrusting(authority),
+            [OptionalProfile()]);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        Assert.Null(context.Features.Get<McpClientCertificateIdentity>());
+    }
+
     /// <summary>The certificate a request claims in a header is not a certificate; it is a value the sender wrote.</summary>
     [Fact]
     public async Task ServeWhenTheConnectionCertificateIsAccepted_AValidCertificateOfferedInAHeader_RefusesTheRequest()
@@ -144,6 +194,13 @@ public sealed class McpClientCertificateValidationTests
         McpClientCertificateTrustProfile.Create(
             "client",
             McpClientCertificateRequirement.Required,
+            [new ConfiguredSecret { Name = "client-ca", SecretReference = "file:/run/secrets/client-ca.pem" }],
+            [ClientDnsName]);
+
+    private static McpClientCertificateTrustProfile OptionalProfile() =>
+        McpClientCertificateTrustProfile.Create(
+            "client",
+            McpClientCertificateRequirement.Optional,
             [new ConfiguredSecret { Name = "client-ca", SecretReference = "file:/run/secrets/client-ca.pem" }],
             [ClientDnsName]);
 
