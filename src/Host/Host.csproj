@@ -29,4 +29,20 @@
   <ItemGroup>
     <InternalsVisibleTo Include="MailMcp.Host.UnitTests" />
   </ItemGroup>
+
+  <!-- The native artifact is this project's publish output, so the Apache-2.0 grant and the original-author
+       attribution travel with it rather than being attached by a release step nobody runs the same way twice. -->
+  <ItemGroup>
+    <None Include="$(RepositoryRoot)/LICENSE" Link="LICENSE" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="$(RepositoryRoot)/NOTICE" Link="NOTICE" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- A missing source file makes the items above resolve to nothing and publish silently succeeds, which is the one
+       failure this has to rule out: an artifact that ships without its license is the defect, not a build that stops. -->
+  <Target Name="VerifyPublishedLicenseAndNotice" AfterTargets="Publish">
+    <Error Condition="!Exists('$(PublishDir)LICENSE')"
+           Text="The published artifact has no LICENSE. Restore the repository root LICENSE before publishing." />
+    <Error Condition="!Exists('$(PublishDir)NOTICE')"
+           Text="The published artifact has no NOTICE. Restore the repository root NOTICE before publishing." />
+  </Target>
 </Project>

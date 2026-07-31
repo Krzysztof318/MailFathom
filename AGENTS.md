@@ -29,6 +29,17 @@ None of this relaxes the rest of these instructions. Pre-release is a reason to 
 - Treat ADRs under `docs/decisions/` as required architectural context for AI agents. Before changing architecture, boundaries, configuration, persistence, provider integration, governance, security-sensitive behavior, or cross-cutting infrastructure, read the relevant ADRs and keep the change consistent with their current status and rationale.
 - Treat MailMcp as an enterprise-grade system even during early scaffolding: preserve seams for governance, auditability, privacy controls, operational hardening, compliance evidence, and future Agent Governance Toolkit (AGT) adoption without prematurely adding runtime dependencies.
 
+## The project's own license
+
+MailMcp is licensed under the Apache License, Version 2.0. That decision is recorded in four places and each one has a single job, so a change that touches licensing keeps them consistent rather than picking whichever is nearest.
+
+- The root `LICENSE` is the unmodified official Apache-2.0 text. Never edit it, never append attribution, third-party terms, or commentary to it: GitHub detects the license by matching that file against the known text, and an edit turns a detected `Apache-2.0` into `NOASSERTION`.
+- The root `NOTICE` names Krzysztof Kasprowicz as the original author, which is what Apache-2.0 section 4(d) asks a derivative distribution to preserve. It stays informational — it adds no use restriction, changes no license term, and claims nothing about contributions by other copyright holders. Third-party notice text may join the distributed bundle beside it, never inside it.
+- `Directory.Build.props` carries the machine-readable form: `PackageLicenseExpression`, the copyright, and the SPDX assembly metadata that ships in the assemblies. `src/Host` copies `LICENSE` and `NOTICE` into its publish output and fails the publish when either is missing, so a native artifact cannot ship without them.
+- `.editorconfig` holds the two-line `file_header_template` that IDE0073 enforces on every source file. Changing it rewrites every file in the repository, so treat it as a repository-wide change rather than a formatting tweak.
+
+`LICENSES.md` is none of the above. It reviews what MailMcp consumes; the rules below govern it.
+
 ## Third-party licensing
 
 - MailMcp must remain compatible with both commercial closed-source distribution and open-source publication.

@@ -10,7 +10,7 @@ trim_trailing_whitespace = true
 [*.{cs,csx,vb,vbx}]
 indent_size = 4
 tab_width = 4
-file_header_template = Copyright © 2026 Krzysztof Kasprowicz
+file_header_template = Copyright © 2026 Krzysztof Kasprowicz\nLicensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 [*.{csproj,vbproj,vcxproj,vcxproj.filters,proj,projitems,shproj,props,targets,ruleset,config,nuspec,resx,vsixmanifest,vsct,slnx,xml}]
 indent_size = 2

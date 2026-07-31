@@ -36,16 +36,16 @@ scripts/regenerate-migration.sh
 ```
 
 The script discards the existing migration, starts the orchestration if it is not already running, waits for PostgreSQL
-and for the startup migration run to settle, regenerates `Initial`, writes the copyright header into it, and drops and
-recreates the database with it applied. It reuses a running orchestration, which is what keeps a second run cheap:
-starting one rebuilds the AppHost and is the single largest cost here.
+and for the startup migration run to settle, regenerates `Initial`, writes the copyright and license header into it,
+and drops and recreates the database with it applied. It reuses a running orchestration, which is what keeps a second
+run cheap: starting one rebuilds the AppHost and is the single largest cost here.
 
 Three files appear under `src/Infrastructure/Persistence/Migrations/`: the migration, its designer file, and the model
 snapshot. All three are committed. The `.editorconfig` beside them is hand-written and is not regenerated — the script
 deletes the `.cs` files rather than the directory for exactly that reason. It relaxes the two diagnostics EF's
 generator trips and deliberately leaves `IDE0073` enforced, which is why the script runs the formatter over the
-generated migration: the copyright header is a property of every file here, and the verification loop formats only
-after a successful build that a missing header would fail.
+generated migration: the copyright and license header is a property of every file here, and the verification loop
+formats only after a successful build that a missing header would fail.
 
 ### 2. Review the result as SQL, not only as C#
 
