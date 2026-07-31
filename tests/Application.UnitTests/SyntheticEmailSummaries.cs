@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
+using MailFathom.Application.Emails;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Application.UnitTests;
+namespace MailFathom.Application.UnitTests;
 
 /// <summary>Builds the read models a mailbox listing returns, so a test states only what it is about.</summary>
 /// <remarks>

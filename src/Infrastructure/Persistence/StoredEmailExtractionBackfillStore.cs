@@ -1,19 +1,19 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
-using MailMcp.Application.Persistence;
-using MailMcp.CodeCoverage;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Persistence;
+using MailFathom.CodeCoverage;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>EF Core state for the walk that re-derives extraction over emails stored before it existed.</summary>
 [RequiresIntegrationCoverage]
-internal sealed class StoredEmailExtractionBackfillStore(MailMcpDbContext dbContext, TimeProvider timeProvider)
+internal sealed class StoredEmailExtractionBackfillStore(MailFathomDbContext dbContext, TimeProvider timeProvider)
     : IStoredEmailExtractionBackfillStore
 {
     /// <inheritdoc />

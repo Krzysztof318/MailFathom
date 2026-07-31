@@ -3,12 +3,12 @@
 
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
-using MailMcp.Domain.Transport;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.TestSupport;
+using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.TestSupport;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class MailServerCertificateValidatorTests
 {
@@ -16,7 +16,7 @@ public sealed class MailServerCertificateValidatorTests
     public void IsServerCertificateTrusted_ServerCertificateChainingToTheConfiguredAnchor_IsTrusted()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var anchor = TestCertificates.WithoutPrivateKey(authority);
         using var serverCertificate = TestCertificates.IssueServerCertificate(authority, "imap.example.test");
         using var handshakeChain = BuildHandshakeChain(serverCertificate);
@@ -37,7 +37,7 @@ public sealed class MailServerCertificateValidatorTests
     public void IsServerCertificateTrusted_NameMismatch_IsRejectedEvenThoughTheChainWouldValidate()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var anchor = TestCertificates.WithoutPrivateKey(authority);
         using var serverCertificate = TestCertificates.IssueServerCertificate(authority, "imap.example.test");
         using var handshakeChain = BuildHandshakeChain(serverCertificate);
@@ -57,7 +57,7 @@ public sealed class MailServerCertificateValidatorTests
     public void IsServerCertificateTrusted_NoCertificatePresented_IsRejected()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var anchor = TestCertificates.WithoutPrivateKey(authority);
 
         // Act
@@ -75,7 +75,7 @@ public sealed class MailServerCertificateValidatorTests
     public void IsServerCertificateTrusted_CertificateFromAnotherAuthority_IsRejected()
     {
         // Arrange
-        using var configuredAuthority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var configuredAuthority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var anchor = TestCertificates.WithoutPrivateKey(configuredAuthority);
         using var otherAuthority = TestCertificates.CreateCertificateAuthority("Some Other Root");
         using var serverCertificate = TestCertificates.IssueServerCertificate(otherAuthority, "imap.example.test");
@@ -97,9 +97,9 @@ public sealed class MailServerCertificateValidatorTests
     public void IsServerCertificateTrusted_CertificateSignedByAnIntermediateTheServerSupplied_ChainsToTheAnchor()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var anchor = TestCertificates.WithoutPrivateKey(authority);
-        using var intermediate = TestCertificates.IssueIntermediateAuthority(authority, "MailMcp Test Issuing CA");
+        using var intermediate = TestCertificates.IssueIntermediateAuthority(authority, "MailFathom Test Issuing CA");
         using var serverCertificate = TestCertificates.IssueServerCertificate(intermediate, "imap.example.test");
         using var publicIntermediate = TestCertificates.WithoutPrivateKey(intermediate);
         using var handshakeChain = BuildHandshakeChain(serverCertificate, publicIntermediate);
@@ -115,12 +115,12 @@ public sealed class MailServerCertificateValidatorTests
         Assert.True(trusted);
     }
 
-    /// <summary>An intermediate the server supplies is a path-building candidate, never a root MailMcp trusts.</summary>
+    /// <summary>An intermediate the server supplies is a path-building candidate, never a root MailFathom trusts.</summary>
     [Fact]
     public void IsServerCertificateTrusted_IntermediateOfferedAsTheOnlyRoot_GrantsItNoTrust()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var unrelatedAuthority = TestCertificates.CreateCertificateAuthority("Unrelated Root");
         using var anchor = TestCertificates.WithoutPrivateKey(unrelatedAuthority);
         using var serverCertificate = TestCertificates.IssueServerCertificate(authority, "imap.example.test");
@@ -143,7 +143,7 @@ public sealed class MailServerCertificateValidatorTests
     public void IsServerCertificateTrusted_CertificateUsableOnlyForClientAuthentication_IsRejected()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var anchor = TestCertificates.WithoutPrivateKey(authority);
         using var clientCertificate = TestCertificates.IssueClientAuthenticationCertificate(authority, "imap.example.test");
         using var handshakeChain = BuildHandshakeChain(clientCertificate);
@@ -163,7 +163,7 @@ public sealed class MailServerCertificateValidatorTests
     public void IsServerCertificateTrusted_PlatformValidationSucceeded_NeedsNoRebuild()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var anchor = TestCertificates.WithoutPrivateKey(authority);
         using var serverCertificate = TestCertificates.IssueServerCertificate(authority, "imap.example.test");
 

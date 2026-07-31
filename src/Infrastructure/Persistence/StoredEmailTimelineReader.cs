@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
-using MailMcp.CodeCoverage;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.Emails;
+using MailFathom.CodeCoverage;
+using MailFathom.Domain.Emails;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Reads bounded pages of the local mailbox timeline out of PostgreSQL.</summary>
 /// <remarks>
@@ -22,7 +22,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class StoredEmailTimelineReader(MailMcpDbContext dbContext) : IStoredEmailTimelineReader
+internal sealed class StoredEmailTimelineReader(MailFathomDbContext dbContext) : IStoredEmailTimelineReader
 {
     /// <inheritdoc />
     public async Task<IReadOnlyList<EmailSummary>> ReadPageAsync(

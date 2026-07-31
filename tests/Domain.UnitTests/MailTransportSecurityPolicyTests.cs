@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Transport;
+using MailFathom.Domain.Transport;
 using Xunit;
 
-namespace MailMcp.Domain.UnitTests;
+namespace MailFathom.Domain.UnitTests;
 
 public sealed class MailTransportSecurityPolicyTests
 {
@@ -189,7 +189,7 @@ public sealed class MailTransportSecurityPolicyTests
             allowInsecureConnection: false,
             allowClearTextAuthenticationOverUnencryptedConnection: false,
             MailServerCertificateTrust.SystemTrustStore,
-            trustedCertificateAuthorityReference: "mailmcp-imap-ca");
+            trustedCertificateAuthorityReference: "mailfathom-imap-ca");
 
         // Assert
         Assert.Equal([MailTransportSecurityViolation.TrustedCertificateAuthorityReferenceNotApplicable], violations);
@@ -234,10 +234,10 @@ public sealed class MailTransportSecurityPolicyTests
             MailConnectionSecurity.StartTlsRequired,
             authentication,
             MailServerCertificateTrust.AdditionalTrustedAuthority,
-            trustedCertificateAuthorityReference: "  mailmcp-imap-ca  ");
+            trustedCertificateAuthorityReference: "  mailfathom-imap-ca  ");
 
         // Assert
-        Assert.Equal("mailmcp-imap-ca", policy.TrustedCertificateAuthorityReference);
+        Assert.Equal("mailfathom-imap-ca", policy.TrustedCertificateAuthorityReference);
     }
 
     [Fact]

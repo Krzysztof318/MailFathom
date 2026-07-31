@@ -5,7 +5,7 @@ using OpenTelemetry;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
 
-namespace MailMcp.Host.Observability;
+namespace MailFathom.Host.Observability;
 
 /// <summary>
 /// Reports the lifetime of the host process through a logging pipeline that exists before the dependency-injection
@@ -34,7 +34,7 @@ namespace MailMcp.Host.Observability;
 /// </remarks>
 internal sealed partial class BootstrapLogger : IDisposable
 {
-    private const string LogCategory = "MailMcp.Host.Startup";
+    private const string LogCategory = "MailFathom.Host.Startup";
 
     private readonly ILoggerFactory loggerFactory;
     private readonly ILogger logger;

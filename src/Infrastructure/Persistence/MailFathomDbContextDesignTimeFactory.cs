@@ -4,7 +4,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Creates a context for <c>dotnet ef</c> without starting the host.</summary>
 /// <remarks>
@@ -21,22 +21,22 @@ namespace MailMcp.Infrastructure.Persistence;
 /// <see cref="OrchestratedConnectionStringVariableName" />; the two fallbacks below exist for a command run outside it.
 /// </para>
 /// </remarks>
-internal sealed class MailMcpDbContextDesignTimeFactory : IDesignTimeDbContextFactory<MailMcpDbContext>
+internal sealed class MailFathomDbContextDesignTimeFactory : IDesignTimeDbContextFactory<MailFathomDbContext>
 {
     /// <summary>The environment variable the Aspire orchestration issues the database connection string through.</summary>
     /// <remarks>
-    /// It is the double-underscore encoding of <c>ConnectionStrings:mailmcp</c>, the key every referencing resource
+    /// It is the double-underscore encoding of <c>ConnectionStrings:mailfathom</c>, the key every referencing resource
     /// receives, so the migration resource and the running host address the same server by construction rather than by
     /// a value copied into two places.
     /// </remarks>
-    internal const string OrchestratedConnectionStringVariableName = "ConnectionStrings__mailmcp";
+    internal const string OrchestratedConnectionStringVariableName = "ConnectionStrings__mailfathom";
 
     /// <summary>The environment variable a design-time command run outside the orchestration reads instead.</summary>
-    internal const string DesignTimeConnectionStringVariableName = "MAILMCP_DESIGN_TIME_CONNECTION_STRING";
+    internal const string DesignTimeConnectionStringVariableName = "MAILFATHOM_DESIGN_TIME_CONNECTION_STRING";
 
     /// <summary>The local development database assumed when neither variable is set.</summary>
     /// <remarks>It carries no password, so a design-time default can never become a credential in source control.</remarks>
-    internal const string LocalDevelopmentConnectionString = "Host=localhost;Database=mailmcp;Username=mailmcp";
+    internal const string LocalDevelopmentConnectionString = "Host=localhost;Database=mailfathom;Username=mailfathom";
 
     /// <summary>The environment variable the text search configuration a migration is generated for is read from.</summary>
     /// <remarks>
@@ -47,7 +47,7 @@ internal sealed class MailMcpDbContextDesignTimeFactory : IDesignTimeDbContextFa
     internal const string TextSearchConfigurationVariableName = "Persistence__TextSearchConfiguration";
 
     /// <inheritdoc />
-    public MailMcpDbContext CreateDbContext(string[] args) => new(
+    public MailFathomDbContext CreateDbContext(string[] args) => new(
         BuildOptions(
             Environment.GetEnvironmentVariable(OrchestratedConnectionStringVariableName),
             Environment.GetEnvironmentVariable(DesignTimeConnectionStringVariableName)),
@@ -56,7 +56,7 @@ internal sealed class MailMcpDbContextDesignTimeFactory : IDesignTimeDbContextFa
     /// <summary>Resolves the text search configuration the generated migration compiles into the search vector.</summary>
     /// <param name="configuredName">The configured name, or <see langword="null" /> when the variable is unset.</param>
     /// <returns>The configured configuration, or the default when none is set.</returns>
-    /// <exception cref="ArgumentException">Thrown when a name is set but is not one MailMcp supports.</exception>
+    /// <exception cref="ArgumentException">Thrown when a name is set but is not one MailFathom supports.</exception>
     /// <remarks>
     /// The value is compiled into a stored generated column, so a migration is generated for exactly one configuration
     /// and cannot serve another. Reading it here is what lets a deployment that configures one produce a migration
@@ -76,7 +76,7 @@ internal sealed class MailMcpDbContextDesignTimeFactory : IDesignTimeDbContextFa
     /// The orchestrated value wins so that a stale override left in a shell cannot silently point a migration at a
     /// different database than the one the resource being migrated is running against.
     /// </remarks>
-    internal static DbContextOptions<MailMcpDbContext> BuildOptions(
+    internal static DbContextOptions<MailFathomDbContext> BuildOptions(
         string? orchestratedConnectionString,
         string? designTimeConnectionString)
     {
@@ -84,7 +84,7 @@ internal sealed class MailMcpDbContextDesignTimeFactory : IDesignTimeDbContextFa
             .FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate))
             ?? LocalDevelopmentConnectionString;
 
-        return new DbContextOptionsBuilder<MailMcpDbContext>()
+        return new DbContextOptionsBuilder<MailFathomDbContext>()
             .UseNpgsql(connectionString)
             .Options;
     }

@@ -10,7 +10,7 @@ set -euo pipefail
 
 app_host_project='src/AppHost/AppHost.csproj'
 postgres_resource='postgres'
-database_name='mailmcp'
+database_name='mailfathom'
 
 if ! repository_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
   printf 'dump-local-schema.sh must run inside a Git worktree.\n' >&2

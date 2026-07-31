@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Application.Persistence;
+namespace MailFathom.Application.Persistence;
 
 /// <summary>Indicates that a local write did not commit because another writer changed the same durable state.</summary>
 /// <remarks>
@@ -18,7 +18,7 @@ namespace MailMcp.Application.Persistence;
 /// decide what a conflict means catch it at a named boundary; everything in between propagates it unchanged.
 /// </para>
 /// </remarks>
-public sealed class PersistenceConcurrencyConflictException : MailMcpException
+public sealed class PersistenceConcurrencyConflictException : MailFathomException
 {
     /// <summary>Initializes a new persistence concurrency conflict with a message that names the conflicting write.</summary>
     /// <param name="operatorSafeMessage">A message free of provider details, tracked values, and personal data.</param>
@@ -28,5 +28,5 @@ public sealed class PersistenceConcurrencyConflictException : MailMcpException
     }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.PersistenceConcurrencyConflict;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.PersistenceConcurrencyConflict;
 }

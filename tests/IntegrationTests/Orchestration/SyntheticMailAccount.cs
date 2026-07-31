@@ -2,17 +2,17 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.AppHost;
-using MailMcp.Application.Mail;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Synchronization;
-using MailMcp.Domain.Transport;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.AppHost;
+using MailFathom.Application.Mail;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Synchronization;
+using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Secrets;
 
-namespace MailMcp.IntegrationTests.Orchestration;
+namespace MailFathom.IntegrationTests.Orchestration;
 
 /// <summary>The one throwaway mailbox the orchestrated mail server serves, as the adapter's two ports see it.</summary>
 /// <remarks>
@@ -23,7 +23,7 @@ namespace MailMcp.IntegrationTests.Orchestration;
 /// than reaching into another assembly's internals for them.
 /// </para>
 /// <para>
-/// The policy is the weakest one MailMcp will build, and deliberately: the server speaks plain IMAP on a container port
+/// The policy is the weakest one MailFathom will build, and deliberately: the server speaks plain IMAP on a container port
 /// and offers no SASL mechanism, so reaching it requires the unencrypted-connection opt-in and the clear-text
 /// authentication opt-in together. That combination is exactly what a test of the clear-text fallback needs to
 /// exercise, and it is confined to a container that lives for one run.

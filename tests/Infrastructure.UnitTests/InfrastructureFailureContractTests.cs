@@ -1,27 +1,27 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Resilience;
-using MailMcp.Domain.Failures;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Resilience;
-using MailMcp.TestSupport;
+using MailFathom.Application.Resilience;
+using MailFathom.Domain.Failures;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Resilience;
+using MailFathom.TestSupport;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Covers the failure contract the infrastructure boundary raises.</summary>
 public sealed class InfrastructureFailureContractTests
 {
     /// <summary>A failure outside the hierarchy carries no code a boundary can report and obeys no stated message contract.</summary>
     [Fact]
-    public void InfrastructureAssembly_EveryDeclaredException_DerivesFromMailMcpException()
+    public void InfrastructureAssembly_EveryDeclaredException_DerivesFromMailFathomException()
     {
         // Arrange
         var infrastructureAssembly = typeof(OutboundDependencyUnavailableException).Assembly;
 
         // Act, Assert
-        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(infrastructureAssembly, typeof(MailMcpException));
+        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(infrastructureAssembly, typeof(MailFathomException));
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public sealed class InfrastructureFailureContractTests
         var failure = new OutboundDependencyUnavailableException(OutboundDependency.MailboxDataRetrieval, rejection);
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.OutboundDependencyUnavailable, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.OutboundDependencyUnavailable, failure.ErrorCode);
         Assert.Equal(OutboundDependency.MailboxDataRetrieval, failure.Dependency);
         Assert.Same(rejection, failure.InnerException);
     }
@@ -62,7 +62,7 @@ public sealed class InfrastructureFailureContractTests
         var failure = new MailAuthenticationMechanismUnavailableException("primary", ["SCRAM-SHA-256"]);
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailAuthenticationMechanismUnavailable, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailAuthenticationMechanismUnavailable, failure.ErrorCode);
         Assert.Equal("primary", failure.AccountId);
         Assert.Equal(["SCRAM-SHA-256"], failure.PermittedMechanismNames);
     }

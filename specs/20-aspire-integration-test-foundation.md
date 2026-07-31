@@ -17,21 +17,21 @@ Integration tests drive the existing `AppHost` through `DistributedApplicationTe
 
 The test project targets xUnit v3 on Microsoft Testing Platform v2, matching the rest of the repository rather than the xUnit v2 examples in the upstream Aspire documentation. It lives at `tests/IntegrationTests/`, named for what it is rather than after a production boundary, because it verifies how the boundaries behave together. It is excluded from the unit-test conventions that forbid network, container, and database access, since those conventions govern unit tests specifically.
 
-The app model gains a second topology rather than a second app host. Started with the argument `IntegrationTesting=true`, it names its container and volume with a shared `mailmcp-integrationtests` prefix instead of taking Aspire's random postfix and the path-derived volume name, so that a run killed rather than shut down leaves resources one filtered command removes; and it marks the MailMcp host project `WithExplicitStart`, so the resource stays in the model — the migration resource is defined on it and the connection string is issued to it — without a second MailMcp synchronizing mail underneath the data a test is asserting on.
+The app model gains a second topology rather than a second app host. Started with the argument `IntegrationTesting=true`, it names its container and volume with a shared `mailfathom-integrationtests` prefix instead of taking Aspire's random postfix and the path-derived volume name, so that a run killed rather than shut down leaves resources one filtered command removes; and it marks the MailFathom host project `WithExplicitStart`, so the resource stays in the model — the migration resource is defined on it and the connection string is issued to it — without a second MailFathom synchronizing mail underneath the data a test is asserting on.
 
-The suite runs on request and nowhere else. `IsTestingPlatformApplication` is `false` for the project, which is what a solution-wide `dotnet test` uses to discover test projects, so neither the fast loop nor the coverage gate finds it and neither can absorb its coverage; the project stays in `MailMcp.slnx`, so build, analyzers, and formatting still cover it. `scripts/run-integration-tests.sh` is what starts it, and the GitHub workflow is manual dispatch only.
+The suite runs on request and nowhere else. `IsTestingPlatformApplication` is `false` for the project, which is what a solution-wide `dotnet test` uses to discover test projects, so neither the fast loop nor the coverage gate finds it and neither can absorb its coverage; the project stays in `MailFathom.slnx`, so build, analyzers, and formatting still cover it. `scripts/run-integration-tests.sh` is what starts it, and the GitHub workflow is manual dispatch only.
 
 ## Approved scope
 
 The harness and nothing written with it:
 
-- The app model's second topology, selected by argument, with ephemeral prefixed container and volume names and the MailMcp host project left unstarted.
+- The app model's second topology, selected by argument, with ephemeral prefixed container and volume names and the MailFathom host project left unstarted.
 - The `tests/IntegrationTests` project and the assembly-scoped orchestration fixture every test draws its database from.
 - The exclusion from the unit-test gate, the run script, and the manually dispatched workflow.
 - The suite's own coverage report over the classes marked `[RequiresIntegrationCoverage]`, enforcing nothing.
 - One test proving the harness reaches a real migrated database through the production registration path, which is what makes the fixture's contract real rather than asserted.
 
-Whether the composed host itself is started under test is deliberately left open. The foundation keeps it unstarted, because a running MailMcp synchronizes mail underneath whatever a test is asserting on, and the host-level assertions above are reachable through the classes the host composes. Turning it on is a later decision with a stated reason, not a default.
+Whether the composed host itself is started under test is deliberately left open. The foundation keeps it unstarted, because a running MailFathom synchronizes mail underneath whatever a test is asserting on, and the host-level assertions above are reachable through the classes the host composes. Turning it on is a later decision with a stated reason, not a default.
 
 The lifetime of the distributed application is shared across the suite rather than per test, with each test isolating itself through its own data rather than its own container, because starting the application per test would make the suite unusably slow.
 
@@ -61,7 +61,7 @@ None of these is a condition of this specification being done. The harness is wh
 
 ## Out of scope
 
-IMAP protocol verification, which specification 21 owns. SMTP verification with smtp4dev, which draft section 21.3 defers to the SMTP stage: MailMcp has no SMTP delivery path yet, so adding the image now would pin, license-review, and orchestrate a dependency with nothing to send to it. Load and performance testing.
+IMAP protocol verification, which specification 21 owns. SMTP verification with smtp4dev, which draft section 21.3 defers to the SMTP stage: MailFathom has no SMTP delivery path yet, so adding the image now would pin, license-review, and orchestrate a dependency with nothing to send to it. Load and performance testing.
 
 Polly's chaos strategies, raised as a follow-up to specification 03 on issue #54, are also out. They inject failure into a resilience pipeline that already has unit coverage of its composition; what they would add is proof that an adapter survives a misbehaving dependency, which is worth doing once the adapters are under integration coverage at all. They belong to that later work, not to the foundation.
 

@@ -4,7 +4,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>Configures what one read of a message body may return.</summary>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]

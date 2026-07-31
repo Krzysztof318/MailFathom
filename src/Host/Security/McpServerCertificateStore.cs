@@ -6,11 +6,11 @@ using System.Diagnostics.CodeAnalysis;
 using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Certificates;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Certificates;
 using Microsoft.Extensions.Options;
 
-namespace MailMcp.Host.Security;
+namespace MailFathom.Host.Security;
 
 /// <summary>Holds the TLS identity of every configured HTTPS profile, and answers which one a handshake gets.</summary>
 /// <remarks>

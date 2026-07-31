@@ -10,6 +10,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="MailMcp.Mcp.UnitTests" />
+    <InternalsVisibleTo Include="MailFathom.Mcp.UnitTests" />
   </ItemGroup>
 </Project>

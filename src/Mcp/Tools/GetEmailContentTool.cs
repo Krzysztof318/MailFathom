@@ -3,13 +3,13 @@
 
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Emails.GetEmailContent;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Failures;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.GetEmailContent;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
 using ModelContextProtocol.Server;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes the <c>get_email_content</c> tool over the <see cref="EmailContentReader" /> use case.</summary>
 /// <param name="emailContentReader">Reads one email from the local mailbox copy.</param>
@@ -26,7 +26,7 @@ namespace MailMcp.Mcp.Tools;
 /// answered with a stable code and a durable repair request instead of a fetch.
 /// </para>
 /// <para>
-/// This is the most sensitive tool MailMcp publishes, since its result is message content in full. Nothing here writes
+/// This is the most sensitive tool MailFathom publishes, since its result is message content in full. Nothing here writes
 /// any part of a result to a log, and the failures it raises name neither the content nor the text the caller supplied.
 /// </para>
 /// </remarks>
@@ -52,7 +52,7 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
     /// <param name="cancellationToken">Cancels the read when the caller disconnects or the host shuts down.</param>
     /// <returns>The email's headers, body, attachment metadata, and remote flag snapshot.</returns>
     /// <exception cref="StoredEmailIdentifierMalformedException">Thrown when the identifier is not one this system issues, before anything is read.</exception>
-    /// <exception cref="MailMcpException">
+    /// <exception cref="MailFathomException">
     /// Raised by the use case for an email it does not hold or whose local copy it cannot serve. The call-tool filter
     /// turns every one of them into the coded result a client reads, so this tool neither catches nor re-describes any.
     /// </exception>
@@ -65,7 +65,7 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
         OpenWorld = false,
         UseStructuredContent = true)]
     [Description(
-        "Reads one email already synchronized into MailMcp's local mailbox copy: its normalized headers, the plain-text "
+        "Reads one email already synchronized into MailFathom's local mailbox copy: its normalized headers, the plain-text "
         + "body, optionally a sanitized HTML body, and a description of each attachment. Reads the local copy only: it "
         + "never contacts a mail server, never downloads mail, and never marks mail as read. Bodies are bounded and say "
         + "so when they were cut, and attachment content is never returned in any form. Name the email by the "

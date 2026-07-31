@@ -3,7 +3,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-namespace MailMcp.Infrastructure.Secrets;
+namespace MailFathom.Infrastructure.Secrets;
 
 /// <summary>A parsed <c>&lt;scheme&gt;:&lt;target&gt;</c> secret reference.</summary>
 /// <remarks>

@@ -1,13 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Transport;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Transport;
 using NSubstitute;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Observes how many mailbox work units a synchronization bound keeps in flight at once.</summary>
 /// <remarks>

@@ -3,10 +3,10 @@
 
 using System.Security.Cryptography;
 using System.Text;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets;
 using Microsoft.Extensions.Logging;
 
-namespace MailMcp.Infrastructure.Security;
+namespace MailFathom.Infrastructure.Security;
 
 /// <summary>Judges the credential an MCP request presented against the API keys a deployment configured.</summary>
 /// <remarks>

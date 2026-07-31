@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>States whether a message's MIME could be read, and what stopped the reader when it could not.</summary>
 public enum EmailMimeExtractionOutcome

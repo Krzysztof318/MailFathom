@@ -3,7 +3,7 @@
 
 using System.Security.Cryptography;
 
-namespace MailMcp.Application.Synchronization;
+namespace MailFathom.Application.Synchronization;
 
 /// <summary>Decides how long one account waits before its next synchronization run.</summary>
 /// <remarks>

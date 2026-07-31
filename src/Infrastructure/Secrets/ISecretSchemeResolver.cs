@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Infrastructure.Secrets;
+namespace MailFathom.Infrastructure.Secrets;
 
 /// <summary>Retrieves material for the one scheme an adapter serves.</summary>
 /// <remarks>
@@ -16,7 +16,7 @@ namespace MailMcp.Infrastructure.Secrets;
 /// selection, SDK client lifetime, platform identity, and any caching policy. The contract exposes none of them, so a
 /// store that must cache aggressively and a local file that must never cache coexist without it taking a position. A
 /// managed store must authenticate through platform-issued identity — a managed identity, a ServiceAccount token, a
-/// Vault role — because requiring MailMcp to hold a credential in order to fetch its credentials would be circular.
+/// Vault role — because requiring MailFathom to hold a credential in order to fetch its credentials would be circular.
 /// </para>
 /// </remarks>
 public interface ISecretSchemeResolver

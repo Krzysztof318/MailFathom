@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Writes what synchronization learned about one message onto its persistence row.</summary>
 /// <remarks>

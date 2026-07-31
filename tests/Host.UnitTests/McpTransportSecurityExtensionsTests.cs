@@ -1,8 +1,8 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Host.Configuration;
-using MailMcp.Host.Security;
+using MailFathom.Host.Configuration;
+using MailFathom.Host.Security;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors.Infrastructure;
@@ -12,7 +12,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers the decisions composition makes about the transport an MCP request arrives on.</summary>
 /// <remarks>
@@ -98,7 +98,7 @@ public sealed class McpTransportSecurityExtensionsTests
 
         return new MessageReceivedContext(
             request,
-            new AuthenticationScheme("MailMcpOAuth:workforce", displayName: null, typeof(JwtBearerHandler)),
+            new AuthenticationScheme("MailFathomOAuth:workforce", displayName: null, typeof(JwtBearerHandler)),
             new JwtBearerOptions());
     }
 }

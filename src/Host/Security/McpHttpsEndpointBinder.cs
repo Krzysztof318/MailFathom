@@ -4,11 +4,11 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Security;
 using System.Security.Authentication;
-using MailMcp.Host.Configuration;
+using MailFathom.Host.Configuration;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 
-namespace MailMcp.Host.Security;
+namespace MailFathom.Host.Security;
 
 /// <summary>Binds the configured HTTPS profiles onto Kestrel listeners.</summary>
 /// <remarks>

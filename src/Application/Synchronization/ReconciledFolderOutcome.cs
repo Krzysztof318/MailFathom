@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Emails;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Application.Synchronization;
+namespace MailFathom.Application.Synchronization;
 
 /// <summary>Pairs one locally stored email with the flags the server reported for it.</summary>
 /// <param name="StoredEmailId">The local identity to write the snapshot onto.</param>

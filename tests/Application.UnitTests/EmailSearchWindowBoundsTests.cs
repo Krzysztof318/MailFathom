@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
+using MailFathom.Application.Emails;
 using Xunit;
 
-namespace MailMcp.Application.UnitTests;
+namespace MailFathom.Application.UnitTests;
 
 /// <summary>Covers the two bounds that decide how much a search may return: the window and the snippets inside it.</summary>
 public sealed class EmailSearchWindowBoundsTests

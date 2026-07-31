@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Emails;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Application.Emails.GetEmailContent;
+namespace MailFathom.Application.Emails.GetEmailContent;
 
 /// <summary>What a caller asks for when reading one email from the local mailbox copy.</summary>
 /// <param name="StoredEmailId">The stable local identity a listing returned for the email.</param>

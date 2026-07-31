@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Reflection;
-using MailMcp.CodeCoverage;
+using MailFathom.CodeCoverage;
 using Xunit;
 
-namespace MailMcp.SharedSources.UnitTests;
+namespace MailFathom.SharedSources.UnitTests;
 
 /// <summary>Keeps the integration-coverage marker aligned with the coverage collector that reads it.</summary>
 public sealed class RequiresIntegrationCoverageAttributeTests

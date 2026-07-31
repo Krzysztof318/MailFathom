@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>The failure raised when a continuation cursor is not one this system issued.</summary>
 /// <remarks>
@@ -18,7 +18,7 @@ namespace MailMcp.Application.Emails;
 /// echoing it would put an unbounded, unvalidated string into a log for no diagnostic gain.
 /// </para>
 /// </remarks>
-public sealed class MailboxQueryCursorMalformedException : MailMcpException
+public sealed class MailboxQueryCursorMalformedException : MailFathomException
 {
     /// <summary>Initializes the failure for one unreadable cursor.</summary>
     public MailboxQueryCursorMalformedException()
@@ -27,5 +27,5 @@ public sealed class MailboxQueryCursorMalformedException : MailMcpException
     }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.MailboxQueryCursorMalformed;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.MailboxQueryCursorMalformed;
 }

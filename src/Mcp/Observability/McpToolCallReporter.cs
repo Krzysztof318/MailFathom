@@ -3,14 +3,14 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
-using MailMcp.Domain.Failures;
-using MailMcp.Mcp.Failures;
+using MailFathom.Domain.Failures;
+using MailFathom.Mcp.Failures;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
-namespace MailMcp.Mcp.Observability;
+namespace MailFathom.Mcp.Observability;
 
 /// <summary>Records how every tool call ended and keeps undiagnosed failures inside the server.</summary>
 /// <param name="timeProvider">Measures how long a call took.</param>
@@ -23,7 +23,7 @@ namespace MailMcp.Mcp.Observability;
 /// </para>
 /// <para>
 /// The second is that nothing undiagnosed reaches a client, and this is the one place that decides it. A
-/// <see cref="MailMcpException" /> whose code belongs to the MCP-boundary category is a refusal a caller caused and can
+/// <see cref="MailFathomException" /> whose code belongs to the MCP-boundary category is a refusal a caller caused and can
 /// act on, so its own code and message are published; the rule is the category rather than a list of exception types,
 /// which is what stops a failure added later from reaching a client because nobody extended a list. Every other
 /// exception — a failure from another category, or one thrown before a tool was even reached, such as a dependency that
@@ -91,7 +91,7 @@ internal sealed partial class McpToolCallReporter(TimeProvider timeProvider, ILo
 
             throw;
         }
-        catch (MailMcpException expectedFailure) when (McpToolFailure.CanDescribeToClient(expectedFailure))
+        catch (MailFathomException expectedFailure) when (McpToolFailure.CanDescribeToClient(expectedFailure))
         {
             // A use case raised this, so the code and the client-safe wording are already decided and no tool has to
             // repeat the mapping. Which failure it was is logged here rather than by the tool, because the tool did not
@@ -108,7 +108,7 @@ internal sealed partial class McpToolCallReporter(TimeProvider timeProvider, ILo
 
             return ErrorResult(
                 McpToolFailure.Describe(
-                    MailMcpErrorCode.McpToolFailedUnexpectedly,
+                    MailFathomErrorCode.McpToolFailedUnexpectedly,
                     "The request could not be completed. The failure was recorded on the server."));
         }
     }
@@ -116,7 +116,7 @@ internal sealed partial class McpToolCallReporter(TimeProvider timeProvider, ILo
     /// <summary>Reduces the tool name a caller sent to something safe to keep in a log.</summary>
     /// <remarks>
     /// The name reaches this filter before anything has established that a tool by that name exists, so on an unknown
-    /// tool it is unvalidated caller input on its way into retained structured logs. Anything outside the shape a MailMcp
+    /// tool it is unvalidated caller input on its way into retained structured logs. Anything outside the shape a MailFathom
     /// tool name is spelled with is therefore recorded as one fixed placeholder, which keeps arbitrary text, control
     /// characters, and unbounded length out of the log without needing the registry to answer first.
     /// </remarks>

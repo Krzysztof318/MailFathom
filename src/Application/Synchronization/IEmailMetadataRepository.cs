@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
-using MailMcp.Application.Persistence;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Persistence;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Application.Synchronization;
+namespace MailFathom.Application.Synchronization;
 
 /// <summary>Persists email metadata independently from raw MIME content.</summary>
 /// <remarks>
@@ -13,7 +13,7 @@ namespace MailMcp.Application.Synchronization;
 /// contract
 /// <see href="../../../docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
 /// chose over a generic repository or an exposed <c>IQueryable</c>. It also has no published
-/// contract to restate: EF Core's query surface is a concrete <c>DbContext</c>, and MailMcp allows no fake provider to
+/// contract to restate: EF Core's query surface is a concrete <c>DbContext</c>, and MailFathom allows no fake provider to
 /// stand in for PostgreSQL semantics, so the upsert is expressed in domain terms and asserted through this port.
 /// </remarks>
 public interface IEmailMetadataRepository

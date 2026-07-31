@@ -2,12 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Application.Persistence;
-using MailMcp.Infrastructure.Persistence;
+using MailFathom.Application.Persistence;
+using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class EfCorePersistenceSessionTests
 {
@@ -117,7 +117,7 @@ public sealed class EfCorePersistenceSessionTests
 
     private sealed class TestPersistenceSessionResources : IEfCorePersistenceSessionResources
     {
-        public MailMcpDbContext DbContext => throw new NotSupportedException();
+        public MailFathomDbContext DbContext => throw new NotSupportedException();
 
         public Exception? SaveChangesException { get; init; }
 

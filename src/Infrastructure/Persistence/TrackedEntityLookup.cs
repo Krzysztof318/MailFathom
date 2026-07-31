@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Linq.Expressions;
-using MailMcp.CodeCoverage;
+using MailFathom.CodeCoverage;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Finds a single entity among both the session's pending inserts and the rows already in the database.</summary>
 /// <remarks>

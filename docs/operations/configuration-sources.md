@@ -1,6 +1,6 @@
 # Configuration sources
 
-MailMcp reads its settings through the ordinary .NET configuration pipeline, plus one addition: a deployment may name a directory or a file of JSON configuration that it provisioned outside the application's own content root. That addition is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see.
+MailFathom reads its settings through the ordinary .NET configuration pipeline, plus one addition: a deployment may name a directory or a file of JSON configuration that it provisioned outside the application's own content root. That addition is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see.
 
 Secrets are a separate contract and stay one. A secret-bearing setting holds a reference rather than material, whichever source the setting itself arrived from; [secret provisioning](secret-provisioning.md) is that contract, and the [Kubernetes mapping](#kubernetes) below states how the two meet.
 
@@ -31,9 +31,9 @@ Two keys, both unset by default. A deployment that names neither keeps exactly t
 | `ConfigurationSources:Directory` | `ConfigurationSources__Directory` | A directory whose `*.json` files are layered in |
 | `ConfigurationSources:File` | `ConfigurationSources__File` | One JSON file layered above that directory |
 
-They are read from configuration rather than from the environment directly, so the same setting arrives as an environment variable in a container, as `--ConfigurationSources:Directory=/etc/mailmcp/config` under systemd, and from `appsettings.json` during local development, without a second mechanism per deployment shape. A blank value reads as unset, because templating a manifest routinely emits an empty string for a setting the operator left alone.
+They are read from configuration rather than from the environment directly, so the same setting arrives as an environment variable in a container, as `--ConfigurationSources:Directory=/etc/mailfathom/config` under systemd, and from `appsettings.json` during local development, without a second mechanism per deployment shape. A blank value reads as unset, because templating a manifest routinely emits an empty string for a setting the operator left alone.
 
-The section takes those two settings and nothing else. A third one — a misspelled `Directroy`, a key from an older draft — fails startup naming it, for the same reason every other security-sensitive section in MailMcp is bound strictly: a setting that bound nothing would leave the host running on defaults while the operator believed their mount was in force.
+The section takes those two settings and nothing else. A third one — a misspelled `Directroy`, a key from an older draft — fails startup naming it, for the same reason every other security-sensitive section in MailFathom is bound strictly: a setting that bound nothing would leave the host running on defaults while the operator believed their mount was in force.
 
 Both settings are **restart-required**. They decide which sources exist, which is settled while the host is being composed, so repointing `ConfigurationSources:Directory` at a different mount takes effect on the next start. What the named sources *contain* is a different question, and the answer is below.
 
@@ -51,13 +51,13 @@ An existing but empty directory is permitted and contributes nothing. A ConfigMa
 A configured path that does not exist fails startup, naming the configuration key and the path:
 
 ```
-The configuration directory named by ConfigurationSources:Directory does not exist: /etc/mailmcp/config.
+The configuration directory named by ConfigurationSources:Directory does not exist: /etc/mailfathom/config.
 ```
 
 So does a setting the section does not define:
 
 ```
-ConfigurationSources carries settings MailMcp does not define: Directroy. The section defines Directory and File.
+ConfigurationSources carries settings MailFathom does not define: Directroy. The section defines Directory and File.
 ```
 
 Both are deliberate and are the point of the feature. A host that ignored an absent mount or a misspelled key would report success while serving configuration nobody wrote, and the divergence would only surface later, through behavior. Both carry error code `12001` and end the process through the bootstrap logging pipeline described in [host startup telemetry](host-startup-telemetry.md).
@@ -65,7 +65,7 @@ Both are deliberate and are the point of the feature. A host that ignored an abs
 Every start records how many provisioned files were layered in, at `Information`:
 
 ```
-Host MailMcp.Host layered 3 deployment-provisioned configuration files below the environment.
+Host MailFathom.Host layered 3 deployment-provisioned configuration files below the environment.
 ```
 
 A `0` on a deployment that mounts a ConfigMap means the mount is empty or did not arrive where the key says it did.
@@ -76,7 +76,7 @@ What reloads is the **content of the files that existed when the host started**.
 
 **Adding or removing a ConfigMap key is restart-required.** The directory is enumerated once, while the host is composing itself, and each file found becomes its own provider; nothing watches the directory for membership. A key added to a mounted ConfigMap therefore produces a file no provider reads, and a key removed empties its provider rather than removing the layer. Restart the pod after changing which keys a ConfigMap holds. Editing the value inside a key that already existed needs no restart.
 
-Two caveats decide whether even a content change actually arrives, and neither is MailMcp's to fix:
+Two caveats decide whether even a content change actually arrives, and neither is MailFathom's to fix:
 
 - **A `subPath` mount never updates.** The kubelet updates a mounted ConfigMap by swapping the volume's `..data` link, and a `subPath` mount bypasses that entirely — the file the container sees is the one that existed when the pod started. Mount the whole volume and use `ConfigurationSources:Directory` when reload matters; use `subPath` only where a restart on change is acceptable and say so in the deployment.
 - **Change detection on a mounted volume needs polling.** `FileSystemWatcher` does not reliably observe the symbolic-link swap that an atomic update performs. Setting `DOTNET_USE_POLLING_FILE_WATCHER=1` makes the file provider poll every four seconds instead; the interval is not configurable. Microsoft documents this for container and network-share mounts generally, not only for Kubernetes.
@@ -89,7 +89,7 @@ Nothing here needs a Kubernetes-specific scheme or provider. A mounted ConfigMap
 
 ### Which construct carries what
 
-| MailMcp input | Kubernetes construct | How MailMcp reads it |
+| MailFathom input | Kubernetes construct | How MailFathom reads it |
 | --- | --- | --- |
 | Non-secret settings, in bulk | ConfigMap mounted as a volume | `ConfigurationSources:Directory` |
 | Non-secret settings, one file | ConfigMap mounted with `subPath` | `ConfigurationSources:File`, without reload |
@@ -98,7 +98,7 @@ Nothing here needs a Kubernetes-specific scheme or provider. A mounted ConfigMap
 | Credential material, without a volume | Secret key in the environment block | `env:…`, subject to the caveats below |
 | Material from an external store | Secrets Store CSI driver | `file:/…`, because the driver mounts files |
 
-A Secret needs no MailMcp support beyond what already exists: `FileSecretReferenceResolver` performs exactly the read a `kubernetes-secret:` scheme would, which is why no such scheme exists. Material is resolved per use and erased immediately, so a Secret rotated behind an unchanged mount path reaches the next IMAP connection or the next database connection without a restart and without a configuration reload — the reference did not change, only what it points at.
+A Secret needs no MailFathom support beyond what already exists: `FileSecretReferenceResolver` performs exactly the read a `kubernetes-secret:` scheme would, which is why no such scheme exists. Material is resolved per use and erased immediately, so a Secret rotated behind an unchanged mount path reaches the next IMAP connection or the next database connection without a restart and without a configuration reload — the reference did not change, only what it points at.
 
 `env:` is the exception on both counts. The platform hands the value over as an immutable `string` that cannot be erased from process memory, and a Secret projected into the environment block is fixed for the life of the pod, so rotating it requires a restart. It is documented for non-production automation and is not recommended in production; [secret provisioning](secret-provisioning.md#secret-material-in-process-memory) states the full reasoning.
 
@@ -108,7 +108,7 @@ A Secret needs no MailMcp support beyond what already exists: `FileSecretReferen
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: mailmcp-config
+  name: mailfathom-config
 data:
   10-mail.json: |
     {
@@ -118,9 +118,9 @@ data:
             "AccountId": "primary",
             "Host": "imap.example.test",
             "Port": 993,
-            "UserName": "mailmcp@example.test",
+            "UserName": "mailfathom@example.test",
             "Secrets": {
-              "Password": { "Name": "primary-imap-password", "SecretReference": "file:/etc/mailmcp/secrets/imap-primary-password" }
+              "Password": { "Name": "primary-imap-password", "SecretReference": "file:/etc/mailfathom/secrets/imap-primary-password" }
             },
             "TransportSecurity": { "ConnectionSecurity": "TlsOnConnect" },
             "Folders": [ { "Alias": "inbox", "SpecialUse": "Inbox" } ]
@@ -131,51 +131,51 @@ data:
   20-persistence.json: |
     {
       "Persistence": {
-        "Password": { "Name": "postgres", "SecretReference": "file:/etc/mailmcp/secrets/postgres-password" }
+        "Password": { "Name": "postgres", "SecretReference": "file:/etc/mailfathom/secrets/postgres-password" }
       }
     }
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mailmcp
+  name: mailfathom
   labels:
-    app.kubernetes.io/name: mailmcp
+    app.kubernetes.io/name: mailfathom
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: mailmcp
+      app.kubernetes.io/name: mailfathom
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: mailmcp
+        app.kubernetes.io/name: mailfathom
     spec:
       containers:
-        - name: mailmcp
-          # Substitute the image your deployment uses. MailMcp publishes none yet; the image contract is
+        - name: mailfathom
+          # Substitute the image your deployment uses. MailFathom publishes none yet; the image contract is
           # tracked separately and this page does not define it.
-          image: mailmcp:replace-me
+          image: mailfathom:replace-me
           env:
             - name: ConfigurationSources__Directory
-              value: /etc/mailmcp/config
+              value: /etc/mailfathom/config
             # Polling is what makes a ConfigMap change reach the running process; see the reload caveats above.
             - name: DOTNET_USE_POLLING_FILE_WATCHER
               value: "1"
           volumeMounts:
             - name: config
-              mountPath: /etc/mailmcp/config
+              mountPath: /etc/mailfathom/config
               readOnly: true
             - name: secrets
-              mountPath: /etc/mailmcp/secrets
+              mountPath: /etc/mailfathom/secrets
               readOnly: true
       volumes:
         - name: config
           configMap:
-            name: mailmcp-config
+            name: mailfathom-config
         - name: secrets
           secret:
-            secretName: mailmcp-secrets
+            secretName: mailfathom-secrets
 ```
 
 The ConfigMap carries the settings and the secret *references*; the Secret carries the material. That split is the property the reference indirection exists for: this ConfigMap is safe to commit, review, and diff, because a copy of it yields credential paths rather than credentials.

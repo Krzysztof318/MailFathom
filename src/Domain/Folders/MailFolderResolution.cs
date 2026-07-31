@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Domain.Folders;
+namespace MailFathom.Domain.Folders;
 
 /// <summary>Binds one alias to the remote folder that discovery matched it to.</summary>
 /// <param name="Alias">The operator-facing folder name.</param>

@@ -2,17 +2,17 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Text;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class SecretReferenceTests
 {
     [Theory]
     [InlineData("systemd-credential:imap-primary-password", "systemd-credential", "imap-primary-password")]
     [InlineData("file:/run/secrets/imap", "file", "/run/secrets/imap")]
-    [InlineData("env:MAILMCP_IMAP_PASSWORD", "env", "MAILMCP_IMAP_PASSWORD")]
+    [InlineData("env:MAILFATHOM_IMAP_PASSWORD", "env", "MAILFATHOM_IMAP_PASSWORD")]
     [InlineData("plaintext:dev-password", "plaintext", "dev-password")]
     public void TryParse_SupportedScheme_ParsesSchemeAndTarget(
         string configuredValue,

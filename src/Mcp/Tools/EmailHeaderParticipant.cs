@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.ComponentModel;
-using MailMcp.Domain.Emails;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes one address a message wrote, paired with the header it appeared in.</summary>
 /// <remarks>

@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Domain.Failures;
+namespace MailFathom.Domain.Failures;
 
-/// <summary>Represents a failure MailMcp diagnosed itself, carrying a stable code and a message already safe to surface.</summary>
+/// <summary>Represents a failure MailFathom diagnosed itself, carrying a stable code and a message already safe to surface.</summary>
 /// <remarks>
 /// <para>
 /// Deriving from this type is what separates a failure this system decided to raise from one a library, the runtime, or
@@ -16,14 +16,14 @@ namespace MailMcp.Domain.Failures;
 /// The constructors name their parameter for that obligation because they are the only route to
 /// <see cref="Exception.Message" /> a derived type has, and because every exception here can reach a log, a startup
 /// diagnostic, or operator-facing output. An account alias, a folder alias, a rule identity, a size, and a limit are
-/// permitted: they are MailMcp's own configured names for things, chosen by the operator rather than by a remote party.
+/// permitted: they are MailFathom's own configured names for things, chosen by the operator rather than by a remote party.
 /// </para>
 /// </remarks>
-public abstract class MailMcpException : Exception
+public abstract class MailFathomException : Exception
 {
     /// <summary>Initializes a new failure with a message safe to surface.</summary>
     /// <param name="operatorSafeMessage">A message free of credentials, hosts, remote paths, message content, and personal data.</param>
-    protected MailMcpException(string operatorSafeMessage)
+    protected MailFathomException(string operatorSafeMessage)
         : base(operatorSafeMessage)
     {
     }
@@ -32,11 +32,11 @@ public abstract class MailMcpException : Exception
     /// <param name="operatorSafeMessage">A message free of credentials, hosts, remote paths, message content, and personal data.</param>
     /// <param name="innerException">The failure this one was raised for.</param>
     /// <remarks>An inner exception is diagnostic detail for a log. A boundary that serializes a failure reports <see cref="ErrorCode" /> and never reaches into it.</remarks>
-    protected MailMcpException(string operatorSafeMessage, Exception innerException)
+    protected MailFathomException(string operatorSafeMessage, Exception innerException)
         : base(operatorSafeMessage, innerException)
     {
     }
 
     /// <summary>Gets the stable code identifying this failure to a boundary that must report it without naming a type.</summary>
-    public abstract MailMcpErrorCode ErrorCode { get; }
+    public abstract MailFathomErrorCode ErrorCode { get; }
 }

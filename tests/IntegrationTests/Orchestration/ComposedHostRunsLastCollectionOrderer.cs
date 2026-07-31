@@ -4,12 +4,12 @@
 using Xunit.Sdk;
 using Xunit.v3;
 
-namespace MailMcp.IntegrationTests.Orchestration;
+namespace MailFathom.IntegrationTests.Orchestration;
 
 /// <summary>Runs the composed-host collection after every other collection in the assembly.</summary>
 /// <remarks>
 /// <para>
-/// The order is a correctness requirement rather than a preference. Starting MailMcp connects a synchronization-free
+/// The order is a correctness requirement rather than a preference. Starting MailFathom connects a synchronization-free
 /// but otherwise complete application to the database the rest of the suite writes to and asserts on, and its startup
 /// alone opens connections, verifies the migration history, and begins the extraction backfill. Running that beside a
 /// test that is counting rows would make the host part of that test's environment, and the failure would look like a

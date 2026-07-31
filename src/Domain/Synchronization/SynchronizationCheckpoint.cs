@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Emails;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Domain.Synchronization;
+namespace MailFathom.Domain.Synchronization;
 
 /// <summary>Tracks how far local synchronization has durably processed one folder UIDVALIDITY scope.</summary>
 public sealed record SynchronizationCheckpoint(ImapUidValidity UidValidity, ImapUid? LastSeenUid, DateTimeOffset? SynchronizedAt)

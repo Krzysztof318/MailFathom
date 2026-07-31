@@ -41,10 +41,10 @@ fi
 
 bash scripts/test-agent-workflow.sh
 dotnet tool restore
-dotnet restore MailMcp.slnx --locked-mode
-dotnet build MailMcp.slnx --configuration Release --no-restore
+dotnet restore MailFathom.slnx --locked-mode
+dotnet build MailFathom.slnx --configuration Release --no-restore
 dotnet msbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release
-dotnet format MailMcp.slnx --no-restore --verify-no-changes --verbosity diagnostic
+dotnet format MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic
 # Two dots, not three. The ancestor check above already proves origin/main is reachable from HEAD,
 # so the two forms agree today; three dots would diff from the merge base and silently keep agreeing
 # if that check were ever relaxed, which is exactly the drift this gate exists to catch.

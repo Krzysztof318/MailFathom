@@ -1,14 +1,14 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Folders;
 using MailKit;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Folders;
 using NSubstitute;
 using Xunit;
-using static MailMcp.Infrastructure.UnitTests.MailKitImapSessionTestContext;
+using static MailFathom.Infrastructure.UnitTests.MailKitImapSessionTestContext;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class MailKitRemoteFolderCatalogTests
 {

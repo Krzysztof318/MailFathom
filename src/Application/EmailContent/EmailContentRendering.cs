@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
+using MailFathom.Application.Emails;
 
-namespace MailMcp.Application.EmailContent;
+namespace MailFathom.Application.EmailContent;
 
 /// <summary>Carries everything one parse of a stored message yields for a reader.</summary>
 /// <param name="Headers">The normalized headers the message displays.</param>

@@ -3,9 +3,9 @@
 
 using System.Security.Claims;
 
-namespace MailMcp.Infrastructure.Security;
+namespace MailFathom.Infrastructure.Security;
 
-/// <summary>The identity MailMcp keeps from a validated access token, and what it is allowed to be asked.</summary>
+/// <summary>The identity MailFathom keeps from a validated access token, and what it is allowed to be asked.</summary>
 /// <remarks>
 /// <para>
 /// A validated token routinely carries a name, an email address, a set of groups, a tenant, and whatever else the
@@ -31,13 +31,13 @@ public static class McpOAuthIdentity
 {
     /// <summary>The claim type carrying the stable identity of the person a request was authorized by.</summary>
     /// <remarks>Its value is the issuer and the subject joined by <c>|</c>, a character an <c>https</c> identifier cannot contain unescaped, so the pair cannot be read back ambiguously.</remarks>
-    public const string SubjectClaimType = "urn:mailmcp:oauth-subject";
+    public const string SubjectClaimType = "urn:mailfathom:oauth-subject";
 
     /// <summary>The claim type carrying the issuer that authenticated the person, which is half of their identity.</summary>
-    public const string IssuerClaimType = "urn:mailmcp:oauth-issuer";
+    public const string IssuerClaimType = "urn:mailfathom:oauth-issuer";
 
     /// <summary>The claim type carrying one scope the validated token granted.</summary>
-    public const string ScopeClaimType = "urn:mailmcp:oauth-scope";
+    public const string ScopeClaimType = "urn:mailfathom:oauth-scope";
 
     /// <summary>The claim type a role check reads on an identity this produces, which nothing ever issues.</summary>
     /// <remarks>
@@ -46,7 +46,7 @@ public static class McpOAuthIdentity
     /// no mapping ever writes is what actually makes a role check answer no, whatever an authorization server put in the
     /// token.
     /// </remarks>
-    public const string RoleClaimType = "urn:mailmcp:oauth-role";
+    public const string RoleClaimType = "urn:mailfathom:oauth-role";
 
     private const char IdentitySeparator = '|';
 
@@ -66,7 +66,7 @@ public static class McpOAuthIdentity
         return $"{issuer}{IdentitySeparator}{subject}";
     }
 
-    /// <summary>Maps a validated token's claims onto the minimal identity MailMcp carries.</summary>
+    /// <summary>Maps a validated token's claims onto the minimal identity MailFathom carries.</summary>
     /// <param name="validatedClaims">The claims of a token whose signature, issuer, audience, and lifetime have already been checked.</param>
     /// <param name="authenticationScheme">The scheme that validated the token, which the identity records as its authentication type.</param>
     /// <returns>The identity, or <see langword="null" /> when the token names no subject and therefore authorizes nobody.</returns>

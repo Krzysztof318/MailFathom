@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Options;
 
-namespace MailMcp.Infrastructure.Resilience;
+namespace MailFathom.Infrastructure.Resilience;
 
 /// <summary>Rejects a resilience budget whose limits contradict each other or leave an operation unbounded.</summary>
 /// <remarks>

@@ -4,7 +4,7 @@
 using System.Collections;
 using System.Reflection;
 
-namespace MailMcp.Infrastructure.Secrets;
+namespace MailFathom.Infrastructure.Secrets;
 
 /// <summary>Finds every secret-bearing setting in a bound options graph.</summary>
 /// <remarks>

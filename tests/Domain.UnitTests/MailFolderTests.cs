@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Folders;
+using MailFathom.Domain.Folders;
 using Xunit;
 
-namespace MailMcp.Domain.UnitTests;
+namespace MailFathom.Domain.UnitTests;
 
 public sealed class MailFolderTests
 {

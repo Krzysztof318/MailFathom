@@ -5,9 +5,9 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace MailMcp.Domain.Failures;
+namespace MailFathom.Domain.Failures;
 
-/// <summary>Identifies a failure MailMcp raised deliberately, as a five-digit code stable enough to publish.</summary>
+/// <summary>Identifies a failure MailFathom raised deliberately, as a five-digit code stable enough to publish.</summary>
 /// <remarks>
 /// <para>
 /// The type is a closed enumeration of values rather than a C# <see langword="enum" />, because the number is the
@@ -32,70 +32,70 @@ namespace MailMcp.Domain.Failures;
 /// lookup rather than through a <see langword="switch" /> over constants.
 /// </para>
 /// </remarks>
-[JsonConverter(typeof(MailMcpErrorCodeJsonConverter))]
-public readonly record struct MailMcpErrorCode
+[JsonConverter(typeof(MailFathomErrorCodeJsonConverter))]
+public readonly record struct MailFathomErrorCode
 {
-    private MailMcpErrorCode(int value) => this.Value = value;
+    private MailFathomErrorCode(int value) => this.Value = value;
 
     #region Category 1 — Configuration and transport security
 
     /// <summary>Gets subcategory 1, transport security policy: a configured combination would weaken protection in a way no opt-in allows.</summary>
-    public static MailMcpErrorCode MailTransportSecurityPolicyViolated { get; } = new(11001);
+    public static MailFathomErrorCode MailTransportSecurityPolicyViolated { get; } = new(11001);
 
     /// <summary>Gets subcategory 2, configuration sources: the deployment's configuration-source settings name a path that is absent or a setting that does not exist.</summary>
-    public static MailMcpErrorCode ProvisionedConfigurationSourceInvalid { get; } = new(12001);
+    public static MailFathomErrorCode ProvisionedConfigurationSourceInvalid { get; } = new(12001);
 
     #endregion
 
     #region Category 2 — Mail protocol
 
     /// <summary>Gets subcategory 1, authentication: a mail server advertises no authentication mechanism the account's policy permits.</summary>
-    public static MailMcpErrorCode MailAuthenticationMechanismUnavailable { get; } = new(21001);
+    public static MailFathomErrorCode MailAuthenticationMechanismUnavailable { get; } = new(21001);
 
     /// <summary>Gets subcategory 2, session availability: a mail server did not serve an operation within the resilience budget configured for it.</summary>
-    public static MailMcpErrorCode MailboxUnavailable { get; } = new(22001);
+    public static MailFathomErrorCode MailboxUnavailable { get; } = new(22001);
 
     /// <summary>Gets subcategory 3, folder identity: a folder was reselected with a UIDVALIDITY that makes the session's identities name different emails.</summary>
-    public static MailMcpErrorCode MailboxFolderRecreated { get; } = new(23001);
+    public static MailFathomErrorCode MailboxFolderRecreated { get; } = new(23001);
 
     /// <summary>Gets subcategory 4, answer completeness: a mail server answered for an email without the data items the command requested.</summary>
-    public static MailMcpErrorCode MailboxAnswerIncomplete { get; } = new(24001);
+    public static MailFathomErrorCode MailboxAnswerIncomplete { get; } = new(24001);
 
     #endregion
 
     #region Category 3 — Persistence
 
     /// <summary>Gets subcategory 1, concurrent writes: a local write did not commit because another writer changed the same durable state.</summary>
-    public static MailMcpErrorCode PersistenceConcurrencyConflict { get; } = new(31001);
+    public static MailFathomErrorCode PersistenceConcurrencyConflict { get; } = new(31001);
 
     /// <summary>Gets subcategory 2, schema state: the database does not carry every migration the running build was compiled against.</summary>
-    public static MailMcpErrorCode DatabaseSchemaOutOfDate { get; } = new(32001);
+    public static MailFathomErrorCode DatabaseSchemaOutOfDate { get; } = new(32001);
 
     /// <summary>Gets subcategory 2, schema state: the migration history could not be read, so the schema is of unknown shape.</summary>
-    public static MailMcpErrorCode DatabaseSchemaStateUnreadable { get; } = new(32002);
+    public static MailFathomErrorCode DatabaseSchemaStateUnreadable { get; } = new(32002);
 
     /// <summary>Gets subcategory 2, schema state: the lexical index was built with a different text search configuration than the one configured.</summary>
-    public static MailMcpErrorCode DatabaseSchemaTextSearchConfigurationMismatch { get; } = new(32003);
+    public static MailFathomErrorCode DatabaseSchemaTextSearchConfigurationMismatch { get; } = new(32003);
 
     #endregion
 
     #region Category 4 — Outbound resilience
 
     /// <summary>Gets subcategory 1, pipeline rejection: a resilience pipeline declined to serve an operation against an outbound dependency any further.</summary>
-    public static MailMcpErrorCode OutboundDependencyUnavailable { get; } = new(41001);
+    public static MailFathomErrorCode OutboundDependencyUnavailable { get; } = new(41001);
 
     #endregion
 
     #region Category 5 — The MCP boundary
 
     /// <summary>Gets subcategory 1, request validation: a mailbox query asked for a page size outside the range the query serves.</summary>
-    public static MailMcpErrorCode MailboxQueryPageSizeOutOfRange { get; } = new(51001);
+    public static MailFathomErrorCode MailboxQueryPageSizeOutOfRange { get; } = new(51001);
 
     /// <summary>Gets subcategory 1, request validation: one filter of a mailbox query carries a value, a count, or a length the query does not accept.</summary>
-    public static MailMcpErrorCode MailboxQueryFilterInvalid { get; } = new(51002);
+    public static MailFathomErrorCode MailboxQueryFilterInvalid { get; } = new(51002);
 
     /// <summary>Gets subcategory 1, request validation: an email search asked for more ranked results than the search serves.</summary>
-    public static MailMcpErrorCode EmailSearchResultLimitOutOfRange { get; } = new(51003);
+    public static MailFathomErrorCode EmailSearchResultLimitOutOfRange { get; } = new(51003);
 
     /// <summary>Gets subcategory 1, request validation: a request named an email by text that is not an identifier this system issues.</summary>
     /// <remarks>
@@ -103,19 +103,19 @@ public readonly record struct MailMcpErrorCode
     /// the request never named an email at all, while that one says an email was named and is not held here. Reporting
     /// a malformed identifier as an absent email would tell a caller that a typo is a message someone deleted.
     /// </remarks>
-    public static MailMcpErrorCode StoredEmailIdentifierMalformed { get; } = new(51004);
+    public static MailFathomErrorCode StoredEmailIdentifierMalformed { get; } = new(51004);
 
     /// <summary>Gets subcategory 2, pagination: a continuation cursor is not one this system issued.</summary>
-    public static MailMcpErrorCode MailboxQueryCursorMalformed { get; } = new(52001);
+    public static MailFathomErrorCode MailboxQueryCursorMalformed { get; } = new(52001);
 
     /// <summary>Gets subcategory 2, pagination: a continuation cursor was issued for a different set of filters than the request carries.</summary>
-    public static MailMcpErrorCode MailboxQueryCursorFilterMismatch { get; } = new(52002);
+    public static MailFathomErrorCode MailboxQueryCursorFilterMismatch { get; } = new(52002);
 
     /// <summary>Gets subcategory 3, access: a request named a mail account this deployment does not serve.</summary>
-    public static MailMcpErrorCode MailAccountNotAccessible { get; } = new(53001);
+    public static MailFathomErrorCode MailAccountNotAccessible { get; } = new(53001);
 
     /// <summary>Gets subcategory 3, access: a request named an email the local mailbox copy holds no row for.</summary>
-    public static MailMcpErrorCode StoredEmailNotFound { get; } = new(53002);
+    public static MailFathomErrorCode StoredEmailNotFound { get; } = new(53002);
 
     /// <summary>Gets subcategory 4, undiagnosed failure: a tool call failed for a reason the boundary deliberately does not describe.</summary>
     /// <remarks>
@@ -124,7 +124,7 @@ public readonly record struct MailMcpErrorCode
     /// already carries. It is the only code in this category a tool boundary raises itself rather than reports on behalf
     /// of a use case.
     /// </remarks>
-    public static MailMcpErrorCode McpToolFailedUnexpectedly { get; } = new(54001);
+    public static MailFathomErrorCode McpToolFailedUnexpectedly { get; } = new(54001);
 
     /// <summary>Gets subcategory 5, local consistency: an email exists locally, but the content stored for it is missing, damaged, or unreadable.</summary>
     /// <remarks>
@@ -134,13 +134,13 @@ public readonly record struct MailMcpErrorCode
     /// apart would retry the wrong one. It is a subcategory of its own rather than one more access failure, because a
     /// caller can act on it: the local copy is being repaired, so the request is worth repeating.
     /// </remarks>
-    public static MailMcpErrorCode EmailContentUnavailable { get; } = new(55001);
+    public static MailFathomErrorCode EmailContentUnavailable { get; } = new(55001);
 
     #endregion
 
     /// <summary>Gets every allocated code.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
-    public static IReadOnlyList<MailMcpErrorCode> All { get; } =
+    public static IReadOnlyList<MailFathomErrorCode> All { get; } =
     [
         MailTransportSecurityPolicyViolated,
         ProvisionedConfigurationSourceInvalid,
@@ -188,7 +188,7 @@ public readonly record struct MailMcpErrorCode
     /// <param name="errorCode">The parsed code when the number is allocated; otherwise the unspecified default.</param>
     /// <returns><see langword="true" /> when the number is an allocated code; otherwise <see langword="false" />.</returns>
     /// <remarks>An unallocated number is not accepted, so a code retired or mistyped is recognized as unknown rather than reconstructed as a value nothing raises.</remarks>
-    public static bool TryParse(int value, out MailMcpErrorCode errorCode)
+    public static bool TryParse(int value, out MailFathomErrorCode errorCode)
     {
         // No allocated code is the struct default, so an unmatched number yields the unspecified value the caller
         // already receives when parsing fails.
@@ -204,18 +204,18 @@ public readonly record struct MailMcpErrorCode
         : "(unspecified)";
 }
 
-/// <summary>Serializes <see cref="MailMcpErrorCode" /> as its five-digit number.</summary>
+/// <summary>Serializes <see cref="MailFathomErrorCode" /> as its five-digit number.</summary>
 /// <remarks>
 /// The type carries this converter through <see cref="JsonConverterAttribute" />, so every serializer that meets the
 /// value uses it without per-call registration. The JSON form is the number for the same reason the value object
 /// exists: the number is the published identity, and a member name would change with a rename that the code is meant
 /// to survive.
 /// </remarks>
-public sealed class MailMcpErrorCodeJsonConverter : JsonConverter<MailMcpErrorCode>
+public sealed class MailFathomErrorCodeJsonConverter : JsonConverter<MailFathomErrorCode>
 {
     /// <inheritdoc />
     /// <exception cref="JsonException">Thrown when the token is not a number or does not name an allocated code.</exception>
-    public override MailMcpErrorCode Read(
+    public override MailFathomErrorCode Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
         JsonSerializerOptions options)
@@ -232,7 +232,7 @@ public sealed class MailMcpErrorCodeJsonConverter : JsonConverter<MailMcpErrorCo
     /// <exception cref="JsonException">Thrown when the value is the unspecified struct default.</exception>
     public override void Write(
         Utf8JsonWriter writer,
-        MailMcpErrorCode value,
+        MailFathomErrorCode value,
         JsonSerializerOptions options)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -242,7 +242,7 @@ public sealed class MailMcpErrorCodeJsonConverter : JsonConverter<MailMcpErrorCo
 
     /// <inheritdoc />
     /// <exception cref="JsonException">Thrown when the property name is not a number or does not name an allocated code.</exception>
-    public override MailMcpErrorCode ReadAsPropertyName(
+    public override MailFathomErrorCode ReadAsPropertyName(
         ref Utf8JsonReader reader,
         Type typeToConvert,
         JsonSerializerOptions options)
@@ -263,7 +263,7 @@ public sealed class MailMcpErrorCodeJsonConverter : JsonConverter<MailMcpErrorCo
     /// <exception cref="JsonException">Thrown when the value is the unspecified struct default.</exception>
     public override void WriteAsPropertyName(
         Utf8JsonWriter writer,
-        MailMcpErrorCode value,
+        MailFathomErrorCode value,
         JsonSerializerOptions options)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -271,17 +271,17 @@ public sealed class MailMcpErrorCodeJsonConverter : JsonConverter<MailMcpErrorCo
         writer.WritePropertyName(SpecifiedValueOrThrow(value).ToString("D5", CultureInfo.InvariantCulture));
     }
 
-    private static MailMcpErrorCode ParseOrThrow(int value)
+    private static MailFathomErrorCode ParseOrThrow(int value)
     {
-        if (!MailMcpErrorCode.TryParse(value, out var errorCode))
+        if (!MailFathomErrorCode.TryParse(value, out var errorCode))
         {
-            throw new JsonException($"'{value}' is not an allocated MailMcp error code.");
+            throw new JsonException($"'{value}' is not an allocated MailFathom error code.");
         }
 
         return errorCode;
     }
 
-    private static int SpecifiedValueOrThrow(MailMcpErrorCode errorCode) => errorCode.IsSpecified
+    private static int SpecifiedValueOrThrow(MailFathomErrorCode errorCode) => errorCode.IsSpecified
         ? errorCode.Value
         : throw new JsonException("An unspecified error code cannot be serialized.");
 }

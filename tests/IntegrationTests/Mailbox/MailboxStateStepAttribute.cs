@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.IntegrationTests.Mailbox;
+namespace MailFathom.IntegrationTests.Mailbox;
 
 /// <summary>Places one test within its class's mailbox-state sequence.</summary>
 /// <param name="position">The position, ascending, with lower positions running first.</param>

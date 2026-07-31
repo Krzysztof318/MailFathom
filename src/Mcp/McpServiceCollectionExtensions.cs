@@ -1,16 +1,16 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Mcp.Observability;
-using MailMcp.Mcp.Serialization;
-using MailMcp.Mcp.Tools;
+using MailFathom.Mcp.Observability;
+using MailFathom.Mcp.Serialization;
+using MailFathom.Mcp.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
-namespace MailMcp.Mcp;
+namespace MailFathom.Mcp;
 
-/// <summary>Composes the MailMcp protocol surface into a host.</summary>
+/// <summary>Composes the MailFathom protocol surface into a host.</summary>
 /// <remarks>
 /// The registration lives with the tools it registers, so a host adds the surface without knowing which tools exist,
 /// which serializer options they publish, or that a call-tool filter reports their outcomes. Mapping the transport
@@ -19,7 +19,7 @@ namespace MailMcp.Mcp;
 /// </remarks>
 public static class McpServiceCollectionExtensions
 {
-    /// <summary>Adds the MailMcp MCP server, its tools, and the reporting that wraps every tool call.</summary>
+    /// <summary>Adds the MailFathom MCP server, its tools, and the reporting that wraps every tool call.</summary>
     /// <param name="services">The container to add to.</param>
     /// <returns>The builder, so a caller can extend the server registration.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
@@ -27,19 +27,19 @@ public static class McpServiceCollectionExtensions
     /// The tools resolve their dependencies per call from the request's scope, so the application ports they read
     /// through may be registered with any lifetime the host chooses.
     /// </remarks>
-    public static IMcpServerBuilder AddMailMcpServer(this IServiceCollection services)
+    public static IMcpServerBuilder AddMailFathomServer(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddSingleton<McpToolCallReporter>();
 
         return services.AddMcpServer()
-            // Stateless without a switch: every MailMcp tool answers one request from the local mailbox copy and sends
+            // Stateless without a switch: every MailFathom tool answers one request from the local mailbox copy and sends
             // nothing back on its own, so a session would carry no state and only cost a client something to lose across
             // a restart. A tool that pushes notifications would change this surface rather than a deployment's settings.
             .WithHttpTransport(transportOptions => transportOptions.Stateless = true)
             // The SDK's filter delegate is the one signature here that mandates ValueTask, so the conversion happens at
-            // that boundary and the reporter itself keeps the Task every other MailMcp method returns.
+            // that boundary and the reporter itself keeps the Task every other MailFathom method returns.
             .WithRequestFilters(requestFilters => requestFilters.AddCallToolFilter(next => (request, cancellationToken) =>
                 new ValueTask<CallToolResult>(RequiredReporter(request).ReportAsync(next, request, cancellationToken))))
             .WithTools<ListEmailsTool>(McpToolContractSerialization.Options)

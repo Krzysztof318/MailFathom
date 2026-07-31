@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Emails;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>Reads one bounded page of locally stored email summaries in timeline order.</summary>
 /// <remarks>

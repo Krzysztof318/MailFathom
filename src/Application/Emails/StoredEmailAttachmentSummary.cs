@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>Reports what one stored email carries besides its body, as far as the persisted row records it.</summary>
 /// <param name="AttachmentCount">How many parts the classification counted as attachments.</param>

@@ -15,7 +15,7 @@ Perform the folder-configuration design review that draft section 11.2 requires 
 
 ## Approved scope
 
-Two distinct concepts replace today's single string. `MailFolderAlias` is the stable operator-facing name used in configuration, logs, and future MCP filters; it is owned by MailMcp and never changes because the server changed. `RemoteFolderPath` is the server-advertised path together with its hierarchy delimiter; it is owned by the server and may change.
+Two distinct concepts replace today's single string. `MailFolderAlias` is the stable operator-facing name used in configuration, logs, and future MCP filters; it is owned by MailFathom and never changes because the server changed. `RemoteFolderPath` is the server-advertised path together with its hierarchy delimiter; it is owned by the server and may change.
 
 Persistence does not key folders by account plus alias alone. The repository rule treats `(account, folder, UIDVALIDITY, UID)` as the stable remote occurrence identity, and that tuple is only stable if its folder component identifies a specific remote folder rather than a name that can be repointed. UIDVALIDITY is unique within one mailbox, not across mailboxes: two unrelated folders on the same server can easily carry the same UIDVALIDITY value. So an alias repointed from one remote folder to another, while keeping the same persistence identity, would let a checkpoint written for the old folder be applied to the new one — its `LastSeenUid` would skip every message in the new folder below that UID, permanently and silently.
 

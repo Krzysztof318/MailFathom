@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Text;
-using MailMcp.Application.Emails;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.Emails;
+using MailFathom.Domain.Emails;
 using MimeKit;
 
-namespace MailMcp.Infrastructure.Mail.Mime;
+namespace MailFathom.Infrastructure.Mail.Mime;
 
 /// <summary>Derives the searchable text of one message from the parts its structure resolved as the body.</summary>
 /// <remarks>

@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Emails;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Application.EmailContent;
+namespace MailFathom.Application.EmailContent;
 
 /// <summary>Carries the normalized headers one email displays above its body.</summary>
 /// <param name="Subject">The decoded subject, or <see langword="null" /> when the message carried none.</param>

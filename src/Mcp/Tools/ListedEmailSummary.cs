@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.ComponentModel;
-using MailMcp.Application.Emails;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.Emails;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes one email of a listed page.</summary>
 /// <remarks>
@@ -18,7 +18,7 @@ namespace MailMcp.Mcp.Tools;
 /// <para>
 /// The descriptions are part of the published output schema. They name the unit and the absence meaning of each value,
 /// because a caller reading a null timestamp or a zero count otherwise has to guess whether the mail lacked the header or
-/// MailMcp lacked the data.
+/// MailFathom lacked the data.
 /// </para>
 /// </remarks>
 [Description("A summary of one locally stored email. Contains no body text, no raw MIME, and no attachment content.")]
@@ -29,11 +29,11 @@ internal sealed record ListedEmailSummary
     public required string StoredEmailId { get; init; }
 
     /// <summary>Gets the configured account the email was synchronized from.</summary>
-    [Description("The configured MailMcp account identifier the email was synchronized from.")]
+    [Description("The configured MailFathom account identifier the email was synchronized from.")]
     public required string AccountId { get; init; }
 
     /// <summary>Gets the folder alias the email was synchronized under.</summary>
-    [Description("The MailMcp folder alias the email was synchronized under, such as INBOX. This is MailMcp's own name for the folder rather than the path the mail server advertises.")]
+    [Description("The MailFathom folder alias the email was synchronized under, such as INBOX. This is MailFathom's own name for the folder rather than the path the mail server advertises.")]
     public required string FolderAlias { get; init; }
 
     /// <summary>Gets the <c>Message-ID</c> the email carried, or <see langword="null" /> when it carried none.</summary>

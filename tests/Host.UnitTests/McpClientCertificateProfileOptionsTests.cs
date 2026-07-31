@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Security;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers what a client certificate profile must state before a deployment can start with it.</summary>
 public sealed class McpClientCertificateProfileOptionsTests

@@ -1,14 +1,14 @@
 {{/*
 Shared naming, labels, and the two derivations that would otherwise be written differently in each template: the image
-reference and the connection string. Everything here is namespaced under `mailmcp.` so a subchart added later cannot
+reference and the connection string. Everything here is namespaced under `mailfathom.` so a subchart added later cannot
 collide with it.
 */}}
 
-{{- define "mailmcp.name" -}}
+{{- define "mailfathom.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "mailmcp.fullname" -}}
+{{- define "mailfathom.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
@@ -21,7 +21,7 @@ collide with it.
 {{- end -}}
 {{- end -}}
 
-{{- define "mailmcp.chart" -}}
+{{- define "mailfathom.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
@@ -30,7 +30,7 @@ The version a label may carry. On the nightly channel it is the nightly identifi
 `appVersion` describes a release and a nightly is not one; labelling it otherwise would make a nightly indistinguishable
 from a release in every query that reads this label.
 */}}
-{{- define "mailmcp.versionLabel" -}}
+{{- define "mailfathom.versionLabel" -}}
 {{- if eq .Values.image.channel "nightly" -}}
 {{- printf "nightly-%s" (default "unknown" .Values.image.tag) | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
@@ -38,27 +38,27 @@ from a release in every query that reads this label.
 {{- end -}}
 {{- end -}}
 
-{{- define "mailmcp.labels" -}}
-helm.sh/chart: {{ include "mailmcp.chart" . }}
-{{ include "mailmcp.selectorLabels" . }}
-app.kubernetes.io/version: {{ include "mailmcp.versionLabel" . | quote }}
+{{- define "mailfathom.labels" -}}
+helm.sh/chart: {{ include "mailfathom.chart" . }}
+{{ include "mailfathom.selectorLabels" . }}
+app.kubernetes.io/version: {{ include "mailfathom.versionLabel" . | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
-app.kubernetes.io/part-of: mailmcp
+app.kubernetes.io/part-of: mailfathom
 {{- if eq .Values.image.channel "nightly" }}
 {{/* Readable from any `kubectl get -l`, so an unsupported deployment stays identifiable long after whoever installed
      it has forgotten which channel they chose. */}}
-io.mailmcp/release-channel: ghcr-nightly-unsupported
+io.mailfathom/release-channel: ghcr-nightly-unsupported
 {{- end }}
 {{- end -}}
 
-{{- define "mailmcp.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "mailmcp.name" . }}
+{{- define "mailfathom.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "mailfathom.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
-{{- define "mailmcp.serviceAccountName" -}}
+{{- define "mailfathom.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create -}}
-{{- default (include "mailmcp.fullname" .) .Values.serviceAccount.name -}}
+{{- default (include "mailfathom.fullname" .) .Values.serviceAccount.name -}}
 {{- else -}}
 {{- default "default" .Values.serviceAccount.name -}}
 {{- end -}}
@@ -70,7 +70,7 @@ The schema covers shape — a required field, a pattern, a type — while these 
 draft-07 schema can state only as unreadable `allOf`/`if` chains that report which subschema failed rather than what is
 wrong.
 */}}
-{{- define "mailmcp.validate" -}}
+{{- define "mailfathom.validate" -}}
 {{- if eq .Values.image.channel "nightly" -}}
   {{- if ne .Values.image.nightlyAcknowledgement "i-understand-this-is-unsupported" -}}
     {{- fail "image.channel is 'nightly'. A nightly build is not a release: it is whatever main happened to be when someone dispatched a build, its schema and configuration may move without notice, and no support or upgrade path applies to it. Set image.nightlyAcknowledgement=i-understand-this-is-unsupported to deploy one anyway." -}}
@@ -88,7 +88,7 @@ wrong.
   {{- fail "image.tag and image.digest are both set. Supply exactly one, so what a rollback goes back to is unambiguous." -}}
 {{- end -}}
 {{- if not (or .Values.image.tag .Values.image.digest) -}}
-  {{- fail "Neither image.tag nor image.digest is set. MailMcp publishes no release yet, so the chart cannot default to one; name the immutable reference your deployment uses." -}}
+  {{- fail "Neither image.tag nor image.digest is set. MailFathom publishes no release yet, so the chart cannot default to one; name the immutable reference your deployment uses." -}}
 {{- end -}}
 {{- if not .Values.image.repository -}}
   {{- fail "image.repository is not set. There is no default: a chart that guessed one would deploy an image nobody named." -}}
@@ -105,7 +105,7 @@ wrong.
 {{- end -}}
 
 {{- if not .Values.database.host -}}
-  {{- fail "database.host is not set. The chart installs no database: MailMcp needs PostgreSQL with the vector extension, and the store holding every synchronized message belongs to whoever operates it." -}}
+  {{- fail "database.host is not set. The chart installs no database: MailFathom needs PostgreSQL with the vector extension, and the store holding every synchronized message belongs to whoever operates it." -}}
 {{- end -}}
 {{- if not .Values.secrets.existingSecret -}}
   {{- fail "secrets.existingSecret is not set. The chart creates no Secret and templates no credential; create one first and name it here." -}}
@@ -116,7 +116,7 @@ wrong.
 The application image reference. A digest wins where both could apply, and the registry is omitted from the rendered
 string when empty so Docker Hub's implicit default is not spelled out inconsistently across templates.
 */}}
-{{- define "mailmcp.image" -}}
+{{- define "mailfathom.image" -}}
 {{- $registry := .Values.image.registry -}}
 {{- if eq .Values.image.channel "nightly" -}}
 {{- $registry = "ghcr.io" -}}
@@ -133,11 +133,11 @@ string when empty so Docker Hub's implicit default is not spelled out inconsiste
 {{- end -}}
 
 {{/*
-The connection string, without the password. The password reaches MailMcp as a mounted file named by
+The connection string, without the password. The password reaches MailFathom as a mounted file named by
 `Persistence__Password__SecretReference`, so nothing here ever carries a credential — which is what makes the ConfigMap
 and the rendered Deployment safe to review and to store.
 */}}
-{{- define "mailmcp.connectionString" -}}
+{{- define "mailfathom.connectionString" -}}
 {{- $connection := printf "Host=%s;Port=%d;Database=%s;Username=%s" .Values.database.host (int .Values.database.port) .Values.database.name .Values.database.user -}}
 {{- if .Values.database.extraConnectionParameters -}}
 {{- $connection = printf "%s;%s" $connection (trimPrefix ";" .Values.database.extraConnectionParameters) -}}

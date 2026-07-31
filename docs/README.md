@@ -1,6 +1,6 @@
-# MailMcp documentation
+# MailFathom documentation
 
-This documentation set explains the durable design and operating model for MailMcp.
+This documentation set explains the durable design and operating model for MailFathom.
 
 ## Sections
 

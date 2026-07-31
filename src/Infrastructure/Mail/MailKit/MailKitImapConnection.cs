@@ -4,18 +4,18 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography.X509Certificates;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Resilience;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Resilience;
 using MailKit;
 using MailKit.Net.Imap;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Resilience;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Transport;
-using MailMcp.Infrastructure.Resilience;
 
-namespace MailMcp.Infrastructure.Mail.MailKit;
+namespace MailFathom.Infrastructure.Mail.MailKit;
 
 /// <summary>Keeps one account authenticated for as long as a mailbox session or a folder discovery needs it.</summary>
 /// <remarks>

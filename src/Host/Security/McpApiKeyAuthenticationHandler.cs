@@ -4,12 +4,12 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 
-namespace MailMcp.Host.Security;
+namespace MailFathom.Host.Security;
 
 /// <summary>Authenticates an MCP request against the configured API keys.</summary>
 /// <remarks>

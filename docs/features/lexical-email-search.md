@@ -1,6 +1,6 @@
 # Lexical email search
 
-MailMcp searches its local copy for text. `SearchEmails` is the second read use case: it takes a free-text query plus
+MailFathom searches its local copy for text. `SearchEmails` is the second read use case: it takes a free-text query plus
 the same structured filters a listing takes, and returns a bounded window of matched emails ordered by relevance, each
 carrying the summary a listing would show, a relevance rank, and highlighted extracts of the body around what matched.
 It reaches no mail server, so a search behaves the same whether or not IMAP is available — and it never touches the
@@ -105,7 +105,7 @@ the body they were cut from, and no result ever carries raw MIME or attachment b
   presented as though they were what matched.
 - **A message with no indexed body text carries no snippets at all**, which is the encrypted and attachment-only case
   above.
-- `**` is the only markup MailMcp adds. A snippet is text cut from untrusted mail, so it is handed back as text rather
+- `**` is the only markup MailFathom adds. A snippet is text cut from untrusted mail, so it is handed back as text rather
   than wrapped in HTML.
 
 Whether a fragment was highlighted is decided before that markup exists. PostgreSQL is asked to mark matches with two
@@ -132,7 +132,7 @@ A third bound is derived rather than configured. `WordsPerSnippet` counts words,
 spaces, so a message carrying words far longer than prose writes — a URL, a base64 blob, a hash — would satisfy a limit
 of a few words while publishing most of its body. Each extract therefore carries at most `WordsPerSnippet × 64`
 characters **of the message**, and is marked with `…` when that cut applies. The `**` markers do not count against it:
-they are MailMcp's own, and counting them would make the same setting show less of a message the better the query
+they are MailFathom's own, and counting them would make the same setting show less of a message the better the query
 matched it. The shortest extract `ts_headline` may return is derived the same way, so no pair of configured numbers can
 produce an option list PostgreSQL rejects.
 
@@ -168,17 +168,17 @@ caller cannot tell a folder that holds nothing matching from one whose synchroni
 
 ## Where the pieces live
 
-- `MailMcp.Application.Emails.SearchEmails` — the use case, its request, and its result.
-- `MailMcp.Application.Emails` — `MailboxEmailSelection`, the validated structural filters both read models share;
+- `MailFathom.Application.Emails.SearchEmails` — the use case, its request, and its result.
+- `MailFathom.Application.Emails` — `MailboxEmailSelection`, the validated structural filters both read models share;
   `EmailSearchQueryText`, `EmailSearchResultLimit`, and `EmailSearchSnippetBounds`; `EmailSearchMatch`; and
   `IEmailSearchIndexReader`, the port the adapter implements.
-- `MailMcp.Application.Emails.MailboxScopeResolver` — resolves the accounts a read runs against and refuses one this
+- `MailFathom.Application.Emails.MailboxScopeResolver` — resolves the accounts a read runs against and refuses one this
   deployment does not serve, once, for every read model.
-- `MailMcp.Infrastructure.Persistence` — `StoredEmailSearchIndexReader`, which composes the ranking query, and
+- `MailFathom.Infrastructure.Persistence` — `StoredEmailSearchIndexReader`, which composes the ranking query, and
   `StoredEmailSelectionPredicate`, the filter predicate it shares with the listing read model, and
   `StoredEmailSummaryRow`, the projection and mapping it shares with every other read that publishes a summary.
-- `MailMcp.Host.Configuration.MailboxSearchOptions` — the snippet bounds, bound strictly and validated on start.
-- `MailMcp.Mcp.Tools` — `SearchEmailsTool`, the protocol adapter, with `SearchEmailsToolResult`, `SearchedEmailMatch`,
+- `MailFathom.Host.Configuration.MailboxSearchOptions` — the snippet bounds, bound strictly and validated on start.
+- `MailFathom.Mcp.Tools` — `SearchEmailsTool`, the protocol adapter, with `SearchEmailsToolResult`, `SearchedEmailMatch`,
   and `EmailRetrievalMode`, the published contract; and `MailboxScopeArguments`, the conversion of caller-supplied text
   into account identifiers and folder aliases that it shares with the listing tool.
 

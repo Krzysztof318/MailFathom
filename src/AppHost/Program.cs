@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Globalization;
-using MailMcp.AppHost;
+using MailFathom.AppHost;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -63,7 +63,7 @@ if (runsIntegrationTests)
                 // One mailbox, whose login is the local part and whose delivery address is the whole string. Verbose
                 // logging stays off on purpose: it transcribes the IMAP conversation, password included, into the
                 // orchestration log.
-                $"-Dgreenmail.users={OrchestrationContract.MailServerAccountUserName}:{OrchestrationContract.MailServerAccountPassword}@mailmcp.test"))
+                $"-Dgreenmail.users={OrchestrationContract.MailServerAccountUserName}:{OrchestrationContract.MailServerAccountPassword}@mailfathom.test"))
         .WithEndpoint(targetPort: 3143, scheme: "tcp", name: OrchestrationContract.MailServerImapEndpointName)
         .WithEndpoint(targetPort: 3025, scheme: "tcp", name: OrchestrationContract.MailServerSmtpEndpointName)
         .WithHttpEndpoint(targetPort: 8080, name: OrchestrationContract.MailServerApiEndpointName)
@@ -72,17 +72,17 @@ if (runsIntegrationTests)
 
 var database = postgres.AddDatabase(OrchestrationContract.DatabaseResourceName);
 
-var mailMcpHost = builder.AddProject<Projects.Host>(OrchestrationContract.HostResourceName)
+var mailFathomHost = builder.AddProject<Projects.Host>(OrchestrationContract.HostResourceName)
     .WithReference(database)
     .WaitFor(database);
 
 if (runsIntegrationTests)
 {
     // Nothing starts the host with the application. Most of the suite verifies classes against a real database and a
-    // real mailbox, and a second MailMcp reconciling folders underneath them would make its synchronization part of
+    // real mailbox, and a second MailFathom reconciling folders underneath them would make its synchronization part of
     // every one of those tests' environment. The suite starts it explicitly, from a collection ordered after all of
     // them, once nothing else is asserting on the infrastructure it would touch.
-    mailMcpHost
+    mailFathomHost
         .WithExplicitStart()
         // Stated here rather than left to appsettings.json, because the isolation above is a promise this app model
         // makes: a default edited elsewhere must not be able to turn the started host into a synchronizing one.
@@ -122,15 +122,15 @@ if (runsIntegrationTests)
 
 // Host is the startup project because it is the project resource the connection string is issued to; Infrastructure
 // owns the context and the migrations. The tool resource runs dotnet-ef with the orchestration's own
-// ConnectionStrings__mailmcp, which is what keeps a migration authored against the same server a running MailMcp uses.
+// ConnectionStrings__mailfathom, which is what keeps a migration authored against the same server a running MailFathom uses.
 // WaitFor is not optional here despite the parent project already declaring it. The migration resource opens its own
 // connection as soon as it starts, and PostgreSQL accepts a socket before it will complete an SSL handshake, so a run
 // without this waits on nothing and fails the handshake against a server that is still starting.
-var migrations = mailMcpHost.AddEFMigrations(OrchestrationContract.MigrationsResourceName)
+var migrations = mailFathomHost.AddEFMigrations(OrchestrationContract.MigrationsResourceName)
     .WithMigrationsProject(Path.Combine(builder.AppHostDirectory, "..", "Infrastructure", "Infrastructure.csproj"))
     // The namespace is deliberately left to EF's own derivation from this directory, which produces
-    // MailMcp.Infrastructure.Persistence.Migrations anyway. Stating it explicitly makes EF write the model snapshot to a
-    // path derived from the namespace instead of to the output directory, which buries it under src/Infrastructure/MailMcp.
+    // MailFathom.Infrastructure.Persistence.Migrations anyway. Stating it explicitly makes EF write the model snapshot to a
+    // path derived from the namespace instead of to the output directory, which buries it under src/Infrastructure/MailFathom.
     .WithMigrationOutputDirectory("Persistence/Migrations")
     .WithReference(database)
     .WaitFor(database)
@@ -138,6 +138,6 @@ var migrations = mailMcpHost.AddEFMigrations(OrchestrationContract.MigrationsRes
 
 // Applying migrations before the host starts is what lets the host refuse to serve traffic against a schema it does not
 // recognize without that refusal firing on every local run.
-mailMcpHost.WaitForCompletion(migrations);
+mailFathomHost.WaitForCompletion(migrations);
 
 builder.Build().Run();

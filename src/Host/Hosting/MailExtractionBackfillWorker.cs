@@ -2,12 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Persistence;
-using MailMcp.Host.Configuration;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Persistence;
+using MailFathom.Host.Configuration;
 using Microsoft.Extensions.Options;
 
-namespace MailMcp.Host.Hosting;
+namespace MailFathom.Host.Hosting;
 
 /// <summary>Runs the extraction backfill in scoped work units until no stored email awaits extraction.</summary>
 /// <remarks>

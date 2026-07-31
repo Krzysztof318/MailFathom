@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Security.Cryptography.X509Certificates;
-using MailMcp.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Certificates;
 using Microsoft.Extensions.Logging;
 
-namespace MailMcp.Infrastructure.Security;
+namespace MailFathom.Infrastructure.Security;
 
 /// <summary>Judges the certificate a TLS connection carried against the trust profiles a deployment configured.</summary>
 /// <remarks>

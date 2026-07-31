@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Emails;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>Names one locally stored email whose raw MIME has never been read for metadata and text.</summary>
 /// <param name="StoredEmailId">The stable local identity, which is also the backfill's resume position.</param>

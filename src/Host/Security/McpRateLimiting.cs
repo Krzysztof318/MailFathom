@@ -3,11 +3,11 @@
 
 using System.Globalization;
 using System.Threading.RateLimiting;
-using MailMcp.Infrastructure.Security;
-using MailMcp.Mcp;
+using MailFathom.Infrastructure.Security;
+using MailFathom.Mcp;
 using Microsoft.AspNetCore.RateLimiting;
 
-namespace MailMcp.Host.Security;
+namespace MailFathom.Host.Security;
 
 /// <summary>Bounds what the MCP endpoint accepts, per process and per client.</summary>
 /// <remarks>
@@ -36,7 +36,7 @@ namespace MailMcp.Host.Security;
 internal static class McpRateLimiting
 {
     /// <summary>The rate-limiting policy the MCP endpoint requires, named so the endpoint asks for this one and a metric can report it.</summary>
-    internal const string PolicyName = "MailMcpEndpoint";
+    internal const string PolicyName = "MailFathomEndpoint";
 
     /// <summary>The one partition every MCP request shares for the process-wide concurrency limit.</summary>
     private const string ProcessPartitionKey = "mcp";

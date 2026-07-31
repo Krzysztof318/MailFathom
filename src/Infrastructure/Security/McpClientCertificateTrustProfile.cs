@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Text.RegularExpressions;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets;
 
-namespace MailMcp.Infrastructure.Security;
+namespace MailFathom.Infrastructure.Security;
 
 /// <summary>One client application a deployment trusts, and the certificate policy that identifies it.</summary>
 /// <remarks>

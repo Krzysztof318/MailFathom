@@ -3,14 +3,14 @@
 
 using System.Security.Cryptography;
 using System.Text;
-using MailMcp.AppHost;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.IntegrationTests.Orchestration;
+using MailFathom.AppHost;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.IntegrationTests.Orchestration;
 
-namespace MailMcp.IntegrationTests.Persistence;
+namespace MailFathom.IntegrationTests.Persistence;
 
 /// <summary>Builds the occurrence identities, metadata, and raw MIME the persistence tests write.</summary>
 /// <remarks>
@@ -54,7 +54,7 @@ internal static class SyntheticEmail
         EmailOccurrenceId occurrenceId,
         string subject,
         long sizeOctets = 2048) =>
-        new(occurrenceId, $"{subject}@mailmcp.test", subject, SentAt, sizeOctets);
+        new(occurrenceId, $"{subject}@mailfathom.test", subject, SentAt, sizeOctets);
 
     /// <summary>Builds the metadata a MIME reader would have extracted from one message's stored bytes.</summary>
     /// <param name="occurrenceId">The occurrence the metadata was read from.</param>
@@ -73,10 +73,10 @@ internal static class SyntheticEmail
             SentAt,
             ReceivedAt,
             [
-                Participant(EmailAddressRole.From, "sender@mailmcp.test"),
+                Participant(EmailAddressRole.From, "sender@mailfathom.test"),
                 .. recipientAddresses.Select(address => Participant(EmailAddressRole.To, address)),
             ],
-            EmailThreadReferences.Create($"{subject}@mailmcp.test", inReplyTo: null, references: null),
+            EmailThreadReferences.Create($"{subject}@mailfathom.test", inReplyTo: null, references: null),
             EmailAttachmentSummary.None,
             ExtractedEmailText.FromPlainTextBody(bodyText, bodyText));
 
@@ -94,7 +94,7 @@ internal static class SyntheticEmail
     internal static byte[] RawMimeOf(string subject, int totalByteCount)
     {
         var headers = Encoding.ASCII.GetBytes(
-            $"From: sender@mailmcp.test\r\nTo: {OrchestrationContract.MailServerAccountEmailAddress}\r\nSubject: {subject}\r\n\r\n");
+            $"From: sender@mailfathom.test\r\nTo: {OrchestrationContract.MailServerAccountEmailAddress}\r\nSubject: {subject}\r\n\r\n");
 
         ArgumentOutOfRangeException.ThrowIfLessThan(totalByteCount, headers.Length);
 

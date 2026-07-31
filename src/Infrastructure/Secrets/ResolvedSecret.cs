@@ -4,7 +4,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace MailMcp.Infrastructure.Secrets;
+namespace MailFathom.Infrastructure.Secrets;
 
 /// <summary>Secret material owned by the operation that resolved it and erased when that operation ends.</summary>
 /// <remarks>
@@ -16,7 +16,7 @@ namespace MailMcp.Infrastructure.Secrets;
 /// survive runtime optimizations that could drop a write no read follows. Pooled buffers are never used, because a
 /// buffer returned uncleared hands the material to the next unrelated caller. <c>SecureString</c> is deliberately not
 /// used: Microsoft recommends against it for new development and it does not encrypt its storage on non-Windows
-/// platforms, which is every environment MailMcp targets.
+/// platforms, which is every environment MailFathom targets.
 /// </para>
 /// <para>
 /// The instance is owned by whoever resolved it. Dispose it as soon as the operation that needed the material finishes,

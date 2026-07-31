@@ -2,19 +2,19 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.IntegrationTests.Orchestration;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Persistence;
+namespace MailFathom.IntegrationTests.Persistence;
 
 /// <summary>Proves the indexes the schema declares are the ones a timeline read and a lexical search need.</summary>
 /// <remarks>
@@ -37,7 +37,7 @@ namespace MailMcp.IntegrationTests.Persistence;
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixture orchestration)
+public sealed class OrchestratedStoredEmailIndexTests(MailFathomOrchestrationFixture orchestration)
 {
     private const string FolderAlias = "timeline-and-search";
 
@@ -138,7 +138,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var folderId = await SeededFolderIdAsync(services, cancellationToken);
 
         // Act
@@ -162,7 +162,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
             FirstTimelinePageSql,
             [FolderIdParameter(folderId), PageSizeParameter(PageSize)],
             cancellationToken);
-        Assert.Contains(MailMcpDbContext.StoredEmailFolderTimelineIndexName, queryPlan, StringComparison.Ordinal);
+        Assert.Contains(MailFathomDbContext.StoredEmailFolderTimelineIndexName, queryPlan, StringComparison.Ordinal);
     }
 
     /// <summary>Proves a keyset walk over that order visits every row exactly once.</summary>
@@ -176,7 +176,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var folderId = await SeededFolderIdAsync(services, cancellationToken);
         var wholeTimeline = await ReadTimelineAsync(
             services,
@@ -204,7 +204,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         await EnsureSeededAsync(services, binding, cancellationToken);
 
@@ -225,7 +225,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
             LexicalSearchSql,
             [ConfigurationParameter(), QueryTextParameter(DistinctiveBodyTerm)],
             cancellationToken);
-        Assert.Contains(MailMcpDbContext.EmailSearchDocumentVectorIndexName, queryPlan, StringComparison.Ordinal);
+        Assert.Contains(MailFathomDbContext.EmailSearchDocumentVectorIndexName, queryPlan, StringComparison.Ordinal);
     }
 
     /// <summary>Proves query text carrying SQL and full-text syntax is data on the way in and on the way out.</summary>
@@ -240,7 +240,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         await EnsureSeededAsync(services, binding, cancellationToken);
         var metacharacterDocument = Assert.Single(
@@ -265,7 +265,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
     }
 
     private static async Task<IReadOnlyList<IReadOnlyList<EmailTimelinePosition>>> WalkTimelineAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         long folderId,
         CancellationToken cancellationToken)
     {
@@ -286,7 +286,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
 
     /// <summary>Reads the page that follows one position, choosing the continuation the cursor's own shape requires.</summary>
     private static Task<IReadOnlyList<EmailTimelinePosition>> ReadTimelinePageAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         long folderId,
         EmailTimelinePosition? resumeAfter,
         CancellationToken cancellationToken) => resumeAfter switch
@@ -318,7 +318,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
         };
 
     private static Task<IReadOnlyList<EmailTimelinePosition>> SearchAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         string queryText,
         CancellationToken cancellationToken) => ReadTimelineAsync(
             services,
@@ -336,7 +336,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
 
     /// <summary>Ensures the seeded volume exists and returns the folder its rows hang from.</summary>
     private static async Task<long> SeededFolderIdAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         CancellationToken cancellationToken)
     {
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
@@ -348,7 +348,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
 
         return await services.InScopeAsync(
             (scope, token) => scope
-                .GetRequiredService<MailMcpDbContext>()
+                .GetRequiredService<MailFathomDbContext>()
                 .MailFolders
                 .AsNoTracking()
                 .Where(folder => folder.MailboxAccountId == SyntheticMailAccount.AccountId.Value
@@ -367,7 +367,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
     /// chooses a plan from defaults and the plan assertions would describe that rather than the indexes.
     /// </remarks>
     private static async Task EnsureSeededAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         MailFolderResolution binding,
         CancellationToken cancellationToken)
     {
@@ -398,7 +398,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
         await services.InScopeAsync(
             async (scope, token) =>
             {
-                var database = scope.GetRequiredService<MailMcpDbContext>().Database;
+                var database = scope.GetRequiredService<MailFathomDbContext>().Database;
 
                 return await database.ExecuteSqlRawAsync("ANALYZE stored_emails, email_search_documents", token);
             },
@@ -421,7 +421,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
                     occurrenceId,
                     subject,
                     SyntheticEmail.BodyTextContaining(bodyTerm, wordCount: 120),
-                    $"recipient{index % 8}@mailmcp.test") with
+                    $"recipient{index % 8}@mailfathom.test") with
                 {
                     ReceivedAt = ReceivedAtOf(index),
                 });
@@ -433,7 +433,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
         : SyntheticEmail.ReceivedAt.AddMinutes(index / EmailsPerReceivedTimestamp);
 
     private static Task<int> CountSeededDocumentsAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         MailFolderResolution binding,
         CancellationToken cancellationToken)
     {
@@ -442,7 +442,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
 
         return services.InScopeAsync(
             (scope, token) => scope
-                .GetRequiredService<MailMcpDbContext>()
+                .GetRequiredService<MailFathomDbContext>()
                 .EmailSearchDocuments
                 .AsNoTracking()
                 .CountAsync(
@@ -454,7 +454,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
 
     /// <summary>Runs a parameterized read and projects its two columns onto timeline positions.</summary>
     private static Task<IReadOnlyList<EmailTimelinePosition>> ReadTimelineAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         string sql,
         IReadOnlyList<NpgsqlParameter> parameters,
         CancellationToken cancellationToken) => WithConnectionAsync(
@@ -481,7 +481,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
 
     /// <summary>Reads the plan PostgreSQL chooses for a query when nothing constrains the planner.</summary>
     private static Task<string> ReadQueryPlanAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         string sql,
         IReadOnlyList<NpgsqlParameter> parameters,
         CancellationToken cancellationToken) =>
@@ -496,7 +496,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
     /// answers: is there an index this query shape can use, or would a full mailbox be scanned for every search.
     /// </remarks>
     private static Task<string> ReadQueryPlanWithoutSequentialScansAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         string sql,
         IReadOnlyList<NpgsqlParameter> parameters,
         CancellationToken cancellationToken) => ReadQueryPlanAsync(
@@ -513,7 +513,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
     /// transaction that is rolled back, so a pooled connection is handed back with the planner it arrived with.
     /// </remarks>
     private static Task<string> ReadQueryPlanAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         string sql,
         IReadOnlyList<NpgsqlParameter> parameters,
         IReadOnlyList<string> plannerSettings,
@@ -577,12 +577,12 @@ public sealed class OrchestratedStoredEmailIndexTests(MailMcpOrchestrationFixtur
     /// comes from the context, so the credential the data source supplies per connection is the one a deployment uses.
     /// </remarks>
     private static Task<TResult> WithConnectionAsync<TResult>(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         Func<NpgsqlConnection, CancellationToken, Task<TResult>> work,
         CancellationToken cancellationToken) => services.InScopeAsync(
             async (scope, token) =>
             {
-                var database = scope.GetRequiredService<MailMcpDbContext>().Database;
+                var database = scope.GetRequiredService<MailFathomDbContext>().Database;
 
                 await database.OpenConnectionAsync(token);
 

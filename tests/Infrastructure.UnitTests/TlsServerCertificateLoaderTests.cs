@@ -2,13 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Security.Cryptography.X509Certificates;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.TestSupport;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Covers what material becomes a server identity, and what is refused before an endpoint could present it.</summary>
 /// <remarks>
@@ -20,13 +20,13 @@ public sealed class TlsServerCertificateLoaderTests
 {
     private const string Domain = "mail.example.test";
 
-    private const string BundleReference = "file:/etc/mailmcp/tls/bundle.pfx";
+    private const string BundleReference = "file:/etc/mailfathom/tls/bundle.pfx";
 
-    private const string ChainReference = "file:/etc/mailmcp/tls/fullchain.pem";
+    private const string ChainReference = "file:/etc/mailfathom/tls/fullchain.pem";
 
-    private const string PrivateKeyReference = "file:/etc/mailmcp/tls/privkey.pem";
+    private const string PrivateKeyReference = "file:/etc/mailfathom/tls/privkey.pem";
 
-    private const string PasswordReference = "systemd-credential:mailmcp-tls-password";
+    private const string PasswordReference = "systemd-credential:mailfathom-tls-password";
 
     private static readonly DateTimeOffset Now = new(2026, 7, 31, 12, 0, 0, TimeSpan.Zero);
 
@@ -108,7 +108,7 @@ public sealed class TlsServerCertificateLoaderTests
     {
         // Arrange
         var material = new ProvisionedMaterialResolver();
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Authority");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Authority");
         using var certificate = ServerCertificateFor(Domain, issuer: authority);
         using var publicAuthority = TestCertificates.WithoutPrivateKey(authority);
         material.Provision(BundleReference, TestCertificates.ToBundleOf(bundlePassword: null, certificate, publicAuthority));
@@ -211,7 +211,7 @@ public sealed class TlsServerCertificateLoaderTests
     {
         // Arrange
         var material = new ProvisionedMaterialResolver();
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Authority");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Authority");
         using var certificate = ServerCertificateFor(Domain, issuer: authority);
         material.ProvisionText(ChainReference, TestCertificates.ToCertificateChainPem(certificate, authority));
         material.ProvisionText(PrivateKeyReference, TestCertificates.ToPrivateKeyPem(certificate));
@@ -626,7 +626,7 @@ public sealed class TlsServerCertificateLoaderTests
     {
         // Arrange
         var material = new ProvisionedMaterialResolver();
-        using var expiredAuthority = TestCertificates.CreateExpiredCertificateAuthority("MailMcp Retired Authority");
+        using var expiredAuthority = TestCertificates.CreateExpiredCertificateAuthority("MailFathom Retired Authority");
         using var certificate = ServerCertificateFor(Domain);
         using var publicAuthority = TestCertificates.WithoutPrivateKey(expiredAuthority);
         material.ProvisionText(
@@ -647,7 +647,7 @@ public sealed class TlsServerCertificateLoaderTests
     {
         // Arrange
         var material = new ProvisionedMaterialResolver();
-        using var unrelatedAuthority = TestCertificates.CreateCertificateAuthority("MailMcp Unrelated Authority");
+        using var unrelatedAuthority = TestCertificates.CreateCertificateAuthority("MailFathom Unrelated Authority");
         using var certificate = ServerCertificateFor(Domain);
         using var publicAuthority = TestCertificates.WithoutPrivateKey(unrelatedAuthority);
         material.ProvisionText(
@@ -668,8 +668,8 @@ public sealed class TlsServerCertificateLoaderTests
     {
         // Arrange
         var material = new ProvisionedMaterialResolver();
-        using var root = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
-        using var intermediate = TestCertificates.IssueIntermediateAuthority(root, "MailMcp Test Intermediate");
+        using var root = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
+        using var intermediate = TestCertificates.IssueIntermediateAuthority(root, "MailFathom Test Intermediate");
         using var certificate = ServerCertificateFor(Domain, issuer: intermediate);
         using var publicRoot = TestCertificates.WithoutPrivateKey(root);
         using var publicIntermediate = TestCertificates.WithoutPrivateKey(intermediate);

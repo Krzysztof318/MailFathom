@@ -2,20 +2,20 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Security.Cryptography.X509Certificates;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Mail.MailKit;
+using MailFathom.Infrastructure.Secrets;
 using MailKit;
 using MailKit.Net.Imap;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Transport;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Mail.MailKit;
-using MailMcp.Infrastructure.Secrets;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Builds the account, policy, folder, and session factory the MailKit adapter tests arrange around.</summary>
 internal static class MailKitImapSessionTestContext

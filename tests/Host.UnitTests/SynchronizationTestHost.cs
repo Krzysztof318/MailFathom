@@ -1,25 +1,25 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Folders;
-using MailMcp.Application.Mail;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Transport;
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Folders;
+using MailFathom.Application.Mail;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Transport;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Secrets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Composes the scoped graph a synchronization work unit resolves, without the real host around it.</summary>
 /// <remarks>
@@ -35,7 +35,7 @@ internal static class SynchronizationTestHost
     {
         AccountId = accountId,
         Host = "imap.example.test",
-        UserName = "mailmcp@example.test",
+        UserName = "mailfathom@example.test",
         Folders = [.. folders.Select(folder => new MailFolderMappingOptions { Alias = folder, RemotePath = folder })],
         Secrets = new MailAccountSecretOptions
         {

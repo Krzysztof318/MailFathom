@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Infrastructure.Security;
+namespace MailFathom.Infrastructure.Security;
 
 /// <summary>How much MCP traffic one process serves, and how fast one client may ask for it.</summary>
 /// <remarks>

@@ -3,7 +3,7 @@
 
 using Ganss.Xss;
 
-namespace MailMcp.Infrastructure.Mail.Mime;
+namespace MailFathom.Infrastructure.Mail.Mime;
 
 /// <summary>Reduces an HTML mail body to markup that is safe to hand to whatever renders it.</summary>
 /// <remarks>
@@ -12,7 +12,7 @@ namespace MailMcp.Infrastructure.Mail.Mime;
 /// the ways it can misbehave — script, event handlers, embedded objects, forms, and above all references that a
 /// renderer resolves on its own — are not a list anyone can finish. The policy is therefore an allow-list at every
 /// level the library offers: elements, attributes, CSS properties, CSS at-rules, and URI schemes. A deny-list cannot be
-/// proven complete, and this is the one place in MailMcp where being wrong is an injected script rather than a bad
+/// proven complete, and this is the one place in MailFathom where being wrong is an injected script rather than a bad
 /// answer.
 /// </para>
 /// <para>

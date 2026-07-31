@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.ComponentModel;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Emails.SearchEmails;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.SearchEmails;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes one ranked window of search results.</summary>
 /// <remarks>

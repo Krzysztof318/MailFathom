@@ -2,16 +2,16 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.AppHost;
+using MailFathom.Domain.Emails;
+using MailFathom.IntegrationTests.Orchestration;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Net.Smtp;
 using MailKit.Security;
-using MailMcp.AppHost;
-using MailMcp.Domain.Emails;
-using MailMcp.IntegrationTests.Orchestration;
 using MimeKit;
 
-namespace MailMcp.IntegrationTests.Mailbox;
+namespace MailFathom.IntegrationTests.Mailbox;
 
 /// <summary>Seeds the orchestrated mailbox and observes it over connections the code under test knows nothing about.</summary>
 /// <remarks>
@@ -158,7 +158,7 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
     /// <para>
     /// The wait is not a guess. GreenMail derives a folder's UIDVALIDITY from <c>System.currentTimeMillis() / 1000</c>,
     /// so a folder recreated inside the same wall-clock second is handed back the value it just had, and the change the
-    /// test asserts on would be absent for a reason that has nothing to do with MailMcp. Crossing the next second
+    /// test asserts on would be absent for a reason that has nothing to do with MailFathom. Crossing the next second
     /// boundary first makes the new value certain rather than likely.
     /// </para>
     /// </remarks>
@@ -212,9 +212,9 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
             Body = new TextPart("plain") { Text = $"Synthetic body of {subject}." },
         };
 
-        message.From.Add(new MailboxAddress("MailMcp integration sender", "sender@mailmcp.test"));
+        message.From.Add(new MailboxAddress("MailFathom integration sender", "sender@mailfathom.test"));
         message.To.Add(new MailboxAddress(
-            "MailMcp integration mailbox",
+            "MailFathom integration mailbox",
             OrchestrationContract.MailServerAccountEmailAddress));
 
         return message;

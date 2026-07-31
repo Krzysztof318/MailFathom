@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>Describes one stored email as a mailbox listing shows it, without any of its content.</summary>
 /// <remarks>
@@ -29,7 +29,7 @@ public sealed record EmailSummary
     /// <summary>Gets the account whose mailbox the email was read from.</summary>
     public required MailAccountId AccountId { get; init; }
 
-    /// <summary>Gets the folder alias the email was read from, which is MailMcp's own name for that folder.</summary>
+    /// <summary>Gets the folder alias the email was read from, which is MailFathom's own name for that folder.</summary>
     public required MailFolderAlias FolderAlias { get; init; }
 
     /// <summary>Gets the <c>Message-ID</c> the message carried, or <see langword="null" /> when it carried none this reader accepted.</summary>

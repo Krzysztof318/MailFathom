@@ -4,7 +4,7 @@
 using System.Collections.ObjectModel;
 using System.Net.Http.Headers;
 
-namespace MailMcp.TestSupport;
+namespace MailFathom.TestSupport;
 
 /// <summary>
 /// An <see cref="HttpMessageHandler" /> that answers requests from a test-supplied script and records every request

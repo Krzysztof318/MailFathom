@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Host.Configuration;
-using MailMcp.Mcp;
+using MailFathom.Host.Configuration;
+using MailFathom.Mcp;
 using Microsoft.Extensions.Options;
 
-namespace MailMcp.Host.Hosting;
+namespace MailFathom.Host.Hosting;
 
 /// <summary>States at startup what bounds the MCP endpoint is serving under, or that it has none.</summary>
 /// <remarks>

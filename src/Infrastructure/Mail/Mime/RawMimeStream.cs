@@ -3,7 +3,7 @@
 
 using System.Runtime.InteropServices;
 
-namespace MailMcp.Infrastructure.Mail.Mime;
+namespace MailFathom.Infrastructure.Mail.Mime;
 
 /// <summary>Opens stored raw MIME for reading without copying it.</summary>
 /// <remarks>

@@ -1,25 +1,25 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Failures;
-using MailMcp.Domain.Transport;
-using MailMcp.TestSupport;
+using MailFathom.Domain.Failures;
+using MailFathom.Domain.Transport;
+using MailFathom.TestSupport;
 using Xunit;
 
-namespace MailMcp.Domain.UnitTests;
+namespace MailFathom.Domain.UnitTests;
 
-/// <summary>Covers the contract every MailMcp failure takes part in.</summary>
-public sealed class MailMcpExceptionTests
+/// <summary>Covers the contract every MailFathom failure takes part in.</summary>
+public sealed class MailFathomExceptionTests
 {
     /// <summary>A failure outside the hierarchy carries no code a boundary can report and obeys no stated message contract.</summary>
     [Fact]
-    public void DomainAssembly_EveryDeclaredException_DerivesFromMailMcpException()
+    public void DomainAssembly_EveryDeclaredException_DerivesFromMailFathomException()
     {
         // Arrange
-        var domainAssembly = typeof(MailMcpException).Assembly;
+        var domainAssembly = typeof(MailFathomException).Assembly;
 
         // Act, Assert
-        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(domainAssembly, typeof(MailMcpException));
+        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(domainAssembly, typeof(MailFathomException));
     }
 
     [Fact]
@@ -32,7 +32,7 @@ public sealed class MailMcpExceptionTests
         var failure = new MailTransportSecurityPolicyViolationException(violations);
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailTransportSecurityPolicyViolated, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailTransportSecurityPolicyViolated, failure.ErrorCode);
     }
 
     /// <summary>A violation naming no rule would report that something is unsafe while withholding what, so it is rejected at construction.</summary>

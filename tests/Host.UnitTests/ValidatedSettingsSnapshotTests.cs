@@ -2,18 +2,18 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Transport;
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Transport;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Secrets;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 public sealed class ValidatedSettingsSnapshotTests
 {

@@ -4,7 +4,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace MailMcp.Domain.Emails;
+namespace MailFathom.Domain.Emails;
 
 /// <summary>Holds an attachment file name that is safe to store, display, and log a decision about.</summary>
 /// <remarks>

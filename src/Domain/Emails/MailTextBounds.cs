@@ -3,11 +3,11 @@
 
 using System.Globalization;
 
-namespace MailMcp.Domain.Emails;
+namespace MailFathom.Domain.Emails;
 
 /// <summary>Cuts mail-derived text to a length without leaving a string a consumer cannot carry.</summary>
 /// <remarks>
-/// Every value MailMcp derives from a message — a file name, a subject, a body — is bounded somewhere, because nothing
+/// Every value MailFathom derives from a message — a file name, a subject, a body — is bounded somewhere, because nothing
 /// between the sender and local storage bounds it. Cutting at a fixed number of UTF-16 code units would split a
 /// surrogate pair or a combining sequence, so text ending in an emoji could keep a lone high surrogate: a JSON writer
 /// replaces or rejects that, and PostgreSQL rejects it outright. The cut therefore falls on a text-element boundary,

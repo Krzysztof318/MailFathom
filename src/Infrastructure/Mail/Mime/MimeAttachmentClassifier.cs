@@ -2,13 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Text.RegularExpressions;
-using MailMcp.Application.Emails;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.Emails;
+using MailFathom.Domain.Emails;
 using MimeKit;
 using MimeKit.Text;
 using MimeKit.Tnef;
 
-namespace MailMcp.Infrastructure.Mail.Mime;
+namespace MailFathom.Infrastructure.Mail.Mime;
 
 /// <summary>Decides what each part of a message is, in the order that decides it correctly.</summary>
 /// <remarks>

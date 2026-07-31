@@ -3,7 +3,7 @@
 
 using System.Text.RegularExpressions;
 
-namespace MailMcp.Infrastructure.Mail.Mime;
+namespace MailFathom.Infrastructure.Mail.Mime;
 
 /// <summary>Removes the quoted history and the signature from the end of an extracted body text.</summary>
 /// <remarks>

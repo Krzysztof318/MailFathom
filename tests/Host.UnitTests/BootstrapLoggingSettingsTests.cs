@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Host.Observability;
+using MailFathom.Host.Observability;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 public sealed class BootstrapLoggingSettingsTests
 {
@@ -20,17 +20,17 @@ public sealed class BootstrapLoggingSettingsTests
         var settings = BootstrapLoggingSettings.From(ReadFrom());
 
         // Assert
-        Assert.Equal("MailMcp.Host", settings.ServiceName);
+        Assert.Equal("MailFathom.Host", settings.ServiceName);
     }
 
     [Fact]
     public void From_ServiceNameConfigured_PrefersTheNameTheOrchestratorInjected()
     {
         // Act
-        var settings = BootstrapLoggingSettings.From(ReadFrom((ServiceNameVariable, "mailmcp-host")));
+        var settings = BootstrapLoggingSettings.From(ReadFrom((ServiceNameVariable, "mailfathom-host")));
 
         // Assert
-        Assert.Equal("mailmcp-host", settings.ServiceName);
+        Assert.Equal("mailfathom-host", settings.ServiceName);
     }
 
     [Theory]
@@ -42,7 +42,7 @@ public sealed class BootstrapLoggingSettingsTests
         var settings = BootstrapLoggingSettings.From(ReadFrom((ServiceNameVariable, configuredServiceName)));
 
         // Assert
-        Assert.Equal("MailMcp.Host", settings.ServiceName);
+        Assert.Equal("MailFathom.Host", settings.ServiceName);
     }
 
     [Fact]

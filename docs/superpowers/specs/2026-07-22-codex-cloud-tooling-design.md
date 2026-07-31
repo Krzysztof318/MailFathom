@@ -24,7 +24,7 @@ Keep the upstream directory structure and referenced support files intact. Recor
 
 ### Microsoft Learn MCP plugin
 
-Create a repository-local plugin under `plugins/mailmcp-microsoft-learn/` containing:
+Create a repository-local plugin under `plugins/mailfathom-microsoft-learn/` containing:
 
 - `.codex-plugin/plugin.json` for plugin identity and component wiring;
 - `.mcp.json` with the public `https://learn.microsoft.com/api/mcp` Streamable HTTP endpoint;
@@ -50,7 +50,7 @@ Add `docs/operations/codex-cloud-tooling.md` after implementation. It will descr
 2. Codex discovers Superpowers metadata from `.agents/skills/` and loads individual skill instructions on demand.
 3. The user or workspace enables the repository's Microsoft Learn plugin.
 4. A new Codex session receives the plugin's MCP tool definitions.
-5. Microsoft documentation searches and article retrievals go to the public Microsoft Learn MCP endpoint; no MailMcp source code, credentials, or message content are required by the integration.
+5. Microsoft documentation searches and article retrievals go to the public Microsoft Learn MCP endpoint; no MailFathom source code, credentials, or message content are required by the integration.
 
 ## Failure Modes
 

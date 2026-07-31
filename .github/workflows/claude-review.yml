@@ -334,7 +334,7 @@ jobs:
             PR NUMBER: ${{ needs.decide.outputs.pull_request_number }}
             HEAD SHA: ${{ steps.collect.outputs.head_sha }}
 
-            You are reviewing a pull request in MailMcp, a pre-release .NET 10 clean-architecture
+            You are reviewing a pull request in MailFathom, a pre-release .NET 10 clean-architecture
             modular monolith that serves a local copy of a mailbox over MCP.
 
             ## Where everything is

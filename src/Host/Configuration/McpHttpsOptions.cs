@@ -4,7 +4,7 @@
 using System.Net;
 using System.Net.Sockets;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>Configures whether Kestrel terminates TLS for the MCP endpoint itself, and under which identities.</summary>
 /// <remarks>

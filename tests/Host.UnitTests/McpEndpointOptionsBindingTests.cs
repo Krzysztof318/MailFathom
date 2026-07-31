@@ -2,13 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Text;
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Security;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers that the endpoint section binds from configuration the way composition reads it.</summary>
 /// <remarks>
@@ -36,9 +36,9 @@ public sealed class McpEndpointOptionsBindingTests
             ["McpEndpoint:Enabled"] = "true",
             ["McpEndpoint:Authentication"] = "ApiKey",
             ["McpEndpoint:ApiKeys:0:Name"] = "workstation",
-            ["McpEndpoint:ApiKeys:0:SecretReference"] = "systemd-credential:mailmcp-mcp-workstation-key",
+            ["McpEndpoint:ApiKeys:0:SecretReference"] = "systemd-credential:mailfathom-mcp-workstation-key",
             ["McpEndpoint:ApiKeys:1:Name"] = "chatgpt-connector",
-            ["McpEndpoint:ApiKeys:1:SecretReference"] = "file:/run/secrets/mailmcp-mcp-chatgpt-key",
+            ["McpEndpoint:ApiKeys:1:SecretReference"] = "file:/run/secrets/mailfathom-mcp-chatgpt-key",
             ["McpEndpoint:ApiKeys:1:Lifetime"] = "2027-01-31T00:00:00Z",
             ["McpEndpoint:Cors:AllowedOrigins:0"] = "https://client.example.test",
             ["McpEndpoint:Cors:AllowedOrigins:1"] = "https://console.example.test:8443",
@@ -107,9 +107,9 @@ public sealed class McpEndpointOptionsBindingTests
             ["McpEndpoint:ClientCertificateProfiles:0:Name"] = "chatgpt-connector",
             ["McpEndpoint:ClientCertificateProfiles:0:Requirement"] = "Optional",
             ["McpEndpoint:ClientCertificateProfiles:0:TrustAnchors:0:Name"] = "openai-connectors-ca",
-            ["McpEndpoint:ClientCertificateProfiles:0:TrustAnchors:0:SecretReference"] = "file:/etc/mailmcp/openai-connectors-ca.pem",
+            ["McpEndpoint:ClientCertificateProfiles:0:TrustAnchors:0:SecretReference"] = "file:/etc/mailfathom/openai-connectors-ca.pem",
             ["McpEndpoint:ClientCertificateProfiles:0:TrustAnchors:1:Name"] = "openai-connectors-ca-next",
-            ["McpEndpoint:ClientCertificateProfiles:0:TrustAnchors:1:SecretReference"] = "file:/etc/mailmcp/openai-connectors-ca-next.pem",
+            ["McpEndpoint:ClientCertificateProfiles:0:TrustAnchors:1:SecretReference"] = "file:/etc/mailfathom/openai-connectors-ca-next.pem",
             ["McpEndpoint:ClientCertificateProfiles:0:SubjectAlternativeNames:0"] = "mtls.prod.connectors.openai.com",
         });
 
@@ -157,11 +157,11 @@ public sealed class McpEndpointOptionsBindingTests
             ["McpEndpoint:Enabled"] = "true",
             ["McpEndpoint:Authentication"] = "ApiKey, OAuth",
             ["McpEndpoint:ApiKeys:0:Name"] = "nightly-digest",
-            ["McpEndpoint:ApiKeys:0:SecretReference"] = "systemd-credential:mailmcp-mcp-digest-key",
+            ["McpEndpoint:ApiKeys:0:SecretReference"] = "systemd-credential:mailfathom-mcp-digest-key",
             ["McpEndpoint:OAuth:Resource"] = "https://mail.example.test/mcp",
-            ["McpEndpoint:OAuth:RequiredScopes:0"] = "mailmcp.read",
+            ["McpEndpoint:OAuth:RequiredScopes:0"] = "mailfathom.read",
             ["McpEndpoint:OAuth:AuthorizationServers:0:Name"] = "workforce",
-            ["McpEndpoint:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailmcp",
+            ["McpEndpoint:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
             ["McpEndpoint:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "9f2c",
         });
 
@@ -172,7 +172,7 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.True(options.AllowsApiKey);
         Assert.True(options.AllowsOAuth);
         Assert.Equal("https://mail.example.test/mcp", options.OAuth.Resource);
-        Assert.Equal(["mailmcp.read"], options.OAuth.RequiredScopes);
+        Assert.Equal(["mailfathom.read"], options.OAuth.RequiredScopes);
         Assert.Equal(["workforce"], options.OAuth.AuthorizationServers.Select(server => server.Name));
         Assert.Equal(["9f2c"], options.OAuth.AuthorizationServers.Single().AuthorizedSubjects);
         Assert.Empty(options.FindConfigurationErrors());
@@ -288,16 +288,16 @@ public sealed class McpEndpointOptionsBindingTests
             ["McpEndpoint:Https:Endpoints:0:HttpProtocols:0"] = "Http1",
             ["McpEndpoint:Https:Endpoints:0:HttpProtocols:1"] = "Http2",
             ["McpEndpoint:Https:Endpoints:0:ServerCertificate:CertificateChain:Name"] = "public-chain",
-            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:CertificateChain:SecretReference"] = "file:/etc/mailmcp/tls/fullchain.pem",
+            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:CertificateChain:SecretReference"] = "file:/etc/mailfathom/tls/fullchain.pem",
             ["McpEndpoint:Https:Endpoints:0:ServerCertificate:PrivateKey:Name"] = "public-key",
-            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:PrivateKey:SecretReference"] = "file:/etc/mailmcp/tls/privkey.pem",
+            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:PrivateKey:SecretReference"] = "file:/etc/mailfathom/tls/privkey.pem",
             ["McpEndpoint:Https:Endpoints:1:Name"] = "connector",
             ["McpEndpoint:Https:Endpoints:1:Domain"] = "connector.example.test",
             ["McpEndpoint:Https:Endpoints:1:Port"] = "443",
             ["McpEndpoint:Https:Endpoints:1:ServerCertificate:Bundle:Name"] = "connector-bundle",
-            ["McpEndpoint:Https:Endpoints:1:ServerCertificate:Bundle:SecretReference"] = "file:/etc/mailmcp/tls/connector.pfx",
+            ["McpEndpoint:Https:Endpoints:1:ServerCertificate:Bundle:SecretReference"] = "file:/etc/mailfathom/tls/connector.pfx",
             ["McpEndpoint:Https:Endpoints:1:ServerCertificate:Bundle:Password:Name"] = "connector-bundle-password",
-            ["McpEndpoint:Https:Endpoints:1:ServerCertificate:Bundle:Password:SecretReference"] = "systemd-credential:mailmcp-tls-password",
+            ["McpEndpoint:Https:Endpoints:1:ServerCertificate:Bundle:Password:SecretReference"] = "systemd-credential:mailfathom-tls-password",
         });
 
         // Act
@@ -311,10 +311,10 @@ public sealed class McpEndpointOptionsBindingTests
             [McpHttpProtocol.Http1, McpHttpProtocol.Http2],
             options.Https.Endpoints[0].ServedHttpProtocols);
         Assert.Equal(
-            "file:/etc/mailmcp/tls/privkey.pem",
+            "file:/etc/mailfathom/tls/privkey.pem",
             options.Https.Endpoints[0].ServerCertificate.PrivateKey?.SecretReference);
         Assert.Equal(
-            "systemd-credential:mailmcp-tls-password",
+            "systemd-credential:mailfathom-tls-password",
             options.Https.Endpoints[1].ServerCertificate.Bundle?.Password?.SecretReference);
         Assert.Empty(options.FindConfigurationErrors());
     }
@@ -331,7 +331,7 @@ public sealed class McpEndpointOptionsBindingTests
             ["McpEndpoint:Https:Endpoints:0:Name"] = "public",
             ["McpEndpoint:Https:Endpoints:0:Domain"] = "mail.example.test",
             ["McpEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:Name"] = "bundle",
-            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:SecretReference"] = "file:/etc/mailmcp/tls/bundle.pfx",
+            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:SecretReference"] = "file:/etc/mailfathom/tls/bundle.pfx",
         });
 
         // Act

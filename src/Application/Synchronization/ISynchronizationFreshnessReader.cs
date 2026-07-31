@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
+using MailFathom.Application.Emails;
 
-namespace MailMcp.Application.Synchronization;
+namespace MailFathom.Application.Synchronization;
 
 /// <summary>Reads how current the local copy of each folder in a mailbox scope is.</summary>
 /// <remarks>

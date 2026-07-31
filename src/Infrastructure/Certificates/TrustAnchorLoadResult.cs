@@ -3,7 +3,7 @@
 
 using System.Security.Cryptography.X509Certificates;
 
-namespace MailMcp.Infrastructure.Certificates;
+namespace MailFathom.Infrastructure.Certificates;
 
 /// <summary>The outcome of loading a configured trust anchor.</summary>
 /// <remarks>

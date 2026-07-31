@@ -2,17 +2,17 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Application.Persistence;
-using MailMcp.CodeCoverage;
+using MailFathom.Application.Persistence;
+using MailFathom.CodeCoverage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Creates EF Core-backed persistence sessions for application write transactions.</summary>
 [RequiresIntegrationCoverage]
-internal sealed class PersistenceSessionFactory(MailMcpDbContext dbContext) : IPersistenceSessionFactory
+internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) : IPersistenceSessionFactory
 {
     /// <inheritdoc />
     [SuppressMessage(
@@ -28,11 +28,11 @@ internal sealed class PersistenceSessionFactory(MailMcpDbContext dbContext) : IP
     }
 
     private sealed class EfCorePersistenceSessionResources(
-        MailMcpDbContext dbContext,
+        MailFathomDbContext dbContext,
         IDbContextTransaction transaction)
         : IEfCorePersistenceSessionResources
     {
-        public MailMcpDbContext DbContext => dbContext;
+        public MailFathomDbContext DbContext => dbContext;
 
         public async Task SaveChangesAsync(CancellationToken cancellationToken)
         {
@@ -59,9 +59,9 @@ internal sealed class PersistenceSessionFactory(MailMcpDbContext dbContext) : IP
             exception.InnerException is PostgresException
             {
                 SqlState: PostgresErrorCodes.UniqueViolation,
-                ConstraintName: MailMcpDbContext.SynchronizationCheckpointPrimaryKeyConstraintName
-                    or MailMcpDbContext.MailFolderBindingUniqueIndexName
-                    or MailMcpDbContext.MailboxAccountPrimaryKeyConstraintName,
+                ConstraintName: MailFathomDbContext.SynchronizationCheckpointPrimaryKeyConstraintName
+                    or MailFathomDbContext.MailFolderBindingUniqueIndexName
+                    or MailFathomDbContext.MailboxAccountPrimaryKeyConstraintName,
             };
 
         public void ClearTrackedState() => dbContext.ChangeTracker.Clear();

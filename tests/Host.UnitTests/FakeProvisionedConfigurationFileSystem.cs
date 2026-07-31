@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Host.Configuration;
+using MailFathom.Host.Configuration;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Reports a mount the test describes, so layering can be proven without a directory on disk.</summary>
 internal sealed class FakeProvisionedConfigurationFileSystem : IProvisionedConfigurationFileSystem

@@ -13,7 +13,7 @@ Expose the content read model from specification 14 as an MCP tool, following th
 
 The tool accepts one stable local message identifier and an optional flag requesting the sanitized HTML representation. It returns normalized headers, the plain-text body, attachment metadata without bytes, source account and folder alias, the remote flag snapshot, and truncation metadata, mapped from the use-case result.
 
-The descriptor carries the same read-only annotation set as `list_emails`, since this tool reads local state and reaches nothing outside MailMcp. The consistency error for missing or corrupt content maps to its own stable code, distinct from a not-found code, because a caller needs to distinguish a message that does not exist from one whose local copy is missing and is being repaired.
+The descriptor carries the same read-only annotation set as `list_emails`, since this tool reads local state and reaches nothing outside MailFathom. The consistency error for missing or corrupt content maps to its own stable code, distinct from a not-found code, because a caller needs to distinguish a message that does not exist from one whose local copy is missing and is being repaired.
 
 ## Safety and privacy
 

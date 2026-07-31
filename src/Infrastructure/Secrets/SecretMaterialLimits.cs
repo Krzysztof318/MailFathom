@@ -3,7 +3,7 @@
 
 using System.Text;
 
-namespace MailMcp.Infrastructure.Secrets;
+namespace MailFathom.Infrastructure.Secrets;
 
 /// <summary>The explicit bounds every secret retrieval enforces.</summary>
 /// <remarks>

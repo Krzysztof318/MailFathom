@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Failures;
-using MailMcp.Host.Configuration;
+using MailFathom.Domain.Failures;
+using MailFathom.Host.Configuration;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers how a deployment states where it provisioned configuration.</summary>
 public sealed class ProvisionedConfigurationPathsTests
@@ -16,14 +16,14 @@ public sealed class ProvisionedConfigurationPathsTests
     {
         // Arrange
         var configuration = Build(
-            (ProvisionedConfigurationPaths.DirectoryKey, "/etc/mailmcp/config"),
-            (ProvisionedConfigurationPaths.FileKey, "/etc/mailmcp/override.json"));
+            (ProvisionedConfigurationPaths.DirectoryKey, "/etc/mailfathom/config"),
+            (ProvisionedConfigurationPaths.FileKey, "/etc/mailfathom/override.json"));
 
         // Act
         var paths = ProvisionedConfigurationPaths.ReadFrom(configuration);
 
         // Assert
-        Assert.Equal(new ProvisionedConfigurationPaths("/etc/mailmcp/config", "/etc/mailmcp/override.json"), paths);
+        Assert.Equal(new ProvisionedConfigurationPaths("/etc/mailfathom/config", "/etc/mailfathom/override.json"), paths);
         Assert.True(paths.AreConfigured);
     }
 
@@ -64,28 +64,28 @@ public sealed class ProvisionedConfigurationPathsTests
     public void ReadFrom_SurroundingWhitespace_NamesThePathWithoutIt()
     {
         // Arrange
-        var configuration = Build((ProvisionedConfigurationPaths.DirectoryKey, "  /etc/mailmcp/config\n"));
+        var configuration = Build((ProvisionedConfigurationPaths.DirectoryKey, "  /etc/mailfathom/config\n"));
 
         // Act
         var paths = ProvisionedConfigurationPaths.ReadFrom(configuration);
 
         // Assert
-        Assert.Equal("/etc/mailmcp/config", paths.DirectoryPath);
+        Assert.Equal("/etc/mailfathom/config", paths.DirectoryPath);
     }
 
     /// <summary>A misspelling that bound nothing would leave the host on defaults with the mount believed in force.</summary>
     [Fact]
-    public void ReadFrom_SettingMailMcpDoesNotDefine_FailsNamingIt()
+    public void ReadFrom_SettingMailFathomDoesNotDefine_FailsNamingIt()
     {
         // Arrange
-        var configuration = Build(($"{ProvisionedConfigurationPaths.SectionName}:Directroy", "/etc/mailmcp/config"));
+        var configuration = Build(($"{ProvisionedConfigurationPaths.SectionName}:Directroy", "/etc/mailfathom/config"));
 
         // Act
         var failure = Assert.Throws<ProvisionedConfigurationSourceInvalidException>(
             () => ProvisionedConfigurationPaths.ReadFrom(configuration));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.ProvisionedConfigurationSourceInvalid, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.ProvisionedConfigurationSourceInvalid, failure.ErrorCode);
         Assert.Contains("Directroy", failure.Message, StringComparison.Ordinal);
     }
 
@@ -95,14 +95,14 @@ public sealed class ProvisionedConfigurationPathsTests
     {
         // Arrange
         var configuration = Build(
-            ($"{ProvisionedConfigurationPaths.DirectoryKey}:Path", "/etc/mailmcp/config"));
+            ($"{ProvisionedConfigurationPaths.DirectoryKey}:Path", "/etc/mailfathom/config"));
 
         // Act
         var failure = Assert.Throws<ProvisionedConfigurationSourceInvalidException>(
             () => ProvisionedConfigurationPaths.ReadFrom(configuration));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.ProvisionedConfigurationSourceInvalid, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.ProvisionedConfigurationSourceInvalid, failure.ErrorCode);
         Assert.Contains("Directory", failure.Message, StringComparison.Ordinal);
     }
 
@@ -111,13 +111,13 @@ public sealed class ProvisionedConfigurationPathsTests
     public void ReadFrom_DifferentlyCasedSetting_NamesTheProvisionedPath()
     {
         // Arrange
-        var configuration = Build(($"{ProvisionedConfigurationPaths.SectionName}:directory", "/etc/mailmcp/config"));
+        var configuration = Build(($"{ProvisionedConfigurationPaths.SectionName}:directory", "/etc/mailfathom/config"));
 
         // Act
         var paths = ProvisionedConfigurationPaths.ReadFrom(configuration);
 
         // Assert
-        Assert.Equal("/etc/mailmcp/config", paths.DirectoryPath);
+        Assert.Equal("/etc/mailfathom/config", paths.DirectoryPath);
     }
 
     private static IConfiguration Build(params (string Key, string Value)[] entries) =>

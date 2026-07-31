@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Application.EmailContent;
+namespace MailFathom.Application.EmailContent;
 
 /// <summary>Turns stored raw MIME into the headers, body, and attachment metadata a reader is shown.</summary>
 /// <remarks>

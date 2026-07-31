@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.TestSupport;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
-namespace MailMcp.SharedSources.UnitTests;
+namespace MailFathom.SharedSources.UnitTests;
 
 /// <summary>
 /// Proves the shared logging-pipeline double, because a suite that asserts a type released the pipeline it was handed
@@ -13,7 +13,7 @@ namespace MailMcp.SharedSources.UnitTests;
 /// </summary>
 public sealed class RecordingLoggerFactoryTests
 {
-    private const string Category = "MailMcp.Host.Startup";
+    private const string Category = "MailFathom.Host.Startup";
 
     [Fact]
     public void CreateLogger_Always_RemembersTheCategoryTheOwnerAskedFor()
@@ -36,19 +36,19 @@ public sealed class RecordingLoggerFactoryTests
         var logger = loggerFactory.CreateLogger(Category);
         var state = new List<KeyValuePair<string, object?>>
         {
-            KeyValuePair.Create("ServiceName", (object?)"mailmcp-host"),
+            KeyValuePair.Create("ServiceName", (object?)"mailfathom-host"),
             KeyValuePair.Create("{OriginalFormat}", (object?)"Host {ServiceName} ended."),
         };
 
         // Act
-        logger.Log(LogLevel.Critical, new EventId(1), state, null, (_, _) => "Host mailmcp-host ended.");
+        logger.Log(LogLevel.Critical, new EventId(1), state, null, (_, _) => "Host mailfathom-host ended.");
 
         // Assert
         var record = Assert.Single(loggerFactory.Records);
         Assert.Equal(Category, record.Category);
         Assert.Equal(LogLevel.Critical, record.Level);
         Assert.Equal(
-            [KeyValuePair.Create("ServiceName", (object?)"mailmcp-host")],
+            [KeyValuePair.Create("ServiceName", (object?)"mailfathom-host")],
             record.Properties);
     }
 

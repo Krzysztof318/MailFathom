@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Accounts;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.Accounts;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Application.Emails.ListEmails;
+namespace MailFathom.Application.Emails.ListEmails;
 
 /// <summary>Lists emails from the local mailbox copy as one bounded page of a keyset walk.</summary>
 /// <remarks>

@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Names the PostgreSQL text search configuration the lexical index is built with.</summary>
 /// <remarks>
@@ -22,7 +22,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// </remarks>
 public sealed record PostgresTextSearchConfiguration
 {
-    /// <summary>The configurations a stock PostgreSQL server ships, which is the set MailMcp accepts.</summary>
+    /// <summary>The configurations a stock PostgreSQL server ships, which is the set MailFathom accepts.</summary>
     private static readonly string[] SupportedConfigurationNames =
     [
         "simple", "arabic", "armenian", "basque", "catalan", "danish", "dutch", "english", "finnish", "french",
@@ -48,7 +48,7 @@ public sealed record PostgresTextSearchConfiguration
     /// <summary>Gets the configuration name as PostgreSQL knows it.</summary>
     public string Value { get; }
 
-    /// <summary>Reports whether a configured name is one MailMcp accepts.</summary>
+    /// <summary>Reports whether a configured name is one MailFathom accepts.</summary>
     /// <param name="candidate">The name a deployment configured, which may be blank or unset.</param>
     /// <returns><see langword="true" /> when the name is supported; otherwise <see langword="false" />.</returns>
     public static bool IsSupported(string? candidate) =>

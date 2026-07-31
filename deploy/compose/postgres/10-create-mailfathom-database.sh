@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Runs once, from the PostgreSQL image's own initialization hook, on an empty data directory and while a superuser is
-# the one connected. It exists so that MailMcp never has to be one.
+# the one connected. It exists so that MailFathom never has to be one.
 #
 # Two things need a superuser and only these two: creating a role, and installing the `vector` extension. Doing both
 # here leaves the schema migration and the running service able to connect as an ordinary role that owns its own
@@ -12,25 +12,25 @@ set -euo pipefail
 # A data directory that already exists is never re-initialized, so editing this file changes nothing about a running
 # deployment. Apply the same statements by hand when a role has to be added to one.
 
-readonly database_name="${MAILMCP_DATABASE:-mailmcp}"
-readonly database_role="${MAILMCP_DATABASE_ROLE:-mailmcp}"
-readonly password_file='/run/secrets/mailmcp-database-password'
+readonly database_name="${MAILFATHOM_DATABASE:-mailfathom}"
+readonly database_role="${MAILFATHOM_DATABASE_ROLE:-mailfathom}"
+readonly password_file='/run/secrets/mailfathom-database-password'
 
 if [[ ! -r "$password_file" ]]; then
-  printf 'The MailMcp database password was not mounted at %s.\n' "$password_file" >&2
+  printf 'The MailFathom database password was not mounted at %s.\n' "$password_file" >&2
   exit 1
 fi
 
 # One trailing newline is stripped, because a secret file written by an editor almost always ends with one and an
-# untrimmed byte becomes part of the password. This is the same rule MailMcp's own secret resolution applies, and the
+# untrimmed byte becomes part of the password. This is the same rule MailFathom's own secret resolution applies, and the
 # `x` sentinel is what keeps it to one: command substitution strips every trailing newline on its own, so a password
-# genuinely ending in two would be created here with both removed and then presented by MailMcp with only one.
+# genuinely ending in two would be created here with both removed and then presented by MailFathom with only one.
 database_password="$(cat -- "$password_file"; printf 'x')"
 database_password="${database_password%x}"
 database_password="${database_password%$'\n'}"
 
 if [[ -z "$database_password" ]]; then
-  printf 'The MailMcp database password at %s is empty.\n' "$password_file" >&2
+  printf 'The MailFathom database password at %s is empty.\n' "$password_file" >&2
   exit 1
 fi
 

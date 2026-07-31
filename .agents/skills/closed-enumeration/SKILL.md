@@ -14,7 +14,7 @@ Use a plain `enum` when the members are nothing but names the process reads: a m
 Reach for a closed enumeration when at least one of these holds:
 
 - **A member carries data.** `MailAuthenticationMechanism` carries its registered SASL name and whether it transmits credentials in clear text. Keeping that in a separate lookup table lets the two drift apart.
-- **The value has a published identity.** `MailMcpErrorCode` is the five-digit number an operator reads in a log and matches in an alert. An enum's ordinal means nothing outside the assembly, and its member name changes with a rename the identity is meant to survive.
+- **The value has a published identity.** `MailFathomErrorCode` is the five-digit number an operator reads in a log and matches in an alert. An enum's ordinal means nothing outside the assembly, and its member name changes with a rename the identity is meant to survive.
 - **A member needs behavior.** A property or method that answers a question about the value belongs on the value.
 - **The value is parsed from outside the process or serialized out of it.** Configuration, JSON, and a wire format all need a stable representation the type owns rather than one a converter guesses.
 
@@ -22,7 +22,7 @@ If none holds, write the enum. Do not reach for this pattern because a set "migh
 
 ## The shape
 
-Follow `src/Domain/Transport/MailAuthenticationMechanism.cs` and `src/Domain/Failures/MailMcpErrorCode.cs`. Both are the same shape:
+Follow `src/Domain/Transport/MailAuthenticationMechanism.cs` and `src/Domain/Failures/MailFathomErrorCode.cs`. Both are the same shape:
 
 ```csharp
 [JsonConverter(typeof(SampleValueJsonConverter))]
@@ -74,4 +74,4 @@ The type's `<remarks>` states why it is not an enum, what the identity is, and t
 
 Cover, in the boundary's own unit-test project: uniqueness of the identities, the structure of the identity when it has one, `TryParse` for a declared and an undeclared input, the default reporting itself as unspecified and rejecting whatever it must reject, `ToString`, and a JSON round trip as both a value and a property name including the rejection cases.
 
-`tests/Domain.UnitTests/MailMcpErrorCodeTests.cs` is the worked example, and it asserts against `All` rather than reflecting over the type.
+`tests/Domain.UnitTests/MailFathomErrorCodeTests.cs` is the worked example, and it asserts against `All` rather than reflecting over the type.

@@ -3,7 +3,7 @@
 
 using System.Security.Cryptography;
 
-namespace MailMcp.Application.EmailContent;
+namespace MailFathom.Application.EmailContent;
 
 /// <summary>Carries the raw MIME stored for one email together with what was recorded about it when it was written.</summary>
 /// <param name="RawMime">The stored RFC 822 bytes.</param>

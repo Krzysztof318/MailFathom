@@ -4,7 +4,7 @@
 using System.Net.Security;
 using System.Security.Authentication;
 
-namespace MailMcp.Host.Security;
+namespace MailFathom.Host.Security;
 
 /// <summary>What one HTTPS profile contributes to a TLS handshake it is selected for.</summary>
 /// <param name="ProfileName">The operator-chosen profile name, which is what a diagnostic about this handshake reports.</param>

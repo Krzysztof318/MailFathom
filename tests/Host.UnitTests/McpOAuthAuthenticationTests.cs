@@ -2,12 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Security.Claims;
-using MailMcp.Host.Security;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Host.Security;
+using MailFathom.Infrastructure.Security;
 using Microsoft.IdentityModel.Tokens;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers the rules a token from a configured authorization server is accepted under.</summary>
 /// <remarks>
@@ -17,7 +17,7 @@ namespace MailMcp.Host.UnitTests;
 /// </remarks>
 public sealed class McpOAuthAuthenticationTests
 {
-    private const string Issuer = "https://sso.example.test/realms/mailmcp";
+    private const string Issuer = "https://sso.example.test/realms/mailfathom";
 
     private const string CanonicalResource = "https://mail.example.test/mcp";
 

@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
+using MailFathom.Application.Emails;
 using MimeKit;
 
-namespace MailMcp.Infrastructure.Mail.Mime;
+namespace MailFathom.Infrastructure.Mail.Mime;
 
 /// <summary>Carries the answers one walk of a message's structure produces.</summary>
 /// <param name="Attachments">What the message carries besides its body.</param>

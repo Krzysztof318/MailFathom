@@ -3,10 +3,10 @@
 
 using System.Security.Cryptography;
 using System.Text;
-using MailMcp.Application.EmailContent;
+using MailFathom.Application.EmailContent;
 using Xunit;
 
-namespace MailMcp.Application.UnitTests;
+namespace MailFathom.Application.UnitTests;
 
 /// <summary>Covers how a stored payload is checked against what was recorded for it when it was written.</summary>
 public sealed class StoredEmailContentTests

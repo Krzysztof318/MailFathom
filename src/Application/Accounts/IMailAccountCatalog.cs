@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Accounts;
+using MailFathom.Domain.Accounts;
 
-namespace MailMcp.Application.Accounts;
+namespace MailFathom.Application.Accounts;
 
 /// <summary>Names the mail accounts this deployment serves.</summary>
 /// <remarks>

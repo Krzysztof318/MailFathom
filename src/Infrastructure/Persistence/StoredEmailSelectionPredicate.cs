@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
-using MailMcp.CodeCoverage;
+using MailFathom.Application.Emails;
+using MailFathom.CodeCoverage;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Turns the structured filters of a mailbox read into the PostgreSQL predicate that evaluates them.</summary>
 /// <remarks>

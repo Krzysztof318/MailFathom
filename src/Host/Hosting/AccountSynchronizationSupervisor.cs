@@ -2,13 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Host.Configuration;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Host.Configuration;
 
-namespace MailMcp.Host.Hosting;
+namespace MailFathom.Host.Hosting;
 
 /// <summary>Runs one configured account's synchronization on a schedule and failure state of its own.</summary>
 /// <remarks>
@@ -378,7 +378,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <remarks>
     /// The disposition is part of the line rather than left to the reader to look up in configuration, because the two
     /// outcomes it names are not comparable: one hides a row, the other destroys it along with everything derived from
-    /// it. Only counts and MailMcp's own configured names appear here; nothing derived from a message may.
+    /// it. Only counts and MailFathom's own configured names appear here; nothing derived from a message may.
     /// </remarks>
     [LoggerMessage(
         Level = LogLevel.Warning,

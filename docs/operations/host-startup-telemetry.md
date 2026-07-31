@@ -13,7 +13,7 @@ The bootstrap pipeline closes both gaps: it is composed before `CreateBuilder`, 
 
 ## What it emits
 
-Four records, all under the category `MailMcp.Host.Startup`:
+Four records, all under the category `MailFathom.Host.Startup`:
 
 | Record | Level | Named properties |
 | --- | --- | --- |

@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Domain.Emails;
+namespace MailFathom.Domain.Emails;
 
 /// <summary>States what becomes of the local copy of an email the mail server no longer holds.</summary>
 /// <remarks>
@@ -12,7 +12,7 @@ namespace MailMcp.Domain.Emails;
 /// leaves what is already recorded exactly as it is.
 /// </para>
 /// <para>
-/// Both values describe a purely local decision. Neither reaches the server: MailMcp reads mail read-only, and no path
+/// Both values describe a purely local decision. Neither reaches the server: MailFathom reads mail read-only, and no path
 /// here issues an IMAP <c>STORE</c> or <c>EXPUNGE</c>.
 /// </para>
 /// </remarks>

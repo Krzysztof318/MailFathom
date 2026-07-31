@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Secrets;
 using Microsoft.Extensions.Options;
 
-namespace MailMcp.Host.Hosting;
+namespace MailFathom.Host.Hosting;
 
 /// <summary>Fails host startup when a configured secret cannot be resolved or the material behind it cannot be used.</summary>
 /// <remarks>

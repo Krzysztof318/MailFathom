@@ -4,9 +4,9 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace MailMcp.Mcp.Serialization;
+namespace MailFathom.Mcp.Serialization;
 
-/// <summary>Defines how MailMcp tool arguments and results are read and written on the wire.</summary>
+/// <summary>Defines how MailFathom tool arguments and results are read and written on the wire.</summary>
 /// <remarks>
 /// <para>
 /// The options are stated once and handed to every tool registration, because they are part of the published contract
@@ -21,7 +21,7 @@ namespace MailMcp.Mcp.Serialization;
 /// </remarks>
 internal static class McpToolContractSerialization
 {
-    /// <summary>Gets the serializer options every MailMcp tool is registered with.</summary>
+    /// <summary>Gets the serializer options every MailFathom tool is registered with.</summary>
     public static JsonSerializerOptions Options { get; } = CreateOptions();
 
     private static JsonSerializerOptions CreateOptions()

@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Security.Claims;
-using MailMcp.Host.Security;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Host.Security;
+using MailFathom.Infrastructure.Security;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers what an authenticated caller must satisfy before a tool runs.</summary>
 /// <remarks>
@@ -16,9 +16,9 @@ namespace MailMcp.Host.UnitTests;
 /// </remarks>
 public sealed class McpAccessPolicyTests
 {
-    private const string OAuthScheme = "MailMcpOAuth:workforce";
+    private const string OAuthScheme = "MailFathomOAuth:workforce";
 
-    private const string Issuer = "https://sso.example.test/realms/mailmcp";
+    private const string Issuer = "https://sso.example.test/realms/mailfathom";
 
     private const string OwnerSubject = "9f2c";
 
@@ -49,24 +49,24 @@ public sealed class McpAccessPolicyTests
     public void IsAuthorized_AnAuthorizedSubjectCarryingEveryRequiredScope_IsAllowed()
     {
         // Arrange
-        var caller = TokenPrincipal("mailmcp.read", "mailmcp.search");
+        var caller = TokenPrincipal("mailfathom.read", "mailfathom.search");
 
         // Act, Assert
-        Assert.True(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailmcp.read"]));
+        Assert.True(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailfathom.read"]));
     }
 
     [Fact]
     public void IsAuthorized_AnAuthorizedSubjectMissingARequiredScope_IsRefused()
     {
         // Arrange
-        var caller = TokenPrincipal("mailmcp.read");
+        var caller = TokenPrincipal("mailfathom.read");
 
         // Act, Assert
-        Assert.False(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailmcp.search"]));
+        Assert.False(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailfathom.search"]));
     }
 
     /// <summary>
-    /// A tenant holds whoever the operator's identity platform holds, and MailMcp serves one owner's mail to everyone it
+    /// A tenant holds whoever the operator's identity platform holds, and MailFathom serves one owner's mail to everyone it
     /// admits. A colleague who can obtain a token for this resource is therefore refused by the subject alone, whatever
     /// the authorization server was willing to put in it.
     /// </summary>
@@ -74,10 +74,10 @@ public sealed class McpAccessPolicyTests
     public void IsAuthorized_AValidTokenNamingAnotherSubjectOfTheSameTenant_IsRefused()
     {
         // Arrange
-        var colleague = TokenPrincipalFor(Issuer, "4b81", "mailmcp.read");
+        var colleague = TokenPrincipalFor(Issuer, "4b81", "mailfathom.read");
 
         // Act, Assert
-        Assert.False(McpAccessPolicy.IsAuthorized(colleague, AuthorizedOwner, ["mailmcp.read"]));
+        Assert.False(McpAccessPolicy.IsAuthorized(colleague, AuthorizedOwner, ["mailfathom.read"]));
     }
 
     /// <summary>A subject is unique only within the server that issued it, so the pair is compared rather than the subject alone.</summary>
@@ -85,7 +85,7 @@ public sealed class McpAccessPolicyTests
     public void IsAuthorized_TheAuthorizedSubjectNamedByAnotherIssuer_IsRefused()
     {
         // Arrange
-        var caller = TokenPrincipalFor("https://sso.other.test/realms/mailmcp", OwnerSubject);
+        var caller = TokenPrincipalFor("https://sso.other.test/realms/mailfathom", OwnerSubject);
 
         // Act, Assert
         Assert.False(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, []));
@@ -103,7 +103,7 @@ public sealed class McpAccessPolicyTests
         var caller = ApiKeyPrincipal("nightly-digest");
 
         // Act, Assert
-        Assert.True(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailmcp.read"]));
+        Assert.True(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailfathom.read"]));
     }
 
     /// <summary>A key names no subject and is not expected to, so the subject list constrains tokens alone.</summary>
@@ -123,11 +123,11 @@ public sealed class McpAccessPolicyTests
     {
         // Arrange
         var claims = new[] { new Claim("iss", Issuer), new Claim("sub", OwnerSubject) };
-        var identity = McpOAuthIdentity.FromValidatedToken(claims, "MailMcpApiKey");
+        var identity = McpOAuthIdentity.FromValidatedToken(claims, "MailFathomApiKey");
         var caller = new ClaimsPrincipal(identity!);
 
         // Act, Assert
-        Assert.False(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailmcp.read"]));
+        Assert.False(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailfathom.read"]));
     }
 
     /// <summary>An authenticated principal carrying no identity at all is refused rather than treated as unrestricted.</summary>

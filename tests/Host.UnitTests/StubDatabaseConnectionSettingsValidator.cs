@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Persistence;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Reports whatever a test needs the database adapter to say about a candidate.</summary>
 /// <remarks>Whether a connection string parses is the adapter's own behaviour and is covered by <c>Infrastructure.UnitTests</c>; host tests only need to know that the verdict reaches the published snapshot.</remarks>

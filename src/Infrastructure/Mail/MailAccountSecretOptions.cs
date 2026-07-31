@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets;
 
-namespace MailMcp.Infrastructure.Mail;
+namespace MailFathom.Infrastructure.Mail;
 
 /// <summary>Describes one unresolvable secret in an account's settings.</summary>
 /// <param name="PropertyName">The setting the operator must correct.</param>

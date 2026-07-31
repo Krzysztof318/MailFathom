@@ -1,13 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Synchronization;
 using Xunit;
 
-namespace MailMcp.Domain.UnitTests;
+namespace MailFathom.Domain.UnitTests;
 
 public sealed class MailIdentityTests
 {

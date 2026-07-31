@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Application.Emails.ListEmails;
+namespace MailFathom.Application.Emails.ListEmails;
 
 /// <summary>What a caller asks for when listing emails from the local mailbox copy.</summary>
 /// <remarks>

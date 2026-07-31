@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Secrets;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers which HTTPS profiles a deployment may serve, and which are refused before a listener opens.</summary>
 /// <remarks>
@@ -456,6 +456,6 @@ public sealed class McpHttpsOptionsTests
     private static ConfiguredSecret Block(string name) => new()
     {
         Name = name,
-        SecretReference = $"file:/etc/mailmcp/tls/{name}",
+        SecretReference = $"file:/etc/mailfathom/tls/{name}",
     };
 }

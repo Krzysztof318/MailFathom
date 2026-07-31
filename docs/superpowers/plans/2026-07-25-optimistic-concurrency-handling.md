@@ -44,7 +44,7 @@ Cover conflict followed by success with two distinct sessions, exhaustion after 
 Run:
 
 ```bash
-/home/krzysiek/.dotnet/dotnet test tests/Application.UnitTests/Application.UnitTests.csproj --no-restore --filter-class "MailMcp.Application.UnitTests.OptimisticConcurrencyRetryPolicyTests"
+/home/krzysiek/.dotnet/dotnet test tests/Application.UnitTests/Application.UnitTests.csproj --no-restore --filter-class "MailFathom.Application.UnitTests.OptimisticConcurrencyRetryPolicyTests"
 ```
 
 Expected: compilation fails because the commit result and retry policy do not exist.
@@ -62,7 +62,7 @@ Run the command from Step 2. Expected: all retry-policy tests pass.
 **Files:**
 - Modify: `src/Infrastructure/Persistence/StoredEmailEntity.cs`
 - Modify: `src/Infrastructure/Persistence/SynchronizationCheckpointEntity.cs`
-- Modify: `src/Infrastructure/Persistence/MailMcpDbContext.cs`
+- Modify: `src/Infrastructure/Persistence/MailFathomDbContext.cs`
 - Modify: `src/Infrastructure/Persistence/PersistenceSessionFactory.cs`
 
 **Interfaces:**
@@ -113,7 +113,7 @@ Cover one conflict followed by success using distinct sessions, confirm the IMAP
 Run:
 
 ```bash
-/home/krzysiek/.dotnet/dotnet test tests/Application.UnitTests/Application.UnitTests.csproj --no-restore --filter-class "MailMcp.Application.UnitTests.MailboxSynchronizerTests"
+/home/krzysiek/.dotnet/dotnet test tests/Application.UnitTests/Application.UnitTests.csproj --no-restore --filter-class "MailFathom.Application.UnitTests.MailboxSynchronizerTests"
 ```
 
 Expected: compilation or assertion failure because the new commit result and synchronization outcome are not handled yet.

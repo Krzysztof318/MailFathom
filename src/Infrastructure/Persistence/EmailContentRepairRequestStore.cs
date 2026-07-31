@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.EmailContent;
-using MailMcp.CodeCoverage;
+using MailFathom.Application.EmailContent;
+using MailFathom.CodeCoverage;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Records email content repair requests in PostgreSQL, one row per affected email.</summary>
 /// <remarks>
@@ -22,7 +22,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class EmailContentRepairRequestStore(MailMcpDbContext dbContext, TimeProvider timeProvider)
+internal sealed class EmailContentRepairRequestStore(MailFathomDbContext dbContext, TimeProvider timeProvider)
     : IEmailContentRepairRequestStore
 {
     /// <inheritdoc />

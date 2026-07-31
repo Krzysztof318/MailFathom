@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Transport;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Transport;
 
-namespace MailMcp.Application.Mail;
+namespace MailFathom.Application.Mail;
 
 /// <summary>Resolves the transport security policy configured for one mail account.</summary>
 /// <remarks>

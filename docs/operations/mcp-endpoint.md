@@ -1,6 +1,6 @@
 # The MCP endpoint and what protects it
 
-The MCP endpoint is how an agent reaches MailMcp. This page records what enabling it means operationally, what a client
+The MCP endpoint is how an agent reaches MailFathom. This page records what enabling it means operationally, what a client
 has to present to reach it, which browser origins it answers, which client applications it accepts a certificate from,
 how much traffic it accepts before it starts refusing, and how it is served over your own domain and certificate. The
 tools it serves are described in
@@ -19,7 +19,7 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
     "ApiKeys": [
       {
         "Name": "workstation",
-        "SecretReference": "systemd-credential:mailmcp-mcp-workstation-key"
+        "SecretReference": "systemd-credential:mailfathom-mcp-workstation-key"
       }
     ]
   }
@@ -37,14 +37,14 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
 | `Cors.AllowedOrigins` | `["*"]` | The browser origins served: `*` for every one, a list for exactly those, an empty list for none |
 | `ClientCertificateProfiles` | empty | The client applications whose certificates are accepted, each with its own authorities and expected names |
 | `RateLimiting` | bounded — see [Rate limiting](#rate-limiting) | How much traffic the endpoint accepts, per process and per client |
-| `Https.Endpoints` | empty | The domains MailMcp terminates TLS for; empty serves the endpoint over the host's ordinary listener |
+| `Https.Endpoints` | empty | The domains MailFathom terminates TLS for; empty serves the endpoint over the host's ordinary listener |
 
 The endpoint always answers on **`/mcp`**, which is a constant rather than a setting. An MCP client is configured with a
 server URL, so a deployment could only move the path in step with every client pointed at it — the configurability would
 buy nothing and add one more way for the surface to end up reachable somewhere nobody is looking. Put it behind a reverse
 proxy if it has to appear elsewhere.
 
-The transport is always **stateless**, for the same kind of reason. Every MailMcp tool answers one request from the local
+The transport is always **stateless**, for the same kind of reason. Every MailFathom tool answers one request from the local
 mailbox copy and sends nothing back on its own, so a session would carry no state and only give a client something to lose
 across a restart. Stateless is also what MCP deployments assume today. Should a tool that pushes notifications arrive, that
 is a change to this surface rather than a switch an operator was expected to have found.
@@ -106,12 +106,12 @@ Several entries are supported, which is what makes rotation an overlap rather th
     "ApiKeys": [
       {
         "Name": "workstation",
-        "SecretReference": "systemd-credential:mailmcp-mcp-workstation-key",
+        "SecretReference": "systemd-credential:mailfathom-mcp-workstation-key",
         "Lifetime": "NoLimit"
       },
       {
         "Name": "chatgpt-connector",
-        "SecretReference": "file:/run/secrets/mailmcp-mcp-chatgpt-key",
+        "SecretReference": "file:/run/secrets/mailfathom-mcp-chatgpt-key",
         "Lifetime": "2027-01-31T00:00:00Z"
       }
     ]
@@ -131,7 +131,7 @@ empty `401` with the same challenge:
 
 ```http
 HTTP/1.1 401 Unauthorized
-WWW-Authenticate: Bearer realm="MailMcp"
+WWW-Authenticate: Bearer realm="MailFathom"
 ```
 
 Nothing in the response says which key identifiers exist or whether a presented key was merely expired, and the comparison
@@ -149,8 +149,8 @@ retrying against an exhausted partition sees `429` where it expected `401`. See 
 
 ### `OAuth`
 
-MailMcp acts as an [OAuth 2.1 protected resource](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization).
-An external authorization server the operator already runs signs users in and issues tokens; MailMcp verifies what that
+MailFathom acts as an [OAuth 2.1 protected resource](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization).
+An external authorization server the operator already runs signs users in and issues tokens; MailFathom verifies what that
 server signed and nothing else. It is **never** an authorization server: it stores no password, issues no token, redeems no
 authorization code, holds no refresh token, and has no login page.
 
@@ -161,11 +161,11 @@ authorization code, holds no refresh token, and has no login page.
     "Authentication": "OAuth",
     "OAuth": {
       "Resource": "https://mail.example.test/mcp",
-      "RequiredScopes": [ "mailmcp.read" ],
+      "RequiredScopes": [ "mailfathom.read" ],
       "AuthorizationServers": [
         {
           "Name": "workforce",
-          "Issuer": "https://sso.example.test/realms/mailmcp",
+          "Issuer": "https://sso.example.test/realms/mailfathom",
           "AuthorizedSubjects": [ "9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04" ]
         }
       ]
@@ -187,21 +187,21 @@ widely deployed servers publish an issuer whose whole path is one trailing slash
 configuration that starts cleanly and then refuses every token that server issues.
 
 **`AuthorizedSubjects` names whose tokens are served, and at least one is required.** An authorization server authenticates
-whoever its tenant holds, while MailMcp serves one owner's synchronized mail to everyone it admits — so without this list
+whoever its tenant holds, while MailFathom serves one owner's synchronized mail to everyone it admits — so without this list
 every colleague who can obtain a token for this resource reads that owner's mail. Write the `sub` the server issues, which
 its administration console shows as the user's identifier: a UUID in Keycloak, `auth0|…` in Auth0, the object identifier in
 Entra ID. An email address is not it, because a subject is what the server promises not to reuse and an address is
 reassigned to whoever holds the mailbox next. The comparison is against the issuer and the subject together, so a subject
 one server authorized is not authorized by another server that happens to name someone the same way.
 
-**Nothing about the server's endpoints is configured or guessed.** MailMcp looks for the discovery document where the MCP
+**Nothing about the server's endpoints is configured or guessed.** MailFathom looks for the discovery document where the MCP
 authorization specification says to look, taking the first that answers with a document reporting the configured issuer:
 
-| Order | Address, for issuer `https://sso.example.test/realms/mailmcp` |
+| Order | Address, for issuer `https://sso.example.test/realms/mailfathom` |
 |---|---|
-| 1 | `https://sso.example.test/.well-known/oauth-authorization-server/realms/mailmcp` |
-| 2 | `https://sso.example.test/.well-known/openid-configuration/realms/mailmcp` |
-| 3 | `https://sso.example.test/realms/mailmcp/.well-known/openid-configuration` |
+| 1 | `https://sso.example.test/.well-known/oauth-authorization-server/realms/mailfathom` |
+| 2 | `https://sso.example.test/.well-known/openid-configuration/realms/mailfathom` |
+| 3 | `https://sso.example.test/realms/mailfathom/.well-known/openid-configuration` |
 
 An issuer with no path drops the third. The key set address comes out of that document, so a server that moves an endpoint
 keeps working. `OAuth.AuthorizationServers[n].MetadataAddress` overrides the search for a server publishing its document
@@ -240,7 +240,7 @@ issuer nobody configured matches no profile at all.
 
 `RequiredScopes` may be left empty, which accepts any token those servers issued for this resource. That is the coarser
 boundary rather than a broken one, and it is the right setting where the authorization server already decides who receives a
-token for MailMcp. A required scope constrains tokens only: an API key cannot carry one, and its authorization is the
+token for MailFathom. A required scope constrains tokens only: an API key cannot carry one, and its authorization is the
 operator's decision to configure it.
 
 **Tokens are never passed on.** A token presented here is used to identify the caller and nothing else. It is not forwarded to
@@ -255,10 +255,10 @@ derived from `Resource` — for `https://mail.example.test/mcp`, that is
 ```json
 {
   "resource": "https://mail.example.test/mcp",
-  "authorization_servers": [ "https://sso.example.test/realms/mailmcp" ],
-  "scopes_supported": [ "mailmcp.read" ],
+  "authorization_servers": [ "https://sso.example.test/realms/mailfathom" ],
+  "scopes_supported": [ "mailfathom.read" ],
   "bearer_methods_supported": [ "header" ],
-  "resource_name": "MailMcp"
+  "resource_name": "MailFathom"
 }
 ```
 
@@ -274,7 +274,7 @@ receives a `403` naming what would have sufficed:
 
 ```http
 HTTP/1.1 403 Forbidden
-WWW-Authenticate: Bearer error="insufficient_scope", scope="mailmcp.read",
+WWW-Authenticate: Bearer error="insufficient_scope", scope="mailfathom.read",
                   resource_metadata="https://mail.example.test/.well-known/oauth-protected-resource/mcp"
 ```
 
@@ -283,23 +283,23 @@ the client; the server log is where they differ.
 
 > **The metadata document is served only to a request whose own scheme and host match `Resource`.** That is the MCP SDK's
 > check, and it is what stops the document being served under a name the deployment never claimed. A deployment where
-> MailMcp terminates TLS itself, or one behind a proxy that passes HTTPS through with the `Host` header intact, satisfies
+> MailFathom terminates TLS itself, or one behind a proxy that passes HTTPS through with the `Host` header intact, satisfies
 > it; a proxy that terminates TLS does not, because the request then arrives as `http` and no forwarded header changes
-> that — MailMcp does not process `X-Forwarded-Proto` or `X-Forwarded-Host` today, so nothing on either side configures
+> that — MailFathom does not process `X-Forwarded-Proto` or `X-Forwarded-Host` today, so nothing on either side configures
 > it away. A `404` on the metadata address with everything else working is this, and OAuth discovery cannot complete
 > until the deployment is one of the two shapes above.
 
-#### What the MCP client does, not MailMcp
+#### What the MCP client does, not MailFathom
 
 The interactive half of OAuth belongs to the MCP client — ChatGPT, Claude Desktop, an IDE — and to the authorization server:
 
 - **authorization-code flow with PKCE (`S256`) and the `resource` parameter** is performed by the client;
 - **client registration** is an arrangement between the client and the authorization server. Client ID Metadata Documents,
   Dynamic Client Registration ([RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591)), and preregistering a client by hand
-  all work, and MailMcp neither advertises nor constrains the choice. Whether one is available depends on the server: a
+  all work, and MailFathom neither advertises nor constrains the choice. Whether one is available depends on the server: a
   `registration_endpoint` in its metadata means Dynamic Client Registration, `client_id_metadata_document_supported` means the
   first;
-- **client secrets, authorization codes, and refresh tokens** never reach MailMcp.
+- **client secrets, authorization codes, and refresh tokens** never reach MailFathom.
 
 Configuring the authorization server is therefore where an operator does the work: create a client for the MCP client, allow
 its redirect URIs, and make the server issue `https://mail.example.test/mcp` as the token's audience. A server that does not
@@ -324,7 +324,7 @@ nothing checks are a deployment believing it is protected — which is worse tha
 Whenever an enabled endpoint requires no credential, startup logs one warning:
 
 ```text
-warn: MailMcp.Host.Hosting.McpTransportAuthenticationWarning
+warn: MailFathom.Host.Hosting.McpTransportAuthenticationWarning
       The MCP endpoint is enabled on /mcp with no authentication method turned on, so anything that can reach this
       address can read the synchronized mailboxes. Set McpEndpoint:Authentication to ApiKey, to OAuth, or to both unless
       the address is reachable only from this machine or from a network you control. Neither an origin policy nor a
@@ -337,7 +337,7 @@ work behind a reverse proxy or on a trusted network without further configuratio
 startup failure:
 
 ```text
-warn: MailMcp.Host.Hosting.McpTransportAuthenticationWarning
+warn: MailFathom.Host.Hosting.McpTransportAuthenticationWarning
       Every browser origin is served while no credential is required, so a web page the user never visited can reach this
       endpoint through DNS rebinding and read what it returns. This is the right posture only where the address is
       unreachable from a browser that could be aimed at it, such as an intranet or a reverse proxy that authenticates.
@@ -354,7 +354,7 @@ The operational consequences are the ones that always applied to an unauthentica
 - **Point it at development mailboxes only.** Do not run it against a mailbox whose contents would matter if read by
   someone else.
 - **Restrict who can reach the address at the network layer.** A loopback bind, a firewall rule, a private network, or an
-  authenticating reverse proxy are all outside MailMcp and all appropriate.
+  authenticating reverse proxy are all outside MailFathom and all appropriate.
 - **Treat the whole surface as read-only but not harmless.** The tools cannot send, delete, move, or mark mail as read, so
   the exposure is disclosure rather than modification. Disclosure of a mailbox is enough.
 
@@ -373,7 +373,7 @@ lifetime, it cannot be revoked for one user without revoking it for the client, 
 token expires on its own, is revoked where the authorization server says so, and carries the multi-factor and
 conditional-access policy that server already enforces.
 
-Of a validated token, MailMcp keeps three things and discards the rest: the issuer, the subject, and the scopes. A name,
+Of a validated token, MailFathom keeps three things and discards the rest: the issuer, the subject, and the scopes. A name,
 an email address, a group, and a tenant claim are dropped at the boundary, so nothing downstream can begin trusting a
 claim the operator never mapped. The identity is `iss` together with `sub` rather than `sub` alone, because a subject is
 unique only within the server that issued it, and never an email address, which is reassignable.
@@ -447,7 +447,7 @@ can provoke the response that would tell it how to proceed and then not be permi
 
 ## HTTPS and your own domain
 
-**MailMcp terminates no TLS by default.** With `Https.Endpoints` empty the endpoint is served over whatever listener the
+**MailFathom terminates no TLS by default.** With `Https.Endpoints` empty the endpoint is served over whatever listener the
 host is already configured with, which is clear-text HTTP unless something in front supplies HTTPS. That default is kept
 deliberately, because two ordinary deployments run it:
 
@@ -455,11 +455,11 @@ deliberately, because two ordinary deployments run it:
 - **Behind a TLS-terminating reverse proxy**, where the proxy already holds your certificate and a second TLS layer
   inside the trust boundary protects nothing.
 
-Neither of those is something MailMcp can detect, so the clear-text posture is reported rather than refused. Whenever an
+Neither of those is something MailFathom can detect, so the clear-text posture is reported rather than refused. Whenever an
 enabled endpoint terminates no TLS, startup logs one warning:
 
 ```text
-warn: MailMcp.Host.Hosting.McpTransportEncryptionWarning
+warn: MailFathom.Host.Hosting.McpTransportEncryptionWarning
       The MCP endpoint is enabled on /mcp and no HTTPS profile is configured, so it is served over whichever listener
       this host was started with — clear text unless that listener or something in front of this process supplies
       HTTPS. On a clear-text hop anything on the network path can read the API key a client presents and every message
@@ -480,7 +480,7 @@ A profile names the domain clients connect to, the socket to bind, and where the
   "McpEndpoint": {
     "Enabled": true,
     "Authentication": "ApiKey",
-    "ApiKeys": [{ "Name": "workstation", "SecretReference": "systemd-credential:mailmcp-mcp-workstation-key" }],
+    "ApiKeys": [{ "Name": "workstation", "SecretReference": "systemd-credential:mailfathom-mcp-workstation-key" }],
     "Https": {
       "Endpoints": [
         {
@@ -491,10 +491,10 @@ A profile names the domain clients connect to, the socket to bind, and where the
           "ServerCertificate": {
             "Bundle": {
               "Name": "public-bundle",
-              "SecretReference": "file:/etc/mailmcp/tls/mail.example.com.pfx",
+              "SecretReference": "file:/etc/mailfathom/tls/mail.example.com.pfx",
               "Password": {
                 "Name": "public-bundle-password",
-                "SecretReference": "systemd-credential:mailmcp-tls-bundle-password"
+                "SecretReference": "systemd-credential:mailfathom-tls-bundle-password"
               }
             }
           }
@@ -512,11 +512,11 @@ A PEM chain beside its private key, which is what a certificate authority usuall
   "ServerCertificate": {
     "CertificateChain": {
       "Name": "public-chain",
-      "SecretReference": "file:/etc/mailmcp/tls/fullchain.pem"
+      "SecretReference": "file:/etc/mailfathom/tls/fullchain.pem"
     },
     "PrivateKey": {
       "Name": "public-key",
-      "SecretReference": "file:/etc/mailmcp/tls/privkey.pem"
+      "SecretReference": "file:/etc/mailfathom/tls/privkey.pem"
     }
   }
 }
@@ -524,7 +524,7 @@ A PEM chain beside its private key, which is what a certificate authority usuall
 
 State one or the other. Configuring both is a startup failure, because which of them supplies the identity would
 otherwise be decided by nothing you wrote. The `CertificateChain` value is the whole `fullchain.pem`: its first
-certificate is the identity and the rest are the intermediates MailMcp presents after it, so a client that does not
+certificate is the identity and the rest are the intermediates MailFathom presents after it, so a client that does not
 already hold the issuing authority can still build a path to a root it trusts. An encrypted private key takes its
 password through a nested `Password` block, exactly as a protected bundle does.
 
@@ -578,14 +578,14 @@ sends during the TLS handshake:
         "Name": "public",
         "Domain": "mail.example.com",
         "Port": 443,
-        "ServerCertificate": { "Bundle": { "Name": "public-bundle", "SecretReference": "file:/etc/mailmcp/tls/public.pfx" } }
+        "ServerCertificate": { "Bundle": { "Name": "public-bundle", "SecretReference": "file:/etc/mailfathom/tls/public.pfx" } }
       },
       {
         "Name": "connector",
         "Domain": "connector.example.com",
         "Port": 443,
         "MinimumTlsVersion": "Tls13",
-        "ServerCertificate": { "Bundle": { "Name": "connector-bundle", "SecretReference": "file:/etc/mailmcp/tls/connector.pfx" } }
+        "ServerCertificate": { "Bundle": { "Name": "connector-bundle", "SecretReference": "file:/etc/mailfathom/tls/connector.pfx" } }
       }
     ]
   }
@@ -681,14 +681,14 @@ and a `Lifetime`, and each is provisioned by reference rather than written into 
 covers the schemes; a private key or a bundle password written directly into a configuration value fails startup under
 the default `ReferenceOnly` interpretation.
 
-A private key is imported into memory only. MailMcp never writes one to an operating-system key store as a side effect of
+A private key is imported into memory only. MailFathom never writes one to an operating-system key store as a side effect of
 loading it. A certificate chain is public material and may be supplied inline under an inline interpretation mode; a
 PKCS#12 bundle may not, because it is binary and has no faithful representation in a configuration value.
 
 Startup records what each profile presents and when it stops working:
 
 ```text
-info: MailMcp.Host.Security.McpServerCertificateStore
+info: MailFathom.Host.Security.McpServerCertificateStore
       The MCP HTTPS profile public presents a server certificate valid until 2027-01-31 00:00:00Z.
 ```
 
@@ -703,7 +703,7 @@ endpoint that has stopped working. Rotating certificates without a restart is tr
 ### What stays yours
 
 Provisioning the DNS record, proving ownership of the domain, and obtaining and renewing the certificate are all outside
-MailMcp. It has no ACME client and issues nothing. Startup only refuses a `Domain` that could not be a DNS name at all —
+MailFathom. It has no ACME client and issues nothing. Startup only refuses a `Domain` that could not be a DNS name at all —
 an IP address, a wildcard, a name with characters a DNS name cannot carry, or a name a second profile already publishes.
 An internationalized domain is configured in its punycode A-label form, because that is what a client sends and what a
 certificate's names carry.
@@ -739,7 +739,7 @@ trust profile exists, reaches whichever listener is actually serving.
         "TrustAnchors": [
           {
             "Name": "openai-connectors-ca",
-            "SecretReference": "file:/etc/mailmcp/openai-connectors-ca.pem"
+            "SecretReference": "file:/etc/mailfathom/openai-connectors-ca.pem"
           }
         ],
         "SubjectAlternativeNames": ["mtls.prod.connectors.openai.com"]
@@ -768,7 +768,7 @@ what to present next.
 
 Several deliberate strictnesses are worth knowing before a profile is written:
 
-- **The certificate comes from the TLS connection.** No header is read, however a proxy in front of MailMcp spells one.
+- **The certificate comes from the TLS connection.** No header is read, however a proxy in front of MailFathom spells one.
   Terminating TLS elsewhere and forwarding what it saw is a design with its own trust boundary and is not this one.
 - **A certificate carrying no extended key usage is refused**, even though X.509 reads absence as every usage. A profile
   that names client authentication asked for a certificate that says so, and the same authority commonly issues server
@@ -788,7 +788,7 @@ Several deliberate strictnesses are worth knowing before a profile is written:
 **mTLS needs an HTTPS endpoint.** A client certificate only exists on a TLS connection, so a deployment serving plain
 HTTP presents none: an `Optional` profile then identifies nothing, and a `Required` profile refuses every request.
 Serving MCP over HTTPS with operator-provided certificates is
-[#142](https://github.com/Krzysztof318/MailMcp/issues/142); until it lands, terminate TLS in front of MailMcp only if you
+[#142](https://github.com/Krzysztof318/MailFathom/issues/142); until it lands, terminate TLS in front of MailFathom only if you
 are not using these profiles, because a proxy that terminates TLS is exactly what stops the certificate from arriving.
 
 ### The ChatGPT connector profile
@@ -799,7 +799,7 @@ carries the subject alternative name `mtls.prod.connectors.openai.com`. Nothing 
 rotates and a pinned fingerprint would turn a routine rotation into an outage.
 
 The authority itself is **supplied by you**, as an ordinary secret reference. No third-party certificate ships in this
-repository, which is what keeps OpenAI rotating their authority an operator change rather than a MailMcp release. Fetch
+repository, which is what keeps OpenAI rotating their authority an operator change rather than a MailFathom release. Fetch
 the current certificate from OpenAI's published location, provision it like any other trust anchor, and add the
 successor beside it while a rotation is in flight.
 
@@ -811,7 +811,7 @@ of the deployment holds a certificate.
 never whose mailbox is being read, so the connector's own OAuth 2.1 flow answers the second question — write
 `"Authentication": "OAuth"` beside this profile, configure the authorization server as [`OAuth`](#oauth) describes, and
 name the owner in its `AuthorizedSubjects`. The two run independently: the certificate is judged before any credential is
-read, and a request satisfying one and not the other is refused. What remains outside MailMcp is the connector-side
+read, and a request satisfying one and not the other is refused. What remains outside MailFathom is the connector-side
 arrangement — registering the client with your authorization server and having it issue `Resource` as the audience — which
 is the client's half of the flow and the same for every MCP client.
 
@@ -830,7 +830,7 @@ That refusal is the *profile's*, not the endpoint's. Another profile still accep
 because the broken material took no part in that verdict — one deleted file closes the clients it belongs to, not the
 ones whose trust material is intact.
 
-They will need MailMcp to terminate TLS itself, which is what the HTTPS profiles above make possible: a client
+They will need MailFathom to terminate TLS itself, which is what the HTTPS profiles above make possible: a client
 certificate is presented during the handshake, and a deployment that terminates TLS at a reverse proxy has no handshake
 here to read one from. Certificate-like HTTP headers are ignored and will stay ignored; trusting a proxy to assert a
 client's identity is its own reviewed design, not something a header enables.
@@ -885,7 +885,7 @@ Whatever is in force is stated once at startup, so a deployment running on defau
 rather than having to know these numbers:
 
 ```text
-info: MailMcp.Host.Hosting.McpRateLimitingStartupReport
+info: MailFathom.Host.Hosting.McpRateLimitingStartupReport
       The MCP endpoint on /mcp serves at most 20 requests at once across every client, queueing 0 beyond that, and
       allows each client a burst of 60 requests restored at 60 every 00:01:00, queueing 0 of its requests beyond that.
 ```
@@ -916,7 +916,7 @@ Two identities can name a caller, and they are consulted in a fixed order:
 2. **The name of the client-certificate profile the connection matched**, when no key authenticated the request.
 3. **One shared anonymous partition** otherwise.
 
-Both are MailMcp's own configured identities — never the credential, and never anything the certificate itself carried.
+Both are MailFathom's own configured identities — never the credential, and never anything the certificate itself carried.
 The partitions a deployment keeps therefore number no more than its key list plus its profile list.
 
 **The key wins wherever both exist, and the two are never combined.** A key names one client of this deployment, which is
@@ -957,7 +957,7 @@ scheduled moment at which a slot frees and a guess would be worse than silence. 
 second, so a client never reads it as "immediately" and retries into the same refusal.
 
 Rejections, active leases, queued requests, and lease durations are recorded through the built-in
-`Microsoft.AspNetCore.RateLimiting` metrics, tagged with the policy name. Nothing MailMcp adds records a client name, an
+`Microsoft.AspNetCore.RateLimiting` metrics, tagged with the policy name. Nothing MailFathom adds records a client name, an
 address, an origin, a credential, or anything from a request or its response.
 
 ### What this is not
@@ -967,7 +967,7 @@ rather than once in total; there is no shared state and no coordination between 
 proxy or load balancer that bounds it if that matters.
 
 **It is not DDoS protection.** It bounds what one client can take from the process it is talking to. A flood arriving
-from many sources is a job for a WAF, a CDN, or a hosting provider's own protection, and none of that is in MailMcp.
+from many sources is a job for a WAF, a CDN, or a hosting provider's own protection, and none of that is in MailFathom.
 
 **It bounds what the endpoint serves, not what the server spends deciding whether to serve it.** The limiter runs behind
 the origin check, the certificate check, and authentication, so the work those do — reading every configured trust anchor
@@ -980,7 +980,7 @@ job for whatever fronts the process.
 Turning the limits off is an explicit value and costs one startup warning:
 
 ```text
-warn: MailMcp.Host.Hosting.McpRateLimitingStartupReport
+warn: MailFathom.Host.Hosting.McpRateLimitingStartupReport
       The MCP endpoint is enabled on /mcp with rate limiting turned off, so one client can hold every database
       connection, response stream, and thread the process has until something runs out. This is the right setting only
       where something in front of this process already bounds the traffic reaching it. Remove

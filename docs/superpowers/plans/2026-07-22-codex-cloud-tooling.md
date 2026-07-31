@@ -57,12 +57,12 @@ Run:
 diff -qr /home/krzysztof/.codex/plugins/cache/openai-curated-remote/superpowers/6.1.1/skills .agents/skills --exclude SUPERPOWERS_VERSION --exclude SUPERPOWERS_LICENSE
 cmp /home/krzysztof/.codex/plugins/cache/openai-curated-remote/superpowers/6.1.1/LICENSE .agents/skills/SUPERPOWERS_LICENSE
 test "$(cat .agents/skills/SUPERPOWERS_VERSION)" = "6.1.1"
-git -C /tmp/mailmcp-superpowers-v6.1.1-source ls-tree -r v6.1.1 skills
+git -C /tmp/mailfathom-superpowers-v6.1.1-source ls-tree -r v6.1.1 skills
 ```
 
 Expected: all commands exit with status `0`, produce no content diff output, and every upstream `100755` skill script remains executable in the repository.
 
-Preserve upstream file content exactly. Configure `.agents/skills/** -whitespace` in `.gitattributes` so an upstream whitespace issue does not weaken checks for MailMcp-owned files.
+Preserve upstream file content exactly. Configure `.agents/skills/** -whitespace` in `.gitattributes` so an upstream whitespace issue does not weaken checks for MailFathom-owned files.
 
 - [x] **Step 4: Verify skill metadata**
 
@@ -80,17 +80,17 @@ git commit -m "chore: vendor Superpowers skills for Codex"
 ### Task 2: Package Microsoft Learn MCP as a repository plugin
 
 **Files:**
-- Create: `plugins/mailmcp-microsoft-learn/.codex-plugin/plugin.json`
-- Create: `plugins/mailmcp-microsoft-learn/.mcp.json`
+- Create: `plugins/mailfathom-microsoft-learn/.codex-plugin/plugin.json`
+- Create: `plugins/mailfathom-microsoft-learn/.mcp.json`
 - Create: `.agents/plugins/marketplace.json`
 
 **Interfaces:**
 - Consumes: Microsoft Learn public Streamable HTTP endpoint.
-- Produces: installable plugin `mailmcp-microsoft-learn` and repo marketplace `mailmcp-repository`.
+- Produces: installable plugin `mailfathom-microsoft-learn` and repo marketplace `mailfathom-repository`.
 
 - [x] **Step 1: Create the MCP configuration**
 
-Create `plugins/mailmcp-microsoft-learn/.mcp.json`:
+Create `plugins/mailfathom-microsoft-learn/.mcp.json`:
 
 ```json
 {
@@ -105,19 +105,19 @@ Create `plugins/mailmcp-microsoft-learn/.mcp.json`:
 
 - [x] **Step 2: Create the plugin manifest**
 
-Create `plugins/mailmcp-microsoft-learn/.codex-plugin/plugin.json`:
+Create `plugins/mailfathom-microsoft-learn/.codex-plugin/plugin.json`:
 
 ```json
 {
-  "name": "mailmcp-microsoft-learn",
+  "name": "mailfathom-microsoft-learn",
   "version": "0.1.0",
-  "description": "Search and fetch current Microsoft Learn documentation while developing MailMcp.",
+  "description": "Search and fetch current Microsoft Learn documentation while developing MailFathom.",
   "author": {
-    "name": "MailMcp contributors",
-    "url": "https://github.com/Krzysztof318/MailMcp"
+    "name": "MailFathom contributors",
+    "url": "https://github.com/Krzysztof318/MailFathom"
   },
   "homepage": "https://learn.microsoft.com/",
-  "repository": "https://github.com/Krzysztof318/MailMcp",
+  "repository": "https://github.com/Krzysztof318/MailFathom",
   "keywords": [
     "documentation",
     "dotnet",
@@ -126,10 +126,10 @@ Create `plugins/mailmcp-microsoft-learn/.codex-plugin/plugin.json`:
   ],
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "MailMcp Microsoft Learn",
+    "displayName": "MailFathom Microsoft Learn",
     "shortDescription": "Search current Microsoft Learn documentation",
-    "longDescription": "Use the public Microsoft Learn MCP server to search and fetch current official Microsoft documentation while developing MailMcp.",
-    "developerName": "MailMcp contributors",
+    "longDescription": "Use the public Microsoft Learn MCP server to search and fetch current official Microsoft documentation while developing MailFathom.",
+    "developerName": "MailFathom contributors",
     "category": "Developer Tools",
     "capabilities": [
       "Read"
@@ -150,16 +150,16 @@ Create `.agents/plugins/marketplace.json`:
 
 ```json
 {
-  "name": "mailmcp-repository",
+  "name": "mailfathom-repository",
   "interface": {
-    "displayName": "MailMcp Repository"
+    "displayName": "MailFathom Repository"
   },
   "plugins": [
     {
-      "name": "mailmcp-microsoft-learn",
+      "name": "mailfathom-microsoft-learn",
       "source": {
         "source": "local",
-        "path": "./plugins/mailmcp-microsoft-learn"
+        "path": "./plugins/mailfathom-microsoft-learn"
       },
       "policy": {
         "installation": "AVAILABLE",
@@ -176,11 +176,11 @@ Create `.agents/plugins/marketplace.json`:
 Run:
 
 ```bash
-jq empty plugins/mailmcp-microsoft-learn/.codex-plugin/plugin.json
-jq empty plugins/mailmcp-microsoft-learn/.mcp.json
+jq empty plugins/mailfathom-microsoft-learn/.codex-plugin/plugin.json
+jq empty plugins/mailfathom-microsoft-learn/.mcp.json
 jq empty .agents/plugins/marketplace.json
-test "$(jq -r '.mcpServers' plugins/mailmcp-microsoft-learn/.codex-plugin/plugin.json)" = "./.mcp.json"
-test "$(jq -r '.mcpServers["microsoft-learn"].url' plugins/mailmcp-microsoft-learn/.mcp.json)" = "https://learn.microsoft.com/api/mcp"
+test "$(jq -r '.mcpServers' plugins/mailfathom-microsoft-learn/.codex-plugin/plugin.json)" = "./.mcp.json"
+test "$(jq -r '.mcpServers["microsoft-learn"].url' plugins/mailfathom-microsoft-learn/.mcp.json)" = "https://learn.microsoft.com/api/mcp"
 test -d "$(jq -r '.plugins[0].source.path' .agents/plugins/marketplace.json)"
 ```
 
@@ -189,7 +189,7 @@ Expected: all commands exit with status `0` and produce no error output.
 - [x] **Step 5: Commit the plugin**
 
 ```bash
-git add .agents/plugins/marketplace.json plugins/mailmcp-microsoft-learn
+git add .agents/plugins/marketplace.json plugins/mailfathom-microsoft-learn
 git commit -m "feat: add Microsoft Learn plugin for Codex"
 ```
 
@@ -207,7 +207,7 @@ git commit -m "feat: add Microsoft Learn plugin for Codex"
 Document these exact contracts:
 
 - Superpowers skills load automatically from `.agents/skills/` in a new repository session.
-- The Microsoft Learn plugin must be installed from the `MailMcp Repository` marketplace and a new session must be started afterward.
+- The Microsoft Learn plugin must be installed from the `MailFathom Repository` marketplace and a new session must be started afterward.
 - Workspace sharing or role-based installation is required when the plugin should be available to every eligible workspace member.
 - The public Microsoft Learn endpoint needs no secret, but workspace plugin/MCP policy and Cloud reachability still apply.
 - Updates to Superpowers must replace the entire snapshot, update `SUPERPOWERS_VERSION`, preserve the license, and pass the snapshot comparison checks.
@@ -217,7 +217,7 @@ Document these exact contracts:
 Run:
 
 ```bash
-rg -n "\.agents/skills|MailMcp Repository|https://learn.microsoft.com/api/mcp|SUPERPOWERS_VERSION" docs/operations/codex-cloud-tooling.md
+rg -n "\.agents/skills|MailFathom Repository|https://learn.microsoft.com/api/mcp|SUPERPOWERS_VERSION" docs/operations/codex-cloud-tooling.md
 ```
 
 Expected: each required operational contract appears in the guide.

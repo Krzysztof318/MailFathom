@@ -3,7 +3,7 @@
 
 using System.Net;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>The socket one or more HTTPS profiles bind.</summary>
 /// <param name="Address">The IP address the listener binds.</param>

@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Synchronization;
+using MailFathom.Application.Synchronization;
 
-namespace MailMcp.Application.Emails.SearchEmails;
+namespace MailFathom.Application.Emails.SearchEmails;
 
 /// <summary>One ranked window of search results, together with how current the mail behind them is.</summary>
 /// <param name="Matches">The matches, most relevant first, holding no more than the effective result limit.</param>

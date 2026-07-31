@@ -3,12 +3,12 @@
 
 using System.Text;
 using System.Text.RegularExpressions;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Domain.Emails;
 using MimeKit;
 
-namespace MailMcp.Infrastructure.Mail.Mime;
+namespace MailFathom.Infrastructure.Mail.Mime;
 
 /// <summary>Renders stored raw MIME for a reader, parsing with MimeKit and sanitizing with the pinned HTML sanitizer.</summary>
 /// <remarks>

@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Application.Emails;
+namespace MailFathom.Application.Emails;
 
 /// <summary>The failure raised when a continuation cursor was issued for a different query than the one presenting it.</summary>
 /// <remarks>
@@ -18,7 +18,7 @@ namespace MailMcp.Application.Emails;
 /// page while continuing the same walk.
 /// </para>
 /// </remarks>
-public sealed class MailboxQueryCursorFilterMismatchException : MailMcpException
+public sealed class MailboxQueryCursorFilterMismatchException : MailFathomException
 {
     /// <summary>Initializes the failure for one cursor presented against filters it was not issued for.</summary>
     public MailboxQueryCursorFilterMismatchException()
@@ -27,5 +27,5 @@ public sealed class MailboxQueryCursorFilterMismatchException : MailMcpException
     }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.MailboxQueryCursorFilterMismatch;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.MailboxQueryCursorFilterMismatch;
 }

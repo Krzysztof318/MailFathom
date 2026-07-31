@@ -1,13 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Mcp.Tools;
+using MailFathom.Mcp.Tools;
 using ModelContextProtocol.Protocol;
 using Xunit;
 
-namespace MailMcp.Mcp.UnitTests;
+namespace MailFathom.Mcp.UnitTests;
 
-/// <summary>Covers the descriptor MailMcp advertises for <c>get_email_content</c>.</summary>
+/// <summary>Covers the descriptor MailFathom advertises for <c>get_email_content</c>.</summary>
 /// <remarks>
 /// The annotations are contract metadata rather than documentation: a client decides whether a tool is safe to call,
 /// safe to retry, and confined to local state by reading them before it calls anything. The description matters as much
@@ -17,7 +17,7 @@ namespace MailMcp.Mcp.UnitTests;
 public sealed class GetEmailContentToolMetadataTests
 {
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheGetEmailContentToolUnderItsProtocolName()
+    public void AddMailFathomServer_AdvertisesTheGetEmailContentToolUnderItsProtocolName()
     {
         // Arrange, Act
         var advertisedTool = AdvertisedGetEmailContentTool();
@@ -29,7 +29,7 @@ public sealed class GetEmailContentToolMetadataTests
 
     /// <summary>The four hints the architecture draft requires of every read-only tool.</summary>
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheReadOnlyLocalStateAnnotations()
+    public void AddMailFathomServer_AdvertisesTheReadOnlyLocalStateAnnotations()
     {
         // Arrange, Act
         var annotations = AdvertisedGetEmailContentTool().Annotations;
@@ -44,7 +44,7 @@ public sealed class GetEmailContentToolMetadataTests
 
     /// <summary>A model reads this before it calls anything, so it states both what the tool serves and what it never returns.</summary>
     [Fact]
-    public void AddMailMcpServer_AdvertisesADescriptionStatingTheLocalReadOnlyBoundsOfTheTool()
+    public void AddMailFathomServer_AdvertisesADescriptionStatingTheLocalReadOnlyBoundsOfTheTool()
     {
         // Arrange, Act
         var description = AdvertisedGetEmailContentTool().Description;
@@ -56,7 +56,7 @@ public sealed class GetEmailContentToolMetadataTests
     }
 
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheEmailIdentifierAndTheHtmlFlagAsInputSchemaProperties()
+    public void AddMailFathomServer_AdvertisesTheEmailIdentifierAndTheHtmlFlagAsInputSchemaProperties()
     {
         // Arrange
         string[] expectedProperties = ["storedEmailId", "includeSanitizedHtml"];
@@ -75,7 +75,7 @@ public sealed class GetEmailContentToolMetadataTests
 
     /// <summary>An argument nobody can interpret is an argument a model guesses at, so every one carries its own description.</summary>
     [Fact]
-    public void AddMailMcpServer_DescribesEveryInputSchemaProperty()
+    public void AddMailFathomServer_DescribesEveryInputSchemaProperty()
     {
         // Arrange, Act
         var describedProperties = AdvertisedGetEmailContentTool()
@@ -91,7 +91,7 @@ public sealed class GetEmailContentToolMetadataTests
 
     /// <summary>The email is named rather than defaulted, so a call that names none is refused by the schema instead of answering about some email.</summary>
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheEmailIdentifierAsRequiredAndTheHtmlFlagAsOptional()
+    public void AddMailFathomServer_AdvertisesTheEmailIdentifierAsRequiredAndTheHtmlFlagAsOptional()
     {
         // Arrange, Act
         var inputSchema = AdvertisedGetEmailContentTool().InputSchema;
@@ -103,7 +103,7 @@ public sealed class GetEmailContentToolMetadataTests
 
     /// <summary>The cancellation token the tool takes is the host's concern and must never become a protocol argument.</summary>
     [Fact]
-    public void AddMailMcpServer_DoesNotAdvertiseTheCancellationTokenAsAnArgument()
+    public void AddMailFathomServer_DoesNotAdvertiseTheCancellationTokenAsAnArgument()
     {
         // Arrange, Act
         var advertisedProperties = AdvertisedGetEmailContentTool().InputSchema.GetProperty("properties");
@@ -113,7 +113,7 @@ public sealed class GetEmailContentToolMetadataTests
     }
 
     [Fact]
-    public void AddMailMcpServer_AdvertisesTheResultShapeAsAnOutputSchema()
+    public void AddMailFathomServer_AdvertisesTheResultShapeAsAnOutputSchema()
     {
         // Arrange, Act
         var outputSchema = AdvertisedGetEmailContentTool().OutputSchema;

@@ -2,16 +2,16 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Infrastructure.Security;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>One external authorization server whose access tokens this deployment accepts.</summary>
 /// <remarks>
 /// <para>
-/// A profile carries what MailMcp needs to find and trust a server's signing keys, and nothing about how a user signs
+/// A profile carries what MailFathom needs to find and trust a server's signing keys, and nothing about how a user signs
 /// in. Interactive login, consent, multi-factor policy, client registration, and token issuance belong to the server the
-/// operator already runs; MailMcp is a resource server that verifies what that server signed. Keycloak, Entra ID, Auth0,
+/// operator already runs; MailFathom is a resource server that verifies what that server signed. Keycloak, Entra ID, Auth0,
 /// and Okta are therefore configuration rather than code, and none of them appears in a type name anywhere below this
 /// section — a difference between two servers is something discovery reports, never something a branch decides.
 /// </para>
@@ -30,7 +30,7 @@ internal sealed class McpAuthorizationServerOptions
     /// <remarks>It never reaches a client and is never compared against anything a token carries; it exists so a startup message and a log line can say which profile they mean without printing an issuer URL.</remarks>
     public string? Name { get; set; }
 
-    /// <summary>Gets or sets the authorization server's issuer identifier, for example <c>https://sso.example.test/realms/mailmcp</c>.</summary>
+    /// <summary>Gets or sets the authorization server's issuer identifier, for example <c>https://sso.example.test/realms/mailfathom</c>.</summary>
     /// <remarks>
     /// Copy it exactly as the authorization server publishes it, trailing slash included where there is one. It is
     /// compared against a token's <c>iss</c> by exact string equality, it decides which profile validates a token, and it
@@ -42,14 +42,14 @@ internal sealed class McpAuthorizationServerOptions
     /// <summary>Gets or sets the discovery document to read instead of the addresses derived from <see cref="Issuer" />.</summary>
     /// <remarks>
     /// <para>
-    /// Left unset, MailMcp looks for the document where the MCP authorization specification says to look: the OAuth 2.0
+    /// Left unset, MailFathom looks for the document where the MCP authorization specification says to look: the OAuth 2.0
     /// Authorization Server Metadata address first, then the two OpenID Connect Discovery addresses, taking the first
     /// that answers with a document whose own <c>issuer</c> matches. That covers every server this repository's
     /// documentation describes, so this setting is for one that publishes its metadata somewhere else entirely.
     /// </para>
     /// <para>
     /// It must sit on the same host and port as <see cref="Issuer" />. The address is operator-supplied rather than
-    /// token-supplied, so it is not untrusted input, but it is the one setting that names something MailMcp will fetch —
+    /// token-supplied, so it is not untrusted input, but it is the one setting that names something MailFathom will fetch —
     /// and a mistyped one pointing at an internal address would make the host fetch it on every key refresh. Tying it to
     /// the issuer's authority means the profile can only ever reach the server it already names.
     /// </para>
@@ -60,7 +60,7 @@ internal sealed class McpAuthorizationServerOptions
     /// <remarks>
     /// <para>
     /// A tenant holds whoever the operator's identity platform holds, and a token proves which of them is asking rather
-    /// than that they were meant to read this mailbox. MailMcp serves one configured owner's mail to everyone it lets
+    /// than that they were meant to read this mailbox. MailFathom serves one configured owner's mail to everyone it lets
     /// in, so without this list every colleague who can obtain a token for this resource reads that owner's mail.
     /// </para>
     /// <para>

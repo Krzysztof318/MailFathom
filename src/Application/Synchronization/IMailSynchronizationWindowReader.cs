@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Synchronization;
 
-namespace MailMcp.Application.Synchronization;
+namespace MailFathom.Application.Synchronization;
 
 /// <summary>Resolves how far back synchronization may reach for one configured mail account.</summary>
 /// <remarks>

@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Security;
+using MailFathom.Infrastructure.Security;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Covers where an authorization server's discovery document is looked for, and in which order.</summary>
 /// <remarks>
@@ -51,14 +51,14 @@ public sealed class OAuthMetadataAddressesTests
     public void ForIssuer_AnIssuerWithAPath_TriesBothInsertionsBeforeTheAppendedForm()
     {
         // Arrange, Act
-        var addresses = OAuthMetadataAddresses.ForIssuer("https://sso.example.test/realms/mailmcp");
+        var addresses = OAuthMetadataAddresses.ForIssuer("https://sso.example.test/realms/mailfathom");
 
         // Assert
         Assert.Equal(
             [
-                "https://sso.example.test/.well-known/oauth-authorization-server/realms/mailmcp",
-                "https://sso.example.test/.well-known/openid-configuration/realms/mailmcp",
-                "https://sso.example.test/realms/mailmcp/.well-known/openid-configuration",
+                "https://sso.example.test/.well-known/oauth-authorization-server/realms/mailfathom",
+                "https://sso.example.test/.well-known/openid-configuration/realms/mailfathom",
+                "https://sso.example.test/realms/mailfathom/.well-known/openid-configuration",
             ],
             addresses);
     }
@@ -67,7 +67,7 @@ public sealed class OAuthMetadataAddressesTests
     public void ForIssuer_AnIssuerOnANonDefaultPort_KeepsThePortOnEveryAddress()
     {
         // Arrange, Act
-        var addresses = OAuthMetadataAddresses.ForIssuer("https://sso.example.test:8443/realms/mailmcp");
+        var addresses = OAuthMetadataAddresses.ForIssuer("https://sso.example.test:8443/realms/mailfathom");
 
         // Assert
         Assert.All(addresses, address => Assert.StartsWith("https://sso.example.test:8443/", address, StringComparison.Ordinal));

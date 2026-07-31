@@ -1,32 +1,32 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Accounts;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Failures;
-using MailMcp.Domain.Folders;
-using MailMcp.TestSupport;
+using MailFathom.Application.Accounts;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using Xunit;
 
-namespace MailMcp.Application.UnitTests;
+namespace MailFathom.Application.UnitTests;
 
 /// <summary>Covers the failure contract the application boundary raises and the result that replaced one of its exceptions.</summary>
 public sealed class ApplicationFailureContractTests
 {
     /// <summary>A failure outside the hierarchy carries no code a boundary can report and obeys no stated message contract.</summary>
     [Fact]
-    public void ApplicationAssembly_EveryDeclaredException_DerivesFromMailMcpException()
+    public void ApplicationAssembly_EveryDeclaredException_DerivesFromMailFathomException()
     {
         // Arrange
         var applicationAssembly = typeof(MailboxSynchronizer).Assembly;
 
         // Act, Assert
-        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(applicationAssembly, typeof(MailMcpException));
+        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(applicationAssembly, typeof(MailFathomException));
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public sealed class ApplicationFailureContractTests
         var failure = new PersistenceConcurrencyConflictException("A competing writer changed the same rows.");
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.PersistenceConcurrencyConflict, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.PersistenceConcurrencyConflict, failure.ErrorCode);
         Assert.Equal("A competing writer changed the same rows.", failure.Message);
     }
 
@@ -51,7 +51,7 @@ public sealed class ApplicationFailureContractTests
         var failure = new MailboxUnavailableException(accountId, rejection);
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailboxUnavailable, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailboxUnavailable, failure.ErrorCode);
         Assert.Same(rejection, failure.InnerException);
     }
 
@@ -98,7 +98,7 @@ public sealed class ApplicationFailureContractTests
         var failure = new MailboxFolderRecreatedException(accountId, alias, sessionUidValidity, reselectedUidValidity);
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailboxFolderRecreated, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailboxFolderRecreated, failure.ErrorCode);
         Assert.Equal(sessionUidValidity, failure.SessionUidValidity);
         Assert.Equal(reselectedUidValidity, failure.ReselectedUidValidity);
     }
@@ -151,10 +151,10 @@ public sealed class ApplicationFailureContractTests
         var invalidFilter = MailboxQueryFilterInvalidException.NotAnAddress("sender address");
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailboxQueryPageSizeOutOfRange, pageSize.ErrorCode);
-        Assert.Equal(MailMcpErrorCode.MailboxQueryCursorMalformed, malformedCursor.ErrorCode);
-        Assert.Equal(MailMcpErrorCode.MailboxQueryCursorFilterMismatch, mismatchedCursor.ErrorCode);
-        Assert.Equal(MailMcpErrorCode.MailboxQueryFilterInvalid, invalidFilter.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailboxQueryPageSizeOutOfRange, pageSize.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailboxQueryCursorMalformed, malformedCursor.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailboxQueryCursorFilterMismatch, mismatchedCursor.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailboxQueryFilterInvalid, invalidFilter.ErrorCode);
     }
 
     /// <summary>One answer for "no such account" and "not yours", so a caller cannot enumerate the served accounts.</summary>
@@ -168,7 +168,7 @@ public sealed class ApplicationFailureContractTests
         var failure = new MailAccountNotAccessibleException(accountId);
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailAccountNotAccessible, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailAccountNotAccessible, failure.ErrorCode);
         Assert.Equal(accountId, failure.AccountId);
         Assert.Contains("primary", failure.Message, StringComparison.Ordinal);
     }
@@ -206,7 +206,7 @@ public sealed class ApplicationFailureContractTests
         var failure = MailboxQueryFilterInvalidException.ContainsControlCharacter("subject fragment");
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
         Assert.Equal("subject fragment", failure.FilterName);
         Assert.Contains("subject fragment", failure.Message, StringComparison.Ordinal);
     }

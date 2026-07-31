@@ -5,7 +5,7 @@ using System.Reflection;
 using Xunit.Sdk;
 using Xunit.v3;
 
-namespace MailMcp.IntegrationTests.Mailbox;
+namespace MailFathom.IntegrationTests.Mailbox;
 
 /// <summary>Runs the tests of one class in the order their <see cref="MailboxStateStepAttribute" /> states.</summary>
 /// <remarks>

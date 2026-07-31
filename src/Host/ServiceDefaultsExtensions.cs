@@ -7,11 +7,11 @@ using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
-namespace MailMcp.Host;
+namespace MailFathom.Host;
 
 /// <summary>
 /// Provides the cross-cutting observability, service-discovery, HTTP-resilience, and health-check defaults
-/// that the MailMcp host applies before any feature-specific composition.
+/// that the MailFathom host applies before any feature-specific composition.
 /// </summary>
 internal static class ServiceDefaultsExtensions
 {
@@ -127,7 +127,7 @@ internal static class ServiceDefaultsExtensions
     /// <remarks>
     /// <para>
     /// Both endpoints are mapped in every environment, because a container platform decides whether to route traffic to
-    /// this process and whether to restart it by probing them, and a deployment shape MailMcp supports must not depend
+    /// this process and whether to restart it by probing them, and a deployment shape MailFathom supports must not depend
     /// on the environment name it was started under. The scaffold this file came from restricted them to Development,
     /// which would have left every probe in <c>deploy/</c> with nothing to ask.
     /// </para>

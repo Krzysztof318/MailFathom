@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Persistence;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>Maps the bound persistence settings onto the connection settings the database adapter takes.</summary>
 /// <remarks>
@@ -25,7 +25,7 @@ internal sealed class DatabaseConnectionSettingsMapper(IConfiguration configurat
         ArgumentNullException.ThrowIfNull(persistenceSettings);
 
         return new PostgresConnectionSettings(
-            configuration.GetConnectionString("mailmcp"),
+            configuration.GetConnectionString("mailfathom"),
             persistenceSettings.ConnectionString,
             persistenceSettings.Password);
     }

@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Reflection;
-using MailMcp.TestSupport;
+using MailFathom.TestSupport;
 using Xunit;
 
-namespace MailMcp.SharedSources.UnitTests;
+namespace MailFathom.SharedSources.UnitTests;
 
 /// <summary>Covers the shared exception-hierarchy assertion against sample types declared beside it.</summary>
 /// <remarks>

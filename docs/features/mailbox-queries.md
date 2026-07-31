@@ -1,6 +1,6 @@
 # Mailbox queries
 
-MailMcp answers a mailbox listing from its local copy. `ListEmails` is the first read use case: it takes structured
+MailFathom answers a mailbox listing from its local copy. `ListEmails` is the first read use case: it takes structured
 filters, returns a bounded page of email summaries, issues the cursor that continues the walk, and reports how current
 the local copy is. It reaches no mail server, so a listing behaves the same whether or not IMAP is available — and it
 never touches the remote `\Seen` flag, because it speaks no mail protocol at all.
@@ -37,7 +37,7 @@ divergence neither copy would look wrong for on its own.
 | `Cursor` | The cursor a previous page returned | the first page |
 
 Accounts and folders are named by their domain identities rather than as text, so an adapter converts a caller's strings
-once at its own boundary. A folder alias is MailMcp's own name for a folder and is normalized to upper case, which is why
+once at its own boundary. A folder alias is MailFathom's own name for a folder and is normalized to upper case, which is why
 naming `archive` and `ARCHIVE` is naming one folder.
 
 ### What each filter accepts, and what it refuses
@@ -76,7 +76,7 @@ and its result would read as an answer about the mailbox.
 
 Naming no account means every account this deployment serves, and the request is narrowed to that set before anything is
 read rather than left without an account predicate. The two are not the same: removing an account from configuration
-leaves its stored rows in place, so an absent predicate would keep publishing mail from an account MailMcp no longer
+leaves its stored rows in place, so an absent predicate would keep publishing mail from an account MailFathom no longer
 serves. Switching synchronization off is a different matter and hides nothing — it stops runs from fetching mail, and the
 copy already stored stays readable.
 
@@ -205,19 +205,19 @@ configuration bounds.
 
 ## Where the pieces live
 
-- `MailMcp.Application.Emails.ListEmails` — the use case, its request, and its result.
-- `MailMcp.Application.Emails` — `MailboxEmailSelection` and the timeline filter that wraps it, the cursor, the page
+- `MailFathom.Application.Emails.ListEmails` — the use case, its request, and its result.
+- `MailFathom.Application.Emails` — `MailboxEmailSelection` and the timeline filter that wraps it, the cursor, the page
   size, the summary, and the query failures shared with the other read models.
-- `MailMcp.Application.Emails.MailboxScopeResolver` — resolves the accounts a read runs against and refuses one this
+- `MailFathom.Application.Emails.MailboxScopeResolver` — resolves the accounts a read runs against and refuses one this
   deployment does not serve. It is a collaborator rather than a step inside the use case because the refusal is an access
   decision every read model has to make identically.
-- `MailMcp.Application.Accounts` — `IMailAccountCatalog`, the port that names which accounts this deployment serves. One
+- `MailFathom.Application.Accounts` — `IMailAccountCatalog`, the port that names which accounts this deployment serves. One
   member answers both questions asked of it: whether the account a request named is accepted, and which accounts an
   unscoped request is narrowed to. `MailSynchronizationOptions` implements it, so the answer comes from the configuration
   that defines the accounts.
-- `MailMcp.Application.Synchronization` — the freshness port and its read model, kept separate from the readers that
+- `MailFathom.Application.Synchronization` — the freshness port and its read model, kept separate from the readers that
   return mail because every read model attaches freshness.
-- `MailMcp.Infrastructure.Persistence` — `StoredEmailTimelineReader` and `SynchronizationFreshnessReader`, which evaluate
+- `MailFathom.Infrastructure.Persistence` — `StoredEmailTimelineReader` and `SynchronizationFreshnessReader`, which evaluate
   every filter, the keyset boundary, the ordering, and the row limit in PostgreSQL and track no entities.
   `StoredEmailSelectionPredicate` is the filter predicate, shared with search, and `StoredEmailSummaryRow` carries the
   column list and the mapping, shared with search and with the single-email lookup. Both are written once because each

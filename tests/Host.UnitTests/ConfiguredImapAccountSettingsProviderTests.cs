@@ -1,13 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Secrets;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 public sealed class ConfiguredImapAccountSettingsProviderTests
 {
@@ -109,7 +109,7 @@ public sealed class ConfiguredImapAccountSettingsProviderTests
                 {
                     AccountId = "primary",
                     Host = "imap.example.test",
-                    UserName = "mailmcp@example.test",
+                    UserName = "mailfathom@example.test",
                     Secrets = new MailAccountSecretOptions
                     {
                         Password = new ConfiguredSecret { SecretReference = "plaintext:dev-password" },

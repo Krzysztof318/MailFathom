@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Infrastructure.Mail.Mime;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Infrastructure.Mail.Mime;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Covers the searchable text one message's body yields, which is what the lexical index is built from.</summary>
 public sealed class EmailBodyTextExtractionTests

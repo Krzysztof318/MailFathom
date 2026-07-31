@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Domain.Accounts;
-using MailMcp.Host.Configuration;
+using MailFathom.Domain.Accounts;
+using MailFathom.Host.Configuration;
 
-namespace MailMcp.Host.Hosting;
+namespace MailFathom.Host.Hosting;
 
 /// <summary>Supervises one <see cref="AccountSynchronizationSupervisor" /> per configured account.</summary>
 /// <remarks>

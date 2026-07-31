@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace MailMcp.Infrastructure.Resilience;
+namespace MailFathom.Infrastructure.Resilience;
 
 /// <summary>Records what a resilience pipeline decided, without recording what the operation was carrying.</summary>
 /// <remarks>

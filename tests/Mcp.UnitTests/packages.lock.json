@@ -309,20 +309,20 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
-      "MailMcp.Application": {
+      "MailFathom.Application": {
         "type": "Project",
         "dependencies": {
-          "MailMcp.Domain": "[1.0.0, )"
+          "MailFathom.Domain": "[1.0.0, )"
         }
       },
-      "MailMcp.Domain": {
+      "MailFathom.Domain": {
         "type": "Project"
       },
-      "MailMcp.Mcp": {
+      "MailFathom.Mcp": {
         "type": "Project",
         "dependencies": {
-          "MailMcp.Application": "[1.0.0, )",
-          "MailMcp.Domain": "[1.0.0, )",
+          "MailFathom.Application": "[1.0.0, )",
+          "MailFathom.Domain": "[1.0.0, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.10, )",
           "ModelContextProtocol.AspNetCore": "[2.0.0, )"
         }

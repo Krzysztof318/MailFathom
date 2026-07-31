@@ -3,7 +3,7 @@
 
 using System.Text;
 
-namespace MailMcp.TestSupport;
+namespace MailFathom.TestSupport;
 
 /// <summary>
 /// An immutable snapshot of one request observed by <see cref="FakeHttpMessageHandler" />.

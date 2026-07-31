@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Collections.Immutable;
-using MailMcp.Application.Resilience;
+using MailFathom.Application.Resilience;
 using Polly;
 using Polly.Registry;
 
-namespace MailMcp.Infrastructure.Resilience;
+namespace MailFathom.Infrastructure.Resilience;
 
 /// <summary>Runs an outbound operation under the resilience pipeline configured for its dependency class.</summary>
 /// <remarks>

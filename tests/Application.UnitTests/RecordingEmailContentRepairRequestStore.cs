@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.EmailContent;
+using MailFathom.Application.EmailContent;
 
-namespace MailMcp.Application.UnitTests;
+namespace MailFathom.Application.UnitTests;
 
 /// <summary>Keeps the repair requests a read recorded, in the order it recorded them.</summary>
 /// <remarks>

@@ -1,23 +1,23 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Accounts;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Mail;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.Host;
-using MailMcp.Host.Configuration;
-using MailMcp.Host.Hosting;
-using MailMcp.Host.Observability;
-using MailMcp.Host.Security;
-using MailMcp.Infrastructure;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.Infrastructure.Resilience;
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.Mcp;
+using MailFathom.Application.Accounts;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Mail;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Host;
+using MailFathom.Host.Configuration;
+using MailFathom.Host.Hosting;
+using MailFathom.Host.Observability;
+using MailFathom.Host.Security;
+using MailFathom.Infrastructure;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Resilience;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.Mcp;
 using Microsoft.Extensions.Options;
 
 // Composed before anything else, CreateBuilder included, so that a malformed appsettings.json, a failure during
@@ -247,7 +247,7 @@ try
     {
         // The tools read the local mailbox copy through the use cases the infrastructure registration above already
         // added, so the protocol surface adds no port of its own.
-        builder.Services.AddMailMcpServer();
+        builder.Services.AddMailFathomServer();
         builder.Services.AddMcpTransportSecurity(mcpEndpointSettings);
 
         // A certificate is asked for while the connection is being established or it never arrives at all, so this is a
@@ -299,7 +299,7 @@ try
     app.UseExceptionHandler();
 
     app.MapDefaultEndpoints();
-    app.MapGet("/", () => Results.Ok(new { service = "MailMcp", status = "ready" }));
+    app.MapGet("/", () => Results.Ok(new { service = "MailFathom", status = "ready" }));
 
     if (mcpEndpointSettings.Enabled)
     {

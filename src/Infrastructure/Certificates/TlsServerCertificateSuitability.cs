@@ -4,7 +4,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-namespace MailMcp.Infrastructure.Certificates;
+namespace MailFathom.Infrastructure.Certificates;
 
 /// <summary>Decides whether a parsed certificate can actually serve a configured domain, and what is presented after it.</summary>
 /// <remarks>

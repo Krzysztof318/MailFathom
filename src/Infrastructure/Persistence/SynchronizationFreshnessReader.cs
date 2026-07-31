@@ -1,14 +1,14 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
-using MailMcp.Application.Synchronization;
-using MailMcp.CodeCoverage;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Synchronization;
+using MailFathom.CodeCoverage;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Reads how current each folder's local copy is from the durable synchronization checkpoints.</summary>
 /// <remarks>
@@ -17,7 +17,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// exactly the folders whose staleness a caller most needs to see: the ones synchronization has never reached.
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class SynchronizationFreshnessReader(MailMcpDbContext dbContext) : ISynchronizationFreshnessReader
+internal sealed class SynchronizationFreshnessReader(MailFathomDbContext dbContext) : ISynchronizationFreshnessReader
 {
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailboxFolderFreshness>> ReadAsync(
@@ -49,7 +49,7 @@ internal sealed class SynchronizationFreshnessReader(MailMcpDbContext dbContext)
             .ToArrayAsync(cancellationToken);
 
         // Ordered here rather than in SQL because the order is ordinal by contract, and a database's collation is not
-        // something MailMcp configures.
+        // something MailFathom configures.
         return
         [
             .. freshestBindings

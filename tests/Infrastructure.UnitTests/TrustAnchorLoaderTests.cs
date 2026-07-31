@@ -2,12 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Text;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.TestSupport;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.TestSupport;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class TrustAnchorLoaderTests
 {
@@ -15,7 +15,7 @@ public sealed class TrustAnchorLoaderTests
     public async Task LoadAsync_PemMaterial_LoadsTheAnchor()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         var resolver = new ProvisionedMaterialResolver();
         resolver.Provision("file:/run/secrets/private-ca.pem", TestCertificates.ToPem(authority));
 
@@ -33,7 +33,7 @@ public sealed class TrustAnchorLoaderTests
     public async Task LoadAsync_DerMaterial_LoadsTheAnchor()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         var resolver = new ProvisionedMaterialResolver();
         resolver.Provision("file:/run/secrets/private-ca.der", TestCertificates.ToDer(authority));
 
@@ -50,7 +50,7 @@ public sealed class TrustAnchorLoaderTests
     public async Task LoadAsync_ProtectedBundle_TakesItsPasswordFromTheNestedSecretBlock()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var publicAnchor = TestCertificates.WithoutPrivateKey(authority);
         var resolver = new ProvisionedMaterialResolver();
         resolver.Provision("file:/run/secrets/private-ca.pfx", TestCertificates.ToBundle(publicAnchor, "bundle-password"));
@@ -74,7 +74,7 @@ public sealed class TrustAnchorLoaderTests
     public async Task LoadAsync_UnprotectedBundleWithNoPasswordBlock_LoadsTheAnchor()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var publicAnchor = TestCertificates.WithoutPrivateKey(authority);
         var resolver = new ProvisionedMaterialResolver();
         resolver.Provision("file:/run/secrets/private-ca.pfx", TestCertificates.ToBundle(publicAnchor));
@@ -92,7 +92,7 @@ public sealed class TrustAnchorLoaderTests
     public async Task LoadAsync_ProtectedBundleWithTheWrongPassword_NamesTheConfiguredPasswordWithoutThrowing()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var publicAnchor = TestCertificates.WithoutPrivateKey(authority);
         var resolver = new ProvisionedMaterialResolver();
         resolver.Provision("file:/run/secrets/private-ca.pfx", TestCertificates.ToBundle(publicAnchor, "bundle-password"));
@@ -116,7 +116,7 @@ public sealed class TrustAnchorLoaderTests
     public async Task LoadAsync_ProtectedBundleWithNoPasswordBlock_ReportsTheMissingBundlePassword()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var publicAnchor = TestCertificates.WithoutPrivateKey(authority);
         var resolver = new ProvisionedMaterialResolver();
         resolver.Provision("file:/run/secrets/private-ca.pfx", TestCertificates.ToBundle(publicAnchor, "bundle-password"));
@@ -135,7 +135,7 @@ public sealed class TrustAnchorLoaderTests
     public async Task LoadAsync_InlineDerMaterial_IsRejectedForItsEncodingRatherThanAsAParseFailure()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         var resolver = new ProvisionedMaterialResolver();
         resolver.Provision("inline:anchor", TestCertificates.ToDer(authority), SecretMaterialSource.InlineValue);
 
@@ -152,7 +152,7 @@ public sealed class TrustAnchorLoaderTests
     public async Task LoadAsync_InlineBundleMaterial_IsRejectedForItsEncoding()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var publicAnchor = TestCertificates.WithoutPrivateKey(authority);
         var resolver = new ProvisionedMaterialResolver();
         resolver.Provision("inline:anchor", TestCertificates.ToBundle(publicAnchor), SecretMaterialSource.InlineValue);
@@ -171,7 +171,7 @@ public sealed class TrustAnchorLoaderTests
     public async Task LoadAsync_InlinePemMaterial_LoadsTheAnchor()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         var resolver = new ProvisionedMaterialResolver();
         resolver.Provision("inline:anchor", TestCertificates.ToPem(authority), SecretMaterialSource.InlineValue);
 
@@ -184,12 +184,12 @@ public sealed class TrustAnchorLoaderTests
         Assert.Equal(authority.Thumbprint, result.TrustAnchor!.Thumbprint);
     }
 
-    /// <summary>A trust anchor needs no private key, and one MailMcp holds is an authority MailMcp could impersonate.</summary>
+    /// <summary>A trust anchor needs no private key, and one MailFathom holds is an authority MailFathom could impersonate.</summary>
     [Fact]
     public async Task LoadAsync_BundleCarryingAPrivateKey_IsRejected()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         var resolver = new ProvisionedMaterialResolver();
         resolver.Provision("file:/run/secrets/private-ca.pfx", TestCertificates.ToBundle(authority));
 
@@ -253,7 +253,7 @@ public sealed class TrustAnchorLoaderTests
     public async Task LoadAsync_UnresolvableBundlePassword_ReportsThatNoMaterialWasRetrieved()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         using var publicAnchor = TestCertificates.WithoutPrivateKey(authority);
         var resolver = new ProvisionedMaterialResolver();
         resolver.Provision("file:/run/secrets/private-ca.pfx", TestCertificates.ToBundle(publicAnchor, "bundle-password"));
@@ -295,7 +295,7 @@ public sealed class TrustAnchorLoaderTests
     public async Task LoadAsync_Always_ErasesTheResolvedMaterialBeforeReturning()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         var resolver = new ProvisionedMaterialResolver();
         resolver.Provision("file:/run/secrets/private-ca.pem", TestCertificates.ToPem(authority));
 

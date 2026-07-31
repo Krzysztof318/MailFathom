@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Secrets;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class MailAccountSecretOptionsTests
 {

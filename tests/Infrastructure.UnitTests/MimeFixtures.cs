@@ -3,12 +3,12 @@
 
 using System.Security.Cryptography;
 using System.Text;
-using MailMcp.Application.EmailContent;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
+using MailFathom.Application.EmailContent;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Builds the in-memory raw MIME the extraction tests parse.</summary>
 /// <remarks>

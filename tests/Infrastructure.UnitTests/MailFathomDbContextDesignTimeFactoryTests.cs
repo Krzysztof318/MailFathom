@@ -1,27 +1,27 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Keeps <c>dotnet ef</c> working without a running host, which composes the connection string at startup.</summary>
-public sealed class MailMcpDbContextDesignTimeFactoryTests
+public sealed class MailFathomDbContextDesignTimeFactoryTests
 {
     [Fact]
     public void BuildOptions_NoConnectionStringAtAll_FallsBackToTheLocalDevelopmentDatabase()
     {
         // Act
-        var options = MailMcpDbContextDesignTimeFactory.BuildOptions(
+        var options = MailFathomDbContextDesignTimeFactory.BuildOptions(
             orchestratedConnectionString: null,
             designTimeConnectionString: null);
 
         // Assert
-        using var context = new MailMcpDbContext(options, PostgresTextSearchConfiguration.Default);
+        using var context = new MailFathomDbContext(options, PostgresTextSearchConfiguration.Default);
         Assert.Equal(
-            MailMcpDbContextDesignTimeFactory.LocalDevelopmentConnectionString,
+            MailFathomDbContextDesignTimeFactory.LocalDevelopmentConnectionString,
             context.Database.GetConnectionString());
     }
 
@@ -32,27 +32,27 @@ public sealed class MailMcpDbContextDesignTimeFactoryTests
     public void BuildOptions_BlankOrchestratedConnectionString_UsesTheDesignTimeOverride(string? orchestrated)
     {
         // Act
-        var options = MailMcpDbContextDesignTimeFactory.BuildOptions(
+        var options = MailFathomDbContextDesignTimeFactory.BuildOptions(
             orchestrated,
-            "Host=db.test;Database=mailmcp;Username=dev");
+            "Host=db.test;Database=mailfathom;Username=dev");
 
         // Assert
-        using var context = new MailMcpDbContext(options, PostgresTextSearchConfiguration.Default);
-        Assert.Equal("Host=db.test;Database=mailmcp;Username=dev", context.Database.GetConnectionString());
+        using var context = new MailFathomDbContext(options, PostgresTextSearchConfiguration.Default);
+        Assert.Equal("Host=db.test;Database=mailfathom;Username=dev", context.Database.GetConnectionString());
     }
 
     [Fact]
     public void BuildOptions_OrchestrationIssuedAConnectionString_PrefersItOverTheDesignTimeOverride()
     {
         // Act
-        var options = MailMcpDbContextDesignTimeFactory.BuildOptions(
-            "Host=orchestrated;Database=mailmcp;Username=orchestrated",
-            "Host=stale;Database=mailmcp;Username=stale");
+        var options = MailFathomDbContextDesignTimeFactory.BuildOptions(
+            "Host=orchestrated;Database=mailfathom;Username=orchestrated",
+            "Host=stale;Database=mailfathom;Username=stale");
 
         // Assert
-        using var context = new MailMcpDbContext(options, PostgresTextSearchConfiguration.Default);
+        using var context = new MailFathomDbContext(options, PostgresTextSearchConfiguration.Default);
         Assert.Equal(
-            "Host=orchestrated;Database=mailmcp;Username=orchestrated",
+            "Host=orchestrated;Database=mailfathom;Username=orchestrated",
             context.Database.GetConnectionString());
     }
 
@@ -60,7 +60,7 @@ public sealed class MailMcpDbContextDesignTimeFactoryTests
     public void ReadTextSearchConfiguration_NoneConfigured_UsesTheDefaultTheModelWouldUse()
     {
         // Act
-        var configuration = MailMcpDbContextDesignTimeFactory.ReadTextSearchConfiguration(null);
+        var configuration = MailFathomDbContextDesignTimeFactory.ReadTextSearchConfiguration(null);
 
         // Assert
         Assert.Equal(PostgresTextSearchConfiguration.Default.Value, configuration.Value);
@@ -70,7 +70,7 @@ public sealed class MailMcpDbContextDesignTimeFactoryTests
     public void ReadTextSearchConfiguration_DeploymentConfiguredOne_GeneratesTheMigrationForIt()
     {
         // Act
-        var configuration = MailMcpDbContextDesignTimeFactory.ReadTextSearchConfiguration("english");
+        var configuration = MailFathomDbContextDesignTimeFactory.ReadTextSearchConfiguration("english");
 
         // Assert
         Assert.Equal("english", configuration.Value);
@@ -81,14 +81,14 @@ public sealed class MailMcpDbContextDesignTimeFactoryTests
     {
         // Act, Assert
         Assert.Throws<ArgumentException>(() =>
-            MailMcpDbContextDesignTimeFactory.ReadTextSearchConfiguration("klingon"));
+            MailFathomDbContextDesignTimeFactory.ReadTextSearchConfiguration("klingon"));
     }
 
     [Fact]
     public void CreateDbContext_DesignTimeTooling_ProducesAUsableModelWithoutAHost()
     {
         // Arrange
-        var factory = new MailMcpDbContextDesignTimeFactory();
+        var factory = new MailFathomDbContextDesignTimeFactory();
 
         // Act
         using var context = factory.CreateDbContext([]);

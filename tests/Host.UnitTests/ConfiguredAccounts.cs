@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Secrets;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Builds the bound account configuration a host test starts from.</summary>
 internal static class ConfiguredAccounts
@@ -19,7 +19,7 @@ internal static class ConfiguredAccounts
             {
                 AccountId = account.AccountId,
                 Host = "imap.example.test",
-                UserName = "mailmcp@example.test",
+                UserName = "mailfathom@example.test",
                 Secrets = new MailAccountSecretOptions
                 {
                     Password = new ConfiguredSecret

@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.CodeCoverage;
+using MailFathom.CodeCoverage;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 [RequiresIntegrationCoverage]
 internal sealed class SynchronizationCheckpointEntity

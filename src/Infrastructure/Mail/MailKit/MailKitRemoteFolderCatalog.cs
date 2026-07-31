@@ -1,16 +1,16 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+using MailFathom.Application.Folders;
+using MailFathom.Application.Resilience;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Resilience;
 using MailKit;
 using MailKit.Net.Imap;
-using MailMcp.Application.Folders;
-using MailMcp.Application.Resilience;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Transport;
-using MailMcp.Infrastructure.Resilience;
 
-namespace MailMcp.Infrastructure.Mail.MailKit;
+namespace MailFathom.Infrastructure.Mail.MailKit;
 
 /// <summary>Lists an account's remote folders over a short-lived authenticated connection.</summary>
 /// <remarks>

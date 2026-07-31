@@ -1,5 +1,5 @@
 apiVersion: v2
-name: mailmcp
+name: mailfathom
 description: A read-only MCP server over synchronized IMAP mailboxes, backed by PostgreSQL.
 type: application
 
@@ -8,14 +8,14 @@ type: application
 version: 0.1.0
 
 # The application version this chart is written against. `0.0.0-unreleased` is literal rather than a placeholder
-# somebody forgot: MailMcp has published no release, and the semantics that will decide what a version means are still
+# somebody forgot: MailFathom has published no release, and the semantics that will decide what a version means are still
 # an open decision. While it reads this, the chart makes no claim about which application version it deploys and its
 # image/appVersion drift check stays inactive — see the `image` section of values.yaml.
 appVersion: "0.0.0-unreleased"
 
-home: https://github.com/Krzysztof318/MailMcp
+home: https://github.com/Krzysztof318/MailFathom
 sources:
-  - https://github.com/Krzysztof318/MailMcp
+  - https://github.com/Krzysztof318/MailFathom
 
 keywords:
   - mcp
@@ -26,12 +26,12 @@ maintainers:
   - name: Krzysztof Kasprowicz
     url: https://github.com/Krzysztof318
 
-# MailMcp's own license, in the SPDX form Artifact Hub reads, matching the image's `org.opencontainers.image.licenses`
+# MailFathom's own license, in the SPDX form Artifact Hub reads, matching the image's `org.opencontainers.image.licenses`
 # label and the root LICENSE. It covers the chart and the application it deploys, both of which are this repository,
 # and says nothing about the PostgreSQL server the operator supplies under its own terms.
 annotations:
   artifacthub.io/license: Apache-2.0
 
-# No dependencies, deliberately. The chart installs no database: MailMcp needs PostgreSQL with the `vector` extension,
+# No dependencies, deliberately. The chart installs no database: MailFathom needs PostgreSQL with the `vector` extension,
 # and a subchart bundled here would make the chart responsible for the durability, backup, and upgrade of the store
 # that holds every synchronized message. `database` in values.yaml points at one the operator owns.

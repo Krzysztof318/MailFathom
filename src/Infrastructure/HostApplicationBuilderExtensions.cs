@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.CodeCoverage;
-using MailMcp.Infrastructure.Persistence;
+using MailFathom.CodeCoverage;
+using MailFathom.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace MailMcp.Infrastructure;
+namespace MailFathom.Infrastructure;
 
 /// <summary>Infrastructure registration that needs the host builder rather than the service collection alone.</summary>
 [RequiresIntegrationCoverage]
@@ -26,7 +26,7 @@ public static class HostApplicationBuilderExtensions
     /// <para>
     /// This is deliberately the enrichment half of the Aspire PostgreSQL EF Core integration rather than its
     /// <c>AddNpgsqlDbContext</c> half. That method resolves a connection string from
-    /// <c>ConnectionStrings</c> at registration time and builds the context around it, which MailMcp cannot use: the
+    /// <c>ConnectionStrings</c> at registration time and builds the context around it, which MailFathom cannot use: the
     /// connection string is composed asynchronously during startup because resolving a secret reference is asynchronous,
     /// and the password is supplied per physical connection so a rotated credential needs no restart. Enrichment layers
     /// the health check, the tracing, and the metrics onto the context the infrastructure already registered, so a
@@ -53,7 +53,7 @@ public static class HostApplicationBuilderExtensions
         // otherwise be reported as adopted while every command kept the old bound.
         builder.Services.AddSingleton(new DatabaseCommandTimeout(commandTimeout));
 
-        builder.EnrichNpgsqlDbContext<MailMcpDbContext>(settings =>
+        builder.EnrichNpgsqlDbContext<MailFathomDbContext>(settings =>
         {
             settings.DisableRetry = true;
             settings.DisableHealthChecks = false;

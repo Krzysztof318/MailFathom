@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Security;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>One client application the endpoint accepts a certificate from, and what that certificate must be.</summary>
 /// <remarks>

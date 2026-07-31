@@ -74,7 +74,7 @@ jobs:
         if: inputs.scope != 'compose'
         uses: helm/kind-action@v1
         with:
-          cluster_name: mailmcp-smoke
+          cluster_name: mailfathom-smoke
           # The script creates and deletes its own cluster; this step only installs kind and kubectl onto the runner.
           install_only: true
 

@@ -3,10 +3,10 @@
 
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using MailMcp.TestSupport;
+using MailFathom.TestSupport;
 using Xunit;
 
-namespace MailMcp.SharedSources.UnitTests;
+namespace MailFathom.SharedSources.UnitTests;
 
 /// <summary>
 /// Proves the shared certificate builder, because every trust decision the mail and MCP suites assert is asserted

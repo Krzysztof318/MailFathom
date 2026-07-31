@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Accounts;
-using MailMcp.Application.Persistence;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Failures;
-using MailMcp.Mcp.Observability;
-using MailMcp.TestSupport;
+using MailFathom.Application.Accounts;
+using MailFathom.Application.Persistence;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Failures;
+using MailFathom.Mcp.Observability;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using ModelContextProtocol;
@@ -15,7 +15,7 @@ using ModelContextProtocol.Server;
 using NSubstitute;
 using Xunit;
 
-namespace MailMcp.Mcp.UnitTests;
+namespace MailFathom.Mcp.UnitTests;
 
 /// <summary>Covers what the boundary tells a client, and an operator, about a tool call that failed.</summary>
 /// <remarks>
@@ -31,7 +31,7 @@ public sealed class McpToolCallReporterTests
     public async Task ReportAsync_UndiagnosedFailure_ReportsTheGenericCodeAndNoDetail()
     {
         // Arrange
-        const string LeakedDetail = "Npgsql connection to mail-db-7 refused for user mailmcp";
+        const string LeakedDetail = "Npgsql connection to mail-db-7 refused for user mailfathom";
         using var logs = new RecordingLoggerProvider();
         var reporter = ReporterOver(logs, out _);
 
@@ -44,7 +44,7 @@ public sealed class McpToolCallReporterTests
         // Assert
         Assert.True(result.IsError);
         var reportedText = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
-        Assert.StartsWith($"MailMcp error {MailMcpErrorCode.McpToolFailedUnexpectedly}:", reportedText, StringComparison.Ordinal);
+        Assert.StartsWith($"MailFathom error {MailFathomErrorCode.McpToolFailedUnexpectedly}:", reportedText, StringComparison.Ordinal);
         Assert.DoesNotContain(LeakedDetail, reportedText, StringComparison.Ordinal);
         Assert.DoesNotContain("mail-db-7", reportedText, StringComparison.Ordinal);
         Assert.DoesNotContain(nameof(InvalidOperationException), reportedText, StringComparison.Ordinal);
@@ -83,13 +83,13 @@ public sealed class McpToolCallReporterTests
         // Assert
         Assert.True(result.IsError);
         var reportedText = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
-        Assert.Equal($"MailMcp error {MailMcpErrorCode.MailAccountNotAccessible}: {refusal.Message}", reportedText);
+        Assert.Equal($"MailFathom error {MailFathomErrorCode.MailAccountNotAccessible}: {refusal.Message}", reportedText);
         Assert.Equal(
-            MailMcpErrorCode.MailAccountNotAccessible.Value,
+            MailFathomErrorCode.MailAccountNotAccessible.Value,
             Assert.Contains("ErrorCode", Assert.Single(logs.Records).Properties));
     }
 
-    /// <summary>A failure from any other category describes MailMcp's own internals, so its message stays on the server.</summary>
+    /// <summary>A failure from any other category describes MailFathom's own internals, so its message stays on the server.</summary>
     [Fact]
     public async Task ReportAsync_FailureFromAnotherCategory_CollapsesIntoTheGenericCode()
     {
@@ -107,7 +107,7 @@ public sealed class McpToolCallReporterTests
         // Assert
         Assert.True(result.IsError);
         var reportedText = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
-        Assert.StartsWith($"MailMcp error {MailMcpErrorCode.McpToolFailedUnexpectedly}:", reportedText, StringComparison.Ordinal);
+        Assert.StartsWith($"MailFathom error {MailFathomErrorCode.McpToolFailedUnexpectedly}:", reportedText, StringComparison.Ordinal);
         Assert.DoesNotContain(OperatorOnlyDetail, reportedText, StringComparison.Ordinal);
         Assert.Contains(logs.Records, record => record.Level is LogLevel.Error);
     }
@@ -130,7 +130,7 @@ public sealed class McpToolCallReporterTests
         // Assert
         Assert.True(result.IsError);
         var reportedText = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
-        Assert.StartsWith($"MailMcp error {MailMcpErrorCode.McpToolFailedUnexpectedly}:", reportedText, StringComparison.Ordinal);
+        Assert.StartsWith($"MailFathom error {MailFathomErrorCode.McpToolFailedUnexpectedly}:", reportedText, StringComparison.Ordinal);
         Assert.DoesNotContain("victim@example.test", reportedText, StringComparison.Ordinal);
         Assert.DoesNotContain("System.Int32", reportedText, StringComparison.Ordinal);
     }
@@ -161,7 +161,7 @@ public sealed class McpToolCallReporterTests
     [InlineData("victim@example.test\nINJECTED admin login")]
     [InlineData("List_Emails")]
     [InlineData("")]
-    public async Task ReportAsync_ToolNameOutsideTheShapeMailMcpUses_RecordsAPlaceholderInstead(string requestedName)
+    public async Task ReportAsync_ToolNameOutsideTheShapeMailFathomUses_RecordsAPlaceholderInstead(string requestedName)
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
@@ -231,7 +231,7 @@ public sealed class McpToolCallReporterTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var reporter = ReporterOver(logs, out _);
-        var toolResult = new CallToolResult { IsError = true, Content = [new TextContentBlock { Text = "MailMcp error 51001: bad argument." }] };
+        var toolResult = new CallToolResult { IsError = true, Content = [new TextContentBlock { Text = "MailFathom error 51001: bad argument." }] };
 
         // Act
         var result = await reporter.ReportAsync((_, _) => ValueTask.FromResult(toolResult), CallContext(), CancellationToken.None);

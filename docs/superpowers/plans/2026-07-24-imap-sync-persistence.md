@@ -33,7 +33,7 @@
 
 ### Task 3: Infrastructure EF Core persistence and MailKit adapter
 
-**Files:** modify `Infrastructure.csproj`; create `MailMcpDbContext`, EF entities/configuration, repositories, content store, MailKit session factory/session; add infrastructure unit tests.
+**Files:** modify `Infrastructure.csproj`; create `MailFathomDbContext`, EF entities/configuration, repositories, content store, MailKit session factory/session; add infrastructure unit tests.
 
 **Deliverable:** Database model expresses uniqueness for stable remote occurrence identity and account/folder names; MailKit adapter exposes only seen-preserving content fetch operations.
 
@@ -45,6 +45,6 @@
 
 ### Task 5: Documentation and draft status update
 
-**Files:** update `docs/features/initial-scope.md`, create `docs/features/imap-synchronization.md`, update `docs/README.md`, and mark implemented/pending status in `specs/2026-07-22-mail-mcp-architecture-draft.md`.
+**Files:** update `docs/features/initial-scope.md`, create `docs/features/imap-synchronization.md`, update `docs/README.md`, and mark implemented/pending status in `specs/2026-07-22-mail-fathom-architecture-draft.md`.
 
 **Deliverable:** Durable documentation describes implemented behavior, safety assumptions, configuration, and pending draft items.

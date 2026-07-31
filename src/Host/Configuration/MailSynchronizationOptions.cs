@@ -4,19 +4,19 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
-using MailMcp.Application.Accounts;
-using MailMcp.Application.Mail;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Domain.Synchronization;
-using MailMcp.Domain.Transport;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Application.Accounts;
+using MailFathom.Application.Mail;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Synchronization;
+using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Secrets;
 
-namespace MailMcp.Host.Configuration;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>Configures periodic IMAP synchronization.</summary>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]

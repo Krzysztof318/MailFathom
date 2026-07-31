@@ -2,7 +2,7 @@
 
 Every secret-bearing setting holds a *reference* to material the deployment provisions, and the host resolves those references before any worker starts. Under the default `ReferenceOnly` mode with an externally provisioned scheme, a configuration file leaked from a backup or a repository therefore yields credential names and paths, not credentials.
 
-That guarantee is a property of how a deployment is configured, not of MailMcp. Three shapes break it deliberately, and each is a visible choice rather than an accident: `plaintext:` puts the value in the file by definition, the `ReferenceOrInline` and `InlineOnly` modes accept a raw secret in `SecretReference`, and a password written into the connection string never passes through a secret block at all. Each is logged at startup by setting name. When judging what a leaked configuration file exposes, read the deployment's mode and schemes rather than this paragraph.
+That guarantee is a property of how a deployment is configured, not of MailFathom. Three shapes break it deliberately, and each is a visible choice rather than an accident: `plaintext:` puts the value in the file by definition, the `ReferenceOrInline` and `InlineOnly` modes accept a raw secret in `SecretReference`, and a password written into the connection string never passes through a secret block at all. Each is logged at startup by setting name. When judging what a leaked configuration file exposes, read the deployment's mode and schemes rather than this paragraph.
 
 ## The secret block
 
@@ -16,7 +16,7 @@ Every secret-bearing setting is a JSON object carrying a `Name`, a `SecretRefere
         "AccountId": "primary",
         "Host": "imap.example.test",
         "Port": 993,
-        "UserName": "mailmcp@example.test",
+        "UserName": "mailfathom@example.test",
         "Secrets": {
           "Password": {
             "Name": "imap-primary-password",
@@ -83,7 +83,7 @@ Every secret states how long it stays usable. The default is the literal `NoLimi
 ```json
 {
   "Name": "workstation",
-  "SecretReference": "systemd-credential:mailmcp-mcp-workstation-key",
+  "SecretReference": "systemd-credential:mailfathom-mcp-workstation-key",
   "Lifetime": "2027-01-31T00:00:00Z"
 }
 ```
@@ -126,28 +126,28 @@ Three shapes are supported, because provisioning systems differ and none of them
 
 | Setting | When to use it |
 | --- | --- |
-| `ConnectionStrings:mailmcp` plus `Persistence:Password` | The connection string names host, database, and user in ordinary configuration while only the credential is provisioned. |
+| `ConnectionStrings:mailfathom` plus `Persistence:Password` | The connection string names host, database, and user in ordinary configuration while only the credential is provisioned. |
 | `Persistence:ConnectionString` | A secret store holds the whole connection string. It is more than a password, so keeping it whole means one artifact to rotate instead of a credential split across two systems. |
-| `ConnectionStrings:mailmcp` alone | An orchestrator or a pre-resolving configuration provider injects a complete connection string. Aspire does this locally. |
+| `ConnectionStrings:mailfathom` alone | An orchestrator or a pre-resolving configuration provider injects a complete connection string. Aspire does this locally. |
 
 ```json
 {
   "Persistence": {
     "ConnectionString": {
-      "Name": "mailmcp-connection-string",
-      "SecretReference": "systemd-credential:mailmcp-connection-string"
+      "Name": "mailfathom-connection-string",
+      "SecretReference": "systemd-credential:mailfathom-connection-string"
     }
   }
 }
 ```
 
-`Persistence:ConnectionString` replaces `ConnectionStrings:mailmcp` rather than adding to it. Configuring a password in both the connection string and `Persistence:Password` is a startup failure, because two sources for one credential leave the effective one decided by implementation order — and an operator rotating the one that loses would see neither an effect nor an error.
+`Persistence:ConnectionString` replaces `ConnectionStrings:mailfathom` rather than adding to it. Configuring a password in both the connection string and `Persistence:Password` is a startup failure, because two sources for one credential leave the effective one decided by implementation order — and an operator rotating the one that loses would see neither an effect nor an error.
 
 A password written into the connection string with no secret block is **not** rejected. The same shape is both a mistake and a legitimate deployment: an orchestrator-injected connection string never touched a file anyone could commit. Under `ReferenceOnly` it is logged as a warning naming the setting, because that mode is the deployment stating that every secret arrives by reference.
 
 ## Deployment shapes
 
-MailMcp runs both as a native systemd service and as a container, and neither is the fallback. No container-specific or Kubernetes-specific scheme exists or is needed, because a container secret *is* a file.
+MailFathom runs both as a native systemd service and as a container, and neither is the fallback. No container-specific or Kubernetes-specific scheme exists or is needed, because a container secret *is* a file.
 
 ### Native systemd service
 
@@ -155,8 +155,8 @@ Provision the credential with `LoadCredential=` for a file the service user may 
 
 ```ini
 [Service]
-LoadCredentialEncrypted=imap-primary-password:/etc/mailmcp/imap-primary-password.cred
-LoadCredential=postgres-password:/etc/mailmcp/postgres-password
+LoadCredentialEncrypted=imap-primary-password:/etc/mailfathom/imap-primary-password.cred
+LoadCredential=postgres-password:/etc/mailfathom/postgres-password
 
 # Bound the in-memory exposure that no code-level measure can address.
 LimitCORE=0
@@ -170,7 +170,7 @@ Compose mounts a secret at `/run/secrets/<name>`, so the reference is `file:/run
 
 ```yaml
 services:
-  mailmcp:
+  mailfathom:
     secrets: [imap-primary-password, postgres-password]
 secrets:
   imap-primary-password:
@@ -179,35 +179,35 @@ secrets:
 
 ### Kubernetes
 
-A Secret mounted as a read-only tmpfs volume becomes one file per key at the path the operator chose, so the reference is `file:/etc/mailmcp-secrets/imap-primary-password`. A Secret projected into the environment block is `env:` instead, subject to the caveat below.
+A Secret mounted as a read-only tmpfs volume becomes one file per key at the path the operator chose, so the reference is `file:/etc/mailfathom-secrets/imap-primary-password`. A Secret projected into the environment block is `env:` instead, subject to the caveat below.
 
 Mounting is the shape to prefer, for a reason beyond memory hygiene: because material is resolved per use rather than cached, a Secret the cluster rotates behind an unchanged mount path reaches the next connection without a restart and without a configuration reload. A Secret projected into the environment block is fixed for the life of the pod, so rotating it means replacing the pod.
 
-A Secrets Store CSI driver — Vault, Azure Key Vault, AWS Secrets Manager — needs no MailMcp adapter for the same reason no Kubernetes scheme exists: it mounts files, so the reference is `file:` and the store's own authentication stays the driver's concern.
+A Secrets Store CSI driver — Vault, Azure Key Vault, AWS Secrets Manager — needs no MailFathom adapter for the same reason no Kubernetes scheme exists: it mounts files, so the reference is `file:` and the store's own authentication stays the driver's concern.
 
-[Configuration sources](configuration-sources.md#kubernetes) states the whole mapping, including how the non-secret half of a deployment reaches MailMcp through a mounted ConfigMap.
+[Configuration sources](configuration-sources.md#kubernetes) states the whole mapping, including how the non-secret half of a deployment reaches MailFathom through a mounted ConfigMap.
 
 ### Non-production automation
 
-`env:MAILMCP_IMAP_PRIMARY_PASSWORD` reads a CI or orchestrator environment variable. It is not recommended in production, for the memory reason stated below as well as for the usual visibility of an environment block to anything that can read `/proc`.
+`env:MAILFATHOM_IMAP_PRIMARY_PASSWORD` reads a CI or orchestrator environment variable. It is not recommended in production, for the memory reason stated below as well as for the usual visibility of an environment block to anything that can read `/proc`.
 
 ## Trailing newlines
 
-`LoadCredential=`, Compose secrets, and Kubernetes Secret files routinely end with a newline, and an untrimmed byte presents as a wrong password. MailMcp therefore strips **one** trailing newline when it decodes material as text. Binary material is never modified: a PKCS#12 bundle or a DER-encoded certificate survives resolution byte for byte.
+`LoadCredential=`, Compose secrets, and Kubernetes Secret files routinely end with a newline, and an untrimmed byte presents as a wrong password. MailFathom therefore strips **one** trailing newline when it decodes material as text. Binary material is never modified: a PKCS#12 bundle or a DER-encoded certificate survives resolution byte for byte.
 
 ## Certificate material
 
 A trust anchor is provisioned like any other secret, but the bytes behind it are loaded as a certificate rather than used as a credential. PEM, DER, and PKCS#12 all load, recognized from the material itself so a mistyped encoding hint cannot exist. Only PEM can be supplied inline, because the other two are binary; an inline block carrying them fails startup naming the encoding. A bundle's password, when it has one, goes in the nested `Password` block.
 
-An anchor that carries a private key is rejected. Provision the public certificate — `openssl x509 -in ca.pem -out ca-public.pem` if the file you have holds more than that — because a trust anchor needs nothing else, and a private key MailMcp holds is an authority MailMcp could impersonate.
+An anchor that carries a private key is rejected. Provision the public certificate — `openssl x509 -in ca.pem -out ca-public.pem` if the file you have holds more than that — because a trust anchor needs nothing else, and a private key MailFathom holds is an authority MailFathom could impersonate.
 
-Two things are provisioned this way and they are judged differently. A mail account's anchor decides whether MailMcp trusts the *server* it connects to; an [MCP client certificate profile](mcp-endpoint.md#client-certificates)'s anchors decide whether MailMcp trusts a *client* connecting to it, and a profile names several so an authority can rotate by overlap.
+Two things are provisioned this way and they are judged differently. A mail account's anchor decides whether MailFathom trusts the *server* it connects to; an [MCP client certificate profile](mcp-endpoint.md#client-certificates)'s anchors decide whether MailFathom trusts a *client* connecting to it, and a profile names several so an authority can rotate by overlap.
 
 [IMAP synchronization](../features/imap-synchronization.md) describes how the server-side anchor is used, including the revocation trade-off a private authority implies.
 
 ## Interpretation modes
 
-A secret-bearing setting does not always carry a reference. How MailMcp reads one is an explicit deployment choice, configured once at the root:
+A secret-bearing setting does not always carry a reference. How MailFathom reads one is an explicit deployment choice, configured once at the root:
 
 ```json
 { "Secrets": { "Interpretation": "ReferenceOnly" } }
@@ -221,7 +221,7 @@ A secret-bearing setting does not always carry a reference. How MailMcp reads on
 
 `ReferenceOnly` is what keeps a mistyped `fil:/run/secrets/imap` a startup failure instead of a password, and it is what makes a plain-text password pasted where a reference belongs fail loudly rather than authenticate successfully.
 
-`InlineOnly` exists for a configuration provider that resolved the secret *before* MailMcp bound it. Azure App Configuration with Key Vault references is the concrete case: the provider substitutes the vault value, so the bound setting is the raw secret with no prefix MailMcp could recognize. That integration needs no MailMcp adapter and no code change — only this mode.
+`InlineOnly` exists for a configuration provider that resolved the secret *before* MailFathom bound it. Azure App Configuration with Key Vault references is the concrete case: the provider substitutes the vault value, so the bound setting is the raw secret with no prefix MailFathom could recognize. That integration needs no MailFathom adapter and no code change — only this mode.
 
 The active mode is logged at startup. Every setting that resolved to an inline value is logged **by name**, never by value, so an unintended inline secret is discoverable rather than silent. That includes `plaintext:` under any mode, because the value sits in configuration either way.
 
@@ -236,7 +236,7 @@ The block is a nested object in JSON but requires no JSON provider. Every hierar
 | Azure App Configuration | `MailSynchronization:Accounts:0:Secrets:Password:SecretReference` |
 | Environment block | `MailSynchronization__Accounts__0__Secrets__Password__SecretReference` |
 
-Combined with `InlineOnly`, that is the complete Azure App Configuration path: the store holds the key, Key Vault holds the secret, the provider maps one to the other, and MailMcp binds an already-resolved value and uses it as material.
+Combined with `InlineOnly`, that is the complete Azure App Configuration path: the store holds the key, Key Vault holds the secret, the provider maps one to the other, and MailFathom binds an already-resolved value and uses it as material.
 
 ## Startup behavior
 
@@ -254,7 +254,7 @@ Startup resolves and immediately erases. Each actual use resolves again, so noth
 
 ## Secret material in process memory
 
-Material MailMcp allocates is held in a pinned byte buffer, never in a `string`, never in a pooled buffer, and never in a `SecureString`. The buffer is erased with `CryptographicOperations.ZeroMemory` when the operation that owns it ends. `SecureString` is deliberately unused: Microsoft recommends against it for new development and it does not encrypt its storage on non-Windows platforms, which is every environment MailMcp targets.
+Material MailFathom allocates is held in a pinned byte buffer, never in a `string`, never in a pooled buffer, and never in a `SecureString`. The buffer is erased with `CryptographicOperations.ZeroMemory` when the operation that owns it ends. `SecureString` is deliberately unused: Microsoft recommends against it for new development and it does not encrypt its storage on non-Windows platforms, which is every environment MailFathom targets.
 
 Four residual exposures are real and are not papered over:
 
@@ -275,12 +275,12 @@ Locking pages with `mlock` is deliberately not attempted. It would need P/Invoke
 
 This section describes the extension contract, not shipped behavior. No managed-store adapter exists today.
 
-Two integration shapes exist and must not be conflated. A provider that **pre-resolves** — Azure App Configuration with Key Vault references — does its mapping below MailMcp in the configuration pipeline and needs no adapter at all, only `InlineOnly`. A store MailMcp **queries itself** — direct Key Vault, HashiCorp Vault, AWS Secrets Manager — earns a scheme, because its retrieval behavior genuinely differs.
+Two integration shapes exist and must not be conflated. A provider that **pre-resolves** — Azure App Configuration with Key Vault references — does its mapping below MailFathom in the configuration pipeline and needs no adapter at all, only `InlineOnly`. A store MailFathom **queries itself** — direct Key Vault, HashiCorp Vault, AWS Secrets Manager — earns a scheme, because its retrieval behavior genuinely differs.
 
 Adding one is a registration rather than a refactor:
 
 - one `ISecretSchemeResolver` declaring its own scheme, which the composite dispatch picks up automatically;
 - one registration extension called beside `AddSecretResolution`;
 - its own timeouts, retry policy, endpoint configuration, and caching, which stay inside the adapter;
-- authentication through platform-issued identity — an Azure managed identity, a Kubernetes ServiceAccount token, a Vault role — never through a MailMcp-held credential, which would be circular;
+- authentication through platform-issued identity — an Azure managed identity, a Kubernetes ServiceAccount token, a Vault role — never through a MailFathom-held credential, which would be circular;
 - a `THIRD_PARTY_LICENSES.md` entry in the same change set, plus review of the SDK license, service terms, telemetry behavior, and data-processing implications.

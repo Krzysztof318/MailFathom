@@ -3,9 +3,9 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Security;
-using MailMcp.CodeCoverage;
+using MailFathom.CodeCoverage;
 
-namespace MailMcp.Infrastructure.Secrets;
+namespace MailFathom.Infrastructure.Secrets;
 
 /// <summary>Reads secret material from the real file system.</summary>
 /// <remarks>

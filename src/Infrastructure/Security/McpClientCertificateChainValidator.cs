@@ -4,7 +4,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-namespace MailMcp.Infrastructure.Security;
+namespace MailFathom.Infrastructure.Security;
 
 /// <summary>Decides whether a client certificate chains to one of a profile's configured authorities.</summary>
 /// <remarks>

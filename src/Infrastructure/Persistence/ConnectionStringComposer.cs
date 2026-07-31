@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Diagnostics.CodeAnalysis;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets;
 using Npgsql;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>The connection settings a data source is built from, and where its password comes from afterwards.</summary>
 /// <param name="ConnectionSettings">Everything but the credential: host, database, user name, and the provider's own options.</param>
@@ -240,7 +240,7 @@ internal static class ConnectionStringComposer
         {
             return string.IsNullOrWhiteSpace(configuredConnectionString)
                 ? throw new InvalidOperationException(
-                    "No PostgreSQL connection string is configured. Supply ConnectionStrings:mailmcp or Persistence:ConnectionString.")
+                    "No PostgreSQL connection string is configured. Supply ConnectionStrings:mailfathom or Persistence:ConnectionString.")
                 : new NpgsqlConnectionStringBuilder(configuredConnectionString);
         }
 

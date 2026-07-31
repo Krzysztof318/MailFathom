@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Emails;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Application.EmailContent;
+namespace MailFathom.Application.EmailContent;
 
 /// <summary>Records that one email's locally stored content has to be fetched or read again.</summary>
 /// <param name="StoredEmailId">The email whose local copy is unusable.</param>

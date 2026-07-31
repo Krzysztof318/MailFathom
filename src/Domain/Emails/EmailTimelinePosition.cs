@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Domain.Emails;
+namespace MailFathom.Domain.Emails;
 
 /// <summary>Places one stored email in the total order a mailbox timeline is read and paged over.</summary>
 /// <param name="ReceivedAt">When the last receiving hop recorded the message, or <see langword="null" /> when no header carried a usable date.</param>

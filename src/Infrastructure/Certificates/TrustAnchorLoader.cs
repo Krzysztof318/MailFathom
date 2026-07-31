@@ -4,14 +4,14 @@
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using MailMcp.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets;
 
-namespace MailMcp.Infrastructure.Certificates;
+namespace MailFathom.Infrastructure.Certificates;
 
 /// <summary>Turns deployment-provisioned material into a certificate usable as a trust anchor.</summary>
 /// <remarks>
 /// <para>
-/// This is the only place in MailMcp that knows about X.509, which is what keeps the scheme adapters material-agnostic:
+/// This is the only place in MailFathom that knows about X.509, which is what keeps the scheme adapters material-agnostic:
 /// a future material kind arrives as another loader over the same resolved bytes rather than as a change to how a
 /// secret is retrieved.
 /// </para>
@@ -19,7 +19,7 @@ namespace MailMcp.Infrastructure.Certificates;
 /// Every anchor is imported with <see cref="X509KeyStorageFlags.EphemeralKeySet" />. A trust anchor needs no private
 /// key, bundles commonly carry one anyway, and the default key-storage behavior would write that key into a key store
 /// on disk — outside the buffer whose lifetime the secret machinery controls. An anchor that turns out to carry a
-/// private key is rejected rather than silently accepted, because trusting an authority MailMcp could also impersonate
+/// private key is rejected rather than silently accepted, because trusting an authority MailFathom could also impersonate
 /// is not what an operator configured.
 /// </para>
 /// </remarks>

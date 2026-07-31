@@ -7,7 +7,7 @@
 
 ## Goal
 
-Give MailMcp one deliberate, configurable, and testable resilience model for outbound dependencies, instead of hand-written retry loops appearing independently in the IMAP adapter, the synchronization supervisor, the SMTP worker, and the AI provider adapters.
+Give MailFathom one deliberate, configurable, and testable resilience model for outbound dependencies, instead of hand-written retry loops appearing independently in the IMAP adapter, the synchronization supervisor, the SMTP worker, and the AI provider adapters.
 
 ## Current state
 

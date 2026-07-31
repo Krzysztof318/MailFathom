@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.CodeCoverage;
+using MailFathom.CodeCoverage;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>The columns one stored-content read projects, before they become the application's own value.</summary>
 /// <param name="RawMime">The stored RFC 822 bytes.</param>

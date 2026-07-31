@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Text;
-using MailMcp.Infrastructure.Certificates;
-using MailMcp.TestSupport;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.TestSupport;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class CertificateMaterialEncodingDetectorTests
 {
@@ -14,7 +14,7 @@ public sealed class CertificateMaterialEncodingDetectorTests
     public void Detect_PemText_RecognizesPem()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
 
         // Act
         var encoding = CertificateMaterialEncodingDetector.Detect(TestCertificates.ToPem(authority));
@@ -28,7 +28,7 @@ public sealed class CertificateMaterialEncodingDetectorTests
     public void Detect_PemTextBehindLeadingWhitespace_StillRecognizesPem()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         var indentedPem = Encoding.UTF8.GetBytes($"\n  \t{authority.ExportCertificatePem()}");
 
         // Act
@@ -42,7 +42,7 @@ public sealed class CertificateMaterialEncodingDetectorTests
     public void Detect_DerEncodedCertificate_RecognizesDer()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
 
         // Act
         var encoding = CertificateMaterialEncodingDetector.Detect(TestCertificates.ToDer(authority));
@@ -56,7 +56,7 @@ public sealed class CertificateMaterialEncodingDetectorTests
     public void Detect_Pkcs12Bundle_RecognizesItAsABundleRatherThanACertificate()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
 
         // Act
         var encoding = CertificateMaterialEncodingDetector.Detect(TestCertificates.ToBundle(authority, "bundle-password"));

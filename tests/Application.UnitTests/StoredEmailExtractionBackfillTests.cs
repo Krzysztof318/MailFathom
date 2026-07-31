@@ -2,17 +2,17 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Security.Cryptography;
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Persistence;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Persistence;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
-namespace MailMcp.Application.UnitTests;
+namespace MailFathom.Application.UnitTests;
 
 public sealed class StoredEmailExtractionBackfillTests
 {

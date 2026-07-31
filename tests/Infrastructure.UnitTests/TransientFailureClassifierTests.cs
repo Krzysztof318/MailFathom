@@ -4,18 +4,18 @@
 using System.Data.Common;
 using System.Net;
 using System.Net.Sockets;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Resilience;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Resilience;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Net.Smtp;
 using MailKit.Security;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Resilience;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Resilience;
 using NSubstitute;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class TransientFailureClassifierTests
 {

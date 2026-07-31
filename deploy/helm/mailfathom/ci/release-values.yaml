@@ -1,25 +1,25 @@
 # The values the repository's own verification renders the chart with, standing in for a deployment on the supported
-# release channel. Nothing here names a real image or a real database: no MailMcp release exists, and the point of
+# release channel. Nothing here names a real image or a real database: no MailFathom release exists, and the point of
 # this file is to give `helm lint` and `helm template` a values document that satisfies the schema so the templates
 # themselves are what gets checked.
 image:
   channel: release
   registry: docker.io
-  repository: example/mailmcp
+  repository: example/mailfathom
   tag: 0.1.0-verification
   allowVersionMismatch: true
 
 database:
-  host: postgres.mailmcp.svc.cluster.local
-  name: mailmcp
-  user: mailmcp
+  host: postgres.mailfathom.svc.cluster.local
+  name: mailfathom
+  user: mailfathom
 
 secrets:
-  existingSecret: mailmcp-secrets
+  existingSecret: mailfathom-secrets
 
 config:
   files:
-    10-mailmcp.json: |
+    10-mailfathom.json: |
       {
         "McpEndpoint": {
           "Enabled": true,
@@ -27,7 +27,7 @@ config:
           "ApiKeys": [
             {
               "Name": "workstation",
-              "SecretReference": "file:/etc/mailmcp/secrets/mcp-workstation-key"
+              "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key"
             }
           ]
         }
@@ -37,11 +37,11 @@ ingress:
   enabled: true
   className: nginx
   hosts:
-    - host: mailmcp.example.test
+    - host: mailfathom.example.test
       paths:
         - path: /mcp
           pathType: Prefix
   tls:
-    - secretName: mailmcp-tls
+    - secretName: mailfathom-tls
       hosts:
-        - mailmcp.example.test
+        - mailfathom.example.test

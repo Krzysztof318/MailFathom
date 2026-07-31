@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Application.Persistence;
+namespace MailFathom.Application.Persistence;
 
 /// <summary>Indicates that the lexical index was built with a different text search configuration than the configured one.</summary>
 /// <remarks>
@@ -14,11 +14,11 @@ namespace MailMcp.Application.Persistence;
 /// shape a search defect can take, because nothing distinguishes it from a mailbox that genuinely holds no match.
 /// </para>
 /// <para>
-/// Both names are MailMcp's own configured names for PostgreSQL text search configurations, so reporting them carries
+/// Both names are MailFathom's own configured names for PostgreSQL text search configurations, so reporting them carries
 /// no credential, host name, or personal data.
 /// </para>
 /// </remarks>
-public sealed class DatabaseSchemaTextSearchConfigurationMismatchException : MailMcpException
+public sealed class DatabaseSchemaTextSearchConfigurationMismatchException : MailFathomException
 {
     /// <summary>Initializes a new text search configuration mismatch between the schema and the configuration.</summary>
     /// <param name="operatorSafeMessage">A message naming both configurations and how to reconcile them.</param>
@@ -35,7 +35,7 @@ public sealed class DatabaseSchemaTextSearchConfigurationMismatchException : Mai
     }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.DatabaseSchemaTextSearchConfigurationMismatch;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.DatabaseSchemaTextSearchConfigurationMismatch;
 
     /// <summary>Gets the text search configuration the lexical index was built with.</summary>
     public string SchemaConfiguration { get; }

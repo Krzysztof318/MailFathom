@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Globalization;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Failures;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
 
-namespace MailMcp.Application.EmailContent;
+namespace MailFathom.Application.EmailContent;
 
 /// <summary>The failure raised when an email exists locally but its stored content cannot be served.</summary>
 /// <remarks>
@@ -24,7 +24,7 @@ namespace MailMcp.Application.EmailContent;
 /// content, and neither reveals anything the caller did not already hold.
 /// </para>
 /// </remarks>
-public sealed class EmailContentUnavailableException : MailMcpException
+public sealed class EmailContentUnavailableException : MailFathomException
 {
     /// <summary>Initializes the failure for one email whose stored content is unusable.</summary>
     /// <param name="storedEmailId">The email the request named.</param>
@@ -47,5 +47,5 @@ public sealed class EmailContentUnavailableException : MailMcpException
     public EmailContentDefect Defect { get; }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.EmailContentUnavailable;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.EmailContentUnavailable;
 }

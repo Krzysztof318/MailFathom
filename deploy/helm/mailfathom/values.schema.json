@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "MailMcp chart values",
-  "description": "Shape and value constraints for the MailMcp chart. This file rejects what can be decided from one field: a wrong type, an empty required string, a moving image tag, a configuration file name MailMcp would never read, an environment variable that looks like a credential. Constraints that hold between two fields \u2014 a nightly image needing its acknowledgement, a tag disagreeing with the chart's application version \u2014 are enforced by the chart's own validation helper, because a draft-07 schema can only state those as nested conditionals that report which subschema failed rather than what is wrong.",
+  "title": "MailFathom chart values",
+  "description": "Shape and value constraints for the MailFathom chart. This file rejects what can be decided from one field: a wrong type, an empty required string, a moving image tag, a configuration file name MailFathom would never read, an environment variable that looks like a credential. Constraints that hold between two fields \u2014 a nightly image needing its acknowledgement, a tag disagreeing with the chart's application version \u2014 are enforced by the chart's own validation helper, because a draft-07 schema can only state those as nested conditionals that report which subschema failed rather than what is wrong.",
   "type": "object",
   "required": [
     "image",
@@ -44,7 +44,7 @@
         "repository": {
           "type": "string",
           "minLength": 1,
-          "description": "No default exists: MailMcp has published no release, and a chart that guessed one would deploy an image nobody named."
+          "description": "No default exists: MailFathom has published no release, and a chart that guessed one would deploy an image nobody named."
         },
         "tag": {
           "type": "string",
@@ -109,7 +109,7 @@
       "properties": {
         "host": {
           "type": "string",
-          "description": "The chart installs no database. MailMcp needs PostgreSQL with the vector extension, and the store holding every synchronized message belongs to whoever operates it."
+          "description": "The chart installs no database. MailFathom needs PostgreSQL with the vector extension, and the store holding every synchronized message belongs to whoever operates it."
         },
         "port": {
           "type": "integer",
@@ -167,7 +167,7 @@
           "type": "object",
           "propertyNames": {
             "pattern": "\\.json$",
-            "description": "MailMcp layers in *.json only, so a key with another extension would be a setting that silently never applied."
+            "description": "MailFathom layers in *.json only, so a key with another extension would be a setting that silently never applied."
           },
           "additionalProperties": {
             "type": "string"
@@ -191,7 +191,7 @@
                 "not": {
                   "pattern": "^(ConnectionStrings__|Persistence__Password__|ConfigurationSources__|ASPNETCORE_)"
                 },
-                "description": "These settings are the chart's, not an override's. The environment block outranks every mounted file, so re-declaring one of them here would silently replace what the templates emit \u2014 and `ConnectionStrings__mailmcp` is the one that matters: the conventional Npgsql form carries `Password=`, which would put a credential into the rendered Deployment and bypass the mounted-file path entirely. Change `database`, `config`, and `secrets` instead."
+                "description": "These settings are the chart's, not an override's. The environment block outranks every mounted file, so re-declaring one of them here would silently replace what the templates emit \u2014 and `ConnectionStrings__mailfathom` is the one that matters: the conventional Npgsql form carries `Password=`, which would put a credential into the rendered Deployment and bypass the mounted-file path entirely. Change `database`, `config`, and `secrets` instead."
               }
             ]
           },
@@ -327,7 +327,7 @@
       "properties": {
         "runAsNonRoot": {
           "const": true,
-          "description": "The Restricted Pod Security Standard requires it, and MailMcp has no reason to be root: the image runs as an unprivileged account and writes only to a mounted tmpfs."
+          "description": "The Restricted Pod Security Standard requires it, and MailFathom has no reason to be root: the image runs as an unprivileged account and writes only to a mounted tmpfs."
         },
         "runAsUser": {
           "type": "integer",
@@ -479,7 +479,7 @@
     },
     "global": {
       "type": "object",
-      "description": "Helm injects this when a chart is used as a subchart. MailMcp has none, so nothing reads it; it is declared only so a parent chart's global values do not fail this schema."
+      "description": "Helm injects this when a chart is used as a subchart. MailFathom has none, so nothing reads it; it is declared only so a parent chart's global values do not fail this schema."
     }
   },
   "definitions": {

@@ -21,14 +21,14 @@ set -euo pipefail
 # Both parts destroy and recreate their own state. Neither touches anything outside the checkout, the Docker daemon,
 # and the kind cluster it creates and deletes.
 
-readonly compose_project='mailmcp-smoke'
+readonly compose_project='mailfathom-smoke'
 # compose.yaml names its volume globally rather than letting Compose prefix it with the project, so the project name
 # alone does not isolate this run from a developer's data. This is what does.
-readonly smoke_postgres_volume='mailmcp-smoke-postgres-data'
-readonly kind_cluster='mailmcp-smoke'
-readonly runtime_image='mailmcp:smoke'
-readonly kubernetes_namespace='mailmcp-smoke'
-readonly helm_release='mailmcp'
+readonly smoke_postgres_volume='mailfathom-smoke-postgres-data'
+readonly kind_cluster='mailfathom-smoke'
+readonly runtime_image='mailfathom:smoke'
+readonly kubernetes_namespace='mailfathom-smoke'
+readonly helm_release='mailfathom'
 
 if ! repository_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
   printf 'smoke-deployment.sh must run inside a Git worktree.\n' >&2
@@ -92,7 +92,7 @@ smoke_workspace=''
 # operator owns:
 #
 #   * a smoke-only project name, which isolates containers and networks;
-#   * MAILMCP_POSTGRES_VOLUME, because compose.yaml gives the volume an explicit global name — the project name does
+#   * MAILFATHOM_POSTGRES_VOLUME, because compose.yaml gives the volume an explicit global name — the project name does
 #     *not* scope it, so without this the teardown below would delete the volume holding a developer's synchronized
 #     mail on the same daemon;
 #   * an override file whose secret and configuration paths point into a temporary directory, so nothing is read from
@@ -102,8 +102,8 @@ smoke_workspace=''
 # resolving: Compose takes the project directory from the first file it is given.
 compose_command() {
   (cd deploy/compose \
-    && MAILMCP_IMAGE="$runtime_image" \
-       MAILMCP_POSTGRES_VOLUME="$smoke_postgres_volume" \
+    && MAILFATHOM_IMAGE="$runtime_image" \
+       MAILFATHOM_POSTGRES_VOLUME="$smoke_postgres_volume" \
     docker compose \
       --project-name "$compose_project" \
       --file compose.yaml \
@@ -115,7 +115,7 @@ compose_command() {
 # shell would lose the project name and the image tags these commands are parameterized by, and would then poll a
 # deployment that does not exist while reporting a timeout against the one that does.
 compose_logs_mention() {
-  compose_command logs mailmcp 2>&1 | grep -q "$1"
+  compose_command logs mailfathom 2>&1 | grep -q "$1"
 }
 
 
@@ -123,41 +123,41 @@ compose_logs_mention() {
 # provisioned the supported deployment keeps their credentials, and this run cannot authenticate against their volume
 # by accident either, because it does not use it.
 provision_smoke_workspace() {
-  smoke_workspace="$(mktemp --directory --tmpdir mailmcp-smoke.XXXXXXXX)"
+  smoke_workspace="$(mktemp --directory --tmpdir mailfathom-smoke.XXXXXXXX)"
 
-  mkdir -p "$smoke_workspace/secrets/mailmcp" "$smoke_workspace/config"
+  mkdir -p "$smoke_workspace/secrets/mailfathom" "$smoke_workspace/config"
   chmod 700 "$smoke_workspace/secrets"
 
   head -c 24 /dev/urandom | base64 | tr -d '\n' > "$smoke_workspace/secrets/postgres-superuser-password"
-  head -c 24 /dev/urandom | base64 | tr -d '\n' > "$smoke_workspace/secrets/mailmcp-database-password"
+  head -c 24 /dev/urandom | base64 | tr -d '\n' > "$smoke_workspace/secrets/mailfathom-database-password"
 
   # The directory restricts access; the files are readable. Compose bind-mounts a file secret with the host's own
   # permissions — outside Swarm it ignores `mode`, `uid`, and `gid` — and the service runs as an unprivileged account
   # that is nobody's host user, so a 0600 file it cannot read presents as an unresolvable secret reference. This is
   # the arrangement docs/operations/deployment-compose.md asks an operator for, and the smoke uses it so the two
   # cannot diverge.
-  chmod 444 "$smoke_workspace/secrets/postgres-superuser-password" "$smoke_workspace/secrets/mailmcp-database-password"
+  chmod 444 "$smoke_workspace/secrets/postgres-superuser-password" "$smoke_workspace/secrets/mailfathom-database-password"
 
-  # The configuration directory is deliberately left empty. An operator's own `config/10-mailmcp.json` would otherwise
+  # The configuration directory is deliberately left empty. An operator's own `config/10-mailfathom.json` would otherwise
   # be mounted into this run, and a real mailbox account in it would make the smoke synchronize somebody's mail.
   cat > "$smoke_workspace/compose.smoke.yaml" <<SMOKE_OVERRIDE
 services:
-  mailmcp:
+  mailfathom:
     volumes: !override
       - type: bind
         source: $smoke_workspace/config
-        target: /etc/mailmcp/config
+        target: /etc/mailfathom/config
         read_only: true
       - type: bind
-        source: $smoke_workspace/secrets/mailmcp
-        target: /etc/mailmcp/secrets
+        source: $smoke_workspace/secrets/mailfathom
+        target: /etc/mailfathom/secrets
         read_only: true
 
 secrets:
   postgres-superuser-password:
     file: $smoke_workspace/secrets/postgres-superuser-password
-  mailmcp-database-password:
-    file: $smoke_workspace/secrets/mailmcp-database-password
+  mailfathom-database-password:
+    file: $smoke_workspace/secrets/mailfathom-database-password
 SMOKE_OVERRIDE
 }
 
@@ -186,12 +186,12 @@ smoke_the_compose_deployment() {
   # created, and read the migration history — and then refused to serve, because no schema has been applied. A host
   # that applied one while starting could never report this, which is why the refusal is the assertion rather than an
   # obstacle to one.
-  compose_command up --detach mailmcp >/dev/null
+  compose_command up --detach mailfathom >/dev/null
   wait_until 'The host reaches the database and refuses to serve against a schema it does not recognize.' 30 \
     compose_logs_mention 'DatabaseSchemaOutOfDateException'
 
   local container_id
-  container_id="$(compose_command ps --all --quiet mailmcp)"
+  container_id="$(compose_command ps --all --quiet mailfathom)"
 
   [[ "$(docker inspect "$container_id" --format '{{.Config.User}}')" == '1654' ]] \
     || abort 'The container is not running as the unprivileged account.'
@@ -210,7 +210,7 @@ smoke_the_compose_deployment() {
   # force reports. The code a failed start *does* produce is whatever the runtime's abort path yields, and that
   # differs by environment — 134 outside a container, 139 in this image — so asserting a particular one would be
   # asserting a property of the .NET host rather than of the deployment.
-  compose_command stop --timeout 60 mailmcp >/dev/null
+  compose_command stop --timeout 60 mailfathom >/dev/null
   local exit_code restart_count
   exit_code="$(docker inspect "$container_id" --format '{{.State.ExitCode}}')"
   restart_count="$(docker inspect "$container_id" --format '{{.RestartCount}}')"
@@ -224,11 +224,11 @@ smoke_the_compose_deployment() {
 ########################################################################################################################
 
 pod_logs_mention() {
-  kubectl --namespace "$kubernetes_namespace" logs --selector app.kubernetes.io/name=mailmcp --tail=-1 2>/dev/null | grep -q "$1"
+  kubectl --namespace "$kubernetes_namespace" logs --selector app.kubernetes.io/name=mailfathom --tail=-1 2>/dev/null | grep -q "$1"
 }
 
 chart_objects_are_gone() {
-  [[ -z "$(kubectl --namespace "$kubernetes_namespace" get all --selector app.kubernetes.io/name=mailmcp --no-headers 2>/dev/null)" ]]
+  [[ -z "$(kubectl --namespace "$kubernetes_namespace" get all --selector app.kubernetes.io/name=mailfathom --no-headers 2>/dev/null)" ]]
 }
 
 apply_the_smoke_database() {
@@ -269,21 +269,21 @@ spec:
           image: pgvector/pgvector:0.8.2-pg17
           env:
             - name: POSTGRES_USER
-              value: mailmcp
+              value: mailfathom
             - name: POSTGRES_DB
-              value: mailmcp
+              value: mailfathom
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: mailmcp-secrets
-                  key: mailmcp-database-password
+                  name: mailfathom-secrets
+                  key: mailfathom-database-password
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           ports:
             - containerPort: 5432
           readinessProbe:
             exec:
-              command: ["pg_isready", "--username", "mailmcp", "--dbname", "mailmcp"]
+              command: ["pg_isready", "--username", "mailfathom", "--dbname", "mailfathom"]
             initialDelaySeconds: 5
             periodSeconds: 5
           volumeMounts:
@@ -310,8 +310,8 @@ smoke_the_kubernetes_deployment() {
   kubectl create namespace "$kubernetes_namespace" >/dev/null
 
   # The chart creates no Secret, so the smoke has to provision one exactly as an operator would.
-  kubectl --namespace "$kubernetes_namespace" create secret generic mailmcp-secrets \
-    --from-literal=mailmcp-database-password="$(head -c 24 /dev/urandom | base64 | tr -d '\n')" \
+  kubectl --namespace "$kubernetes_namespace" create secret generic mailfathom-secrets \
+    --from-literal=mailfathom-database-password="$(head -c 24 /dev/urandom | base64 | tr -d '\n')" \
     --from-literal=mcp-workstation-key="$(head -c 24 /dev/urandom | base64 | tr -d '\n')" >/dev/null
   pass 'The Secret the chart references is provisioned.'
 
@@ -321,15 +321,15 @@ smoke_the_kubernetes_deployment() {
 
   local -a chart_values=(
     --set "image.registry="
-    --set "image.repository=mailmcp"
+    --set "image.repository=mailfathom"
     --set "image.tag=smoke"
     --set "image.pullPolicy=Never"
     --set "image.allowVersionMismatch=true"
     --set "database.host=postgres"
-    --set "secrets.existingSecret=mailmcp-secrets"
+    --set "secrets.existingSecret=mailfathom-secrets"
   )
 
-  helm install "$helm_release" deploy/helm/mailmcp --namespace "$kubernetes_namespace" "${chart_values[@]}" >/dev/null
+  helm install "$helm_release" deploy/helm/mailfathom --namespace "$kubernetes_namespace" "${chart_values[@]}" >/dev/null
   pass 'The chart installed.'
 
   # The same refusal the Compose half observes, reached through the chart's own wiring: the ConfigMap it mounts, the
@@ -342,7 +342,7 @@ smoke_the_kubernetes_deployment() {
   # because the rollout it produces cannot become ready without a schema.
   local first_manifest second_manifest
   first_manifest="$(helm get manifest "$helm_release" --namespace "$kubernetes_namespace")"
-  helm upgrade "$helm_release" deploy/helm/mailmcp --namespace "$kubernetes_namespace" "${chart_values[@]}" >/dev/null
+  helm upgrade "$helm_release" deploy/helm/mailfathom --namespace "$kubernetes_namespace" "${chart_values[@]}" >/dev/null
   second_manifest="$(helm get manifest "$helm_release" --namespace "$kubernetes_namespace")"
   [[ "$first_manifest" == "$second_manifest" ]] || abort 'A repeated upgrade changed the rendered objects.'
   pass 'A repeated upgrade rendered the same objects.'

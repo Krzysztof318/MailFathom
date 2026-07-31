@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Infrastructure.Certificates;
+namespace MailFathom.Infrastructure.Certificates;
 
 /// <summary>The outcome of turning configured material into the TLS identity an endpoint presents.</summary>
 /// <remarks>

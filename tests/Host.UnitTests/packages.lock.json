@@ -719,33 +719,33 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
-      "MailMcp.AI": {
+      "MailFathom.AI": {
         "type": "Project",
         "dependencies": {
-          "MailMcp.Application": "[1.0.0, )",
-          "MailMcp.Domain": "[1.0.0, )",
+          "MailFathom.Application": "[1.0.0, )",
+          "MailFathom.Domain": "[1.0.0, )",
           "Microsoft.Agents.AI": "[1.15.0, )",
           "Microsoft.Extensions.AI": "[10.8.1, )",
           "Microsoft.Extensions.AI.Abstractions": "[10.8.1, )"
         }
       },
-      "MailMcp.Application": {
+      "MailFathom.Application": {
         "type": "Project",
         "dependencies": {
-          "MailMcp.Domain": "[1.0.0, )"
+          "MailFathom.Domain": "[1.0.0, )"
         }
       },
-      "MailMcp.Domain": {
+      "MailFathom.Domain": {
         "type": "Project"
       },
-      "MailMcp.Host": {
+      "MailFathom.Host": {
         "type": "Project",
         "dependencies": {
-          "MailMcp.AI": "[1.0.0, )",
-          "MailMcp.Application": "[1.0.0, )",
-          "MailMcp.Domain": "[1.0.0, )",
-          "MailMcp.Infrastructure": "[1.0.0, )",
-          "MailMcp.Mcp": "[1.0.0, )",
+          "MailFathom.AI": "[1.0.0, )",
+          "MailFathom.Application": "[1.0.0, )",
+          "MailFathom.Domain": "[1.0.0, )",
+          "MailFathom.Infrastructure": "[1.0.0, )",
+          "MailFathom.Mcp": "[1.0.0, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.10, )",
           "Microsoft.Extensions.Http.Resilience": "[10.6.0, )",
           "Microsoft.Extensions.ServiceDiscovery": "[10.6.0, )",
@@ -756,14 +756,14 @@
           "OpenTelemetry.Instrumentation.Runtime": "[1.15.1, )"
         }
       },
-      "MailMcp.Infrastructure": {
+      "MailFathom.Infrastructure": {
         "type": "Project",
         "dependencies": {
           "Aspire.Npgsql.EntityFrameworkCore.PostgreSQL": "[13.4.6, )",
           "HtmlSanitizer": "[9.1.974, )",
           "MailKit": "[4.17.0, )",
-          "MailMcp.Application": "[1.0.0, )",
-          "MailMcp.Domain": "[1.0.0, )",
+          "MailFathom.Application": "[1.0.0, )",
+          "MailFathom.Domain": "[1.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.10, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.10, )",
@@ -777,11 +777,11 @@
           "Polly.RateLimiting": "[8.7.0, )"
         }
       },
-      "MailMcp.Mcp": {
+      "MailFathom.Mcp": {
         "type": "Project",
         "dependencies": {
-          "MailMcp.Application": "[1.0.0, )",
-          "MailMcp.Domain": "[1.0.0, )",
+          "MailFathom.Application": "[1.0.0, )",
+          "MailFathom.Domain": "[1.0.0, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.10, )",
           "ModelContextProtocol.AspNetCore": "[2.0.0, )"
         }

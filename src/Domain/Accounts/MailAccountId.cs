@@ -1,9 +1,9 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Domain.Accounts;
+namespace MailFathom.Domain.Accounts;
 
-/// <summary>Identifies a configured mail account inside MailMcp.</summary>
+/// <summary>Identifies a configured mail account inside MailFathom.</summary>
 public readonly record struct MailAccountId
 {
     private MailAccountId(string value) => this.Value = value;

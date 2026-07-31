@@ -1,14 +1,14 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Folders;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Application.Synchronization;
+namespace MailFathom.Application.Synchronization;
 
 /// <summary>Reports how current the local copy of one folder is.</summary>
 /// <param name="AccountId">The account the folder belongs to.</param>
-/// <param name="FolderAlias">MailMcp's own name for the folder.</param>
+/// <param name="FolderAlias">MailFathom's own name for the folder.</param>
 /// <param name="SynchronizedAt">When synchronization last durably committed progress for the folder, or <see langword="null" /> when it never has.</param>
 /// <remarks>
 /// <para>

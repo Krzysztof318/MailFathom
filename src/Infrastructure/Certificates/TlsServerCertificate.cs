@@ -3,7 +3,7 @@
 
 using System.Security.Cryptography.X509Certificates;
 
-namespace MailMcp.Infrastructure.Certificates;
+namespace MailFathom.Infrastructure.Certificates;
 
 /// <summary>A validated TLS identity: the leaf a server presents, its private key, and the authorities presented after it.</summary>
 /// <remarks>

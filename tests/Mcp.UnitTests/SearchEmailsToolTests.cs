@@ -1,18 +1,18 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Accounts;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Emails.SearchEmails;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Failures;
-using MailMcp.Domain.Folders;
-using MailMcp.Mcp.Tools;
+using MailFathom.Application.Accounts;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.SearchEmails;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
+using MailFathom.Mcp.Tools;
 using Xunit;
 
-namespace MailMcp.Mcp.UnitTests;
+namespace MailFathom.Mcp.UnitTests;
 
 /// <summary>Covers what the <c>search_emails</c> tool itself owns: converting arguments and publishing a ranked window.</summary>
 /// <remarks>
@@ -153,7 +153,7 @@ public sealed class SearchEmailsToolTests
             () => tool.SearchEmailsAsync(blank, cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
         Assert.Equal("search query", failure.FilterName);
         Assert.Equal(0, index.ReadCount);
     }
@@ -214,7 +214,7 @@ public sealed class SearchEmailsToolTests
                 cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.EmailSearchResultLimitOutOfRange, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.EmailSearchResultLimitOutOfRange, failure.ErrorCode);
         Assert.Equal(EmailSearchResultLimit.MaximumValue, failure.MaximumResultLimit);
         Assert.Equal(0, index.ReadCount);
     }
@@ -235,7 +235,7 @@ public sealed class SearchEmailsToolTests
                 cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailMcpErrorCode.MailAccountNotAccessible, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.MailAccountNotAccessible, failure.ErrorCode);
         Assert.Equal(0, index.ReadCount);
     }
 

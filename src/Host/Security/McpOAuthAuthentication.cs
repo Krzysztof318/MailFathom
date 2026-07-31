@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Infrastructure.Security;
+using MailFathom.Infrastructure.Security;
 using Microsoft.IdentityModel.Tokens;
 
-namespace MailMcp.Host.Security;
+namespace MailFathom.Host.Security;
 
 /// <summary>The constants the OAuth side of the MCP endpoint is composed from.</summary>
 /// <remarks>
@@ -14,7 +14,7 @@ namespace MailMcp.Host.Security;
 internal static class McpOAuthAuthentication
 {
     /// <summary>The scheme that decides which credential a request presented and forwards it to the handler that judges it.</summary>
-    internal const string RoutingSchemeName = "MailMcpTransport";
+    internal const string RoutingSchemeName = "MailFathomTransport";
 
     /// <summary>The signature algorithms a token may be signed with.</summary>
     /// <remarks>
@@ -26,7 +26,7 @@ internal static class McpOAuthAuthentication
     /// </para>
     /// <para>
     /// The list is fixed here rather than read from the discovery document. A server states which algorithms it can sign
-    /// with, and that is a capability, not a policy; taking it as policy would let a server decide what MailMcp accepts.
+    /// with, and that is a capability, not a policy; taking it as policy would let a server decide what MailFathom accepts.
     /// </para>
     /// </remarks>
     internal static readonly string[] PermittedSignatureAlgorithms =
@@ -82,7 +82,7 @@ internal static class McpOAuthAuthentication
     /// <param name="authorizationServerName">The operator's name for the profile.</param>
     /// <returns>The scheme name.</returns>
     internal static string SchemeNameFor(string authorizationServerName) =>
-        $"MailMcpOAuth:{authorizationServerName}";
+        $"MailFathomOAuth:{authorizationServerName}";
 
     /// <summary>States what a token from one authorization server must satisfy to be accepted.</summary>
     /// <param name="issuer">The profile's issuer, compared against the token's <c>iss</c>.</param>

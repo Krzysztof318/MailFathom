@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.ComponentModel;
-using MailMcp.Application.EmailContent;
+using MailFathom.Application.EmailContent;
 
-namespace MailMcp.Mcp.Tools;
+namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes one representation of a message body together with what was left out of it.</summary>
 /// <remarks>

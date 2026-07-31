@@ -4,13 +4,13 @@
 using System.Data.Common;
 using System.Net;
 using System.Net.Sockets;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Resilience;
+using MailFathom.Infrastructure.Mail;
 using MailKit;
 using MailKit.Net.Smtp;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Resilience;
-using MailMcp.Infrastructure.Mail;
 
-namespace MailMcp.Infrastructure.Resilience;
+namespace MailFathom.Infrastructure.Resilience;
 
 /// <summary>Classifies outbound failures by protocol family, so only failures that can clear on their own are repeated.</summary>
 /// <remarks>

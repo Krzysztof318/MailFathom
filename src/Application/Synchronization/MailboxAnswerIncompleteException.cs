@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Accounts;
-using MailMcp.Domain.Failures;
-using MailMcp.Domain.Folders;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
 
-namespace MailMcp.Application.Synchronization;
+namespace MailFathom.Application.Synchronization;
 
 /// <summary>Indicates that a mail server answered for an email without the data items the command asked for.</summary>
 /// <remarks>
@@ -21,7 +21,7 @@ namespace MailMcp.Application.Synchronization;
 /// from it; the folder's next run asks again.
 /// </para>
 /// </remarks>
-public sealed class MailboxAnswerIncompleteException : MailMcpException
+public sealed class MailboxAnswerIncompleteException : MailFathomException
 {
     /// <summary>Initializes a new incomplete-answer failure naming the account, the folder alias, and the missing item.</summary>
     /// <param name="accountId">The account whose mail server answered incompletely.</param>
@@ -44,7 +44,7 @@ public sealed class MailboxAnswerIncompleteException : MailMcpException
     }
 
     /// <inheritdoc />
-    public override MailMcpErrorCode ErrorCode => MailMcpErrorCode.MailboxAnswerIncomplete;
+    public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.MailboxAnswerIncomplete;
 
     /// <summary>Gets the account whose mail server answered incompletely.</summary>
     public MailAccountId AccountId { get; }

@@ -1,16 +1,16 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Persistence;
-using MailMcp.Infrastructure;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.IntegrationTests.Orchestration;
+using MailFathom.Application.Persistence;
+using MailFathom.Infrastructure;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Persistence;
+namespace MailFathom.IntegrationTests.Persistence;
 
 /// <summary>Proves the suite reaches a real, migrated PostgreSQL database, and reads the schema facts a build cannot infer.</summary>
 /// <remarks>
@@ -21,7 +21,7 @@ namespace MailMcp.IntegrationTests.Persistence;
 /// in PostgreSQL's own column catalogue.
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-public sealed class OrchestratedDatabaseSchemaTests(MailMcpOrchestrationFixture orchestration)
+public sealed class OrchestratedDatabaseSchemaTests(MailFathomOrchestrationFixture orchestration)
 {
     [Fact]
     public async Task ReadPendingMigrationIdentifiersAsync_AgainstTheOrchestratedDatabase_ReportsNoPendingMigration()
@@ -79,7 +79,7 @@ public sealed class OrchestratedDatabaseSchemaTests(MailMcpOrchestrationFixture 
     /// ordinary configuration here: the orchestration issues it directly, so no secret block is involved.
     /// </remarks>
     private static IHost ComposeHost(
-        MailMcpOrchestrationFixture orchestration,
+        MailFathomOrchestrationFixture orchestration,
         PostgresTextSearchConfiguration textSearchConfiguration)
     {
         var builder = new HostApplicationBuilder();

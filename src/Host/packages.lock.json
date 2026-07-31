@@ -547,33 +547,33 @@
         "resolved": "10.0.0",
         "contentHash": "UPWqLSygJlFerRi9XNIuM0a1VC8gHUIufyP24xQ0sc+XimqUAEcjpOz9DhKpyDjH+5B/wO3RpC0KpkEeDj/ddg=="
       },
-      "MailMcp.AI": {
+      "MailFathom.AI": {
         "type": "Project",
         "dependencies": {
-          "MailMcp.Application": "[1.0.0, )",
-          "MailMcp.Domain": "[1.0.0, )",
+          "MailFathom.Application": "[1.0.0, )",
+          "MailFathom.Domain": "[1.0.0, )",
           "Microsoft.Agents.AI": "[1.15.0, )",
           "Microsoft.Extensions.AI": "[10.8.1, )",
           "Microsoft.Extensions.AI.Abstractions": "[10.8.1, )"
         }
       },
-      "MailMcp.Application": {
+      "MailFathom.Application": {
         "type": "Project",
         "dependencies": {
-          "MailMcp.Domain": "[1.0.0, )"
+          "MailFathom.Domain": "[1.0.0, )"
         }
       },
-      "MailMcp.Domain": {
+      "MailFathom.Domain": {
         "type": "Project"
       },
-      "MailMcp.Infrastructure": {
+      "MailFathom.Infrastructure": {
         "type": "Project",
         "dependencies": {
           "Aspire.Npgsql.EntityFrameworkCore.PostgreSQL": "[13.4.6, )",
           "HtmlSanitizer": "[9.1.974, )",
           "MailKit": "[4.17.0, )",
-          "MailMcp.Application": "[1.0.0, )",
-          "MailMcp.Domain": "[1.0.0, )",
+          "MailFathom.Application": "[1.0.0, )",
+          "MailFathom.Domain": "[1.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.10, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
           "MimeKit": "[4.17.0, )",
@@ -584,11 +584,11 @@
           "Polly.RateLimiting": "[8.7.0, )"
         }
       },
-      "MailMcp.Mcp": {
+      "MailFathom.Mcp": {
         "type": "Project",
         "dependencies": {
-          "MailMcp.Application": "[1.0.0, )",
-          "MailMcp.Domain": "[1.0.0, )",
+          "MailFathom.Application": "[1.0.0, )",
+          "MailFathom.Domain": "[1.0.0, )",
           "ModelContextProtocol.AspNetCore": "[2.0.0, )"
         }
       },

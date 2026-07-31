@@ -1,10 +1,10 @@
-{{- include "mailmcp.validate" . -}}
+{{- include "mailfathom.validate" . -}}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "mailmcp.fullname" . }}
+  name: {{ include "mailfathom.fullname" . }}
   labels:
-    {{- include "mailmcp.labels" . | nindent 4 }}
+    {{- include "mailfathom.labels" . | nindent 4 }}
   {{- with .Values.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -17,4 +17,4 @@ spec:
       targetPort: http
       protocol: TCP
   selector:
-    {{- include "mailmcp.selectorLabels" . | nindent 4 }}
+    {{- include "mailfathom.selectorLabels" . | nindent 4 }}

@@ -1,4 +1,4 @@
-# Default values for the MailMcp chart.
+# Default values for the MailFathom chart.
 #
 # Two things have no default and must be supplied: the image, and the database. Everything else below is a working
 # value that a deployment may leave alone. `values.schema.json` beside this file rejects a values document that omits
@@ -14,7 +14,7 @@ fullnameOverride: ""
 
 ### The image
 #
-# There is no default repository or tag, because MailMcp has published no release. Supplying one here would either
+# There is no default repository or tag, because MailFathom has published no release. Supplying one here would either
 # name an image that does not exist or, worse, name a moving tag that a cluster would silently follow. Set the values
 # below to an immutable reference once the release channel exists.
 image:
@@ -51,7 +51,7 @@ image:
 
 ### The database
 #
-# MailMcp needs PostgreSQL with the `vector` extension. The chart installs none: a database holding every synchronized
+# MailFathom needs PostgreSQL with the `vector` extension. The chart installs none: a database holding every synchronized
 # message needs backup, durability, and an upgrade path that belong to whoever operates it. Point this at one you own.
 database:
   # Everything except the password. The password arrives as a mounted secret, named below, because a connection string
@@ -59,37 +59,37 @@ database:
   # a Secret.
   host: ""
   port: 5432
-  name: mailmcp
-  user: mailmcp
+  name: mailfathom
+  user: mailfathom
 
   # Extra Npgsql keywords appended verbatim, for example `SslMode=VerifyFull;`. Keep credentials out of it; the schema
   # rejects a value that names a password.
   extraConnectionParameters: ""
 
-  # The key inside the mounted secret holding the password. The reference MailMcp binds is
-  # `file:/etc/mailmcp/secrets/<key>`, which is the same shape the Compose deployment uses, so a `SecretReference`
+  # The key inside the mounted secret holding the password. The reference MailFathom binds is
+  # `file:/etc/mailfathom/secrets/<key>`, which is the same shape the Compose deployment uses, so a `SecretReference`
   # written for one deployment reads correctly in the other.
-  passwordSecretKey: mailmcp-database-password
+  passwordSecretKey: mailfathom-database-password
 
 ### Secrets
 #
 # The chart creates no Secret and templates no credential. It mounts one the operator has already created, read-only,
-# at /etc/mailmcp/secrets — one file per key. Every credential MailMcp reads is a `file:` reference into that
+# at /etc/mailfathom/secrets — one file per key. Every credential MailFathom reads is a `file:` reference into that
 # directory: mailbox passwords, MCP API keys, and a private trust anchor alike. A Secrets Store CSI driver needs no
 # support beyond this, because it mounts files too.
 secrets:
   existingSecret: ""
-  mountPath: /etc/mailmcp/secrets
+  mountPath: /etc/mailfathom/secrets
 
 ### Configuration
 #
-# Rendered into a ConfigMap and mounted as a directory of JSON files, which MailMcp layers in file-name order beneath
+# Rendered into a ConfigMap and mounted as a directory of JSON files, which MailFathom layers in file-name order beneath
 # the environment block. Nothing here may be a secret: a ConfigMap is readable by anything with `get` on it.
 config:
   # Map of file name to file contents. The name must end in `.json`; anything else is ignored by the loader and would
   # be a setting that silently never applied, so the schema rejects it.
   files: {}
-  mountPath: /etc/mailmcp/config
+  mountPath: /etc/mailfathom/config
 
   # Appended to the environment block, which outranks every mounted file. Use it for a per-deployment override of one
   # setting rather than for a whole configuration. The schema rejects a name that reads like a credential, because an
@@ -107,7 +107,7 @@ service:
   port: 8080
   annotations: {}
 
-# MailMcp speaks plain HTTP and terminates no TLS of its own. TLS belongs to the ingress, which is also the only place
+# MailFathom speaks plain HTTP and terminates no TLS of its own. TLS belongs to the ingress, which is also the only place
 # a certificate has to exist — the chart never templates, issues, or stores certificate material. Name a Secret the
 # cluster already holds, whether an operator created it or cert-manager did.
 ingress:
@@ -115,14 +115,14 @@ ingress:
   className: ""
   annotations: {}
   hosts:
-    - host: mailmcp.example.test
+    - host: mailfathom.example.test
       paths:
         - path: /mcp
           pathType: Prefix
   tls: []
-  #  - secretName: mailmcp-tls
+  #  - secretName: mailfathom-tls
   #    hosts:
-  #      - mailmcp.example.test
+  #      - mailfathom.example.test
 
 ### Workload
 replicaCount: 1
@@ -158,7 +158,7 @@ serviceAccount:
   create: true
   name: ""
   annotations: {}
-  # MailMcp calls no Kubernetes API. A projected token in the pod would be a credential with nothing to authenticate
+  # MailFathom calls no Kubernetes API. A projected token in the pod would be a credential with nothing to authenticate
   # to, so it is not mounted.
   automountToken: false
 
@@ -167,7 +167,7 @@ serviceAccount:
 temporaryDirectory:
   sizeLimit: 64Mi
 
-# Longer than the host's own shutdown budget, which MailMcp derives from `MailSynchronization:ShutdownDrainTimeout`,
+# Longer than the host's own shutdown budget, which MailFathom derives from `MailSynchronization:ShutdownDrainTimeout`,
 # so a synchronization run drains and the process exits rather than being killed part-way. Raise both together.
 terminationGracePeriodSeconds: 60
 
@@ -188,7 +188,7 @@ probes:
     periodSeconds: 20
     timeoutSeconds: 5
     failureThreshold: 3
-  # Startup covers the interval in which MailMcp validates every secret reference and verifies the database schema.
+  # Startup covers the interval in which MailFathom validates every secret reference and verifies the database schema.
   # Its budget is what a slow first start is allowed, and it holds the liveness probe off until it succeeds.
   startup:
     path: /alive
@@ -208,7 +208,7 @@ podLabels: {}
 
 ### The schema
 #
-# The chart applies none and renders nothing that could. MailMcp never applies a schema change while starting — it
+# The chart applies none and renders nothing that could. MailFathom never applies a schema change while starting — it
 # verifies the schema and refuses to serve against one it does not recognize — and the reviewed artifact that answers
 # that refusal is #126's, together with the Job or command that runs it. Until it exists, establish the schema before
 # installing this chart; `docs/operations/deployment-kubernetes.md` describes the step.

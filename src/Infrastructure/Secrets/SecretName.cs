@@ -3,7 +3,7 @@
 
 using System.Text.RegularExpressions;
 
-namespace MailMcp.Infrastructure.Secrets;
+namespace MailFathom.Infrastructure.Secrets;
 
 /// <summary>The operator-chosen identity of one configured secret, safe to record wherever the material is not.</summary>
 /// <remarks>

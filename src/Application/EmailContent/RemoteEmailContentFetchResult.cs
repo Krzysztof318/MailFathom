@@ -1,10 +1,10 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
-using MailMcp.Domain.Emails;
+using MailFathom.Application.Emails;
+using MailFathom.Domain.Emails;
 
-namespace MailMcp.Application.EmailContent;
+namespace MailFathom.Application.EmailContent;
 
 /// <summary>States whether a seen-preserving fetch returned raw MIME, and what stopped it when it did not.</summary>
 public enum RemoteEmailContentFetchOutcome

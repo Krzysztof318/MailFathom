@@ -1,13 +1,13 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Domain.Transport;
-using MailMcp.Infrastructure.Mail;
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.TestSupport;
+using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.TestSupport;
 using Xunit;
 
-namespace MailMcp.Infrastructure.UnitTests;
+namespace MailFathom.Infrastructure.UnitTests;
 
 public sealed class MailAccountTransportSecurityOptionsTests
 {
@@ -176,7 +176,7 @@ public sealed class MailAccountTransportSecurityOptionsTests
         {
             ConnectionSecurity = MailConnectionSecurity.None,
             PermittedAuthenticationMechanisms = ["PLAIN"],
-            TrustedCertificateAuthority = new ConfiguredSecret { SecretReference = "systemd-credential:mailmcp-imap-ca" },
+            TrustedCertificateAuthority = new ConfiguredSecret { SecretReference = "systemd-credential:mailfathom-imap-ca" },
         };
 
         // Act
@@ -251,7 +251,7 @@ public sealed class MailAccountTransportSecurityOptionsTests
         // Arrange
         var options = new MailAccountTransportSecurityOptions
         {
-            TrustedCertificateAuthority = new ConfiguredSecret { SecretReference = "systemd-credential:mailmcp-imap-ca" },
+            TrustedCertificateAuthority = new ConfiguredSecret { SecretReference = "systemd-credential:mailfathom-imap-ca" },
         };
 
         // Act
@@ -260,7 +260,7 @@ public sealed class MailAccountTransportSecurityOptionsTests
         // Assert
         var error = Assert.Single(errors);
         Assert.Equal(nameof(MailAccountTransportSecurityOptions.TrustedCertificateAuthority), error.PropertyName);
-        Assert.DoesNotContain("mailmcp-imap-ca", error.Description, StringComparison.Ordinal);
+        Assert.DoesNotContain("mailfathom-imap-ca", error.Description, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -306,7 +306,7 @@ public sealed class MailAccountTransportSecurityOptionsTests
             ConnectionSecurity = MailConnectionSecurity.StartTlsRequired,
             PermittedAuthenticationMechanisms = ["scram-sha-256", "SCRAM-SHA-256", "PLAIN"],
             CertificateTrust = MailServerCertificateTrust.AdditionalTrustedAuthority,
-            TrustedCertificateAuthority = new ConfiguredSecret { SecretReference = "systemd-credential:mailmcp-imap-ca" },
+            TrustedCertificateAuthority = new ConfiguredSecret { SecretReference = "systemd-credential:mailfathom-imap-ca" },
         };
 
         // Act
@@ -337,7 +337,7 @@ public sealed class MailAccountTransportSecurityOptionsTests
     public void FindConfigurationErrors_InlinePemTrustAnchor_ReportsNoMissingAnchor()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         var options = new MailAccountTransportSecurityOptions
         {
             CertificateTrust = MailServerCertificateTrust.AdditionalTrustedAuthority,
@@ -356,7 +356,7 @@ public sealed class MailAccountTransportSecurityOptionsTests
     public void CreatePolicy_InlinePemTrustAnchor_CarriesAMaskedValueIntoTheDomain()
     {
         // Arrange
-        using var authority = TestCertificates.CreateCertificateAuthority("MailMcp Test Root");
+        using var authority = TestCertificates.CreateCertificateAuthority("MailFathom Test Root");
         var options = new MailAccountTransportSecurityOptions
         {
             CertificateTrust = MailServerCertificateTrust.AdditionalTrustedAuthority,

@@ -4,11 +4,11 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using MailMcp.AppHost;
-using MailMcp.IntegrationTests.Orchestration;
+using MailFathom.AppHost;
+using MailFathom.IntegrationTests.Orchestration;
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Hosting;
+namespace MailFathom.IntegrationTests.Hosting;
 
 /// <summary>Proves that the controls in front of the MCP endpoint run before the protocol surface answers.</summary>
 /// <remarks>
@@ -31,11 +31,11 @@ public sealed class ComposedMcpEndpointSecurityTests
 {
     private const string ToolListedByTheProtocolSurface = "list_emails";
 
-    private readonly MailMcpOrchestrationFixture orchestration;
+    private readonly MailFathomOrchestrationFixture orchestration;
 
     /// <summary>Initializes the tests against the assembly's orchestration.</summary>
     /// <param name="orchestration">The orchestration fixture, which starts the host on first request.</param>
-    public ComposedMcpEndpointSecurityTests(MailMcpOrchestrationFixture orchestration) =>
+    public ComposedMcpEndpointSecurityTests(MailFathomOrchestrationFixture orchestration) =>
         this.orchestration = orchestration;
 
     [Fact]
@@ -142,7 +142,7 @@ public sealed class ComposedMcpEndpointSecurityTests
         // Arrange
         using var client = await this.ComposedHostClientAsync();
         using var request = ListToolsRequest(OrchestrationContract.McpApiKey);
-        request.Headers.Add("Origin", "https://attacker.mailmcp.test");
+        request.Headers.Add("Origin", "https://attacker.mailfathom.test");
 
         // Act
         using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -283,7 +283,7 @@ public sealed class ComposedMcpEndpointSecurityTests
 
     private async Task<HttpClient> ComposedHostClientAsync() => new()
     {
-        BaseAddress = await this.orchestration.StartMailMcpHostAsync(TestContext.Current.CancellationToken),
+        BaseAddress = await this.orchestration.StartMailFathomHostAsync(TestContext.Current.CancellationToken),
     };
 
     /// <summary>Sends one tool listing and reads everything a burst is judged on before the response is released.</summary>

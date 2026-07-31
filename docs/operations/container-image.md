@@ -1,12 +1,12 @@
 # The container image
 
-`deploy/docker/Dockerfile` is the only image definition MailMcp has. Both deployment shapes in `deploy/` build from it,
-and nothing else produces an image, so what this page describes is what runs wherever MailMcp runs in a container.
+`deploy/docker/Dockerfile` is the only image definition MailFathom has. Both deployment shapes in `deploy/` build from it,
+and nothing else produces an image, so what this page describes is what runs wherever MailFathom runs in a container.
 
 The build context is the repository root, so the definition is named rather than found:
 
 ```bash
-docker build --target runtime --file deploy/docker/Dockerfile --tag mailmcp:local .
+docker build --target runtime --file deploy/docker/Dockerfile --tag mailfathom:local .
 ```
 
 It produces one image: the service. It carries no migration tool, no SQL, and no credential that could apply one, which
@@ -18,7 +18,7 @@ environment, and the reviewed artifact that answers that refusal belongs to issu
 
 The runtime image is built on `mcr.microsoft.com/dotnet/aspnet:10.0.10-noble-chiseled-extra` and is about 77 MB.
 Chiseled means there is no shell, no package manager, and no HTTP client: a process that reaches the container finds
-almost nothing to use. `-extra` carries ICU and tzdata, which the plain chiseled image does not — MailMcp decodes
+almost nothing to use. `-extra` carries ICU and tzdata, which the plain chiseled image does not — MailFathom decodes
 internationalized headers, folds case for search, and formats instants for several time zones, and the invariant
 globalization the smaller image forces would quietly change how mail from outside one alphabet is read.
 
@@ -44,7 +44,7 @@ Every base image is pinned to an explicit patch version. `scripts/verify-deploym
 | User | `1654`, the unprivileged `app` account the .NET base images define |
 | Port | `8080`, plain HTTP |
 | Writable paths | `/tmp` only, which a deployment supplies as a tmpfs or an `emptyDir` |
-| Entrypoint | `dotnet /app/MailMcp.Host.dll` |
+| Entrypoint | `dotnet /app/MailFathom.Host.dll` |
 | Health check | None. See [the health endpoints](#the-health-endpoints) below. |
 
 The application directory is owned by `root` and the process is not, so the service cannot rewrite its own code even
@@ -92,10 +92,10 @@ deployments in `deploy/` allow 60 seconds against a 10-second default; raise the
 
 The image carries the OCI labels that let a pulled image be traced back to the commit it was built from —
 `org.opencontainers.image.source`, `.revision`, `.version`, `.created` — supplied as build arguments.
-`IMAGE_VERSION` currently defaults to `0.0.0-unversioned`: MailMcp has published no release, and what a version means
+`IMAGE_VERSION` currently defaults to `0.0.0-unversioned`: MailFathom has published no release, and what a version means
 here is still an open decision. The application does not yet report its own version at run time either.
 
-`org.opencontainers.image.licenses` is fixed rather than passed in, at `Apache-2.0`, because it states MailMcp's own
+`org.opencontainers.image.licenses` is fixed rather than passed in, at `Apache-2.0`, because it states MailFathom's own
 license and a build must not be able to say otherwise. The label is only the claim a registry indexes; the terms
 themselves are `/app/LICENSE` and `/app/NOTICE`, which arrive as part of the publish output the runtime stage copies.
 `Host` fails its own publish when either is missing, so the image cannot be built without them. The third-party

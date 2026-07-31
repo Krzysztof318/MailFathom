@@ -127,13 +127,13 @@
           "Microsoft.Extensions.Logging.Abstractions": "10.0.10"
         }
       },
-      "MailMcp.Application": {
+      "MailFathom.Application": {
         "type": "Project",
         "dependencies": {
-          "MailMcp.Domain": "[1.0.0, )"
+          "MailFathom.Domain": "[1.0.0, )"
         }
       },
-      "MailMcp.Domain": {
+      "MailFathom.Domain": {
         "type": "Project"
       },
       "Microsoft.Extensions.AI.Abstractions": {

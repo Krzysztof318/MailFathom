@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Domain.Folders;
+namespace MailFathom.Domain.Folders;
 
 /// <summary>Names the role a mail server assigns to a folder, independently of what it calls the folder.</summary>
 /// <remarks>

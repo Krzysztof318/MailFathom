@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.ComponentModel.DataAnnotations;
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Persistence;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Persistence;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 public sealed class PersistenceOptionsTests
 {

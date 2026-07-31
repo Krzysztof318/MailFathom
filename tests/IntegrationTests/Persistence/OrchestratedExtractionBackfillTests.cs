@@ -1,17 +1,17 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
-using MailMcp.Application.Persistence;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.IntegrationTests.Orchestration;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Persistence;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Persistence;
+namespace MailFathom.IntegrationTests.Persistence;
 
 /// <summary>Proves the extraction backfill's walk shrinks as it commits, and resumes from what it recorded.</summary>
 /// <remarks>
@@ -28,7 +28,7 @@ namespace MailMcp.IntegrationTests.Persistence;
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-public sealed class OrchestratedExtractionBackfillTests(MailMcpOrchestrationFixture orchestration)
+public sealed class OrchestratedExtractionBackfillTests(MailFathomOrchestrationFixture orchestration)
 {
     private const string FolderAlias = "extraction-backfill";
 
@@ -41,7 +41,7 @@ public sealed class OrchestratedExtractionBackfillTests(MailMcpOrchestrationFixt
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var awaitingEmailIds = await InsertEmailsWithoutSearchDocumentsAsync(services, binding, cancellationToken);
 
@@ -80,7 +80,7 @@ public sealed class OrchestratedExtractionBackfillTests(MailMcpOrchestrationFixt
 
     /// <summary>Runs the walk to exhaustion, committing each batch's extraction and its resume position together.</summary>
     private static async Task<IReadOnlyList<IReadOnlyList<StoredEmailId>>> WalkAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         MailFolderResolution binding,
         CancellationToken cancellationToken)
     {
@@ -124,7 +124,7 @@ public sealed class OrchestratedExtractionBackfillTests(MailMcpOrchestrationFixt
     }
 
     private static Task<IReadOnlyList<StoredEmailId>> ReadBatchAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         StoredEmailId? resumeAfter,
         CancellationToken cancellationToken) => services.InScopeAsync(
             async (scope, token) =>
@@ -143,7 +143,7 @@ public sealed class OrchestratedExtractionBackfillTests(MailMcpOrchestrationFixt
     /// were created and a failure names a position rather than an unordered set.
     /// </remarks>
     private static async Task<IReadOnlyList<StoredEmailId>> InsertEmailsWithoutSearchDocumentsAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         MailFolderResolution binding,
         CancellationToken cancellationToken)
     {
@@ -154,7 +154,7 @@ public sealed class OrchestratedExtractionBackfillTests(MailMcpOrchestrationFixt
         var commitResult = await services.CommitAsync(
             async (scope, session, token) =>
             {
-                var dbContext = scope.GetRequiredService<MailMcpDbContext>();
+                var dbContext = scope.GetRequiredService<MailFathomDbContext>();
                 var folder = await dbContext.MailFolders.SingleAsync(
                     candidate => candidate.MailboxAccountId == SyntheticMailAccount.AccountId.Value
                         && candidate.Alias == alias

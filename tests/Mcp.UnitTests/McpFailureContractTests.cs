@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using System.Reflection;
-using MailMcp.Domain.Failures;
-using MailMcp.TestSupport;
+using MailFathom.Domain.Failures;
+using MailFathom.TestSupport;
 using Xunit;
 
-namespace MailMcp.Mcp.UnitTests;
+namespace MailFathom.Mcp.UnitTests;
 
 /// <summary>Covers the failure contract the MCP boundary is bound by like every other assembly.</summary>
 public sealed class McpFailureContractTests
@@ -17,12 +17,12 @@ public sealed class McpFailureContractTests
     /// the assertion has to exist before the first exception is written rather than after.
     /// </summary>
     [Fact]
-    public void McpAssembly_EveryDeclaredException_DerivesFromMailMcpException()
+    public void McpAssembly_EveryDeclaredException_DerivesFromMailFathomException()
     {
         // Arrange
-        var mcpAssembly = Assembly.Load("MailMcp.Mcp");
+        var mcpAssembly = Assembly.Load("MailFathom.Mcp");
 
         // Act, Assert
-        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(mcpAssembly, typeof(MailMcpException));
+        ExceptionHierarchyAssertion.AssertEveryDeclaredExceptionDerivesFrom(mcpAssembly, typeof(MailFathomException));
     }
 }

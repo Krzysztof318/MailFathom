@@ -1,11 +1,11 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.EmailContent;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Synchronization;
+using MailFathom.Application.EmailContent;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Synchronization;
 
-namespace MailMcp.Application.Synchronization;
+namespace MailFathom.Application.Synchronization;
 
 /// <summary>Represents a read-only mailbox folder session.</summary>
 /// <remarks>

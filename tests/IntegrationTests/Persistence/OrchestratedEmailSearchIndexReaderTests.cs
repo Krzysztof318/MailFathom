@@ -1,18 +1,18 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.Emails;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Emails;
-using MailMcp.Domain.Folders;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.IntegrationTests.Orchestration;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Persistence;
+namespace MailFathom.IntegrationTests.Persistence;
 
 /// <summary>Proves the lexical search runs, ranks, highlights, and stays parameterized against a real PostgreSQL database.</summary>
 /// <remarks>
@@ -31,7 +31,7 @@ namespace MailMcp.IntegrationTests.Persistence;
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestrationFixture orchestration)
+public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrationFixture orchestration)
 {
     private const string FolderAlias = "lexical-search";
 
@@ -67,7 +67,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         await SeededSelectionAsync(services, cancellationToken);
 
         // Act
@@ -102,7 +102,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var selection = await SeededSelectionAsync(services, cancellationToken);
         var bounds = EmailSearchSnippetBounds.Create(snippetsPerEmail: 2, wordsPerSnippet: 8);
 
@@ -135,7 +135,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var selection = await SeededSelectionAsync(services, cancellationToken);
 
         // Act
@@ -152,7 +152,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
 
                 Assert.Equal(SeededEmailCount, matches.Count);
 
-                return scope.GetRequiredService<MailMcpDbContext>().ChangeTracker.Entries().Count();
+                return scope.GetRequiredService<MailFathomDbContext>().ChangeTracker.Entries().Count();
             },
             cancellationToken);
 
@@ -162,7 +162,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
 
     /// <summary>Counts what a snippet carries of the message, which is what the character ceiling bounds.</summary>
     /// <remarks>
-    /// The highlight markup and the truncation mark are MailMcp's own, so they do not count against a bound that exists
+    /// The highlight markup and the truncation mark are MailFathom's own, so they do not count against a bound that exists
     /// to limit how much of a message one result publishes. Removing every <c>**</c> also removes any the body wrote
     /// itself, which can only make this count lower — so the assertion it feeds stays honest by erring towards passing,
     /// and the ellipsis assertion beside it is what proves the ceiling did any cutting at all.
@@ -173,7 +173,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
         .Length;
 
     private static Task<IReadOnlyList<EmailSearchMatch>> SearchAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         string queryText,
         CancellationToken cancellationToken,
         MailboxEmailSelection? selection = null,
@@ -199,7 +199,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
 
     /// <summary>Ensures the seeded folder exists and returns the selection every test in this class searches through.</summary>
     private static async Task<MailboxEmailSelection> SeededSelectionAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         CancellationToken cancellationToken)
     {
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
@@ -215,7 +215,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
     /// first writes the folder and the others find it, so no test depends on having run after another.
     /// </remarks>
     private static async Task EnsureSeededAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         MailFolderResolution binding,
         CancellationToken cancellationToken)
     {
@@ -255,7 +255,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
                 occurrenceId,
                 subject,
                 BodyTextOf(index),
-                $"recipient{index}@mailmcp.test");
+                $"recipient{index}@mailfathom.test");
 
             return (
                 SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
@@ -295,7 +295,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
     }
 
     private static Task<int> CountSeededEmailsAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         MailFolderResolution binding,
         CancellationToken cancellationToken)
     {
@@ -304,7 +304,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailMcpOrchestration
 
         return services.InScopeAsync(
             (scope, token) => scope
-                .GetRequiredService<MailMcpDbContext>()
+                .GetRequiredService<MailFathomDbContext>()
                 .StoredEmails
                 .AsNoTracking()
                 .CountAsync(

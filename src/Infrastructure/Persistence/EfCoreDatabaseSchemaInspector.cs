@@ -3,11 +3,11 @@
 
 using System.Data.Common;
 using System.Text.RegularExpressions;
-using MailMcp.Application.Persistence;
-using MailMcp.CodeCoverage;
+using MailFathom.Application.Persistence;
+using MailFathom.CodeCoverage;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailMcp.Infrastructure.Persistence;
+namespace MailFathom.Infrastructure.Persistence;
 
 /// <summary>Reads the migration history and the schema facts a build cannot infer from its own model.</summary>
 /// <remarks>
@@ -18,7 +18,7 @@ namespace MailMcp.Infrastructure.Persistence;
 /// whichever configuration a migration was generated from.
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed partial class EfCoreDatabaseSchemaInspector(MailMcpDbContext dbContext) : IDatabaseSchemaInspector
+internal sealed partial class EfCoreDatabaseSchemaInspector(MailFathomDbContext dbContext) : IDatabaseSchemaInspector
 {
     /// <summary>The table and column the generated search vector lives in, as the model maps them.</summary>
     private const string SearchDocumentTableName = "email_search_documents";

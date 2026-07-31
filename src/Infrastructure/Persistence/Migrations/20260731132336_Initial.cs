@@ -8,7 +8,7 @@ using NpgsqlTypes;
 
 #nullable disable
 
-namespace MailMcp.Infrastructure.Persistence.Migrations
+namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
     public partial class Initial : Migration

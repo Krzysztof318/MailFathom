@@ -1,12 +1,12 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Host.Configuration;
-using MailMcp.Infrastructure.Secrets;
-using MailMcp.Infrastructure.Security;
+using MailFathom.Host.Configuration;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Security;
 using Xunit;
 
-namespace MailMcp.Host.UnitTests;
+namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers the decisions the MCP endpoint section carries and what an unusable combination of them does.</summary>
 /// <remarks>
@@ -130,7 +130,7 @@ public sealed class McpEndpointOptionsTests
         // Arrange
         var options = EnabledWith(McpTransportAuthenticationMethods.ApiKey | McpTransportAuthenticationMethods.OAuth);
         options.ApiKeys.Add(Key("nightly-digest"));
-        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailmcp"));
+        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
 
         // Act, Assert
         Assert.Empty(options.FindConfigurationErrors());
@@ -144,7 +144,7 @@ public sealed class McpEndpointOptionsTests
     {
         // Arrange
         var options = EnabledWith(McpTransportAuthenticationMethods.None);
-        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailmcp"));
+        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
@@ -179,7 +179,7 @@ public sealed class McpEndpointOptionsTests
     {
         // Arrange
         var options = EnabledWith(McpTransportAuthenticationMethods.OAuth);
-        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailmcp"));
+        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
         options.OAuth.Resource = resource;
 
         // Act
@@ -196,8 +196,8 @@ public sealed class McpEndpointOptionsTests
         // Arrange
         var options = EnabledWith(McpTransportAuthenticationMethods.OAuth);
         options.OAuth = OAuthWith(
-            AuthorizationServer("workforce", "https://sso.example.test/realms/mailmcp"),
-            AuthorizationServer("partners", "https://sso.example.test/realms/mailmcp"));
+            AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"),
+            AuthorizationServer("partners", "https://sso.example.test/realms/mailfathom"));
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
@@ -216,7 +216,7 @@ public sealed class McpEndpointOptionsTests
     {
         // Arrange
         var options = EnabledWith(McpTransportAuthenticationMethods.OAuth);
-        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailmcp"));
+        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
         options.OAuth.RequiredScopes.Add(scope);
 
         // Act
@@ -232,7 +232,7 @@ public sealed class McpEndpointOptionsTests
     {
         // Arrange
         var options = EnabledWith(McpTransportAuthenticationMethods.OAuth);
-        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailmcp"));
+        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
 
         // Act, Assert
         Assert.Empty(options.FindConfigurationErrors());
@@ -445,6 +445,6 @@ public sealed class McpEndpointOptionsTests
     private static ConfiguredSecret Key(string name) => new()
     {
         Name = name,
-        SecretReference = "systemd-credential:mailmcp-mcp-workstation-key",
+        SecretReference = "systemd-credential:mailfathom-mcp-workstation-key",
     };
 }

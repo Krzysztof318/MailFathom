@@ -1,18 +1,18 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-using MailMcp.Application.EmailContent;
-using MailMcp.Application.Emails;
-using MailMcp.Application.Persistence;
-using MailMcp.Application.Synchronization;
-using MailMcp.Domain.Emails;
-using MailMcp.Infrastructure.Persistence;
-using MailMcp.IntegrationTests.Orchestration;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Emails;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace MailMcp.IntegrationTests.Persistence;
+namespace MailFathom.IntegrationTests.Persistence;
 
 /// <summary>Proves the two database-side halves of reading one email's content against real PostgreSQL.</summary>
 /// <remarks>
@@ -22,7 +22,7 @@ namespace MailMcp.IntegrationTests.Persistence;
 /// real write establishes it.
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-public sealed class OrchestratedEmailContentReadTests(MailMcpOrchestrationFixture orchestration)
+public sealed class OrchestratedEmailContentReadTests(MailFathomOrchestrationFixture orchestration)
 {
     private const string FolderAlias = "content-read";
 
@@ -36,7 +36,7 @@ public sealed class OrchestratedEmailContentReadTests(MailMcpOrchestrationFixtur
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var occurrenceId = SyntheticEmail.OccurrenceIn(binding, LookedUpUid);
         var storedEmailId = await StoreMetadataAsync(services, occurrenceId, "Content lookup", cancellationToken);
@@ -70,7 +70,7 @@ public sealed class OrchestratedEmailContentReadTests(MailMcpOrchestrationFixtur
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailMcpServices.StartAsync(orchestration, cancellationToken);
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var occurrenceId = SyntheticEmail.OccurrenceIn(binding, RepairedUid);
         var storedEmailId = await StoreMetadataAsync(services, occurrenceId, "Content repair", cancellationToken);
@@ -118,11 +118,11 @@ public sealed class OrchestratedEmailContentReadTests(MailMcpOrchestrationFixtur
     }
 
     private static Task<EmailContentRepairRequestEntity[]> ReadRequestsAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope
-                .GetRequiredService<MailMcpDbContext>()
+                .GetRequiredService<MailFathomDbContext>()
                 .EmailContentRepairRequests
                 .AsNoTracking()
                 .Where(request => request.StoredEmailId == storedEmailId.Value)
@@ -130,7 +130,7 @@ public sealed class OrchestratedEmailContentReadTests(MailMcpOrchestrationFixtur
             cancellationToken);
 
     private static async Task<StoredEmailId> StoreMetadataAsync(
-        OrchestratedMailMcpServices services,
+        OrchestratedMailFathomServices services,
         EmailOccurrenceId occurrenceId,
         string subject,
         CancellationToken cancellationToken)

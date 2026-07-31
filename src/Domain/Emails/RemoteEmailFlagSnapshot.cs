@@ -1,7 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-namespace MailMcp.Domain.Emails;
+namespace MailFathom.Domain.Emails;
 
 /// <summary>Reports the IMAP flags a mail server last showed for one email, and when they were read.</summary>
 /// <param name="ObservedAt">When the flags below were last read from the server, or <see langword="null" /> while they have never been read.</param>
@@ -12,8 +12,8 @@ namespace MailMcp.Domain.Emails;
 /// <param name="IsDeleted">Whether the server reported the <c>\Deleted</c> flag.</param>
 /// <remarks>
 /// <para>
-/// The snapshot is an observation of server state and travels in one direction only: MailMcp reads mail read-only, so
-/// no application path turns any of these into an IMAP <c>STORE</c>. Above all, reading an email through MailMcp never
+/// The snapshot is an observation of server state and travels in one direction only: MailFathom reads mail read-only, so
+/// no application path turns any of these into an IMAP <c>STORE</c>. Above all, reading an email through MailFathom never
 /// sets <c>\Seen</c> remotely, and this type reports what the server said rather than what a local reader did.
 /// </para>
 /// <para>
