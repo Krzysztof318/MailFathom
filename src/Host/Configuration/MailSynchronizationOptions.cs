@@ -21,6 +21,12 @@ namespace MailMcp.Host.Configuration;
 internal sealed class MailSynchronizationOptions
     : IValidatableObject, IMailTransportSecurityPolicyReader, IMailSynchronizationWindowReader, IMailAccountCatalog
 {
+    /// <summary>The shutdown budget the .NET Generic Host applies when nothing configures one.</summary>
+    private static readonly TimeSpan DefaultHostShutdownTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>What the shutdown budget keeps for the hosted services that stop beside a synchronization drain.</summary>
+    private static readonly TimeSpan HostShutdownMargin = TimeSpan.FromSeconds(5);
+
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
 
@@ -38,22 +44,24 @@ internal sealed class MailSynchronizationOptions
     [Range(typeof(TimeSpan), "00:00:10", "1.00:00:00")]
     public TimeSpan MaxFailureBackoff { get; set; } = TimeSpan.FromMinutes(30);
 
-    /// <summary>Gets or sets how many accounts may synchronize at the same time.</summary>
+    /// <summary>Gets or sets how many accounts may be synchronizing at the same moment.</summary>
     /// <remarks>
-    /// Each account is supervised independently, so this bound is what keeps the number of accounts, rather than the
-    /// operator's account list, from deciding how much of the database and the network synchronization consumes at
-    /// once. An account waiting for a slot is not delayed by a failing account's backoff, only by the runs that hold
-    /// the slots.
+    /// This bounds simultaneity, not throughput: every configured account is supervised and synchronized, and one
+    /// beyond the bound waits for a slot rather than being skipped for that interval. It is what keeps the length of
+    /// an operator's account list from deciding how much of the database and the network synchronization consumes at
+    /// once. An account waiting for a slot is delayed by the runs holding them and never by a failing account's
+    /// backoff.
     /// </remarks>
     [Range(1, 100)]
     public int MaxConcurrentAccounts { get; set; } = 4;
 
-    /// <summary>Gets or sets how many folders of one account may synchronize at the same time.</summary>
+    /// <summary>Gets or sets how many folders of one account may be synchronizing at the same moment.</summary>
     /// <remarks>
-    /// The default of one is deliberate: a single IMAP connection per account is the conservative, server-friendly
-    /// choice, and every folder of an account shares that account's session establishment budget and its circuit
-    /// breaker. Raising it multiplies with <see cref="MaxConcurrentAccounts" /> to give the number of folder work
-    /// units that can be in flight across the process.
+    /// Like <see cref="MaxConcurrentAccounts" /> this bounds simultaneity rather than how many folders a run reaches:
+    /// the account's remaining folders follow within the same run. The default of one is deliberate, because a single
+    /// IMAP connection per account is the conservative, server-friendly choice and every folder of an account shares
+    /// that account's session establishment budget and its circuit breaker. The two bounds multiply to give the number
+    /// of folder work units that can be in flight across the process.
     /// </remarks>
     [Range(1, 20)]
     public int MaxConcurrentFoldersPerAccount { get; set; } = 1;
@@ -62,7 +70,9 @@ internal sealed class MailSynchronizationOptions
     /// <remarks>
     /// Shutdown stops scheduling immediately and only then waits, so this bounds the drain rather than delaying every
     /// stop by its own length. Zero cancels in-flight work at once, which is safe but discards the run's remaining
-    /// progress; the stored occurrences and the checkpoint a run already committed are durable either way.
+    /// progress; the stored occurrences and the checkpoint a run already committed are durable either way. A value
+    /// beyond the host's own shutdown budget would be accepted and never honored, which
+    /// <see cref="ResolveHostShutdownBudget" /> is what prevents.
     /// </remarks>
     [Range(typeof(TimeSpan), "00:00:00", "00:02:00")]
     public TimeSpan ShutdownDrainTimeout { get; set; } = TimeSpan.FromSeconds(10);
@@ -109,6 +119,27 @@ internal sealed class MailSynchronizationOptions
 
     /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
+
+    /// <summary>Computes the host shutdown budget a configured drain needs to be honored.</summary>
+    /// <param name="shutdownDrainTimeout">The configured drain the synchronization coordinator applies.</param>
+    /// <returns>The budget to give <c>HostOptions.ShutdownTimeout</c>, never below the framework default.</returns>
+    /// <remarks>
+    /// <para>
+    /// A drain is only real while the host is still waiting for it. Once its own shutdown timeout expires the host
+    /// stops awaiting <c>StopAsync</c> and the process exits with the work still running, so a drain configured beyond
+    /// that timeout would be accepted and silently not honored. The budget is therefore derived from the drain rather
+    /// than left on the framework's 30-second default.
+    /// </para>
+    /// <para>
+    /// The margin is what the other hosted services stop within, and the floor keeps a deployment that shortens the
+    /// drain on the shutdown behavior the framework default gives it rather than tightening the whole host because one
+    /// worker asked for less.
+    /// </para>
+    /// </remarks>
+    internal static TimeSpan ResolveHostShutdownBudget(TimeSpan shutdownDrainTimeout) =>
+        shutdownDrainTimeout + HostShutdownMargin > DefaultHostShutdownTimeout
+            ? shutdownDrainTimeout + HostShutdownMargin
+            : DefaultHostShutdownTimeout;
 
     /// <summary>Builds one account's connection settings, resolving its material for the caller to own.</summary>
     /// <param name="accountId">The local account identifier.</param>

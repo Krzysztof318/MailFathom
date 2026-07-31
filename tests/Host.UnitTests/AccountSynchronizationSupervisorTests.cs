@@ -347,6 +347,47 @@ public sealed class AccountSynchronizationSupervisorTests
         Assert.All(deferrals, deferral => Assert.Contains("failed 1 runs in a row", deferral, StringComparison.Ordinal));
     }
 
+    /// <summary>The drain lets work already in flight finish; it must not become the window a queued folder starts in.</summary>
+    [Fact]
+    public async Task RunAsync_SchedulingStopsMidRun_StartsNoneOfTheFoldersStillQueued()
+    {
+        // Arrange
+        var attemptedFolders = new List<string>();
+        var firstFolderEntered = new TaskCompletionSource();
+        var releaseFirstFolder = new TaskCompletionSource();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                lock (attemptedFolders)
+                {
+                    attemptedFolders.Add(call.Arg<MailFolderResolution>()!.Alias.Value);
+                }
+
+                firstFolderEntered.TrySetResult();
+
+                return HoldUntilReleasedAsync(releaseFirstFolder);
+            });
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX", "Archive", "Sent"),
+            sessionFactory);
+        var supervision = harness.StartSupervision();
+
+        // Act
+        await firstFolderEntered.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await harness.StopSchedulingAsync();
+        releaseFirstFolder.SetResult();
+        await supervision.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["INBOX"], attemptedFolders);
+    }
+
     /// <summary>An account a reload removes is withdrawn work, not a failure, so its supervisor ends instead of connecting again.</summary>
     [Fact]
     public async Task RunAsync_AccountLeavesConfiguration_EndsSupervisionOfIt()
@@ -404,6 +445,14 @@ public sealed class AccountSynchronizationSupervisorTests
             });
 
         return sessionFactory;
+    }
+
+    /// <summary>Models a folder work unit that is under way and stays there until the test lets it end.</summary>
+    private static async Task<IMailboxSession> HoldUntilReleasedAsync(TaskCompletionSource release)
+    {
+        await release.Task;
+
+        throw new InvalidOperationException("connect failed");
     }
 
     /// <summary>Models a folder the server serves and that holds no email, which is the cheapest successful run there is.</summary>
@@ -480,6 +529,9 @@ public sealed class AccountSynchronizationSupervisorTests
         internal RecordingLogger<AccountSynchronizationSupervisor> Logger { get; }
 
         internal Task StartSupervision() => this.supervisor.RunAsync(this.scheduling.Token, this.workUnits.Token);
+
+        /// <summary>Cancels scheduling the way host shutdown does, leaving the work-unit token live for the drain.</summary>
+        internal Task StopSchedulingAsync() => this.scheduling.CancelAsync();
 
         /// <summary>Supervises the account until the awaited signal arrives, then stops scheduling and lets it finish.</summary>
         internal async Task SuperviseUntilAsync(Task signal)

@@ -128,9 +128,18 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <summary>Runs every configured folder of the account once, bounded by the configured folder concurrency.</summary>
     /// <returns><see langword="true" /> when at least one folder failed, which is what puts the account into backoff.</returns>
     /// <remarks>
+    /// <para>
     /// An alias that matched no advertised folder, or several, is not counted as a failure. It is a configuration
     /// mistake whose remedy is an edit rather than a wait, and backing the account off for it would slow every folder
     /// that is working.
+    /// </para>
+    /// <para>
+    /// The folder bound admits folders one at a time, so most of a run's folders are still queued when it starts. A
+    /// folder that has not begun when shutdown does is therefore skipped rather than started: the drain exists to let
+    /// work already in flight finish, and opening a new mailbox session inside it would create exactly the work the
+    /// drain then has to cut off. The two tokens divide that decision — the scheduling token stops admitting folders,
+    /// the work-unit token is what a folder already running is eventually cancelled by.
+    /// </para>
     /// </remarks>
     private async Task<bool> RunOnceAsync(
         MailSynchronizationOptions runSettings,
@@ -156,6 +165,11 @@ internal sealed partial class AccountSynchronizationSupervisor
                 },
                 async (configuredFolder, folderToken) =>
                 {
+                    if (schedulingToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
                     if (!await this.SynchronizeFolderAsync(runSettings, configuredFolder, folderToken))
                     {
                         Interlocked.Increment(ref failedFolderCount);

@@ -105,6 +105,28 @@ public sealed class MailSynchronizationOptionsTests
         Assert.False(results);
     }
 
+    /// <summary>A drain the host stops waiting for is a drain that was never honored, so the budget has to cover it.</summary>
+    [Theory]
+    [InlineData("00:00:00", "00:00:30")]
+    [InlineData("00:00:10", "00:00:30")]
+    [InlineData("00:00:25", "00:00:30")]
+    [InlineData("00:00:40", "00:00:45")]
+    [InlineData("00:02:00", "00:02:05")]
+    public void ResolveHostShutdownBudget_ConfiguredDrain_CoversItWithoutFallingBelowTheFrameworkDefault(
+        string configuredDrain,
+        string expectedBudget)
+    {
+        // Arrange
+        var shutdownDrainTimeout = TimeSpan.Parse(configuredDrain, CultureInfo.InvariantCulture);
+
+        // Act
+        var budget = MailSynchronizationOptions.ResolveHostShutdownBudget(shutdownDrainTimeout);
+
+        // Assert
+        Assert.Equal(TimeSpan.Parse(expectedBudget, CultureInfo.InvariantCulture), budget);
+        Assert.True(budget > shutdownDrainTimeout);
+    }
+
     /// <summary>Configuration defines the served accounts, normalized and ordered the way a resolved query scope needs them.</summary>
     [Fact]
     public void ServedAccountIds_ConfiguredAccounts_AreNormalizedDeduplicatedAndOrdered()

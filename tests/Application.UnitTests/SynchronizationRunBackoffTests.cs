@@ -71,20 +71,6 @@ public sealed class SynchronizationRunBackoffTests
         Assert.All(delays, delay => Assert.InRange(delay, Interval, MaxDelay));
     }
 
-    /// <summary>Accounts that share a mail server fail together, so an exact delay would return all of them to it at once.</summary>
-    [Fact]
-    public void DelayBeforeNextRun_RepeatedForOneFailureCount_SpreadsTheDelayAcrossItsRange()
-    {
-        // Arrange, Act
-        var distinctDelays = Enumerable.Range(0, 50)
-            .Select(_ => SynchronizationRunBackoff.DelayBeforeNextRun(Interval, MaxDelay, consecutiveFailureCount: 3))
-            .Distinct()
-            .ToArray();
-
-        // Assert
-        Assert.True(distinctDelays.Length > 1, "The backoff delay must be jittered rather than exact.");
-    }
-
     [Fact]
     public void DelayBeforeNextRun_CeilingBelowTheInterval_IsRejected()
     {

@@ -38,21 +38,32 @@ starts one `AccountSynchronizationSupervisor` per configured account and supervi
 run actually does belongs to the supervisor of the account it runs for.
 
 Each supervisor owns its own schedule, its own consecutive-failure count, and its own backoff, and creates a scope per
-folder work unit. A server that stops answering therefore costs its own account and nothing else — the accounts beside
-it keep their own intervals and never queue behind it. The only thing supervisors share is the slot count that bounds
-how many of them run at once.
+folder work unit. That is what a server which stops answering can no longer reach: no other account inherits its
+failure state, waits out its backoff, or has its own interval pushed back by the folders it is still working through.
+The one thing supervisors do share is the slot count below, so an account can wait for a *slot* a slow run is holding
+— bounded by that run rather than by the failing account's backoff, which is the isolation this design provides and
+the limit of it.
 
 ### Two bounds, and what each one is for
 
-| Bound | Setting | Default | What it admits |
+**Both bounds count what is happening at one moment, not how much gets done.** Neither is a quota, a per-interval
+budget, or a cap on how many accounts or folders are synchronized: every configured account is supervised and every
+configured folder is reached. What the bounds decide is how many of them may be *in flight simultaneously*; the rest
+wait their turn within the same run and the same interval.
+
+| Bound | Setting | Default | How many may run at the same moment |
 | --- | --- | --- | --- |
-| Accounts at once | `MaxConcurrentAccounts` | 4 | How many accounts may be inside a run at the same time |
-| Folders at once, within one account | `MaxConcurrentFoldersPerAccount` | 1 | How many folder work units of one account run at the same time |
+| Accounts | `MaxConcurrentAccounts` | 4 | Accounts inside a run; the others wait for a slot and then run |
+| Folders, within one account | `MaxConcurrentFoldersPerAccount` | 1 | Folder work units of one account; its remaining folders follow in the same run |
 
 Both are validated at startup and enforced at run time, and they multiply: the process never has more than
-`MaxConcurrentAccounts × MaxConcurrentFoldersPerAccount` folder work units in flight. The account bound is what keeps
-the length of an operator's account list from deciding how much database and network work synchronization does at
-once; a supervisor waiting for a slot is delayed by the runs holding them and never by another account's backoff.
+`MaxConcurrentAccounts × MaxConcurrentFoldersPerAccount` folder work units in flight at once. With ten accounts of
+three folders each on the defaults, all ten accounts are synchronized and all thirty folders are reached every
+interval — at most four accounts are working at any instant, and each of those is working one folder at a time.
+
+The account bound is what keeps the length of an operator's account list from deciding how much database and network
+work synchronization does at once. A supervisor waiting for a slot is delayed by the runs holding them, never by
+another account's backoff.
 
 The folder default of one is deliberate. A single IMAP connection per account is the conservative, server-friendly
 choice, and every folder of an account already shares that account's session-establishment budget and its circuit
@@ -82,19 +93,30 @@ off for it would slow the folders that are working.
 
 ### Shutdown stops scheduling first and drains second
 
-Host shutdown cancels scheduling for every supervisor at once, so no further run and no further folder starts. The work
-units already under way are then given `ShutdownDrainTimeout` to finish, and only what outlasts the drain is cancelled.
-That is what keeps a run from being torn down between persisting an email's content and advancing the folder
-checkpoint — and when the drain does expire, the progress already committed is durable and idempotent, so the next
-start resumes from the committed checkpoint rather than losing or duplicating anything.
+Host shutdown cancels scheduling for every supervisor at once, so no further run starts and no further folder of a run
+already going is admitted — a folder still queued behind the folder bound is skipped rather than started, because the
+drain exists to finish work already in flight and not to open a new mailbox session inside it. The work units already
+under way are then given `ShutdownDrainTimeout` to finish, and only what outlasts the drain is cancelled. That is what
+keeps a run from being torn down between persisting an email's content and advancing the folder checkpoint — and when
+the drain does expire, the progress already committed is durable and idempotent, so the next start resumes from the
+committed checkpoint rather than losing or duplicating anything.
+
+The drain is only real while the host is still waiting for it, so the host's own shutdown budget is derived from it
+rather than left on the framework's 30-second default: `HostOptions.ShutdownTimeout` is set to the configured drain
+plus five seconds for the hosted services stopping beside it, and never below that 30-second default. Without that, a
+drain configured above the default would be accepted and silently not honored — the host would stop waiting and the
+process would exit with the work still running.
 
 ### The account set is re-read rather than fixed at startup
 
 The coordinator re-reads the published snapshot on the configured interval and starts a supervisor for any configured
 account that has none running. One mechanism therefore covers three things: an account a configuration reload adds
 begins synchronizing without a restart, a supervisor that ended unexpectedly is started again instead of leaving one
-account silently unsynchronized, and an account a reload removes ends its own supervision at the start of its next run
-— the mail already stored for it stays readable, as `ServedAccountIds` requires.
+account silently unsynchronized, and an account a reload removes ends its own supervision at the start of its next run.
+Removing an account is not the same as disabling synchronization: `ServedAccountIds` drops it, and the read side
+resolves its mailbox scopes from that same catalog, so the mail already stored for a removed account stops being
+readable as well as stopping being synchronized. Turning `Enabled` off stops the runs and leaves the stored copy
+readable; removing the account does both.
 
 Supervisor logs and run records carry the account identifier, the folder alias, counts, the run duration, the
 consecutive failure count, and the current backoff, and never message-level data. They are structured log records;
@@ -556,8 +578,10 @@ healthy one, so it fails startup naming both values. A deployment that wants no 
 interval, which leaves every wait exactly one interval long.
 
 `ShutdownDrainTimeout` is how long shutdown waits for the work units already under way after it has stopped scheduling
-new ones. It accepts anything from zero to two minutes and defaults to ten seconds, which sits inside the host's own
-shutdown timeout. Zero cancels in-flight work immediately; what a run had already committed stays durable either way.
+new ones. It accepts anything from zero to two minutes and defaults to ten seconds. The host's shutdown budget is
+derived from whatever is configured, so every accepted value is honored rather than being cut short by the framework
+default; changing it is restart-required, which a shutdown budget is by nature. Zero cancels in-flight work
+immediately, and what a run had already committed stays durable either way.
 
 ### Transport security
 
