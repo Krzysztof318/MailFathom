@@ -12,10 +12,6 @@
     <Compile Include="..\shared\RecordingLoggerFactory.cs" Link="RecordingLoggerFactory.cs" />
     <Compile Include="..\shared\ExceptionHierarchyAssertion.cs" Link="ExceptionHierarchyAssertion.cs" />
     <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
-    <!-- The container health probe speaks HTTP, and this is the suite's only HTTP test double. RecordedHttpRequest
-         comes with it because the handler records every request through it. -->
-    <Compile Include="..\shared\FakeHttpMessageHandler.cs" Link="FakeHttpMessageHandler.cs" />
-    <Compile Include="..\shared\RecordedHttpRequest.cs" Link="RecordedHttpRequest.cs" />
   </ItemGroup>
 
   <ItemGroup>

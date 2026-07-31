@@ -1,24 +1,18 @@
 # The container image
 
-`Dockerfile` at the repository root is the only image definition MailMcp has. Both deployment shapes in `deploy/` build
-from it, and nothing else produces an image, so what this page describes is what runs wherever MailMcp runs in a
-container.
+`deploy/docker/Dockerfile` is the only image definition MailMcp has. Both deployment shapes in `deploy/` build from it,
+and nothing else produces an image, so what this page describes is what runs wherever MailMcp runs in a container.
 
-It produces **two** images, and the difference between them is the whole of MailMcp's migration model.
-
-| Target | What it is | What it can do to a database |
-| --- | --- | --- |
-| `runtime` | The service | Read and write rows. It contains no migration tool and no SQL. |
-| `migrations` | A one-shot schema step | Apply the schema, once, when an operator runs it. |
+The build context is the repository root, so the definition is named rather than found:
 
 ```bash
-docker build --target runtime    --tag mailmcp:local .
-docker build --target migrations --tag mailmcp-migrations:local .
+docker build --target runtime --file deploy/docker/Dockerfile --tag mailmcp:local .
 ```
 
-Keeping the two apart is what makes "the host never applies a migration" a property of what was built rather than a
-rule someone has to remember. `DatabaseSchemaStartupGate` refuses to start against a schema this build does not
-recognize, in every environment; the answer to that refusal is the second image, run deliberately.
+It produces one image: the service. It carries no migration tool, no SQL, and no credential that could apply one, which
+is what makes "the host never applies a migration" a property of what was built rather than a rule someone has to
+remember. `DatabaseSchemaStartupGate` refuses to start against a schema this build does not recognize, in every
+environment, and the reviewed artifact that answers that refusal belongs to issue #126 rather than to anything here.
 
 ## What is inside, and what is not
 
@@ -34,9 +28,11 @@ dropped at publish, because none is read at run time and shipping them would put
 own internal contracts into an artifact an operator can unpack. The portable symbol files stay, because they are what
 turns a stack trace in a support report into file and line numbers.
 
-`.dockerignore` is an allow-list rather than a deny-list: it excludes everything and then names what may reach the
-build. The build context is the repository root, which is also where a developer's `.env`, a mounted secret, and a
-certificate live, and a rule that only excluded what someone remembered would send all of them to the daemon.
+`deploy/docker/Dockerfile.dockerignore` is an allow-list rather than a deny-list: it excludes everything and then names
+what may reach the build. The build context is the repository root, which is also where a developer's `.env`, a mounted
+secret, and a certificate live, and a rule that only excluded what someone remembered would send all of them to the
+daemon. Docker looks for an ignore-file named after the Dockerfile before it looks for one at the context root, and
+prefers it, so the file bounding the context travels with the definition that uses it.
 
 Every base image is pinned to an explicit patch version. `scripts/verify-deployment-assets.sh` rejects a floating one.
 
@@ -48,7 +44,7 @@ Every base image is pinned to an explicit patch version. `scripts/verify-deploym
 | Port | `8080`, plain HTTP |
 | Writable paths | `/tmp` only, which a deployment supplies as a tmpfs or an `emptyDir` |
 | Entrypoint | `dotnet /app/MailMcp.Host.dll` |
-| Health check | `dotnet /app/MailMcp.Host.dll --health-probe` |
+| Health check | None. See [the health endpoints](#the-health-endpoints) below. |
 
 The application directory is owned by `root` and the process is not, so the service cannot rewrite its own code even
 before the deployment imposes a read-only root filesystem on it. Both deployments do impose one, and both drop every
@@ -63,14 +59,16 @@ and a dump is a way to read secret material out of managed memory — the residu
 [secret provisioning](secret-provisioning.md#secret-material-in-process-memory) documents and asks deployments to
 close. Set it back to `1` deliberately, for one session, when a dump is genuinely needed.
 
-### The health probe
+### The health endpoints
 
-Kubernetes probes `/health` and `/alive` over HTTP from the kubelet and needs nothing inside the container. Docker and
-Podman do not work that way: `HEALTHCHECK` runs a command *inside* the container, and a chiseled image has no shell for
-one to be written in. The image therefore uses the runtime it already ships — `--health-probe` asks the running host's
-own readiness endpoint over loopback and reports the answer as an exit code.
+The host serves `/health` and `/alive` on its own port, in every environment. Kubernetes probes them over HTTP from the
+kubelet and needs nothing inside the container, which is what the chart's probes use.
 
-`MAILMCP_HEALTH_PROBE_PATH` selects which endpoint it asks; the default is `/health`.
+**The image declares no `HEALTHCHECK`.** Docker and Podman run one as a command *inside* the container, and a chiseled
+image has no shell and no HTTP client for one to be written in, so asking the endpoint would mean adding a probe mode
+to the application itself. That belongs to issue #179, which decides the listener the probes are served on, the
+transport they use, and whether they are served at all. Under Compose, ask the endpoints from outside the container
+instead.
 
 The two endpoints answer different questions and are wired to different probes on purpose:
 
@@ -96,40 +94,17 @@ The image carries the OCI labels that let a pulled image be traced back to the c
 `IMAGE_VERSION` currently defaults to `0.0.0-unversioned`: MailMcp has published no release, and what a version means
 here is still an open decision. The application does not yet report its own version at run time either.
 
-## The schema script
+## The schema
 
-The migration image applies an **idempotent SQL script**, generated during the build from the migrations the same build
-compiled. It is not a checked-in file, so the script and the migrations can never describe two different schemas.
+The image applies none and carries nothing that could — the verification script fails a Dockerfile that reintroduces a
+schema tool. The reviewed artifact a released installation applies, and the step that runs it, belong to issue #126.
+Until it ships, establishing the schema is an explicit operator action each deployment page describes.
 
-That shape was chosen over an EF Core migration bundle for three reasons. It is text, so it reads the same on every
-architecture and can be reviewed as SQL — which is how this repository already reviews a migration. A bundle is a
-native executable per runtime identifier, needing a runtime-identifier-specific restore that the committed lock files
-reject. And a bundle takes its connection string on a command line, where every process on the host can read it, while
-`psql` reads a password from a file.
-
-Read it before applying it:
-
-```bash
-docker run --rm mailmcp-migrations:local --print
-```
-
-The script is idempotent: it consults `__EFMigrationsHistory` and applies only what is missing, so running it against an
-up-to-date database is a no-op. It brings its own transaction around each migration and runs under `ON_ERROR_STOP`, so
-a failure part-way rolls back rather than leaving a schema nothing describes.
-
-**The role it connects as needs more privilege than the service's.** The schema installs the `vector` extension, which
-PostgreSQL does not permit an ordinary role to create. That asymmetry is the point of a separate step: grant the
-service a role that can read and write rows and nothing more, and give the migration a role that can do the rest. Both
-deployments in `deploy/` show one way to arrange that.
-
-The connection is resolved in this order, and a file is preferred at every step because a file never appears in another
-process's environment block or in `ps`:
-
-| Setting | Holds |
-| --- | --- |
-| `MAILMCP_MIGRATION_DSN_FILE` | A file holding a libpq connection string or URI |
-| `MAILMCP_MIGRATION_DSN` | The same value, inline |
-| `PGHOST` / `PGPORT` / `PGDATABASE` / `PGUSER` | The connection, with the password from `MAILMCP_MIGRATION_PASSWORD_FILE` |
+The role that applies it needs more privilege than the service's: the schema installs the `vector` extension, which
+PostgreSQL does not permit an ordinary role to create. That asymmetry is why the step is separate — grant the service a
+role that can read and write rows and nothing more, and give the schema step a role that can do the rest. The Compose
+deployment installs the extension during initialization, while a superuser is still connected, so neither of its roles
+has to be one.
 
 ## Verification
 
@@ -138,10 +113,11 @@ bash scripts/verify-deployment-assets.sh   # reads the files: pins, privileges, 
 bash scripts/smoke-deployment.sh compose   # starts the real thing and asserts what only a running one can answer
 ```
 
-The second one proves, among other things, that the host refuses an unrecognized schema, that the migration is
-idempotent, that the container runs unprivileged on a read-only root filesystem, and that shutting it down is a stop
-rather than a kill. The `Deployment assets` job of the CI workflow runs both, plus the two-architecture build and the
-same smoke run against an ephemeral Kubernetes cluster.
+The second one proves that the container runs unprivileged on a read-only root filesystem, reads its mounted
+configuration, resolves its mounted secret, reaches the database, and then refuses an unrecognized schema — which is
+where a deployment without a schema artifact stops. Neither script runs on a pull request: the `Deployment assets`
+workflow that runs both, plus the two-architecture build and the same smoke against an ephemeral Kubernetes cluster, is
+manual dispatch only.
 
 ## Where the deployments are
 

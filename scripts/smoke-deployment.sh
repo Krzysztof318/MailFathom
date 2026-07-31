@@ -8,9 +8,15 @@ set -euo pipefail
 #   scripts/smoke-deployment.sh all
 #
 # scripts/verify-deployment-assets.sh answers everything that can be read out of the files; this answers the rest —
-# that the image builds and runs unprivileged on a read-only root filesystem, that the schema step is separate and
-# idempotent, that a host refuses to serve against a schema it does not recognize, that readiness and liveness report
-# what they claim to, and that shutting down is clean rather than a kill.
+# that the image builds and runs unprivileged on a read-only root filesystem, that it reads its mounted configuration
+# and resolves its mounted secret, that it reaches the database, and that it then refuses to serve against a schema it
+# does not recognize.
+#
+# That refusal is where both halves stop, deliberately. Neither the image nor the chart applies a schema, and the
+# reviewed artifact that would establish one is #126's, so a deployment cannot be driven to readiness here without
+# reproducing that artifact in a test script — which would make the smoke prove something the deployment does not
+# contain. Everything up to the refusal is proven; readiness joins this script in the change that supplies the schema
+# step.
 #
 # Both parts destroy and recreate their own state. Neither touches anything outside the checkout, the Docker daemon,
 # and the kind cluster it creates and deletes.
@@ -21,7 +27,6 @@ readonly compose_project='mailmcp-smoke'
 readonly smoke_postgres_volume='mailmcp-smoke-postgres-data'
 readonly kind_cluster='mailmcp-smoke'
 readonly runtime_image='mailmcp:smoke'
-readonly migrations_image='mailmcp-migrations:smoke'
 readonly kubernetes_namespace='mailmcp-smoke'
 readonly helm_release='mailmcp'
 
@@ -68,13 +73,12 @@ wait_until() {
   abort "Timed out waiting for: ${description}"
 }
 
-build_the_images() {
-  report 'Building the images'
+build_the_image() {
+  report 'Building the image'
 
-  docker build --target runtime --tag "$runtime_image" . >/dev/null
-  docker build --target migrations --tag "$migrations_image" . >/dev/null
+  docker build --target runtime --file deploy/docker/Dockerfile --tag "$runtime_image" . >/dev/null
 
-  pass 'Both images built.'
+  pass 'The runtime image built.'
 }
 
 ########################################################################################################################
@@ -99,7 +103,6 @@ smoke_workspace=''
 compose_command() {
   (cd deploy/compose \
     && MAILMCP_IMAGE="$runtime_image" \
-       MAILMCP_MIGRATIONS_IMAGE="$migrations_image" \
        MAILMCP_POSTGRES_VOLUME="$smoke_postgres_volume" \
     docker compose \
       --project-name "$compose_project" \
@@ -114,6 +117,7 @@ compose_command() {
 compose_logs_mention() {
   compose_command logs mailmcp 2>&1 | grep -q "$1"
 }
+
 
 # Builds the throwaway workspace. Nothing here touches the tracked deployment directory: a developer who has already
 # provisioned the supported deployment keeps their credentials, and this run cannot authenticate against their volume
@@ -170,39 +174,24 @@ smoke_the_compose_deployment() {
   # The workspace exists before the first teardown, because compose_command cannot run without the override file it
   # names — and a teardown issued against the repository file alone would be the very thing this isolation prevents.
   provision_smoke_workspace
-  trap 'compose_command --profile migrate down --volumes --remove-orphans >/dev/null 2>&1 || true; remove_smoke_workspace' RETURN
+  trap 'compose_command down --volumes --remove-orphans >/dev/null 2>&1 || true; remove_smoke_workspace' RETURN
 
-  compose_command --profile migrate down --volumes --remove-orphans >/dev/null 2>&1 || true
+  compose_command down --volumes --remove-orphans >/dev/null 2>&1 || true
 
   compose_command up --detach --wait postgres >/dev/null
   pass 'PostgreSQL reports healthy, so its initialization script created the role and the database.'
 
-  # Before the schema exists, so the refusal is observed rather than assumed. This is the whole reason the migration is
-  # a separate step: a host that applied one on start could never report this.
+  # Reaching this message is what the run proves. The host got far enough to read its mounted configuration directory,
+  # resolve the mounted database password, open a connection as the unprivileged role the initialization script
+  # created, and read the migration history — and then refused to serve, because no schema has been applied. A host
+  # that applied one while starting could never report this, which is why the refusal is the assertion rather than an
+  # obstacle to one.
   compose_command up --detach mailmcp >/dev/null
-  wait_until 'The host refuses to serve against a schema it does not recognize.' 30 \
+  wait_until 'The host reaches the database and refuses to serve against a schema it does not recognize.' 30 \
     compose_logs_mention 'DatabaseSchemaOutOfDateException'
-  compose_command stop mailmcp >/dev/null
-
-  compose_command --profile migrate run --rm migrations >/dev/null
-  pass 'The one-shot migration applied the schema.'
-
-  compose_command --profile migrate run --rm migrations >/dev/null
-  pass 'Running it again changed nothing, so it is idempotent.'
-
-  # The grant path a deployment reaches when the migration role differs from the service's. The role named here is the
-  # same one, which a deployment would never do — granting to yourself is a no-op — but it is what executes the
-  # statements, and executing them is the risk: `ALTER DEFAULT PRIVILEGES` and the `GRANT ... ON ALL` forms are where a
-  # syntax or privilege mistake would otherwise only surface in a cluster running the split for real.
-  compose_command --profile migrate run --rm \
-    --env MAILMCP_RUNTIME_ROLE="${MAILMCP_DATABASE_ROLE:-mailmcp}" migrations >/dev/null
-  pass 'The runtime-role grant runs against the migrated schema.'
-
-  compose_command up --detach --wait mailmcp >/dev/null
-  pass 'The host became healthy against the migrated schema.'
 
   local container_id
-  container_id="$(compose_command ps --quiet mailmcp)"
+  container_id="$(compose_command ps --all --quiet mailmcp)"
 
   [[ "$(docker inspect "$container_id" --format '{{.Config.User}}')" == '1654' ]] \
     || abort 'The container is not running as the unprivileged account.'
@@ -212,24 +201,22 @@ smoke_the_compose_deployment() {
     || abort 'The root filesystem is writable.'
   pass 'Its root filesystem is read-only.'
 
-  # Proves the readiness endpoint answers over the published port rather than only to the in-container probe.
-  local published_port
-  published_port="$(compose_command port mailmcp 8080 | sed 's/.*://')"
-  [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${published_port}/health")" == '200' ]] \
-    || abort 'Readiness did not answer 200 over the published port.'
-  [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${published_port}/alive")" == '200' ]] \
-    || abort 'Liveness did not answer 200 over the published port.'
-  pass 'Readiness and liveness answer over the published port.'
-
-  # A clean shutdown ends with the host's own stop record, and the exit code says whether it was a stop or a kill:
-  # 137 is SIGKILL, which is what a drain that outlives the grace period produces.
+  # The refusal ends the process, and `restart: unless-stopped` starts it again — which is what a deployment waiting
+  # for an operator to apply a schema should do, and why a restart having happened is the evidence that the process
+  # ended itself. The service is stopped first so the recorded exit code is a settled one rather than a race against
+  # the next restart.
+  #
+  # Only 137 is asserted against, deliberately. That is SIGKILL, which is what a container the daemon had to stop by
+  # force reports. The code a failed start *does* produce is whatever the runtime's abort path yields, and that
+  # differs by environment — 134 outside a container, 139 in this image — so asserting a particular one would be
+  # asserting a property of the .NET host rather than of the deployment.
   compose_command stop --timeout 60 mailmcp >/dev/null
-  local exit_code
+  local exit_code restart_count
   exit_code="$(docker inspect "$container_id" --format '{{.State.ExitCode}}')"
-  [[ "$exit_code" != '137' ]] || abort 'The container was killed rather than stopped; the drain outlived the grace period.'
-  compose_command logs mailmcp 2>&1 | grep -q 'stopped' \
-    || abort 'The host did not record a stop, so shutdown was not graceful.'
-  pass "Shutdown was graceful (exit code ${exit_code})."
+  restart_count="$(docker inspect "$container_id" --format '{{.RestartCount}}')"
+  [[ "$restart_count" != '0' ]] || abort 'The container never restarted, so the refusal did not end the process.'
+  [[ "$exit_code" != '137' ]] || abort 'The container was killed by the daemon rather than ending on its own.'
+  pass "The refusal ended the process itself (exit code ${exit_code}, restarted ${restart_count} time(s) by the restart policy)."
 }
 
 ########################################################################################################################
@@ -317,8 +304,8 @@ smoke_the_kubernetes_deployment() {
   kind create cluster --name "$kind_cluster" --wait 120s >/dev/null
   pass 'The cluster is up.'
 
-  kind load docker-image "$runtime_image" "$migrations_image" --name "$kind_cluster" >/dev/null
-  pass 'Both images are loaded into the cluster, so nothing is pulled from a registry.'
+  kind load docker-image "$runtime_image" --name "$kind_cluster" >/dev/null
+  pass 'The image is loaded into the cluster, so nothing is pulled from a registry.'
 
   kubectl create namespace "$kubernetes_namespace" >/dev/null
 
@@ -342,32 +329,23 @@ smoke_the_kubernetes_deployment() {
     --set "secrets.existingSecret=mailmcp-secrets"
   )
 
-  # Installed before the schema exists, so the refusal is observed. Readiness must not arrive, and the reason must be
-  # the pending migration rather than anything else.
   helm install "$helm_release" deploy/helm/mailmcp --namespace "$kubernetes_namespace" "${chart_values[@]}" >/dev/null
   pass 'The chart installed.'
 
-  wait_until 'The pod refuses to serve against a schema it does not recognize.' 60 \
+  # The same refusal the Compose half observes, reached through the chart's own wiring: the ConfigMap it mounts, the
+  # Secret it references, and the connection string it renders. Readiness never arrives while no schema exists, and
+  # that is the state this run asserts rather than works around.
+  wait_until 'The pod reaches the database and refuses to serve against a schema it does not recognize.' 60 \
     pod_logs_mention 'DatabaseSchemaOutOfDateException'
 
-  helm upgrade "$helm_release" deploy/helm/mailmcp --namespace "$kubernetes_namespace" "${chart_values[@]}" \
-    --set migrations.enabled=true \
-    --set migrations.image.repository=mailmcp-migrations \
-    --set migrations.image.tag=smoke >/dev/null
-  kubectl --namespace "$kubernetes_namespace" wait --for=condition=complete job \
-    --selector app.kubernetes.io/component=schema-migration --timeout=180s >/dev/null
-  pass 'The migration Job completed.'
-
-  helm upgrade "$helm_release" deploy/helm/mailmcp --namespace "$kubernetes_namespace" "${chart_values[@]}" \
-    --set migrations.enabled=false >/dev/null
-  kubectl --namespace "$kubernetes_namespace" rollout restart deployment/"$helm_release" >/dev/null
-  kubectl --namespace "$kubernetes_namespace" rollout status deployment/"$helm_release" --timeout=180s >/dev/null
-  pass 'The deployment became ready against the migrated schema, which is what its readiness probe reports.'
-
-  # An upgrade that changes nothing must stay ready rather than churn.
+  # An upgrade that changes nothing must render the same objects rather than churn. Compared as rendered manifests,
+  # because the rollout it produces cannot become ready without a schema.
+  local first_manifest second_manifest
+  first_manifest="$(helm get manifest "$helm_release" --namespace "$kubernetes_namespace")"
   helm upgrade "$helm_release" deploy/helm/mailmcp --namespace "$kubernetes_namespace" "${chart_values[@]}" >/dev/null
-  kubectl --namespace "$kubernetes_namespace" rollout status deployment/"$helm_release" --timeout=180s >/dev/null
-  pass 'A repeated upgrade left it ready.'
+  second_manifest="$(helm get manifest "$helm_release" --namespace "$kubernetes_namespace")"
+  [[ "$first_manifest" == "$second_manifest" ]] || abort 'A repeated upgrade changed the rendered objects.'
+  pass 'A repeated upgrade rendered the same objects.'
 
   helm uninstall "$helm_release" --namespace "$kubernetes_namespace" >/dev/null
   wait_until 'Uninstalling removed every object the chart owns.' 60 chart_objects_are_gone
@@ -381,23 +359,21 @@ main() {
 
   case "${1:-all}" in
     compose)
-      require_command curl
-      build_the_images
+      build_the_image
       smoke_the_compose_deployment
       ;;
     kubernetes)
       require_command kind
       require_command kubectl
       require_command helm
-      build_the_images
+      build_the_image
       smoke_the_kubernetes_deployment
       ;;
     all)
-      require_command curl
       require_command kind
       require_command kubectl
       require_command helm
-      build_the_images
+      build_the_image
       smoke_the_compose_deployment
       smoke_the_kubernetes_deployment
       ;;

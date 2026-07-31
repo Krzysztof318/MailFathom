@@ -19,16 +19,9 @@ Watch it become ready:
   kubectl --namespace {{ .Release.Namespace }} rollout status deployment/{{ include "mailmcp.fullname" . }}
 
 MailMcp verifies the database schema while starting and refuses to serve against one it does not recognize. It never
-applies a migration itself, in any environment. If the pod reports a pending migration, apply the schema deliberately:
-
-  helm upgrade {{ .Release.Name }} <chart> --namespace {{ .Release.Namespace }} --reuse-values \
-    --set migrations.enabled=true \
-    --set migrations.image.repository=<repository> --set migrations.image.tag=<tag> --wait
-  kubectl --namespace {{ .Release.Namespace }} logs job/{{ include "mailmcp.fullname" . }}-migrate-<revision>
-
-Then switch it off again, so the next upgrade does not create another Job:
-
-  helm upgrade {{ .Release.Name }} <chart> --namespace {{ .Release.Namespace }} --reuse-values --set migrations.enabled=false
+applies a migration itself, in any environment, and neither does this chart. If the pod reports a pending migration,
+apply the schema to {{ .Values.database.name }} yourself and let the rollout continue; the reviewed schema artifact and
+the Job that runs it are tracked by MailMcp issue #126.
 {{ if not .Values.ingress.enabled }}
 No Ingress is configured, so the endpoint is reachable only from inside the cluster. Reach it for a check with:
 

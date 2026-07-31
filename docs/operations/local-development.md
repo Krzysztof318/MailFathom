@@ -55,14 +55,15 @@ bash scripts/smoke-deployment.sh compose   # minutes; starts the real deployment
 bash scripts/smoke-deployment.sh kubernetes
 ```
 
-The first answers what can be decided by reading `Dockerfile` and everything under `deploy/`: that base images are
-pinned, that both image stages drop to an unprivileged account, that the Compose files and the chart render, that
-rendering is deterministic, and that the chart's schema still rejects the values that must never install. It uses
-`helm` from the PATH when it is there and a pinned container image otherwise, so it works without installing anything.
+The first answers what can be decided by reading everything under `deploy/`: that base images are pinned, that the image
+drops to an unprivileged account and carries no schema tool, that the Compose files and the chart render, that rendering
+is deterministic, and that the chart's schema still rejects the values that must never install. It uses `helm` from the
+PATH when it is there and a pinned container image otherwise, so it works without installing anything.
 
 The second starts a deployment and asserts what only a running one can answer. Its `kubernetes` mode additionally needs
-`kind`, `kubectl`, and `helm` installed. The `Deployment assets` job of the CI workflow runs both, plus the
-two-architecture image build. [The container image](container-image.md) describes what they verify.
+`kind`, `kubectl`, and `helm` installed. Neither script runs on a pull request; the `Deployment assets` workflow that
+runs both, plus the two-architecture image build, is manual dispatch only, like the integration suite.
+[The container image](container-image.md) describes what they verify.
 
 Both scripts stop immediately when `HEAD` resolves to `main` or `master`,
 because verification on the integration branch reports on code that no change

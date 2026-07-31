@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Static verification of everything under deploy/ and of the Dockerfile beside it.
+# Static verification of everything under deploy/.
 #
 # Nothing here starts a container, reaches a registry, or needs a cluster: it answers the questions that can be
 # answered by reading the files, which is what makes it cheap enough to run in the implementation loop. The questions
 # that need something running — that the image builds, that the Compose stack comes up, that the chart installs into a
-# cluster — belong to the `Deployment assets` job of the CI workflow.
+# cluster — belong to the manually dispatched `Deployment assets` workflow.
 #
 # It checks three things a reader would otherwise have to check by hand on every change:
 #
 #   * the image definition still holds the properties #123 requires of it — pinned bases, an unprivileged account, no
 #     credential baked in;
-#   * the Compose deployment renders, its one-shot migration profile renders, and its GHCR overlay still refuses to
-#     render without a deliberate acknowledgement;
+#   * the Compose deployment renders and its GHCR overlay still refuses to render without a deliberate
+#     acknowledgement;
 #   * the chart lints, renders identically twice, and its schema still rejects the values that must never install.
 #
 # `helm` is used from the PATH when it is there, and from a pinned container image otherwise, so a developer who has
@@ -30,6 +30,11 @@ cd "$repository_root"
 
 readonly chart_directory='deploy/helm/mailmcp'
 readonly compose_directory='deploy/compose'
+readonly dockerfile='deploy/docker/Dockerfile'
+# The ignore-file lives beside the Dockerfile rather than at the context root. Docker looks for
+# `<dockerfile>.dockerignore` first and prefers it over the root one, so the build context stays bounded by a file that
+# travels with the definition that uses it.
+readonly dockerignore_file='deploy/docker/Dockerfile.dockerignore'
 
 failures=0
 
@@ -87,36 +92,38 @@ verify_the_image_definition() {
   report 'Dockerfile'
 
   # A floating base tag makes the image a function of when it was built rather than of what was reviewed.
-  if grep -nE '^ARG [A-Z_]*IMAGE=.*:(latest|[0-9]+\.[0-9]+)$' Dockerfile >/dev/null; then
+  if grep -nE '^ARG [A-Z_]*IMAGE=.*:(latest|[0-9]+\.[0-9]+)$' "$dockerfile" >/dev/null; then
     fail 'A base image is pinned to a floating tag. Pin an explicit patch version or a digest.'
   else
     pass 'Every base image is pinned to an explicit version.'
   fi
 
   # The runtime stage must hand the process to an unprivileged account before its entrypoint.
-  if awk '/^FROM .* AS runtime$/,/^FROM .* AS migrations$/' Dockerfile | grep -qE '^USER '; then
+  if awk '/^FROM .* AS runtime$/,0' "$dockerfile" | grep -qE '^USER '; then
     pass 'The runtime stage drops to an unprivileged account.'
   else
     fail 'The runtime stage never issues USER, so the service would run as root.'
   fi
 
-  if awk '/^FROM .* AS migrations$/,0' Dockerfile | grep -qE '^USER '; then
-    pass 'The migration stage drops to an unprivileged account.'
+  # Nothing in this image may apply a schema. The migration artifact and the image that runs it are #126's, and an
+  # entrypoint that could reach a database with DDL is exactly what "the host never applies migrations" excludes.
+  if grep -qE 'dotnet ef|migrations script|apply-schema|psql' "$dockerfile"; then
+    fail 'The Dockerfile builds or carries a schema step. The reviewed schema artifact belongs to #126.'
   else
-    fail 'The migration stage never issues USER.'
+    pass 'The image carries no schema tool and no SQL.'
   fi
 
   # A credential in a build argument ends up in the image history, where `docker history` reads it back.
-  if grep -nEi '^(ARG|ENV) .*(PASSWORD|SECRET|TOKEN|APIKEY|API_KEY|CREDENTIAL)' Dockerfile >/dev/null; then
+  if grep -nEi '^(ARG|ENV) .*(PASSWORD|SECRET|TOKEN|APIKEY|API_KEY|CREDENTIAL)' "$dockerfile" >/dev/null; then
     fail 'A build argument or environment variable in the Dockerfile names a credential. Image history is readable.'
   else
     pass 'No credential is named by a build argument or environment variable.'
   fi
 
-  if [[ -f .dockerignore ]] && grep -qE '^\*\*$' .dockerignore; then
-    pass '.dockerignore excludes everything before allowing anything back.'
+  if [[ -f "$dockerignore_file" ]] && grep -qE '^\*\*$' "$dockerignore_file"; then
+    pass 'The ignore-file excludes everything before allowing anything back.'
   else
-    fail '.dockerignore does not start from an exclude-everything rule, so a new file at the repository root would reach the build context.'
+    fail "${dockerignore_file} does not start from an exclude-everything rule, so a new file at the repository root would reach the build context."
   fi
 }
 
@@ -141,17 +148,11 @@ verify_the_compose_deployment() {
     fail 'compose.yaml does not render.'
   fi
 
-  if (cd "$compose_directory" && docker compose --profile migrate config --quiet 2>/dev/null); then
-    pass 'The migrate profile renders.'
+  # Nothing in the deployment may apply a schema, whichever profile or overlay is selected.
+  if grep -rqE 'apply-schema|dotnet ef|migrations script' "$compose_directory"; then
+    fail 'The Compose deployment carries a schema step. The reviewed schema artifact belongs to #126.'
   else
-    fail 'The migrate profile does not render.'
-  fi
-
-  # The schema migration must never be something an ordinary `up` performs.
-  if (cd "$compose_directory" && docker compose config --services 2>/dev/null | grep -qx 'migrations'); then
-    fail 'The migrations service is started by an ordinary `docker compose up`. It must stay behind its profile.'
-  else
-    pass 'The migrations service stays behind its profile.'
+    pass 'The Compose deployment applies no schema.'
   fi
 
   # The tag is supplied so the acknowledgement is what the render is left missing. Both are required, and Compose
@@ -220,7 +221,7 @@ verify_the_chart() {
   fi
 
   local rendered_kind
-  for rendered_kind in Deployment Service ConfigMap ServiceAccount Ingress Job; do
+  for rendered_kind in Deployment Service ConfigMap ServiceAccount Ingress; do
     if printf '%s' "$first_render" | grep -q "^kind: ${rendered_kind}$"; then
       pass "${rendered_kind} is rendered."
     else
@@ -284,20 +285,17 @@ verify_the_chart() {
     helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml \
     --set 'config.extraEnvironment.ConnectionStrings__mailmcp=Host=x;Password=y'
 
-  expect_rejection \
-    'A migration image from another version is refused.' \
-    'allowVersionMismatch' \
-    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml --set migrations.image.tag=0.0.1-other
-
-  expect_rejection \
-    'A migration Job without TLS is refused when the application connection requires it.' \
-    'migrations.sslMode' \
-    helm_command template verification mailmcp --values mailmcp/ci/release-values.yaml \
-    --set 'database.extraConnectionParameters=SslMode=VerifyFull'
+  # The chart applies no schema and renders nothing that could. A Job reintroduced here would be an automatic
+  # migration the moment somebody gave it a Helm hook; #126 owns the artifact and the step that runs it.
+  if printf '%s' "$first_render" | grep -q '^kind: Job$'; then
+    fail 'The chart renders a Job. The reviewed schema artifact and the step that applies it belong to #126.'
+  else
+    pass 'The chart renders no schema Job.'
+  fi
 
   # An image or a chart declaring a license the project has not published would make a distribution claim the
   # copyright holder never granted. #113 owns that decision; until it lands, neither says anything.
-  if grep -qE '^[^#]*org\.opencontainers\.image\.licenses' Dockerfile; then
+  if grep -qE '^[^#]*org\.opencontainers\.image\.licenses' "$dockerfile"; then
     fail 'The Dockerfile declares an image license. MailMcp has published none; #113 owns that decision.'
   else
     pass 'The image declares no license it does not have.'
@@ -309,16 +307,6 @@ verify_the_chart() {
     pass 'The chart declares no license it does not have.'
   fi
 
-  # The migration Job carries no Helm hook, so an upgrade cannot run it.
-  # Anchored to an annotation key at the start of a line, so the template's own explanation of why it carries no
-  # hook does not read as one.
-  if grep -qE '^[[:space:]]*"?helm\.sh/hook' "$chart_directory/templates/migration-job.yaml"; then
-    fail 'The migration Job carries a Helm hook annotation, which would apply the schema on every upgrade.'
-  else
-    pass 'The migration Job carries no Helm hook.'
-  fi
-
-  # Off by default is what keeps it an operator's decision.
   local nightly_render
   nightly_render="$(helm_command template verification mailmcp --values mailmcp/ci/nightly-values.yaml 2>&1)"
   if printf '%s' "$nightly_render" | grep -q 'ghcr-nightly-unsupported'; then

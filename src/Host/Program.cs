@@ -19,21 +19,6 @@ using MailMcp.Infrastructure.Secrets;
 using MailMcp.Mcp;
 using Microsoft.Extensions.Options;
 
-// Ahead of everything, the bootstrap logger included. This process asks the *running* host a question and exits; it
-// composes no configuration and starts nothing, so recording a host start for it would put a start record in the log
-// for every health check the container platform runs.
-if (ContainerHealthProbe.IsRequestedBy(args))
-{
-    using var probeClient = new HttpClient { Timeout = ContainerHealthProbe.RequestTimeout };
-
-    return await ContainerHealthProbe.ProbeAsync(
-        probeClient,
-        ContainerHealthProbe.ResolveProbeAddress(
-            Environment.GetEnvironmentVariable(ContainerHealthProbe.PortsVariableName),
-            Environment.GetEnvironmentVariable(ContainerHealthProbe.PathVariableName)),
-        CancellationToken.None);
-}
-
 // Composed before anything else, CreateBuilder included, so that a malformed appsettings.json, a failure during
 // composition, and a failed host start are all reported rather than only printed. The pipeline the container owns
 // does not exist until Build has returned, and on a startup failure it never flushes.
@@ -395,8 +380,3 @@ catch (Exception exception)
 
     throw;
 }
-
-// Written out because the health probe above returns a code, which makes this program's result an exit code rather
-// than nothing. A host that ran and stopped on request ended successfully; every other ending leaves through the
-// rethrow above and never reaches here.
-return 0;

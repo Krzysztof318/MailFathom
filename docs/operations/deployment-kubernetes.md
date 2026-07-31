@@ -8,7 +8,7 @@ otherwise.
 | --- | --- |
 | Deployment, Service, ConfigMap, ServiceAccount | Any `Secret` |
 | An optional Ingress | Any certificate material |
-| An opt-in migration Job | Any database |
+|  | Any database, and any schema step |
 
 ## What you supply
 
@@ -111,57 +111,27 @@ therefore does *not* become ready, and its log says why:
 DatabaseSchemaOutOfDateException: The database has not applied 1 migration(s) this build defines: 20260730152610_Initial.
 ```
 
-That is the design. The Job that answers it is off by default and carries **no Helm hook**, because a hook would run it
-on every install and upgrade — the automatic migration this whole arrangement exists to prevent. Take a backup, then:
+That is the design, and the chart deliberately renders nothing that answers it: a Job carrying a Helm hook would be the
+automatic migration this whole arrangement exists to prevent, and one without a hook would still need a schema artifact
+the project has not published.
 
-```bash
-helm upgrade mailmcp deploy/helm/mailmcp --namespace mailmcp --reuse-values \
-  --set migrations.enabled=true \
-  --set migrations.image.repository=<namespace>/mailmcp-migrations \
-  --set migrations.image.tag=<the same version> --wait
+> **The schema artifact does not exist yet.** The reviewed, idempotent artifact and the step that applies it are
+> tracked by [issue #126](https://github.com/Krzysztof318/MailMcp/issues/126). Until it ships, apply the schema to the
+> database yourself before the pod can become ready — a `psql` Job of your own, a migration run from outside the
+> cluster, or whatever your database's operations already use. Take a backup first, and read the SQL before applying
+> it.
 
-kubectl --namespace mailmcp logs job/mailmcp-migrate-<revision>
+Two things about the role that applies it are worth knowing now, because they outlive whatever runs the SQL:
 
-helm upgrade mailmcp deploy/helm/mailmcp --namespace mailmcp --reuse-values --set migrations.enabled=false
-kubectl --namespace mailmcp rollout restart deployment/mailmcp
-```
+**It needs privileges the service's role does not.** The schema installs the `vector` extension, which PostgreSQL does
+not permit an ordinary role to create. Either install the extension out of band, as the Compose deployment's
+initialization script does, or run the schema step as a more privileged role.
 
-The Job is named with the release revision, so re-enabling it creates a new one rather than colliding with the
-completed one — a Job's pod template is immutable and a same-named apply would fail instead of running.
-
-`migrations.image.tag` must equal `image.tag`. The two images come out of one Dockerfile and one restore, and applying
-a schema from another version is not repaired by naming the right image afterwards — only from a backup. Set
-`migrations.allowVersionMismatch=true` if a pairing is genuinely deliberate.
-
-**The migration role needs privileges the service's does not.** The schema installs the `vector` extension, which
-PostgreSQL does not permit an ordinary role to create. Provision a second, more privileged credential and name it:
-
-```yaml
-migrations:
-  user: mailmcp_migrator
-  passwordSecretKey: mailmcp-migrator-password
-```
-
-Leaving both empty reuses the service's credential, which is simpler and less contained.
-
-Naming a separate role has a consequence the Job handles for you, and it is worth knowing about: PostgreSQL makes
-whoever runs the DDL the **owner** of every table, sequence, and index it creates, and ownership grants nothing to
-anybody else. A split without more would leave the Job succeeding and MailMcp then failing on permission errors
-against a schema that plainly exists. The Job therefore grants `database.user` the DML privileges it needs, and sets
-`ALTER DEFAULT PRIVILEGES` so whatever a later migration creates is covered without this being remembered again. It
-grants rather than transfers ownership, because handing the tables over would leave the migrator unable to alter them
-next time without membership in the runtime role — the privilege the split exists to avoid.
-
-**TLS for the migration is configured separately.** `database.extraConnectionParameters` are Npgsql keywords and reach
-only the application's connection; the Job speaks libpq, which reads none of them and would otherwise fall back to
-`sslmode=prefer` while applying privileged DDL. The chart refuses to render when the application configures TLS and
-the Job does not:
-
-```yaml
-migrations:
-  sslMode: verify-full
-  sslRootCertSecretKey: postgres-ca.pem   # a key in the same mounted Secret
-```
+**A separate role leaves ownership behind.** PostgreSQL makes whoever runs the DDL the **owner** of every table,
+sequence, and index it creates, and ownership grants nothing to anybody else — so a schema applied by `mailmcp_migrator`
+leaves MailMcp failing on permission errors against a schema that plainly exists. Grant `database.user` the DML
+privileges it needs and set `ALTER DEFAULT PRIVILEGES` so later migrations are covered too. Grant rather than transfer
+ownership: handing the tables over would leave the migrator unable to alter them next time.
 
 ## TLS and reaching it
 
@@ -194,6 +164,32 @@ Without an Ingress the Service is reachable only inside the cluster:
 ```bash
 kubectl --namespace mailmcp port-forward service/mailmcp 8080:8080
 ```
+
+## What the pod serves by default
+
+Plain HTTP on port 8080, with no authentication, no CORS gate, no mTLS, and no rate limiting. That is the usual
+Kubernetes arrangement — an ingress or a service mesh in front of the workload owns TLS termination and whatever
+client authentication the cluster imposes — and it is why the chart neither templates certificate material nor asks
+for a credential to start.
+
+Every one of those is a MailMcp setting rather than a chart value, so turning one on is a ConfigMap entry under
+`config.files` and nothing else changes:
+
+| To turn on | Configure | Reference |
+| --- | --- | --- |
+| API keys | `McpEndpoint:Authentication` and `McpEndpoint:ApiKeys` | [Authentication](mcp-endpoint.md#authentication) |
+| An `Origin` gate | `McpEndpoint:Cors` | [CORS and the `Origin` header](mcp-endpoint.md#cors-and-the-origin-header) |
+| TLS terminated by the pod itself | `McpEndpoint:Https:Endpoints` | [HTTPS and your own domain](mcp-endpoint.md#https-and-your-own-domain) |
+| Client certificates | `McpEndpoint:ClientCertificateProfiles` | [Client certificates](mcp-endpoint.md#client-certificates) |
+| Rate limits | `McpEndpoint:RateLimiting` | [Rate limiting](mcp-endpoint.md#rate-limiting) |
+
+Configuring `Https:Endpoints` takes over the host's listeners, so the chart's `service.port` and the container port have
+to match what the profiles bind. That is a deliberate step rather than the default: in a cluster, TLS at the ingress is
+usually what an operator already has.
+
+The credentials any of them reads stay `file:` references into the mounted Secret. Keep them out of `config.files` and
+out of `config.extraEnvironment`; the values schema rejects an environment name that reads like a credential, because
+an environment block is visible to anything that can read `/proc` and cannot be erased from process memory.
 
 ## Security defaults
 
@@ -245,9 +241,9 @@ helm rollback mailmcp <revision> --namespace mailmcp
 helm uninstall mailmcp --namespace mailmcp
 ```
 
-`helm rollback` returns the workload to a previous image. **It does not return the schema.** The migration script only
-moves forward, so rolling back to an image that expects an earlier schema means restoring the database from a backup
-taken before the migration.
+`helm rollback` returns the workload to a previous image. **It does not return the schema.** A migration only moves
+forward, so rolling back to an image that expects an earlier schema means restoring the database from a backup taken
+before the migration.
 
 Uninstalling removes every object the chart owns. It removes **no** data: the database is not the chart's, and the
 Secret was created outside it and stays.
@@ -274,8 +270,12 @@ indistinguishable from a release in a query that reads that label.
 
 ```bash
 bash scripts/verify-deployment-assets.sh          # lint, render, determinism, and every schema guard
-bash scripts/smoke-deployment.sh kubernetes       # install, migrate, become ready, upgrade, uninstall, in a kind cluster
+bash scripts/smoke-deployment.sh kubernetes       # install into a kind cluster, observe the refusal, upgrade, uninstall
 ```
+
+The Kubernetes smoke stops where a deployment without a schema stops: the pod reaches the database through the chart's
+own wiring and refuses to serve. Readiness joins that script in the change that supplies the schema step. Neither
+script runs on a pull request; the `Deployment assets` workflow that runs both is manual dispatch only.
 
 `deploy/helm/mailmcp/ci/` holds the two values files those use. They are excluded from the packaged chart and name no
 real image and no real database.

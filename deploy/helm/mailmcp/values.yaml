@@ -206,58 +206,9 @@ priorityClassName: ""
 podAnnotations: {}
 podLabels: {}
 
-### The schema migration
+### The schema
 #
-# Off, and it stays off during an ordinary install or upgrade. MailMcp never applies a schema change while starting —
-# it verifies the schema and refuses to serve against one it does not recognize — and this Job is the explicit,
-# operator-invoked answer to that refusal. It carries no Helm hook annotation on purpose: a hook would run it on every
-# upgrade, which is the automatic migration the whole arrangement exists to prevent.
-#
-# Enable it deliberately, watch it, then set it back to false:
-#
-#   helm upgrade <release> <chart> --set migrations.enabled=true --wait
-#   kubectl logs job/<release>-mailmcp-migrate-<revision>
-#
-# The Job is named with the release revision, so re-enabling it creates a new one rather than colliding with the
-# completed one it should not silently replace.
-migrations:
-  enabled: false
-  image:
-    repository: ""
-    tag: ""
-    digest: ""
-  # The role the migration connects as needs privileges the service's does not: the schema installs the `vector`
-  # extension, which PostgreSQL does not permit an ordinary role to create. Name a separate key when the deployment
-  # provisions a separate, more privileged credential; leaving it empty reuses the service's.
-  #
-  # Setting `user` to something other than `database.user` also makes the Job grant the service's role the privileges
-  # it needs on what the migration creates. PostgreSQL makes whoever runs the DDL the owner, and ownership grants
-  # nothing to anybody else, so the split would otherwise leave the Job succeeding and MailMcp failing on permissions.
-  passwordSecretKey: ""
-  user: ""
-
-  # TLS for the Job's own connection. `database.extraConnectionParameters` configures Npgsql and reaches only the
-  # application; the Job speaks libpq, which reads none of those keywords. The chart refuses to render when the
-  # application configures TLS and this does not, because the alternative is privileged DDL applied over a connection
-  # that verifies nothing.
-  #
-  # `sslMode` is a libpq value — `require`, `verify-ca`, or `verify-full`. `sslRootCertSecretKey` names the key in the
-  # mounted Secret holding the authority to verify against, and is needed only for the two verifying modes against a
-  # private authority.
-  sslMode: ""
-  sslRootCertSecretKey: ""
-
-  # The two images come out of one Dockerfile and one restore, so the chart refuses a tag that disagrees with
-  # `image.tag`. Applying a schema from another version is not repaired by naming the right image afterwards — only
-  # from a backup — which is why this is refused rather than warned about.
-  allowVersionMismatch: false
-
-  backoffLimit: 0
-  ttlSecondsAfterFinished: 86400
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      cpu: "1"
-      memory: 512Mi
+# The chart applies none and renders nothing that could. MailMcp never applies a schema change while starting — it
+# verifies the schema and refuses to serve against one it does not recognize — and the reviewed artifact that answers
+# that refusal is #126's, together with the Job or command that runs it. Until it exists, establish the schema before
+# installing this chart; `docs/operations/deployment-kubernetes.md` describes the step.

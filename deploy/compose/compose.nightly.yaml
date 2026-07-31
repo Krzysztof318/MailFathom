@@ -33,9 +33,3 @@ services:
       io.mailmcp.release-channel: "ghcr-nightly-unsupported"
     environment:
       MAILMCP_NIGHTLY_ACKNOWLEDGED: ${MAILMCP_NIGHTLY_ACKNOWLEDGED:?Set MAILMCP_NIGHTLY_ACKNOWLEDGED=i-understand-this-is-unsupported to deploy a nightly build. It is not a release, its schema and configuration may move without notice, and no support or upgrade path applies to it. Compose can only require that this variable is set; it cannot compare the phrase, which the Helm chart does.}
-
-  migrations:
-    image: ghcr.io/krzysztof318/mailmcp-migrations:${MAILMCP_NIGHTLY_TAG:?Name the nightly identifier to deploy. Nightly builds are unsupported development output and carry no release promise.}
-    build: !reset null
-    labels:
-      io.mailmcp.release-channel: "ghcr-nightly-unsupported"

@@ -5,12 +5,14 @@
 #
 #   cp .env.example .env
 #   docker compose up -d postgres
-#   docker compose --profile migrate run --rm migrations      # explicit, and only when you mean it
+#   # apply the database schema — see docs/operations/deployment-compose.md
 #   docker compose up -d
 #
-# The migration step is separate on purpose. MailMcp never applies a schema change while starting — it verifies the
-# schema and refuses to serve against one it does not recognize — so bringing the stack up after a version change tells
-# you whether a migration is outstanding rather than silently applying one.
+# This file applies no schema and contains nothing that can. MailMcp never applies a schema change while starting — it
+# verifies the schema and refuses to serve against one it does not recognize — so bringing the stack up after a version
+# change tells you whether a migration is outstanding rather than silently applying one. The reviewed artifact that
+# answers that refusal is #126's, and until it exists the schema step is an explicit operator action the documentation
+# describes.
 
 name: mailmcp
 
@@ -51,8 +53,9 @@ services:
       start_period: 30s
     networks:
       - backend
-    # No published port. The database is reachable from the service and from a one-shot migration container on the same
-    # network, and from nothing else; publish one explicitly and temporarily when a backup or an inspection needs it.
+    # No published port. The database is reachable from the service and from anything else an operator attaches to this
+    # network, and from nothing else; publish one explicitly and temporarily when a backup, a schema step, or an
+    # inspection needs it.
     logging:
       driver: json-file
       options:
@@ -71,7 +74,7 @@ services:
     image: ${MAILMCP_IMAGE:-mailmcp:local}
     build:
       context: ../..
-      dockerfile: Dockerfile
+      dockerfile: deploy/docker/Dockerfile
       target: runtime
     # Build rather than pull. Without this, Compose treats a service carrying both `image` and `build` as pullable
     # first and only builds when the pull fails — and `mailmcp:local` is an unqualified name, so the attempt goes to
@@ -115,8 +118,10 @@ services:
       # port to a network means exposing synchronized mail without transport protection; put a reverse proxy in front
       # of it and change MAILMCP_HTTP_BIND only once that proxy is what listens publicly.
       - "${MAILMCP_HTTP_BIND:-127.0.0.1}:${MAILMCP_HTTP_PORT:-8080}:8080"
-    # The image declares its own health check, which asks the readiness endpoint from inside the container. Nothing is
-    # restated here; `docker compose ps` reports it.
+    # No health check. The image declares none — a chiseled image has no shell or HTTP client to run one in — and one
+    # written here would need the same thing: a client inside the container. `/health` and `/alive` are served on the
+    # published port and can be asked from outside; #179 is what makes the probe surface something a deployment
+    # configures rather than something each shape improvises.
     read_only: true
     tmpfs:
       # The one path the runtime needs to write. Everything else, /app included, is owned by root and mounted
@@ -143,41 +148,6 @@ services:
         limits:
           cpus: ${MAILMCP_CPU_LIMIT:-2}
           memory: ${MAILMCP_MEMORY_LIMIT:-1g}
-
-  migrations:
-    # Behind a profile, so `docker compose up` never starts it. It runs once, exits, and is the only thing in this file
-    # that changes a schema.
-    profiles:
-      - migrate
-    image: ${MAILMCP_MIGRATIONS_IMAGE:-mailmcp-migrations:local}
-    build:
-      context: ../..
-      dockerfile: Dockerfile
-      target: migrations
-    # For the reason the service above gives, and it matters more here: an image pulled instead of built would be
-    # applying a schema.
-    pull_policy: ${MAILMCP_PULL_POLICY:-build}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      PGHOST: postgres
-      PGPORT: "5432"
-      PGDATABASE: ${MAILMCP_DATABASE:-mailmcp}
-      PGUSER: ${MAILMCP_DATABASE_ROLE:-mailmcp}
-      MAILMCP_MIGRATION_PASSWORD_FILE: /run/secrets/mailmcp-database-password
-    secrets:
-      - mailmcp-database-password
-    read_only: true
-    tmpfs:
-      - /tmp:mode=1777,size=16m
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    restart: "no"
-    networks:
-      - backend
 
 networks:
   # What the database is reachable on, and nothing that is not on it can reach the database. `internal` keeps this

@@ -40,7 +40,6 @@ jobs:
     outputs:
       build: ${{ github.event_name != 'pull_request' || steps.filter.outputs.build == 'true' }}
       format: ${{ github.event_name != 'pull_request' || steps.filter.outputs.format == 'true' }}
-      deployment: ${{ github.event_name != 'pull_request' || steps.filter.outputs.deployment == 'true' }}
     steps:
       # A manual dispatch has no pull request to compare against, so the filter is skipped and both
       # outputs fall back to `true` above: an explicitly started run always does the work.
@@ -79,22 +78,6 @@ jobs:
               - 'Directory.Build.targets'
               - 'Directory.Packages.props'
               - 'MailMcp.slnx'
-              - 'global.json'
-            # The deployment assets are verified against the application they deploy, not only against themselves:
-            # the smoke run asserts that the host refuses a schema it does not recognize, that its readiness and
-            # liveness endpoints answer, and that it shuts down cleanly. A change under `src/**` can move any of
-            # those without touching a single file under `deploy/`, which is why the whole source tree is here.
-            deployment:
-              - 'Dockerfile'
-              - '.dockerignore'
-              - 'deploy/**'
-              - 'scripts/verify-deployment-assets.sh'
-              - 'scripts/smoke-deployment.sh'
-              - 'src/**'
-              - '.github/workflows/ci.yml'
-              - 'Directory.Build.props'
-              - 'Directory.Packages.props'
-              - 'NuGet.config'
               - 'global.json'
 
   build-and-unit-test:
@@ -195,70 +178,12 @@ jobs:
       - name: Verify formatting
         run: dotnet format MailMcp.slnx --verify-no-changes --verbosity diagnostic
 
-  deployment-assets:
-    name: Deployment assets
-    needs:
-      - detect-changes
-    if: >-
-      needs.detect-changes.outputs.deployment == 'true'
-      && (github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
-      - name: Set up Helm
-        uses: azure/setup-helm@v5
-        with:
-          version: v3.19.0
-
-      # The static half: what can be decided by reading the files. It runs first because it is seconds rather than
-      # minutes, so a moving base-image tag or a schema that stopped rejecting a nightly fails before anything builds.
-      - name: Verify deployment assets
-        run: bash scripts/verify-deployment-assets.sh
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      # No QEMU step, deliberately. The application is published as portable IL on the build platform, so the
-      # per-architecture stages only pull a base image and copy into it — nothing executes under emulation, and a
-      # matrix that needed it would be paying minutes for a result this arrangement gets for free.
-      - name: Build both images for linux/amd64 and linux/arm64
-        run: |
-          set -euo pipefail
-          for target in runtime migrations; do
-            docker buildx build \
-              --platform linux/amd64,linux/arm64 \
-              --target "$target" \
-              --cache-from type=gha,scope="$target" \
-              --cache-to type=gha,mode=max,scope="$target" \
-              .
-          done
-
-      # Starts the deployment for real. The Compose half proves the image runs unprivileged on a read-only root
-      # filesystem, that the schema step is separate and idempotent, and that shutdown is a stop rather than a kill.
-      - name: Smoke the Compose deployment
-        run: bash scripts/smoke-deployment.sh compose
-
-      - name: Create an ephemeral Kubernetes cluster
-        uses: helm/kind-action@v1
-        with:
-          cluster_name: mailmcp-smoke
-          # The script creates and deletes its own cluster; this step only installs kind and kubectl onto the runner.
-          install_only: true
-
-      - name: Smoke the Helm chart
-        run: bash scripts/smoke-deployment.sh kubernetes
-
   required-ci:
     name: Required CI
     needs:
       - detect-changes
       - build-and-unit-test
       - dotnet-format
-      - deployment-assets
     # `always()` rather than `success() || failure()`, because this job has to report on a run that was
     # cancelled as well as on one whose dependencies were skipped. Anything weaker leaves the required
     # check itself skipped, which is the state this whole arrangement exists to avoid.
@@ -273,7 +198,6 @@ jobs:
           DETECT_CHANGES_RESULT: ${{ needs.detect-changes.result }}
           BUILD_AND_UNIT_TEST_RESULT: ${{ needs.build-and-unit-test.result }}
           DOTNET_FORMAT_RESULT: ${{ needs.dotnet-format.result }}
-          DEPLOYMENT_ASSETS_RESULT: ${{ needs.deployment-assets.result }}
         run: |
           set -euo pipefail
 
@@ -306,7 +230,6 @@ jobs:
           require_success 'Detect changes' "$DETECT_CHANGES_RESULT"
           require_success_or_skipped 'Build and unit test' "$BUILD_AND_UNIT_TEST_RESULT"
           require_success_or_skipped 'dotnet format' "$DOTNET_FORMAT_RESULT"
-          require_success_or_skipped 'Deployment assets' "$DEPLOYMENT_ASSETS_RESULT"
 
           if [[ "$verdict" -eq 0 ]]; then
             echo "All pull-request checks completed or were not applicable to this change."

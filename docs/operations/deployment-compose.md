@@ -73,33 +73,34 @@ password is never on a path the service can read.
 
 ```bash
 docker compose up -d postgres                              # creates the role, the database, and the vector extension
-docker compose --profile migrate run --rm migrations       # applies the schema, once, deliberately
+# apply the schema — see below
 docker compose up -d                                       # starts MailMcp
 ```
 
-The middle step is separate on purpose. MailMcp never applies a schema change while starting: it verifies the schema
-and refuses to serve against one it does not recognize. Bringing the stack up after a version change therefore *tells*
-you a migration is outstanding rather than silently applying one. Take a backup before you answer.
+The middle step is separate on purpose, and nothing in this deployment performs it. MailMcp never applies a schema
+change while starting: it verifies the schema and refuses to serve against one it does not recognize. Bringing the
+stack up after a version change therefore *tells* you a migration is outstanding rather than silently applying one.
+Take a backup before you answer.
 
 ```
 MailMcp.Application.Persistence.DatabaseSchemaOutOfDateException: The database has not applied 1 migration(s) this
 build defines: 20260730152610_Initial.
 ```
 
-Read the SQL before applying it:
-
-```bash
-docker compose --profile migrate run --rm migrations --print | less
-```
-
-Running the migration again changes nothing — it consults `__EFMigrationsHistory` and applies only what is missing.
+> **The schema artifact does not exist yet.** The reviewed, idempotent artifact a released installation applies — and
+> the command that applies it — are tracked by [issue #126](https://github.com/Krzysztof318/MailMcp/issues/126). Until
+> it ships, establishing the schema is your own step against the `mailmcp` database: publish the database port
+> temporarily, or attach a `psql` container to the `backend` network, and apply the migrations this build defines.
+> Whatever you use, apply it once, read it before applying it, and take a backup first. That is the same discipline the
+> shipped artifact will enforce; what is missing is the artifact, not the rule.
 
 ### What the first `up` of PostgreSQL does
 
 `postgres/10-create-mailmcp-database.sh` runs once, from the image's own initialization hook, on an empty data
 directory. It creates the `mailmcp` role and database, and installs the `vector` extension while a superuser is still
-the one connected. MailMcp then connects as a role that owns its database and is not a superuser, and the migration's
-`CREATE EXTENSION IF NOT EXISTS vector` finds the extension already present.
+the one connected. MailMcp then connects as a role that owns its database and is not a superuser, and a schema step's
+`CREATE EXTENSION IF NOT EXISTS vector` finds the extension already present rather than needing a privilege that role
+does not have.
 
 A data directory that already exists is never re-initialized, so editing that script changes nothing about a running
 deployment.
@@ -107,11 +108,16 @@ deployment.
 ## Checking it
 
 ```bash
-docker compose ps                                    # both services report healthy
+docker compose ps                                    # PostgreSQL reports healthy; MailMcp reports running
 curl -fsS http://127.0.0.1:8080/health               # readiness, including the database
 curl -fsS http://127.0.0.1:8080/alive                # liveness, the process alone
 docker compose logs -f mailmcp
 ```
+
+The MailMcp container declares no Docker health check. Its image carries no shell and no HTTP client for one to run
+in, so the two endpoints above are asked from outside the container instead;
+[issue #179](https://github.com/Krzysztof318/MailMcp/issues/179) is what turns the probe surface into something a
+deployment configures.
 
 The MCP endpoint answers at `/mcp` and is off until the configuration enables it. Read
 [the MCP endpoint](mcp-endpoint.md) before you do; an enabled endpoint must state how it is authenticated, and there is
@@ -124,21 +130,21 @@ another interface exposes synchronized mail without transport protection. Change
 reverse proxy on the `frontend` network is what listens publicly, and give that proxy the certificate.
 
 PostgreSQL publishes no port at all. It sits on `backend`, which is declared `internal`, so it is reachable from
-MailMcp and from a one-shot migration container and from nothing else.
+MailMcp and from whatever else you attach to that network — a schema step or a backup container — and from nothing
+else.
 
 ## Upgrading
 
 ```bash
 docker compose pull                                        # or: docker compose build
 docker compose up -d
-# if the host reports a pending migration:
-docker compose --profile migrate run --rm migrations
+# if the host reports a pending migration, apply the schema and bring it up again:
 docker compose up -d
 ```
 
-Rolling back is the same sequence with the previous image. **A schema change is not rolled back by it.** The migration
-script only moves forward; going back to an image that expects an earlier schema means restoring the database from a
-backup taken before the migration, which is the reason the migration is a step you decide to take.
+Rolling back is the same sequence with the previous image. **A schema change is not rolled back by it.** A migration
+only moves forward; going back to an image that expects an earlier schema means restoring the database from a backup
+taken before the migration, which is the reason applying one is a step you decide to take.
 
 ## Backup and what survives removal
 
@@ -162,8 +168,8 @@ The files under `secrets/` and `config/` are yours and are never touched by eith
 ## Uninstalling
 
 ```bash
-docker compose --profile migrate down --remove-orphans      # keeps the mail
-docker compose --profile migrate down --volumes --remove-orphans   # destroys it
+docker compose down --remove-orphans                # keeps the mail
+docker compose down --volumes --remove-orphans      # destroys it
 ```
 
 ## The image

@@ -2,37 +2,30 @@
 
 ### The MailMcp container image.
 #
-# Two images come out of this file, and they are deliberately different things:
+# One image comes out of this file: the service, built with `--target runtime`. It applies no schema change, ever. It
+# carries no migration tool, no SQL, and no credential that could apply one, which is what makes "the host never
+# applies migrations" a property of the image rather than a rule somebody has to remember.
 #
-#   --target runtime     the service. It applies no schema change, ever.
-#   --target migrations  the one-shot schema step an operator runs, and only when they mean to.
+# `DatabaseSchemaStartupGate` refuses to start against a schema it does not recognize, and the artifact that answers
+# that refusal is #126's — the reviewed, operator-invoked schema step for a released installation. Nothing here
+# produces or applies one, so a deployment built from this file reaches a database whose schema was established
+# separately and deliberately.
 #
-# Keeping them apart is what makes "the host never applies migrations" a property of the image rather than a rule
-# somebody has to remember. The service image contains no migration tool, no SQL, and no credential that could apply
-# one; `DatabaseSchemaStartupGate` refuses to start against a schema it does not recognize, and the operator's answer
-# to that refusal is the second image.
+# The build context is the repository root, and the ignore-file beside this one is what bounds it:
 #
-# Both are built from the same context and the same restore, so what the service expects and what the migration step
-# produces can never describe two different models.
+#   docker build --target runtime --file deploy/docker/Dockerfile .
 
 # Base images are pinned to explicit patch versions rather than to a floating `10.0`, so a rebuild months from now
-# resolves what this change was reviewed against. Every one of them is recorded in THIRD_PARTY_LICENSES.md.
+# resolves what this change was reviewed against. Both are recorded in THIRD_PARTY_LICENSES.md.
 ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.302-noble
 # `-extra` carries ICU and tzdata. MailMcp decodes internationalized headers, folds case for search, and formats
 # instants for several time zones, so invariant globalization — what the plain chiseled image forces — would quietly
 # change how mail from outside one alphabet is read. The size saved is not worth that.
 ARG DOTNET_ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0.10-noble-chiseled-extra
-# The same server image the AppHost orchestrates locally, used here for its `psql` client. Sharing one pin means the
-# client applying the schema and the server the schema was designed for never drift apart, and the register already
-# reviews it.
-ARG POSTGRES_IMAGE=pgvector/pgvector:0.8.2-pg17
-# Matches the EF Core packages pinned in Directory.Packages.props. A design-time tool one minor version away from the
-# runtime it generates for is a supported combination in EF, but not one this repository has reviewed.
-ARG DOTNET_EF_VERSION=10.0.10
 
 
 ########################################################################################################################
-# Build: restore, publish, and generate the schema script. Runs once, on the build platform.
+# Build: restore and publish. Runs once, on the build platform.
 ########################################################################################################################
 
 # Pinned to BUILDPLATFORM on purpose. The application is published framework-dependent and without an apphost, so its
@@ -77,36 +70,6 @@ RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
         -p:PublishDocumentationFiles=false \
         -p:PublishReferencesDocumentationFiles=false \
         --output /app
-
-# The deployment's migration artifact is an idempotent SQL script, which is what EF Core recommends for a production
-# database and what this repository can review: it is text, it reads the same on every architecture, and it states the
-# schema change in the language the change is actually made in. The alternative — a migration bundle — is a native
-# executable per runtime identifier, needs a runtime-identifier-specific restore that the committed lock files reject,
-# and takes its connection string on a command line where every process on the host can read it.
-#
-# `AGENTS.md` bars invoking `dotnet ef` by hand because a design-time command must see the connection string the
-# orchestration issues rather than an ad-hoc one. `migrations script` is the command that does not: it reads the model
-# and opens no connection, and `MailMcpDbContextDesignTimeFactory` is what answers it. There is no orchestration inside
-# an image build to route it through, and generating the script here rather than committing it is what stops the
-# script and the migrations from ever describing different schemas.
-ARG DOTNET_EF_VERSION
-RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked <<'GENERATE_SCHEMA_SCRIPT'
-set -eu
-dotnet tool install --global dotnet-ef --version "${DOTNET_EF_VERSION}"
-export PATH="${PATH}:/root/.dotnet/tools"
-mkdir -p /schema
-dotnet ef migrations script \
-    --idempotent \
-    --no-build \
-    --configuration Release \
-    --project src/Infrastructure/Infrastructure.csproj \
-    --startup-project src/Host/Host.csproj \
-    --output /schema/mailmcp-schema.sql
-
-# EF writes the script as UTF-8 with a byte-order mark, and psql passes those three bytes to the parser as if they
-# were SQL, which fails on the first statement. Nothing downstream needs the mark: the file is UTF-8 either way.
-sed -i '1s/^\xEF\xBB\xBF//' /schema/mailmcp-schema.sql
-GENERATE_SCHEMA_SCRIPT
 
 
 ########################################################################################################################
@@ -156,42 +119,9 @@ COPY --from=build --chown=root:root /app .
 # path of its own; mount a tmpfs at /tmp, which is where the runtime expects to be able to write.
 USER $APP_UID
 
-# Docker and Podman run a health check as a command *inside* the container, and a chiseled image has no shell and no
-# HTTP client for one to be written in. The runtime it already ships is the answer: the switch below asks the running
-# host's own readiness endpoint over loopback and reports it as an exit code. Kubernetes needs none of this and the
-# chart uses ordinary HTTP probes, which is why nothing here is on the container's critical path.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD ["dotnet", "/app/MailMcp.Host.dll", "--health-probe"]
-
+# No HEALTHCHECK, deliberately. The host serves `/health` and `/alive`, and Kubernetes probes them over HTTP without
+# needing anything from the image — but Docker and Podman run a health check as a command *inside* the container, and a
+# chiseled image has no shell and no HTTP client for one to be written in. Asking the endpoint would therefore mean
+# adding a probe mode to the application itself, which is #179's: it decides the listener, the transport, and whether
+# the probes are served at all. A check written here would be replaced by that change rather than extended by it.
 ENTRYPOINT ["dotnet", "/app/MailMcp.Host.dll"]
-
-
-########################################################################################################################
-# Migrations: the explicit, operator-invoked schema step.
-########################################################################################################################
-
-FROM ${POSTGRES_IMAGE} AS migrations
-
-ARG IMAGE_VERSION=0.0.0-unversioned
-ARG IMAGE_REVISION=unknown
-ARG IMAGE_CREATED=1970-01-01T00:00:00Z
-
-LABEL org.opencontainers.image.title="MailMcp schema migration" \
-      org.opencontainers.image.description="Applies the MailMcp database schema. Run once, by an operator, never by the service." \
-      org.opencontainers.image.source="https://github.com/Krzysztof318/MailMcp" \
-      org.opencontainers.image.version="${IMAGE_VERSION}" \
-      org.opencontainers.image.revision="${IMAGE_REVISION}" \
-      org.opencontainers.image.created="${IMAGE_CREATED}"
-
-# Without `--chmod`, for the reason the runtime stage gives: BuildKit applies the mode to the directories it creates
-# along the way, and a `/schema` without its execute bit cannot be entered by the unprivileged account below. The
-# default is a root-owned 0644 file in a 0755 directory, which is readable and not writable — what this needs.
-COPY --from=build --chown=root:root /schema/mailmcp-schema.sql /schema/mailmcp-schema.sql
-# One file into a directory that already exists, so the mode lands only on the file.
-COPY --chown=root:root --chmod=555 deploy/migrations/apply-schema /usr/local/bin/apply-schema
-
-# `postgres` is the unprivileged account the upstream image already creates. The entrypoint needs no more than the
-# ability to read the script and open a connection.
-USER postgres
-
-ENTRYPOINT ["/usr/local/bin/apply-schema"]

@@ -110,41 +110,6 @@ wrong.
 {{- if not .Values.secrets.existingSecret -}}
   {{- fail "secrets.existingSecret is not set. The chart creates no Secret and templates no credential; create one first and name it here." -}}
 {{- end -}}
-
-{{- if .Values.migrations.enabled -}}
-  {{- if not (or .Values.migrations.image.tag .Values.migrations.image.digest) -}}
-    {{- fail "migrations.enabled is true but neither migrations.image.tag nor migrations.image.digest is set. The migration image is versioned with the application it produces the schema for and cannot be inferred." -}}
-  {{- end -}}
-  {{- if not .Values.migrations.image.repository -}}
-    {{- fail "migrations.enabled is true but migrations.image.repository is not set." -}}
-  {{- end -}}
-
-  {{/*
-    The two images come out of one Dockerfile and one restore, so a matching tag is what makes the schema the running
-    host expects and the schema this Job applies the same schema. A typo here is worse than a typo in the application
-    image: a wrong application image is repaired by naming the right one, while a migration from another version has
-    already written the database and is repaired only from a backup. Only tags are compared — two digests are
-    unrelated strings and say nothing about which versions they are, so a digest pairing states itself.
-  */}}
-  {{- if and
-        .Values.image.tag
-        .Values.migrations.image.tag
-        (ne .Values.image.tag .Values.migrations.image.tag)
-        (not .Values.migrations.allowVersionMismatch) -}}
-    {{- fail (printf "migrations.image.tag is %q while image.tag is %q. The two images are built from one source tree, and applying a schema from another version cannot be undone by changing an image back. Set migrations.allowVersionMismatch=true if this pairing is deliberate." .Values.migrations.image.tag .Values.image.tag) -}}
-  {{- end -}}
-
-  {{/*
-    Npgsql keywords configure the application's connection and nothing else; the Job speaks libpq, which reads none of
-    them. A database reachable only over verified TLS would therefore accept the service and refuse the migration —
-    or, worse, accept an unverified migration connection applying privileged DDL.
-  */}}
-  {{- if and
-        (regexMatch "(?i)sslmode|sslcert|sslrootcert|rootcertificate" .Values.database.extraConnectionParameters)
-        (not .Values.migrations.sslMode) -}}
-    {{- fail "database.extraConnectionParameters configures TLS for the application's connection, but migrations.sslMode is unset and the migration Job speaks libpq, which does not read Npgsql keywords. Set migrations.sslMode, and migrations.sslRootCertSecretKey when the server is verified against a private authority." -}}
-  {{- end -}}
-{{- end -}}
 {{- end -}}
 
 {{/*
@@ -164,22 +129,6 @@ string when empty so Docker Hub's implicit default is not spelled out inconsiste
 {{- printf "%s@%s" $repository .Values.image.digest -}}
 {{- else -}}
 {{- printf "%s:%s" $repository .Values.image.tag -}}
-{{- end -}}
-{{- end -}}
-
-{{- define "mailmcp.migrationsImage" -}}
-{{- $registry := .Values.image.registry -}}
-{{- if eq .Values.image.channel "nightly" -}}
-{{- $registry = "ghcr.io" -}}
-{{- end -}}
-{{- $repository := .Values.migrations.image.repository -}}
-{{- if $registry -}}
-{{- $repository = printf "%s/%s" $registry $repository -}}
-{{- end -}}
-{{- if .Values.migrations.image.digest -}}
-{{- printf "%s@%s" $repository .Values.migrations.image.digest -}}
-{{- else -}}
-{{- printf "%s:%s" $repository .Values.migrations.image.tag -}}
 {{- end -}}
 {{- end -}}
 

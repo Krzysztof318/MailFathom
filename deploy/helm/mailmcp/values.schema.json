@@ -9,8 +9,7 @@
     "secrets",
     "config",
     "service",
-    "probes",
-    "migrations"
+    "probes"
   ],
   "properties": {
     "nameOverride": {
@@ -477,74 +476,6 @@
     },
     "podLabels": {
       "type": "object"
-    },
-    "migrations": {
-      "type": "object",
-      "required": [
-        "enabled",
-        "image"
-      ],
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "Off during an ordinary install or upgrade. The Job it renders is the explicit, operator-invoked schema step; MailMcp never applies a migration itself."
-        },
-        "image": {
-          "type": "object",
-          "properties": {
-            "repository": {
-              "type": "string"
-            },
-            "tag": {
-              "type": "string",
-              "not": {
-                "enum": [
-                  "latest",
-                  "main",
-                  "master",
-                  "stable",
-                  "edge"
-                ]
-              }
-            },
-            "digest": {
-              "type": "string",
-              "pattern": "^$|^sha256:[a-f0-9]{64}$"
-            }
-          },
-          "additionalProperties": false
-        },
-        "passwordSecretKey": {
-          "type": "string"
-        },
-        "user": {
-          "type": "string"
-        },
-        "sslMode": {
-          "type": "string",
-          "enum": ["", "disable", "allow", "prefer", "require", "verify-ca", "verify-full"],
-          "description": "A libpq value, not an Npgsql one. The Job speaks libpq and reads none of database.extraConnectionParameters, so TLS for the connection that applies privileged DDL is configured here."
-        },
-        "sslRootCertSecretKey": {
-          "type": "string",
-          "description": "The key in the mounted Secret holding the authority to verify the server against. Needed only for verify-ca and verify-full against a private authority."
-        },
-        "allowVersionMismatch": {
-          "type": "boolean"
-        },
-        "backoffLimit": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "ttlSecondsAfterFinished": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "resources": {
-          "type": "object"
-        }
-      },
-      "additionalProperties": false
     },
     "global": {
       "type": "object",
