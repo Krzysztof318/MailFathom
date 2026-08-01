@@ -117,6 +117,12 @@ docker build --target runtime --file deploy/docker/Dockerfile \
   --tag mailfathom:local .
 ```
 
+`io.mailfathom.release-channel` states which channel produced the image: `release`, `nightly`, or `local` for a build
+nobody published. The version identifier already separates the channels — a nightly always carries a `-nightly.<n>`
+prerelease identifier and a release never carries one — and this label is what still answers the question once a
+reference has been re-tagged, mirrored, or reduced to a digest, which is the state a reference reaches long before
+anyone asks what it is. It arrives as `IMAGE_RELEASE_CHANNEL`, and its default is deliberately neither channel.
+
 `org.opencontainers.image.licenses` is fixed rather than passed in, at `Apache-2.0`, because it states MailFathom's own
 license and a build must not be able to say otherwise. The label is only the claim a registry indexes; the terms
 themselves are `/app/LICENSE` and `/app/NOTICE`, which arrive as part of the publish output the runtime stage copies.
@@ -140,16 +146,126 @@ role that can read and write rows and nothing more, and give the schema step a r
 deployment installs the extension during initialization, while a superuser is still connected, so neither of its roles
 has to be one.
 
+## Published images
+
+Images are published to the GitHub Container Registry, at `ghcr.io/krzysztof318/mailfathom`. Docker Hub will carry the
+same manifest list under the same digest once issue #235 lands; until then this is the only registry a MailFathom image
+reaches.
+
+**While this repository is private, the package is private too**, so a pull is authenticated even for a nightly:
+
+```bash
+echo "$GITHUB_TOKEN" | docker login ghcr.io --username <your-github-login> --password-stdin
+```
+
+The token is a personal access token with `read:packages`. The publishing run asserts the package's visibility rather
+than trusting the registry's default, and fails when the repository is private and the package is not.
+
+Two channels are published, and what separates them is the version identifier rather than where the image sits:
+
+| Tag | Channel | Moves | Published by |
+| --- | --- | --- | --- |
+| `<major>.<minor>.<patch>` | release | never | `Release`, on an annotated `v<major>.<minor>.<patch>` tag |
+| `latest` | release | to the highest release that carries no prerelease identifier | the same run |
+| `<major>.<minor>.<patch>-nightly.<n>-<short revision>` | nightly | never, until it is pruned | `Nightly` |
+| `nightly` | nightly | to the newest published nightly | the same run |
+
+`latest` is chosen by excluding every version carrying a prerelease identifier and taking the highest of what remains,
+never by taking a maximum — because `main` names the *next* release, a maximum would select a nightly. A patch to an
+older line is a supported release and still does not move `latest`.
+
+A nightly's identifier carries both the run number and the commit it was built from, so the tag says what it is without
+anything having to be inspected; they travel in one dot-separated part because an OCI tag admits no `+` build metadata.
+The consequence is worth knowing: `41-3f1c9ab` contains letters, so SemVer compares it as text rather than as a number,
+and **nightlies do not sort against each other numerically**. Nothing here depends on that — every nightly still sorts
+below the release it previews, `nightly` names the newest one, and retention works from when a version was published —
+but a tool that picks "the newest nightly" by sorting versions will get it wrong. Ask the registry for `nightly`
+instead.
+
+`Release` runs only on a tag push. It refuses to publish before it has checked that the tag is annotated and carries no
+prerelease identifier, that the tagged commit is reachable from `main` or from that line's `release/<major>.<minor>.x`
+branch, that the version equals the tagged commit's own `VersionPrefix`, that it advances its own `major.minor` line,
+and that `CHANGELOG.md` has a non-empty section for it. `scripts/assert-release-tag.sh` is that check, and it runs
+before anything is built.
+
+`Nightly` runs at 00:00 UTC — 02:00 in Europe/Warsaw under CEST, 01:00 under CET — and **publishes nothing when `main`
+has not moved since the last published nightly**. It reads that from the revision the published `nightly` image itself
+carries, so a deleted tag or a pruned package leaves it right rather than stuck. A `workflow_dispatch` builds a snapshot
+whether or not `main` moved, and refuses a ref that is not reachable from `main`.
+
+The newest 30 nightly versions are kept and older ones are deleted, so a channel that publishes every night does not
+grow without bound. Only versions whose every tag is a nightly identifier are ever deleted: a release, `latest`, and an
+attestation manifest are out of that step's reach by construction.
+
+### What a nightly build risks
+
+A nightly is whatever `main` was that night. It is published so a change can be tried, and running one is a decision
+rather than a default — which is why both deployment shapes put an acknowledgement in front of it. What you take on:
+
+- **The database schema may be ahead of any release.** A nightly can carry a schema change that no published migration
+  applies, and MailFathom refuses to start against a schema it does not recognize. Recovering usually means restoring
+  the database rather than downgrading the image.
+- **There is no upgrade path, in either direction.** Nothing tests that yesterday's nightly upgrades to today's, that a
+  nightly upgrades to the release that follows it, or that a release can be put back after one. A production database
+  that a nightly has touched may not be usable by a release.
+- **The four public surfaces may move without notice.** A configuration key can be renamed, a tool contract can change,
+  a default can flip, and none of it earns a changelog entry until the release that contains it is prepared.
+- **It is not supported and carries no promise.** No defect report about a nightly is a release defect, and no nightly
+  is patched — the fix is the next nightly.
+- **It disappears.** Only the newest 30 are kept, so a nightly you deployed can stop being pullable, which is enough to
+  break a node that has to re-pull the image.
+- **The vulnerability scan does not block it.** A `HIGH` or `CRITICAL` finding refuses to publish a release and is only
+  reported on a nightly, so a nightly may carry a finding a release never would.
+
+Use a release for anything you are not prepared to rebuild from scratch. Where a nightly is the right answer — trying a
+change, reproducing a defect, previewing what the next release will contain — pin the exact `-nightly.<n>-<short revision>` tag or the
+digest rather than the moving `nightly` tag, so what you are running does not change under you.
+
 ## Verification
 
 The `Container image` workflow builds this file for `linux/amd64` and `linux/arm64` and stops there. It is manual
-dispatch only and publishes nothing; no registry credential reaches it.
+dispatch only and publishes nothing; no registry credential reaches it, and it is what proves a Dockerfile change still
+builds without waiting for a release.
 
-Everything beyond "it builds" — that the container runs unprivileged on a read-only root filesystem, reads its mounted
-configuration, resolves its mounted secret, reaches the database, and then refuses an unrecognized schema — belongs to
-the release pipeline issue #156 owns, which tests, builds, and publishes the deployment assets in one place. Until it
-exists, a change here is reviewed by reading it and, where the change is worth running, by starting the Compose
-deployment by hand as [Deploying with Docker Compose](deployment-compose.md) describes.
+Publication runs the gates instead, in an order that spends the cheap ones first:
+
+1. **`Build, test, format, and migrations`**, against the commit being published rather than against a branch — the
+   build, the unit-test and coverage gate, `dotnet format`, and the check that no model change outran its migration.
+   Both channels wait for all four. `CI` calls the same workflow for a pull request, so "this image passed CI" is one
+   claim about one definition rather than about a copy of it. What `CI` keeps to itself is the part that is about a
+   pull request: skipping work the changed files cannot affect, and waiting for a draft to be marked ready. A
+   publication skips neither.
+
+   The migration check is the one worth naming here rather than leaving to `CI`: an image whose committed model
+   snapshot describes a schema no migration produces would refuse to start against any database an operator can
+   actually have, and a nightly is installable long before a tag exists to catch it.
+2. **The integration suite**, for a release only, and only after CI has passed. It starts PostgreSQL, applies the
+   baseline migration, and asserts against the result, which is minutes of container time no commit a unit test would
+   have rejected is worth. A nightly does not run it.
+3. **The image gates.** The image is built for one architecture, started, and required to report the version and
+   revision its labels claim, to run as the unprivileged `1654` account, and to expose both listeners; then Trivy scans
+   it, which refuses to publish a release carrying a fixable `HIGH` or `CRITICAL` finding and only reports one on a
+   nightly.
+
+Only then is the multi-architecture manifest list built and pushed. After the push it is inspected by digest and
+required to carry both platforms and to identify itself as the channel and version it was published as. A failure
+anywhere above publishes nothing.
+
+A published image can be verified the same way from outside:
+
+```bash
+docker buildx imagetools inspect ghcr.io/krzysztof318/mailfathom:latest
+gh attestation verify oci://ghcr.io/krzysztof318/mailfathom:latest --repo Krzysztof318/MailFathom
+```
+
+The first prints the manifest list, its platforms, and the labels above. The second checks the signed provenance
+statement that says this digest was built by this repository's workflow from a named commit; a release carries that
+attestation in the registry as well, so verification does not depend on reaching GitHub's attestation store.
+
+What no gate covers is the deployment around the image — that it reads its mounted configuration, resolves its mounted
+secret, reaches a real database, and then refuses an unrecognized schema. A change there is reviewed by reading it and,
+where it is worth running, by starting the Compose deployment by hand as
+[Deploying with Docker Compose](deployment-compose.md) describes.
 
 ## Where the deployments are
 

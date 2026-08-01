@@ -1,0 +1,136 @@
+name: Release
+
+# What turns a commit into a release: an annotated `v<major>.<minor>.<patch>` tag, and nothing else. A merge to `main`
+# publishes nothing, a manual dispatch does not exist here, and no branch push reaches this workflow — so the decision
+# that a version is real stays the owner's deliberate act, per
+# docs/decisions/0004-versioning-and-release-policy.md.
+#
+# Everything that could make a release wrong is asserted before anything is built. A tag that disagrees with the version
+# its own commit declares, that repeats or moves backwards on its line, that names a commit which never merged, or whose
+# changelog says nothing, fails here — while deleting the tag is still the whole remedy.
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Never cancels a run in progress. Cancelling a publication half-way is exactly the state this pipeline is built to
+# avoid, and two release tags pushed close together are two different versions rather than a race.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  assert:
+    name: Assert the release tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.assert.outputs.version }}
+      revision: ${{ steps.assert.outputs.revision }}
+      tags: ${{ steps.assert.outputs.tags }}
+    steps:
+      # The whole history and every tag, because the assertions read them: reachability from `main` or from a release
+      # branch, and the highest existing tag on this release's own line.
+      - name: Check out the tagged commit with its history
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Assert the tag against the commit it names
+        id: assert
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          version="$(bash scripts/assert-release-tag.sh "$RELEASE_TAG")"
+          revision="$(git rev-list -n 1 "refs/tags/${RELEASE_TAG}")"
+
+          # `latest` is what an operator gets by not choosing, so it moves only to the highest stable release — chosen
+          # by taking the highest of the tags that carry no prerelease identifier, never by taking a maximum over every
+          # tag present. A patch to an older line is a supported release and still not the newest one, and this is what
+          # gives that answer without a rule of its own.
+          highest_release="$(git tag --list 'v*' |
+            grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+            sed 's/^v//' |
+            sort --version-sort |
+            tail -n 1)"
+
+          image_tags="$version"
+
+          if [[ "$highest_release" == "$version" ]]; then
+            image_tags="${image_tags}"$'\n'"latest"
+            echo "${version} is the highest release, so it takes over 'latest'."
+          else
+            echo "${highest_release} is higher than ${version}, so 'latest' stays where it is."
+          fi
+
+          {
+            printf 'version=%s\n' "$version"
+            printf 'revision=%s\n' "$revision"
+            printf 'tags<<TAGS\n%s\nTAGS\n' "$image_tags"
+          } >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Publish
+    needs:
+      - assert
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/publish-container-image.yml
+    with:
+      channel: release
+      ref: ${{ needs.assert.outputs.revision }}
+      version: ${{ needs.assert.outputs.version }}
+      tags: ${{ needs.assert.outputs.tags }}
+      # A release publishes nothing while a fixable vulnerability is in it. The nightly channel reports the same finding
+      # and publishes anyway; that difference is the channels' whole point.
+      block-on-vulnerabilities: true
+
+  announce:
+    name: Publish the GitHub release
+    needs:
+      - assert
+      - publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      # The notes are the changelog section, not a list of pull-request titles: no arrangement of titles can state that
+      # a release cannot be deployed over the previous release's data, which is the most important sentence a MailFathom
+      # release note will ever carry.
+      - name: Create or update the release from the changelog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.assert.outputs.version }}
+          IMAGE: ${{ needs.publish.outputs.image }}
+          DIGEST: ${{ needs.publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+
+          notes_file="$(mktemp)"
+
+          {
+            bash scripts/read-changelog-section.sh "$VERSION"
+            printf '\n## The published image\n\n```\ndocker pull %s:%s\ndocker pull %s@%s\n```\n' \
+              "$IMAGE" "$VERSION" "$IMAGE" "$DIGEST"
+          } > "$notes_file"
+
+          # Idempotent, because a re-run of a release must not fail on the release it already created.
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --notes-file "$notes_file"
+          else
+            gh release create "$RELEASE_TAG" --title "MailFathom $VERSION" --notes-file "$notes_file" --verify-tag
+          fi

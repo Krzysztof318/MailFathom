@@ -7,11 +7,11 @@ Secrets:  {{ .Values.secrets.existingSecret }}, mounted read-only at {{ .Values.
   ############################################################################
   #  UNSUPPORTED: this release deploys a GHCR nightly build.                 #
   #                                                                          #
-  #  A nightly is whatever main happened to be when someone dispatched a     #
-  #  build. It is not a release: it carries no version promise, it may       #
-  #  expect a schema no published migration produces, and no support or      #
-  #  upgrade path applies to it. Move to a Docker Hub release image before   #
-  #  this deployment holds anything you would mind losing.                   #
+  #  A nightly is whatever main was the night it was built. It is not a      #
+  #  release: it carries no version promise, it may expect a schema no       #
+  #  published migration produces, no support or upgrade path applies to it, #
+  #  and it is deleted once thirty newer nightlies exist. Move to a release  #
+  #  image before this deployment holds anything you would mind losing.      #
   ############################################################################
 {{ end }}
 Watch it become ready:

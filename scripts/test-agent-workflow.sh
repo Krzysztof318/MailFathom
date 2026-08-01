@@ -892,8 +892,233 @@ fathom_review_reads_the_newest_comment_whatever_the_order() {
   assert_seconds_elapsed_at_least 4 "$started_at"
 }
 
+# The release gate is a script rather than a step inside `release.yml`, so the contracts below run it directly instead
+# of extracting it from YAML. Everything it decides — what a release tag may look like, which history it may come from,
+# and what the tagged tree has to say about itself — is decided once here, before a workflow builds anything, because
+# a published artifact is the one thing in this repository that cannot be corrected by a later commit.
+#
+# The fixture writes `refs/remotes/origin/main` and `refs/remotes/origin/release/*` directly rather than cloning a
+# remote to obtain them. Those refs are the whole of what reachability is judged against, and creating them is a truer
+# fixture than a clone whose fetch could succeed for reasons the assertion never reads.
+create_release_fixture() {
+  local fixture_root="$1"
+  local declared_version="$2"
+  local changelog_body="$3"
+
+  mkdir -p "$fixture_root/scripts"
+  cp \
+    "$source_repository_root/scripts/assert-release-tag.sh" \
+    "$source_repository_root/scripts/read-changelog-section.sh" \
+    "$fixture_root/scripts/"
+
+  git -C "$fixture_root" init --initial-branch=main --quiet
+  git -C "$fixture_root" config user.email agent-workflow@example.invalid
+  git -C "$fixture_root" config user.name 'Agent Workflow Tests'
+
+  write_declared_version "$fixture_root" '0.1.0'
+  printf '# Changelog\n\n## [0.1.0] - 2026-01-01\n\n### Added\n\n- The first release.\n' > "$fixture_root/CHANGELOG.md"
+  git -C "$fixture_root" add .
+  git -C "$fixture_root" commit --quiet -m 'release 0.1.0'
+  git -C "$fixture_root" tag --annotate v0.1.0 --message 'MailFathom 0.1.0'
+
+  write_declared_version "$fixture_root" "$declared_version"
+  printf '# Changelog\n\n## [%s] - 2026-02-01\n%s\n## [0.1.0] - 2026-01-01\n\n### Added\n\n- The first release.\n' \
+    "$declared_version" "$changelog_body" > "$fixture_root/CHANGELOG.md"
+  git -C "$fixture_root" add .
+  git -C "$fixture_root" commit --quiet -m "release $declared_version"
+
+  git -C "$fixture_root" update-ref refs/remotes/origin/main refs/heads/main
+}
+
+write_declared_version() {
+  local fixture_root="$1"
+  local declared_version="$2"
+
+  printf '<Project>\n  <PropertyGroup>\n    <VersionPrefix>%s</VersionPrefix>\n  </PropertyGroup>\n</Project>\n' \
+    "$declared_version" > "$fixture_root/Directory.Build.props"
+}
+
+assert_release_tag() {
+  local fixture_root="$1"
+  local release_tag="$2"
+  local output_file="$3"
+
+  (
+    cd "$fixture_root"
+    bash scripts/assert-release-tag.sh "$release_tag"
+  ) > "$output_file" 2>&1
+}
+
+release_tag_assertion_accepts_a_tag_that_matches_its_commit() {
+  local fixture_root="$test_directory/release-accepts"
+  local output_file="$test_directory/release-accepts-output"
+
+  create_release_fixture "$fixture_root" '0.2.0' $'\n### Added\n\n- Something an operator notices.\n'
+  git -C "$fixture_root" tag --annotate v0.2.0 --message 'MailFathom 0.2.0'
+
+  assert_release_tag "$fixture_root" 'v0.2.0' "$output_file"
+
+  assert_contains '0.2.0' "$output_file"
+  assert_contains 'reachable from origin/main' "$output_file"
+}
+
+release_tag_assertion_refuses_a_prerelease_tag() {
+  local fixture_root="$test_directory/release-prerelease"
+  local output_file="$test_directory/release-prerelease-output"
+
+  create_release_fixture "$fixture_root" '0.2.0' $'\n### Added\n\n- Something an operator notices.\n'
+  git -C "$fixture_root" tag --annotate v0.2.0-rc.1 --message 'MailFathom 0.2.0-rc.1'
+
+  if assert_release_tag "$fixture_root" 'v0.2.0-rc.1' "$output_file"; then
+    printf 'assert-release-tag.sh released a prerelease tag\n' >&2
+    return 1
+  fi
+
+  assert_contains 'carries no prerelease identifier' "$output_file"
+}
+
+release_tag_assertion_refuses_a_lightweight_tag() {
+  local fixture_root="$test_directory/release-lightweight"
+  local output_file="$test_directory/release-lightweight-output"
+
+  create_release_fixture "$fixture_root" '0.2.0' $'\n### Added\n\n- Something an operator notices.\n'
+  git -C "$fixture_root" tag v0.2.0
+
+  if assert_release_tag "$fixture_root" 'v0.2.0' "$output_file"; then
+    printf 'assert-release-tag.sh released a lightweight tag\n' >&2
+    return 1
+  fi
+
+  assert_contains 'is a lightweight tag' "$output_file"
+}
+
+release_tag_assertion_refuses_a_version_the_commit_does_not_declare() {
+  local fixture_root="$test_directory/release-disagreeing-version"
+  local output_file="$test_directory/release-disagreeing-version-output"
+
+  create_release_fixture "$fixture_root" '0.2.0' $'\n### Added\n\n- Something an operator notices.\n'
+  git -C "$fixture_root" tag --annotate v0.3.0 --message 'MailFathom 0.3.0'
+
+  if assert_release_tag "$fixture_root" 'v0.3.0' "$output_file"; then
+    printf 'assert-release-tag.sh released a version the tagged tree does not declare\n' >&2
+    return 1
+  fi
+
+  assert_contains '<VersionPrefix>0.2.0</VersionPrefix>' "$output_file"
+}
+
+release_tag_assertion_refuses_a_commit_that_never_merged() {
+  local fixture_root="$test_directory/release-unmerged"
+  local output_file="$test_directory/release-unmerged-output"
+
+  create_release_fixture "$fixture_root" '0.2.0' $'\n### Added\n\n- Something an operator notices.\n'
+  git -C "$fixture_root" checkout --quiet -b agent/unmerged
+  printf 'unreviewed\n' > "$fixture_root/unreviewed.txt"
+  git -C "$fixture_root" add unreviewed.txt
+  git -C "$fixture_root" commit --quiet -m 'work that never merged'
+  git -C "$fixture_root" tag --annotate v0.2.0 --message 'MailFathom 0.2.0'
+
+  if assert_release_tag "$fixture_root" 'v0.2.0' "$output_file"; then
+    printf 'assert-release-tag.sh released a commit reachable from no protected branch\n' >&2
+    return 1
+  fi
+
+  assert_contains 'reachable from neither origin/main nor any origin/release/* branch' "$output_file"
+}
+
+# A patch is by construction not reachable from `main`, and it is cut after a higher minor has already shipped. Both
+# are the ordinary shape of a hotfix rather than something to refuse, which is why the regression rule reads one line
+# rather than every tag present.
+release_tag_assertion_accepts_a_patch_from_a_release_branch() {
+  local fixture_root="$test_directory/release-patch"
+  local output_file="$test_directory/release-patch-output"
+
+  create_release_fixture "$fixture_root" '0.2.0' $'\n### Added\n\n- Something an operator notices.\n'
+  git -C "$fixture_root" tag --annotate v0.2.0 --message 'MailFathom 0.2.0'
+  git -C "$fixture_root" checkout --quiet -b release/0.1.x v0.1.0
+  write_declared_version "$fixture_root" '0.1.1'
+  printf '# Changelog\n\n## [0.1.1] - 2026-03-01\n\n### Fixed\n\n- A defect the 0.1.x line still has.\n' \
+    > "$fixture_root/CHANGELOG.md"
+  git -C "$fixture_root" add .
+  git -C "$fixture_root" commit --quiet -m 'release 0.1.1'
+  git -C "$fixture_root" tag --annotate v0.1.1 --message 'MailFathom 0.1.1'
+  git -C "$fixture_root" update-ref refs/remotes/origin/release/0.1.x refs/heads/release/0.1.x
+
+  assert_release_tag "$fixture_root" 'v0.1.1' "$output_file"
+
+  assert_contains '0.1.1' "$output_file"
+  assert_contains 'reachable from origin/release/0.1.x' "$output_file"
+}
+
+release_tag_assertion_refuses_a_version_already_released_on_its_line() {
+  local fixture_root="$test_directory/release-regression"
+  local output_file="$test_directory/release-regression-output"
+
+  create_release_fixture "$fixture_root" '0.2.0' $'\n### Added\n\n- Something an operator notices.\n'
+  git -C "$fixture_root" checkout --quiet -b release/0.1.x v0.1.0
+
+  commit_patch_release() {
+    write_declared_version "$fixture_root" "$1"
+    printf '# Changelog\n\n## [%s] - 2026-03-01\n\n### Fixed\n\n- A defect the 0.1.x line still has.\n' "$1" \
+      > "$fixture_root/CHANGELOG.md"
+    git -C "$fixture_root" add .
+    git -C "$fixture_root" commit --quiet -m "release $1"
+  }
+
+  commit_patch_release '0.1.1'
+  git -C "$fixture_root" tag --annotate v0.1.1 --message 'MailFathom 0.1.1'
+  commit_patch_release '0.1.2'
+  git -C "$fixture_root" tag --annotate v0.1.2 --message 'MailFathom 0.1.2'
+
+  # The line has moved past 0.1.1, and the tag is dragged forward onto a newer commit anyway. Everything else about it
+  # is consistent — the tree declares 0.1.1 and the changelog describes it — so the line's own history is the only
+  # thing left that can refuse it.
+  commit_patch_release '0.1.1'
+  git -C "$fixture_root" tag --annotate --force v0.1.1 --message 'MailFathom 0.1.1 again' > /dev/null 2>&1
+  git -C "$fixture_root" update-ref refs/remotes/origin/release/0.1.x refs/heads/release/0.1.x
+
+  if assert_release_tag "$fixture_root" 'v0.1.1' "$output_file"; then
+    printf 'assert-release-tag.sh released a number the line had already used\n' >&2
+    return 1
+  fi
+
+  assert_contains 'does not advance the 0.1.x line' "$output_file"
+}
+
+release_tag_assertion_refuses_an_empty_changelog_section() {
+  local fixture_root="$test_directory/release-empty-changelog"
+  local output_file="$test_directory/release-empty-changelog-output"
+
+  create_release_fixture "$fixture_root" '0.2.0' $'\n'
+  git -C "$fixture_root" tag --annotate v0.2.0 --message 'MailFathom 0.2.0'
+
+  if assert_release_tag "$fixture_root" 'v0.2.0' "$output_file"; then
+    printf 'assert-release-tag.sh released a version the changelog says nothing about\n' >&2
+    return 1
+  fi
+
+  assert_contains "section of CHANGELOG.md is empty" "$output_file"
+}
+
+changelog_section_reading_returns_only_the_requested_release() {
+  local fixture_root="$test_directory/changelog-section"
+  local output_file="$test_directory/changelog-section-output"
+
+  create_release_fixture "$fixture_root" '0.2.0' $'\n### Added\n\n- Something an operator notices.\n'
+
+  (
+    cd "$fixture_root"
+    bash scripts/read-changelog-section.sh '0.2.0'
+  ) > "$output_file" 2>&1
+
+  assert_contains 'Something an operator notices.' "$output_file"
+  assert_excludes 'The first release.' "$output_file"
+}
+
 workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
+  [[ -x "$source_repository_root/scripts/assert-release-tag.sh" ]]
+  [[ -x "$source_repository_root/scripts/read-changelog-section.sh" ]]
   [[ -x "$source_repository_root/scripts/verify-fast.sh" ]]
   [[ -x "$source_repository_root/scripts/verify-full.sh" ]]
   [[ -x "$source_repository_root/scripts/test-agent-workflow.sh" ]]
@@ -929,6 +1154,15 @@ run_test fathom_review_collects_at_once_when_nobody_has_commented
 run_test fathom_review_waits_before_freezing_a_quiet_conversation
 run_test fathom_review_stops_waiting_at_the_ceiling
 run_test fathom_review_reads_the_newest_comment_whatever_the_order
+run_test release_tag_assertion_accepts_a_tag_that_matches_its_commit
+run_test release_tag_assertion_refuses_a_prerelease_tag
+run_test release_tag_assertion_refuses_a_lightweight_tag
+run_test release_tag_assertion_refuses_a_version_the_commit_does_not_declare
+run_test release_tag_assertion_refuses_a_commit_that_never_merged
+run_test release_tag_assertion_accepts_a_patch_from_a_release_branch
+run_test release_tag_assertion_refuses_a_version_already_released_on_its_line
+run_test release_tag_assertion_refuses_an_empty_changelog_section
+run_test changelog_section_reading_returns_only_the_requested_release
 run_test workflow_scripts_use_flat_manual_layout
 
 printf '%s passed, %s failed\n' "$passed_count" "$failed_count"

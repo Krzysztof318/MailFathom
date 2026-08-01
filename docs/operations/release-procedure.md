@@ -18,7 +18,7 @@ Continuous integration contributes exactly two inputs and nothing else:
 
 | Input | Supplied as | Effect |
 | --- | --- | --- |
-| Prerelease identifier | `VersionSuffix` | `0.1.0` becomes `0.1.0-nightly.41` |
+| Prerelease identifier | `VersionSuffix` | `0.1.0` becomes `0.1.0-nightly.41-3f1c9ab` |
 | Source revision | `SourceRevisionId` | `InformationalVersion` gains `+3f1c9ab` |
 
 That yields the four build kinds the ADR tabulates. Neither is set in the repository. A build inside a Git worktree
@@ -34,7 +34,7 @@ Read the number rather than retyping it:
 
 ```bash
 scripts/read-declared-version.sh              # 0.1.0
-scripts/read-declared-version.sh nightly.41   # 0.1.0-nightly.41
+scripts/read-declared-version.sh nightly.41-3f1c9ab   # 0.1.0-nightly.41-3f1c9ab
 ```
 
 The script parses `Directory.Build.props` rather than evaluating it through MSBuild, so it works inside a container
@@ -72,8 +72,10 @@ chart's own version, which counts edits to the chart directory and never follows
 
 ## The moving tags
 
-Every published release carries its own immutable `v<x.y.z>` tag **and** moves `latest` onto the same digest, in both
-registries. `latest` is what an operator gets by not choosing, so it must never be a preview:
+Every published release carries its own immutable `<x.y.z>` image tag **and** moves `latest` onto the same digest. The
+image tag drops the `v` the Git tag carries, because that is what an OCI reference is written as everywhere else and
+what the Helm chart compares against `appVersion`; the `v` belongs to the Git tag, which is a different thing pointing
+at the same commit. `latest` is what an operator gets by not choosing, so it must never be a preview:
 
 - **`latest` follows the newest release and never a nightly.** It is chosen by excluding every version carrying a
   prerelease identifier and taking the highest of what remains, **never** by taking a maximum. Because `VersionPrefix`
@@ -85,7 +87,10 @@ registries. `latest` is what an operator gets by not choosing, so it must never 
   right answer, because `0.3.0` is higher.
 - **`nightly` follows the newest nightly**, and is the only other mutable reference. Every other tag is immutable.
 
-Publishing is the release workflow's, which is issue #156. This is the rule it implements.
+The `Release` and `Nightly` workflows implement this rule, publishing to `ghcr.io/krzysztof318/mailfathom`. Docker Hub
+carries the same manifest list under the same digest once issue #235 lands.
+[The container image](container-image.md#published-images) records what each tag means and how a published image is
+verified.
 
 ## What earns which increment
 
@@ -117,8 +122,9 @@ whole procedure, and it is recorded here so it survives the skill being unavaila
 2. **Push the annotated tag `v<x.y.z>` on that merge commit.** This is what makes the release real and what triggers
    the release workflow. Before publishing anything the workflow asserts the tag against the tagged commit's
    `VersionPrefix`, against the highest existing tag on the same `major.minor` line, and against the changelog section
-   for that version. It then pushes the image under `v<x.y.z>` and moves `latest` onto the same digest, in both
-   registries.
+   for that version — `scripts/assert-release-tag.sh` is that check. It then builds and gates the image, pushes it
+   under `<x.y.z>`, moves `latest` onto the same digest, attests it, and opens the GitHub release with that changelog
+   section as its notes.
 
    ```bash
    git tag --annotate v0.1.0 --message 'MailFathom 0.1.0'

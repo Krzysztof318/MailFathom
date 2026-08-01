@@ -52,7 +52,7 @@ WORKDIR /source
 # label beside them named one. Its `unknown` default round-trips — an unsupplied revision stamps `+unknown`, which is
 # exactly what the process then reports.
 ARG IMAGE_REVISION=unknown
-# Empty for a release build and for an ordinary local one, and `nightly.<run number>` for a nightly, per ADR 0004's
+# Empty for a release build and for an ordinary local one, and `nightly.<run number>-<short revision>` for a nightly, per ADR 0004's
 # build table. An empty value leaves the stamped version at the declared prefix.
 ARG VERSION_SUFFIX=
 
@@ -112,6 +112,12 @@ FROM ${DOTNET_ASPNET_IMAGE} AS runtime
 ARG IMAGE_VERSION=0.0.0-unversioned
 ARG IMAGE_REVISION=unknown
 ARG IMAGE_CREATED=1970-01-01T00:00:00Z
+# `release` or `nightly` for a published image, and `local` for anything else. The version identifier already separates
+# the channels — a nightly always carries a `-nightly.<n>` prerelease identifier and a release never carries one — and
+# this label is what still answers the question after a reference has been re-tagged, mirrored, or reduced to a digest,
+# which is the state an image reaches long before anyone asks what it is. Its default is deliberately neither channel:
+# an image nobody published belongs to neither.
+ARG IMAGE_RELEASE_CHANNEL=local
 
 # `org.opencontainers.image.licenses` is the SPDX identifier a registry and a scanner read without unpacking the
 # image, and it says the same thing as the root LICENSE, the SPDX assembly metadata, and every source header. The
@@ -128,6 +134,7 @@ LABEL org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.revision="${IMAGE_REVISION}" \
       org.opencontainers.image.created="${IMAGE_CREATED}" \
+      io.mailfathom.release-channel="${IMAGE_RELEASE_CHANNEL}" \
       io.artifacthub.package.logo-url="https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/icon-1254.png"
 
 # 8080 is what the .NET base images already listen on, restated here so the number is visible beside the EXPOSE that

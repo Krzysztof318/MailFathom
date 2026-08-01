@@ -1,11 +1,21 @@
 name: Integration tests
 
-# Manual dispatch only, deliberately. The suite starts a PostgreSQL container, applies the baseline
+# Never runs on a pull request. The suite starts a PostgreSQL container, applies the baseline
 # migration to it, and asserts against the result, so it is minutes of runner time rather than the
 # seconds a pull-request check is worth. Nothing here is a required status check; the owner asks for
 # a run when the change is one this suite can speak to.
+#
+# It is reachable two ways, and both are deliberate acts rather than a schedule: a manual dispatch,
+# and the `Release` workflow, which will not publish an image until this suite has passed on the
+# commit it is about to release. A nightly does not call it — see `publish-container-image.yml`.
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag, or SHA to run the suite against'
+        required: false
+        type: string
+  workflow_call:
     inputs:
       ref:
         description: 'Branch, tag, or SHA to run the suite against'

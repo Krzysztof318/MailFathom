@@ -1,0 +1,214 @@
+name: Nightly
+
+# A published preview of `main`, and never a release. Every image this workflow produces carries a
+# `-nightly.<n>-<short revision>` prerelease identifier and the `nightly` channel label, which is what separates the
+# two channels — not the registry they sit in, and not the hostname of a reference somebody pasted. See
+# docs/decisions/0004-versioning-and-release-policy.md.
+#
+# It runs at 00:00 UTC, which is 02:00 in Europe/Warsaw under CEST and 01:00 under CET; GitHub schedules are expressed
+# in UTC only, and a run may start later than asked when the hosted queue is busy.
+#
+# **A run publishes nothing when `main` has not moved since the last published nightly.** The check reads the revision
+# the published `nightly` image itself carries rather than any state stored beside it, so it stays right after a deleted
+# tag, a re-run, or a package that was pruned. A `workflow_dispatch` is exempt: asking for a snapshot explicitly is a
+# reason to build one.
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag, or SHA to build. Must be reachable from main. Defaults to the head of main.'
+        required: false
+        type: string
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  decide:
+    name: Decide whether to publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Reading the published `nightly` image's labels is a registry read, and it is the whole reason this job
+      # authenticates at all.
+      packages: read
+    outputs:
+      publish: ${{ steps.decide.outputs.publish }}
+      revision: ${{ steps.resolve.outputs.revision }}
+      version: ${{ steps.resolve.outputs.version }}
+      version-suffix: ${{ steps.resolve.outputs.version-suffix }}
+      tags: ${{ steps.resolve.outputs.tags }}
+    steps:
+      - name: Check out the ref to preview
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.ref || 'main' }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # A dispatch can name any ref, and this job goes on to hold a token that can write to a registry. Only history
+      # that reached the protected branch is previewed, so a branch nobody reviewed cannot be published under a version
+      # that looks like MailFathom's.
+      - name: Resolve the commit and the nightly identifier
+        id: resolve
+        env:
+          REQUESTED_REF: ${{ inputs.ref }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+
+          revision="$(git rev-parse HEAD)"
+
+          if ! git merge-base --is-ancestor "$revision" refs/remotes/origin/main; then
+            echo "::error::${REQUESTED_REF:-HEAD} resolves to ${revision}, which is not reachable from main. A nightly previews the protected branch and nothing else."
+            exit 1
+          fi
+
+          # The run number says which nightly this is and the short revision says what it was built from, so the tag
+          # names its own source without anything having to be inspected. Both travel in one SemVer prerelease
+          # identifier because the version has to survive as an OCI tag, which admits no `+build` metadata.
+          version_suffix="nightly.${RUN_NUMBER}-${revision:0:7}"
+          version="$(bash scripts/read-declared-version.sh "$version_suffix")"
+
+          {
+            printf 'revision=%s\n' "$revision"
+            printf 'version=%s\n' "$version"
+            printf 'version-suffix=%s\n' "$version_suffix"
+            printf 'tags<<TAGS\n%s\nnightly\nTAGS\n' "$version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Decide whether main has moved
+        id: decide
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REVISION: ${{ steps.resolve.outputs.revision }}
+          IS_DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+
+          publish() {
+            printf 'publish=true\n' >> "$GITHUB_OUTPUT"
+            printf '%s\n' "$1"
+            exit 0
+          }
+
+          if [[ "$IS_DISPATCH" == 'true' ]]; then
+            publish 'Dispatched explicitly, so the snapshot is built whether or not main has moved.'
+          fi
+
+          image="ghcr.io/$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+
+          # Any failure to read the published nightly — an absent tag, a registry hiccup, a manifest shape that changed
+          # — resolves to publishing. The cost of a wrong answer is one duplicate nightly; the cost of the opposite
+          # default is a channel that quietly stops producing anything.
+          if ! manifest="$(docker buildx imagetools inspect "${image}:nightly" --format '{{json .Image}}' 2>/dev/null)"; then
+            publish "No nightly is published at ${image}:nightly yet."
+          fi
+
+          published_revision="$(printf '%s' "$manifest" |
+            jq -r '[.. | objects | .config?.Labels?["org.opencontainers.image.revision"]? // empty] | unique | .[0] // empty')"
+
+          if [[ -z "$published_revision" ]]; then
+            publish 'The published nightly states no source revision, so it cannot be compared against main.'
+          fi
+
+          if [[ "$published_revision" != "$REVISION" ]]; then
+            publish "main is at ${REVISION}; the published nightly is ${published_revision}."
+          fi
+
+          printf 'publish=false\n' >> "$GITHUB_OUTPUT"
+
+          {
+            printf '### No nightly published\n\n'
+            printf 'main is still at `%s`, which is what `%s:nightly` already carries. ' "$REVISION" "$image"
+            printf 'Nothing was built.\n'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish
+    needs:
+      - decide
+    if: needs.decide.outputs.publish == 'true'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/publish-container-image.yml
+    with:
+      channel: nightly
+      ref: ${{ needs.decide.outputs.revision }}
+      version: ${{ needs.decide.outputs.version }}
+      version-suffix: ${{ needs.decide.outputs.version-suffix }}
+      tags: ${{ needs.decide.outputs.tags }}
+      # Reported rather than enforced on this channel. A nightly exists to be tried, and a nightly that refuses to
+      # publish because of a finding in a base image tells nobody what actually broke; the same finding blocks a
+      # release, which is where the answer matters.
+      block-on-vulnerabilities: false
+
+  prune:
+    name: Prune superseded nightlies
+    needs:
+      - publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      # Retention is stated rather than left to accumulate: the newest nightly versions are kept and the rest are
+      # deleted, so a channel that publishes every night does not grow without bound. Only versions whose every tag is a
+      # nightly identifier are considered — a version carrying `latest`, a release number, or no tag at all is never
+      # touched, which is what keeps a released image and an attestation manifest out of reach of this step.
+      - name: Delete nightly versions beyond the retained window
+        env:
+          GH_TOKEN: ${{ secrets.GHCR_RETENTION_TOKEN || secrets.GITHUB_TOKEN }}
+          PACKAGE_OWNER: ${{ github.repository_owner }}
+          PACKAGE_NAME: ${{ github.event.repository.name }}
+          RETAINED_NIGHTLY_COUNT: '30'
+        run: |
+          set -euo pipefail
+
+          package_name="$(printf '%s' "$PACKAGE_NAME" | tr '[:upper:]' '[:lower:]')"
+          package_path="/users/${PACKAGE_OWNER}/packages/container/${package_name}"
+
+          if ! versions="$(gh api --paginate "${package_path}/versions" 2>/dev/null)"; then
+            echo "::warning::The package's versions could not be listed with this token, so nothing was pruned. Supply a GHCR_RETENTION_TOKEN with read:packages and delete:packages to enable retention."
+            exit 0
+          fi
+
+          # Newest first, so the retained window is the head of the list.
+          superseded="$(printf '%s' "$versions" | jq -r -s --argjson keep "$RETAINED_NIGHTLY_COUNT" '
+            [ .[][]
+              | select((.metadata.container.tags | length) > 0)
+              | select(all(.metadata.container.tags[]; test("^[0-9]+\\.[0-9]+\\.[0-9]+-nightly\\.[0-9]+-[0-9a-f]{7,}$")))
+            ]
+            | sort_by(.created_at) | reverse | .[$keep:] | .[] | "\(.id) \(.metadata.container.tags | join(","))"')"
+
+          if [[ -z "$superseded" ]]; then
+            echo "Nothing to prune: at most ${RETAINED_NIGHTLY_COUNT} nightly versions are published."
+            exit 0
+          fi
+
+          while read -r version_id version_tags; do
+            [[ -n "$version_id" ]] || continue
+
+            if gh api --method DELETE "${package_path}/versions/${version_id}" > /dev/null 2>&1; then
+              printf 'Deleted nightly %s.\n' "$version_tags"
+            else
+              echo "::warning::Nightly ${version_tags} could not be deleted with this token. Supply a GHCR_RETENTION_TOKEN with delete:packages to enable retention."
+              exit 0
+            fi
+          done <<< "$superseded"

@@ -68,6 +68,11 @@ helm template verification deploy/helm/mailfathom --values deploy/helm/mailfatho
 The `Container image` workflow builds the image for both supported architectures and does nothing else. It is manual
 dispatch only, like the integration suite, and it publishes nothing.
 
+What does publish is `Release`, on an annotated version tag, and `Nightly`, on its schedule. Neither is something to
+start as part of a task, and neither has a local equivalent: they run `Build, test, format, and migrations` — the same
+workflow `CI` calls for a pull request — then, for a release, the integration suite, and only then build and push. [The container image](container-image.md#published-images) records
+what they produce and how a published image is verified.
+
 Both scripts stop immediately when `HEAD` resolves to `main` or `master`,
 because verification on the integration branch reports on code that no change
 is about to touch. Check out the branch that carries the change first. A

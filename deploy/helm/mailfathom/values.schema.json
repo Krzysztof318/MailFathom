@@ -36,7 +36,7 @@
             "release",
             "nightly"
           ],
-          "description": "'release' is a published Docker Hub image and the only supported channel. 'nightly' is unsupported development output published to GHCR."
+          "description": "'release' is a published release image and the only supported channel. 'nightly' is unsupported development output, deleted once thirty newer nightlies exist."
         },
         "registry": {
           "type": "string"

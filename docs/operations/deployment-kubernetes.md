@@ -277,9 +277,16 @@ and the unpackaged chart directory, which states none because it is not a releas
 
 `image.channel: nightly` deploys unsupported GHCR development output. It requires
 `image.nightlyAcknowledgement: i-understand-this-is-unsupported`, forces `ghcr.io` and rejects any other registry,
-labels every rendered object `io.mailfathom/release-channel: ghcr-nightly-unsupported`, prints a warning in the chart's
+labels every rendered object `io.mailfathom/release-channel: nightly` — the same value the image carries as
+`io.mailfathom.release-channel`, spelled the way a Kubernetes label prefix has to be — prints a warning in the chart's
 notes, and labels the workload with the nightly identifier rather than with `appVersion` — so a nightly is never
 indistinguishable from a release in a query that reads that label.
+
+[What a nightly build risks](container-image.md#what-a-nightly-build-risks) states what the acknowledgement is
+acknowledging: a schema that can be ahead of any published migration, no upgrade path in either direction, four public
+surfaces that move without notice, and a tag that is deleted once thirty newer nightlies exist. Name the exact
+`-nightly.<n>-<short revision>` identifier or a digest rather than the moving `nightly` tag, and give the cluster a pull secret while
+the package is private.
 
 ## Verification
 
