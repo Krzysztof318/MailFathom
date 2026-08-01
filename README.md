@@ -102,6 +102,7 @@ These are recorded as open questions, each waiting on a decision rather than on 
 - **Antivirus scanning of stored attachments**, constrained by which engines can be used under a permissive licensing policy. [#77](https://github.com/Krzysztof318/MailFathom/issues/77)
 - **OAuth for outbound IMAP and SMTP**, so a provider that has retired password authentication stays reachable. [#78](https://github.com/Krzysztof318/MailFathom/issues/78)
 - **Local secret detection before anything leaves for a model**, which only becomes concrete once retrieval-augmented answering exists. [#79](https://github.com/Krzysztof318/MailFathom/issues/79)
+- **Jobs you define yourself**, in two shapes that stay separate rather than becoming one: *programmatic* jobs, where a deterministic rule matches stored mail and takes a bounded action, and *skill-based* jobs, whose body is an instruction an agent carries out against a slice of your mail. The second asks questions the first does not — what content leaves for a model, what a job may act on, and what an attacker who can write you an email can make one do. [#251](https://github.com/Krzysztof318/MailFathom/issues/251)
 
 ## Contributing
 
