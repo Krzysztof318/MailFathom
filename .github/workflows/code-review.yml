@@ -124,7 +124,14 @@ jobs:
               # instruction, at the start of a line; somebody talking about it does not. Leading
               # whitespace is allowed because a list item or a quote is still an instruction, and
               # the trailing `[^a-z-]` keeps `code-reviewer` from counting.
-              trigger_pattern=$'(^|\n)[[:space:]]*code-review([^a-z-]|$)'
+              #
+              # The `@` is optional because every other reviewer on the market is summoned with one,
+              # so it is the first thing a hand types, and a trigger that silently ignores the
+              # obvious spelling is a trap rather than a guard. It addresses no account here — the
+              # App is named `Code reviewer` — so GitHub renders it as plain text, and accepting it
+              # weakens nothing: `@code-review` is not a phrase that turns up in prose about the
+              # workflow, so the line-start rule above still carries the whole guard.
+              trigger_pattern=$'(^|\n)[[:space:]]*@?code-review([^a-z-]|$)'
 
               if [[ "$IS_PULL_REQUEST_COMMENT" != 'true' ]]; then
                 reason='the comment is on an issue rather than a pull request'

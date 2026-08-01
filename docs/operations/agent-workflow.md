@@ -128,15 +128,21 @@ later push is not reviewed either — it runs the required checks and nothing
 else, since those gate the merge while a re-review would mostly repeat findings
 the author is already answering. Two things ask for a review anyway:
 
-- a comment on the pull request that *begins a line* with `code-review`, from an
-  author with write access. Adding `opus` to that comment buys a second, costlier
-  opinion; `claude-sonnet-5` is the default. Two things about that phrase are
-  deliberate. It is not `@claude`, which collides with GitHub Copilot's own
-  trigger. And it has to lead a line rather than appear anywhere in the body,
-  because `code-review` is ordinary English about this very workflow — writing
-  "I'll rerun the code-review workflow" mid-sentence must not spend subscription
-  usage on a run nobody asked for. Leading whitespace is fine, so a list item or
-  a quoted line still counts, and `code-reviewer` does not;
+- a comment on the pull request that *begins a line* with `code-review` or
+  `@code-review`, from an author with write access. Adding `opus` to that comment
+  buys a second, costlier opinion; `claude-sonnet-5` is the default.
+
+  Three things about that phrase are deliberate. It is not `@claude`, which
+  collides with GitHub Copilot's own trigger. It has to lead a line rather than
+  appear anywhere in the body, because `code-review` is ordinary English about
+  this very workflow — writing "I'll rerun the code-review workflow" mid-sentence
+  must not spend subscription usage on a run nobody asked for. And the `@` is
+  optional rather than required, because every other reviewer is summoned with
+  one and a trigger that silently ignores the spelling a hand reaches for first
+  is a trap. `@code-review` addresses no account: the App is named
+  `Code reviewer`, so GitHub renders it as plain text. Leading whitespace is
+  fine, so a list item or a quoted line still counts, and `code-reviewer` does
+  not;
 - the `code-review` label, which is how a fork's pull request is reviewed at
   all. A fork's own pushes never start a review, so a maintainer decides.
 
