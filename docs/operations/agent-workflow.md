@@ -117,6 +117,24 @@ release, and which board transitions belong to the project automation rather
 than to an agent. Placing an issue is part of opening it, because the built-in
 workflows set `Status` and nothing else.
 
+Those rules describe an issue an agent opened. A public repository also receives
+issues nobody here opened, and one arrives with no `type:*` label and no board
+fields because none of the rules reached its author. Root `AGENTS.md` holds that
+path too: the missing `type:*` label is what marks an issue untriaged, triage
+either places it by the ordinary rules or closes it as `not planned` with a
+reason, a question moves to Discussions instead of being given a label so the
+board has somewhere to put it, and a contribution is read cheapest-check-first —
+required checks, then `Protected paths`, then the code-owner review. The `Triage`
+board view is where an arrival waits, which is why it is expected to be empty
+only while the repository is private.
+
+The three Discussions categories that routing rule names — `Q&A`, `Ideas`, and
+`Announcements` — are the ones this project answers. The remaining defaults
+GitHub creates are unused and are removed in the repository's Discussions
+settings, which is a manual step rather than a scripted one: the GraphQL API
+exposes no mutation for a discussion category, so nothing in this repository can
+assert their absence and a periodic look is what catches a re-created one.
+
 Skills live under `.agents/skills/`. Claude Code consumes the same directory
 through the relative symlink `.claude/skills -> ../.agents/skills`; do not copy
 or maintain a second skill tree.
@@ -170,6 +188,21 @@ Two things ask for a review anyway:
 - the `fathom-review` label, which is how a fork's pull request is reviewed at
   all. A fork's own pushes never start a review, so a maintainer decides.
 
+An automatic review is bounded per pull request: once ten reviews by
+`fathom-reviewer[bot]` stand on it, the gate refuses and says so in the run log
+instead of starting an eleventh. Every push to a published branch starts a
+review, so a branch pushed to forty times would otherwise be reviewed forty
+times, and past some number of passes over the same change another one repeats
+what it already said. The count is the App's own submitted reviews rather than a
+quota read from run history, because the runs endpoint cannot tell a run that
+decided not to review — a draft push, a comment about the workflow — from one
+that did. What it counts is every review the App has submitted on the pull
+request, the explicitly requested ones included, because the question is how many
+passes the change has already had rather than which of them were unprompted. Only
+the automatic path is refused by the answer: a label or a comment still starts a
+review afterwards, because somebody with write access asking has already made the
+decision the ceiling makes when nobody made it.
+
 The workflow reports no status check and is not in the `main` ruleset. It
 advises; nothing waits on it.
 
@@ -220,10 +253,9 @@ Effort decides how much the reviewer works before answering, which is the
 difference between a sweep over the whole change and a close reading of the first
 few files followed by a shrug. `high` is a deliberate step down rather than the
 value that would apply otherwise — Claude Code runs `xhigh` by default — because
-this workflow spends a personal subscription with no per-run ceiling anywhere in
-it, and the extra depth `xhigh` buys has not been measured against that cost
-here. A missed finding is what would justify raising it, and the measurement
-would come with the change.
+this workflow spends a personal subscription and the extra depth `xhigh` buys has
+not been measured against that cost here. A missed finding is what would justify
+raising it, and the measurement would come with the change.
 
 That split is the point. Everything the reviewer reads about the change is
 untrusted — a diff, a comment, or an issue body can carry an instruction aimed
@@ -232,14 +264,67 @@ tells Claude to report such an instruction as a P1 finding rather than obey it,
 but the guarantee is structural rather than textual.
 
 Every trigger runs the workflow file from the default branch.
-`pull_request_target` and `issue_comment` both do, by definition, and there is
-deliberately no `workflow_dispatch`: a dispatch takes a ref, which would let the
-branch under review supply the job that receives the Claude credential.
+`pull_request_target` and `issue_comment` both do, by definition, and the next
+section is why that trigger is allowed here when no other workflow may use it.
 
 The paths under `$RUNNER_TEMP` are declared on each step that uses them rather
 than once for the job, because `runner` is not among the contexts a job-level
 `env` block may read and naming it there fails the whole file's validation before
 any job exists.
+
+### Why `pull_request_target` is a granted exception
+
+Every other workflow in this repository is forbidden to use
+`pull_request_target`, because the trigger hands repository secrets to a run
+started by a pull request, and the rule exists so contributed code never executes
+with them. `Fathom review` uses it anyway, as one recorded exception rather than
+as a rule the repository quietly breaks.
+
+The exception holds because the trigger is what the workflow needs and the danger
+is not what it does. `issue_comment` and a label event carry no head ref to run,
+and reviewing a fork at a maintainer's request is the whole reason the workflow
+reaches one at all; `pull_request` would give the run neither the secrets it needs
+to publish under the App nor a trigger a maintainer can aim. What makes that safe
+is structural rather than procedural: the workspace holds `base.sha` and never the
+branch, nothing from the contribution is executed, and the reviewer runs with
+`Read`, `Grep`, `Glob`, and `Write` and no shell, network tool, or MCP tool. The
+purpose of the prohibition — untrusted code never runs with a credential — is met
+without avoiding the trigger.
+
+The exception is scoped to this workflow and to that shape. It is revoked by any
+change that checks out, builds, restores, or executes the branch under review,
+that grants the reviewer a shell or a network tool, that adds `workflow_dispatch`
+— a dispatch takes a ref, which would let the branch supply the job that receives
+the Claude credential — or that lets a trigger other than a maintainer's label or
+comment reach a fork. A second workflow wanting the trigger does not inherit this
+reasoning; it argues its own case or uses `pull_request`.
+
+### What bounds the cost
+
+The run spends the repository owner's personal Claude subscription through
+`CLAUDE_CODE_OAUTH_TOKEN`, so what limits how often it runs is a design concern
+rather than an operational one. Eight things do, and they are listed together
+because each closes a different way the bill could grow:
+
+- a draft is never reviewed automatically, so a branch still being written is
+  pushed to freely and spends nothing;
+- `concurrency` with `cancel-in-progress` means a superseded head never finishes
+  a review, so a rapid series of pushes costs one run rather than one per push;
+- a fork's own pushes never start a review; a maintainer's label does;
+- the comment trigger requires an `OWNER`, `MEMBER`, or `COLLABORATOR` author, so
+  nobody outside the project can spend the subscription by typing;
+- an automatic review is capped per pull request, as described above;
+- the model is `claude-sonnet-5` rather than the costlier Opus, which a review
+  request reaches only by asking for it by name;
+- `--effort high` rather than the `xhigh` that would otherwise apply;
+- every collected input carries an explicit ceiling, and what a ceiling dropped is
+  stated in the review body.
+
+Moving the run onto a metered API key with a spend limit would replace that set
+with one number, and it is deliberately not done: the gate above already stops
+anyone outside the project from spending anything, so the remaining cost is the
+owner's own pushing, and a second credential to provision, rotate, and register
+buys no protection against that.
 
 ### What the reviewer is measured against
 
