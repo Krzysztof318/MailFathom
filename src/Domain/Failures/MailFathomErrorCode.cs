@@ -105,6 +105,22 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode StoredEmailIdentifierMalformed { get; } = new(51004);
 
+    /// <summary>Gets subcategory 1, request validation: a content read named no emails, or more emails than one call serves.</summary>
+    /// <remarks>
+    /// One code covers both ends of the range, as <see cref="MailboxQueryPageSizeOutOfRange" /> does for a page size: a
+    /// call naming nothing and a call naming too much are the same finding about the count the caller chose, and neither
+    /// is served by a truncated answer that would hide which emails were dropped.
+    /// </remarks>
+    public static MailFathomErrorCode EmailContentReadCountOutOfRange { get; } = new(51005);
+
+    /// <summary>Gets subcategory 1, request validation: a content read named the same email more than once.</summary>
+    /// <remarks>
+    /// Serving it twice would spend the read's character budget on content the caller already has, and silently
+    /// collapsing it would return fewer entries than were named, which a caller reading results positionally cannot
+    /// detect. Refusing says which of the two the caller meant is theirs to decide.
+    /// </remarks>
+    public static MailFathomErrorCode EmailContentReadDuplicateEmail { get; } = new(51006);
+
     /// <summary>Gets subcategory 2, pagination: a continuation cursor is not one this system issued.</summary>
     public static MailFathomErrorCode MailboxQueryCursorMalformed { get; } = new(52001);
 
@@ -157,6 +173,8 @@ public readonly record struct MailFathomErrorCode
         MailboxQueryFilterInvalid,
         EmailSearchResultLimitOutOfRange,
         StoredEmailIdentifierMalformed,
+        EmailContentReadCountOutOfRange,
+        EmailContentReadDuplicateEmail,
         MailboxQueryCursorMalformed,
         MailboxQueryCursorFilterMismatch,
         MailAccountNotAccessible,

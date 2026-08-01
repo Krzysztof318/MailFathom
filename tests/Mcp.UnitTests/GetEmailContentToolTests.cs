@@ -16,13 +16,13 @@ using Xunit;
 
 namespace MailFathom.Mcp.UnitTests;
 
-/// <summary>Covers what the <c>get_email_content</c> tool itself owns: naming one email and publishing what was read.</summary>
+/// <summary>Covers what the <c>get_email_content</c> tool itself owns: naming emails and publishing what was read.</summary>
 /// <remarks>
 /// <para>
 /// The tool calls the real <see cref="EmailContentReader" /> rather than a substitute for it, because the use case is
-/// where the authorization, the integrity check, and the repair request live, and a substitute would only prove that
-/// the tool composes with a fiction. What the stubs replace is storage and the parse, the boundaries below the use
-/// case.
+/// where the authorization, the integrity check, the character budget, and the repair request live, and a substitute
+/// would only prove that the tool composes with a fiction. What the stubs replace is storage and the parse, the
+/// boundaries below the use case.
 /// </para>
 /// <para>
 /// Two properties are asserted throughout rather than in one test of their own: a refusal never reaches storage, and no
@@ -53,54 +53,58 @@ public sealed class GetEmailContentToolTests
                     ParticipantOf(EmailAddressRole.To, displayName: null, "finance@example.test"),
                 ],
                 EmailThreadReferences.Create("abc@example.test", "root@example.test", ["root@example.test"])),
-            plainText: new EmailBodyRepresentation("Please find the invoice attached.", OriginalCharacterCount: 33, WasTruncated: false),
+            plainText: new EmailBodyRepresentation("Please find the invoice attached.", 33, EmailBodyTruncation.None),
             attachments: [new ExtractedEmailAttachment(AttachmentFileNameOf("invoice.pdf"), "application/pdf", DecodedSizeOctets: 2048)],
             inlineResourceCount: 1,
             carriesUnverifiedSignature: true);
         var tool = ToolOver(
-            new StubStoredEmailSummaryReader(
-                SummaryOf(StoredEmailId.Create(storedEmailId), sentAt, receivedAt, observedAt)),
+            new StubStoredEmailSummaryReader(SummaryOf(sentAt: sentAt, receivedAt: receivedAt, observedAt: observedAt)),
             new StubEmailContentRenderer(EmailContentRenderingResult.Rendered(rendering)));
 
         // Act
         var result = await tool.GetEmailContentAsync(
-            storedEmailId.ToString(),
+            [storedEmailId.ToString()],
+            includeAttachmentDetails: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(storedEmailId.ToString(), result.StoredEmailId);
-        Assert.Equal(ServedAccountId, result.AccountId);
-        Assert.Equal("INBOX", result.FolderAlias);
-        Assert.Equal(4096, result.SizeBytes);
-        Assert.Equal("Quarterly invoice", result.Headers.Subject);
-        Assert.Equal(sentAt, result.Headers.SentAt);
-        Assert.Equal(receivedAt, result.Headers.ReceivedAt);
+        var email = Assert.Single(result.Emails);
+        Assert.Equal(storedEmailId.ToString(), email.StoredEmailId);
+        Assert.Null(email.Failure);
+        var content = Assert.IsType<RetrievedEmailContent>(email.Content);
+        Assert.Equal(ServedAccountId, content.AccountId);
+        Assert.Equal("INBOX", content.FolderAlias);
+        Assert.Equal(4096, content.SizeBytes);
+        Assert.Equal("Quarterly invoice", content.Headers.Subject);
+        Assert.Equal(sentAt, content.Headers.SentAt);
+        Assert.Equal(receivedAt, content.Headers.ReceivedAt);
         Assert.Equal(
             [(EmailHeaderRole.From, "billing@example.test", "Accounts Payable"), (EmailHeaderRole.To, "finance@example.test", null)],
-            [.. result.Headers.Participants.Select(participant => (participant.Role, participant.Address, participant.DisplayName))]);
-        Assert.Equal("abc@example.test", result.Headers.MessageId);
-        Assert.Equal("root@example.test", result.Headers.InReplyTo);
-        Assert.Equal(["root@example.test"], result.Headers.References);
-        Assert.Equal(EmailBodyAvailabilityState.Readable, result.Body.Availability);
-        Assert.Equal("Please find the invoice attached.", result.Body.PlainText.Text);
-        Assert.Equal(33, result.Body.PlainText.OriginalCharacterCount);
-        Assert.False(result.Body.PlainText.WasTruncated);
-        Assert.Null(result.Body.SanitizedHtml);
-        var attachment = Assert.Single(result.Attachments);
+            [.. content.Headers.Participants.Select(participant => (participant.Role, participant.Address, participant.DisplayName))]);
+        Assert.Equal("abc@example.test", content.Headers.MessageId);
+        Assert.Equal("root@example.test", content.Headers.InReplyTo);
+        Assert.Equal(["root@example.test"], content.Headers.References);
+        Assert.Equal(EmailBodyAvailabilityState.Readable, content.Body.Availability);
+        Assert.Equal("Please find the invoice attached.", content.Body.PlainText.Text);
+        Assert.Equal(33, content.Body.PlainText.OriginalCharacterCount);
+        Assert.Equal(EmailBodyTruncationCause.None, content.Body.PlainText.TruncatedBy);
+        Assert.Null(content.Body.SanitizedHtml);
+        Assert.NotNull(content.Attachments);
+        var attachment = Assert.Single(content.Attachments);
         Assert.Equal("invoice.pdf", attachment.FileName);
         Assert.False(attachment.WasFileNameNormalized);
         Assert.Equal("application/pdf", attachment.MediaType);
         Assert.Equal(2048, attachment.SizeBytes);
-        Assert.NotNull(result.AttachmentCounts);
-        Assert.Equal(1, result.AttachmentCounts.AttachmentCount);
-        Assert.Equal(2048, result.AttachmentCounts.TotalSizeBytes);
-        Assert.Equal(1, result.AttachmentCounts.InlineResourceCount);
-        Assert.False(result.AttachmentCounts.IsEncrypted);
-        Assert.True(result.AttachmentCounts.CarriesUnverifiedSignature);
-        Assert.False(result.AttachmentCounts.ContainsUnexpandedTnefPart);
-        Assert.True(result.RemoteFlags.Seen);
-        Assert.Equal(observedAt, result.RemoteFlags.ObservedAt);
-        Assert.True(result.RemoteFlags.WasObserved);
+        Assert.NotNull(content.AttachmentCounts);
+        Assert.Equal(1, content.AttachmentCounts.AttachmentCount);
+        Assert.Equal(2048, content.AttachmentCounts.TotalSizeBytes);
+        Assert.Equal(1, content.AttachmentCounts.InlineResourceCount);
+        Assert.False(content.AttachmentCounts.IsEncrypted);
+        Assert.True(content.AttachmentCounts.CarriesUnverifiedSignature);
+        Assert.False(content.AttachmentCounts.ContainsUnexpandedTnefPart);
+        Assert.True(content.RemoteFlags.Seen);
+        Assert.Equal(observedAt, content.RemoteFlags.ObservedAt);
+        Assert.True(content.RemoteFlags.WasObserved);
     }
 
     /// <summary>A body and the fact that it is incomplete are never useful apart, so the second travels inside the first.</summary>
@@ -111,17 +115,39 @@ public sealed class GetEmailContentToolTests
         var tool = ToolOver(
             renderer: new StubEmailContentRenderer(
                 EmailContentRenderingResult.Rendered(
-                    RenderingOf(plainText: new EmailBodyRepresentation("The invoice beg", OriginalCharacterCount: 41_000, WasTruncated: true)))));
+                    RenderingOf(plainText: new EmailBodyRepresentation("The invoice beg", 41_000, EmailBodyTruncation.BodyCharacterLimit)))));
 
         // Act
         var result = await tool.GetEmailContentAsync(
-            Guid.CreateVersion7().ToString(),
+            [Guid.CreateVersion7().ToString()],
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(result.Body.PlainText.WasTruncated);
-        Assert.Equal(41_000, result.Body.PlainText.OriginalCharacterCount);
-        Assert.Equal("The invoice beg", result.Body.PlainText.Text);
+        var plainText = ContentOf(Assert.Single(result.Emails)).Body.PlainText;
+        Assert.Equal(EmailBodyTruncationCause.BodyCharacterLimit, plainText.TruncatedBy);
+        Assert.Equal(41_000, plainText.OriginalCharacterCount);
+        Assert.Equal("The invoice beg", plainText.Text);
+    }
+
+    /// <summary>Splitting the call is only worth suggesting when the call's own budget is what cut the body.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_BodyCutByTheReadsBudget_PublishesThatBoundRatherThanTheBodyBound()
+    {
+        // Arrange
+        var tool = ToolOver(
+            renderer: new StubEmailContentRenderer(
+                EmailContentRenderingResult.Rendered(
+                    RenderingOf(plainText: new EmailBodyRepresentation("The inv", 41_000, EmailBodyTruncation.ReadCharacterBudget)))));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [Guid.CreateVersion7().ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            EmailBodyTruncationCause.ReadCharacterBudget,
+            ContentOf(Assert.Single(result.Emails)).Body.PlainText.TruncatedBy);
     }
 
     [Fact]
@@ -130,21 +156,22 @@ public sealed class GetEmailContentToolTests
         // Arrange
         var renderer = new StubEmailContentRenderer(
             EmailContentRenderingResult.Rendered(
-                RenderingOf(sanitizedHtml: new EmailBodyRepresentation("<p>Invoice</p>", OriginalCharacterCount: 12_000, WasTruncated: true))));
+                RenderingOf(sanitizedHtml: new EmailBodyRepresentation("<p>Invoice</p>", 12_000, EmailBodyTruncation.BodyCharacterLimit))));
         var tool = ToolOver(renderer: renderer);
 
         // Act
         var result = await tool.GetEmailContentAsync(
-            Guid.CreateVersion7().ToString(),
+            [Guid.CreateVersion7().ToString()],
             includeSanitizedHtml: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(renderer.LastIncludeSanitizedHtml);
-        Assert.NotNull(result.Body.SanitizedHtml);
-        Assert.Equal("<p>Invoice</p>", result.Body.SanitizedHtml.Text);
-        Assert.True(result.Body.SanitizedHtml.WasTruncated);
-        Assert.False(result.Body.PlainText.WasTruncated);
+        var body = ContentOf(Assert.Single(result.Emails)).Body;
+        Assert.NotNull(body.SanitizedHtml);
+        Assert.Equal("<p>Invoice</p>", body.SanitizedHtml.Text);
+        Assert.Equal(EmailBodyTruncationCause.BodyCharacterLimit, body.SanitizedHtml.TruncatedBy);
+        Assert.Equal(EmailBodyTruncationCause.None, body.PlainText.TruncatedBy);
     }
 
     /// <summary>The markup costs a sanitization pass, so it is produced only for a caller that asked for it.</summary>
@@ -157,12 +184,12 @@ public sealed class GetEmailContentToolTests
 
         // Act
         var result = await tool.GetEmailContentAsync(
-            Guid.CreateVersion7().ToString(),
+            [Guid.CreateVersion7().ToString()],
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(renderer.LastIncludeSanitizedHtml);
-        Assert.Null(result.Body.SanitizedHtml);
+        Assert.Null(ContentOf(Assert.Single(result.Emails)).Body.SanitizedHtml);
     }
 
     /// <summary>"The caller did not want HTML" and "this message has no HTML" must not be reported as the same thing.</summary>
@@ -174,13 +201,14 @@ public sealed class GetEmailContentToolTests
 
         // Act
         var result = await tool.GetEmailContentAsync(
-            Guid.CreateVersion7().ToString(),
+            [Guid.CreateVersion7().ToString()],
             includeSanitizedHtml: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Null(result.Body.SanitizedHtml);
-        Assert.Equal(EmailBodyAvailabilityState.Readable, result.Body.Availability);
+        var body = ContentOf(Assert.Single(result.Emails)).Body;
+        Assert.Null(body.SanitizedHtml);
+        Assert.Equal(EmailBodyAvailabilityState.Readable, body.Availability);
     }
 
     /// <summary>Mail this deployment cannot decrypt is stated as such, so an empty body is never read as an empty message.</summary>
@@ -194,14 +222,15 @@ public sealed class GetEmailContentToolTests
 
         // Act
         var result = await tool.GetEmailContentAsync(
-            Guid.CreateVersion7().ToString(),
+            [Guid.CreateVersion7().ToString()],
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(EmailBodyAvailabilityState.EncryptedNotReadableLocally, result.Body.Availability);
-        Assert.Empty(result.Body.PlainText.Text);
-        Assert.NotNull(result.AttachmentCounts);
-        Assert.True(result.AttachmentCounts.IsEncrypted);
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Equal(EmailBodyAvailabilityState.EncryptedNotReadableLocally, content.Body.Availability);
+        Assert.Empty(content.Body.PlainText.Text);
+        Assert.NotNull(content.AttachmentCounts);
+        Assert.True(content.AttachmentCounts.IsEncrypted);
     }
 
     /// <summary>An email the size limit kept out of storage reports why, and reports no count nothing ever established.</summary>
@@ -217,38 +246,114 @@ public sealed class GetEmailContentToolTests
 
         // Act
         var result = await tool.GetEmailContentAsync(
-            Guid.CreateVersion7().ToString(),
+            [Guid.CreateVersion7().ToString()],
+            includeAttachmentDetails: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(EmailBodyAvailabilityState.NotStoredExceededSizeLimit, result.Body.Availability);
-        Assert.Empty(result.Body.PlainText.Text);
-        Assert.Empty(result.Attachments);
-        Assert.Null(result.AttachmentCounts);
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Equal(EmailBodyAvailabilityState.NotStoredExceededSizeLimit, content.Body.Availability);
+        Assert.Empty(content.Body.PlainText.Text);
+        Assert.Empty(content.Attachments ?? []);
+        Assert.Null(content.AttachmentCounts);
         Assert.Equal(0, contentStore.ReadCount);
     }
 
+    /// <summary>A file name is sender-chosen mail content, so an ordinary read is told how many attachments there are and not what they are called.</summary>
     [Fact]
-    public async Task GetEmailContentAsync_EmailThisMailboxCopyDoesNotHold_RaisesTheNotFoundRefusalWithoutReadingContent()
+    public async Task GetEmailContentAsync_AttachmentDetailsNotRequested_PublishesTheCountsAndNoAttachmentList()
+    {
+        // Arrange
+        var tool = ToolOver(
+            renderer: new StubEmailContentRenderer(
+                EmailContentRenderingResult.Rendered(
+                    RenderingOf(
+                        attachments:
+                        [
+                            new ExtractedEmailAttachment(AttachmentFileNameOf("medical-results.pdf"), "application/pdf", DecodedSizeOctets: 2048),
+                        ]))));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [Guid.CreateVersion7().ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Null(content.Attachments);
+        Assert.NotNull(content.AttachmentCounts);
+        Assert.Equal(1, content.AttachmentCounts.AttachmentCount);
+        Assert.Equal(2048, content.AttachmentCounts.TotalSizeBytes);
+    }
+
+    /// <summary>An email carrying nothing attached says so under either setting, so absence is never guessed at.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetEmailContentAsync_EmailWithNoAttachments_PublishesZeroUnderEitherSetting(
+        bool includeAttachmentDetails)
+    {
+        // Arrange
+        var tool = ToolOver();
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [Guid.CreateVersion7().ToString()],
+            includeAttachmentDetails: includeAttachmentDetails,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.NotNull(content.AttachmentCounts);
+        Assert.Equal(0, content.AttachmentCounts.AttachmentCount);
+    }
+
+    /// <summary>One flag governs the whole call, so a caller never receives descriptions for only part of what it named.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_AttachmentDetailsRequestedForSeveralEmails_DescribesEveryOneOfThem()
+    {
+        // Arrange
+        var tool = ToolOver(
+            renderer: new StubEmailContentRenderer(
+                EmailContentRenderingResult.Rendered(
+                    RenderingOf(
+                        attachments:
+                        [
+                            new ExtractedEmailAttachment(AttachmentFileNameOf("invoice.pdf"), "application/pdf", DecodedSizeOctets: 2048),
+                        ]))));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [.. Enumerable.Range(0, 3).Select(_ => Guid.CreateVersion7().ToString())],
+            includeAttachmentDetails: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([1, 1, 1], result.Emails.Select(email => ContentOf(email).Attachments?.Count));
+    }
+
+    /// <summary>An email that is not here is one entry refused, not a call refused, so what could be read still comes back.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_EmailThisMailboxCopyDoesNotHold_ReportsItInPlaceWithoutReadingItsContent()
     {
         // Arrange
         var contentStore = new StubEmailContentStore(IntactContent());
         var tool = ToolOver(new StubStoredEmailSummaryReader(), contentStore: contentStore);
 
         // Act
-        var failure = await Assert.ThrowsAsync<StoredEmailNotFoundException>(
-            () => tool.GetEmailContentAsync(
-                Guid.CreateVersion7().ToString(),
-                cancellationToken: TestContext.Current.CancellationToken));
+        var result = await tool.GetEmailContentAsync(
+            [Guid.CreateVersion7().ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(MailFathomErrorCode.StoredEmailNotFound, failure.ErrorCode);
+        var failure = FailureOf(Assert.Single(result.Emails));
+        Assert.Equal(MailFathomErrorCode.StoredEmailNotFound.Value, failure.Code);
         Assert.Equal(0, contentStore.ReadCount);
     }
 
     /// <summary>"No such email" and "not yours" are deliberately one answer, so a read cannot discover another mailbox's identifiers.</summary>
     [Fact]
-    public async Task GetEmailContentAsync_EmailOfAnAccountThisDeploymentDoesNotServe_IsRefusedAsNotFound()
+    public async Task GetEmailContentAsync_EmailOfAnAccountThisDeploymentDoesNotServe_IsReportedAsNotFound()
     {
         // Arrange
         var contentStore = new StubEmailContentStore(IntactContent());
@@ -257,41 +362,80 @@ public sealed class GetEmailContentToolTests
             contentStore: contentStore);
 
         // Act
-        var failure = await Assert.ThrowsAsync<StoredEmailNotFoundException>(
-            () => tool.GetEmailContentAsync(
-                Guid.CreateVersion7().ToString(),
-                cancellationToken: TestContext.Current.CancellationToken));
+        var result = await tool.GetEmailContentAsync(
+            [Guid.CreateVersion7().ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(MailFathomErrorCode.StoredEmailNotFound, failure.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.StoredEmailNotFound.Value, FailureOf(Assert.Single(result.Emails)).Code);
         Assert.Equal(0, contentStore.ReadCount);
+    }
+
+    /// <summary>Emails come back paired with what was asked for, in the order it was asked for.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_SeveralEmails_PublishesThemInTheOrderTheyWereNamed()
+    {
+        // Arrange
+        var namedEmailIds = Enumerable.Range(0, 4).Select(_ => Guid.CreateVersion7().ToString()).ToArray();
+        var tool = ToolOver();
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            namedEmailIds,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(namedEmailIds, result.Emails.Select(email => email.StoredEmailId));
+    }
+
+    /// <summary>One identifier this deployment cannot serve must not discard the content of the others.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_OneUnknownEmailAmongKnownOnes_PublishesTheContentOfTheRest()
+    {
+        // Arrange
+        var known = Enumerable.Range(0, 2).Select(_ => Guid.CreateVersion7()).ToArray();
+        var unknown = Guid.CreateVersion7();
+        var tool = ToolOver(
+            new StubStoredEmailSummaryReader(
+                SummaryOf(),
+                [.. known.Select(StoredEmailId.Create)]));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [known[0].ToString(), unknown.ToString(), known[1].ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(result.Emails[0].Content);
+        Assert.Null(result.Emails[1].Content);
+        Assert.Equal(MailFathomErrorCode.StoredEmailNotFound.Value, FailureOf(result.Emails[1]).Code);
+        Assert.NotNull(result.Emails[2].Content);
     }
 
     /// <summary>A local copy being repaired must not read as an email that was never stored, so the codes stay apart.</summary>
     [Fact]
-    public async Task GetEmailContentAsync_MissingLocalContent_RaisesACodeDistinctFromNotFound()
+    public async Task GetEmailContentAsync_MissingLocalContent_ReportsACodeDistinctFromNotFound()
     {
         // Arrange
         var repairRequests = Substitute.For<IEmailContentRepairRequestStore>();
         var tool = ToolOver(contentStore: new StubEmailContentStore(), repairRequestStore: repairRequests);
 
         // Act
-        var failure = await Assert.ThrowsAsync<EmailContentUnavailableException>(
-            () => tool.GetEmailContentAsync(
-                Guid.CreateVersion7().ToString(),
-                cancellationToken: TestContext.Current.CancellationToken));
+        var result = await tool.GetEmailContentAsync(
+            [Guid.CreateVersion7().ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(MailFathomErrorCode.EmailContentUnavailable, failure.ErrorCode);
-        Assert.NotEqual(MailFathomErrorCode.StoredEmailNotFound, failure.ErrorCode);
-        Assert.Equal(EmailContentDefect.Missing, failure.Defect);
+        var failure = FailureOf(Assert.Single(result.Emails));
+        Assert.Equal(MailFathomErrorCode.EmailContentUnavailable.Value, failure.Code);
+        Assert.NotEqual(MailFathomErrorCode.StoredEmailNotFound.Value, failure.Code);
         await repairRequests.Received(1).RecordAsync(
             Arg.Is<EmailContentRepairRequest>(request => request != null && request.Defect == EmailContentDefect.Missing),
             Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task GetEmailContentAsync_DamagedLocalContent_RaisesTheSameConsistencyCode()
+    public async Task GetEmailContentAsync_DamagedLocalContent_ReportsTheSameConsistencyCode()
     {
         // Arrange
         var tool = ToolOver(
@@ -299,14 +443,14 @@ public sealed class GetEmailContentToolTests
                 new StoredEmailContent(StoredRawMime, StoredRawMime.Length, SHA256.HashData([0x01]))));
 
         // Act
-        var failure = await Assert.ThrowsAsync<EmailContentUnavailableException>(
-            () => tool.GetEmailContentAsync(
-                Guid.CreateVersion7().ToString(),
-                cancellationToken: TestContext.Current.CancellationToken));
+        var result = await tool.GetEmailContentAsync(
+            [Guid.CreateVersion7().ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(MailFathomErrorCode.EmailContentUnavailable, failure.ErrorCode);
-        Assert.Equal(EmailContentDefect.HashMismatch, failure.Defect);
+        var failure = FailureOf(Assert.Single(result.Emails));
+        Assert.Equal(MailFathomErrorCode.EmailContentUnavailable.Value, failure.Code);
+        Assert.Contains(nameof(EmailContentDefect.HashMismatch), failure.Message, StringComparison.Ordinal);
     }
 
     /// <summary>A file name is attacker-controlled text that reaches a model, so what is published is the repaired form.</summary>
@@ -328,11 +472,12 @@ public sealed class GetEmailContentToolTests
 
         // Act
         var result = await tool.GetEmailContentAsync(
-            Guid.CreateVersion7().ToString(),
+            [Guid.CreateVersion7().ToString()],
+            includeAttachmentDetails: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        var attachment = Assert.Single(result.Attachments);
+        var attachment = Assert.Single(ContentOf(Assert.Single(result.Emails)).Attachments ?? []);
         Assert.Equal("passwd", attachment.FileName);
         Assert.True(attachment.WasFileNameNormalized);
     }
@@ -350,11 +495,12 @@ public sealed class GetEmailContentToolTests
 
         // Act
         var result = await tool.GetEmailContentAsync(
-            Guid.CreateVersion7().ToString(),
+            [Guid.CreateVersion7().ToString()],
+            includeAttachmentDetails: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        var attachment = Assert.Single(result.Attachments);
+        var attachment = Assert.Single(ContentOf(Assert.Single(result.Emails)).Attachments ?? []);
         Assert.Null(attachment.FileName);
         Assert.False(attachment.WasFileNameNormalized);
     }
@@ -397,7 +543,26 @@ public sealed class GetEmailContentToolTests
 
         // Act
         var failure = await Assert.ThrowsAsync<StoredEmailIdentifierMalformedException>(
-            () => tool.GetEmailContentAsync(unusable, cancellationToken: TestContext.Current.CancellationToken));
+            () => tool.GetEmailContentAsync([unusable], cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.StoredEmailIdentifierMalformed, failure.ErrorCode);
+        Assert.Equal(0, summaryReader.ReadCount);
+    }
+
+    /// <summary>One unusable identifier refuses the whole call, because no email was named to report an outcome against.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_OneUnusableIdentifierAmongUsableOnes_RefusesTheCallWithoutReadingAny()
+    {
+        // Arrange
+        var summaryReader = new StubStoredEmailSummaryReader(SummaryOf());
+        var tool = ToolOver(summaryReader);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<StoredEmailIdentifierMalformedException>(
+            () => tool.GetEmailContentAsync(
+                [Guid.CreateVersion7().ToString(), "not-a-stored-email"],
+                cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.StoredEmailIdentifierMalformed, failure.ErrorCode);
@@ -418,10 +583,88 @@ public sealed class GetEmailContentToolTests
 
         // Act
         var failure = await Assert.ThrowsAsync<StoredEmailIdentifierMalformedException>(
-            () => tool.GetEmailContentAsync(overlongIdentifier, cancellationToken: TestContext.Current.CancellationToken));
+            () => tool.GetEmailContentAsync([overlongIdentifier], cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.StoredEmailIdentifierMalformed, failure.ErrorCode);
+        Assert.Equal(0, summaryReader.ReadCount);
+    }
+
+    /// <summary>The count is what decides how much parsing a caller can ask for, so it is checked before the first parse.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_MoreEmailsThanTheCallServes_IsRefusedBeforeAnyIdentifierIsParsed()
+    {
+        // Arrange
+        var summaryReader = new StubStoredEmailSummaryReader(SummaryOf());
+        var tool = ToolOver(summaryReader);
+        var namedEmailIds = Enumerable
+            .Range(0, GetEmailContentRequest.MaximumEmails + 1)
+            .Select(_ => "not-a-stored-email")
+            .ToArray();
+
+        // Act
+        var failure = await Assert.ThrowsAsync<EmailContentReadCountOutOfRangeException>(
+            () => tool.GetEmailContentAsync(namedEmailIds, cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.EmailContentReadCountOutOfRange, failure.ErrorCode);
+        Assert.Equal(0, summaryReader.ReadCount);
+    }
+
+    /// <summary>The call is refused rather than truncated, so a caller is never left comparing the answer against its own list.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_ExactlyTheGreatestNumberOfEmails_IsServedRatherThanRefused()
+    {
+        // Arrange
+        var tool = ToolOver();
+        var namedEmailIds = Enumerable
+            .Range(0, GetEmailContentRequest.MaximumEmails)
+            .Select(_ => Guid.CreateVersion7().ToString())
+            .ToArray();
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            namedEmailIds,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(GetEmailContentRequest.MaximumEmails, result.Emails.Count);
+    }
+
+    /// <summary>A call naming nothing asks for nothing, and is the same finding about a count as a call naming too much.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_NoEmailNamed_IsRefusedWithTheSameCountRefusal()
+    {
+        // Arrange
+        var summaryReader = new StubStoredEmailSummaryReader(SummaryOf());
+        var tool = ToolOver(summaryReader);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<EmailContentReadCountOutOfRangeException>(
+            () => tool.GetEmailContentAsync([], cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.EmailContentReadCountOutOfRange, failure.ErrorCode);
+        Assert.Equal(0, summaryReader.ReadCount);
+    }
+
+    /// <summary>A repeat is refused rather than served twice, whichever way the caller spelled the second one.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_TheSameEmailNamedTwice_IsRefusedWithoutReadingIt()
+    {
+        // Arrange
+        var summaryReader = new StubStoredEmailSummaryReader(SummaryOf());
+        var tool = ToolOver(summaryReader);
+        var repeated = Guid.CreateVersion7();
+
+        // Act
+        var failure = await Assert.ThrowsAsync<EmailContentReadDuplicateEmailException>(
+            () => tool.GetEmailContentAsync(
+                [repeated.ToString(), Guid.CreateVersion7().ToString(), repeated.ToString().ToUpperInvariant()],
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.EmailContentReadDuplicateEmail, failure.ErrorCode);
         Assert.Equal(0, summaryReader.ReadCount);
     }
 
@@ -435,7 +678,7 @@ public sealed class GetEmailContentToolTests
 
         // Act
         var failure = await Assert.ThrowsAsync<StoredEmailIdentifierMalformedException>(
-            () => tool.GetEmailContentAsync(CallerText, cancellationToken: TestContext.Current.CancellationToken));
+            () => tool.GetEmailContentAsync([CallerText], cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
         Assert.DoesNotContain("victim@example.test", failure.Message, StringComparison.Ordinal);
@@ -447,12 +690,12 @@ public sealed class GetEmailContentToolTests
     {
         // Arrange
         var storedEmailId = Guid.CreateVersion7();
-        var summaryReader = new StubStoredEmailSummaryReader(SummaryOf(StoredEmailId.Create(storedEmailId)));
+        var summaryReader = new StubStoredEmailSummaryReader(SummaryOf());
         var tool = ToolOver(summaryReader);
 
         // Act
         await tool.GetEmailContentAsync(
-            storedEmailId.ToString().ToUpperInvariant(),
+            [storedEmailId.ToString().ToUpperInvariant()],
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
@@ -469,7 +712,9 @@ public sealed class GetEmailContentToolTests
 
         // Act, Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => tool.GetEmailContentAsync(Guid.CreateVersion7().ToString(), cancellationToken: cancellation.Token));
+            () => tool.GetEmailContentAsync(
+                [Guid.CreateVersion7().ToString()],
+                cancellationToken: cancellation.Token));
     }
 
     /// <summary>Collects every property type the published contract can carry, following the types this boundary declares.</summary>
@@ -501,6 +746,13 @@ public sealed class GetEmailContentToolTests
             ? type.GetGenericArguments()[0]
             : type;
 
+    private static RetrievedEmailContent ContentOf(RetrievedEmail email) =>
+        email.Content ?? throw new InvalidOperationException(
+            $"The email was not served: {email.Failure?.Message}");
+
+    private static RetrievedEmailFailure FailureOf(RetrievedEmail email) =>
+        email.Failure ?? throw new InvalidOperationException("The email was served rather than refused.");
+
     private static GetEmailContentTool ToolOver(
         StubStoredEmailSummaryReader? summaryReader = null,
         StubEmailContentRenderer? renderer = null,
@@ -511,17 +763,17 @@ public sealed class GetEmailContentToolTests
             contentStore ?? new StubEmailContentStore(IntactContent()),
             renderer ?? new StubEmailContentRenderer(EmailContentRenderingResult.Rendered(RenderingOf())),
             repairRequestStore ?? Substitute.For<IEmailContentRepairRequestStore>(),
-            new StubMailAccountCatalog(ServedAccountId)));
+            new StubMailAccountCatalog(ServedAccountId),
+            new EmailContentReadOptions()));
 
     private static EmailSummary SummaryOf(
-        StoredEmailId? storedEmailId = null,
         DateTimeOffset? sentAt = null,
         DateTimeOffset? receivedAt = null,
         DateTimeOffset? observedAt = null,
         string accountId = ServedAccountId,
         StoredEmailContentAvailability contentAvailability = StoredEmailContentAvailability.Available) => new()
         {
-            StoredEmailId = storedEmailId ?? StoredEmailId.Create(Guid.CreateVersion7()),
+            StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
             AccountId = MailAccountId.Create(accountId),
             FolderAlias = MailFolderAlias.Create("INBOX"),
             InternetMessageId = "<abc@example.test>",
@@ -556,7 +808,7 @@ public sealed class GetEmailContentToolTests
         headers ?? new EmailContentHeaders("Quarterly invoice", SentAt: null, ReceivedAt: null, [], EmailThreadReferences.None),
         plainText ?? (bodyIsEncrypted
             ? EmailBodyRepresentation.Empty
-            : new EmailBodyRepresentation("Body", OriginalCharacterCount: 4, WasTruncated: false)),
+            : new EmailBodyRepresentation("Body", 4, EmailBodyTruncation.None)),
         sanitizedHtml,
         bodyIsEncrypted,
         EmailAttachmentSummary.Create(

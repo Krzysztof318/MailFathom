@@ -15,9 +15,10 @@ namespace MailFathom.Application.Emails;
 /// one.
 /// </para>
 /// <para>
-/// It is deliberately distinct from <see cref="StoredEmailNotFoundException" />. That failure answers a request that
-/// named an email this deployment does not hold, and a caller acts on it by looking the email up again; this one says
-/// the request named no email at all, which no repeated read will change.
+/// It is deliberately distinct from the per-email failure a read reports for an email this deployment does not hold.
+/// That one answers a request that named an email, and a caller acts on it by looking the email up again; this one says
+/// the request named no email at all, which no repeated read will change. It is also raised rather than returned for
+/// that reason: text that names nothing leaves no email to report an outcome against.
 /// </para>
 /// <para>
 /// The message carries no payload of its own, because the only thing there would be to name is the refused text — and

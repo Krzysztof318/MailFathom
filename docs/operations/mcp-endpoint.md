@@ -1019,9 +1019,11 @@ whether a mail server is reachable. A deployment whose folders have never synchr
 `folderFreshness` entries report `wasSynchronized` as false, which is the state to check before treating an empty result as
 a statement about the mailbox.
 
-`get_email_content` reads that same local copy: it takes a `storedEmailId` a listing returned and never fetches, so an
-email whose content is missing or damaged locally is answered with `55001` and a durable repair request rather than with
-a download. An operator reading `55001` in the log is reading a local-consistency problem, not a mail-server one.
+`get_email_content` reads that same local copy: it takes up to ten `storedEmailId` values a listing returned and never
+fetches, so an email whose content is missing or damaged locally is reported as `55001` with a durable repair request
+rather than answered with a download. That code arrives inside an otherwise successful result, on the entry for the email
+it belongs to, so the emails read beside it are still returned. An operator reading `55001` in the log is reading a
+local-consistency problem, not a mail-server one.
 
 `search_emails` reads the lexical index built over that copy rather than the copy itself, so a folder that has
 synchronized but whose text extraction has not run yet answers an empty window rather than a failure. `folderFreshness`

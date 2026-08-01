@@ -17,15 +17,16 @@ public sealed class EmailBodyRepresentationTests
         const string body = "The whole message.";
 
         // Act
-        var representation = EmailBodyRepresentation.Bounded(body, maxCharacters: 100);
+        var representation = EmailBodyRepresentation.Bounded(body, AllowanceOf(100));
 
         // Assert
         Assert.Equal(body, representation.Text);
         Assert.Equal(body.Length, representation.OriginalCharacterCount);
+        Assert.Equal(EmailBodyTruncation.None, representation.Truncation);
         Assert.False(representation.WasTruncated);
     }
 
-    /// <summary>A body of exactly the bound is complete, which is the boundary the truncation flag turns on after.</summary>
+    /// <summary>A body of exactly the bound is complete, which is the boundary the truncation state turns on after.</summary>
     [Fact]
     public void Bounded_BodyOfExactlyTheBound_KeepsItAndReportsNoTruncation()
     {
@@ -33,11 +34,11 @@ public sealed class EmailBodyRepresentationTests
         var body = new string('a', 64);
 
         // Act
-        var representation = EmailBodyRepresentation.Bounded(body, maxCharacters: 64);
+        var representation = EmailBodyRepresentation.Bounded(body, AllowanceOf(64));
 
         // Assert
         Assert.Equal(body, representation.Text);
-        Assert.False(representation.WasTruncated);
+        Assert.Equal(EmailBodyTruncation.None, representation.Truncation);
     }
 
     /// <summary>One character past the bound is truncation, and the original length is what the caller needs to know.</summary>
@@ -48,12 +49,48 @@ public sealed class EmailBodyRepresentationTests
         var body = new string('a', 65);
 
         // Act
-        var representation = EmailBodyRepresentation.Bounded(body, maxCharacters: 64);
+        var representation = EmailBodyRepresentation.Bounded(body, AllowanceOf(64));
 
         // Assert
         Assert.Equal(64, representation.Text.Length);
         Assert.Equal(65, representation.OriginalCharacterCount);
         Assert.True(representation.WasTruncated);
+    }
+
+    /// <summary>Which limit cut a body is the caller's next decision, so the allowance's own answer is what is reported.</summary>
+    [Theory]
+    [InlineData(EmailBodyTruncation.BodyCharacterLimit)]
+    [InlineData(EmailBodyTruncation.ReadCharacterBudget)]
+    public void Bounded_BodyBeyondTheBound_NamesTheBoundTheAllowanceCarried(EmailBodyTruncation truncationWhenCut)
+    {
+        // Arrange
+        var body = new string('a', 65);
+
+        // Act
+        var representation = EmailBodyRepresentation.Bounded(
+            body,
+            new EmailBodyCharacterAllowance(64, truncationWhenCut));
+
+        // Assert
+        Assert.Equal(truncationWhenCut, representation.Truncation);
+    }
+
+    /// <summary>An email reached after the read's budget ran out returns nothing and says which limit emptied it.</summary>
+    [Fact]
+    public void Bounded_AllowanceOfNoCharacters_ReturnsAnEmptyTextThatStatesTheBoundThatEmptiedIt()
+    {
+        // Arrange
+        const string body = "The whole message.";
+
+        // Act
+        var representation = EmailBodyRepresentation.Bounded(
+            body,
+            new EmailBodyCharacterAllowance(0, EmailBodyTruncation.ReadCharacterBudget));
+
+        // Assert
+        Assert.Equal(string.Empty, representation.Text);
+        Assert.Equal(body.Length, representation.OriginalCharacterCount);
+        Assert.Equal(EmailBodyTruncation.ReadCharacterBudget, representation.Truncation);
     }
 
     /// <summary>The cut falls between characters a reader sees, never through the middle of one.</summary>
@@ -66,7 +103,7 @@ public sealed class EmailBodyRepresentationTests
         var body = "Report " + "👨‍👩‍👧‍👦";
 
         // Act
-        var representation = EmailBodyRepresentation.Bounded(body, maxCharacters: body.Length - 1);
+        var representation = EmailBodyRepresentation.Bounded(body, AllowanceOf(body.Length - 1));
 
         // Assert
         Assert.Equal("Report ", representation.Text);
@@ -84,6 +121,9 @@ public sealed class EmailBodyRepresentationTests
         // Assert
         Assert.Equal(string.Empty, representation.Text);
         Assert.Equal(0, representation.OriginalCharacterCount);
-        Assert.False(representation.WasTruncated);
+        Assert.Equal(EmailBodyTruncation.None, representation.Truncation);
     }
+
+    private static EmailBodyCharacterAllowance AllowanceOf(int maxCharacters) =>
+        new(maxCharacters, EmailBodyTruncation.BodyCharacterLimit);
 }

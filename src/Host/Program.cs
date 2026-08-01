@@ -145,9 +145,14 @@ try
             MaxExtractedTextCharacters = synchronizationSettings.MaxExtractedTextCharacters,
         };
     });
-    builder.Services.AddScoped(provider => new EmailContentReadOptions
+    builder.Services.AddScoped(provider =>
     {
-        MaxBodyCharacters = provider.GetRequiredService<IOptions<EmailContentOptions>>().Value.MaxBodyCharacters,
+        var contentSettings = provider.GetRequiredService<IOptions<EmailContentOptions>>().Value;
+        return new EmailContentReadOptions
+        {
+            MaxBodyCharacters = contentSettings.MaxBodyCharacters,
+            MaxCharactersPerRead = contentSettings.MaxCharactersPerRead,
+        };
     });
     builder.Services.AddScoped(provider =>
     {

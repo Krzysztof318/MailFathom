@@ -12,13 +12,18 @@ using ModelContextProtocol.Server;
 namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes the <c>get_email_content</c> tool over the <see cref="EmailContentReader" /> use case.</summary>
-/// <param name="emailContentReader">Reads one email from the local mailbox copy.</param>
+/// <param name="emailContentReader">Reads emails from the local mailbox copy.</param>
 /// <remarks>
 /// <para>
-/// The tool translates and nothing more. It converts the caller's text into the domain identity the request is
+/// The tool translates and nothing more. It converts the caller's text into the domain identities the request is
 /// expressed in, calls the use case, and maps the result onto the published contract. The account authorization, the
-/// integrity check on the local copy, the body bound, and the repair request a damaged copy produces are the use case's
-/// own, checked there so an entrypoint added later cannot bypass them.
+/// integrity check on the local copy, the body bounds, the read's character budget, and the repair request a damaged
+/// copy produces are the use case's own, checked there so an entrypoint added later cannot bypass them.
+/// </para>
+/// <para>
+/// One thing is checked here that cannot be checked anywhere else: how many identifiers the caller sent, counted before
+/// any of them is parsed. The parse scans whatever it is handed, and a caller nobody vouches for decides both how long
+/// each identifier is and how many there are.
 /// </para>
 /// <para>
 /// It reaches no mail server, because the use case it calls holds no mailbox port. A protocol request therefore cannot
@@ -46,15 +51,20 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
     /// </remarks>
     private const int MaximumIdentifierLength = 68;
 
-    /// <summary>Reads one email's content from the local mailbox copy.</summary>
-    /// <param name="storedEmailId">The stable local identifier a listing or a search returned for the email.</param>
-    /// <param name="includeSanitizedHtml">Whether to also return the sanitized HTML representation of the body.</param>
+    /// <summary>Reads the content of the named emails from the local mailbox copy.</summary>
+    /// <param name="storedEmailIds">The stable local identifiers a listing or a search returned for the emails.</param>
+    /// <param name="includeSanitizedHtml">Whether to also return the sanitized HTML representation of each body.</param>
+    /// <param name="includeAttachmentDetails">Whether to describe each attachment rather than only count them.</param>
     /// <param name="cancellationToken">Cancels the read when the caller disconnects or the host shuts down.</param>
-    /// <returns>The email's headers, body, attachment metadata, and remote flag snapshot.</returns>
-    /// <exception cref="StoredEmailIdentifierMalformedException">Thrown when the identifier is not one this system issues, before anything is read.</exception>
+    /// <returns>One entry per named email, each carrying its content or the reason there is none.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="storedEmailIds" /> is <see langword="null" />, which the advertised schema already refuses.</exception>
+    /// <exception cref="EmailContentReadCountOutOfRangeException">Thrown when no email is named, or more than the call serves, before any identifier is parsed.</exception>
+    /// <exception cref="StoredEmailIdentifierMalformedException">Thrown when an identifier is not one this system issues, before anything is read.</exception>
+    /// <exception cref="EmailContentReadDuplicateEmailException">Thrown when the same email is named more than once.</exception>
     /// <exception cref="MailFathomException">
-    /// Raised by the use case for an email it does not hold or whose local copy it cannot serve. The call-tool filter
-    /// turns every one of them into the coded result a client reads, so this tool neither catches nor re-describes any.
+    /// Raised by the use case for a request it will not serve. The call-tool filter turns every one of them into the
+    /// coded result a client reads, so this tool neither catches nor re-describes any. A single email it cannot serve is
+    /// not one of them: that is reported inside the result, beside the emails it could.
     /// </exception>
     [McpServerTool(
         Name = ToolName,
@@ -65,26 +75,55 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
         OpenWorld = false,
         UseStructuredContent = true)]
     [Description(
-        "Reads one email already synchronized into MailFathom's local mailbox copy: its normalized headers, the plain-text "
-        + "body, optionally a sanitized HTML body, and a description of each attachment. Reads the local copy only: it "
-        + "never contacts a mail server, never downloads mail, and never marks mail as read. Bodies are bounded and say "
-        + "so when they were cut, and attachment content is never returned in any form. Name the email by the "
-        + "storedEmailId a listing or a search returned.")]
+        "Reads up to 10 emails already synchronized into MailFathom's local mailbox copy, in one call: for each one its "
+        + "normalized headers, the plain-text body, optionally a sanitized HTML body, and how many attachments it "
+        + "carries. Reads the local copy only: it never contacts a mail server, never downloads mail, and never marks "
+        + "mail as read. Each email is answered for separately, so one this deployment cannot serve does not discard "
+        + "the others. Bodies are bounded per email and by a budget shared across the whole call, and each says which "
+        + "of the two cut it; naming fewer emails at once returns more of each. By default attachments are counted and "
+        + "not described — set includeAttachmentDetails to receive their file names, media types, and sizes. Attachment "
+        + "content is never returned in any form. Name each email by the storedEmailId a listing or a search returned.")]
     public async Task<GetEmailContentToolResult> GetEmailContentAsync(
-        [Description("The storedEmailId a listing or a search returned for the email. It is a UUID and does not change when the mail server renumbers or moves the message.")]
-        string storedEmailId,
-        [Description("Whether to also return the sanitized HTML body. Omit it unless the markup itself matters: the plain text is the representation to read from, and HTML costs a sanitization pass. An email carrying no HTML part returns none either way.")]
+        [Description("The storedEmailIds a listing or a search returned, at most 10, each named at most once. Each is a UUID and does not change when the mail server renumbers or moves the message. Results come back in the order given, and the call is refused rather than truncated when it names more than 10.")]
+        IReadOnlyList<string> storedEmailIds,
+        [Description("Whether to also return the sanitized HTML body of each email. Omit it unless the markup itself matters: the plain text is the representation to read from, HTML costs a sanitization pass, and it draws on the same character budget as the plain text. An email carrying no HTML part returns none either way.")]
         bool includeSanitizedHtml = false,
+        [Description("Whether to describe each attachment — its file name, media type, and decoded size — rather than only count them. Omitted returns the counts alone, which is what an ordinary read of a body needs: a file name is text the sender chose and is often the most identifying string an email carries. Attachment content is never returned under either setting.")]
+        bool includeAttachmentDetails = false,
         CancellationToken cancellationToken = default)
     {
-        var request = new GetEmailContentRequest(NamedEmail(storedEmailId), includeSanitizedHtml);
+        var request = GetEmailContentRequest.Create(
+            NamedEmails(storedEmailIds),
+            includeSanitizedHtml,
+            includeAttachmentDetails);
 
         var result = await emailContentReader.ReadContentAsync(request, cancellationToken);
 
         return GetEmailContentToolResult.From(result);
     }
 
-    /// <summary>Reads the email identity the caller's text names.</summary>
+    /// <summary>Reads the email identities the caller's text names.</summary>
+    /// <remarks>
+    /// The count is checked before the first identifier is parsed, for the same reason each identifier's length is
+    /// checked before that identifier is parsed: a parse scans what it is handed, and the caller decides both how much
+    /// of it there is and how many times it is repeated. A list refused after the ninetieth parse would have paid for
+    /// eighty-nine of them.
+    /// </remarks>
+    /// <exception cref="EmailContentReadCountOutOfRangeException">Thrown when no email is named, or more than one call serves.</exception>
+    /// <exception cref="StoredEmailIdentifierMalformedException">Thrown when one of the texts is not an identifier this system issues.</exception>
+    private static IReadOnlyList<StoredEmailId> NamedEmails(IReadOnlyList<string> storedEmailIds)
+    {
+        ArgumentNullException.ThrowIfNull(storedEmailIds);
+
+        if (storedEmailIds.Count is 0 || storedEmailIds.Count > GetEmailContentRequest.MaximumEmails)
+        {
+            throw new EmailContentReadCountOutOfRangeException(GetEmailContentRequest.MaximumEmails);
+        }
+
+        return [.. storedEmailIds.Select(NamedEmail)];
+    }
+
+    /// <summary>Reads the email identity one piece of the caller's text names.</summary>
     /// <remarks>
     /// <para>
     /// The conversion happens before the use case is reached, so text that names no email is refused without a lookup.
@@ -99,12 +138,13 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
     /// <para>
     /// The refused text is deliberately absent from the failure. It is the caller's own input on its way into a
     /// client-readable result and the log line beside it, and an identifier a caller invented says nothing an operator
-    /// needs that the code does not already say.
+    /// needs that the code does not already say. Which position in the list was refused is absent for the same reason
+    /// it is unnecessary: the caller holds the list it sent.
     /// </para>
     /// </remarks>
     /// <exception cref="StoredEmailIdentifierMalformedException">Thrown when the text is not an identifier this system issues.</exception>
     private static StoredEmailId NamedEmail(string storedEmailId) =>
-        storedEmailId.Length <= MaximumIdentifierLength
+        storedEmailId is { Length: <= MaximumIdentifierLength }
         && Guid.TryParse(storedEmailId, out var identity)
         && identity != Guid.Empty
             ? StoredEmailId.Create(identity)

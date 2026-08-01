@@ -20,17 +20,23 @@ public interface IEmailContentRenderer
 {
     /// <summary>Renders one stored message.</summary>
     /// <param name="content">The stored raw MIME.</param>
-    /// <param name="includeSanitizedHtml">Whether to also produce the sanitized HTML representation.</param>
+    /// <param name="bounds">What to produce, and how many characters of it a reader may be handed.</param>
     /// <param name="cancellationToken">Cancels the parse.</param>
     /// <returns>The rendering, or the fact that the bytes yielded nothing a reader could be shown.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="content" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when either argument is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// The HTML representation costs a sanitization pass over untrusted markup, so it is produced only when it was
     /// asked for. A message with no HTML body part returns none of it whether or not it was asked for, which is what
     /// keeps "the caller did not want HTML" and "this message has no HTML" from being reported as the same thing.
+    /// </para>
+    /// <para>
+    /// An implementation applies both bounds and reports which one cut each representation. The plain text is bounded
+    /// before the markup, because the caller's default representation must not be the one a shared budget starves.
+    /// </para>
     /// </remarks>
     Task<EmailContentRenderingResult> RenderAsync(
         StoredEmailContent content,
-        bool includeSanitizedHtml,
+        EmailContentRenderingBounds bounds,
         CancellationToken cancellationToken);
 }
