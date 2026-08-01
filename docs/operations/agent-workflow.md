@@ -137,13 +137,18 @@ the author is already answering. Two things ask for a review anyway:
   appear anywhere in the body, because `fathom-review` names this pipeline and is
   therefore exactly the word somebody writes when discussing it — "I'll rerun the
   fathom-review workflow" mid-sentence must not spend subscription usage on a run
-  nobody asked for. And the `@` is
-  optional rather than required, because every other reviewer is summoned with
-  one and a trigger that silently ignores the spelling a hand reaches for first
-  is a trap. `@fathom-review` addresses no account: the App is named
-  `Fathom reviewer`, so GitHub renders it as plain text. Leading whitespace is
-  fine, so a list item or a quoted line still counts, and `fathom-reviewer` does
-  not;
+  nobody asked for. And the `@` is optional rather than required, because every
+  other reviewer is summoned with one and a trigger that silently ignores the
+  spelling a hand reaches for first is a trap. `@fathom-review` addresses no
+  account: the App is named `Fathom reviewer`, so GitHub renders it as plain
+  text.
+
+  Leading whitespace is fine, and so is a `-`, `*`, or `+` list marker, because a
+  request written as one of several bullet points is still a request. A `>` is
+  not: that is GitHub's quote-reply marker, so accepting it would make answering
+  a thread that contains the phrase start a second run, and a citation is not an
+  instruction. The marker must be followed by whitespace, so the hyphenated
+  `-fathom-review` does not count, and neither does `fathom-reviewer`;
 - the `fathom-review` label, which is how a fork's pull request is reviewed at
   all. A fork's own pushes never start a review, so a maintainer decides.
 
@@ -275,6 +280,15 @@ verdict, so it is delivered where GitHub renders a verdict. The alternatives are
 both worse — `event: COMMENT` with an empty comment list records that a review
 happened without saying what it concluded, and an ordinary issue comment says it
 somewhere nothing reads as a verdict at all.
+
+That branch is the one place the reviewer's own exit status is consulted a second
+time. An empty findings array means two different things: from a run that
+finished it means nothing was found, and from one that died after writing the
+file — an exhausted subscription, a transport error, a model that stopped — it
+means the search never completed. Findings from such a run are still posted,
+because a defect it did name is real. An approval is not, because it asserts the
+absence of what the run stopped looking for, so an unfinished run that found
+nothing reports a notice and publishes no verdict.
 
 `commit_id` ties the approval to the head the reviewer actually saw, and the
 `main` ruleset sets `dismiss_stale_reviews_on_push`, so the next push dismisses

@@ -129,9 +129,14 @@ jobs:
               # docs" — and an anywhere-match would spend subscription usage on a run nobody asked
               # for every time that sentence appears on a pull request. Somebody asking for a review
               # types the phrase as an instruction, at the start of a line; somebody talking about
-              # it does not. Leading
-              # whitespace is allowed because a list item or a quote is still an instruction, and
-              # the trailing `[^a-z-]` keeps `fathom-reviewer` from counting.
+              # it does not. The trailing `[^a-z-]` keeps `fathom-reviewer` from counting.
+              #
+              # A `-`, `*`, or `+` list marker may precede the phrase, because a request written as
+              # one of several bullet points is still a request. A `>` may not: on GitHub that is
+              # the quote-reply marker, so accepting it would make answering a thread that contains
+              # the phrase start a second run — a citation is not an instruction. The marker has to
+              # be followed by whitespace, so a hyphenated word such as `-fathom-review` still does
+              # not count.
               #
               # The `@` is optional because every other reviewer on the market is summoned with one,
               # so it is the first thing a hand types, and a trigger that silently ignores the
@@ -139,7 +144,7 @@ jobs:
               # App is named `Fathom reviewer` — so GitHub renders it as plain text, and accepting it
               # weakens nothing: `@fathom-review` is not a phrase that turns up in prose about the
               # workflow, so the line-start rule above still carries the whole guard.
-              trigger_pattern=$'(^|\n)[[:space:]]*@?fathom-review([^a-z-]|$)'
+              trigger_pattern=$'(^|\n)[[:space:]]*([-*+][[:space:]]+)?@?fathom-review([^a-z-]|$)'
 
               if [[ "$IS_PULL_REQUEST_COMMENT" != 'true' ]]; then
                 reason='the comment is on an issue rather than a pull request'
@@ -837,6 +842,19 @@ jobs:
           # This cannot merge anything by itself: the ruleset requires an approving review from a
           # code owner, and a GitHub App cannot be one. `REQUEST_CHANGES` is never used in either
           # branch — a reviewer that gates nothing must not be able to block a merge either.
+          # An empty findings array means two different things depending on how the reviewer ended.
+          # From a run that finished, it means nothing was found. From one that died after its
+          # `Write` call — an exhausted subscription, a transport error, a model that stopped — it
+          # means the search never completed, and the file is a snapshot rather than a verdict.
+          # Findings from such a run are still worth posting, because a defect it did name is real;
+          # an approval is not, because it asserts the absence of what the run stopped looking for.
+          # So the affirmative branch is the one gated on the reviewer having succeeded.
+          if [[ "$(jq '(.findings // []) | length' "$FINDINGS_FILE")" == '0' ]] \
+            && [[ "$REVIEW_OUTCOME" != 'success' ]]; then
+            echo '::notice::The reviewer did not finish and found nothing before stopping, so no approval was posted.'
+            exit 0
+          fi
+
           if [[ "$(jq '(.findings // []) | length' "$FINDINGS_FILE")" == '0' ]]; then
             jq --arg commit "$HEAD_SHA" \
                --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" '
