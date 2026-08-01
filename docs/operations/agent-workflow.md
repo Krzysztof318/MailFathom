@@ -120,17 +120,27 @@ then comment on the pull request itself: Codex and Claude. Both post threads
 carrying a `P1`, `P2`, or `P3` severity, so one pass over the pull request's
 threads answers both rather than two passes reading two vocabularies.
 
-The Claude pass is the `Fathom review` workflow. It runs by itself once, when a
-pull request whose branch is in this repository becomes reviewable: `opened`,
-`reopened`, or `ready_for_review`. A draft is skipped, because a draft is still
-being written and reviewing it spends subscription usage on a moving target. A
-later push is not reviewed either — it runs the required checks and nothing
-else, since those gate the merge while a re-review would mostly repeat findings
-the author is already answering. Two things ask for a review anyway:
+The Claude pass is the `Fathom review` workflow. It runs by itself when a pull
+request whose branch is in this repository becomes reviewable — `opened`,
+`reopened`, or `ready_for_review` — and again on every push to one that is
+already published. The branch that will merge is the one worth a verdict, and the
+`main` ruleset sets `dismiss_stale_reviews_on_push`, so a commit landing on an
+approved pull request discards that approval; without a re-review it would carry
+no verdict at all, which is the state a reader is most likely to mistake for one.
+
+A draft is skipped, because a draft is still being written and reviewing it
+spends subscription usage on a moving target. That is also what contains the cost
+of reviewing pushes: a branch still being written is pushed to freely and spends
+nothing, and marking it ready is the deliberate act that opts every later push in.
+Two things ask for a review anyway:
 
 - a comment on the pull request that *begins a line* with `fathom-review` or
-  `@fathom-review`, from an author with write access. Adding `opus` to that comment
-  buys a second, costlier opinion; `claude-sonnet-5` is the default.
+  `@fathom-review`, from an author with write access. A draft is reviewed this
+  way, and so is any published pull request whose current head is worth a second
+  look; the comment path applies none of the checks above, because somebody with
+  write access typing the phrase has already decided the run is worth its cost.
+  Adding `opus` to that comment buys a second, costlier opinion;
+  `claude-sonnet-5` is the default.
 
   Three things about that phrase are deliberate. It is not `@claude`, which
   collides with GitHub Copilot's own trigger. It has to lead a line rather than
@@ -214,8 +224,8 @@ The prompt points the reviewer at this repository's own rules rather than at
 general review practice: root `AGENTS.md`, the nested `AGENTS.md` files under
 `src/`, `tests/`, and `docs/`, the recurring findings in the `review-change`
 skill, and the specifications and ADRs that govern the area the change touches. A
-finding is expected to name the rule it rests on, and one that applies generic
-advice where this repository has stated a different rule is itself wrong.
+finding names the rule it rests on in a field of its own, and one that applies
+generic advice where this repository has stated a different rule is itself wrong.
 
 Beyond that contract it works through five rubrics — the repository's rules,
 security and privacy, reliability, performance, and clean code — each stated as
@@ -274,12 +284,30 @@ ranged comment, submits with an explicit `POST`, and refuses to post at all if
 the findings contain any credential this workflow holds or anything shaped like
 one.
 
+It also lays each finding out. The reviewer writes one as separate fields —
+`impact`, what breaks; `correction`, the smallest change that fixes it; `rule`,
+what the finding rests on — and this step renders them under fixed headings, so
+every thread answers the same three questions in the same order. An author
+reading a column of threads can skip to the part they need instead of parsing a
+paragraph per finding, and a reviewer that skipped a field leaves a visible gap
+rather than a plausible-looking sentence. The unanchored findings in the body are
+rendered by the same code, so a finding does not change shape because its line
+moved. The count by severity is rendered here too, and the prompt forbids the
+reviewer from restating it: a tally written by hand can disagree with the threads
+that were actually posted.
+
+Either body opens with the verdict as a heading of its own — `APPROVED` when the
+findings array is empty, `NEEDS CHANGES` when it is not — and the summary sits
+under it. That is the one thing a reader wants before deciding whether to read
+the rest, and inferring it from whether threads appeared fails exactly where it
+matters, on a long pull request.
+
 A run that found nothing takes the other branch: `event: APPROVE`, carrying the
-reviewer's summary as the review body and no inline comments. Nothing found is a
-verdict, so it is delivered where GitHub renders a verdict. The alternatives are
-both worse — `event: COMMENT` with an empty comment list records that a review
-happened without saying what it concluded, and an ordinary issue comment says it
-somewhere nothing reads as a verdict at all.
+verdict and the reviewer's summary as the review body and no inline comments.
+Nothing found is a verdict, so it is delivered where GitHub renders a verdict.
+The alternatives are both worse — `event: COMMENT` with an empty comment list
+records that a review happened without saying what it concluded, and an ordinary
+issue comment says it somewhere nothing reads as a verdict at all.
 
 That branch is the one place the reviewer's own exit status is consulted a second
 time. An empty findings array means two different things: from a run that
@@ -299,7 +327,8 @@ approving review *from a code owner*, `CODEOWNERS` makes the repository owner th
 code owner of every path, and a GitHub App cannot be a code owner — so the
 owner's approval is still required and this one sits beside it as a signal.
 `REQUEST_CHANGES` is never used in either branch: a reviewer that reports no
-status check and gates nothing must not be able to block a merge either.
+status check and gates nothing must not be able to block a merge either, which is
+why `NEEDS CHANGES` is a heading in a body and never a review state.
 
 ### Who publishes it
 

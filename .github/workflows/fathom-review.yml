@@ -25,23 +25,34 @@ name: Fathom review
 # A run that finds nothing above the bar approves the pull request, and one that finds something
 # submits `event: COMMENT`. The verdict is the whole content of an all-clear, so it is said in the
 # one place GitHub renders as a verdict rather than as a wall of threads that each read "this is
-# fine". `REQUEST_CHANGES` is deliberately never used: this reviewer advises and gates nothing.
+# fine". Either body opens with that verdict as a heading of its own — `APPROVED` or
+# `NEEDS CHANGES` — so what the run concluded is legible before the summary under it is read, and
+# a reader scrolling a long pull request does not have to infer it from whether threads appeared.
+#
+# `NEEDS CHANGES` is a heading and nothing more. `REQUEST_CHANGES` is deliberately never used:
+# this reviewer advises and gates nothing, so it must not be able to block a merge either.
 #
 # The approval cannot merge anything on its own. The `main` ruleset requires one approving review
 # *from a code owner*, `CODEOWNERS` makes the repository owner the code owner of every path, and a
 # GitHub App cannot be a code owner — so the owner's own approval is still required, and this one
 # sits beside it as a signal. `dismiss_stale_reviews_on_push` then discards it on the next push, so
-# an approval never outlives the commit it was given for.
+# an approval never outlives the commit it was given for, and that same push starts the review that
+# replaces it.
 on:
-  # No `synchronize`. A push to a pull request that is already open runs the required checks and
-  # nothing else: those are cheap, deterministic, and gate the merge, while a re-review costs
-  # subscription usage and would repeat findings the author is already answering. A review of the
-  # updated branch is asked for, with a `fathom-review` comment.
+  # `synchronize` is what reviews a push. The branch that will merge is the one worth a verdict, and
+  # the `main` ruleset sets `dismiss_stale_reviews_on_push`, so a commit landing on an approved pull
+  # request discards the approval — without a re-review it would then carry no verdict at all, which
+  # is the state a reader is most likely to misread as one.
+  #
+  # It costs subscription usage per push, and the gate below is where that cost is contained: a
+  # draft is not reviewed, so a branch still being written spends nothing however often it is pushed
+  # to, and marking it ready is the deliberate act that opts every later push in.
   pull_request_target:
     types:
       - opened
       - reopened
       - ready_for_review
+      - synchronize
       - labeled
     branches:
       - main
@@ -50,6 +61,10 @@ on:
       - created
 
 concurrency:
+  # One run per pull request, and the newest head wins. A push while a review is still running
+  # leaves that review describing a head nobody will merge, so it is cancelled rather than allowed
+  # to post a verdict against superseded code and threads anchored to lines that have moved.
+  #
   # Cancelling is safe and worth the saved usage: the review is one POST at the end of the job, so a
   # run stopped before it posts nothing at all, and a run stopped after it has already finished.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
@@ -107,18 +122,28 @@ jobs:
                   reason="the applied label is '${ADDED_LABEL}'"
                 fi
               elif [[ "$PULL_REQUEST_DRAFT" == 'true' ]]; then
+                # This is the one check that contains what `synchronize` costs: a draft is pushed
+                # to while it is being written, and none of those pushes is reviewed.
                 reason='the pull request is a draft; label it fathom-review or comment fathom-review to review it anyway'
               elif [[ "$HEAD_REPOSITORY" != "$REPOSITORY" ]]; then
-                # A fork's own pull request never starts a review by being opened. The label
-                # does, and the action's own write-permission check on the actor agrees: on a
+                # A fork's own pull request never starts a review by being opened or pushed to. The
+                # label does, and the action's own write-permission check on the actor agrees: on a
                 # `labeled` event the actor is the maintainer who applied it.
                 reason="the head branch is in ${HEAD_REPOSITORY}; a maintainer applies the fathom-review label to review a fork"
+              elif [[ "$EVENT_ACTION" == 'synchronize' ]]; then
+                review='true'
+                reason='the branch was pushed to'
               else
                 review='true'
                 reason="the pull request was ${EVENT_ACTION}"
               fi
               ;;
             issue_comment)
+              # The comment path deliberately applies none of the checks above. A draft is reviewed
+              # this way — it is the escape hatch the draft branch above names — and so is a fork's
+              # pull request, because somebody with write access typing the phrase has already
+              # decided this run is worth its cost. Author association is the whole guard here.
+              #
               # `fathom-review` rather than `@claude`: an at-mention collides with GitHub Copilot's
               # own trigger.
               #
@@ -650,7 +675,7 @@ jobs:
 
             ```json
             {
-              "summary": "One to five lines: what the change does, how much of it you covered, the count by severity, anything you left out against the cap, and any concern that had no line to sit on.",
+              "summary": "One to five lines: what the change does, how much of it you covered, anything you left out against the cap, and any concern that had no line to sit on.",
               "findings": [
                 {
                   "severity": "P1",
@@ -658,24 +683,41 @@ jobs:
                   "start_line": null,
                   "line": 87,
                   "title": "Refuse when a matching profile loses all anchors",
-                  "body": "When a certificate matches a profile's SAN but every anchor becomes unloadable after startup, `FindRejectionAsync` returns `TrustAnchorUnavailable`, yet this loop records it and continues, so a later profile can accept the certificate and widen access against the documented fail-closed behavior. Return the rejection immediately when it is `TrustAnchorUnavailable`."
+                  "impact": "When a certificate matches a profile's SAN but every anchor becomes unloadable after startup, `FindRejectionAsync` returns `TrustAnchorUnavailable`, yet this loop records it and continues, so a later profile can accept the certificate and widen access.",
+                  "correction": "Return the rejection immediately when it is `TrustAnchorUnavailable`.",
+                  "rule": "`AGENTS.md`, \"Reliability, security, and performance\": a security decision must not fail open where the documentation says it fails closed."
                 }
               ]
             }
             ```
 
-            `path` is a key of `lines.json` and `line` is one of the numbers listed for it; use
-            `start_line` with `line` for a range, and `null` otherwise. The title is imperative and
-            names the correction. The body states the impact concretely and proposes the smallest
-            correction; a ```suggestion``` block belongs there only when the replacement is a
-            syntactically complete drop-in for exactly the lines you anchored to.
+            Every field is required, and each one holds a different thing. The step after you
+            renders them under fixed headings, so a finding that folds two of them together arrives
+            with an empty heading above it, and one that repeats the heading inside its own text
+            arrives with the heading twice. Write the sentences only.
+
+            - `path` is a key of `lines.json` and `line` is one of the numbers listed for it; use
+              `start_line` with `line` for a range, and `null` otherwise.
+            - `title` is imperative and names the correction in a handful of words.
+            - `impact` is what goes wrong, stated concretely: the input or state that reaches this
+              code, and the wrong result that follows. It is not a restatement of what the line says.
+            - `correction` is the smallest change that fixes it, and nothing else. A ```suggestion```
+              block belongs here, and only when the replacement is a syntactically complete drop-in
+              for exactly the lines you anchored to.
+            - `rule` names what the finding rests on in one line: the file and its section, or the
+              specification or ADR. A finding you cannot attribute is one the second pass drops.
+
+            Do not write a count by severity into the summary, and do not restate a finding there.
+            The step after you tallies the findings and renders them; the summary carries what only
+            you can say — what you covered, and what you could not.
 
             When nothing survives the second pass, write the file with an empty `findings` array and
             a summary that says plainly what you covered and that you found nothing above the bar.
             That is a finished review rather than a failed one, and the step after you turns it into
-            an approval of the pull request carrying your summary as its body. Your summary is
-            therefore the entire content of that verdict — say what you covered in two or three
-            lines and stop, and do not invent a finding to avoid approving. Approving cannot merge
+            an approval whose body is the verdict `APPROVED` followed by your summary. Two or three
+            lines under that heading: what you covered, and the state you found it in. Do not write
+            the verdict yourself — the step adds it, and a second one below it reads as a
+            contradiction — and do not invent a finding to avoid approving. Approving cannot merge
             anything on its own; a code owner still has to approve separately.
           # `--setting-sources user` keeps the deny list above as the only settings the session
           # loads. The action would otherwise load `user`, `project`, and `local`, and a project
@@ -862,7 +904,8 @@ jobs:
                 commit_id: $commit,
                 event: "APPROVE",
                 body: (
-                  [((.summary // "") | if . == "" then "The review found nothing above the bar in this change." else . end)]
+                  ["# APPROVED", ""]
+                  + [((.summary // "") | if . == "" then "The review found nothing above the bar in this change." else . end)]
                   + (if $truncation == "" then [] else ["", $truncation] end)
                   | join("\n")
                 )
@@ -878,6 +921,14 @@ jobs:
           # Anchors are checked against the same patches the reviewer was given, so a line that has
           # since moved cannot make the API reject the whole review. A finding whose anchor does not
           # survive is not discarded; it moves into the body, where it still reaches the author.
+          #
+          # Every finding is rendered here rather than by the reviewer, from the separate fields it
+          # wrote. A thread then always answers the same three questions in the same order — what
+          # breaks, what to change, and which rule says so — so an author reading a column of them
+          # can skip to the part they need instead of parsing a paragraph per finding, and a
+          # reviewer that skipped a field leaves a visible gap rather than a plausible-looking
+          # sentence. The same rendering serves the unanchored findings in the body, so a finding
+          # does not change shape because its line moved.
           jq --slurpfile lines "$REVIEW_DIRECTORY/lines.json" \
              --arg commit "$HEAD_SHA" \
              --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" '
@@ -887,6 +938,28 @@ jobs:
               and (($finding.start_line == null)
                    or ((allowed($finding.path) | index($finding.start_line)) != null));
 
+            def details($finding):
+              (if ($finding.impact // "") == "" then []
+               else ["", "**Impact**", "", $finding.impact] end)
+              + (if ($finding.correction // "") == "" then []
+                 else ["", "**Correction**", "", $finding.correction] end)
+              + (if ($finding.rule // "") == "" then []
+                 else ["", "**Rule** — \($finding.rule)"] end);
+
+            # The counts are stated here rather than by the reviewer, because a tally written by
+            # hand can disagree with the threads that were actually posted. A severity outside the
+            # three the prompt defines counts toward the total rather than vanishing from it, so a
+            # reviewer that invented one leaves a visible discrepancy instead of a shorter tally.
+            def tally($findings):
+              (["P1", "P2", "P3"]
+               | map(. as $severity
+                     | ($findings | map(select(.severity == $severity)) | length) as $count
+                     | select($count > 0)
+                     | "\($severity): \($count)")) as $counted
+              | if ($counted | length) == 0
+                then "\($findings | length)"
+                else ($counted | join(", ")) end;
+
             (.findings // [])[0:20] as $findings
             | ($findings | map(select(anchored(.)))) as $kept
             | ($findings - $kept) as $dropped
@@ -894,11 +967,15 @@ jobs:
                 commit_id: $commit,
                 event: "COMMENT",
                 body: (
-                  [(.summary // "")]
+                  ["# NEEDS CHANGES", ""]
+                  + [(.summary // "")]
+                  + ["", "**Findings** — \(tally($findings))"]
                   + (if $truncation == "" then [] else ["", $truncation] end)
                   + (if ($dropped | length) == 0 then [] else
-                      ["", "Findings whose line is no longer in the diff:"]
-                      + ($dropped | map("- **\(.severity) — \(.title)** (`\(.path)`): \(.body)"))
+                      ["", "### Findings whose line is no longer in the diff"]
+                      + ($dropped
+                         | map(["", "**\(.severity) — \(.title)** — `\(.path)`"] + details(.))
+                         | add)
                     end)
                   | join("\n")
                 ),
@@ -907,7 +984,7 @@ jobs:
                     path,
                     line,
                     side: "RIGHT",
-                    body: "**\(.severity) — \(.title)**\n\n\(.body)"
+                    body: (["**\(.severity) — \(.title)**"] + details(.) | join("\n"))
                   }
                   + (if .start_line == null then {} else {start_line, start_side: "RIGHT"} end)
                 ))
