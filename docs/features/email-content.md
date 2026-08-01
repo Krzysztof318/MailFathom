@@ -173,6 +173,12 @@ member beside an encrypted one, and the message then has a body a reader can be 
 even though the attachment summary still records that the message carries encrypted content somewhere. The unreadable
 state is reserved for a body that left nothing behind.
 
+"Left nothing behind" is measured on what the message wrote rather than on what a call returned. A read's character
+budget can empty the representation of such a message for a reason belonging to the call rather than to the mail — the
+emails named before it spent the budget — and reporting that as the encrypted state would tell a caller the message can
+never be read locally when naming it alone returns the readable alternative in full. It stays readable, with
+`readCharacterBudget` saying what cut it.
+
 `NotStoredExceededSizeLimit` is not a defect and schedules no repair: synchronization recorded the occurrence and
 deliberately stored no content for it, and asking for repair would ask a later run to store what the same limit refuses
 again. Everything answerable is still answered — the headers from the stored row, the attachment counts from the summary

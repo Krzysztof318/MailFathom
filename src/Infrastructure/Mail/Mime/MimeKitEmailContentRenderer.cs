@@ -121,7 +121,12 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
         // encrypted content somewhere; reporting that as "nothing can read this body" would discard text the message
         // itself provided for exactly this purpose. The state is therefore reserved for a body that is both encrypted
         // and left nothing readable behind.
-        var bodyIsUnreadable = classification.BodyIsEncrypted && plainTextBody.Text.Length == 0;
+        //
+        // What the message left behind is the source length, not the returned one. A read's character budget can empty
+        // this representation for a reason that belongs to the call rather than to the message — the emails named
+        // before it spent the budget — and judging emptiness after the bound would answer "this message can never be
+        // read locally" to a message that reads fine when named on its own.
+        var bodyIsUnreadable = classification.BodyIsEncrypted && plainTextBody.OriginalCharacterCount == 0;
 
         return new EmailContentRendering(
             MimeMessageHeaderReader.Read(message),

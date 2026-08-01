@@ -277,6 +277,76 @@ public sealed class MimeKitEmailContentRendererTests
         Assert.True(rendering.Attachments.IsEncrypted);
     }
 
+    /// <summary>
+    /// A budget the earlier emails of the same call already spent empties this representation for a reason that belongs
+    /// to the call rather than to the message. Reading that as the encrypted-unreadable state would tell a caller the
+    /// message can never be read locally, when naming it alone returns the readable alternative in full.
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_ReadableAlternativeBesideAnEncryptedMemberStarvedByTheBudget_StaysReadableAndSaysTheBudgetCutIt()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/alternative; boundary=\"alt\"",
+            string.Empty,
+            "--alt",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            "The readable alternative.",
+            "--alt",
+            "Content-Type: multipart/encrypted; protocol=\"application/pgp-encrypted\"; boundary=\"enc\"",
+            string.Empty,
+            "--enc",
+            "Content-Type: application/pgp-encrypted",
+            string.Empty,
+            "Version: 1",
+            "--enc",
+            "Content-Type: application/octet-stream",
+            string.Empty,
+            "-----BEGIN PGP MESSAGE-----",
+            "-----END PGP MESSAGE-----",
+            "--enc--",
+            "--alt--");
+
+        // Act
+        var rendering = await RenderAsync(content, remainingCharactersForRead: 0);
+
+        // Assert
+        Assert.False(rendering.BodyIsEncrypted);
+        Assert.Empty(rendering.PlainTextBody.Text);
+        Assert.Equal(EmailBodyTruncation.ReadCharacterBudget, rendering.PlainTextBody.Truncation);
+        Assert.Equal("The readable alternative.".Length, rendering.PlainTextBody.OriginalCharacterCount);
+    }
+
+    /// <summary>The exhausted budget must not turn a genuinely encrypted body into a readable one either.</summary>
+    [Fact]
+    public async Task RenderAsync_EncryptedBodyStarvedByTheBudget_StillReportsItAsEncrypted()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/encrypted; protocol=\"application/pgp-encrypted\"; boundary=\"enc\"",
+            string.Empty,
+            "--enc",
+            "Content-Type: application/pgp-encrypted",
+            string.Empty,
+            "Version: 1",
+            "--enc",
+            "Content-Type: application/octet-stream",
+            string.Empty,
+            "-----BEGIN PGP MESSAGE-----",
+            "-----END PGP MESSAGE-----",
+            "--enc--");
+
+        // Act
+        var rendering = await RenderAsync(content, remainingCharactersForRead: 0);
+
+        // Assert
+        Assert.True(rendering.BodyIsEncrypted);
+        Assert.Empty(rendering.PlainTextBody.Text);
+    }
+
     /// <summary>One header cannot decide how large a result is by carrying an unbounded number of addresses.</summary>
     [Fact]
     public async Task RenderAsync_HeaderCarryingMoreAddressesThanTheBound_ReturnsNoMoreThanTheBoundForThatRole()
