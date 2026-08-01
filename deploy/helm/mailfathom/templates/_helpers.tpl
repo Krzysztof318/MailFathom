@@ -51,8 +51,10 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: mailfathom
 {{- if eq .Values.image.channel "nightly" }}
 {{/* Readable from any `kubectl get -l`, so an unsupported deployment stays identifiable long after whoever installed
-     it has forgotten which channel they chose. */}}
-io.mailfathom/release-channel: ghcr-nightly-unsupported
+     it has forgotten which channel they chose. The value is the one the image carries as `io.mailfathom.release-channel`;
+     the key is spelled with a slash because that is what Kubernetes requires of a label prefix and a dot is what OCI
+     expects of an image label, so these are one name written the way each ecosystem reads it. */}}
+io.mailfathom/release-channel: nightly
 {{- end }}
 {{- end -}}
 
@@ -78,7 +80,7 @@ wrong.
 {{- define "mailfathom.validate" -}}
 {{- if eq .Values.image.channel "nightly" -}}
   {{- if ne .Values.image.nightlyAcknowledgement "i-understand-this-is-unsupported" -}}
-    {{- fail "image.channel is 'nightly'. A nightly build is not a release: it is whatever main happened to be when someone dispatched a build, its schema and configuration may move without notice, and no support or upgrade path applies to it. Set image.nightlyAcknowledgement=i-understand-this-is-unsupported to deploy one anyway." -}}
+    {{- fail "image.channel is 'nightly'. A nightly build is not a release: it is whatever main was the night it was built, its schema and configuration may move without notice, no support or upgrade path applies to it, and it is deleted once thirty newer nightlies exist. Set image.nightlyAcknowledgement=i-understand-this-is-unsupported to deploy one anyway." -}}
   {{- end -}}
   {{- if and .Values.image.registry (ne .Values.image.registry "ghcr.io") -}}
     {{- fail (printf "image.channel is 'nightly' but image.registry is %q. Nightly builds are published only to ghcr.io; naming another registry would present a nightly as a release from somewhere it was never published." .Values.image.registry) -}}

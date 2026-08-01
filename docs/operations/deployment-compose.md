@@ -190,9 +190,15 @@ immutable tag once one exists — never a moving tag.
 
 ### Nightly builds
 
-GHCR nightly builds are unsupported development output: whatever `main` happened to be when someone dispatched a build,
-carrying no release promise and possibly expecting a schema no published migration produces. Nothing in `compose.yaml`
-reads GHCR, so a deployment that does not name the overlay cannot reach one however it is configured.
+GHCR nightly builds are unsupported development output: whatever `main` was the night it was built, carrying no release
+promise and possibly expecting a schema no published migration produces. Nothing in `compose.yaml` reads GHCR, so a
+deployment that does not name the overlay cannot reach one however it is configured.
+
+Read [what a nightly build risks](container-image.md#what-a-nightly-build-risks) before using one. The short of it is
+that a nightly has no upgrade path in either direction, that a database it has touched may not be usable by a release,
+and that the tag you deployed is deleted once thirty newer nightlies exist. Name the exact `-nightly.<n>-<short revision>` identifier
+rather than the moving `nightly` tag, so what is running does not change under you. While the repository is private the
+package is too, so `docker login ghcr.io` with a `read:packages` token comes first.
 
 Using one is deliberately awkward:
 
@@ -203,7 +209,8 @@ docker compose -f compose.yaml -f compose.nightly.yaml up -d
 ```
 
 Leaving either variable out fails immediately with the reason. Containers started this way carry
-`io.mailfathom.release-channel=ghcr-nightly-unsupported`, so one started months ago still says what it is.
+`io.mailfathom.release-channel=nightly`, which is the value the image itself carries under the same name, so one started
+months ago still says what it is and says it the same way `docker image inspect` does.
 
 Compose can require that the acknowledgement *has* a value and nothing more — it has no equality operator — so the
 phrase above is the one to use rather than one that is checked. The Helm chart does compare it exactly, because a

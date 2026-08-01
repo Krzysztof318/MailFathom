@@ -1,6 +1,6 @@
 # The GHCR nightly channel. Unsupported.
 #
-# A nightly build is whatever `main` happened to be when someone dispatched the workflow. It carries no release
+# A nightly build is whatever `main` was the night it was built, or when someone dispatched one. It carries no release
 # promise: its schema may be ahead of any published migration, its configuration keys may have moved, and no version
 # it reports means anything outside the commit it was built from. It is development output, published so a change can
 # be tried, and it is never a release.
@@ -21,7 +21,10 @@
 # the same thing, and it is not enforcement — it is that nobody reaches a nightly image without reading a sentence
 # saying it is not a release.
 #
-# The nightly identifiers themselves are #156's, and neither the registry path below nor any tag under it exists yet.
+# The identifier to name is the `<x.y.z>-nightly.<n>-<short revision>` tag of one night's build rather than the moving
+# `nightly` tag, so
+# what a deployment runs does not change under it. While the repository is private the package is private too, which
+# makes `docker login ghcr.io` with a `read:packages` token part of using this overlay.
 
 services:
   mailfathom:
@@ -29,7 +32,8 @@ services:
     build: !reset null
     labels:
       # Readable from `docker inspect` and from any monitoring that reads labels, so a container started from this
-      # overlay months ago still says what it is.
-      io.mailfathom.release-channel: "ghcr-nightly-unsupported"
+      # overlay months ago still says what it is. The value is the one the image itself carries under the same name, so
+      # a query for the channel gets one answer whether it asks the container or the image it was started from.
+      io.mailfathom.release-channel: "nightly"
     environment:
       MAILFATHOM_NIGHTLY_ACKNOWLEDGED: ${MAILFATHOM_NIGHTLY_ACKNOWLEDGED:?Set MAILFATHOM_NIGHTLY_ACKNOWLEDGED=i-understand-this-is-unsupported to deploy a nightly build. It is not a release, its schema and configuration may move without notice, and no support or upgrade path applies to it. Compose can only require that this variable is set; it cannot compare the phrase, which the Helm chart does.}

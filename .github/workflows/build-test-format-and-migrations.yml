@@ -1,0 +1,191 @@
+name: Build, test, format, and migrations
+
+# The build, the unit-test and coverage gate, `dotnet format`, and the check that no model change outran its
+# migration, defined once. `CI` calls it for a pull request and the publishing pipeline calls it for the commit it is
+# about to release, so "this passed CI" is one claim about one definition rather than two sets of steps that agree
+# until somebody edits one of them.
+#
+# The last of the four is why a publication runs this at all rather than only a build: an image whose committed model
+# snapshot describes a schema no migration produces would start against a database it cannot have, and a nightly is
+# installable long before any tag.
+#
+# What is deliberately *not* here is the decision about whether to run: a pull request skips work its changed files
+# cannot affect, and a publication never does. That decision needs the pull request the caller has and this workflow
+# does not, so it arrives as the three switches below rather than as a second changed-file query.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Branch, tag, or SHA to check. Empty checks out whatever the caller''s event points at, which is what a pull request wants.'
+        required: false
+        type: string
+        default: ''
+      run-build:
+        description: 'Whether to build and run the unit-test and coverage gate.'
+        required: false
+        type: boolean
+        default: true
+      run-format:
+        description: 'Whether to verify formatting.'
+        required: false
+        type: boolean
+        default: true
+      run-model:
+        description: 'Whether to verify that every model change carries a migration.'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-unit-test:
+    name: Build and unit test
+    if: inputs.run-build
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # Versions are pinned centrally, NuGet.config decides which sources they may come from, and the
+      # lock files fix the resolved transitive closure, so the key covers all three. A key that
+      # ignored source policy would keep serving packages obtained under the previous one.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+
+      - name: Restore dependencies
+        run: dotnet restore MailFathom.slnx --locked-mode
+
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      - name: Build solution
+        run: dotnet build MailFathom.slnx --configuration Release --no-restore
+
+      - name: Run unit tests and enforce code coverage
+        run: dotnet msbuild .config/CodeCoverage.proj -t:Collect
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: 'artifacts/coverage/raw/**/*.trx'
+          if-no-files-found: ignore
+
+      - name: Upload code coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-coverage
+          path: |
+            artifacts/coverage/raw/**/*.cobertura.*.xml
+            artifacts/coverage/report/**
+          if-no-files-found: ignore
+
+  dotnet-format:
+    name: dotnet format
+    if: inputs.run-format
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # The same cache and the same key as the build job, for the same reason.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+
+      - name: Restore dependencies
+        run: dotnet restore MailFathom.slnx --locked-mode
+
+      - name: Verify formatting
+        run: dotnet format MailFathom.slnx --verify-no-changes --verbosity diagnostic
+
+  pending-model-changes:
+    name: Pending model changes
+    if: inputs.run-model
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # The same cache and the same key as the build job, for the same reason.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+
+      - name: Restore dependencies
+        run: dotnet restore MailFathom.slnx --locked-mode
+
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      # `Host` rather than `Infrastructure`, because dotnet-ef loads MailFathom.Infrastructure.dll from
+      # the startup project's output directory. Building Infrastructure alone leaves a stale assembly
+      # there and the check reads the model the previous build produced.
+      - name: Build the startup project
+        run: dotnet build src/Host/Host.csproj --configuration Release --no-restore
+
+      # The one place the repository runs dotnet-ef directly. Everything else goes through the
+      # AppHost's migration resource so a command sees the orchestrated connection string, and this
+      # command is the exception because it opens no connection at all: it compares the EF Core model
+      # against the committed model snapshot and answers from those two alone. Routing it through the
+      # resource would mean starting PostgreSQL, an AppHost build, and a container pull to answer a
+      # question about two files in the checkout.
+      #
+      # `Persistence__TextSearchConfiguration` is deliberately left unset. It is compiled into the
+      # search vector's generated column, so the snapshot is a function of it, and the committed
+      # snapshot is the one generated for the default. A migration generated under a different value
+      # therefore fails here, which is the intended verdict rather than a false positive.
+      - name: Verify every model change carries a migration
+        run: >-
+          dotnet ef migrations has-pending-model-changes
+          --project src/Infrastructure/Infrastructure.csproj
+          --startup-project src/Host/Host.csproj
+          --configuration Release
+          --no-build

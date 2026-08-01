@@ -4,6 +4,11 @@ name: CI
 # job name, so two workflows cannot each publish a `Required CI` job without the ruleset becoming
 # ambiguous about which one it is waiting for. The expensive jobs stay separate inside this workflow
 # and keep the names they had.
+#
+# What this workflow owns is the pull request: which work a change can affect, whether the pull request
+# is a draft, and the one required check. The work itself lives in `build-test-format-and-migrations.yml`, which the
+# publishing pipeline calls too — so a release and a nightly are gated on the same build, unit-test,
+# coverage, and formatting checks a pull request is, from one definition rather than from a copy.
 on:
   pull_request:
     types:
@@ -55,6 +60,7 @@ jobs:
               - 'tests/**'
               - '.config/**'
               - '.editorconfig'
+              - '.github/workflows/build-test-format-and-migrations.yml'
               - '.github/workflows/ci.yml'
               - 'Directory.Build.props'
               - 'Directory.Build.targets'
@@ -74,6 +80,7 @@ jobs:
               - 'src/**'
               - 'tests/**'
               - '.editorconfig'
+              - '.github/workflows/build-test-format-and-migrations.yml'
               - '.github/workflows/ci.yml'
               - 'Directory.Build.props'
               - 'Directory.Build.targets'
@@ -89,175 +96,32 @@ jobs:
             model:
               - 'src/**'
               - '.config/dotnet-tools.json'
+              - '.github/workflows/build-test-format-and-migrations.yml'
               - '.github/workflows/ci.yml'
               - 'Directory.Packages.props'
 
-  build-and-unit-test:
-    name: Build and unit test
+  # The build, the unit-test and coverage gate, `dotnet format`, and the pending-model-changes check live
+  # in `build-test-format-and-migrations.yml`, which the publishing pipeline calls as well. What stays
+  # here is the part that is about a pull request: which of them this change can affect, and whether the
+  # pull request is still a draft.
+  verify:
+    name: Verify
     needs:
       - detect-changes
-    if: >-
-      needs.detect-changes.outputs.build == 'true'
-      && (github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false)
-    runs-on: ubuntu-latest
-    env:
-      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
-      DOTNET_NOLOGO: '1'
-      NUGET_XMLDOC_MODE: skip
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
-      - name: Set up .NET SDK
-        uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-
-      # Versions are pinned centrally, NuGet.config decides which sources they may come from, and the
-      # lock files fix the resolved transitive closure, so the key covers all three. A key that
-      # ignored source policy would keep serving packages obtained under the previous one.
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
-
-      - name: Restore dependencies
-        run: dotnet restore MailFathom.slnx --locked-mode
-
-      - name: Restore local tools
-        run: dotnet tool restore
-
-      - name: Build solution
-        run: dotnet build MailFathom.slnx --configuration Release --no-restore
-
-      - name: Run unit tests and enforce code coverage
-        run: dotnet msbuild .config/CodeCoverage.proj -t:Collect
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-test-results
-          path: 'artifacts/coverage/raw/**/*.trx'
-          if-no-files-found: ignore
-
-      - name: Upload code coverage
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: code-coverage
-          path: |
-            artifacts/coverage/raw/**/*.cobertura.*.xml
-            artifacts/coverage/report/**
-          if-no-files-found: ignore
-
-  dotnet-format:
-    name: dotnet format
-    needs:
-      - detect-changes
-    if: >-
-      needs.detect-changes.outputs.format == 'true'
-      && (github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false)
-    runs-on: ubuntu-latest
-    env:
-      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
-      DOTNET_NOLOGO: '1'
-      NUGET_XMLDOC_MODE: skip
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
-      - name: Set up .NET SDK
-        uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-
-      # The same cache and the same key as the build job, for the same reason.
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
-
-      - name: Restore dependencies
-        run: dotnet restore MailFathom.slnx --locked-mode
-
-      - name: Verify formatting
-        run: dotnet format MailFathom.slnx --verify-no-changes --verbosity diagnostic
-
-  pending-model-changes:
-    name: Pending model changes
-    needs:
-      - detect-changes
-    if: >-
-      needs.detect-changes.outputs.model == 'true'
-      && (github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false)
-    runs-on: ubuntu-latest
-    env:
-      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
-      DOTNET_NOLOGO: '1'
-      NUGET_XMLDOC_MODE: skip
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
-      - name: Set up .NET SDK
-        uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-
-      # The same cache and the same key as the build job, for the same reason.
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
-
-      - name: Restore dependencies
-        run: dotnet restore MailFathom.slnx --locked-mode
-
-      - name: Restore local tools
-        run: dotnet tool restore
-
-      # `Host` rather than `Infrastructure`, because dotnet-ef loads MailFathom.Infrastructure.dll from
-      # the startup project's output directory. Building Infrastructure alone leaves a stale assembly
-      # there and the check reads the model the previous build produced.
-      - name: Build the startup project
-        run: dotnet build src/Host/Host.csproj --configuration Release --no-restore
-
-      # The one place the repository runs dotnet-ef directly. Everything else goes through the
-      # AppHost's migration resource so a command sees the orchestrated connection string, and this
-      # command is the exception because it opens no connection at all: it compares the EF Core model
-      # against the committed model snapshot and answers from those two alone. Routing it through the
-      # resource would mean starting PostgreSQL, an AppHost build, and a container pull to answer a
-      # question about two files in the checkout.
-      #
-      # `Persistence__TextSearchConfiguration` is deliberately left unset. It is compiled into the
-      # search vector's generated column, so the snapshot is a function of it, and the committed
-      # snapshot is the one generated for the default. A migration generated under a different value
-      # therefore fails here, which is the intended verdict rather than a false positive.
-      - name: Verify every model change carries a migration
-        run: >-
-          dotnet ef migrations has-pending-model-changes
-          --project src/Infrastructure/Infrastructure.csproj
-          --startup-project src/Host/Host.csproj
-          --configuration Release
-          --no-build
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-test-format-and-migrations.yml
+    with:
+      run-build: ${{ needs.detect-changes.outputs.build == 'true' }}
+      run-format: ${{ needs.detect-changes.outputs.format == 'true' }}
+      run-model: ${{ needs.detect-changes.outputs.model == 'true' }}
 
   required-ci:
     name: Required CI
     needs:
       - detect-changes
-      - build-and-unit-test
-      - dotnet-format
-      - pending-model-changes
+      - verify
     # `always()` rather than `success() || failure()`, because this job has to report on a run that was
     # cancelled as well as on one whose dependencies were skipped. Anything weaker leaves the required
     # check itself skipped, which is the state this whole arrangement exists to avoid.
@@ -270,9 +134,7 @@ jobs:
         shell: bash
         env:
           DETECT_CHANGES_RESULT: ${{ needs.detect-changes.result }}
-          BUILD_AND_UNIT_TEST_RESULT: ${{ needs.build-and-unit-test.result }}
-          DOTNET_FORMAT_RESULT: ${{ needs.dotnet-format.result }}
-          PENDING_MODEL_CHANGES_RESULT: ${{ needs.pending-model-changes.result }}
+          VERIFY_RESULT: ${{ needs.verify.result }}
         run: |
           set -euo pipefail
 
@@ -290,8 +152,9 @@ jobs:
             fi
           }
 
-          # A job the change did not concern reports `skipped`, which is a complete answer rather than
-          # a missing one. `failure` and `cancelled` never are.
+          # Work the change did not concern reports `skipped`, which is a complete answer rather than a
+          # missing one: a documentation-only pull request skips both halves of the verification and the
+          # called workflow reports `skipped` as a whole. `failure` and `cancelled` never are.
           require_success_or_skipped() {
             local job_name="$1"
             local result="$2"
@@ -303,9 +166,7 @@ jobs:
           }
 
           require_success 'Detect changes' "$DETECT_CHANGES_RESULT"
-          require_success_or_skipped 'Build and unit test' "$BUILD_AND_UNIT_TEST_RESULT"
-          require_success_or_skipped 'dotnet format' "$DOTNET_FORMAT_RESULT"
-          require_success_or_skipped 'Pending model changes' "$PENDING_MODEL_CHANGES_RESULT"
+          require_success_or_skipped 'Verify' "$VERIFY_RESULT"
 
           if [[ "$verdict" -eq 0 ]]; then
             echo "All pull-request checks completed or were not applicable to this change."

@@ -1,0 +1,420 @@
+name: Publish container image
+
+# The one place an image is built and pushed. Both channels call it — `Release` on an annotated tag, `Nightly` on a
+# schedule — and neither builds anything of its own, so a change to how MailFathom is built, gated, scanned, or attested
+# is one edit rather than two that can drift apart.
+#
+# The build happens once and the push is the only per-registry part, which is what leaves #235 a login and a tag list to
+# add rather than a second pipeline. Until it lands, GHCR is the only registry a MailFathom image reaches.
+#
+# Every action here is pinned to an immutable commit SHA, which the read-only workflows in this repository deliberately
+# do not do. The difference is the privilege: these jobs hold a token that can write to a registry and sign an
+# attestation, so what a moving major tag resolves to at run time is not something to discover afterwards.
+on:
+  workflow_call:
+    inputs:
+      channel:
+        description: '`release` or `nightly`. Decides the channel label, whether a vulnerability finding blocks, and where the attestation is stored.'
+        required: true
+        type: string
+      ref:
+        description: 'The commit SHA to build. Resolved by the caller, so what is built is never re-resolved from a moving ref.'
+        required: true
+        type: string
+      version:
+        description: 'The full stamped version, for example `0.1.0` or `0.1.0-nightly.41-3f1c9ab`.'
+        required: true
+        type: string
+      version-suffix:
+        description: 'The `VersionSuffix` the build stamps: empty for a release, `nightly.<run number>-<short revision>` for a nightly.'
+        required: false
+        type: string
+        default: ''
+      tags:
+        description: 'Newline-separated image tags. The first is the immutable one this version owns; the rest are the moving tags it takes over.'
+        required: true
+        type: string
+      block-on-vulnerabilities:
+        description: 'Whether a vulnerability finding refuses to publish. True for a release; false for a nightly, which exists to be tried.'
+        required: true
+        type: boolean
+    outputs:
+      image:
+        description: 'The image repository that was published to.'
+        value: ${{ jobs.publish.outputs.image }}
+      digest:
+        description: 'The digest of the published manifest list.'
+        value: ${{ jobs.publish.outputs.digest }}
+      already-published:
+        description: '`true` when this version was already in the registry from the same commit and nothing was rebuilt.'
+        value: ${{ jobs.publish.outputs.already-published }}
+
+env:
+  # What a scan has to be clean of before a release publishes. `ignore-unfixed` is what keeps this a gate rather than a
+  # standing failure: a finding with no fixed version available cannot be answered by rebuilding, so blocking on one
+  # would block every release until an upstream base image moves.
+  TRIVY_SEVERITY: 'HIGH,CRITICAL'
+
+jobs:
+  # The same build, unit-test and coverage gate, `dotnet format`, and pending-model-changes check a pull request runs,
+  # from the same definition, against the commit being published rather than against a branch. Every switch stays at
+  # its default: `CI` skips work a pull request's changed files cannot affect, and a publication skips nothing.
+  build-test-format-and-migrations:
+    name: Build, test, format, and migrations
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-test-format-and-migrations.yml
+    with:
+      ref: ${{ inputs.ref }}
+
+  # A release additionally runs the suite that starts PostgreSQL, applies the baseline migration, and asserts against
+  # the result — and it runs *after* CI rather than beside it, so minutes of container time are never spent on a commit
+  # a unit test would have rejected in seconds.
+  #
+  # A nightly does not run it. A nightly is published every night, its whole value is being current, and the gate it is
+  # worth waiting for is the one above.
+  integration-tests:
+    name: Integration tests
+    needs:
+      - build-test-format-and-migrations
+    if: inputs.channel == 'release'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/integration-tests.yml
+    with:
+      ref: ${{ inputs.ref }}
+
+  publish:
+    name: Publish ${{ inputs.channel }} ${{ inputs.version }}
+    needs:
+      - build-test-format-and-migrations
+      - integration-tests
+    # `!cancelled()` is what lets a nightly publish at all: its integration-test job is skipped, and a skipped
+    # dependency would otherwise skip this job with it. Every other outcome still has to be `success`, so nothing
+    # weaker than a passing gate reaches the registry, and a cancelled run publishes nothing at all.
+    if: >-
+      !cancelled()
+      && needs.build-test-format-and-migrations.result == 'success'
+      && (needs.integration-tests.result == 'success' || needs.integration-tests.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The registry write this whole workflow exists for, and the two an attestation needs: an OIDC token to prove the
+      # workflow's identity to the signing service, and the store the resulting attestation is recorded in.
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      image: ${{ steps.reference.outputs.image }}
+      digest: ${{ steps.published.outputs.digest }}
+      already-published: ${{ steps.existing.outputs.already-published }}
+    steps:
+      - name: Check out the commit being published
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # An OCI repository name is lowercase, and this owner's login is not, so the reference is folded once here rather
+      # than written as a literal that a rename would leave pointing at nothing.
+      - name: Resolve the image reference
+        id: reference
+        env:
+          REPOSITORY: ${{ github.repository }}
+          IMAGE_TAGS: ${{ inputs.tags }}
+        run: |
+          set -euo pipefail
+
+          image="ghcr.io/$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          primary_tag="$(printf '%s\n' "$IMAGE_TAGS" | sed '/^[[:space:]]*$/d' | head -n 1)"
+
+          {
+            printf 'image=%s\n' "$image"
+            printf 'primary-tag=%s\n' "$primary_tag"
+            printf 'primary-reference=%s:%s\n' "$image" "$primary_tag"
+          } >> "$GITHUB_OUTPUT"
+
+          # `created` names the instant the source was committed rather than the instant a runner happened to start.
+          # A re-run of the same commit then produces the same label instead of a second image that differs only in
+          # when it was rebuilt.
+          printf 'created=%s\n' "$(git show --no-patch --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # While this repository is private its packages are too, and that is asserted rather than assumed: a package that
+      # turned public would publish an unreleased product's artifacts and every layer inside them. It runs here, before
+      # anything is built or pushed, because a check that ran afterwards would have already exposed what it exists to
+      # protect. Reading a package's visibility needs a token GITHUB_TOKEN is not always accepted as, so a read that
+      # fails says so and leaves the check unmade instead of failing a publication over a permission.
+      - name: Assert the package is as private as the repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY_IS_PRIVATE: ${{ github.event.repository.private }}
+          PACKAGE_OWNER: ${{ github.repository_owner }}
+          PACKAGE_NAME: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+
+          package_name="$(printf '%s' "$PACKAGE_NAME" | tr '[:upper:]' '[:lower:]')"
+
+          if ! visibility="$(gh api "/users/${PACKAGE_OWNER}/packages/container/${package_name}" --jq '.visibility' 2>/dev/null)"; then
+            echo "::warning::The package's visibility could not be read with the workflow token, so it was not checked. Confirm it under Packages > ${package_name} > Package settings."
+            exit 0
+          fi
+
+          if [[ "$REPOSITORY_IS_PRIVATE" == 'true' && "$visibility" != 'private' ]]; then
+            echo "::error::The repository is private but the ${package_name} package is ${visibility}. Make the package private under Packages > ${package_name} > Package settings, and delete what was published while it was not."
+            exit 1
+          fi
+
+          echo "The package is ${visibility}, which matches a repository whose private flag is ${REPOSITORY_IS_PRIVATE}."
+
+      # Publication is idempotent rather than merely retryable. A run that finds this version already in the registry,
+      # built from this commit, reports the digest that is there and rebuilds nothing — which is what makes a re-run
+      # after a failed later step safe. A version present from a *different* commit is the one case that must never be
+      # overwritten, so it fails here instead of replacing an immutable tag with different content.
+      - name: Check whether this version is already published
+        id: existing
+        env:
+          PRIMARY_REFERENCE: ${{ steps.reference.outputs.primary-reference }}
+          EXPECTED_REVISION: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+
+          if ! manifest="$(docker buildx imagetools inspect "$PRIMARY_REFERENCE" --format '{{json .Image}}' 2>/dev/null)"; then
+            echo "$PRIMARY_REFERENCE is not in the registry yet."
+            printf 'already-published=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # One reference resolves to one object for a single-platform image and to a map keyed by platform for a
+          # manifest list, so the revision is collected from whatever shape came back rather than from an assumed one.
+          published_revisions="$(printf '%s' "$manifest" |
+            jq -r '[.. | objects | .config?.Labels?["org.opencontainers.image.revision"]? // empty] | unique | .[]')"
+
+          if [[ "$published_revisions" != "$EXPECTED_REVISION" ]]; then
+            echo "::error::${PRIMARY_REFERENCE} already exists, built from revision '${published_revisions}' rather than ${EXPECTED_REVISION}. A published version is immutable; publish a new version instead of replacing this one."
+            exit 1
+          fi
+
+          echo "$PRIMARY_REFERENCE is already published from this commit. Nothing is rebuilt."
+          printf 'already-published=true\n' >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        if: steps.existing.outputs.already-published != 'true'
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      # Built for one architecture and loaded rather than pushed, so the gates below run against the artifact itself
+      # before anything reaches the registry. No QEMU is involved: the application publishes as portable IL on the build
+      # platform, so the second architecture below only pulls a base image and copies into it, and the layer cache
+      # carries the expensive half of this build into the push that follows.
+      - name: Build the image for gating
+        if: steps.existing.outputs.already-published != 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          target: runtime
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: mailfathom:gate
+          build-args: |
+            IMAGE_VERSION=${{ inputs.version }}
+            IMAGE_REVISION=${{ inputs.ref }}
+            IMAGE_CREATED=${{ steps.reference.outputs.created }}
+            IMAGE_RELEASE_CHANNEL=${{ inputs.channel }}
+            VERSION_SUFFIX=${{ inputs.version-suffix }}
+          cache-from: type=gha,scope=publish-${{ inputs.channel }}
+          cache-to: type=gha,mode=max,scope=publish-${{ inputs.channel }}
+
+      # What the smoke test proves is the claim every label on this image makes: that the artifact runs, and that the
+      # process inside it reports the same version and the same commit the registry will index it under. It stops at the
+      # database it has no configuration for, which is the correct behaviour for a host given none, and everything this
+      # step asserts happens before that point.
+      - name: Smoke-test the built image
+        if: steps.existing.outputs.already-published != 'true'
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+          EXPECTED_REVISION: ${{ inputs.ref }}
+          EXPECTED_CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -euo pipefail
+
+          expected_startup_line="at version ${EXPECTED_VERSION} built from revision ${EXPECTED_REVISION}."
+
+          docker run --detach --name mailfathom-smoke mailfathom:gate > /dev/null
+          trap 'docker rm --force mailfathom-smoke > /dev/null 2>&1 || true' EXIT
+
+          for _ in $(seq 1 30); do
+            if docker logs mailfathom-smoke 2>&1 | grep -qF "$expected_startup_line"; then
+              startup_line_found=1
+              break
+            fi
+            sleep 2
+          done
+
+          if [[ "${startup_line_found:-0}" -ne 1 ]]; then
+            echo "::error::The image never reported '${expected_startup_line}'. What it did report follows."
+            docker logs mailfathom-smoke 2>&1 | tail -n 40
+            exit 1
+          fi
+
+          # The deployment contract the image publishes, read back from the image rather than from the file that
+          # declares it: an unprivileged account, and both listeners the host serves.
+          image_user="$(docker image inspect mailfathom:gate --format '{{ .Config.User }}')"
+          image_ports="$(docker image inspect mailfathom:gate --format '{{ range $port, $_ := .Config.ExposedPorts }}{{ $port }} {{ end }}')"
+          image_channel="$(docker image inspect mailfathom:gate --format '{{ index .Config.Labels "io.mailfathom.release-channel" }}')"
+
+          [[ "$image_user" == '1654' ]] || { echo "::error::The image runs as '${image_user}' rather than the unprivileged 1654."; exit 1; }
+          [[ "$image_ports" == *'8080/tcp'* && "$image_ports" == *'8081/tcp'* ]] || { echo "::error::The image exposes '${image_ports}' rather than 8080 and 8081."; exit 1; }
+          [[ "$image_channel" == "$EXPECTED_CHANNEL" ]] || { echo "::error::The image is labelled channel '${image_channel}' rather than '${EXPECTED_CHANNEL}'."; exit 1; }
+
+          echo "The image starts, reports ${EXPECTED_VERSION} from ${EXPECTED_REVISION}, and publishes the documented runtime contract."
+
+      # A release publishes nothing when this finds something fixable; a nightly reports and publishes anyway, because a
+      # nightly exists to be tried and a blocked one tells nobody what broke. The caller decides which, so the rule lives
+      # with the channel rather than being re-argued here.
+      - name: Scan the image for known vulnerabilities
+        if: steps.existing.outputs.already-published != 'true'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: mailfathom:gate
+          format: table
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: true
+          exit-code: ${{ inputs.block-on-vulnerabilities && '1' || '0' }}
+
+      - name: Record that the scan did not block
+        if: steps.existing.outputs.already-published != 'true' && !inputs.block-on-vulnerabilities
+        run: |
+          {
+            printf '### Vulnerability scan\n\n'
+            printf 'Findings at %s are reported for this channel and do not block publication. ' "$TRIVY_SEVERITY"
+            printf 'Read the scan step above; the same finding blocks a release.\n\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The push the whole workflow leads to: one build, both architectures, one manifest list, every tag this version
+      # takes pointing at that one digest. `provenance` and `sbom` travel inside the index BuildKit produces, so what
+      # was built and what is inside it are readable from the artifact itself.
+      - name: Build and push the multi-architecture image
+        id: push
+        if: steps.existing.outputs.already-published != 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ inputs.tags }}
+          build-args: |
+            IMAGE_VERSION=${{ inputs.version }}
+            IMAGE_REVISION=${{ inputs.ref }}
+            IMAGE_CREATED=${{ steps.reference.outputs.created }}
+            IMAGE_RELEASE_CHANNEL=${{ inputs.channel }}
+            VERSION_SUFFIX=${{ inputs.version-suffix }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=publish-${{ inputs.channel }}
+          cache-to: type=gha,mode=max,scope=publish-${{ inputs.channel }}
+
+      - name: Resolve the published digest
+        id: published
+        env:
+          PUSHED_DIGEST: ${{ steps.push.outputs.digest }}
+          PRIMARY_REFERENCE: ${{ steps.reference.outputs.primary-reference }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "$PUSHED_DIGEST" ]]; then
+            printf 'digest=%s\n' "$PUSHED_DIGEST" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Nothing was pushed because this version was already published, so the digest is read back from the registry
+          # rather than left empty: what the run reports has to name the artifact that exists either way.
+          digest="$(docker buildx imagetools inspect "$PRIMARY_REFERENCE" --format '{{ .Manifest.Digest }}')"
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+
+      # A signed statement that this digest was built by this workflow, from this commit, verifiable with
+      # `gh attestation verify`. A release also carries it in the registry as a referrer, so verification needs nothing
+      # but the image; a nightly deliberately does not, because its versions are pruned and a referrer manifest would
+      # outlive the image it describes.
+      - name: Attest the published image
+        if: steps.existing.outputs.already-published != 'true'
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ steps.reference.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: ${{ inputs.channel == 'release' }}
+
+      - name: Verify the published image
+        env:
+          IMAGE: ${{ steps.reference.outputs.image }}
+          DIGEST: ${{ steps.published.outputs.digest }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+          EXPECTED_REVISION: ${{ inputs.ref }}
+          EXPECTED_CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -euo pipefail
+
+          manifest="$(docker buildx imagetools inspect "${IMAGE}@${DIGEST}" --format '{{json .}}')"
+
+          for platform in linux/amd64 linux/arm64; do
+            printf '%s' "$manifest" | jq -e --arg platform "$platform" '
+              [.manifest.manifests[]? | "\(.platform.os)/\(.platform.architecture)"] | index($platform)' > /dev/null \
+              || { echo "::error::The published manifest list carries no ${platform}."; exit 1; }
+          done
+
+          assert_label() {
+            local label="$1"
+            local expected="$2"
+            local found
+
+            found="$(printf '%s' "$manifest" | jq -r --arg label "$label" \
+              '[.. | objects | .config?.Labels?[$label]? // empty] | unique | join(",")')"
+
+            if [[ "$found" != "$expected" ]]; then
+              echo "::error::The published image labels ${label} as '${found}' rather than '${expected}'."
+              exit 1
+            fi
+          }
+
+          assert_label 'org.opencontainers.image.version' "$EXPECTED_VERSION"
+          assert_label 'org.opencontainers.image.revision' "$EXPECTED_REVISION"
+          assert_label 'io.mailfathom.release-channel' "$EXPECTED_CHANNEL"
+
+          echo "${IMAGE}@${DIGEST} carries both platforms and identifies itself as ${EXPECTED_CHANNEL} ${EXPECTED_VERSION}."
+
+      - name: Summarize the publication
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ inputs.version }}
+          IMAGE: ${{ steps.reference.outputs.image }}
+          DIGEST: ${{ steps.published.outputs.digest }}
+          REVISION: ${{ inputs.ref }}
+          IMAGE_TAGS: ${{ inputs.tags }}
+          ALREADY_PUBLISHED: ${{ steps.existing.outputs.already-published }}
+        run: |
+          set -euo pipefail
+
+          {
+            printf '### %s %s\n\n' "$CHANNEL" "$VERSION"
+
+            if [[ "$ALREADY_PUBLISHED" == 'true' ]]; then
+              printf 'Already published from this commit; nothing was rebuilt.\n\n'
+            fi
+
+            printf '| | |\n| --- | --- |\n'
+            printf '| Image | `%s` |\n' "$IMAGE"
+            printf '| Digest | `%s` |\n' "$DIGEST"
+            printf '| Revision | `%s` |\n' "$REVISION"
+            printf '| Tags | %s |\n\n' "$(printf '%s\n' "$IMAGE_TAGS" | sed '/^[[:space:]]*$/d' | sed 's/^/`/; s/$/`/' | paste -sd ' ' -)"
+            printf '```\ndocker pull %s@%s\n```\n' "$IMAGE" "$DIGEST"
+          } >> "$GITHUB_STEP_SUMMARY"

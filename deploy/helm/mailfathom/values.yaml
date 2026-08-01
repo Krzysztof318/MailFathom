@@ -20,14 +20,15 @@ fullnameOverride: ""
 image:
   # `release` or `nightly`.
   #
-  # `release` is a published Docker Hub image and the only supported channel. `nightly` is whatever `main` happened to
-  # be when someone dispatched a build: it is published to GHCR, carries no release promise, may expect a schema no
-  # published migration produces, and is never what `appVersion` describes. Selecting it requires the acknowledgement
-  # below, and the chart's notes say so on every install and upgrade.
+  # `release` is a published release image and the only supported channel. `nightly` is whatever `main` was the night
+  # it was built: it carries no release promise, may expect a schema no published migration produces, is deleted once
+  # thirty newer nightlies exist, and is never what `appVersion` describes. Selecting it requires the acknowledgement
+  # below, and the chart's notes say so on every install and upgrade. Both channels are published to GHCR; Docker Hub
+  # joins them under the same digest with issue #235.
   channel: release
 
   # Left empty for the release channel, where the schema requires it to be supplied. The nightly channel forces
-  # `ghcr.io` and rejects any other value, so a nightly reference cannot be made to look like a Docker Hub release.
+  # `ghcr.io` and rejects any other value, so a nightly reference cannot be made to look like a release.
   registry: ""
   repository: ""
 

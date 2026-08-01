@@ -4,10 +4,17 @@ MailFathom runs in three shapes, and each has one authoritative guide. This page
 assumes, what it is good for, and what every shape shares. Follow the linked guide for the commands; the guides do not
 repeat each other and neither does this page.
 
-**There is no published release yet.** No image is on any registry and no binary artifact is downloadable, so every
-path below starts from a checkout of this repository. That is a statement about today, not about the design: the
-deployment assets are written for released artifacts and will point at them once `0.1.0` ships. Until then, treat what
-you install as a development build of an unreleased product.
+**There is no published release yet.** No release image and no binary artifact exist, so every path below starts from a
+checkout of this repository. That is a statement about today, not about the design: the deployment assets are written
+for released artifacts and will point at them once `0.1.0` ships. Until then, treat what you install as a development
+build of an unreleased product.
+
+What does exist is the nightly channel: `ghcr.io/krzysztof318/mailfathom:nightly` and the `-nightly.<n>-<short revision>` tag of each
+night's build, published from `main` when it has moved. **A nightly is not a release and is a poor place to keep data
+you care about** — its schema can be ahead of any migration, it has no upgrade path in either direction, and it is
+deleted once thirty newer ones exist. [What a nightly build risks](../operations/container-image.md#what-a-nightly-build-risks)
+states the whole of it before you choose one. While this repository is private the package is private too, so pulling
+one means logging in to GHCR with a token that has `read:packages`.
 
 ```bash
 git clone https://github.com/Krzysztof318/MailFathom.git
