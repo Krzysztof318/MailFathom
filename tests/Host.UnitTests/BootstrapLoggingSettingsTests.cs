@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using MailFathom.Host.Observability;
+using MailFathom.Versioning;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests;
@@ -110,13 +111,24 @@ public sealed class BootstrapLoggingSettingsTests
         Assert.Equal("Production", settings.EnvironmentName);
     }
 
+    /// <summary>
+    /// The expectation is read from the host assembly's own build-time metadata rather than restated here, so a
+    /// reporting path that regressed to a literal — one that would stay plausible while the declared version moved —
+    /// fails this instead of passing it. The revision is asserted with it because the two are stamped together and
+    /// only reported apart.
+    /// </summary>
     [Fact]
-    public void From_Always_ReportsAHostVersionCarryingNoSourceControlBuildMetadata()
+    public void From_Always_ReportsTheVersionAndRevisionStampedIntoTheHostAssembly()
     {
+        // Arrange
+        var stamped = StampedAssemblyVersion.ReadFrom(typeof(BootstrapLoggingSettings).Assembly);
+
         // Act
         var settings = BootstrapLoggingSettings.From(ReadFrom());
 
         // Assert
+        Assert.Equal(stamped.Version, settings.ServiceVersion);
+        Assert.Equal(stamped.Revision, settings.ServiceRevision);
         Assert.NotEmpty(settings.ServiceVersion);
         Assert.DoesNotContain("+", settings.ServiceVersion, StringComparison.Ordinal);
     }

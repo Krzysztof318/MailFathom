@@ -11,11 +11,15 @@ type: application
 # publication only counts edits. #156 owns that publication; from it onward the rule above applies literally.
 version: 0.1.0
 
-# The application version this chart is written against. `0.0.0-unreleased` is literal rather than a placeholder
-# somebody forgot: MailFathom has published no release, and the semantics that will decide what a version means are still
-# an open decision. While it reads this, the chart makes no claim about which application version it deploys and its
-# image/appVersion drift check stays inactive — see the `image` section of values.yaml.
-appVersion: "0.0.0-unreleased"
+# No `appVersion` here, deliberately. A version written in this file would be a second place to remember one, and the
+# whole point of ADR 0004's scheme is that `<VersionPrefix>` in `Directory.Build.props` is the only place a version
+# number is written. The release run supplies it instead, from that same declaration:
+#
+#   helm package deploy/helm/mailfathom --app-version "$(scripts/read-declared-version.sh)"
+#
+# A packaged chart therefore always states the application version it deploys, and the chart as it sits in the
+# repository states none — which is honest, because an unpackaged chart directory is not a release of anything. The
+# image/appVersion drift check in `_helpers.tpl` binds on a packaged chart and stands down without one.
 
 home: https://github.com/Krzysztof318/MailFathom
 sources:

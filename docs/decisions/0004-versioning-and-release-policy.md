@@ -11,7 +11,7 @@ informed:
 
 ## Context and Problem Statement
 
-Nothing in MailFathom sets a version. `Directory.Build.props` declares no version property, so every assembly compiles to the MSBuild default of `1.0.0.0`; `deploy/helm/mailfathom/Chart.yaml` carries `appVersion: "0.0.0-unreleased"`; and `deploy/docker/Dockerfile` defaults `IMAGE_VERSION` to `0.0.0-unversioned`. All three are placeholders written deliberately, each with a comment pointing at this decision, and none of them can be filled in until it is made.
+When this decision was opened, nothing in MailFathom set a version. `Directory.Build.props` declared no version property, so every assembly compiled to the MSBuild default of `1.0.0.0`; `deploy/helm/mailfathom/Chart.yaml` carried `appVersion: "0.0.0-unreleased"`; and `deploy/docker/Dockerfile` defaulted `IMAGE_VERSION` to `0.0.0-unversioned`. All three were placeholders written deliberately, each with a comment pointing at this decision, and none of them could be filled in until it was made.
 
 The decision question has three parts that are usually conflated: what a version number *promises*, where the number *comes from*, and which event turns an ordinary commit on `main` into a *release*. The first part is not answered by "pick SemVer", because MailFathom's public surface is not a compiled API. Its consumers bind to an MCP tool contract, a configuration schema, a database schema, and a deployment contract, and a versioning policy that talks about assembly compatibility makes a promise about the one surface nobody uses.
 
@@ -118,10 +118,10 @@ An annotated tag `v<major>.<minor>.<patch>` pushed on a commit reachable from `m
 
 The tag is preceded by one reviewed pull request and followed by one generated one:
 
-1. **Prepare.** A release-preparation pull request closes `## [Unreleased]` in `CHANGELOG.md` into `## [x.y.z] - YYYY-MM-DD`. `VersionPrefix` already reads `x.y.z` and is not touched. This is the last point at which the release's contents are read as a whole before anyone can install them.
-2. **Tag.** The annotated tag is pushed on the merge commit, so the tagged tree contains the released changelog rather than describing the release after it happened.
+1. **Prepare.** A release-preparation pull request writes `## [x.y.z] - YYYY-MM-DD` into `CHANGELOG.md`, composed from the work merged since the previous tag. `VersionPrefix` already reads `x.y.z` and is not touched. This is the last point at which the release's contents are read as a whole before anyone can install them, and it is the only pull request that touches the changelog at all.
+2. **Tag.** The annotated tag is pushed on that pull request's merge commit, so the published artifact is built from a tree that contains the released changelog rather than one that describes the release after it happened.
 3. **Publish.** The release workflow runs, and before it publishes anything it asserts that the tag's version equals the `VersionPrefix` of the tagged commit, that the version is not a regression against the highest existing tag **on the same `major.minor` line** rather than against the highest tag overall — otherwise `v0.2.1`, cut after `0.3.0` has shipped, would be rejected as a regression when it is the ordinary shape of a hotfix — that `CHANGELOG.md` carries a non-empty section whose heading matches the tag, and that no artifact already exists under that version with different content. It then runs the build, test, container smoke, license, and vulnerability gates, publishing nothing if any fails, and publishes the image to both registries with the chart alongside it in one run, per issues 156 and 187.
-4. **Reopen.** The workflow opens the follow-up pull request, which raises `VersionPrefix` to the next minor — or to the next major when the accumulated work already requires one — and opens a fresh empty `Unreleased`. **It is never raised to a patch**, because `main` does not produce patches; the next section says what does.
+4. **Reopen.** The workflow opens the follow-up pull request, which raises `VersionPrefix` to the next minor — or to the next major when the accumulated work already requires one. It touches `CHANGELOG.md` not at all, because the next section of that file is written by the next release rather than opened in advance. **The prefix is never raised to a patch**, because `main` does not produce patches; the next section says what does.
 
 Step 4 is what keeps the declared prefix from being a thing somebody has to remember. If it is skipped, the failure is loud rather than silent: the next tag push repeats a version that already exists and step 3 rejects it.
 
@@ -155,6 +155,8 @@ That decision moves the burden of separating the channels, because the registry 
 
 Two moving tags exist in each registry and are the only mutable references: `latest` follows the highest release selected by the prerelease-excluding rule above rather than by a maximum, and `nightly` follows the newest nightly. Every other tag is immutable.
 
+**Every release publish moves `latest` onto that release's digest, in both registries, in the same run that pushes the immutable tag.** An immutable `v<x.y.z>` on its own is not enough: `latest` is what an operator gets by not choosing, and a release channel that never publishes one makes the default answer *nothing*. It follows from this that a patch to an older line does not move it — `v0.2.1` cut after `0.3.0` has shipped is a supported release of the `0.2.x` line and is not the newest one — and the prerelease-excluding rule already gives that answer, because `0.3.0` is higher than `0.2.1`.
+
 A channel label backs that up for a reference that has been rewritten, re-tagged, or reduced to a digest — but **it does not exist yet**, and this ADR creates it rather than describing it. `deploy/docker/Dockerfile` declares only `org.opencontainers.image.*`, so no image built today states its channel at all. What exists is two labels of a different kind and a different value: `deploy/compose/compose.nightly.yaml` sets the *container* label `io.mailfathom.release-channel: ghcr-nightly-unsupported` on one overlay, and the chart's `_helpers.tpl` emits the *Kubernetes object* label `io.mailfathom/release-channel` — a slash, not a dot — with the same value.
 
 Accepting this ADR adds `io.mailfathom.release-channel` to the image itself, valued `release` or `nightly`, and moves the two existing labels to those same values. The two spellings both stay: a dot is the OCI convention for an image label and a slash is what Kubernetes requires of a label key prefix, so they are the same name written the way each ecosystem reads it, not a divergence to be tidied up.
@@ -165,12 +167,13 @@ This **changes issue 156** in three places, all amended in the change set that a
 - Its acceptance forbids a `schedule` trigger outright. The reason it forbade one was that no nightly identifier had been defined, so a scheduled build had nothing meaningful to call itself; this ADR defines it and the constraint expires with its cause. Nightlies run daily, guarded so a run publishes nothing when `main` has not moved since the last published nightly, with `workflow_dispatch` retained for an out-of-band snapshot.
 - Its release trigger is written as "an accepted version bump reaches the protected default branch", deferring to whatever this issue decided. The answer is the tag, so that clause becomes an annotated `v<x.y.z>` tag on a commit reachable from `main` or from a `release/<major>.<minor>.x` branch.
 
-The larger consequence is for the deployment assets, which encode the old premise as working enforcement in four places. None of it is in the values schema: `deploy/helm/mailfathom/values.schema.json` declares `image.registry` as a bare `{"type": "string"}` and says so itself, noting that cross-field constraints "are enforced by the chart's own validation helper".
+The larger consequence is for the deployment assets, which encode the old premise as working enforcement in three places. None of it is in the values schema: `deploy/helm/mailfathom/values.schema.json` declares `image.registry` as a bare `{"type": "string"}` and says so itself, noting that cross-field constraints "are enforced by the chart's own validation helper".
 
 - `deploy/helm/mailfathom/templates/_helpers.tpl` holds both halves of the chart's guard. `mailfathom.validate` fails a nightly install whose `image.registry` is anything but `ghcr.io`, and `mailfathom.image` then substitutes `ghcr.io` on the nightly channel regardless of what was configured — so even removing the rejection would leave the reference silently rewritten. Both have to move.
 - `deploy/compose/compose.nightly.yaml` hard-codes `ghcr.io` for its nightly image.
-- `scripts/verify-deployment-assets.sh` asserts the premise mechanically, and root `AGENTS.md` makes that script the gate for any change under `deploy/`, so the accepting change set fails its own gate until the script moves with it. It expects a nightly render pointed at `docker.io` to be rejected with "published only to ghcr.io"; it fails the run if `compose.yaml` names `ghcr.io` at all, which is now where a release is published too; and it asserts that a nightly render still contains `ghcr-nightly-unsupported`, which the label change above supersedes. `AGENTS.md` describes that script as rejecting "a Compose file that reaches the nightly registry", and that sentence goes with it.
 - `docs/operations/deployment-compose.md` and `docs/operations/deployment-kubernetes.md` document the GHCR-only nightly, the forced registry, and the old label value as implemented behavior, which `docs/AGENTS.md` requires to stay true.
+
+Nothing asserts the premise mechanically any more. Issue 119 removed `scripts/verify-deployment-assets.sh` and `scripts/smoke-deployment.sh`, on the decision that testing, building, and publishing the deployment assets belong to the release pipeline in issue 156 rather than to local scripts a developer needs a Docker daemon and a Kubernetes cluster to run. The checks that script performed are recorded on issue 156 so the pipeline inherits them, and this ADR's consequences are now the pipeline's to enforce rather than a script's.
 
 The two enforcement points move to the check the identifier already supports — the nightly channel requires a `-nightly.` reference and the release channel rejects one — which is a stricter guard than the hostname it replaces, because it holds whichever registry the image came from. The `values.schema.json` description of `image.channel` still says nightly is "published to GHCR" and is corrected with them. The acknowledgement gates in front of the nightly channel are untouched; nothing about reaching a nightly gets easier.
 
@@ -180,13 +183,17 @@ No release-candidate channel exists for `0.1.0`. `-rc.<n>` is reserved in the sc
 
 ### Changelog
 
-`CHANGELOG.md` at the repository root, hand-written in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) form, with an `Unreleased` section that accumulates entries as changes merge.
+`CHANGELOG.md` at the repository root, hand-written in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) form, one section per released version, each written by the pull request that prepares that release.
 
 GitHub release notes are generated from the changelog rather than the other way round. Automatically generated notes are a list of pull-request titles, and no arrangement of pull-request titles can state that a release cannot be deployed over the previous release's data — which is the single most important sentence a MailFathom release note will ever contain.
 
 Choosing the file settles nothing on its own; a changelog decays unless the rules for keeping it are as explicit as the rules for the version number it documents. The following are those rules.
 
-**An entry is written in the change set that causes it, never at release time.** The pull request that changes behavior adds its own line under `Unreleased`, in the same diff, reviewed by the same reader. Reconstructing a release's entries afterwards from merged titles produces exactly the list that generated release notes already produce for free, which is the thing this file exists not to be.
+**The release pull request writes the file, and nothing else does.** A changelog is a statement about a *release*, and until someone decides to cut one there is no release for a line to belong to; an entry added while implementing a task is an edit to what a future release will claim it shipped. `$prepare-release` therefore composes each section at release time, from the merged work since the previous tag, and ordinary work never touches `CHANGELOG.md`.
+
+Composing it is a reading rather than a transcription, which is what keeps the result from collapsing into the list of pull-request titles that generated release notes already produce for free. The rules below are what that reading applies, and they are also what makes the increment decidable: the section and the version are two outputs of one judgement about the four surfaces.
+
+`CHANGELOG.md` is a protected path in `.github/workflows/protected-paths.yml`, beside the four configuration directories, so an edit arriving outside a release is visible while it is still a diff.
 
 **What earns an entry is what a consumer of a release would notice.** That means anything reaching one of the four surfaces: a tool contract, a configuration key, the database schema, or the deployment contract; plus a fixed defect that was observable from outside, and any change with a security consequence. Nothing else does. A refactor, a new test, a CI adjustment, a documentation edit, and an internal rename get no entry, because a file that records them stops being read and then stops being written. When a change is genuinely invisible from outside, the correct entry is none.
 
@@ -196,27 +203,32 @@ Choosing the file settles nothing on its own; a changelog decays unless the rule
 
 **A release that touches the database schema says so, in the terms an upgrade is planned in:** whether a migration must be applied, whether it can be applied while the previous version is still running, and whether the release can be deployed over the previous release's data at all. This is the one entry an operator reads before scheduling a window, and it is the clause the database row of the surface table exists to force.
 
-**Nightly and prerelease builds get no section of their own.** They are, by definition, whatever `Unreleased` currently describes.
+**Nightly and prerelease builds get no section of their own.** They are, by definition, whatever has merged since the newest section in the file.
 
-**Releasing is what closes the section, and it is a reviewed step.** A release-preparation pull request renames `## [Unreleased]` to `## [x.y.z] - YYYY-MM-DD` and updates the link references at the foot of the file; `VersionPrefix` already reads `x.y.z` and is not touched. Once it merges, the tag is pushed on that merge commit, so the tagged tree contains the released changelog rather than describing it afterwards. The follow-up pull request the release workflow opens then does two things together: it raises `VersionPrefix` to the next minor and it opens a fresh empty `Unreleased`.
+**Writing the section is what a release-preparation pull request does.** It adds `## [x.y.z] - YYYY-MM-DD` with that reading's entries and updates the link references at the foot of the file; `VersionPrefix` already reads `x.y.z` and is not touched. **Its merge commit is the one that gets tagged and published**, so the published artifact is built from the tree that contains the released changelog rather than from one that describes it afterwards. The follow-up pull request then raises `VersionPrefix` to the next minor.
 
-**Enforcement is review, with one mechanical check.** No gate can distinguish a user-visible change from a refactor, so requiring every pull request that touches `src/` to touch `CHANGELOG.md` would train everyone to add filler. The obligation belongs to `$check-docs-licenses` and `$finish-change`, beside the documentation obligation it resembles. What *is* mechanical, and therefore is checked, is the release: the release workflow refuses to publish when `CHANGELOG.md` has no section whose heading matches the tag being released, or when that section is empty.
+**Enforcement is review, with one mechanical check.** No gate can distinguish a user-visible change from a refactor, so nothing tries to; `$check-docs-licenses` reports `n/a` for this file on every change that is not a release, and `fail` on one that edits it anyway. What *is* mechanical, and therefore is checked, is the release: the release workflow refuses to publish when `CHANGELOG.md` has no section whose heading matches the tag being released, or when that section is empty.
 
 ### What accepting this ADR obliges
 
-Nothing here is done by proposing it. Moving the status to `accepted` commits the project to a change set that:
+The stamping half is built. Issue 119 implemented against this decision while it was still `proposed`, because a proposed status means the reasoning has not been formally accepted rather than that the decision is undecided, and because deferring the mechanism would have left every assembly claiming `1.0.0.0` for the sake of a ceremony. What it landed:
 
-- sets `VersionPrefix` to `0.1.0` in `Directory.Build.props` and derives the four version properties centrally there (issue 119);
-- creates `CHANGELOG.md` with an `Unreleased` section, and adds the entry obligation and its exclusions to `$check-docs-licenses` and `$finish-change`;
+- `VersionPrefix` is `0.1.0` in `Directory.Build.props`, and the four version properties derive from it centrally there. Nothing else in the repository writes an application version: the image's tags and labels arrive as build arguments read with `scripts/read-declared-version.sh`, and the chart's `appVersion` arrives from the same declaration through `helm package --app-version`, so `Chart.yaml` carries none of its own;
+- the version is reported at run time from assembly metadata, in the host's startup record and in the MCP `initialize` response, with unit tests that derive their expectation from that same metadata;
+- `CHANGELOG.md` exists, written by the release pull request alone and protected as a path;
+- `$prepare-release` prepares the two pull requests and prints the ordering the tag lands in.
+
+Moving the status to `accepted` still commits the project to a change set that:
+
 - amends issue 156 on the registry premise, the schedule, and the release trigger, and issue 187 on how the chart's version derives from the release;
-- moves the nightly guard off the registry hostname and onto the prerelease identifier in all four places that hold it — the `mailfathom.validate` rejection and the `mailfathom.image` registry default in `deploy/helm/mailfathom/templates/_helpers.tpl`, the hard-coded registry in `deploy/compose/compose.nightly.yaml`, the three assertions in `scripts/verify-deployment-assets.sh`, and the `image.channel` description in `values.schema.json`;
-- updates `docs/operations/deployment-compose.md` and `docs/operations/deployment-kubernetes.md`, which document the GHCR-only nightly and the forced registry as implemented behavior, and the sentence in root `AGENTS.md` describing the verification script as rejecting a Compose file that reaches the nightly registry;
-- adds the `io.mailfathom.release-channel` label to `deploy/docker/Dockerfile`, which carries none today, and moves the existing container and Kubernetes labels from `ghcr-nightly-unsupported` to `release` or `nightly`, together with the `verify-deployment-assets.sh` assertion that still expects the old value;
+- moves the nightly guard off the registry hostname and onto the prerelease identifier in the three places that hold it — the `mailfathom.validate` rejection and the `mailfathom.image` registry default in `deploy/helm/mailfathom/templates/_helpers.tpl`, the hard-coded registry in `deploy/compose/compose.nightly.yaml`, and the `image.channel` description in `values.schema.json`;
+- updates `docs/operations/deployment-compose.md` and `docs/operations/deployment-kubernetes.md`, which document the GHCR-only nightly and the forced registry as implemented behavior;
+- adds the `io.mailfathom.release-channel` label to `deploy/docker/Dockerfile`, which carries none today, and moves the existing container and Kubernetes labels from `ghcr-nightly-unsupported` to `release` or `nightly`;
 - replaces root `AGENTS.md`'s single-regenerated-migration rule with the freeze described above, and updates `docs/operations/` and the `$add-migration` skill to match;
 - generalizes the base check in `scripts/verify-full.sh` from `origin/main` to the branch the change will merge into, so a `release/*` branch can pass the gate at all, and updates the branch rules in root `AGENTS.md` alongside it;
-- adds the release and nightly workflows that assert the prefix, the same-line regression rule, the changelog section, and the immutability before publishing anything.
+- adds the release and nightly workflows that assert the prefix, the same-line regression rule, the changelog section, and the immutability before publishing anything, and that move `latest` onto every release they publish.
 
-Until then, `0.0.0-unreleased` in `Chart.yaml` and `0.0.0-unversioned` in the `Dockerfile` stay exactly as they are.
+Until then, `0.0.0-unversioned` stays the `Dockerfile`'s `IMAGE_VERSION` default — not as a placeholder for an undecided version, but as the value that marks an image nobody passed one to, which is not publishable.
 
 ### Consequences
 
@@ -238,7 +250,7 @@ Until then, `0.0.0-unreleased` in `Chart.yaml` and `0.0.0-unversioned` in the `D
 
 - The release workflow's assertion that the tag version equals the tagged commit's `VersionPrefix` is the primary machine check, and it gates publication.
 - A unit test asserts that the version reported at host startup and in the MCP `initialize` response is read from assembly metadata, so the reporting path cannot regress to a plausible-looking literal (issue 119).
-- The Helm chart's existing drift check compares `image.tag` against `Chart.appVersion` on the release channel and activates on its own the moment a real `appVersion` replaces `0.0.0-unreleased`. Nothing has to be written for it; stamping the version is what switches it on. It is a default rather than a binding validation, and an audit against this ADR must not read it as one: it refuses by default, is turned off by `image.allowVersionMismatch`, and does not apply at all to a deployment that names the image by `image.digest`, because there is then no tag to compare.
+- The Helm chart's drift check compares `image.tag` against `Chart.appVersion` on the release channel, and it binds on a packaged chart, which is the only thing an operator installs: `helm package --app-version` supplies the version from the declaration above, so a chart that reached a cluster always states which application version it deploys. It is a default rather than a binding validation, and an audit against this ADR must not read it as one: it refuses by default, is turned off by `image.allowVersionMismatch`, and stands down entirely in the two cases that carry nothing to compare — a deployment naming the image by `image.digest`, which publishes no version, and the unpackaged chart directory, which declares no `appVersion` because it is not a release of anything.
 - The release workflow refuses to publish when `CHANGELOG.md` carries no section whose heading matches the tag, or when that section is empty. This is the only mechanical check on the changelog, deliberately: a rule requiring every pull request touching `src/` to touch the file would be satisfied by filler.
 - Review enforces the rest: an entry exists for every change a consumer of a release would notice and for nothing else, a breaking entry names its surface and the operator's action, and the increment matches the highest surface affected.
 

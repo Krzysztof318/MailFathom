@@ -4,6 +4,7 @@
 using MailFathom.Mcp.Observability;
 using MailFathom.Mcp.Serialization;
 using MailFathom.Mcp.Tools;
+using MailFathom.Versioning;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -33,7 +34,7 @@ public static class McpServiceCollectionExtensions
 
         services.AddSingleton<McpToolCallReporter>();
 
-        return services.AddMcpServer()
+        return services.AddMcpServer(serverOptions => serverOptions.ServerInfo = ProtocolSurfaceIdentity)
             // Stateless without a switch: every MailFathom tool answers one request from the local mailbox copy and sends
             // nothing back on its own, so a session would carry no state and only cost a client something to lose across
             // a restart. A tool that pushes notifications would change this surface rather than a deployment's settings.
@@ -46,6 +47,27 @@ public static class McpServiceCollectionExtensions
             .WithTools<GetEmailContentTool>(McpToolContractSerialization.Options)
             .WithTools<SearchEmailsTool>(McpToolContractSerialization.Options);
     }
+
+    /// <summary>What the server reports about itself when a client initializes a session.</summary>
+    /// <remarks>
+    /// <para>
+    /// Stated rather than left to the SDK's default, which names the entry assembly: a client would then learn the
+    /// host's assembly name, which is a composition detail that says nothing about the protocol surface it is talking
+    /// to. The product name is what a client recognizes, and the version comes from this assembly's own build-time
+    /// metadata rather than from a literal here, so a build cannot report a version it was not stamped with.
+    /// </para>
+    /// <para>
+    /// Only the semantic version is reported, without the source revision that
+    /// <see href="../../docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see> also stamps. This value
+    /// answers a compatibility question — which tool contract a client is bound to — and the commit a build came from
+    /// is provenance an operator reads from the startup record and the artifact's own labels.
+    /// </para>
+    /// </remarks>
+    private static Implementation ProtocolSurfaceIdentity => new()
+    {
+        Name = nameof(MailFathom),
+        Version = StampedAssemblyVersion.ReadFrom(typeof(McpServiceCollectionExtensions).Assembly).Version,
+    };
 
     /// <summary>Resolves the reporter from the scope the call arrived in.</summary>
     /// <remarks>

@@ -41,6 +41,21 @@ ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
 
 WORKDIR /source
 
+# The two inputs continuous integration contributes to the stamped version, and the only two. The number itself is
+# declared in Directory.Build.props, which the context below carries, so nothing here can name a version the build
+# would not stamp — see docs/decisions/0004-versioning-and-release-policy.md.
+#
+# `IMAGE_REVISION` is deliberately the same argument the runtime stage labels the image with, so the commit the
+# assemblies report and the commit the registry indexes are one value rather than two that can drift. It has to be
+# passed here rather than resolved: the SDK's source-link support reads the revision from a Git checkout, and the build
+# context deliberately carries no .git, so without this the assemblies inside the image would name no commit while the
+# label beside them named one. Its `unknown` default round-trips — an unsupplied revision stamps `+unknown`, which is
+# exactly what the process then reports.
+ARG IMAGE_REVISION=unknown
+# Empty for a release build and for an ordinary local one, and `nightly.<run number>` for a nightly, per ADR 0004's
+# build table. An empty value leaves the stamped version at the declared prefix.
+ARG VERSION_SUFFIX=
+
 # The restore inputs first, so editing a `.cs` file does not invalidate the restore layer. The lock files travel with
 # the projects under src/.
 COPY Directory.Build.props Directory.Packages.props NuGet.config global.json .editorconfig ./
@@ -71,6 +86,8 @@ RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
     dotnet publish src/Host/Host.csproj \
         --configuration Release \
         --no-restore \
+        -p:VersionSuffix="${VERSION_SUFFIX}" \
+        -p:SourceRevisionId="${IMAGE_REVISION}" \
         -p:UseAppHost=false \
         -p:PublishDocumentationFile=false \
         -p:PublishDocumentationFiles=false \
@@ -85,8 +102,13 @@ RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
 FROM ${DOTNET_ASPNET_IMAGE} AS runtime
 
 # Supplied by the build so a pulled image can be traced to the commit it came from without consulting anything mutable.
-# The application does not yet report these at run time; stamping them into the assembly is #119, and the release
-# semantics that decide what belongs in `version` are #116.
+# The same two values are stamped into the assemblies by the build stage above, so what the label says and what the
+# running process reports are the same build rather than two claims about it.
+#
+# `IMAGE_VERSION` has no useful default and its placeholder says so: the version is declared once, in
+# Directory.Build.props, and `scripts/read-declared-version.sh` is what every build reads it with. A default that named
+# a real version here would be a second place to remember, which is the failure ADR 0004 exists to avoid. An image
+# labelled 0.0.0-unversioned is therefore one nobody passed a version to, and is not publishable.
 ARG IMAGE_VERSION=0.0.0-unversioned
 ARG IMAGE_REVISION=unknown
 ARG IMAGE_CREATED=1970-01-01T00:00:00Z

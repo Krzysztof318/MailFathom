@@ -96,11 +96,19 @@ The canonical skills are:
 - `review-change` performs a findings-first diff review and records verification
   status and residual risks, and reruns the fast loop only when something has
   invalidated its last green run;
-- `check-docs-licenses` is the mandatory documentation and licensing gate;
-- `finish-change` stages only the task files, requires the documentation and
-  licensing gate, runs full verification, checks the final diff, creates a
-  focused commit, pushes the branch, and opens a draft pull request that
-  references its issue with `Closes #<issue>`.
+- `check-docs-licenses` is the mandatory documentation, changelog, and licensing
+  gate;
+- `finish-change` stages only the task files, requires that gate, runs full
+  verification, checks the final diff, creates a focused commit, pushes the
+  branch, and opens a draft pull request that references its issue with
+  `Closes #<issue>`;
+- `prepare-release` opens the two pull requests a release consists of and prints
+  the order they and the tag between them have to land in. It is the one skill
+  an agent cannot invoke — its frontmatter sets `disable-model-invocation`, so
+  only the owner reaches it, because when a version becomes real is their
+  decision. It pushes no tag and merges nothing;
+  `docs/operations/release-procedure.md` records the same sequence for a reader
+  without the skill.
 
 Root `AGENTS.md` holds the issue rules themselves: which work needs an issue,
 what an issue body contains, the `type:*` label it carries, the `Track`, `Queue`
@@ -483,14 +491,14 @@ to test code. Each nested `CLAUDE.md` imports its sibling `AGENTS.md`.
   `artifacts/coverage/report/`. Add meaningful tests, rerun the complete gate,
   and do not weaken the 85% scope or exclusions.
 - If Claude Code cannot discover the skills, confirm that `.claude/skills` is
-  the relative symlink `../.agents/skills`, that its target contains all four
-  `SKILL.md` files, and that the installed Claude Code version supports
+  the relative symlink `../.agents/skills`, that its target contains every
+  `SKILL.md` file, and that the installed Claude Code version supports
   directory symlinks. Stop instead of creating a duplicate skill tree.
 
 ## Completion evidence
 
 A change is not complete until `check-docs-licenses` returns `pass` or `n/a` for
-both categories, `verify-full.sh` succeeds from a fresh run, the complete diff
+all three categories, `verify-full.sh` succeeds from a fresh run, the complete diff
 has been inspected for secrets, generated files, unrelated edits, and boundary
 violations, and the published pull request body references its issue. Pull
 requests are created as drafts and contain no co-author trailers.

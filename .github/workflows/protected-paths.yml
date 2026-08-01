@@ -10,9 +10,18 @@ name: Protected paths
 #   `.agents/`  the skills that define the task, review, verification, and completion contract
 #   `.claude/`  the tracked entry points to those same skills
 #
-# A pull request that edits any of them is editing the gate it has to pass, so the repository owner
-# is the only author for whom that is ordinary work. `CODEOWNERS` says this to the reviewer; this job
-# says it to the author, within seconds of the push and without a reviewer having to notice.
+# One file joins them for a different reason, which is why it is listed separately rather than folded
+# into the four above:
+#
+#   `CHANGELOG.md`  what a published release claims it shipped. It is written by the release pull
+#                   request alone — the one whose merge commit is tagged and pushed to the container
+#                   registries — so an edit arriving through ordinary work is, by construction, out of
+#                   band. This job is what makes that visible while it is still a diff.
+#
+# A pull request that edits any of them is editing the gate it has to pass, or the record a release
+# stands on, so the repository owner is the only author for whom that is ordinary work. `CODEOWNERS`
+# says this to the reviewer; this job says it to the author, within seconds of the push and without a
+# reviewer having to notice.
 #
 # It is not a security boundary on its own. A `pull_request` run uses the workflow file as the pull
 # request would leave it, so a change to this file changes the check that judges it. The pair is what
@@ -22,7 +31,8 @@ name: Protected paths
 #
 # The set is a list rather than a pattern because each entry was added for a reason that had to be
 # stated. A directory joins it when a change to it decides what the repository enforces on every
-# other change; a dotted directory is not protected merely for being dotted.
+# other change; a dotted directory is not protected merely for being dotted. A file joins it only
+# when it is written by one deliberate flow and every other edit to it is out of band.
 on:
   pull_request:
     types:
@@ -71,14 +81,15 @@ jobs:
           set -euo pipefail
 
           protected_prefixes=('.github/' '.agents/' '.claude/' '.config/')
-          protected_directories="${protected_prefixes[*]}"
+          protected_files=('CHANGELOG.md')
+          protected_paths="${protected_prefixes[*]} ${protected_files[*]}"
           reportable_file_limit=3000
 
           # The changed-files endpoint stops at 3000 entries, so a larger pull request cannot be shown
           # to leave the protected paths alone. An answer that could not be computed is not an answer
           # that clears this check.
           if (( CHANGED_FILE_COUNT > reportable_file_limit )); then
-            echo "::error::This pull request changes ${CHANGED_FILE_COUNT} files, more than the ${reportable_file_limit} the changed-files endpoint reports, so its changes under ${protected_directories} cannot be verified."
+            echo "::error::This pull request changes ${CHANGED_FILE_COUNT} files, more than the ${reportable_file_limit} the changed-files endpoint reports, so its changes under ${protected_paths} cannot be verified."
             exit 1
           fi
 
@@ -90,32 +101,40 @@ jobs:
           )"
 
           # Prefix matching rather than a regular expression, so the leading dot of each directory is
-          # a dot and a sibling whose name merely ends that way is not protected by accident.
+          # a dot and a sibling whose name merely ends that way is not protected by accident. A
+          # protected file is matched whole, so a differently placed file of the same name is not
+          # caught and a longer name beginning the same way is not either.
           protected_changes=()
           while IFS= read -r changed_path; do
             for protected_prefix in "${protected_prefixes[@]}"; do
               if [[ "$changed_path" == "${protected_prefix}"* ]]; then
                 protected_changes+=("$changed_path")
-                break
+                continue 2
+              fi
+            done
+            for protected_file in "${protected_files[@]}"; do
+              if [[ "$changed_path" == "$protected_file" ]]; then
+                protected_changes+=("$changed_path")
+                continue 2
               fi
             done
           done <<< "$changed_paths"
 
           if (( ${#protected_changes[@]} == 0 )); then
-            echo "This pull request changes nothing under ${protected_directories}."
+            echo "This pull request changes nothing under ${protected_paths}."
             exit 0
           fi
 
           # GitHub logins are compared case-insensitively, because the same account is addressable
           # under either casing and the two spellings must not decide a gate differently.
           if [[ "${PULL_REQUEST_AUTHOR,,}" == "${REPOSITORY_OWNER,,}" ]]; then
-            echo "The repository owner authored this pull request, so its changes under ${protected_directories} are allowed."
+            echo "The repository owner authored this pull request, so its changes under ${protected_paths} are allowed."
             exit 0
           fi
 
           for protected_change in "${protected_changes[@]}"; do
-            echo "::error file=${protected_change}::${protected_change} is repository configuration and only ${REPOSITORY_OWNER} may change it in a pull request."
+            echo "::error file=${protected_change}::${protected_change} decides how other changes are judged, or what a release claims it shipped, and only ${REPOSITORY_OWNER} may change it in a pull request."
           done
 
-          echo "::error::This pull request is authored by ${PULL_REQUEST_AUTHOR} and changes repository configuration under ${protected_directories}. Open that change separately, or ask ${REPOSITORY_OWNER} to make it."
+          echo "::error::This pull request is authored by ${PULL_REQUEST_AUTHOR} and changes ${protected_paths}. Open that change separately, or ask ${REPOSITORY_OWNER} to make it."
           exit 1

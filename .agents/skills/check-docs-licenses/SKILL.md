@@ -20,6 +20,12 @@ Confirm that durable documentation describes implemented behavior:
 
 Use `n/a` only when the change cannot affect user, operator, contributor, architectural, or security guidance.
 
+## Changelog
+
+**Do not touch `CHANGELOG.md`.** It is written by the release pull request and by nothing else, because a changelog is a statement about a release rather than about a change, and that pull request is the one whose merge commit is tagged and published. `$prepare-release` composes each section from the work merged since the previous tag; ordinary work leaves the file alone, and `CHANGELOG.md` is a protected path so an edit to it is visible as the exception it is.
+
+The verdict below is therefore `n/a` for every ordinary change, and `fail` for a diff that edits the file outside a release.
+
 ## Licenses
 
 Inventory added, upgraded, replaced, bundled, or newly used third-party packages, tools, services, provider APIs, protocols, container images, models, generated assets, and copied samples.
@@ -44,6 +50,9 @@ Return exactly these headings with evidence:
 ```text
 Docs: pass|n/a|fail
 <files checked and required actions>
+
+Changelog: n/a|fail
+<n/a for ordinary work, which never touches the file; fail when the diff edits it outside a release>
 
 Licenses: pass|n/a|fail
 <official evidence, THIRD_PARTY_LICENSES.md entries, and required actions>

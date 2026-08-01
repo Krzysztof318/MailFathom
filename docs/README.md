@@ -16,6 +16,7 @@ This documentation set explains the durable design and operating model for MailF
 - [The container image](operations/container-image.md) documents the image `deploy/docker/Dockerfile` produces, how the service runs, its health endpoints, and why it carries no schema tool.
 - [Deploying with Docker Compose](operations/deployment-compose.md) is the supported single-machine deployment, including secret and configuration provisioning, the explicit schema step, backup, and what survives removal.
 - [Deploying to Kubernetes](operations/deployment-kubernetes.md) documents the Helm chart, its required inputs, what the pod serves by default, TLS at the ingress, and the Restricted Pod Security Standard defaults.
+- [The release procedure](operations/release-procedure.md) documents where the version number comes from, where it is observable at run time and on disk, and the order the two pull requests and the tag have to land in.
 - [Agent workflow](operations/agent-workflow.md) documents the shared Codex and Claude Code workflow.
 - [Decisions](decisions/README.md) describes the ADR workflow and templates.
 

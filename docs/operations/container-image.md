@@ -35,7 +35,8 @@ secret, and a certificate live, and a rule that only excluded what someone remem
 daemon. Docker looks for an ignore-file named after the Dockerfile before it looks for one at the context root, and
 prefers it, so the file bounding the context travels with the definition that uses it.
 
-Every base image is pinned to an explicit patch version. `scripts/verify-deployment-assets.sh` rejects a floating one.
+Every base image is pinned to an explicit patch version rather than to a floating `10.0`, so a rebuild months from now
+resolves what the change was reviewed against.
 
 ## How it runs
 
@@ -96,8 +97,25 @@ deployments in `deploy/` allow 60 seconds against a 10-second default; raise the
 
 The image carries the OCI labels that let a pulled image be traced back to the commit it was built from —
 `org.opencontainers.image.source`, `.revision`, `.version`, `.created` — supplied as build arguments.
-`IMAGE_VERSION` currently defaults to `0.0.0-unversioned`: MailFathom has published no release, and what a version means
-here is still an open decision. The application does not yet report its own version at run time either.
+
+`IMAGE_VERSION` has no useful default, and its `0.0.0-unversioned` placeholder says so. The version is declared once,
+as `VersionPrefix` in `Directory.Build.props`, and every build reads it with `scripts/read-declared-version.sh` rather
+than restating it — which is what keeps a labelled version from drifting away from the stamped one, because there is no
+second copy to drift. [ADR 0004](../decisions/0004-versioning-and-release-policy.md) records why the number lives in one
+reviewed line.
+
+`IMAGE_REVISION` is passed to the publish inside the build as `SourceRevisionId`, so the assemblies report the same
+commit the label names rather than a second claim about it. The running process then reports its version and revision
+in its [startup record](host-startup-telemetry.md), and its version to an MCP client during `initialize`. A published
+artifact identifies itself both ways: from outside, through the labels, without being run; and from inside, once it is.
+
+```bash
+docker build --target runtime --file deploy/docker/Dockerfile \
+  --build-arg "IMAGE_VERSION=$(bash scripts/read-declared-version.sh)" \
+  --build-arg "IMAGE_REVISION=$(git rev-parse HEAD)" \
+  --build-arg "IMAGE_CREATED=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --tag mailfathom:local .
+```
 
 `org.opencontainers.image.licenses` is fixed rather than passed in, at `Apache-2.0`, because it states MailFathom's own
 license and a build must not be able to say otherwise. The label is only the claim a registry indexes; the terms
@@ -112,9 +130,9 @@ payload of its own.
 
 ## The schema
 
-The image applies none and carries nothing that could — the verification script fails a Dockerfile that reintroduces a
-schema tool. The reviewed artifact a released installation applies, and the step that runs it, belong to issue #126.
-Until it ships, establishing the schema is an explicit operator action each deployment page describes.
+The image applies none and carries nothing that could: no migration tool, no SQL, and no credential that could reach a
+database with DDL. The reviewed artifact a released installation applies, and the step that runs it, belong to issue
+#126. Until it ships, establishing the schema is an explicit operator action each deployment page describes.
 
 The role that applies it needs more privilege than the service's: the schema installs the `vector` extension, which
 PostgreSQL does not permit an ordinary role to create. That asymmetry is why the step is separate — grant the service a
@@ -124,16 +142,14 @@ has to be one.
 
 ## Verification
 
-```bash
-bash scripts/verify-deployment-assets.sh   # reads the files: pins, privileges, rendering, schema and license guards
-bash scripts/smoke-deployment.sh compose   # starts the real thing and asserts what only a running one can answer
-```
+The `Container image` workflow builds this file for `linux/amd64` and `linux/arm64` and stops there. It is manual
+dispatch only and publishes nothing; no registry credential reaches it.
 
-The second one proves that the container runs unprivileged on a read-only root filesystem, reads its mounted
-configuration, resolves its mounted secret, reaches the database, and then refuses an unrecognized schema — which is
-where a deployment without a schema artifact stops. Neither script runs on a pull request: the `Deployment assets`
-workflow that runs both, plus the two-architecture build and the same smoke against an ephemeral Kubernetes cluster, is
-manual dispatch only.
+Everything beyond "it builds" — that the container runs unprivileged on a read-only root filesystem, reads its mounted
+configuration, resolves its mounted secret, reaches the database, and then refuses an unrecognized schema — belongs to
+the release pipeline issue #156 owns, which tests, builds, and publishes the deployment assets in one place. Until it
+exists, a change here is reviewed by reading it and, where the change is worth running, by starting the Compose
+deployment by hand as [Deploying with Docker Compose](deployment-compose.md) describes.
 
 ## Where the deployments are
 

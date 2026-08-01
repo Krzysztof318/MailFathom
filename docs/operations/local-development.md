@@ -46,24 +46,21 @@ does not contain that base, so it needs access to the remote and cannot run
 offline. Rebase onto the fetched base when it reports the branch is behind.
 The fast script queries only local Git state and remains available offline.
 
-Two further scripts cover the deployment assets, and neither is part of either gate above: they need a Docker daemon,
-and a change that touches no deployment file has nothing for them to say.
+Neither gate covers the deployment assets, and no script here does either. Testing, building, and publishing what
+`deploy/` produces is one pipeline's job rather than several local scripts' — a developer would otherwise need a Docker
+daemon, a Kubernetes cluster, and Helm on the machine to learn what a runner can decide once. That pipeline is issue
+#156; [the container image](container-image.md) and [Kubernetes and Helm](deployment-kubernetes.md) describe what it
+has to establish.
+
+What is useful locally is reading the chart, which needs only Helm:
 
 ```bash
-bash scripts/verify-deployment-assets.sh   # seconds; reads the files
-bash scripts/smoke-deployment.sh compose   # minutes; starts the real deployment
-bash scripts/smoke-deployment.sh kubernetes
+helm lint     deploy/helm/mailfathom --values deploy/helm/mailfathom/ci/release-values.yaml
+helm template verification deploy/helm/mailfathom --values deploy/helm/mailfathom/ci/nightly-values.yaml
 ```
 
-The first answers what can be decided by reading everything under `deploy/`: that base images are pinned, that the image
-drops to an unprivileged account and carries no schema tool, that the Compose files and the chart render, that rendering
-is deterministic, and that the chart's schema still rejects the values that must never install. It uses `helm` from the
-PATH when it is there and a pinned container image otherwise, so it works without installing anything.
-
-The second starts a deployment and asserts what only a running one can answer. Its `kubernetes` mode additionally needs
-`kind`, `kubectl`, and `helm` installed. Neither script runs on a pull request; the `Deployment assets` workflow that
-runs both, plus the two-architecture image build, is manual dispatch only, like the integration suite.
-[The container image](container-image.md) describes what they verify.
+The `Container image` workflow builds the image for both supported architectures and does nothing else. It is manual
+dispatch only, like the integration suite, and it publishes nothing.
 
 Both scripts stop immediately when `HEAD` resolves to `main` or `master`,
 because verification on the integration branch reports on code that no change

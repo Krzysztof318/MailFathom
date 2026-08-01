@@ -13,11 +13,12 @@ public sealed class BootstrapLoggerTests
     private static readonly BootstrapLoggingSettings Settings = new(
         ServiceName: "mailfathom-host",
         ServiceVersion: "1.2.3",
+        ServiceRevision: "3f1c9ab",
         EnvironmentName: "Production",
         ExportsToCollector: false);
 
     [Fact]
-    public void RecordHostStarting_Always_ReportsServiceEnvironmentAndVersionAndNothingElse()
+    public void RecordHostStarting_Always_ReportsServiceEnvironmentVersionAndRevisionAndNothingElse()
     {
         // Arrange
         using var loggerFactory = new RecordingLoggerFactory();
@@ -34,6 +35,7 @@ public sealed class BootstrapLoggerTests
             [
                 KeyValuePair.Create("EnvironmentName", (object?)"Production"),
                 KeyValuePair.Create("ServiceName", (object?)"mailfathom-host"),
+                KeyValuePair.Create("ServiceRevision", (object?)"3f1c9ab"),
                 KeyValuePair.Create("ServiceVersion", (object?)"1.2.3"),
             ],
             record.Properties.OrderBy(property => property.Key, StringComparer.Ordinal));

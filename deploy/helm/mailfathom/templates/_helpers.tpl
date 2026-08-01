@@ -29,6 +29,11 @@ collide with it.
 The version a label may carry. On the nightly channel it is the nightly identifier rather than `appVersion`, because
 `appVersion` describes a release and a nightly is not one; labelling it otherwise would make a nightly indistinguishable
 from a release in every query that reads this label.
+
+On the release channel it is `appVersion`, which the release run supplies when it packages the chart. Rendering the
+chart directory straight out of the repository leaves it empty, and the label is then written empty rather than filled
+with a guess: an unpackaged chart genuinely deploys no stated application version, and a fallback here would be the
+second written version number Chart.yaml exists to avoid.
 */}}
 {{- define "mailfathom.versionLabel" -}}
 {{- if eq .Values.image.channel "nightly" -}}
@@ -94,11 +99,16 @@ wrong.
   {{- fail "image.repository is not set. There is no default: a chart that guessed one would deploy an image nobody named." -}}
 {{- end -}}
 
-{{/* Inactive while appVersion is the unreleased placeholder, and binds on its own once a real version is stamped. */}}
+{{/*
+Deploying a version other than the one this chart documents is allowed and sometimes necessary, but it is stated rather
+than assumed. Two cases carry nothing to compare and are therefore not refusals: a deployment naming the image by
+digest, which publishes no version, and an unpackaged chart, which declares no `appVersion` because only the release
+run supplies one — see Chart.yaml.
+*/}}
 {{- if and
       (eq .Values.image.channel "release")
       .Values.image.tag
-      (ne .Chart.AppVersion "0.0.0-unreleased")
+      .Chart.AppVersion
       (ne .Values.image.tag .Chart.AppVersion)
       (not .Values.image.allowVersionMismatch) -}}
   {{- fail (printf "image.tag is %q but this chart documents application version %q. Deploying a different version than the chart describes is allowed, but it has to be said: set image.allowVersionMismatch=true." .Values.image.tag .Chart.AppVersion) -}}
