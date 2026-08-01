@@ -1,0 +1,84 @@
+# No `labels:` key, deliberately. A `type:*` label is what marks an issue as read, and it is applied
+# during triage rather than by whoever opened the issue. A form that applied one would make every
+# arrival look triaged and leave the `Triage` view permanently empty, which is the one thing the
+# board's four-mechanism split exists to prevent. What the reporter believes they found does not
+# decide the label either: a feature request describing incorrect behavior is triaged as a defect.
+name: Bug report
+description: Something already implemented behaves incorrectly.
+
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Title it with what goes wrong, in one line. Issues here carry no prefix or tag in the title.
+
+
+        **Do not report a security vulnerability here.**
+        [SECURITY.md](https://github.com/Krzysztof318/MailMcp/blob/main/SECURITY.md) has the private
+        channel. Anything touching credentials, tokens, certificates, or unauthorized access to mail
+        goes there instead.
+
+
+        **Send no real mail data.** Redact addresses, subjects, and message content in every log,
+        payload, and screenshot. A synthetic message reproduces the same defect and puts nobody's
+        correspondence in a public issue.
+
+  - type: textarea
+    id: what-happens
+    attributes:
+      label: What happens
+      description: The incorrect behavior, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How to reproduce
+      description: >-
+        The smallest sequence that produces it. A failing unit test is the most useful form this can
+        take; the steps that led there are the next most useful.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: >-
+        The commit SHA you observed it on. Nothing has been released yet, so a version number will
+        exist only once `0.1.0` ships.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: >-
+        Whatever is relevant: .NET SDK version, PostgreSQL version, whether it runs as a container or
+        a native process, and the mail provider if the defect involves IMAP or SMTP.
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, stack trace, or error output
+      description: Redacted. This field is rendered as a code block, so no backticks are needed.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: >-
+        Related issues, when it started, whether it is intermittent, and anything you ruled out.
+    validations:
+      required: false
