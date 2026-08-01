@@ -130,8 +130,8 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     /// <para>
     /// Starting is deliberately a request rather than part of <see cref="InitializeAsync" />. The host opens the same
     /// database every other test writes to, so bringing it up with the application would put it inside the environment
-    /// of tests that assume they own that database. Only <c>ComposedHostCollectionDefinition</c> calls this, and that
-    /// collection is ordered last.
+    /// of tests that assume they own that database. Only <c>ComposedHostCollectionDefinition</c> calls this, and the
+    /// orderer places that collection after the infrastructure collections and before the mutual-TLS one.
     /// </para>
     /// <para>
     /// The first caller pays the start; the rest wait for it and receive the same address. The gate is held across the
@@ -151,7 +151,9 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     /// <remarks>
     /// A second host rather than a posture on the first, for the reason <see cref="OrchestrationContract.MutualTlsHostResourceName" />
     /// states: whether a client certificate is required is one answer for a whole process. It is started on request on
-    /// the same terms, and from the same collection, because it opens the same database.
+    /// the same terms, because it opens the same database, and only <c>MutualTlsHostCollectionDefinition</c> calls
+    /// this — a collection of its own, which the orderer places after the one that starts the host above, so a second
+    /// project process is never starting while that collection measures a rate limit.
     /// </remarks>
     public Task<Uri> StartMutualTlsHostAsync(CancellationToken cancellationToken) => this.StartHostOnceAsync(
         OrchestrationContract.MutualTlsHostResourceName,

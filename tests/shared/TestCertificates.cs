@@ -16,9 +16,12 @@ namespace MailFathom.TestSupport;
 /// Serial numbers come from a counter for the same reason — they must be unique per issuer, not unpredictable.
 /// </para>
 /// <para>
-/// The server-identity members below are the exception, and deliberately so. A certificate a server presents is judged
-/// against an injected clock rather than against the system one, so those take their validity period from the test —
-/// which is what lets an expired and a not-yet-valid certificate be built without waiting for either.
+/// <see cref="CreateServerIdentity" /> and <see cref="CreateIdentityWithoutSubjectAlternativeName" /> are the
+/// exception, and deliberately so. A certificate a loader judges is read against an injected clock rather than against
+/// the system one, so those two take their validity period from the test — which is what lets an expired and a
+/// not-yet-valid certificate be built without waiting for either. Every other member, <see cref="IssueServerIdentity" />
+/// included, keeps the fixed interval, because a certificate presented during a real handshake is judged by the system
+/// clock like any other.
 /// </para>
 /// </remarks>
 internal static class TestCertificates
