@@ -15,6 +15,12 @@ artifacts/
 .env.*
 !.env.example
 
+# The plans and design notes the agent harness writes while a change is being worked out. They record how a change
+# was arrived at rather than how the system behaves, which is the one thing `docs/` never carries, and they are
+# snapshots that were never meant to stay true. Ignored rather than tracked so the harness can keep writing them
+# without the workspace preflight or the diff gate ever seeing them.
+docs/superpowers/
+
 # Everything an operator provisions for the Compose deployment. The directories themselves are tracked, because the
 # Compose file bind-mounts one of them and a missing bind source is a start-up failure rather than an empty mount;
 # nothing inside them ever is.
