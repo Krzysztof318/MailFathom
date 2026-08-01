@@ -105,6 +105,11 @@ themselves are `/app/LICENSE` and `/app/NOTICE`, which arrive as part of the pub
 `Host` fails its own publish when either is missing, so the image cannot be built without them. The third-party
 notices that must accompany them are not in the image yet — see `THIRD_PARTY_LICENSES.md` and issue #191.
 
+`io.artifacthub.package.logo-url` is the only label the image carries that OCI does not define. The specification has no
+field for a project icon, so a listing reads a vendor label instead. It points at `assets/icon-1254.png` in the
+repository, which is the asset the Helm chart's `icon` names as well, and it stays a URL because a label carries no
+payload of its own.
+
 ## The schema
 
 The image applies none and carries nothing that could — the verification script fails a Dockerfile that reintroduces a

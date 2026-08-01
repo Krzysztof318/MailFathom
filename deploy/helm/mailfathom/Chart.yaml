@@ -5,6 +5,10 @@ type: application
 
 # The chart's own version, moved when anything under this directory changes. It is not the application's version and
 # never follows it: a values default corrected without touching the image is a chart release on its own.
+#
+# It still reads its initial value because no chart has been published. Moving it distinguishes what an installer can
+# already have from what this directory now says, and nobody can have anything yet, so a bump before the first
+# publication only counts edits. #156 owns that publication; from it onward the rule above applies literally.
 version: 0.1.0
 
 # The application version this chart is written against. `0.0.0-unreleased` is literal rather than a placeholder
@@ -16,6 +20,12 @@ appVersion: "0.0.0-unreleased"
 home: https://github.com/Krzysztof318/MailFathom
 sources:
   - https://github.com/Krzysztof318/MailFathom
+
+# The project icon, absolute because a chart is consumed as a packaged archive with no repository beside it to resolve a
+# relative path against. A chart listing is the only place this field is read, and the container image states the same
+# asset as `io.artifacthub.package.logo-url`, so the chart and the image it deploys cannot come to show different
+# projects.
+icon: https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/icon-1254.png
 
 keywords:
   - mcp
