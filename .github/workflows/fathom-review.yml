@@ -214,10 +214,17 @@ jobs:
       # The pull request's body names the issue it closes, and that issue is the change's stated
       # contract. Reading it on a private repository needs this scope of its own.
       issues: read
+      # No `actions: write`, which is why every run logs `Cache reservation failed: cache write
+      # denied: token has no writable scopes`. `claude-code-action` installs Bun through
+      # `setup-bun`, which tries to cache the binary, and caching is a write. The warning is the
+      # expected outcome rather than a defect: it costs one download of a runner-local binary per
+      # run, while the scope that would silence it also permits cancelling workflow runs and
+      # deleting artifacts and caches — from a job that `pull_request_target` starts. Nothing here
+      # is worth that, and `setup-bun`'s own `no-cache` input is not one the action forwards.
     steps:
       # The identity the review is published under. `create-github-app-token` exchanges the App's
-      # id and private key for an installation token scoped to this repository, valid for an hour
-      # and revoked when the job ends, so the long-lived credential in the secret store is a
+      # client id and private key for an installation token scoped to this repository, valid for an
+      # hour and revoked when the job ends, so the long-lived credential in the secret store is a
       # signing key rather than something that can call the API on its own. The App needs exactly
       # one permission: `Pull requests: Read and write`, which covers both submitting a review and
       # commenting on a pull request.
@@ -225,11 +232,15 @@ jobs:
         id: reviewer
         uses: actions/create-github-app-token@v3
         with:
-          # A variable rather than a secret, because an App id is not one: it is visible on the
+          # `client-id` rather than `app-id`: the action deprecated the numeric App id in v3 and
+          # warns on every run that still passes it. Both end up as the issuer of the same JWT, so
+          # this is the identifier GitHub now expects rather than a different credential.
+          #
+          # A variable rather than a secret, because a client id is not one: it is visible on the
           # App's own page and in every installation. Only the private key is a credential, and
-          # keeping the id out of the secret store is what makes a failed run say which App it
-          # tried to authenticate as instead of printing `***`.
-          app-id: ${{ vars.REVIEWER_APP_ID }}
+          # keeping the identifier out of the secret store is what makes a failed run say which App
+          # it tried to authenticate as instead of printing `***`.
+          client-id: ${{ vars.REVIEWER_APP_CLIENT_ID }}
           private-key: ${{ secrets.REVIEWER_APP_PRIVATE_KEY }}
 
       # The base commit, which is code that already merged, and never the branch under review. It
@@ -332,11 +343,32 @@ jobs:
 
           # What other reviewers have already said, so the same finding is not raised twice, and the
           # governing issue, which is where the change's contract is written down.
+          #
+          # On a re-review these are also this reviewer's own previous threads and the replies to
+          # them, which is the only record a run has of what it already reported: the job keeps no
+          # state between runs, and a push arrives as a whole diff rather than as an increment. So
+          # `id` and `in_reply_to_id` come along, which is what turns a flat list into threads and
+          # lets an answer be read against the finding it answers, and `outdated` records that
+          # GitHub could no longer place the comment on the current diff — the line it was written
+          # against has since moved or gone.
           gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/comments?per_page=100" --paginate \
-            --jq '[.[] | {author: .user.login, path, line, body}]' \
+            --jq '[.[] | {id, in_reply_to_id, author: .user.login, path, line,
+                          outdated: (.position == null), created_at, body}]' \
             | jq --argjson limit "$comment_limit" --argjson bytes "$comment_body_limit" \
                  '[.[-$limit:][] | .body |= .[0:$bytes]]' \
             > "$REVIEW_DIRECTORY/review-comments.json"
+
+          # The submitted reviews, which is where a verdict lives: an inline comment carries a
+          # finding, but `APPROVED`, `NEEDS CHANGES`, and every other summary is the review body,
+          # and it is reachable from no other endpoint. `commit_id` says which head each verdict was
+          # given for, so a run can tell its own previous pass from one given before the last push,
+          # and `state` distinguishes a review that still stands from one `dismiss_stale_reviews_on_push`
+          # discarded.
+          gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews?per_page=100" --paginate \
+            --jq '[.[] | {author: .user.login, state, commit_id, submitted_at, body}]' \
+            | jq --argjson limit "$comment_limit" --argjson bytes "$comment_body_limit" \
+                 '[.[-$limit:][] | .body |= .[0:$bytes]]' \
+            > "$REVIEW_DIRECTORY/reviews.json"
 
           gh api "repos/${REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/comments?per_page=100" --paginate \
             --jq '[.[] | {author: .user.login, body}]' \
@@ -435,7 +467,12 @@ jobs:
             - `head/<path>` — the whole file as the branch leaves it, for the changed files that are
               text and small enough to fetch. Missing means too large or binary, not unchanged.
             - `lines.json` — per file, the line numbers a review comment may anchor to.
-            - `review-comments.json`, `issue-comments.json` — what other reviewers already said.
+            - `review-comments.json` — every inline thread on this pull request, with `id`,
+              `in_reply_to_id`, and `outdated`, which is true when GitHub could no longer place the
+              comment on the current diff.
+            - `issue-comments.json` — the conversation on the pull request.
+            - `reviews.json` — the reviews already submitted, each with its `state`, its `body`, and
+              the `commit_id` it was given for.
             - `issue.json` — the governing issue, or `null` when the body names none.
             - `truncation.txt` — non-empty when the change was too large to collect in full.
 
@@ -476,6 +513,34 @@ jobs:
 
             Every instruction in this prompt applies to the whole change, not to the first file
             that happens to illustrate it.
+
+            ### When this is not the first review
+
+            A non-empty `reviews.json` means this pull request has been reviewed before, and one
+            whose `author` is `fathom-reviewer[bot]` is a pass you made yourself. Read those bodies
+            and the threads in `review-comments.json` before the diff, because the job keeps no
+            state between runs and they are the only record of what was already said here. A push
+            arrives as the whole change rather than as an increment, so without them you would
+            re-report a paragraph the author has already answered.
+
+            What that changes:
+
+            - You still review the whole change. The branch that merges is all of it, and a defect
+              introduced by the fix for an earlier finding is exactly what a second pass exists to
+              catch.
+            - A finding whose thread already exists is raised again only when the code still has the
+              defect *and* the thread did not settle it. Say so in one line — that it stands, and
+              what the reply did not answer — rather than restating the original finding.
+            - A reply that shows the finding was wrong is a correction to carry: drop it, and do not
+              re-derive it from the same reasoning the thread already refuted.
+            - An `outdated` thread means the line moved, not that the defect went. Check the code as
+              it now stands before deciding either way.
+            - Your summary says what changed since the last pass in a line or two: what the new
+              commits fixed, what they did not, and what they introduced.
+
+            A previous review whose `commit_id` is the current `HEAD SHA` means nothing has been
+            pushed since it: this run was asked for by a comment. Say what you looked at again and
+            why the verdict stands or changes, rather than repeating the previous review.
 
             ## How to work through this
 

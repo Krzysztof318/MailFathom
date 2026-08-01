@@ -176,10 +176,25 @@ would rewrite them.
 
 The change arrives as data. A collection step reads the pull request, its
 changed files with their patches, the resulting content of each changed file,
-the existing review and issue comments, and the governing issue, and writes them
-under `$RUNNER_TEMP/review` with an explicit ceiling on every one of them. What
-a ceiling drops is recorded and ends up in the review body, because a partial
-review that looks complete is worse than one that says what it did not see.
+the inline threads and issue comments, the reviews already submitted, and the
+governing issue, and writes them under `$RUNNER_TEMP/review` with an explicit
+ceiling on every one of them. What a ceiling drops is recorded and ends up in the
+review body, because a partial review that looks complete is worse than one that
+says what it did not see.
+
+Those threads and reviews are what a re-review runs on. The job keeps no state
+between runs and a push arrives as the whole change rather than as an increment,
+so the previous verdicts — its own included, posted as `fathom-reviewer[bot]` —
+are the only record of what was already reported. The threads carry `id` and
+`in_reply_to_id`, so a reply can be read against the finding it answers, and
+`outdated`, which says GitHub could no longer place the comment on the current
+diff. The prompt spends them on not repeating itself: a finding whose thread
+exists is raised again only when the code still has the defect and the thread did
+not settle it, a reply that showed the finding was wrong is a correction to
+carry, and the summary says what the new commits fixed, what they did not, and
+what they introduced. The change under review is still the whole branch, because
+a defect introduced by the fix for an earlier finding is what a second pass is
+for.
 
 Claude then runs with `Read`, `Grep`, `Glob`, and `Write` and nothing else: no
 shell, no editor, no network tool, no MCP tool, and no read access to `.git`,
@@ -334,12 +349,17 @@ why `NEEDS CHANGES` is a heading in a body and never a review state.
 
 Not `github-actions`. The submission step authenticates as the owner's
 `Fathom reviewer` GitHub App, whose installation token it mints from the
-`REVIEWER_APP_ID` repository *variable* and the `REVIEWER_APP_PRIVATE_KEY`
-repository *secret*. The split is deliberate: an App id is visible on the App's
+`REVIEWER_APP_CLIENT_ID` repository *variable* and the `REVIEWER_APP_PRIVATE_KEY`
+repository *secret*. The split is deliberate: a client id is visible on the App's
 own page and in every installation, so it is not a credential, and keeping it out
 of the secret store is what lets a failed run name the App it tried to
 authenticate as rather than printing `***`. The private key is the credential,
 and it is the only one.
+
+The identifier is the App's **Client ID** rather than its numeric App ID.
+`create-github-app-token` deprecated the `app-id` input in v3 and warns on every
+run that still passes one; both are issuers of the same JWT, so this is the
+identifier GitHub now expects rather than a second credential.
 
 Two things follow, and the second is the reason for the first. The review carries
 an identity that names what produced it instead of the identity every other
@@ -353,6 +373,16 @@ commenting on a pull request alike.
 
 A missing or invalid App credential fails the run at its first step, before the
 change is collected and before any subscription usage is spent.
+
+Every run logs `Cache reservation failed: cache write denied: token has no
+writable scopes`, and that warning is expected rather than a defect.
+`claude-code-action` installs Bun through `setup-bun`, which tries to cache the
+binary, and a cache write needs `actions: write` on the workflow token. The
+warning costs one download of a runner-local binary per run; the scope that would
+silence it also permits cancelling workflow runs and deleting artifacts and
+caches, from a job that `pull_request_target` starts. `setup-bun` does expose a
+`no-cache` input, but the action does not forward it, so the choice is between
+the warning and the scope — and the warning is the cheaper of the two.
 
 ### Provisioning the App
 
@@ -371,7 +401,8 @@ and both are required before a review can be posted.
    **Pull requests: Read and write** and nothing else. That single scope covers
    both API calls the workflow makes. Leave **Where can this GitHub App be
    installed?** at **Only on this account**.
-3. On the App's settings page after creation, note the **App ID**, then under
+3. On the App's settings page after creation, note the **Client ID** — the
+   `Iv23…` value beside the App ID, not the numeric one — then under
    **Private keys** choose **Generate a private key**. GitHub downloads a `.pem`
    file and keeps only its fingerprint; the file is the credential and cannot be
    recovered from GitHub if it is lost.
@@ -380,7 +411,7 @@ and both are required before a review can be posted.
    with an authentication error rather than a missing-secret one.
 5. In the repository's **Settings → Secrets and variables → Actions**, add both,
    on their own tabs:
-   - the **Variables** tab: `REVIEWER_APP_ID`, the numeric App ID;
+   - the **Variables** tab: `REVIEWER_APP_CLIENT_ID`, the App's Client ID;
    - the **Secrets** tab: `REVIEWER_APP_PRIVATE_KEY`, the entire contents of the
      `.pem` file including the `-----BEGIN…-----` and `-----END…-----` lines and
      the trailing newline. A key pasted without its header lines fails to parse.
