@@ -10,7 +10,7 @@ name: Protected paths
 #   `.agents/`  the skills that define the task, review, verification, and completion contract
 #   `.claude/`  the tracked entry points to those same skills
 #
-# Three files decide the same thing from wherever they sit, so they are matched by name anywhere in
+# Five files decide the same thing from wherever they sit, so they are matched by name anywhere in
 # the tree rather than at the repository root. A nested copy of each overrides the root one for its
 # own subtree, and that override — a rule relaxed for one directory, quietly — is the part worth
 # catching:
@@ -22,6 +22,12 @@ name: Protected paths
 #                       stops having reviewable content at all
 #   `.worktreeinclude`  which gitignored files, local secrets among them, are copied into every
 #                       worktree an agent works in
+#   `AGENTS.md`         the architecture, conventions, verification gates, and workflow contract every
+#                       agent-authored change is written and judged against. It is the same kind of
+#                       instruction the skills under `.agents/` carry, written where an agent reads it
+#                       first, so protecting one of the two and not the other protects neither
+#   `CLAUDE.md`         the tracked entry point to those same instructions, which is what `.claude/`
+#                       is to `.agents/`
 #
 # The remaining entries are single repository-root files, matched whole. Each is either written by
 # one deliberate flow, so every other edit to it is out of band, or states terms and pins that the
@@ -113,7 +119,7 @@ jobs:
           set -euo pipefail
 
           protected_prefixes=('.github/' '.agents/' '.claude/' '.config/')
-          protected_names=('.editorconfig' '.gitattributes' '.worktreeinclude')
+          protected_names=('.editorconfig' '.gitattributes' '.worktreeinclude' 'AGENTS.md' 'CLAUDE.md')
           protected_files=(
             'CHANGELOG.md'
             'Directory.Build.props'
