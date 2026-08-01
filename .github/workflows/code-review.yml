@@ -17,7 +17,7 @@ name: Code review
 # keeps a prompt injection in the diff, in a comment, or in the linked issue from reaching an
 # authenticated API call.
 #
-# What that step posts, it posts as the `Code reviewer` GitHub App rather than as `github-actions`.
+# What that step posts, it posts as the `Fathom reviewer` GitHub App rather than as `github-actions`.
 # The App is the owner's, so the review carries an identity that says what produced it, and the
 # workflow token it replaces drops to read-only: the only credential in this file that can write to
 # a pull request is minted from the App's private key, held by one step, and expires with the job.
@@ -128,7 +128,7 @@ jobs:
               # The `@` is optional because every other reviewer on the market is summoned with one,
               # so it is the first thing a hand types, and a trigger that silently ignores the
               # obvious spelling is a trap rather than a guard. It addresses no account here — the
-              # App is named `Code reviewer` — so GitHub renders it as plain text, and accepting it
+              # App is named `Fathom reviewer` — so GitHub renders it as plain text, and accepting it
               # weakens nothing: `@code-review` is not a phrase that turns up in prose about the
               # workflow, so the line-start rule above still carries the whole guard.
               trigger_pattern=$'(^|\n)[[:space:]]*@?code-review([^a-z-]|$)'
@@ -169,7 +169,7 @@ jobs:
     permissions:
       contents: read
       # Read-only throughout. The workflow token collects the change and nothing else; every write
-      # this job performs is made with the `Code reviewer` App's installation token, minted below.
+      # this job performs is made with the `Fathom reviewer` App's installation token, minted below.
       # That is what lets this block stay narrower than the job's behavior suggests: `write` here
       # would also permit closing or relabelling a pull request, which nothing in this file does.
       pull-requests: read

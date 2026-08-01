@@ -140,7 +140,7 @@ the author is already answering. Two things ask for a review anyway:
   optional rather than required, because every other reviewer is summoned with
   one and a trigger that silently ignores the spelling a hand reaches for first
   is a trap. `@code-review` addresses no account: the App is named
-  `Code reviewer`, so GitHub renders it as plain text. Leading whitespace is
+  `Fathom reviewer`, so GitHub renders it as plain text. Leading whitespace is
   fine, so a list item or a quoted line still counts, and `code-reviewer` does
   not;
 - the `code-review` label, which is how a fork's pull request is reviewed at
@@ -279,7 +279,7 @@ found a defect.
 ### Who publishes it
 
 Not `github-actions`. The submission step authenticates as the owner's
-`Code reviewer` GitHub App, whose installation token it mints from an app id and
+`Fathom reviewer` GitHub App, whose installation token it mints from an app id and
 a private key held as the `REVIEWER_APP_ID` and `REVIEWER_APP_PRIVATE_KEY`
 secrets.
 
@@ -303,10 +303,13 @@ Once, by the owner. A GitHub App is an account-level object that is then
 and both are required before a review can be posted.
 
 1. At <https://github.com/settings/apps/new>, create an App named
-   `Code reviewer`. The name is what appears as the review's author, so it is
-   the one field with a user-visible consequence. Give it any homepage URL — the
-   field is required and unused — and clear **Webhook → Active**, because
-   nothing here receives events.
+   `Fathom reviewer`. The name is what appears as the review's author, so it is
+   the one field with a user-visible consequence. It does not match the
+   workflow's name because App names are unique across all of GitHub rather than
+   per account, and `Code reviewer` was already taken — a replacement name is
+   expected here, and only this file and the workflow's own comments have to
+   agree with it. Give it any homepage URL — the field is required and unused —
+   and clear **Webhook → Active**, because nothing here receives events.
 2. Under **Permissions → Repository permissions**, grant
    **Pull requests: Read and write** and nothing else. That single scope covers
    both API calls the workflow makes. Leave **Where can this GitHub App be
