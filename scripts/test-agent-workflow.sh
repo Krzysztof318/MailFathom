@@ -24,6 +24,7 @@ remote_repository_root="$test_directory/remote"
 fake_bin_directory="$test_directory/bin"
 protected_paths_bin_directory="$test_directory/protected-paths-bin"
 fathom_review_bin_directory="$test_directory/fathom-review-bin"
+settle_bin_directory="$test_directory/fathom-review-settle-bin"
 invocation_log="$test_directory/dotnet-invocations.log"
 workflow_invocation_log="$test_directory/workflow-invocations.log"
 fixture_branch='agent/workflow-fixture'
@@ -95,6 +96,21 @@ cat > "$fathom_review_bin_directory/gh" <<'FAKE_GH'
 printf '0\n'
 FAKE_GH
 chmod +x "$fathom_review_bin_directory/gh"
+
+# The settle step asks the same two endpoints when the newest comment on the pull request was
+# written, and decides only from that timestamp. This fake answers whatever the contract set:
+# nothing for a pull request nobody has commented on, `now` for a conversation that never goes
+# quiet, and an explicit timestamp otherwise.
+mkdir -p "$settle_bin_directory"
+cat > "$settle_bin_directory/gh" <<'FAKE_GH'
+#!/usr/bin/env bash
+case "${FAKE_NEWEST_COMMENT:-}" in
+  '') ;;
+  now) date -u +%Y-%m-%dT%H:%M:%SZ ;;
+  *) printf '%s\n' "$FAKE_NEWEST_COMMENT" ;;
+esac
+FAKE_GH
+chmod +x "$settle_bin_directory/gh"
 
 export FAKE_DOTNET_LOG="$invocation_log"
 export FAKE_WORKFLOW_LOG="$workflow_invocation_log"
@@ -685,16 +701,17 @@ protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit() {
   assert_contains 'cannot be verified' "$output_file"
 }
 
-# The gate that decides whether a review runs is a shell block inside `fathom-review.yml`, and it
-# cannot be a script in `scripts/` for the reason the protected-paths guard cannot: the workflow
-# never checks the branch out. Extracting it verbatim is again what makes these contracts run the
-# runner's own code. The block is the `run: |` under `id: gate`, indented ten spaces, and it ends at
-# the first line that leaves that indentation, so a step added after it changes nothing here.
-extract_fathom_review_gate() {
-  local step_script="$1"
+# The steps these contracts run are shell blocks inside `fathom-review.yml`, and they cannot be
+# scripts in `scripts/` for the reason the protected-paths guard cannot: the workflow never checks
+# the branch out. Extracting one verbatim is again what makes these contracts run the runner's own
+# code. A block is the `run: |` under the step's `id:`, indented ten spaces, and it ends at the
+# first line that leaves that indentation, so a step added after it changes nothing here.
+extract_fathom_review_step() {
+  local step_id="$1"
+  local step_script="$2"
 
-  awk '
-    /^        id: gate$/ { found = 1; next }
+  awk -v step_declaration="        id: $step_id" '
+    $0 == step_declaration { found = 1; next }
     found && !extracting && /^        run: \|$/ { extracting = 1; next }
     extracting {
       if ($0 != "" && $0 !~ /^          /) { exit }
@@ -715,7 +732,7 @@ run_fathom_review_gate() {
   local step_output_file="$3"
   local step_script="$test_directory/fathom-review-gate.sh"
 
-  extract_fathom_review_gate "$step_script"
+  extract_fathom_review_step 'gate' "$step_script"
   : > "$step_output_file"
 
   (
@@ -760,6 +777,94 @@ fathom_review_refuses_a_closed_pull_request() {
   assert_contains 'the pull request is closed' "$output_file"
 }
 
+# The settle step waits for the pull request's conversation to stop moving before the snapshot is
+# frozen, so a reply written in the seconds after the push that started the run is inside it. The
+# windows come from the step's own `env` block, which is what lets these contracts run the real loop
+# against seconds instead of minutes; the values the workflow declares are not what is asserted
+# here, only the decisions the loop takes between them.
+run_fathom_review_settle() {
+  local newest_comment="$1"
+  local output_file="$2"
+  local step_script="$test_directory/fathom-review-settle.sh"
+
+  extract_fathom_review_step 'settle' "$step_script"
+
+  (
+    export PATH="$settle_bin_directory:$PATH"
+    export FAKE_NEWEST_COMMENT="$newest_comment"
+    export GH_TOKEN='fake-token'
+    export REPOSITORY='Krzysztof318/MailFathom'
+    export PULL_REQUEST_NUMBER='1'
+    export SETTLE_MINIMUM_SECONDS='2'
+    export SETTLE_QUIET_SECONDS='1'
+    export SETTLE_LIMIT_SECONDS='4'
+    export SETTLE_POLL_SECONDS='1'
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+}
+
+assert_seconds_elapsed_at_least() {
+  local minimum_seconds="$1"
+  local started_at="$2"
+  local elapsed=$(($(date -u +%s) - started_at))
+
+  if ((elapsed < minimum_seconds)); then
+    printf 'Expected at least %ss to elapse, but %ss did\n' "$minimum_seconds" "$elapsed" >&2
+    return 1
+  fi
+}
+
+assert_seconds_elapsed_below() {
+  local ceiling_seconds="$1"
+  local started_at="$2"
+  local elapsed=$(($(date -u +%s) - started_at))
+
+  if ((elapsed >= ceiling_seconds)); then
+    printf 'Expected fewer than %ss to elapse, but %ss did\n' "$ceiling_seconds" "$elapsed" >&2
+    return 1
+  fi
+}
+
+# A first review has nothing to answer, so it pays none of the wait below.
+fathom_review_collects_at_once_when_nobody_has_commented() {
+  local output_file="$test_directory/fathom-review-settle-empty-output"
+  local started_at
+  started_at="$(date -u +%s)"
+
+  run_fathom_review_settle '' "$output_file"
+
+  assert_contains 'Nothing to settle' "$output_file"
+  assert_seconds_elapsed_below 2 "$started_at"
+}
+
+# The contract this whole step exists for. On #223 the collection closed twelve seconds before the
+# author's reply to the previous pass was written, and the reviewer reported the finding again as
+# unanswered. A conversation that is already quiet still waits the minimum window, because the reply
+# that matters is the one not written yet.
+fathom_review_waits_before_freezing_a_quiet_conversation() {
+  local output_file="$test_directory/fathom-review-settle-quiet-output"
+  local started_at
+  started_at="$(date -u +%s)"
+
+  run_fathom_review_settle '2020-01-01T00:00:00Z' "$output_file"
+
+  assert_contains 'Settled' "$output_file"
+  assert_seconds_elapsed_at_least 2 "$started_at"
+}
+
+# The other end of it: somebody typing steadily must not hold the run open, so the wait is bounded
+# and says in the log that it collected a conversation still in motion.
+fathom_review_stops_waiting_at_the_ceiling() {
+  local output_file="$test_directory/fathom-review-settle-ceiling-output"
+  local started_at
+  started_at="$(date -u +%s)"
+
+  run_fathom_review_settle 'now' "$output_file"
+
+  assert_contains 'still moving' "$output_file"
+  assert_seconds_elapsed_at_least 4 "$started_at"
+}
+
 workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
   [[ -x "$source_repository_root/scripts/verify-fast.sh" ]]
@@ -793,6 +898,9 @@ run_test protected_paths_reports_the_paths_it_found_when_the_owner_is_the_author
 run_test protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit
 run_test fathom_review_reviews_a_push_to_a_published_pull_request
 run_test fathom_review_refuses_a_closed_pull_request
+run_test fathom_review_collects_at_once_when_nobody_has_commented
+run_test fathom_review_waits_before_freezing_a_quiet_conversation
+run_test fathom_review_stops_waiting_at_the_ceiling
 run_test workflow_scripts_use_flat_manual_layout
 
 printf '%s passed, %s failed\n' "$passed_count" "$failed_count"

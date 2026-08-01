@@ -235,19 +235,12 @@ ceiling on every one of them. What a ceiling drops is recorded and ends up in th
 review body, because a partial review that looks complete is worse than one that
 says what it did not see.
 
-Those threads and reviews are what a re-review runs on. The job keeps no state
-between runs and a push arrives as the whole change rather than as an increment,
-so the previous verdicts — its own included, posted as `fathom-reviewer[bot]` —
-are the only record of what was already reported. The threads carry `id` and
-`in_reply_to_id`, so a reply can be read against the finding it answers, and
-`outdated`, which says GitHub could no longer place the comment on the current
-diff. The prompt spends them on not repeating itself: a finding whose thread
-exists is raised again only when the code still has the defect and the thread did
-not settle it, a reply that showed the finding was wrong is a correction to
-carry, and the summary says what the new commits fixed, what they did not, and
-what they introduced. The change under review is still the whole branch, because
-a defect introduced by the fix for an earlier finding is what a second pass is
-for.
+Every one of those collections produces a single JSON array whatever the page
+count. `--paginate` runs `--jq` once per page, so a filter that built an array
+per page would leave a stream of them as soon as a pull request passed a hundred
+files or comments; the line list derived from the files would inherit that shape,
+and the submission step would then validate every anchor against the first page
+alone and push every other finding into the review body.
 
 Claude then runs with `Read`, `Grep`, `Glob`, and `Write` and nothing else: no
 shell, no editor, no network tool, no MCP tool, and no read access to `.git`,
@@ -283,6 +276,63 @@ The paths under `$RUNNER_TEMP` are declared on each step that uses them rather
 than once for the job, because `runner` is not among the contexts a job-level
 `env` block may read and naming it there fails the whole file's validation before
 any job exists.
+
+### Waiting for the conversation before collecting it
+
+A step before the collection waits for the pull request's conversation to stop
+moving, and it exists because answering a review is one act that GitHub delivers
+as two. The fix is pushed and the replies are written into the threads a moment
+later, so the event that starts the run arrives *before* the answers it should be
+read with. On #223 the collection closed at `18:31:40` and the two replies
+disputing the previous pass were written at `18:31:52` and `18:32:07`; the
+reviewer then spent five minutes on a snapshot that could not contain them and
+reported both findings again, stating that neither thread had received a reply.
+No wording in the prompt recovers an answer that is not in the data, which is why
+this is a step rather than a paragraph.
+
+So the snapshot is frozen only after a minimum window, extended for as long as
+comments keep arriving, and bounded by a ceiling so somebody typing steadily
+cannot hold a run open. A pull request nobody has commented on has nothing to
+settle and waits not at all, which is every first review. The wait costs runner
+time and no subscription usage, because the model has not started. The windows
+are declared in the step's own `env` block, which is also what lets
+`scripts/test-agent-workflow.sh` run the real loop against seconds rather than
+minutes. It covers the three decisions the loop takes: collect at once, wait out
+a quiet conversation, stop at the ceiling.
+
+The collection then records the instant it began, and the prompt states it. That
+makes the snapshot's edge something the reviewer can reason about rather than
+mistake for the record: it may say what the code does and what a thread contains,
+and never that an answer does not exist because it was not given one.
+
+### What a re-review is given
+
+The threads and the submitted reviews are what a re-review runs on. The job keeps
+no state between runs and a push arrives as the whole change rather than as an
+increment, so the previous verdicts — its own included, posted as
+`fathom-reviewer[bot]` — are the only record of what was already reported.
+
+The threads come from GraphQL rather than from the REST comment list, for the one
+field REST does not carry: whether a thread is resolved. Resolving is how this
+repository closes a finding out — reply, then resolve, never one without the
+other — so it is the author's clearest statement that a thread is settled, and a
+reviewer that cannot see it re-opens what the pull request already closed.
+GraphQL also returns the comments already grouped into their threads, so a reply
+sits beside the finding it answers rather than having to be reassembled from
+`in_reply_to_id`, and it marks a thread outdated when the line it was written
+against has moved or gone. Both are bounded: a hundred threads, twenty comments
+each, and the same body ceiling every other collected text carries.
+
+The prompt spends all of that on not repeating itself. A resolved thread is taken
+as closed and re-opened only where the code still plainly has the defect. A reply
+that argues against a finding is answered on its merits or the finding is
+dropped, because restating it beside an argument that engaged it tells the author
+their answer was not read. A reply that showed the finding was wrong is a
+correction to carry. What survives is raised in one line — that it stands, and
+what the reply left unanswered — rather than by restating it, and the summary
+says what the new commits fixed, what they did not, and what they introduced. The
+change under review is still the whole branch, because a defect introduced by the
+fix for an earlier finding is what a second pass is for.
 
 ### Why `pull_request_target` is a granted exception
 
