@@ -33,6 +33,14 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
           persist-credentials: false
 
+      # `github.sha` is the commit that *triggered* the dispatch, which is the branch the workflow was started from
+      # rather than the `ref` input it was given. Reading the checkout instead means the revision stamped into the
+      # assemblies and labelled on the image is the one that was actually built, which is the whole claim the label
+      # exists to support.
+      - name: Resolve the commit that was checked out
+        id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -49,7 +57,7 @@ jobs:
             --target runtime \
             --file deploy/docker/Dockerfile \
             --build-arg "IMAGE_VERSION=$(bash scripts/read-declared-version.sh)" \
-            --build-arg "IMAGE_REVISION=${GITHUB_SHA}" \
+            --build-arg "IMAGE_REVISION=${{ steps.revision.outputs.sha }}" \
             --build-arg "IMAGE_CREATED=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --cache-from type=gha,scope=runtime \
             --cache-to type=gha,mode=max,scope=runtime \

@@ -130,9 +130,9 @@ payload of its own.
 
 ## The schema
 
-The image applies none and carries nothing that could — the verification script fails a Dockerfile that reintroduces a
-schema tool. The reviewed artifact a released installation applies, and the step that runs it, belong to issue #126.
-Until it ships, establishing the schema is an explicit operator action each deployment page describes.
+The image applies none and carries nothing that could: no migration tool, no SQL, and no credential that could reach a
+database with DDL. The reviewed artifact a released installation applies, and the step that runs it, belong to issue
+#126. Until it ships, establishing the schema is an explicit operator action each deployment page describes.
 
 The role that applies it needs more privilege than the service's: the schema installs the `vector` extension, which
 PostgreSQL does not permit an ordinary role to create. That asymmetry is why the step is separate — grant the service a
