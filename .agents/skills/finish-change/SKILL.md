@@ -23,8 +23,9 @@ Do not proceed while a gate fails.
 4. Push the `agent/*` branch.
 5. Create a draft pull request whose body contains `Closes #<issue>` for the issue the change completes. Never mark it ready unless the owner explicitly asks.
 6. Confirm the reference is present in the published body. `gh pr edit` fails against this repository with a Projects-classic GraphQL error and silently drops the edit, so correct a missing reference through `gh api repos/<owner>/<repo>/pulls/<number> -X PATCH -f body=...`.
+7. Set `Queue: Next` on the issue the pull request closes, whether it was opened for this task or already existed, and confirm the value landed. No project automation can write that field, so a value that did not land is an incomplete gate in the same way a missing `Closes #<issue>` is. It sits outside the owner's five-slot cap and needs no clearing: the merge closes the issue out of every view that reads `Queue`.
 
-Confirm the issue is still placed: exactly one `type:*` label, a `Track` and a `Queue` value on the board, a milestone if the release rule assigns one, and a `Size`, which is no longer deferrable because the diff now exists and can be measured rather than estimated. A change that grew past what the issue described may have outgrown its placement too.
+Confirm the issue is still placed: exactly one `type:*` label, a `Track` value on the board, a milestone if the release rule assigns one, and a `Size`, which is no longer deferrable because the diff now exists and can be measured rather than estimated. A change that grew past what the issue described may have outgrown its placement too.
 
 Leave the board's `Status` field to the project automation. Set a status by hand only for an issue created already closed, which the automation does not add.
 
@@ -40,7 +41,8 @@ Commit: <hash and subject>
 Push: <remote branch>
 Draft PR: <URL>
 Issue link: <Closes #N confirmed in the published body>
-Placement: <type label, Track, Queue, Size, milestone or none>
+Queue: <Next confirmed on the board after the pull request existed>
+Placement: <type label, Track, Size, milestone or none>
 ```
 
 Never claim completion without fresh evidence for every line.

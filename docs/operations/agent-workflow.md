@@ -100,8 +100,9 @@ The canonical skills are:
   gate;
 - `finish-change` stages only the task files, requires that gate, runs full
   verification, checks the final diff, creates a focused commit, pushes the
-  branch, and opens a draft pull request that references its issue with
-  `Closes #<issue>`;
+  branch, opens a draft pull request that references its issue with
+  `Closes #<issue>`, and then moves that issue to `Queue: Next` so the board
+  shows the work as in flight;
 - `prepare-release` opens the two pull requests a release consists of and prints
   the order they and the tag between them have to land in. It is the one skill
   an agent cannot invoke — its frontmatter sets `disable-model-invocation`, so
@@ -116,6 +117,13 @@ and `Size` fields that place it on the board, the milestone that scopes it to a
 release, and which board transitions belong to the project automation rather
 than to an agent. Placing an issue is part of opening it, because the built-in
 workflows set `Status` and nothing else.
+
+That same limit is why `Queue: Next` is written by a skill rather than by an
+automation. No project workflow can set a custom single-select field, and the
+board is user-owned, which leaves only a classic account-wide token as a
+credential a GitHub Actions run could use — so the write stays where a token
+that already exists is already in use, and a pull request opened outside
+`finish-change` moves nothing.
 
 Those rules describe an issue an agent opened. A public repository also receives
 issues nobody here opened, and one arrives with no `type:*` label and no board
