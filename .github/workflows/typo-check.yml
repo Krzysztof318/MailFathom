@@ -20,6 +20,12 @@ on:
       - reopened
       - synchronize
       - ready_for_review
+      # Never starts a check that does any work, and is listed so that a conversion reaches the
+      # concurrency group below and cancels a run still going. Without it, converting a ready pull
+      # request back to draft leaves the last verdict standing on a pull request that is no longer
+      # ready — an answer about a change still being written, which is the state the draft condition
+      # on the job exists to avoid.
+      - converted_to_draft
     branches:
       - main
 
