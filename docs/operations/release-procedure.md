@@ -105,9 +105,10 @@ to. The file is a protected path, so an edit arriving through ordinary work is v
 
 ## Cutting a release
 
-Use `$prepare-release`, which reads the version, refuses the states that must not be released, opens both pull
-requests as drafts, and prints the ordering. The sequence it prints is the whole procedure, and it is recorded here so
-it survives the skill being unavailable:
+The owner invokes `$prepare-release`, which reads the version, refuses the states that must not be released, opens both
+pull requests as drafts, and prints the ordering. It is manual-invocation only — no agent can reach it — because when a
+version becomes real is a decision rather than a consequence of work looking finished. The sequence it prints is the
+whole procedure, and it is recorded here so it survives the skill being unavailable:
 
 1. **Merge the changelog pull request.** It adds `## [x.y.z] - YYYY-MM-DD` with the release's entries, composed from
    what merged since the previous tag, and touches nothing else. It merges first because **its merge commit is what

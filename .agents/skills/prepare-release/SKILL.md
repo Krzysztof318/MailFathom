@@ -1,9 +1,12 @@
 ---
 name: prepare-release
-description: Use when a MailFathom release is being cut, to compose the changelog, raise the declared version, and state the order the two pull requests and the tag have to land in.
+description: Manual only. Invoked by the owner to cut a MailFathom release — composes the changelog, raises the declared version, and states the order the two pull requests and the tag have to land in.
+disable-model-invocation: true
 ---
 
 # Prepare Release
+
+**Manual invocation only.** Cutting a release is the owner's decision about when a version becomes real, not something to infer from a task looking release-shaped. `disable-model-invocation` in the frontmatter above is what enforces that: an agent cannot reach this skill on its own, and a release begins when the owner asks for one.
 
 Prepares the two pull requests a release consists of and then hands the sequence back to the owner.
 

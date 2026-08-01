@@ -103,9 +103,12 @@ The canonical skills are:
   branch, and opens a draft pull request that references its issue with
   `Closes #<issue>`;
 - `prepare-release` opens the two pull requests a release consists of and prints
-  the order they and the tag between them have to land in. It pushes no tag and
-  merges nothing; `docs/operations/release-procedure.md` records the same
-  sequence for a reader without the skill.
+  the order they and the tag between them have to land in. It is the one skill
+  an agent cannot invoke — its frontmatter sets `disable-model-invocation`, so
+  only the owner reaches it, because when a version becomes real is their
+  decision. It pushes no tag and merges nothing;
+  `docs/operations/release-procedure.md` records the same sequence for a reader
+  without the skill.
 
 Root `AGENTS.md` holds the issue rules themselves: which work needs an issue,
 what an issue body contains, the `type:*` label it carries, the `Track`, `Queue`
