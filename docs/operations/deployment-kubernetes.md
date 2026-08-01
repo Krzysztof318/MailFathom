@@ -302,5 +302,7 @@ runs no cluster of its own for it.
 
 - [The container image](container-image.md) — what is inside it, how it runs, and the schema script
 - [Docker Compose](deployment-compose.md) — the same contract in the other shape
+- [The platform TLS policy](platform-tls-policy.md) — for a mail server whose handshake the pod's own OpenSSL refuses;
+  `config.extraEnvironment` names the file, and the chart currently has no hook for mounting it
 - [Configuration sources](configuration-sources.md), [secret provisioning](secret-provisioning.md),
   [the MCP endpoint](mcp-endpoint.md)

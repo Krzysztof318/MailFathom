@@ -312,3 +312,8 @@ belong to the platform rather than to MailFathom:
 | `ASPNETCORE_URLS` / `ASPNETCORE_HTTP_PORTS` | The application listener's addresses, unless MCP HTTPS profiles or explicit Kestrel endpoints replace them |
 | `DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT` | The environment name; `Development` is what admits user secrets and `appsettings.Development.json` |
 | `DOTNET_USE_POLLING_FILE_WATCHER` | Set to `1` where reload must observe a mounted volume's atomic update — Kubernetes ConfigMaps in particular |
+| `OPENSSL_CONF` | The OpenSSL configuration file every TLS connection in the process is handshaked under. Unset is the platform's own policy; setting it is how a mail server the platform refuses is reached at all, and the host warns at startup that it is in force. [The platform TLS policy](platform-tls-policy.md) is the page |
+
+`OPENSSL_CONF` is the one entry here that could not be a MailFathom setting even in principle: OpenSSL reads it while
+initializing, before configuration binding exists, so the same name written into `appsettings.json` or a mounted file is
+silently ineffective.

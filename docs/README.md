@@ -18,6 +18,7 @@ instead of duplicating them.
 - [Configuration sources](operations/configuration-sources.md) covers the source precedence, the deployment-provisioned JSON directory and file, and the Kubernetes ConfigMap and Secret mapping.
 - [Configuration reference](operations/configuration-reference.md) lists every user-settable option in one place, with its type, default, constraints, and whether changing it needs a restart.
 - [Telemetry](operations/telemetry.md) records what the host emits over OpenTelemetry, the one environment variable that decides whether it is exported, the Aspire dashboard as the local destination, and why deployments export nothing by default.
+- [The platform TLS policy](operations/platform-tls-policy.md) explains why a legacy mail server's handshake can be refused before any MailFathom setting applies, the one supported way to relax it, and what relaxing it costs the whole process.
 - [Secret provisioning](operations/secret-provisioning.md) covers secret references, the systemd and container provisioning paths, and in-memory exposure.
 - [Host startup telemetry](operations/host-startup-telemetry.md) describes the bootstrap logging pipeline that reports process start, startup failure, and shutdown.
 - [MCP endpoint](operations/mcp-endpoint.md) covers enabling the protocol surface, the API keys and explicit unauthenticated mode that guard it, the origins it answers, and the domains and certificates it terminates TLS for.

@@ -220,5 +220,7 @@ unset variable and the documented value mean the same thing.
 
 - [The container image](container-image.md) — what is inside it, how it runs, and the schema script
 - [Kubernetes and Helm](deployment-kubernetes.md) — the same contract in the other shape
+- [The platform TLS policy](platform-tls-policy.md) — for a mail server whose handshake the container's own OpenSSL
+  refuses; the file has to be mounted into the container and named in the service's `environment:` block
 - [Configuration sources](configuration-sources.md), [secret provisioning](secret-provisioning.md),
   [the MCP endpoint](mcp-endpoint.md)

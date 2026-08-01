@@ -72,6 +72,10 @@ Points worth knowing before you adapt it:
   an unencrypted connection, clear-text authentication over one — must be stated explicitly and fails startup
   otherwise. A server with a private certificate authority is supported by trusting that authority, never by turning
   validation off; [transport security](../features/imap-synchronization.md#transport-security) records the rules.
+- **An older server may be refused before any of this applies.** If synchronization reports an authentication failure
+  wrapping `SSL Handshake failed with OpenSSL error`, the password is not the problem: the platform's own TLS policy
+  ended the handshake before a credential was sent. [The platform TLS policy](../operations/platform-tls-policy.md)
+  covers how to confirm that and the one supported way to relax it.
 - **How far back to synchronize** is per account: `EarliestEmailReceivedDate` bounds the first synchronization of a
   large mailbox, and omitting it copies everything the server still holds.
 

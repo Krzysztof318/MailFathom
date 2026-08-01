@@ -111,6 +111,14 @@ dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:ApiKeys:0:Na
 dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:ApiKeys:0:SecretReference" "plaintext:dev-key"
 ```
 
+A development mailbox served by a mail server whose TLS parameters the platform refuses needs one more thing, and the
+symptom sends most people the wrong way: the handshake fails, but reads as an authentication failure. Export
+`OPENSSL_CONF` in the shell the orchestration starts from and the AppHost passes it through to `mailfathom-host`, which
+then reports at startup that it is running under it. [The platform TLS policy](platform-tls-policy.md) covers the file,
+what it costs, and how to confirm the handshake is what failed. The AppHost passes an exported value through and never
+sets one, so a checkout that exports nothing runs under the platform default; the integration-test topology receives it
+under no circumstances, because a suite whose handshakes depended on the machine that ran it would prove nothing.
+
 An MCP client then connects to `http://localhost:5171/mcp` with `Authorization: Bearer dev-key`. Stopping the
 orchestration with `Ctrl+C` — or `aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive` — leaves the
 synchronized mail in place, because the database volume outlives the container.
