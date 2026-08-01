@@ -65,6 +65,24 @@ A release's increment is the **highest increment any of the four surfaces requir
 
 Removal above `1.0.0` requires a deprecation window: the thing being removed is announced as deprecated in a minor release, remains functional for at least one further minor release, and is removed in the next major. The announcement lives in `CHANGELOG.md` and, where the surface can carry it, in the surface itself — a tool description, an option's XML documentation, a startup warning.
 
+### Deciding the increment
+
+The table is read as a procedure rather than as a menu. Ask all four surfaces, take the highest answer, and stop; there is no weighing of how *much* of a surface moved, because the question is whether an unchanged consumer survives, and that has no degrees.
+
+One question settles most cases: **does something that worked before the upgrade stop working after it, without the operator doing anything?** If yes, it is major. If nothing breaks but something new is available, it is minor. If nothing breaks and nothing is new, it is patch. The table's rows are that question applied to each surface.
+
+The cases where two readings are defensible recur, so they are settled here rather than re-argued per release:
+
+- **A new configuration key is minor only while it is optional.** A required key is major, because an unchanged configuration fails startup, and "it is only one line to add" describes the fix, not the break.
+- **A changed default is major when an unchanged deployment behaves differently after the upgrade**, and minor when it only affects deployments created afterwards.
+- **Correcting behavior is patch only when the documented contract already described the corrected behavior.** When the contract itself moves, the change is minor or major even though the code looks like a fix — a consumer bound to what the software did, not to what the documentation said, is still a consumer.
+- **A result gaining a field is minor; a field changing type or meaning is major**, even when the field name survives. A rename is a removal and an addition.
+- **Validation widening is minor, narrowing is major.** A value that started a host yesterday and refuses to today is a break regardless of whether it should ever have been accepted.
+- **A migration that applies forward unattended is minor; one that cannot be applied over the previous release's data is major**, whatever the code around it did.
+- **Performance, logging, telemetry, and internal structure carry no increment of their own.** They earn one only when they change something the four surfaces publish.
+
+When a case still reads both ways after those, take the higher increment. An unnecessary major costs an operator one careful upgrade; an unmarked break costs them an outage, and only one of the two is recoverable by reading the changelog.
+
 ### What `0.x` suspends, and what it does not
 
 The first release is `0.1.0`, matching the `0.1.0 — first public release` milestone. SemVer 2.0.0 section 4 makes `0.y.z` carry no compatibility promise at all, which is honest for a product whose schema is still settling. MailFathom narrows that deliberately rather than accepting it wholesale:
@@ -96,20 +114,38 @@ Two format constraints shape the artifact tags rather than the version itself. A
 
 ### What cuts a release
 
-An annotated tag `v<major>.<minor>.<patch>` pushed on a commit reachable from `main`, or from a `release/<major>.<minor>.x` branch cut from an earlier release tag. The second case is the hotfix path, and it is admitted here rather than left to issue 117 to discover, because a hotfix commit is by construction not reachable from `main` and a trigger that only accepted `main` would reject the patch release this ADR requires elsewhere.
+An annotated tag `v<major>.<minor>.<patch>` pushed on a commit reachable from `main`, or from a `release/<major>.<minor>.x` branch. `main` produces every major and minor release; a `release/*` branch produces every patch and nothing else, under *The patch flow* below. Both are admitted by the trigger here rather than left to issue 117 to discover, because a commit on a release branch is by construction not reachable from `main`, and a trigger accepting only `main` would reject every patch this ADR requires.
 
 The tag is preceded by one reviewed pull request and followed by one generated one:
 
 1. **Prepare.** A release-preparation pull request closes `## [Unreleased]` in `CHANGELOG.md` into `## [x.y.z] - YYYY-MM-DD`. `VersionPrefix` already reads `x.y.z` and is not touched. This is the last point at which the release's contents are read as a whole before anyone can install them.
 2. **Tag.** The annotated tag is pushed on the merge commit, so the tagged tree contains the released changelog rather than describing the release after it happened.
 3. **Publish.** The release workflow runs, and before it publishes anything it asserts that the tag's version equals the `VersionPrefix` of the tagged commit, that the version is not a regression against the highest existing tag **on the same `major.minor` line** rather than against the highest tag overall — otherwise `v0.2.1`, cut after `0.3.0` has shipped, would be rejected as a regression when it is the ordinary shape of a hotfix — that `CHANGELOG.md` carries a non-empty section whose heading matches the tag, and that no artifact already exists under that version with different content. It then runs the build, test, container smoke, license, and vulnerability gates, publishing nothing if any fails, and publishes the image to both registries with the chart alongside it in one run, per issues 156 and 187.
-4. **Reopen.** The workflow opens the follow-up pull request, which raises `VersionPrefix` to the next minor and opens a fresh empty `Unreleased`.
+4. **Reopen.** The workflow opens the follow-up pull request, which raises `VersionPrefix` to the next minor — or to the next major when the accumulated work already requires one — and opens a fresh empty `Unreleased`. **It is never raised to a patch**, because `main` does not produce patches; the next section says what does.
 
 Step 4 is what keeps the declared prefix from being a thing somebody has to remember. If it is skipped, the failure is loud rather than silent: the next tag push repeats a version that already exists and step 3 rejects it.
 
 Between the tag and the merge of that follow-up, nightlies briefly carry `-nightly.N` of an already released version. That is harmless — a prerelease identifier never occupies a stable version, and the acknowledgement gates in front of the nightly channel do not depend on the number — and the window is as short as merging one generated pull request.
 
 The alternative shape considered, option E, was rejected on one point that has no workaround: it releases version *N* from a commit whose source tree already says *N+1*, so rebuilding from the revision recorded in the published artifact produces a different version. That contradicts the determinism the build already claims and the self-identification issue 119 requires. Its two-commit variant avoids the contradiction but needs a separate marker to say which commit is the release — which is what a tag already is, with immutability and a natural mapping onto the image tag, the chart version, and the GitHub release thrown in.
+
+### The patch flow
+
+**A patch is never cut from `main`.** `main` carries one line of development, and its `VersionPrefix` only ever moves forward to the next minor or major. Patching there is not merely discouraged — it is unavailable, because by the time `0.2.0` needs a fix, `main` already contains everything intended for `0.3.0`, and a patch released from it would ship that work under a number promising nothing had changed. That is the failure a patch number exists to rule out.
+
+A patch lives on a **permanent branch named `release/<major>.<minor>.x`**, cut from the release tag of the line it patches.
+
+- **It is created on demand**, the first time that line needs a fix, from the tag rather than from any later commit. A line that never needs a patch never gets a branch, so the branch list stays a record of what was actually maintained rather than one entry per release.
+- **It is never deleted.** Once a line has been patched, its branch is where that line's history lives, and a later patch to the same line reuses it rather than re-cutting from a tag that no longer reflects what shipped.
+- **It carries its own `VersionPrefix`**, reading `<major>.<minor>.<patch>`. This is the only place in the repository where a patch number is ever written.
+- **It publishes through the same three-step sequence** as any other release — preparation pull request, tag, generated follow-up — and its follow-up raises `VersionPrefix` to the next *patch* on that branch, which is the one place that is correct.
+- **It never produces a nightly.** The nightly channel previews `main` and nothing else.
+
+**The fix reaches `main` first.** Where the code being fixed still exists there, the change merges to `main` through the ordinary flow and is then cherry-picked onto the release branch, so a fix cannot be lost when the next minor ships. Only where `main` no longer contains the code — the fix applies to something already replaced — does the branch carry a change of its own, and its changelog entry says so explicitly, because that is the case a reader would otherwise assume was an oversight.
+
+**Only the newest released minor is patched by default.** Reaching further back is a deliberate decision recorded on the issue that asks for it, not something that follows from a branch still existing. A single maintainer cannot support an unbounded number of lines, and a policy that implies otherwise makes a promise the project cannot keep.
+
+This flow **breaks the repository's own final gate as it currently stands**, and that has to be fixed with it rather than discovered during an incident. `scripts/verify-full.sh` requires `origin/main` to be an ancestor of `HEAD` and computes its diff validation as `origin/main..HEAD`. A branch cut from `v0.2.0` while `main` sits on `0.3.0` contains no such ancestor, so the gate refuses to run before it builds anything, and the diff it would check is every change `main` made since the tag. The check's purpose is to prove a change was verified against the base it will actually merge into, so it generalizes rather than gets an exception: on a `release/*` branch that base is the release branch's own upstream, and only on an `agent/*` branch is it `origin/main`. Exempting hotfix work from the gate is the alternative, and it is the wrong one — a patch is the change most likely to be written under time pressure and least likely to be re-reviewed.
 
 ### Channels
 
@@ -177,6 +213,7 @@ Nothing here is done by proposing it. Moving the status to `accepted` commits th
 - updates `docs/operations/deployment-compose.md` and `docs/operations/deployment-kubernetes.md`, which document the GHCR-only nightly and the forced registry as implemented behavior, and the sentence in root `AGENTS.md` describing the verification script as rejecting a Compose file that reaches the nightly registry;
 - adds the `io.mailfathom.release-channel` label to `deploy/docker/Dockerfile`, which carries none today, and moves the existing container and Kubernetes labels from `ghcr-nightly-unsupported` to `release` or `nightly`, together with the `verify-deployment-assets.sh` assertion that still expects the old value;
 - replaces root `AGENTS.md`'s single-regenerated-migration rule with the freeze described above, and updates `docs/operations/` and the `$add-migration` skill to match;
+- generalizes the base check in `scripts/verify-full.sh` from `origin/main` to the branch the change will merge into, so a `release/*` branch can pass the gate at all, and updates the branch rules in root `AGENTS.md` alongside it;
 - adds the release and nightly workflows that assert the prefix, the same-line regression rule, the changelog section, and the immutability before publishing anything.
 
 Until then, `0.0.0-unreleased` in `Chart.yaml` and `0.0.0-unversioned` in the `Dockerfile` stay exactly as they are.
@@ -191,6 +228,8 @@ Until then, `0.0.0-unreleased` in `Chart.yaml` and `0.0.0-unversioned` in the `D
 - Neutral, because `VersionPrefix` on `main` names the *next* release rather than the last one, so a build from `main` is always a preview. This is the same convention MinVer's `MinVerMinimumMajorMinor` expresses, arrived at without the package.
 - Good, because publishing both channels to both registries makes neither registry a single point of failure for reaching a MailFathom version, and the prerelease identifier separates the channels more reliably than a hostname did.
 - Bad, because the prefix and the tag can disagree, and only the workflow's assertion prevents a disagreement from publishing. The check is mandatory rather than advisory for this reason.
+- Good, because keeping patches off `main` means a patch cannot accidentally ship the next minor's work under a number that promises nothing changed, which is the whole reason a patch number is trusted.
+- Bad, because a permanent branch per patched line is real maintenance: a fix that matters to two lines is written once and cherry-picked twice, and the support window has to be stated and then honoured rather than implied by a branch still existing.
 - Bad, because two registries mean two credentials, two pushes, and a state where one succeeded and the other did not. The release run pushes the same manifest list to both and reports a partial publication as a failed release, so the recovery is a documented re-push by digest rather than a rebuild.
 - Bad, because deciding a release's increment requires judging four surfaces rather than reading a diff, and nothing mechanical can make that judgement. The changelog's per-surface structure is what makes the omission visible in review.
 - Bad, because freezing the migration baseline at `0.1.0` removes the regeneration workflow that has been convenient throughout development, and every later schema change costs a reviewed forward migration.
@@ -291,6 +330,6 @@ Raising the declared base from `0.2.0` to `0.3.0` publishes `0.2.0` from that sa
 
 Normative references consulted for this decision: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) for precedence and the meaning of `0.y.z`; the [OCI distribution tag grammar](https://github.com/opencontainers/distribution-spec/blob/main/spec.md) for what an image tag may contain; the [Helm chart `version` and `appVersion` fields](https://helm.sh/docs/topics/charts/), which require full SemVer 2; and [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/).
 
-Related issues: 116 records this decision; 119 stamps the number into builds and reports it at runtime; 156 publishes the container image, and is amended here on the registry premise, the schedule, and the release trigger; 187 joins the Helm chart to the same release run; 117 records the branching model, and inherits the hotfix path this ADR's release trigger already admits — a `release/<major>.<minor>.x` branch cut from a release tag, carrying its own `VersionPrefix`, from which a patch tag is pushed — leaving 117 to decide how the fix returns to `main` and what the branch's lifetime is; 53 owns the migration baseline this decision freezes at the first release.
+Related issues: 116 records this decision; 119 stamps the number into builds and reports it at runtime; 156 publishes the container image, and is amended here on the registry premise, the schedule, and the release trigger; 187 joins the Helm chart to the same release run; 117 records the branching model and inherits the patch flow settled here — the permanent `release/<major>.<minor>.x` branch, its `VersionPrefix`, the cherry-pick direction, and the support window — leaving 117 the questions that are genuinely branching rather than versioning: branch protection on a release branch, who may push to it, and how its existence interacts with the board automation; 53 owns the migration baseline this decision freezes at the first release.
 
 Revisit this ADR at `1.0.0`, when the deprecation window becomes binding and the `0.x` clauses expire; if a second maintainer joins, which changes what the tag-plus-bump sequence costs; or if a release cadence emerges that makes a candidate channel worth its cost.
