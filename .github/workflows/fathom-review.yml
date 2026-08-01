@@ -99,10 +99,21 @@ jobs:
           IS_PULL_REQUEST_COMMENT: ${{ github.event.issue.pull_request.url != '' }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_ASSOCIATION: ${{ github.event.comment.author_association }}
+          GH_TOKEN: ${{ github.token }}
+          # The account the App's reviews are authored by, which the per-pull-request ceiling below
+          # counts, and the same login the prompt names when it tells the reviewer which previous
+          # verdicts are its own. It is the App's slug and not its display name — `Fathom reviewer`
+          # publishes as `fathom-reviewer[bot]` — so anything that touches the App's identity means
+          # re-reading this from the API rather than deriving it from the settings page.
+          REVIEWER_LOGIN: 'fathom-reviewer[bot]'
         run: |
           set -euo pipefail
 
           review='false'
+          # Whether somebody asked for this run in so many words. A label or a comment is a person
+          # with write access deciding the pass is worth its cost; every other path is the workflow
+          # deciding for them, and only that one is bounded below.
+          explicit='false'
           # Sonnet 5 by default, at the exact identifier rather than the `sonnet` alias: an alias
           # silently re-points at whatever ships next, and a review's findings are only comparable
           # across runs when the model that produced them is the one this file names. The prompt is
@@ -117,6 +128,7 @@ jobs:
                 # request reaches this workflow and the only way a draft does.
                 if [[ "$ADDED_LABEL" == 'fathom-review' ]]; then
                   review='true'
+                  explicit='true'
                   reason='a maintainer applied the fathom-review label'
                 else
                   reason="the applied label is '${ADDED_LABEL}'"
@@ -179,6 +191,7 @@ jobs:
                 reason="the comment author is ${COMMENT_ASSOCIATION} and cannot spend review usage"
               else
                 review='true'
+                explicit='true'
                 reason='a maintainer asked for fathom-review in a comment'
                 # The escape hatch to the more expensive model, for a change where the default
                 # reviewer's verdict is worth a second, costlier opinion.
@@ -188,6 +201,45 @@ jobs:
               fi
               ;;
           esac
+
+          # What the subscription pays for is bounded per pull request, not per period. Every push to
+          # a published branch starts a review, so a branch pushed to forty times is reviewed forty
+          # times, and past some number of passes over the same pull request another one is spending
+          # usage to repeat what it already said.
+          #
+          # The count is the reviews this App has already submitted here rather than a quota read from
+          # run history. A run that decided *not* to review — a draft push, a comment about the
+          # workflow — is indistinguishable from one that did in the runs endpoint, so counting runs
+          # would bound the wrong number, and a calendar quota would bound a busy month rather than
+          # the pathological pull request that is the actual failure.
+          #
+          # What is counted is every review the App has submitted here, including the ones somebody
+          # asked for, because the question is how many passes this pull request has already had
+          # rather than which of them were unprompted. Only the automatic path is refused by the
+          # answer: somebody with write access asking has already made the decision this ceiling
+          # exists to make when nobody made it, so a label and a comment still work afterwards.
+          automatic_review_limit=10
+
+          if [[ "$review" == 'true' && "$explicit" != 'true' ]]; then
+            # `--paginate` runs `--jq` once per page, so the per-page counts are summed rather than
+            # read as one number. The login reaches jq through the environment rather than through
+            # string interpolation, so the `[bot]` brackets never arrive as filter syntax.
+            #
+            # A failed count reads as zero and the review proceeds. This is a cost guard rather than
+            # a security one, so one extra review is a better outcome than failing a run over a
+            # transient API error — and the workflow gates nothing, so a red run here would be noise
+            # a reader has to dismiss rather than a signal.
+            submitted_reviews=$(
+              gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews?per_page=100" --paginate \
+                --jq '[.[] | select(.user.login == env.REVIEWER_LOGIN)] | length' \
+                | jq -s 'add // 0'
+            ) || submitted_reviews='0'
+
+            if (( submitted_reviews >= automatic_review_limit )); then
+              review='false'
+              reason="the automatic review ceiling of ${automatic_review_limit} is reached; ${REVIEWER_LOGIN} has ${submitted_reviews} reviews on this pull request, so label it fathom-review or comment fathom-review to review it again"
+            fi
+          fi
 
           {
             echo "review=${review}"
