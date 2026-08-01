@@ -80,6 +80,12 @@ Run the Aspire orchestration host:
 dotnet run --project src/AppHost/AppHost.csproj
 ```
 
+The AppHost prints the dashboard address, including a one-time login link, as it starts. The dashboard is where a
+local run is observed: per-resource console output, structured logs, traces, and metrics, all delivered over OTLP
+because Aspire injects `OTEL_EXPORTER_OTLP_ENDPOINT` into the resources it starts. That injection is currently the
+only place telemetry export is configured at all — a deployment exports nothing until an operator sets the variable
+themselves. [Telemetry](telemetry.md) records what the host emits and where it goes.
+
 The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.2-pg17` image so local development starts with a PostgreSQL server that can support the `vector` extension required by the RAG and embedding slices. It keeps its data in a named Docker volume, so synchronized mail survives a restart instead of costing a full IMAP synchronization every time the orchestration stops.
 
 That volume is why `src/AppHost/AppHost.csproj` declares a `UserSecretsId` and `src/AppHost/Properties/launchSettings.json` sets `DOTNET_ENVIRONMENT=Development`. Aspire generates the PostgreSQL password and keeps it stable by writing it to user secrets, which are only loaded in the Development environment. Without both, every run generates a new password while the volume keeps the one it was initialized with, and the container never becomes healthy. If it ever does report `password authentication failed`, the volume and the current password have diverged; remove the volume and start again:
