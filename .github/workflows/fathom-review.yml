@@ -1,4 +1,4 @@
-name: Code review
+name: Fathom review
 
 # A second reviewer, next to the Codex review that already comments here, in the same P1/P2/P3
 # vocabulary so one pass over the threads answers both. It reports no status check and is not in the
@@ -22,14 +22,21 @@ name: Code review
 # workflow token it replaces drops to read-only: the only credential in this file that can write to
 # a pull request is minted from the App's private key, held by one step, and expires with the job.
 #
-# An all-clear is not a review. A run that finds nothing above the bar posts one ordinary
-# pull-request comment saying so, because a review whose every thread reads "this is fine" costs the
-# author threads to resolve and tells them nothing a sentence could not.
+# A run that finds nothing above the bar approves the pull request, and one that finds something
+# submits `event: COMMENT`. The verdict is the whole content of an all-clear, so it is said in the
+# one place GitHub renders as a verdict rather than as a wall of threads that each read "this is
+# fine". `REQUEST_CHANGES` is deliberately never used: this reviewer advises and gates nothing.
+#
+# The approval cannot merge anything on its own. The `main` ruleset requires one approving review
+# *from a code owner*, `CODEOWNERS` makes the repository owner the code owner of every path, and a
+# GitHub App cannot be a code owner — so the owner's own approval is still required, and this one
+# sits beside it as a signal. `dismiss_stale_reviews_on_push` then discards it on the next push, so
+# an approval never outlives the commit it was given for.
 on:
   # No `synchronize`. A push to a pull request that is already open runs the required checks and
   # nothing else: those are cheap, deterministic, and gate the merge, while a re-review costs
   # subscription usage and would repeat findings the author is already answering. A review of the
-  # updated branch is asked for, with a `code-review` comment.
+  # updated branch is asked for, with a `fathom-review` comment.
   pull_request_target:
     types:
       - opened
@@ -93,55 +100,56 @@ jobs:
               if [[ "$EVENT_ACTION" == 'labeled' ]]; then
                 # The label is the maintainer's explicit ask, which is the only way a fork's pull
                 # request reaches this workflow and the only way a draft does.
-                if [[ "$ADDED_LABEL" == 'code-review' ]]; then
+                if [[ "$ADDED_LABEL" == 'fathom-review' ]]; then
                   review='true'
-                  reason='a maintainer applied the code-review label'
+                  reason='a maintainer applied the fathom-review label'
                 else
                   reason="the applied label is '${ADDED_LABEL}'"
                 fi
               elif [[ "$PULL_REQUEST_DRAFT" == 'true' ]]; then
-                reason='the pull request is a draft; label it code-review or comment code-review to review it anyway'
+                reason='the pull request is a draft; label it fathom-review or comment fathom-review to review it anyway'
               elif [[ "$HEAD_REPOSITORY" != "$REPOSITORY" ]]; then
                 # A fork's own pull request never starts a review by being opened. The label
                 # does, and the action's own write-permission check on the actor agrees: on a
                 # `labeled` event the actor is the maintainer who applied it.
-                reason="the head branch is in ${HEAD_REPOSITORY}; a maintainer applies the code-review label to review a fork"
+                reason="the head branch is in ${HEAD_REPOSITORY}; a maintainer applies the fathom-review label to review a fork"
               else
                 review='true'
                 reason="the pull request was ${EVENT_ACTION}"
               fi
               ;;
             issue_comment)
-              # `code-review` rather than `@claude`: an at-mention collides with GitHub Copilot's
+              # `fathom-review` rather than `@claude`: an at-mention collides with GitHub Copilot's
               # own trigger.
               #
               # The phrase has to begin a line, which is stricter than matching it anywhere in the
               # body and is the whole reason this is a variable rather than a literal pattern.
-              # `code-review` is ordinary English about this very workflow — "I'll rerun the
-              # code-review workflow", "see the code-review docs" — so an anywhere-match would
-              # spend subscription usage on a run nobody asked for every time the pipeline is
-              # discussed on a pull request. Somebody asking for a review types the phrase as an
-              # instruction, at the start of a line; somebody talking about it does not. Leading
+              # `fathom-review` names this pipeline, so it is exactly the word somebody writes when
+              # they discuss it — "I'll rerun the fathom-review workflow", "see the fathom-review
+              # docs" — and an anywhere-match would spend subscription usage on a run nobody asked
+              # for every time that sentence appears on a pull request. Somebody asking for a review
+              # types the phrase as an instruction, at the start of a line; somebody talking about
+              # it does not. Leading
               # whitespace is allowed because a list item or a quote is still an instruction, and
-              # the trailing `[^a-z-]` keeps `code-reviewer` from counting.
+              # the trailing `[^a-z-]` keeps `fathom-reviewer` from counting.
               #
               # The `@` is optional because every other reviewer on the market is summoned with one,
               # so it is the first thing a hand types, and a trigger that silently ignores the
               # obvious spelling is a trap rather than a guard. It addresses no account here — the
               # App is named `Fathom reviewer` — so GitHub renders it as plain text, and accepting it
-              # weakens nothing: `@code-review` is not a phrase that turns up in prose about the
+              # weakens nothing: `@fathom-review` is not a phrase that turns up in prose about the
               # workflow, so the line-start rule above still carries the whole guard.
-              trigger_pattern=$'(^|\n)[[:space:]]*@?code-review([^a-z-]|$)'
+              trigger_pattern=$'(^|\n)[[:space:]]*@?fathom-review([^a-z-]|$)'
 
               if [[ "$IS_PULL_REQUEST_COMMENT" != 'true' ]]; then
                 reason='the comment is on an issue rather than a pull request'
               elif [[ ! "${COMMENT_BODY,,}" =~ $trigger_pattern ]]; then
-                reason='the comment does not ask for code-review'
+                reason='the comment does not ask for fathom-review'
               elif [[ "$COMMENT_ASSOCIATION" != 'OWNER' && "$COMMENT_ASSOCIATION" != 'MEMBER' && "$COMMENT_ASSOCIATION" != 'COLLABORATOR' ]]; then
                 reason="the comment author is ${COMMENT_ASSOCIATION} and cannot spend review usage"
               else
                 review='true'
-                reason='a maintainer asked for code-review in a comment'
+                reason='a maintainer asked for fathom-review in a comment'
                 # The escape hatch to the more expensive model, for a change where the default
                 # reviewer's verdict is worth a second, costlier opinion.
                 if [[ "${COMMENT_BODY,,}" == *opus* ]]; then
@@ -159,8 +167,8 @@ jobs:
 
           echo "Review: ${review} (${reason})."
 
-  code-review:
-    name: Code review
+  fathom-review:
+    name: Fathom review
     needs:
       - decide
     if: needs.decide.outputs.review == 'true'
@@ -655,10 +663,11 @@ jobs:
 
             When nothing survives the second pass, write the file with an empty `findings` array and
             a summary that says plainly what you covered and that you found nothing above the bar.
-            That is a finished review rather than a failed one, and the step after you posts it as
-            one ordinary pull-request comment instead of as a review — so an all-clear never reaches
-            the author as a set of threads to resolve that each say the code is fine. Say it in two
-            or three lines and stop; there is nothing to pad it with.
+            That is a finished review rather than a failed one, and the step after you turns it into
+            an approval of the pull request carrying your summary as its body. Your summary is
+            therefore the entire content of that verdict — say what you covered in two or three
+            lines and stop, and do not invent a finding to avoid approving. Approving cannot merge
+            anything on its own; a code owner still has to approve separately.
           # `--setting-sources user` keeps the deny list above as the only settings the session
           # loads. The action would otherwise load `user`, `project`, and `local`, and a project
           # source means settings and hooks read out of the working directory. Nothing untrusted is
@@ -811,15 +820,25 @@ jobs:
             exit 1
           fi
 
-          # An all-clear is a comment, not a review. A review with an empty `comments` array still
-          # opens a review thread on the pull request and shows up in the timeline as a completed
-          # review, which for a change nothing was found in reads as ceremony: the author gets a
-          # thread to resolve that says only that there was nothing to resolve. One ordinary
-          # pull-request comment carries the same sentence and leaves the review timeline for runs
-          # that actually found something.
+          # Nothing found is a verdict, so it is delivered as one: an approval carrying the summary
+          # and no inline comments. The alternative shapes are both worse. `event: COMMENT` with an
+          # empty `comments` array records that a review happened without saying what it concluded,
+          # and an ordinary issue comment says it in the timeline where nothing reads it as a
+          # verdict at all.
+          #
+          # `commit_id` ties the approval to the head the reviewer actually saw. With
+          # `dismiss_stale_reviews_on_push` set on the `main` ruleset, the next push dismisses it,
+          # so an approval can never describe code that has since changed.
+          #
+          # This cannot merge anything by itself: the ruleset requires an approving review from a
+          # code owner, and a GitHub App cannot be one. `REQUEST_CHANGES` is never used in either
+          # branch — a reviewer that gates nothing must not be able to block a merge either.
           if [[ "$(jq '(.findings // []) | length' "$FINDINGS_FILE")" == '0' ]]; then
-            jq --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" '
+            jq --arg commit "$HEAD_SHA" \
+               --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" '
               {
+                commit_id: $commit,
+                event: "APPROVE",
                 body: (
                   [((.summary // "") | if . == "" then "The review found nothing above the bar in this change." else . end)]
                   + (if $truncation == "" then [] else ["", $truncation] end)
@@ -827,10 +846,10 @@ jobs:
                 )
               }' "$FINDINGS_FILE" > "$payload_file"
 
-            gh api "repos/${REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/comments" \
+            gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews" \
               --method POST --input "$payload_file" --silent
 
-            echo 'Posted a comment: the review found nothing above the bar.'
+            echo 'Approved: the review found nothing above the bar.'
             exit 0
           fi
 

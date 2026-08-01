@@ -120,7 +120,7 @@ then comment on the pull request itself: Codex and Claude. Both post threads
 carrying a `P1`, `P2`, or `P3` severity, so one pass over the pull request's
 threads answers both rather than two passes reading two vocabularies.
 
-The Claude pass is the `Code review` workflow. It runs by itself once, when a
+The Claude pass is the `Fathom review` workflow. It runs by itself once, when a
 pull request whose branch is in this repository becomes reviewable: `opened`,
 `reopened`, or `ready_for_review`. A draft is skipped, because a draft is still
 being written and reviewing it spends subscription usage on a moving target. A
@@ -128,22 +128,23 @@ later push is not reviewed either — it runs the required checks and nothing
 else, since those gate the merge while a re-review would mostly repeat findings
 the author is already answering. Two things ask for a review anyway:
 
-- a comment on the pull request that *begins a line* with `code-review` or
-  `@code-review`, from an author with write access. Adding `opus` to that comment
+- a comment on the pull request that *begins a line* with `fathom-review` or
+  `@fathom-review`, from an author with write access. Adding `opus` to that comment
   buys a second, costlier opinion; `claude-sonnet-5` is the default.
 
   Three things about that phrase are deliberate. It is not `@claude`, which
   collides with GitHub Copilot's own trigger. It has to lead a line rather than
-  appear anywhere in the body, because `code-review` is ordinary English about
-  this very workflow — writing "I'll rerun the code-review workflow" mid-sentence
-  must not spend subscription usage on a run nobody asked for. And the `@` is
+  appear anywhere in the body, because `fathom-review` names this pipeline and is
+  therefore exactly the word somebody writes when discussing it — "I'll rerun the
+  fathom-review workflow" mid-sentence must not spend subscription usage on a run
+  nobody asked for. And the `@` is
   optional rather than required, because every other reviewer is summoned with
   one and a trigger that silently ignores the spelling a hand reaches for first
-  is a trap. `@code-review` addresses no account: the App is named
+  is a trap. `@fathom-review` addresses no account: the App is named
   `Fathom reviewer`, so GitHub renders it as plain text. Leading whitespace is
-  fine, so a list item or a quoted line still counts, and `code-reviewer` does
+  fine, so a list item or a quoted line still counts, and `fathom-reviewer` does
   not;
-- the `code-review` label, which is how a fork's pull request is reviewed at
+- the `fathom-review` label, which is how a fork's pull request is reviewed at
   all. A fork's own pushes never start a review, so a maintainer decides.
 
 The workflow reports no status check and is not in the `main` ruleset. It
@@ -169,8 +170,8 @@ Claude then runs with `Read`, `Grep`, `Glob`, and `Write` and nothing else: no
 shell, no editor, no network tool, no MCP tool, and no read access to `.git`,
 where the action leaves a token for its own use. It holds no credential it could
 use and posts nothing. It writes findings to one file, and the step after it
-validates them and submits a single review with `event: COMMENT` — or, when the
-file holds no findings, one ordinary pull-request comment instead.
+validates them and submits a single review: `event: COMMENT` when the file holds
+findings, `event: APPROVE` when it holds none.
 
 The model is named exactly rather than by alias: `claude-sonnet-5` at
 `--effort high`. An alias re-points at whatever ships next, and findings are only
@@ -268,13 +269,23 @@ ranged comment, submits with an explicit `POST`, and refuses to post at all if
 the findings contain any credential this workflow holds or anything shaped like
 one.
 
-A run that found nothing takes the other path: one ordinary pull-request comment
-saying so, rather than a review. A review with no comments still opens a thread
-in the timeline and asks the author to resolve something that says only that
-there was nothing to resolve, and a reviewer that has to produce a review body
-either way is a reviewer under quiet pressure to find something for it. The
-comment carries the same sentence and leaves the review timeline to runs that
-found a defect.
+A run that found nothing takes the other branch: `event: APPROVE`, carrying the
+reviewer's summary as the review body and no inline comments. Nothing found is a
+verdict, so it is delivered where GitHub renders a verdict. The alternatives are
+both worse — `event: COMMENT` with an empty comment list records that a review
+happened without saying what it concluded, and an ordinary issue comment says it
+somewhere nothing reads as a verdict at all.
+
+`commit_id` ties the approval to the head the reviewer actually saw, and the
+`main` ruleset sets `dismiss_stale_reviews_on_push`, so the next push dismisses
+it and an approval can never describe code that has since changed.
+
+**The approval cannot merge anything on its own.** The ruleset requires one
+approving review *from a code owner*, `CODEOWNERS` makes the repository owner the
+code owner of every path, and a GitHub App cannot be a code owner — so the
+owner's approval is still required and this one sits beside it as a signal.
+`REQUEST_CHANGES` is never used in either branch: a reviewer that reports no
+status check and gates nothing must not be able to block a merge either.
 
 ### Who publishes it
 
@@ -304,12 +315,11 @@ and both are required before a review can be posted.
 
 1. At <https://github.com/settings/apps/new>, create an App named
    `Fathom reviewer`. The name is what appears as the review's author, so it is
-   the one field with a user-visible consequence. It does not match the
-   workflow's name because App names are unique across all of GitHub rather than
-   per account, and `Code reviewer` was already taken — a replacement name is
-   expected here, and only this file and the workflow's own comments have to
-   agree with it. Give it any homepage URL — the field is required and unused —
-   and clear **Webhook → Active**, because nothing here receives events.
+   the one field with a user-visible consequence. App names are unique across all
+   of GitHub rather than per account, so this one may be unavailable; pick
+   another and update this file and the workflow's comments, which are the only
+   two places that name it. Give it any homepage URL — the field is required and
+   unused — and clear **Webhook → Active**, because nothing here receives events.
 2. Under **Permissions → Repository permissions**, grant
    **Pull requests: Read and write** and nothing else. That single scope covers
    both API calls the workflow makes. Leave **Where can this GitHub App be
