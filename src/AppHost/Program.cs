@@ -3,6 +3,8 @@
 
 using System.Globalization;
 using MailFathom.AppHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -66,6 +68,10 @@ else
     // behind ASPIREPERSISTENCE001 as evaluation-only. Taking it would mean suppressing an experimental-API diagnostic
     // to reach behavior the stable overload already expresses.
     //
+    // Kept is not the same as left running, and the lifetime has no third value for that, so PersistentContainerStopper
+    // below stops it during shutdown. What outlives the orchestration is then the container and its data rather than a
+    // PostgreSQL process and the port it holds.
+    //
     // The host port is fixed for the same reason the host's own ports are: a connection string typed into a database
     // tool once should keep working. PostgreSQL's own port is the convenient one, and Aspire publishes it on the
     // loopback address, so the server a developer reaches is not one anything else on their network can.
@@ -73,6 +79,13 @@ else
         .WithDataVolume()
         .WithLifetime(ContainerLifetime.Persistent)
         .WithHostPort(5432);
+
+    // Registered last, which is what makes its shutdown run first: a hosted service stops in reverse registration
+    // order, and the orchestrator that carries out the stop is registered while the builder is created.
+    builder.Services.AddHostedService(provider => new PersistentContainerStopper(
+        provider.GetRequiredService<ResourceCommandService>(),
+        [postgres.Resource],
+        provider.GetRequiredService<ILogger<PersistentContainerStopper>>()));
 }
 
 if (runsIntegrationTests)
@@ -202,10 +215,25 @@ else
         // unconfigured here, so a developer needs `dotnet dev-certs https --trust` once rather than certificate
         // material per checkout.
         .WithHttpsEndpoint(port: 8443, targetPort: 8443, isProxied: false)
-        // The probe listener's own default, restated where the other two ports are stated so all three are read in one
-        // place. It is not an Aspire endpoint for the reason the bind address above is set: an endpoint would reach
-        // ASPNETCORE_URLS and the host would serve `/` and `/mcp` on the probe port as well.
-        .WithEnvironment("HealthEndpoints__Port", "8081");
+        // The probe listener, declared here so that all three ports are read in one place and the orchestrator shows
+        // the one a developer curls. The endpoint states the port to the app model and injects it into the host's own
+        // configuration key, so the number is written once rather than declared here and configured again beside it.
+        //
+        // Its scheme is tcp rather than http, and that is the whole reason this works. Aspire builds ASPNETCORE_URLS
+        // from the http and https endpoints, so an http one here would make 8081 an application listener — and the
+        // host refuses exactly that, because the probes answer without a credential and must not share a socket with
+        // the MCP endpoint: `HealthEndpoints — port 8081 is already the application listener's`. A tcp endpoint is
+        // recorded and published without reaching that variable, which leaves the two listeners separate.
+        //
+        // WithHttpHealthCheck is unavailable for the same reason: it derives its address from an endpoint, and the
+        // only endpoint that would give it one is the http endpoint that stops the host from starting.
+        .WithEndpoint(
+            name: "health",
+            scheme: "tcp",
+            port: 8081,
+            targetPort: 8081,
+            isProxied: false,
+            env: "HealthEndpoints__Port");
 }
 
 // Host is the startup project because it is the project resource the connection string is issued to; Infrastructure

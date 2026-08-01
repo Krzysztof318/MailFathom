@@ -5,7 +5,7 @@
          secret store the framework already loads in Development is where they go, so nothing has to be un-staged
          before a commit. The identifier is fixed rather than generated per clone, so the operations documentation can
          name the command that writes into it and every checkout writes into the same store. -->
-    <UserSecretsId>mailfathom-host-c24be749-2609-4926-a560-be8b4c8aac0e</UserSecretsId>
+    <UserSecretsId>mailfathom-c24be749-2609-4926-a560-be8b4c8aac0e</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
