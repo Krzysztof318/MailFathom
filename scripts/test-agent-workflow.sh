@@ -22,6 +22,7 @@ test_directory="$(mktemp -d)"
 repository_root="$test_directory/repository"
 remote_repository_root="$test_directory/remote"
 fake_bin_directory="$test_directory/bin"
+protected_paths_bin_directory="$test_directory/protected-paths-bin"
 invocation_log="$test_directory/dotnet-invocations.log"
 workflow_invocation_log="$test_directory/workflow-invocations.log"
 fixture_branch='agent/workflow-fixture'
@@ -73,6 +74,16 @@ printf 'namespace Fixture;\n' > "$repository_root/src/Sample.cs"
 git -C "$repository_root" add src/Sample.cs
 git -C "$repository_root" commit --quiet -m 'fixture C# file'
 
+# The protected-paths contracts stand in for the GitHub REST call the workflow makes, so their fake
+# `gh` lives in a directory of its own rather than beside the fake `dotnet`. Only those contracts put
+# it on `PATH`, and nothing else in this suite can then reach a `gh` it did not ask for.
+mkdir -p "$protected_paths_bin_directory"
+cat > "$protected_paths_bin_directory/gh" <<'FAKE_GH'
+#!/usr/bin/env bash
+printf '%s\n' "$FAKE_CHANGED_PATHS"
+FAKE_GH
+chmod +x "$protected_paths_bin_directory/gh"
+
 export FAKE_DOTNET_LOG="$invocation_log"
 export FAKE_WORKFLOW_LOG="$workflow_invocation_log"
 export PATH="$fake_bin_directory:$PATH"
@@ -91,8 +102,18 @@ assert_contains() {
   local expected_text="$1"
   local actual_file="$2"
 
-  if ! grep -Fq "$expected_text" "$actual_file"; then
+  if ! grep -Fq -e "$expected_text" "$actual_file"; then
     printf 'Expected %s to contain: %s\n' "$actual_file" "$expected_text" >&2
+    return 1
+  fi
+}
+
+assert_excludes() {
+  local unexpected_text="$1"
+  local actual_file="$2"
+
+  if grep -Fq -e "$unexpected_text" "$actual_file"; then
+    printf 'Expected %s not to contain: %s\n' "$actual_file" "$unexpected_text" >&2
     return 1
   fi
 }
@@ -495,6 +516,163 @@ workspace_inspection_reports_unavailable_sdk() {
   assert_contains '.NET SDK: unavailable' "$output_file"
 }
 
+# The `Protected paths` workflow never checks the branch out, so its guard cannot be a script in
+# `scripts/` that the job calls: it is one shell block inside the YAML. Extracting that block
+# verbatim from the committed file is what lets these contracts run the same code the runner runs
+# rather than a copy that drifts from it. The block is the step's `run: |`, indented ten spaces, and
+# it is the last thing in the file; `bash -n` on the result is what notices if that stops being true.
+extract_protected_paths_step() {
+  local step_script="$1"
+
+  awk 'extracting { sub(/^          /, ""); print } /^        run: \|$/ { extracting = 1 }' \
+    "$source_repository_root/.github/workflows/protected-paths.yml" > "$step_script"
+
+  [[ -s "$step_script" ]]
+  bash -n "$step_script"
+}
+
+# Returns the step's own exit status, so every caller invokes it as a condition rather than letting
+# `set -e` end the test before the refusal can be inspected.
+run_protected_paths_step() {
+  local pull_request_author="$1"
+  local changed_paths="$2"
+  local output_file="$3"
+  local summary_file="$4"
+  local changed_file_count="${5:-$(printf '%s\n' "$changed_paths" | grep -c '')}"
+  local step_script="$test_directory/protected-paths-step.sh"
+
+  extract_protected_paths_step "$step_script"
+  : > "$summary_file"
+
+  (
+    export PATH="$protected_paths_bin_directory:$PATH"
+    export GH_TOKEN='fake-token'
+    export REPOSITORY='Krzysztof318/MailMcp'
+    export REPOSITORY_OWNER='Krzysztof318'
+    export PULL_REQUEST_NUMBER='1'
+    export PULL_REQUEST_AUTHOR="$pull_request_author"
+    export CHANGED_FILE_COUNT="$changed_file_count"
+    export FAKE_CHANGED_PATHS="$changed_paths"
+    export GITHUB_STEP_SUMMARY="$summary_file"
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+}
+
+protected_paths_allows_a_change_that_touches_nothing_protected() {
+  local output_file="$test_directory/protected-paths-clean-output"
+  local summary_file="$test_directory/protected-paths-clean-summary"
+
+  if ! run_protected_paths_step \
+    'outside-contributor' \
+    $'src/Domain/Emails/EmailOccurrenceId.cs\nREADME.md\ndocs/operations/agent-workflow.md' \
+    "$output_file" \
+    "$summary_file"; then
+    printf 'Protected paths refused a pull request that changes nothing protected\n' >&2
+    return 1
+  fi
+
+  assert_contains 'changes nothing under' "$output_file"
+  assert_file_content '' "$summary_file"
+}
+
+protected_paths_refuses_a_contributor_changing_repository_root_configuration() {
+  local output_file="$test_directory/protected-paths-root-output"
+  local summary_file="$test_directory/protected-paths-root-summary"
+
+  if run_protected_paths_step \
+    'outside-contributor' \
+    $'Directory.Build.props\nLICENSE\nNOTICE\nNuGet.config\nglobal.json\nCHANGELOG.md' \
+    "$output_file" \
+    "$summary_file"; then
+    printf 'Protected paths allowed a contributor to change the repository-root configuration\n' >&2
+    return 1
+  fi
+
+  local protected_file
+  for protected_file in Directory.Build.props LICENSE NOTICE NuGet.config global.json CHANGELOG.md; do
+    assert_contains "::error file=${protected_file}::" "$output_file"
+  done
+}
+
+protected_paths_matches_the_configuration_files_at_every_depth() {
+  local output_file="$test_directory/protected-paths-nested-output"
+  local summary_file="$test_directory/protected-paths-nested-summary"
+
+  if run_protected_paths_step \
+    'outside-contributor' \
+    $'src/Infrastructure/Persistence/Migrations/.editorconfig\ndocs/.gitattributes\ntests/shared/.worktreeinclude' \
+    "$output_file" \
+    "$summary_file"; then
+    printf 'Protected paths allowed a contributor to change a nested configuration file\n' >&2
+    return 1
+  fi
+
+  assert_contains '::error file=src/Infrastructure/Persistence/Migrations/.editorconfig::' "$output_file"
+  assert_contains '::error file=docs/.gitattributes::' "$output_file"
+  assert_contains '::error file=tests/shared/.worktreeinclude::' "$output_file"
+}
+
+protected_paths_ignores_paths_that_only_resemble_a_protected_one() {
+  local output_file="$test_directory/protected-paths-resemblance-output"
+  local summary_file="$test_directory/protected-paths-resemblance-summary"
+
+  # A protected name is anchored to a path segment and a protected file to the repository root, so a
+  # longer name beginning the same way, a suffix of one, and a copy placed elsewhere all pass.
+  if ! run_protected_paths_step \
+    'outside-contributor' \
+    $'docs/my.editorconfig\n.editorconfiguration\ndeploy/global.json\nsrc/Host/NOTICE.md\n.githubbed/stale.yml' \
+    "$output_file" \
+    "$summary_file"; then
+    printf 'Protected paths refused paths that only resemble a protected one\n' >&2
+    return 1
+  fi
+
+  assert_contains 'changes nothing under' "$output_file"
+  assert_excludes '::error' "$output_file"
+}
+
+protected_paths_reports_the_paths_it_found_when_the_owner_is_the_author() {
+  local output_file="$test_directory/protected-paths-owner-output"
+  local summary_file="$test_directory/protected-paths-owner-summary"
+
+  # Login casing must not decide the gate, so the fixture spells the owner differently from the
+  # repository. The pass still has to name what it let through.
+  if ! run_protected_paths_step \
+    'krzysztof318' \
+    $'.config/BannedSymbols.txt\n.gitattributes\n.gitattributes\nglobal.json' \
+    "$output_file" \
+    "$summary_file"; then
+    printf 'Protected paths refused a pull request authored by the repository owner\n' >&2
+    return 1
+  fi
+
+  assert_contains 'changes 3 protected path(s)' "$output_file"
+  assert_contains 'The repository owner authored this pull request' "$output_file"
+  assert_excludes '::error' "$output_file"
+
+  assert_contains '### Protected paths this pull request changes' "$summary_file"
+  assert_contains '- `.config/BannedSymbols.txt`' "$summary_file"
+  assert_contains '- `.gitattributes`' "$summary_file"
+  assert_contains '- `global.json`' "$summary_file"
+}
+
+protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit() {
+  local output_file="$test_directory/protected-paths-oversized-output"
+  local summary_file="$test_directory/protected-paths-oversized-summary"
+
+  if run_protected_paths_step \
+    'Krzysztof318' \
+    'README.md' \
+    "$output_file" \
+    "$summary_file" \
+    3001; then
+    printf 'Protected paths passed a pull request too large for the changed-files endpoint\n' >&2
+    return 1
+  fi
+
+  assert_contains 'cannot be verified' "$output_file"
+}
+
 workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
   [[ -x "$source_repository_root/scripts/verify-fast.sh" ]]
@@ -520,6 +698,12 @@ run_test verify_fast_skips_formatting_when_no_csharp_file_changed
 run_test verification_stops_after_first_failure
 run_test workspace_inspection_is_read_only_and_labeled
 run_test workspace_inspection_reports_unavailable_sdk
+run_test protected_paths_allows_a_change_that_touches_nothing_protected
+run_test protected_paths_refuses_a_contributor_changing_repository_root_configuration
+run_test protected_paths_matches_the_configuration_files_at_every_depth
+run_test protected_paths_ignores_paths_that_only_resemble_a_protected_one
+run_test protected_paths_reports_the_paths_it_found_when_the_owner_is_the_author
+run_test protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit
 run_test workflow_scripts_use_flat_manual_layout
 
 printf '%s passed, %s failed\n' "$passed_count" "$failed_count"
