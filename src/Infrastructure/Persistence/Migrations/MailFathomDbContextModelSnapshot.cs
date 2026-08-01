@@ -177,7 +177,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("PK_mailbox_accounts");
 
                     b.ToTable("mailbox_accounts", (string)null);
                 });

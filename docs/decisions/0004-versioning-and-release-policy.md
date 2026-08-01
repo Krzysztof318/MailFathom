@@ -91,7 +91,9 @@ The first release is `0.1.0`, matching the `0.1.0 — first public release` mile
 - Within `0.x.y`, a **patch** is compatible on all four surfaces. This is a real promise, not a `0.x` disclaimer.
 - The deprecation window does not exist below `1.0.0`. Something may be removed in the next minor with a changelog entry, without a release of notice.
 
-The most consequential clause is about data. Root `AGENTS.md` currently states that the repository keeps exactly one migration, `Initial`, and that a model change regenerates it rather than adding a second one, destroying local data by design. **That policy ends the moment `v0.1.0` is tagged.** From the first release onward a schema change is a new migration, never a regenerated baseline, and every release must be deployable over the previous release's data unless its changelog entry states otherwise and the increment reflects it. Accepting this ADR therefore obliges a matching edit to `AGENTS.md`, to `docs/operations/`, and to the `$add-migration` skill, and it is the point at which specification 19's baseline stops being disposable.
+The most consequential clause is about data. A schema change is a new migration, never a regenerated baseline, and every release must be deployable over the previous release's data unless its changelog entry states otherwise and the increment reflects it.
+
+**That policy took effect before the first release rather than at it**, which is a correction to what this ADR first recorded. The original clause ended the single-regenerated-migration workflow the moment `v0.1.0` was tagged, and the tag is too late: the nightly channel this ADR establishes builds from `main` and publishes an installable artifact months before any tag exists. A regenerated baseline changes the migration identifier, the host fails fast on a history it does not recognize, and no forward migration can reach a database that recorded the previous one — so a nightly could be installed but never upgraded, and the acknowledgement gate in front of that channel says the build is unsupported, not that its data is disposable. The local development database that #222 made persistent is the same argument at a smaller scale. The freeze therefore belongs before the first published artifact of any channel, and #126 moved it there; specification 19's baseline stopped being disposable at that point rather than at the tag.
 
 ### Where the number comes from
 
@@ -224,7 +226,7 @@ Moving the status to `accepted` still commits the project to a change set that:
 - moves the nightly guard off the registry hostname and onto the prerelease identifier in the three places that hold it — the `mailfathom.validate` rejection and the `mailfathom.image` registry default in `deploy/helm/mailfathom/templates/_helpers.tpl`, the hard-coded registry in `deploy/compose/compose.nightly.yaml`, and the `image.channel` description in `values.schema.json`;
 - updates `docs/operations/deployment-compose.md` and `docs/operations/deployment-kubernetes.md`, which document the GHCR-only nightly and the forced registry as implemented behavior;
 - adds the `io.mailfathom.release-channel` label to `deploy/docker/Dockerfile`, which carries none today, and moves the existing container and Kubernetes labels from `ghcr-nightly-unsupported` to `release` or `nightly`;
-- replaces root `AGENTS.md`'s single-regenerated-migration rule with the freeze described above, and updates `docs/operations/` and the `$add-migration` skill to match;
+- assumes the freeze described above, which #126 applied: root `AGENTS.md`, `docs/operations/`, and the `$add-migration` skill describe an additive workflow, and no command in the repository deletes a migration;
 - generalizes the base check in `scripts/verify-full.sh` from `origin/main` to the branch the change will merge into, so a `release/*` branch can pass the gate at all, and updates the branch rules in root `AGENTS.md` alongside it;
 - adds the release and nightly workflows that assert the prefix, the same-line regression rule, the changelog section, and the immutability before publishing anything, and that move `latest` onto every release they publish.
 
@@ -244,7 +246,7 @@ Until then, `0.0.0-unversioned` stays the `Dockerfile`'s `IMAGE_VERSION` default
 - Bad, because a permanent branch per patched line is real maintenance: a fix that matters to two lines is written once and cherry-picked twice, and the support window has to be stated and then honoured rather than implied by a branch still existing.
 - Bad, because two registries mean two credentials, two pushes, and a state where one succeeded and the other did not. The release run pushes the same manifest list to both and reports a partial publication as a failed release, so the recovery is a documented re-push by digest rather than a rebuild.
 - Bad, because deciding a release's increment requires judging four surfaces rather than reading a diff, and nothing mechanical can make that judgement. The changelog's per-surface structure is what makes the omission visible in review.
-- Bad, because freezing the migration baseline at `0.1.0` removes the regeneration workflow that has been convenient throughout development, and every later schema change costs a reviewed forward migration.
+- Bad, because freezing the migration baseline before the first published artifact removes the regeneration workflow that has been convenient throughout development, and every later schema change costs a reviewed forward migration. It also means the first release may ship `Initial` plus a few incremental migrations rather than the single reviewed baseline specification 19 aimed at.
 
 ## Validation
 

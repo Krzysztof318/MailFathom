@@ -13,7 +13,7 @@ using NpgsqlTypes;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260731132336_Initial")]
+    [Migration("20260801190024_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -180,7 +180,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("PK_mailbox_accounts");
 
                     b.ToTable("mailbox_accounts", (string)null);
                 });
