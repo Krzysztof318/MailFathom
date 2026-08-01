@@ -1,3 +1,5 @@
+<img src="assets/icon-900.png" alt="MailFathom" width="128" align="right">
+
 # MailFathom
 
 MailFathom is a clean-architecture modular monolith for synchronizing mail from IMAP accounts, storing a durable local copy, indexing messages for retrieval, and exposing read-only mail capabilities through MCP.
@@ -24,3 +26,5 @@ MailFathom was originally created by **Krzysztof Kasprowicz**. The root [NOTICE]
 Contributions to this repository are offered under Apache-2.0, by section 5 of the license. There is no contributor licence agreement and no developer certificate of origin, and contributors keep the copyright in what they write.
 
 Third-party components that MailFathom consumes are reviewed separately in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). That register records what MailFathom depends on and under which terms; it grants nothing in MailFathom itself, which `LICENSE` alone does.
+
+The application icon in [`assets/`](assets) is MailFathom's own asset rather than a third-party component, and the same grant covers it. The register records how it was produced and why no one else holds rights in it.

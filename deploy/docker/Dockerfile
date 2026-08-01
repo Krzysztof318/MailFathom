@@ -95,13 +95,18 @@ ARG IMAGE_CREATED=1970-01-01T00:00:00Z
 # image, and it says the same thing as the root LICENSE, the SPDX assembly metadata, and every source header. The
 # label is only the claim; what discharges the obligation is the LICENSE and NOTICE copied in with the publish output
 # below, which is where a reader of a pulled image finds the terms themselves.
+#
+# `io.artifacthub.package.logo-url` is the one label here that OCI does not define: the specification has no field for a
+# project icon, so a listing reads a vendor label instead. It names the same asset as the Helm chart's `icon`, and it is
+# a URL rather than a copied file because a label carries no payload.
 LABEL org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.title="MailFathom" \
       org.opencontainers.image.description="Read-only MCP server over synchronized IMAP mailboxes." \
       org.opencontainers.image.source="https://github.com/Krzysztof318/MailFathom" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.revision="${IMAGE_REVISION}" \
-      org.opencontainers.image.created="${IMAGE_CREATED}"
+      org.opencontainers.image.created="${IMAGE_CREATED}" \
+      io.artifacthub.package.logo-url="https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/icon-1254.png"
 
 # 8080 is what the .NET base images already listen on, restated here so the number is visible beside the EXPOSE that
 # publishes it. The container speaks plain HTTP: TLS terminates at the ingress or the reverse proxy in front of it,
