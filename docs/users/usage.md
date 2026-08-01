@@ -84,6 +84,7 @@ The codes a user meets in practice:
 | --- | --- | --- |
 | `51001` / `51003` | A page size or result limit outside the served range | Stay within 1–100 pages, 1–50 search results |
 | `51002` | A filter value the query does not accept — too long, malformed, or a range that ends before it starts | Fix the argument; the message names the filter and its limit, never the value |
+| `51004` | The `storedEmailId` argument is no identifier this system issues — blank, truncated, or invented | Pass the identifier a listing or search actually returned; never construct or guess one |
 | `52001` / `52002` | A cursor this system did not issue, or one reused after the filters changed | Restart the walk from the first page |
 | `53001` | The named account is not served here | Check `AccountId` spelling against the deployment's configuration |
 | `53002` | No such email in the local copy | The identifier is stale, or the mail was removed; list again |
