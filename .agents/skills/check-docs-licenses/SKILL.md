@@ -20,6 +20,16 @@ Confirm that durable documentation describes implemented behavior:
 
 Use `n/a` only when the change cannot affect user, operator, contributor, architectural, or security guidance.
 
+## Changelog
+
+`CHANGELOG.md` records what a consumer of a release would notice, and the entry is written by the change that causes it rather than reconstructed at release time. No mechanical check can tell a user-visible change from a refactor, so this gate is where the obligation lives.
+
+An entry is required when the change reaches one of the four public surfaces [ADR 0004](../../../docs/decisions/0004-versioning-and-release-policy.md) versions — the MCP tool contract, the configuration schema, the database schema, or the deployment contract — or fixes a defect that was observable from outside, or has a security consequence. It goes under `## [Unreleased]`, in one of the six Keep a Changelog categories, and it references the issue or pull request that carried it.
+
+A breaking entry opens with `**Breaking (<surface>)**` and states what the operator has to do, not only what changed. A change touching the database schema says whether a migration must be applied, whether it applies while the previous version still runs, and whether the release deploys over the previous release's data.
+
+Everything else earns none. A refactor, a new test, a continuous-integration adjustment, a documentation edit, and an internal rename are `n/a`, and adding a line for one is the failure this rule guards against — a file recording them stops being read and then stops being written.
+
 ## Licenses
 
 Inventory added, upgraded, replaced, bundled, or newly used third-party packages, tools, services, provider APIs, protocols, container images, models, generated assets, and copied samples.
@@ -44,6 +54,9 @@ Return exactly these headings with evidence:
 ```text
 Docs: pass|n/a|fail
 <files checked and required actions>
+
+Changelog: pass|n/a|fail
+<the surface reached and the entry added, or why the change is invisible from outside>
 
 Licenses: pass|n/a|fail
 <official evidence, THIRD_PARTY_LICENSES.md entries, and required actions>

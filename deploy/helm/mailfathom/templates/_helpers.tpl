@@ -94,11 +94,13 @@ wrong.
   {{- fail "image.repository is not set. There is no default: a chart that guessed one would deploy an image nobody named." -}}
 {{- end -}}
 
-{{/* Inactive while appVersion is the unreleased placeholder, and binds on its own once a real version is stamped. */}}
+{{/*
+Deploying a version other than the one this chart documents is allowed and sometimes necessary, but it is stated rather
+than assumed. A digest names no version, so there is nothing to compare and the check does not apply.
+*/}}
 {{- if and
       (eq .Values.image.channel "release")
       .Values.image.tag
-      (ne .Chart.AppVersion "0.0.0-unreleased")
       (ne .Values.image.tag .Chart.AppVersion)
       (not .Values.image.allowVersionMismatch) -}}
   {{- fail (printf "image.tag is %q but this chart documents application version %q. Deploying a different version than the chart describes is allowed, but it has to be said: set image.allowVersionMismatch=true." .Values.image.tag .Chart.AppVersion) -}}

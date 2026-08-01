@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.ListEmails;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Synchronization;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using NSubstitute;
@@ -26,6 +27,28 @@ internal static class RegisteredMcpToolSurface
     /// <summary>Gets every tool the registration advertises.</summary>
     /// <returns>The registered tools, in registration order.</returns>
     public static IReadOnlyList<McpServerTool> Tools()
+    {
+        using var provider = Compose();
+
+        return [.. provider.GetServices<McpServerTool>()];
+    }
+
+    /// <summary>Gets the implementation information the registration reports to a client that initializes a session.</summary>
+    /// <returns>The advertised server information, or <see langword="null" /> when the registration advertises none.</returns>
+    public static Implementation? ServerInfo()
+    {
+        using var provider = Compose();
+
+        return provider.GetRequiredService<IOptions<McpServerOptions>>().Value.ServerInfo;
+    }
+
+    /// <summary>Gets the descriptor one tool is advertised with.</summary>
+    /// <param name="toolName">The protocol name of the tool.</param>
+    /// <returns>The advertised descriptor.</returns>
+    public static Tool AdvertisedTool(string toolName) =>
+        Tools().Single(tool => tool.ProtocolTool.Name == toolName).ProtocolTool;
+
+    private static ServiceProvider Compose()
     {
         var services = new ServiceCollection();
 
@@ -46,14 +69,6 @@ internal static class RegisteredMcpToolSurface
         services.AddSingleton<MailboxSearchReader>();
         services.AddMailFathomServer();
 
-        using var provider = services.BuildServiceProvider();
-
-        return [.. provider.GetServices<McpServerTool>()];
+        return services.BuildServiceProvider();
     }
-
-    /// <summary>Gets the descriptor one tool is advertised with.</summary>
-    /// <param name="toolName">The protocol name of the tool.</param>
-    /// <returns>The advertised descriptor.</returns>
-    public static Tool AdvertisedTool(string toolName) =>
-        Tools().Single(tool => tool.ProtocolTool.Name == toolName).ProtocolTool;
 }

@@ -10,6 +10,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\shared\StampedAssemblyVersion.cs" Link="StampedAssemblyVersion.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="MailFathom.Mcp.UnitTests" />
   </ItemGroup>
 </Project>

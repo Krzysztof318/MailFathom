@@ -142,6 +142,32 @@ verify_the_image_definition() {
   else
     fail "${dockerignore_file} excludes LICENSE or NOTICE, so the publish inside the image build has none to copy."
   fi
+
+  # The publish has to receive both of continuous integration's version inputs, or the assemblies inside the image
+  # report a build the labels beside them contradict. This is the half a running process publishes, and it is the one
+  # a reader of a support report has.
+  if grep -q 'p:SourceRevisionId=' "$dockerfile" && grep -q 'p:VersionSuffix=' "$dockerfile"; then
+    pass 'The publish stamps the revision and the prerelease suffix into the assemblies.'
+  else
+    fail 'The Dockerfile publishes without SourceRevisionId or VersionSuffix, so the image cannot report which build it is.'
+  fi
+
+  # Every build path in the repository has to name the version, because the ARG default is a placeholder rather than a
+  # version. A path that stopped passing it would keep building and would ship an image labelled 0.0.0-unversioned.
+  local unnamed_build_paths=()
+  local build_path
+  for build_path in scripts/smoke-deployment.sh .github/workflows/deployment-assets.yml; do
+    if grep -q 'read-declared-version.sh' "$build_path"; then
+      continue
+    fi
+    unnamed_build_paths+=("$build_path")
+  done
+
+  if [[ "${#unnamed_build_paths[@]}" -eq 0 ]]; then
+    pass 'Every build path names the image after the declared version.'
+  else
+    fail "These build paths name no version, so they would ship the placeholder: ${unnamed_build_paths[*]}"
+  fi
 }
 
 verify_the_compose_deployment() {
@@ -201,6 +227,30 @@ verify_the_compose_deployment() {
 
 verify_the_chart() {
   report 'Helm chart'
+
+  # `appVersion` is a second written copy of a number declared in Directory.Build.props, and the only thing keeping the
+  # two together is this check. A chart that documented one version while the build stamped another would reject the
+  # image it was written for, through its own drift check below.
+  local declared_version chart_app_version
+  declared_version="$(bash scripts/read-declared-version.sh)"
+  chart_app_version="$(
+    sed -n 's/^appVersion:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p' "$chart_directory/Chart.yaml"
+  )"
+
+  if [[ "$chart_app_version" == "$declared_version" ]]; then
+    pass "The chart documents application version ${declared_version}, which is what the build stamps."
+  else
+    fail "Chart.yaml documents appVersion ${chart_app_version}, but the build stamps ${declared_version}."
+  fi
+
+  # The drift check binds on the release channel, so an upgrade cannot quietly deploy an application version the chart
+  # does not describe. It refuses by default and is turned off deliberately, which is what ci/release-values.yaml does.
+  expect_rejection \
+    'A release install whose tag disagrees with appVersion is rejected.' \
+    'set image.allowVersionMismatch=true' \
+    helm_command template verification mailfathom \
+      --values mailfathom/ci/release-values.yaml \
+      --set image.allowVersionMismatch=false
 
   local values_file
   for values_file in release nightly; do

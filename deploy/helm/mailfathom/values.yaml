@@ -44,9 +44,9 @@ image:
   nightlyAcknowledgement: ""
 
   # The chart compares `image.tag` against `Chart.appVersion` on the release channel and refuses an install where the
-  # two disagree, so a chart upgrade cannot quietly deploy a different application version than it documents. The
-  # check is inactive while `appVersion` reads `0.0.0-unreleased`, and activates on its own once a real one is
-  # stamped. Set this to true only to deploy a deliberate combination, and say why in your own values file.
+  # two disagree, so a chart upgrade cannot quietly deploy a different application version than it documents. A
+  # deployment naming the image by `image.digest` is unaffected: a digest carries no version to compare. Set this to
+  # true only to deploy a deliberate combination, and say why in your own values file.
   allowVersionMismatch: false
 
 ### The database

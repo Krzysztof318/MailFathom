@@ -261,9 +261,13 @@ Secret was created outside it and stays.
 version the chart is written against. They are separate, and a values default corrected without touching the image is a
 chart release on its own.
 
-`appVersion` currently reads `0.0.0-unreleased`, literally, because no MailFathom release exists. While it does, the chart
-makes no claim about which application version it deploys. Once a real version is stamped, the chart begins refusing an
-install whose `image.tag` disagrees with it, unless `image.allowVersionMismatch` says the combination is deliberate.
+`appVersion` is the version declared in `Directory.Build.props`, which is also what the build stamps into the
+assemblies and what the image's `org.opencontainers.image.version` label carries.
+`scripts/verify-deployment-assets.sh` fails a chart that has drifted from it.
+
+The chart refuses an install whose `image.tag` disagrees with `appVersion`, unless `image.allowVersionMismatch` says the
+combination is deliberate. A deployment naming the image by `image.digest` is unaffected, because a digest carries no
+version to compare.
 
 ### Nightly builds
 

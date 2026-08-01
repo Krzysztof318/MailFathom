@@ -76,9 +76,19 @@ wait_until() {
 build_the_image() {
   report 'Building the image'
 
-  docker build --target runtime --file deploy/docker/Dockerfile --tag "$runtime_image" . >/dev/null
+  # The version comes from the same place a release build reads it, so what this smoke exercises is the labelled and
+  # stamped image an operator would pull rather than a placeholder-versioned one only this script can produce.
+  local declared_version
+  declared_version="$(bash scripts/read-declared-version.sh)"
 
-  pass 'The runtime image built.'
+  docker build \
+    --target runtime \
+    --file deploy/docker/Dockerfile \
+    --build-arg "IMAGE_VERSION=$declared_version" \
+    --tag "$runtime_image" \
+    . >/dev/null
+
+  pass "The runtime image built at version ${declared_version}."
 }
 
 ########################################################################################################################

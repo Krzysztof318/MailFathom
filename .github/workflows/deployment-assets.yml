@@ -60,12 +60,18 @@ jobs:
       # No QEMU step, deliberately. The application is published as portable IL on the build platform, so the
       # per-architecture stages only pull a base image and copy into it — nothing executes under emulation, and a
       # matrix that needed it would be paying minutes for a result this arrangement gets for free.
+      # The version and the revision are supplied rather than defaulted, so this build produces the same self-identifying
+      # image a release build would. It publishes nothing: naming an artifact and pushing one are separate, and pushing
+      # belongs to #156.
       - name: Build the image for linux/amd64 and linux/arm64
         run: |
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --target runtime \
             --file deploy/docker/Dockerfile \
+            --build-arg "IMAGE_VERSION=$(bash scripts/read-declared-version.sh)" \
+            --build-arg "IMAGE_REVISION=${GITHUB_SHA}" \
+            --build-arg "IMAGE_CREATED=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --cache-from type=gha,scope=runtime \
             --cache-to type=gha,mode=max,scope=runtime \
             .

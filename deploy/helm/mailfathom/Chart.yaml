@@ -11,11 +11,12 @@ type: application
 # publication only counts edits. #156 owns that publication; from it onward the rule above applies literally.
 version: 0.1.0
 
-# The application version this chart is written against. `0.0.0-unreleased` is literal rather than a placeholder
-# somebody forgot: MailFathom has published no release, and the semantics that will decide what a version means are still
-# an open decision. While it reads this, the chart makes no claim about which application version it deploys and its
-# image/appVersion drift check stays inactive — see the `image` section of values.yaml.
-appVersion: "0.0.0-unreleased"
+# The application version this chart is written against, which is the `VersionPrefix` declared in
+# `Directory.Build.props` and nothing else. `scripts/verify-deployment-assets.sh` fails the two apart, because a chart
+# that named a different application version than the build stamps would reject the very image it was written for.
+# Naming a real version here is also what activates the chart's image/appVersion drift check — see the `image` section
+# of values.yaml.
+appVersion: "0.1.0"
 
 home: https://github.com/Krzysztof318/MailFathom
 sources:

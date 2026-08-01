@@ -96,8 +96,25 @@ deployments in `deploy/` allow 60 seconds against a 10-second default; raise the
 
 The image carries the OCI labels that let a pulled image be traced back to the commit it was built from —
 `org.opencontainers.image.source`, `.revision`, `.version`, `.created` — supplied as build arguments.
-`IMAGE_VERSION` currently defaults to `0.0.0-unversioned`: MailFathom has published no release, and what a version means
-here is still an open decision. The application does not yet report its own version at run time either.
+
+`IMAGE_VERSION` has no useful default, and its `0.0.0-unversioned` placeholder says so. The version is declared once,
+as `VersionPrefix` in `Directory.Build.props`, and every build path reads it with `scripts/read-declared-version.sh`
+rather than restating it; `scripts/verify-deployment-assets.sh` fails a build path that stopped doing so, which is what
+keeps a labelled version from drifting away from the stamped one. [ADR 0004](../decisions/0004-versioning-and-release-policy.md)
+records why the number lives in one reviewed line.
+
+`IMAGE_REVISION` is passed to the publish inside the build as `SourceRevisionId`, so the assemblies report the same
+commit the label names rather than a second claim about it. The running process then reports its version and revision
+in its [startup record](host-startup-telemetry.md), and its version to an MCP client during `initialize`. A published
+artifact identifies itself both ways: from outside, through the labels, without being run; and from inside, once it is.
+
+```bash
+docker build --target runtime --file deploy/docker/Dockerfile \
+  --build-arg "IMAGE_VERSION=$(bash scripts/read-declared-version.sh)" \
+  --build-arg "IMAGE_REVISION=$(git rev-parse HEAD)" \
+  --build-arg "IMAGE_CREATED=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --tag mailfathom:local .
+```
 
 `org.opencontainers.image.licenses` is fixed rather than passed in, at `Apache-2.0`, because it states MailFathom's own
 license and a build must not be able to say otherwise. The label is only the claim a registry indexes; the terms

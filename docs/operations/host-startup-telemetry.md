@@ -17,12 +17,14 @@ Four records, all under the category `MailFathom.Host.Startup`:
 
 | Record | Level | Named properties |
 | --- | --- | --- |
-| Host is starting | `Information` | `ServiceName`, `EnvironmentName`, `ServiceVersion` |
+| Host is starting | `Information` | `ServiceName`, `EnvironmentName`, `ServiceVersion`, `ServiceRevision` |
 | Host layered provisioned configuration files | `Information` | `ServiceName`, `FileCount` |
 | Host ended with an unhandled exception | `Critical` | `ServiceName`, plus the exception |
 | Host stopped | `Information` | `ServiceName` |
 
 The configuration record is a count and never a path, and it is written here rather than through the container pipeline for the same reason the others are: it describes what the host read before a container existed to log it. A `0` against a deployment that mounts a ConfigMap is how an empty or misplaced mount becomes visible; [configuration sources](configuration-sources.md) states what is counted.
+
+`ServiceVersion` and `ServiceRevision` are read from the host assembly's own build-time metadata and are not configurable, so a deployment cannot make the process claim a build it is not running. They answer different questions and are therefore reported apart: the version is the compatibility statement [ADR 0004](../decisions/0004-versioning-and-release-policy.md) defines over MailFathom's four public surfaces, and the revision is the commit the assemblies were built from, which is what makes a report from a deployment the reader did not build reproducible. A build inside a Git worktree resolves that revision on its own; one with no repository beside it, such as the container build, carries whatever its caller supplied and reports `unknown` otherwise, which is a legitimate state rather than a fault. The same version, without the revision, is what the MCP surface reports to a client during `initialize`.
 
 Those properties are the whole payload the host composes. Nothing reads a configuration value, a connection string, an account, or secret material into a startup record, and the failure record carries the exception as structured exception data rather than interpolated into its message text.
 

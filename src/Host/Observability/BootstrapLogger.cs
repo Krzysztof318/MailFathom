@@ -65,9 +65,20 @@ internal sealed partial class BootstrapLogger : IDisposable
         return new BootstrapLogger(CreateLoggerFactory(settings), settings);
     }
 
-    /// <summary>Reports that the host process has begun composing itself.</summary>
+    /// <summary>Reports that the host process has begun composing itself, and which build is composing.</summary>
+    /// <remarks>
+    /// The version and the revision are both reported because they answer different questions. The version states what
+    /// the process promises across the four surfaces
+    /// <see href="../../../docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see> versions; the revision
+    /// names the commit it was built from, which is what makes a report from a deployment the reader did not build
+    /// reproducible. A build with neither a repository beside it nor a revision supplied to it reports <c>unknown</c>.
+    /// </remarks>
     public void RecordHostStarting() =>
-        this.LogHostStarting(this.settings.ServiceName, this.settings.EnvironmentName, this.settings.ServiceVersion);
+        this.LogHostStarting(
+            this.settings.ServiceName,
+            this.settings.EnvironmentName,
+            this.settings.ServiceVersion,
+            this.settings.ServiceRevision);
 
     /// <summary>Reports how many deployment-provisioned configuration files were layered into the host's configuration.</summary>
     /// <param name="fileCount">The number of files layered in, which is zero when the deployment provisioned none.</param>
@@ -131,8 +142,12 @@ internal sealed partial class BootstrapLogger : IDisposable
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Host {ServiceName} is starting in environment {EnvironmentName} at version {ServiceVersion}.")]
-    private partial void LogHostStarting(string serviceName, string environmentName, string serviceVersion);
+        Message = "Host {ServiceName} is starting in environment {EnvironmentName} at version {ServiceVersion} built from revision {ServiceRevision}.")]
+    private partial void LogHostStarting(
+        string serviceName,
+        string environmentName,
+        string serviceVersion,
+        string serviceRevision);
 
     [LoggerMessage(
         Level = LogLevel.Information,
