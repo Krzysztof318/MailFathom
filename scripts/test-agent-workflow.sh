@@ -97,16 +97,21 @@ printf '0\n'
 FAKE_GH
 chmod +x "$fathom_review_bin_directory/gh"
 
-# The settle step asks the same two endpoints when the newest comment on the pull request was
-# written, and decides only from that timestamp. This fake answers whatever the contract set:
-# nothing for a pull request nobody has commented on, `now` for a conversation that never goes
-# quiet, and an explicit timestamp otherwise.
+# The settle step asks the same two endpoints when the comments on the pull request were written,
+# and decides only from those timestamps. This fake answers whatever the contract set: nothing for
+# a pull request nobody has commented on, `now` for a conversation that never goes quiet, an
+# explicit timestamp otherwise, and `oldest-first` for the order GitHub actually returns, where the
+# record that decides is the last one rather than the first.
 mkdir -p "$settle_bin_directory"
 cat > "$settle_bin_directory/gh" <<'FAKE_GH'
 #!/usr/bin/env bash
 case "${FAKE_NEWEST_COMMENT:-}" in
   '') ;;
   now) date -u +%Y-%m-%dT%H:%M:%SZ ;;
+  oldest-first)
+    printf '2020-01-01T00:00:00Z\n'
+    date -u +%Y-%m-%dT%H:%M:%SZ
+    ;;
   *) printf '%s\n' "$FAKE_NEWEST_COMMENT" ;;
 esac
 FAKE_GH
@@ -865,6 +870,21 @@ fathom_review_stops_waiting_at_the_ceiling() {
   assert_seconds_elapsed_at_least 4 "$started_at"
 }
 
+# Both comment endpoints return oldest first, and the per-issue one silently ignores a `sort` or
+# `direction` asking otherwise, so the step must decide from the largest timestamp it saw rather
+# than from the first record. A step that read the first would take the 2020 stamp here, find the
+# conversation quiet, and freeze the snapshot while a reply was seconds old.
+fathom_review_reads_the_newest_comment_whatever_the_order() {
+  local output_file="$test_directory/fathom-review-settle-order-output"
+  local started_at
+  started_at="$(date -u +%s)"
+
+  run_fathom_review_settle 'oldest-first' "$output_file"
+
+  assert_contains 'still moving' "$output_file"
+  assert_seconds_elapsed_at_least 4 "$started_at"
+}
+
 workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
   [[ -x "$source_repository_root/scripts/verify-fast.sh" ]]
@@ -901,6 +921,7 @@ run_test fathom_review_refuses_a_closed_pull_request
 run_test fathom_review_collects_at_once_when_nobody_has_commented
 run_test fathom_review_waits_before_freezing_a_quiet_conversation
 run_test fathom_review_stops_waiting_at_the_ceiling
+run_test fathom_review_reads_the_newest_comment_whatever_the_order
 run_test workflow_scripts_use_flat_manual_layout
 
 printf '%s passed, %s failed\n' "$passed_count" "$failed_count"

@@ -320,8 +320,11 @@ reviewer that cannot see it re-opens what the pull request already closed.
 GraphQL also returns the comments already grouped into their threads, so a reply
 sits beside the finding it answers rather than having to be reassembled from
 `in_reply_to_id`, and it marks a thread outdated when the line it was written
-against has moved or gone. Both are bounded: a hundred threads, twenty comments
-each, and the same body ceiling every other collected text carries.
+against has moved or gone. Both are bounded, and both keep the newest: the last
+hundred threads, the last twenty comments in each, and the same body ceiling
+every other collected text carries. A ceiling that kept the oldest would drop the
+reviewer's own most recent pass and the answers to it, which is what the
+collection exists for.
 
 The prompt spends all of that on not repeating itself. A resolved thread is taken
 as closed and re-opened only where the code still plainly has the defect. A reply

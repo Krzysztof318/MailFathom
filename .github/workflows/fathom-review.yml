@@ -331,10 +331,14 @@ jobs:
       # is not in the data, so the fix is here rather than there.
       #
       # The snapshot is therefore not frozen until the conversation has stopped moving: a minimum
-      # window, which covers the burst that follows a push, then however much longer it takes for
-      # the newest comment to be quiet, and a ceiling on the whole wait so somebody typing steadily
-      # cannot hold a run open. A pull request nobody has commented on has nothing to settle and
-      # waits not at all, which is every first review.
+      # window, then however much longer it takes for the newest comment to be quiet, and a ceiling
+      # on the whole wait so somebody typing steadily cannot hold a run open. A pull request nobody
+      # has commented on has nothing to settle and waits not at all, which is every first review.
+      #
+      # The minimum only has to reach the *first* reply, because the quiet window carries the rest
+      # of the burst from there. On #223 that reply arrived one second into this step on one pass
+      # and six on the other, so a minute is the measured margin rather than a guess; a run whose
+      # author writes nothing for a minute after pushing is one where nothing was in flight.
       #
       # This costs runner time and no subscription usage: the model is not running yet. The windows
       # are `env` values rather than literals in the body so the workflow states them in one place
@@ -346,7 +350,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
-          SETTLE_MINIMUM_SECONDS: '90'
+          SETTLE_MINIMUM_SECONDS: '60'
           SETTLE_QUIET_SECONDS: '45'
           SETTLE_LIMIT_SECONDS: '300'
           SETTLE_POLL_SECONDS: '15'
@@ -357,8 +361,16 @@ jobs:
 
           # The newest comment of either kind, because a finding is answered in its thread and a
           # change is answered in the conversation, and both are written in the same minute as the
-          # push. One record per endpoint is enough: the question is when somebody last wrote,
-          # never what they wrote.
+          # push. Only the timestamps are read; the question is when somebody last wrote, never
+          # what they wrote.
+          #
+          # Every timestamp is streamed and the largest wins, rather than asking either endpoint
+          # for the newest record. `sort` and `direction` are not parameters of the per-issue
+          # comment list — only the repository-wide one accepts them — and GitHub ignores an
+          # unrecognized query parameter silently, so asking for the newest returns the oldest and
+          # a reply posted seconds ago reads as a conversation that went quiet hours back. That is
+          # the very race this step exists to close, so the shape that cannot express the mistake
+          # is worth a page of records the loop then reduces to one number.
           newest_comment_epoch() {
             local newest=0 timestamp epoch
 
@@ -371,10 +383,10 @@ jobs:
                 newest="$epoch"
               fi
             done < <(
-              gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/comments?sort=created&direction=desc&per_page=1" \
-                --jq '.[0].created_at // empty'
-              gh api "repos/${REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/comments?sort=created&direction=desc&per_page=1" \
-                --jq '.[0].created_at // empty'
+              gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/comments?per_page=100" \
+                --paginate --jq '.[].created_at'
+              gh api "repos/${REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/comments?per_page=100" \
+                --paginate --jq '.[].created_at'
             )
 
             printf '%s\n' "$newest"
@@ -529,6 +541,12 @@ jobs:
           # instead of being reassembled from `in_reply_to_id`, and `isOutdated` states directly
           # what `position == null` only implied: GitHub can no longer place the thread on the
           # current diff, because the line it was written against has moved or gone.
+          #
+          # `last` on both connections rather than `first`. They are returned in creation order and
+          # every other collection here keeps the newest entries, so `first` would silently drop
+          # the most recent threads and the most recent replies within a thread once a pull request
+          # passed the ceiling — which is to say it would drop this reviewer's own last pass and the
+          # answers to it, the exact records a re-review is collecting them for.
           gh api graphql \
             -F owner="${REPOSITORY%/*}" \
             -F name="${REPOSITORY#*/}" \
@@ -540,13 +558,13 @@ jobs:
                     $threads: Int!, $threadComments: Int!) {
                 repository(owner: $owner, name: $name) {
                   pullRequest(number: $number) {
-                    reviewThreads(first: $threads) {
+                    reviewThreads(last: $threads) {
                       nodes {
                         isResolved
                         isOutdated
                         path
                         line
-                        comments(first: $threadComments) {
+                        comments(last: $threadComments) {
                           nodes { author { login } createdAt body }
                         }
                       }
