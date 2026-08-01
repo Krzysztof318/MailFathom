@@ -100,6 +100,6 @@ Every unit-test project asserts, through the shared `ExceptionHierarchyAssertion
 
 ## More Information
 
-Issue 93 records the review that prompted this decision, including the four types it originally listed and the three added since. The design note in `docs/superpowers/specs/2026-07-29-custom-exception-hierarchy-design.md` records the evidence for the `RCS1194` finding.
+Issue 93 records the review that prompted this decision, including the four types it originally listed and the three added since.
 
 The MCP translation layer that consumes this contract is delivered by issues 50, 51, and 52. Revisit this decision if that layer finds the lookup-based translation unworkable, if a first-party failure genuinely needs to derive from a framework exception, or when the first code outside categories 1 to 4 is allocated.
