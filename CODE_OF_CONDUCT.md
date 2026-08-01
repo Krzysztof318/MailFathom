@@ -8,6 +8,7 @@ Everyone participating in this repository — through issues, discussions, pull 
 
 - **Assume good faith.** A confusing question, a wrong patch, and a blunt review are ordinarily what they look like: a person working with incomplete information, in a language that may not be their first.
 - **Review the work, not the author.** "This leaks the connection on the failure path" is a review. "This is amateur work" is not, and it says nothing the first sentence did not.
+- **Keep the language plain.** Blunt is welcome here, and a blunt review is usually kinder than a hedged one. Obscenity, sneering, and contempt are not bluntness: they carry nothing the plain sentence did not, and they make every later reader work past the tone to reach the point.
 - **Say why.** A rejected approach costs the contributor the same amount of time whether or not the reason was given, and only the reason lets the next attempt be better.
 - **Accept the answer.** The maintainer decides what this project builds. Argue the technical case as hard as it deserves, then let a settled decision stay settled.
 - **Respect a stated boundary.** When someone asks that a line of discussion stop, it stops.
@@ -15,7 +16,9 @@ Everyone participating in this repository — through issues, discussions, pull 
 ## What is not acceptable
 
 - Harassment, whether directed at someone here or continued from elsewhere.
+- Intimidation and deliberate provocation: needling, following someone from thread to thread, reopening a settled argument to get a reaction, and piling on one person. Sustained hostility needs no insult in it to make someone stop taking part.
 - Insults, demeaning remarks, and comments about a person rather than about their work.
+- Abusive, obscene, or degrading language, and slurs of any kind. This holds whatever it is aimed at — a person, their patch, or nobody in particular — because language aimed at nobody still tells every reader what passes as normal here.
 - Discriminatory or stereotyping remarks, including ones framed as jokes, about race, ethnicity, nationality, religion, age, disability, neurodivergence, sex, gender identity or expression, sexual orientation, appearance, or any comparable characteristic.
 - Sexual attention or imagery. This project has no context in which either belongs.
 - Publishing someone's private information, or the private contents of a conversation, without their permission.
