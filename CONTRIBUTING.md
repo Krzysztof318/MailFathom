@@ -6,6 +6,17 @@ It is deliberately short. The detailed engineering rules live in [`AGENTS.md`](A
 
 By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
+## How this project is built
+
+**MailFathom is developed AI-first, and close to zero-touch.** Nearly every line here was written by an autonomous coding agent working from an issue, a specification, and the rules in [`AGENTS.md`](AGENTS.md); the maintainer sets direction, reviews, and decides, but rarely edits code by hand. That is the normal path rather than an experiment, and it is why the instruction files read as a prescriptive contract instead of as advice: they are what the agents execute.
+
+**You are encouraged to work the same way.** Point an agent at your checkout — Claude Code, Codex, and anything else that reads `AGENTS.md` pick the rules up on their own — give it the issue, and let it produce the change, the tests, and the documentation in one pass. A hand-written patch is equally welcome and is judged identically; the point is that the conventions here are dense enough that an agent which has actually read them will satisfy them faster than a person skimming them.
+
+Two things are unchanged by whoever or whatever typed the code:
+
+- **You are responsible for what you submit.** Read the diff before opening the pull request. Output nobody has read is not a contribution, it is a request that someone else read it for you.
+- **The gates are identical.** The same full verification run, the same coverage threshold, and above all the same [licensing obligations](#licensing-your-contribution) — a model that reproduced code from somewhere restrictive is yours to catch, and it is the one mistake a follow-up commit cannot fix.
+
 ## Before you start
 
 **Every change starts from an issue.** Open one before writing code, or comment on an existing one to say you are working on it. That is not ceremony: it is where scope is agreed, and it is what a pull request closes. For anything larger than a typo, wait for a maintainer's reply before investing time — MailFathom is pre-release and its direction changes faster than its issue list.
