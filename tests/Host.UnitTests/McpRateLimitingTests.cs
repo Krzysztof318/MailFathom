@@ -78,19 +78,23 @@ public sealed class McpRateLimitingTests
         Assert.True(limiterOptions.AutoReplenishment);
     }
 
-    [Fact]
-    public void PartitionForProcess_ForARequestOutsideTheEndpoint_AppliesNoLimit()
+    [Theory]
+    [InlineData("/started")]
+    [InlineData("/health")]
+    [InlineData("/alive")]
+    public void PartitionForProcess_ForAProbeRequest_AppliesNoLimit(string probePath)
     {
         // Arrange
         var limits = Limits(maxConcurrentRequests: 1);
         using var limiter = ProcessLimiter(limits);
 
         // Act
-        var leases = AcquireAll(limiter, () => RequestTo("/health"), attempts: 5);
+        var leases = AcquireAll(limiter, () => RequestTo(probePath), attempts: 5);
 
         // Assert
-        // Readiness and liveness have to keep answering while the endpoint is refusing, so the process-wide limiter
-        // excludes every route that is not the MCP endpoint rather than counting them against the same permits.
+        // A throttled probe fails, and a failed liveness probe restarts a process that was answering correctly, so a
+        // limiter on the probe listener would turn a burst of polling into an outage. The process-wide limiter excludes
+        // every route that is not the MCP endpoint rather than counting them against the same permits.
         Assert.All(leases, lease => Assert.True(lease.IsAcquired));
 
         DisposeAll(leases);

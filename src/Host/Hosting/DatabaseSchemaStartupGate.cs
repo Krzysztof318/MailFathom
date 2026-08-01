@@ -32,19 +32,26 @@ internal sealed partial class DatabaseSchemaStartupGate : IHostedService
 {
     private readonly IServiceScopeFactory scopeFactory;
     private readonly PostgresTextSearchConfiguration configuredTextSearchConfiguration;
+    private readonly HostStartupGates startupGates;
     private readonly ILogger<DatabaseSchemaStartupGate> logger;
 
     /// <summary>Initializes a new database schema startup gate.</summary>
     /// <param name="scopeFactory">Creates the scope the inspector is resolved from.</param>
     /// <param name="configuredTextSearchConfiguration">The configuration the EF Core model was built from.</param>
+    /// <param name="startupGates">The tracker this gate reports its completion to, which is what the startup probe reads.</param>
     /// <param name="logger">The startup logger.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="startupGates" /> is <see langword="null" />.</exception>
     public DatabaseSchemaStartupGate(
         IServiceScopeFactory scopeFactory,
         PostgresTextSearchConfiguration configuredTextSearchConfiguration,
+        HostStartupGates startupGates,
         ILogger<DatabaseSchemaStartupGate> logger)
     {
+        ArgumentNullException.ThrowIfNull(startupGates);
+
         this.scopeFactory = scopeFactory;
         this.configuredTextSearchConfiguration = configuredTextSearchConfiguration;
+        this.startupGates = startupGates;
         this.logger = logger;
     }
 
@@ -73,6 +80,8 @@ internal sealed partial class DatabaseSchemaStartupGate : IHostedService
         await this.VerifyTheLexicalIndexMatchesTheConfigurationAsync(inspector, cancellationToken);
 
         this.LogSchemaCurrent();
+
+        this.startupGates.MarkCompleted(HostStartupGate.DatabaseSchema);
     }
 
     /// <summary>Fails startup when the search vector was built with a configuration this process is not configured for.</summary>

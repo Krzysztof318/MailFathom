@@ -91,8 +91,9 @@ Authorization: Bearer <the key>
 ```
 
 Every MCP method and response path is covered — the JSON-RPC post, the stream it reads back, and the delete that ends a
-session — and the check runs before any protocol handling. The readiness response and the health endpoints are not
-covered; they carry no mailbox data and a probe has no credential to present.
+session — and the check runs before any protocol handling. The readiness response is not covered, and neither are the
+[health endpoints](health-endpoints.md), which are served on a listener of their own and deliberately carry no
+credential at all.
 
 Each entry is an ordinary [named secret](secret-provisioning.md#the-secret-block): the key material is provisioned like
 every other credential, the `Name` is what a diagnostic and an audit record correlate on, and the `Lifetime` is enforced.
@@ -546,13 +547,15 @@ needs a handshake this process terminated, and configuring one here is how it ge
 ### Configuring a profile takes over the host's listeners
 
 Binding a listener explicitly replaces whatever URLs the host was otherwise configured with, so **no clear-text listener
-stays open behind an HTTPS profile**. That applies to everything this process serves, the health endpoints included,
-because one Kestrel serves them all. There is no mixed posture in which the MCP route is protected while a second
+stays open behind an HTTPS profile**. There is no mixed posture in which the MCP route is protected while a second
 listener offers the same mailbox without protection.
 
 `ASPNETCORE_URLS`, `--urls`, and the Aspire-issued endpoints are therefore all ignored once a profile is configured.
-A deployment that needs a plain HTTP health endpoint beside HTTPS should keep the clear-text posture and terminate TLS
-at a reverse proxy instead.
+
+The [health endpoints](health-endpoints.md) are the one thing this does not take over. They are served on a listener of
+their own, and that listener keeps its own transport: a deployment terminating TLS for the MCP endpoint still serves
+plain HTTP probes unless it configures `HealthEndpoints:Transport` as well. Nothing is lost by that, because the probe
+listener serves no mailbox — a request for `/mcp` that arrives on it is answered with `404`.
 
 Kestrel's own `Kestrel:Endpoints` section is the one listener a profile cannot displace: those endpoints are bound
 alongside the ones bound in code rather than replaced by them, so an endpoint configured there would keep its socket and

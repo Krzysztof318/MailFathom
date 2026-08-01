@@ -32,10 +32,11 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly SecretConfigurationValidator validator;
     private readonly SecretResolutionOptions resolutionOptions;
+    private readonly HostStartupGates startupGates;
     private readonly ILogger<SecretConfigurationStartupValidator> logger;
 
     /// <summary>Initializes a new secret configuration startup validator.</summary>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="mcpEndpointSettings" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="mcpEndpointSettings" /> or <paramref name="startupGates" /> is <see langword="null" />.</exception>
     /// <remarks>The endpoint settings arrive as the composed value rather than as a snapshot, because the section is read once while the host is built and takes a restart to change.</remarks>
     public SecretConfigurationStartupValidator(
         ISettingsSnapshot<MailSynchronizationOptions> mailSynchronizationSettings,
@@ -43,15 +44,18 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         SecretConfigurationValidator validator,
         SecretResolutionOptions resolutionOptions,
+        HostStartupGates startupGates,
         ILogger<SecretConfigurationStartupValidator> logger)
     {
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
+        ArgumentNullException.ThrowIfNull(startupGates);
 
         this.mailSynchronizationSettings = mailSynchronizationSettings;
         this.persistenceSettings = persistenceSettings;
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.validator = validator;
         this.resolutionOptions = resolutionOptions;
+        this.startupGates = startupGates;
         this.logger = logger;
     }
 
@@ -82,6 +86,8 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
             // after one options type; each message already names the exact path an operator edits.
             throw new OptionsValidationException("Secrets", typeof(SecretResolutionOptions), failures);
         }
+
+        this.startupGates.MarkCompleted(HostStartupGate.SecretConfiguration);
     }
 
     /// <inheritdoc />

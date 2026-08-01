@@ -84,6 +84,71 @@ public sealed class ConfiguredKestrelEndpointsTests
         Assert.Empty(ConfiguredKestrelEndpoints.FindHttpsProfileConflicts(configuration, HttpsProfiles()));
     }
 
+    /// <summary>
+    /// A deployment naming its own endpoints is one whose URL-shaped addresses Kestrel already ignores, which is what
+    /// the health-endpoint listener must not undo by restating them beside the endpoints an operator wrote.
+    /// </summary>
+    [Fact]
+    public void AnyConfigured_AConfiguredEndpoint_ReportsThatTheDeploymentNamesItsOwnListeners()
+    {
+        // Arrange
+        var configuration = ConfigurationWith(("Kestrel:Endpoints:Http:Url", "http://0.0.0.0:8080"));
+
+        // Act, Assert
+        Assert.True(ConfiguredKestrelEndpoints.AnyConfigured(configuration));
+    }
+
+    [Fact]
+    public void AnyConfigured_AnEndpointWithoutAUrl_ReportsNoConfiguredListener()
+    {
+        // Arrange
+        var configuration = ConfigurationWith(("Kestrel:Endpoints:Http:Protocols", "Http1AndHttp2"));
+
+        // Act, Assert
+        Assert.False(ConfiguredKestrelEndpoints.AnyConfigured(configuration));
+    }
+
+    [Fact]
+    public void AnyConfigured_NoKestrelSectionAtAll_ReportsNoConfiguredListener()
+    {
+        // Arrange
+        var configuration = ConfigurationWith(("Logging:LogLevel:Default", "Information"));
+
+        // Act, Assert
+        Assert.False(ConfiguredKestrelEndpoints.AnyConfigured(configuration));
+    }
+
+    /// <summary>
+    /// These are the application listener's ports whenever the section is populated, because the URL-shaped addresses
+    /// stop binding as soon as it is. A second listener that has to avoid the application's reads them from here, or
+    /// its collision check compares against sockets nothing opens.
+    /// </summary>
+    [Fact]
+    public void ListenerPorts_ConfiguredEndpoints_ReadsThePortsTheyBind()
+    {
+        // Arrange
+        var configuration = ConfigurationWith(
+            ("Kestrel:Endpoints:Http:Url", "http://127.0.0.1:8081"),
+            ("Kestrel:Endpoints:Https:Url", "https://0.0.0.0:8443"),
+            ("Kestrel:Endpoints:Defaults:Protocols", "Http1AndHttp2"));
+
+        // Act
+        var ports = ConfiguredKestrelEndpoints.ListenerPorts(configuration);
+
+        // Assert
+        Assert.Equal([8081, 8443], ports);
+    }
+
+    [Fact]
+    public void ListenerPorts_NoConfiguredEndpoint_ReadsNoPort()
+    {
+        // Arrange
+        var configuration = ConfigurationWith(("Logging:LogLevel:Default", "Information"));
+
+        // Act, Assert
+        Assert.Empty(ConfiguredKestrelEndpoints.ListenerPorts(configuration));
+    }
+
     private static IConfiguration ConfigurationWith(params (string Key, string Value)[] settings) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(settings.Select(static setting =>

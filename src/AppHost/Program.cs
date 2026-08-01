@@ -74,7 +74,12 @@ var database = postgres.AddDatabase(OrchestrationContract.DatabaseResourceName);
 
 var mailFathomHost = builder.AddProject<Projects.Host>(OrchestrationContract.HostResourceName)
     .WithReference(database)
-    .WaitFor(database);
+    .WaitFor(database)
+    // The probe listener binds every interface by default, which is what a container wants and what a developer
+    // machine does not: the probes answer without a credential, and nothing on a local network has any business asking
+    // them. It is not published as an Aspire endpoint either, because Aspire issues ASPNETCORE_URLS from the endpoints
+    // it knows about and the host would then serve `/` and `/mcp` on the probe port as well.
+    .WithEnvironment("HealthEndpoints__BindAddress", "127.0.0.1");
 
 if (runsIntegrationTests)
 {
