@@ -633,7 +633,7 @@ protected_paths_matches_the_configuration_files_at_every_depth() {
 
   if run_protected_paths_step \
     'outside-contributor' \
-    $'src/Infrastructure/Persistence/Migrations/.editorconfig\ndocs/.gitattributes\ntests/shared/.worktreeinclude' \
+    $'src/Infrastructure/Persistence/Migrations/.editorconfig\ndocs/.gitattributes\ntests/shared/.worktreeinclude\ntests/AGENTS.md\nsrc/CLAUDE.md' \
     "$output_file" \
     "$summary_file"; then
     printf 'Protected paths allowed a contributor to change a nested configuration file\n' >&2
@@ -643,6 +643,8 @@ protected_paths_matches_the_configuration_files_at_every_depth() {
   assert_contains '::error file=src/Infrastructure/Persistence/Migrations/.editorconfig::' "$output_file"
   assert_contains '::error file=docs/.gitattributes::' "$output_file"
   assert_contains '::error file=tests/shared/.worktreeinclude::' "$output_file"
+  assert_contains '::error file=tests/AGENTS.md::' "$output_file"
+  assert_contains '::error file=src/CLAUDE.md::' "$output_file"
 }
 
 protected_paths_ignores_paths_that_only_resemble_a_protected_one() {
@@ -653,7 +655,7 @@ protected_paths_ignores_paths_that_only_resemble_a_protected_one() {
   # longer name beginning the same way, a suffix of one, and a copy placed elsewhere all pass.
   if ! run_protected_paths_step \
     'outside-contributor' \
-    $'docs/my.editorconfig\n.editorconfiguration\ndeploy/global.json\nsrc/Host/NOTICE.md\n.githubbed/stale.yml' \
+    $'docs/my.editorconfig\n.editorconfiguration\ndeploy/global.json\nsrc/Host/NOTICE.md\n.githubbed/stale.yml\ndocs/CONTRIBUTING-AGENTS.md' \
     "$output_file" \
     "$summary_file"; then
     printf 'Protected paths refused paths that only resemble a protected one\n' >&2
