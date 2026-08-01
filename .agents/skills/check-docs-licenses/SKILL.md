@@ -22,13 +22,9 @@ Use `n/a` only when the change cannot affect user, operator, contributor, archit
 
 ## Changelog
 
-`CHANGELOG.md` records what a consumer of a release would notice, and the entry is written by the change that causes it rather than reconstructed at release time. No mechanical check can tell a user-visible change from a refactor, so this gate is where the obligation lives.
+**Do not touch `CHANGELOG.md`.** It is written by the release pull request and by nothing else, because a changelog is a statement about a release rather than about a change, and that pull request is the one whose merge commit is tagged and published. `$prepare-release` composes each section from the work merged since the previous tag; ordinary work leaves the file alone, and `CHANGELOG.md` is a protected path so an edit to it is visible as the exception it is.
 
-An entry is required when the change reaches one of the four public surfaces [ADR 0004](../../../docs/decisions/0004-versioning-and-release-policy.md) versions — the MCP tool contract, the configuration schema, the database schema, or the deployment contract — or fixes a defect that was observable from outside, or has a security consequence. It goes under `## [Unreleased]`, in one of the six Keep a Changelog categories, and it references the issue or pull request that carried it.
-
-A breaking entry opens with `**Breaking (<surface>)**` and states what the operator has to do, not only what changed. A change touching the database schema says whether a migration must be applied, whether it applies while the previous version still runs, and whether the release deploys over the previous release's data.
-
-Everything else earns none. A refactor, a new test, a continuous-integration adjustment, a documentation edit, and an internal rename are `n/a`, and adding a line for one is the failure this rule guards against — a file recording them stops being read and then stops being written.
+The verdict below is therefore `n/a` for every ordinary change, and `fail` for a diff that edits the file outside a release.
 
 ## Licenses
 
@@ -55,8 +51,8 @@ Return exactly these headings with evidence:
 Docs: pass|n/a|fail
 <files checked and required actions>
 
-Changelog: pass|n/a|fail
-<the surface reached and the entry added, or why the change is invisible from outside>
+Changelog: n/a|fail
+<n/a for ordinary work, which never touches the file; fail when the diff edits it outside a release>
 
 Licenses: pass|n/a|fail
 <official evidence, THIRD_PARTY_LICENSES.md entries, and required actions>

@@ -35,7 +35,8 @@ secret, and a certificate live, and a rule that only excluded what someone remem
 daemon. Docker looks for an ignore-file named after the Dockerfile before it looks for one at the context root, and
 prefers it, so the file bounding the context travels with the definition that uses it.
 
-Every base image is pinned to an explicit patch version. `scripts/verify-deployment-assets.sh` rejects a floating one.
+Every base image is pinned to an explicit patch version rather than to a floating `10.0`, so a rebuild months from now
+resolves what the change was reviewed against.
 
 ## How it runs
 
@@ -98,10 +99,10 @@ The image carries the OCI labels that let a pulled image be traced back to the c
 `org.opencontainers.image.source`, `.revision`, `.version`, `.created` — supplied as build arguments.
 
 `IMAGE_VERSION` has no useful default, and its `0.0.0-unversioned` placeholder says so. The version is declared once,
-as `VersionPrefix` in `Directory.Build.props`, and every build path reads it with `scripts/read-declared-version.sh`
-rather than restating it; `scripts/verify-deployment-assets.sh` fails a build path that stopped doing so, which is what
-keeps a labelled version from drifting away from the stamped one. [ADR 0004](../decisions/0004-versioning-and-release-policy.md)
-records why the number lives in one reviewed line.
+as `VersionPrefix` in `Directory.Build.props`, and every build reads it with `scripts/read-declared-version.sh` rather
+than restating it — which is what keeps a labelled version from drifting away from the stamped one, because there is no
+second copy to drift. [ADR 0004](../decisions/0004-versioning-and-release-policy.md) records why the number lives in one
+reviewed line.
 
 `IMAGE_REVISION` is passed to the publish inside the build as `SourceRevisionId`, so the assemblies report the same
 commit the label names rather than a second claim about it. The running process then reports its version and revision
@@ -141,16 +142,14 @@ has to be one.
 
 ## Verification
 
-```bash
-bash scripts/verify-deployment-assets.sh   # reads the files: pins, privileges, rendering, schema and license guards
-bash scripts/smoke-deployment.sh compose   # starts the real thing and asserts what only a running one can answer
-```
+The `Container image` workflow builds this file for `linux/amd64` and `linux/arm64` and stops there. It is manual
+dispatch only and publishes nothing; no registry credential reaches it.
 
-The second one proves that the container runs unprivileged on a read-only root filesystem, reads its mounted
-configuration, resolves its mounted secret, reaches the database, and then refuses an unrecognized schema — which is
-where a deployment without a schema artifact stops. Neither script runs on a pull request: the `Deployment assets`
-workflow that runs both, plus the two-architecture build and the same smoke against an ephemeral Kubernetes cluster, is
-manual dispatch only.
+Everything beyond "it builds" — that the container runs unprivileged on a read-only root filesystem, reads its mounted
+configuration, resolves its mounted secret, reaches the database, and then refuses an unrecognized schema — belongs to
+the release pipeline issue #156 owns, which tests, builds, and publishes the deployment assets in one place. Until it
+exists, a change here is reviewed by reading it and, where the change is worth running, by starting the Compose
+deployment by hand as [Deploying with Docker Compose](deployment-compose.md) describes.
 
 ## Where the deployments are
 

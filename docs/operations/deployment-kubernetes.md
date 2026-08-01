@@ -261,13 +261,17 @@ Secret was created outside it and stays.
 version the chart is written against. They are separate, and a values default corrected without touching the image is a
 chart release on its own.
 
-`appVersion` is the version declared in `Directory.Build.props`, which is also what the build stamps into the
-assemblies and what the image's `org.opencontainers.image.version` label carries.
-`scripts/verify-deployment-assets.sh` fails a chart that has drifted from it.
+`Chart.yaml` carries no `appVersion`, deliberately: the release run supplies it when it packages the chart, from the
+`VersionPrefix` in `Directory.Build.props` that is the only file in the repository carrying an application version.
 
-The chart refuses an install whose `image.tag` disagrees with `appVersion`, unless `image.allowVersionMismatch` says the
-combination is deliberate. A deployment naming the image by `image.digest` is unaffected, because a digest carries no
-version to compare.
+```bash
+helm package deploy/helm/mailfathom --app-version "$(bash scripts/read-declared-version.sh)"
+```
+
+A **packaged** chart therefore always states the application version it deploys, and refuses an install whose
+`image.tag` disagrees with it unless `image.allowVersionMismatch` says the combination is deliberate. Two cases carry
+nothing to compare and are not refusals: a deployment naming the image by `image.digest`, which publishes no version,
+and the unpackaged chart directory, which states none because it is not a release of anything.
 
 ### Nightly builds
 
@@ -279,17 +283,20 @@ indistinguishable from a release in a query that reads that label.
 
 ## Verification
 
+Reading the chart needs only Helm, and it is what a change here is reviewed with:
+
 ```bash
-bash scripts/verify-deployment-assets.sh          # lint, render, determinism, and every schema guard
-bash scripts/smoke-deployment.sh kubernetes       # install into a kind cluster, observe the refusal, upgrade, uninstall
+helm lint     deploy/helm/mailfathom --values deploy/helm/mailfathom/ci/release-values.yaml
+helm template verification deploy/helm/mailfathom --values deploy/helm/mailfathom/ci/nightly-values.yaml
 ```
 
-The Kubernetes smoke stops where a deployment without a schema stops: the pod reaches the database through the chart's
-own wiring and refuses to serve. Readiness joins that script in the change that supplies the schema step. Neither
-script runs on a pull request; the `Deployment assets` workflow that runs both is manual dispatch only.
+`deploy/helm/mailfathom/ci/` holds those two values files. They are excluded from the packaged chart and name no real
+image and no real database.
 
-`deploy/helm/mailfathom/ci/` holds the two values files those use. They are excluded from the packaged chart and name no
-real image and no real database.
+Installing the chart into a real cluster and asserting what only a running deployment can answer — that the pod reaches
+the database through the chart's own wiring and then refuses to serve against a schema no reviewed artifact has applied
+— belongs to the release pipeline issue #156 owns, together with building and publishing the assets. The repository
+runs no cluster of its own for it.
 
 ## Related
 

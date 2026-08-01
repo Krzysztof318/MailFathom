@@ -106,9 +106,9 @@ FROM ${DOTNET_ASPNET_IMAGE} AS runtime
 # running process reports are the same build rather than two claims about it.
 #
 # `IMAGE_VERSION` has no useful default and its placeholder says so: the version is declared once, in
-# Directory.Build.props, and `scripts/read-declared-version.sh` is what every build path reads it with. A default that
-# named a real version here would be a second place to remember, which is the failure ADR 0004 exists to avoid;
-# `scripts/verify-deployment-assets.sh` fails a build path that ships this placeholder instead of the declared version.
+# Directory.Build.props, and `scripts/read-declared-version.sh` is what every build reads it with. A default that named
+# a real version here would be a second place to remember, which is the failure ADR 0004 exists to avoid. An image
+# labelled 0.0.0-unversioned is therefore one nobody passed a version to, and is not publishable.
 ARG IMAGE_VERSION=0.0.0-unversioned
 ARG IMAGE_REVISION=unknown
 ARG IMAGE_CREATED=1970-01-01T00:00:00Z

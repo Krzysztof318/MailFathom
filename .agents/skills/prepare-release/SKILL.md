@@ -1,6 +1,6 @@
 ---
 name: prepare-release
-description: Use when a MailFathom release is being cut, to close the changelog, raise the declared version, and state the order the two pull requests and the tag have to land in.
+description: Use when a MailFathom release is being cut, to compose the changelog, raise the declared version, and state the order the two pull requests and the tag have to land in.
 ---
 
 # Prepare Release
@@ -42,61 +42,80 @@ from the permanent `release/<major>.<minor>.x` branch, which the ADR's *patch fl
 Stop and report, without creating anything, when any of these holds:
 
 - **The working tree is dirty.** The release describes a tree, and an uncommitted change is not in it.
-- **`## [Unreleased]` is empty.** There is nothing to release. An empty section means either the work was not entered
-  as it merged — which is the changelog obligation in `$check-docs-licenses`, not something to fix here — or this
-  version has already been closed.
+- **Nothing has merged since the previous tag.** There is nothing to release. Re-publishing an identical tree under a
+  new number makes the number mean less rather than more.
 - **A tag `v<x.y.z>` already exists** for the version being released, locally or on the remote. A released version is
   never re-cut; the release workflow rejects it anyway, and finding out here costs nothing.
+- **`CHANGELOG.md` already carries a `## [x.y.z]` section.** That version has been prepared, and possibly released.
 - **The branch is not `main` or `release/<major>.<minor>.x`.** No other branch releases.
-- **`Directory.Build.props` and `deploy/helm/mailfathom/Chart.yaml` disagree** on the version.
-  `scripts/verify-deployment-assets.sh` is the check; a chart documenting another version would reject the image this
-  release publishes.
 
 ## Workflow
 
 ### 1. Establish the two versions and confirm the increment
 
 ```bash
+git fetch --tags origin
 git status --porcelain            # must be empty
 git branch --show-current
 scripts/read-declared-version.sh  # the version being released
 git tag --list 'v*'               # must not contain the version being released
-git fetch --tags origin
 ```
 
-The increment to bump *to* follows the table above. Confirm it against the four surfaces before continuing: the highest
-increment any of the MCP tool contract, the configuration schema, the database schema, or the deployment contract
-requires is the release's own, and the `## [Unreleased]` entries are what that is read from. Raise the question with the
-owner when the entries and the proposed increment disagree — an unnecessary major costs one careful upgrade, an
-unmarked break costs an outage.
+### 2. Read what merged since the previous tag
 
-### 2. Open the changelog pull request
+This is the whole substance of the release, and it is read now rather than accumulated as work went along.
+`CHANGELOG.md` is written here and nowhere else: an entry added while implementing a task would be a claim about a
+release nobody had yet decided to cut.
+
+```bash
+git log --merges --pretty='%h %s' "$(git describe --tags --abbrev=0)..HEAD"
+gh pr list --state merged --search 'base:main merged:>=<date of previous tag>' --limit 100 \
+  --json number,title,url,closingIssuesReferences
+```
+
+Keep what a consumer of a release would notice — anything reaching the MCP tool contract, the configuration schema, the
+database schema, or the deployment contract, plus a defect that was observable from outside and anything with a
+security consequence. Drop the rest. A refactor, a test, a continuous-integration adjustment, a documentation edit, and
+an internal rename earn no entry, and a changelog that lists them stops being read.
+
+**The increment follows from what this reading found**, not the other way round: the highest increment any of the four
+surfaces requires is the release's own. Raise the question with the owner when the entries and the version already
+declared disagree — an unnecessary major costs one careful upgrade, an unmarked break costs an outage.
+
+### 3. Open the changelog pull request
 
 On a branch off the release branch, and touching nothing else:
 
-- rename `## [Unreleased]` to `## [x.y.z] - YYYY-MM-DD`, using the release date in UTC;
-- update the link references at the foot of the file so the new section resolves and `Unreleased` still does;
+- add `## [x.y.z] - YYYY-MM-DD` above the previous section, using the release date in UTC, with the entries from step 2
+  grouped into the six Keep a Changelog categories and each referencing the pull request or issue that carried it;
+- open a breaking entry with `**Breaking (<surface>)**` and state the operator's action, not only the fact;
+- say, when the database schema moved, whether a migration must be applied, whether it applies while the previous
+  version still runs, and whether the release deploys over the previous release's data at all;
+- update the link references at the foot of the file so the new section resolves;
 - leave `VersionPrefix` alone. It already reads `x.y.z`, which is what makes the tagged tree self-consistent.
 
-Nothing else belongs in this diff. It is the last point at which the release's contents are read as a whole before
-anyone can install them, and an unrelated change in it is a change nobody reviewed as part of the release.
+Nothing else belongs in this diff. **This is the pull request whose merge commit is tagged and published**, so it is
+both the last point at which the release's contents are read as a whole and the thing the published artifact is built
+from; an unrelated change in it is a change nobody reviewed as part of the release. `CHANGELOG.md` is a protected path,
+which is what makes an edit to it outside this flow visible.
 
-### 3. Open the version-bump pull request
+### 4. Open the version-bump pull request
 
 On a second branch off the release branch:
 
-- raise `<VersionPrefix>` in `Directory.Build.props` to the next version from the table above;
-- raise `appVersion` in `deploy/helm/mailfathom/Chart.yaml` to the same value, and `version` if anything under the chart
-  directory changed;
-- open a fresh, empty `## [Unreleased]` section above the one that was just closed.
+- raise `<VersionPrefix>` in `Directory.Build.props` to the next version from the table above. That is the only file
+  carrying a version number; the chart's `appVersion` and the image's tags and labels are all derived from it at
+  package and build time;
+- raise `version` in `deploy/helm/mailfathom/Chart.yaml` if anything under the chart directory changed, which is the
+  chart's own version and never follows the application's.
 
-### 4. Draft both, and cross-reference them
+### 5. Draft both, and cross-reference them
 
 Both open as drafts, per the repository rule, and each body names the other by number, so neither is merged alone by
-accident. Neither carries `Closes #<issue>`: a release closes no issue, and the issue that asked for the release is
-closed by the work in it rather than by the release of it.
+accident. The changelog pull request carries `Closes #<issue>` for the issue that tracks this release; the version-bump
+one closes nothing, because bumping is what follows a release rather than what the release was for.
 
-### 5. Print the ordering, and stop
+### 6. Print the ordering, and stop
 
 Report exactly this to the owner, with the numbers filled in:
 
@@ -104,13 +123,16 @@ Report exactly this to the owner, with the numbers filled in:
 Release x.y.z is prepared. Merge in this order — the tag has to land between the two.
 
 1. Merge the changelog pull request (#A).
-   The tagged tree has to contain the released changelog, not describe it afterwards.
+   Its merge commit is what gets tagged and published, so the tagged tree contains the released changelog rather
+   than describing it afterwards.
 
 2. Push the annotated tag on that merge commit:
        git tag --annotate vx.y.z --message 'MailFathom x.y.z'
        git push origin vx.y.z
    This is what triggers the release workflow. Before publishing anything it asserts the tag against VersionPrefix,
    against the highest existing tag on the same major.minor line, and against the changelog section for this version.
+   It then publishes the image under vx.y.z and moves `latest` onto it, in both registries — `latest` follows the
+   newest release and never a nightly.
 
 3. Merge the version-bump pull request (#B).
    After the tag, so main returns to naming the next release rather than the one just published.

@@ -49,19 +49,43 @@ because an OCI tag would reject it later and further from the cause.
 | Host startup record | `ServiceVersion` and `ServiceRevision` | no |
 | MCP `initialize` | the server's implementation version | no |
 | `org.opencontainers.image.version` and `.revision` | the image's version and commit | yes |
-| `Chart.appVersion` | the application version the chart deploys | yes |
+| The image's tags, including `latest` | which release this is | yes |
+| A packaged chart's `appVersion` | the application version the chart deploys | yes |
 | The published assemblies | `AssemblyInformationalVersion` | yes |
 
-All of them come from the same stamp. The two runtime paths read the assembly's own metadata rather than a literal
-restated in code, and unit tests assert that by deriving their expectation from that metadata; a reporting path that
-regressed to a hardcoded string fails them rather than staying plausible while being wrong.
+All of them come from the same declaration. The two runtime paths read the assembly's own metadata rather than a
+literal restated in code, and unit tests assert that by deriving their expectation from that metadata; a reporting path
+that regressed to a hardcoded string fails them rather than staying plausible while being wrong.
 
 The native process deployment needs nothing further: `dotnet publish` writes the stamped assemblies, so the artifact on
 disk carries its own version and revision without being started.
 
-`scripts/verify-deployment-assets.sh` is what keeps the copies together. It fails a `Chart.appVersion` that has drifted
-from the declared version, a build path that stopped naming the version and would therefore ship the
-`0.0.0-unversioned` placeholder, and a Dockerfile whose publish stopped stamping the revision.
+**Nothing else in the repository writes a version number**, which is what makes drift impossible rather than merely
+checked. The image's labels and tags arrive as build arguments, and the chart's `appVersion` arrives at package time:
+
+```bash
+helm package deploy/helm/mailfathom --app-version "$(bash scripts/read-declared-version.sh)"
+```
+
+`Chart.yaml` therefore carries no `appVersion` of its own. Its `version` field is not an exception — that is the
+chart's own version, which counts edits to the chart directory and never follows the application's.
+
+## The moving tags
+
+Every published release carries its own immutable `v<x.y.z>` tag **and** moves `latest` onto the same digest, in both
+registries. `latest` is what an operator gets by not choosing, so it must never be a preview:
+
+- **`latest` follows the newest release and never a nightly.** It is chosen by excluding every version carrying a
+  prerelease identifier and taking the highest of what remains, **never** by taking a maximum. Because `VersionPrefix`
+  on `main` names the *next* release, `main` carries `0.3.0-nightly.N` as soon as `v0.2.0` is released, and a maximum
+  over the tags present would select that nightly. The same holds for any tooling, documentation example, or upgrade
+  check asking which version is current.
+- **`latest` does not move for a patch to an older line.** `v0.2.1` cut after `0.3.0` has shipped is a supported
+  release of the `0.2.x` line, and it is not the newest one; the prerelease-excluding rule above already gives the
+  right answer, because `0.3.0` is higher.
+- **`nightly` follows the newest nightly**, and is the only other mutable reference. Every other tag is immutable.
+
+Publishing is the release workflow's, which is issue #156. This is the rule it implements.
 
 ## What earns which increment
 
@@ -71,8 +95,13 @@ that worked before the upgrade stop working after it, without the operator doing
 nothing breaks but something new is available it is minor; if neither, it is patch. The ADR's table applies that
 question per surface and settles the recurring ambiguous cases.
 
-`CHANGELOG.md` is what the increment is read from. An entry is written by the change that causes it, never
-reconstructed at release time, and `$check-docs-licenses` is where that obligation is enforced.
+The reading that answers it happens at release time, from what merged since the previous tag, and it is the same
+reading that produces the changelog section.
+
+**`CHANGELOG.md` is written by the release pull request and by nothing else.** Ordinary work never touches it: a
+changelog is a statement about a release, and until someone decides to cut one there is no release for a line to belong
+to. The file is a protected path, so an edit arriving through ordinary work is visible as the exception it is, and
+`$check-docs-licenses` reports `n/a` for it on every change that is not a release.
 
 ## Cutting a release
 
@@ -80,22 +109,24 @@ Use `$prepare-release`, which reads the version, refuses the states that must no
 requests as drafts, and prints the ordering. The sequence it prints is the whole procedure, and it is recorded here so
 it survives the skill being unavailable:
 
-1. **Merge the changelog pull request.** It closes `## [Unreleased]` into `## [x.y.z] - YYYY-MM-DD` and touches nothing
-   else. It merges first because the tagged tree has to *contain* the released changelog rather than describe it
+1. **Merge the changelog pull request.** It adds `## [x.y.z] - YYYY-MM-DD` with the release's entries, composed from
+   what merged since the previous tag, and touches nothing else. It merges first because **its merge commit is what
+   gets tagged and published**, so the tagged tree contains the released changelog rather than describing it
    afterwards.
 2. **Push the annotated tag `v<x.y.z>` on that merge commit.** This is what makes the release real and what triggers
    the release workflow. Before publishing anything the workflow asserts the tag against the tagged commit's
    `VersionPrefix`, against the highest existing tag on the same `major.minor` line, and against the changelog section
-   for that version.
+   for that version. It then pushes the image under `v<x.y.z>` and moves `latest` onto the same digest, in both
+   registries.
 
    ```bash
    git tag --annotate v0.1.0 --message 'MailFathom 0.1.0'
    git push origin v0.1.0
    ```
 
-3. **Merge the version-bump pull request.** It raises `VersionPrefix` to the next version and opens a fresh empty
-   `Unreleased`. It merges after the tag, so `main` returns to naming the next release. Skipping it fails loudly rather
-   than silently: the next tag push repeats a version that already exists, and step 2 rejects it.
+3. **Merge the version-bump pull request.** It raises `VersionPrefix` to the next version. It merges after the tag, so
+   `main` returns to naming the next release. Skipping it fails loudly rather than silently: the next tag push repeats
+   a version that already exists, and step 2 rejects it.
 
 No step is safe out of order, and nothing in a pull request can express that, which is why the ordering is printed
 rather than automated. Nothing here pushes a tag on the owner's behalf.
@@ -118,10 +149,3 @@ asks for it.
 Within `0.x` a **minor** bump may break any of the four surfaces, and every break is named in that release's changelog
 entry against the surface it breaks. Within `0.x.y` a **patch** is compatible on all four — that is a real promise, not
 a disclaimer. The deprecation window does not exist below `1.0.0`.
-
-## Which version is current
-
-`latest` is chosen by excluding every version carrying a prerelease identifier and taking the highest of what remains,
-**never** by taking a maximum. Because `VersionPrefix` on `main` names the next release, `main` carries
-`0.3.0-nightly.N` as soon as `v0.2.0` is released, and a maximum over the tags present would select that nightly. The
-same holds for any tooling, documentation example, or upgrade check that asks which version is current.
