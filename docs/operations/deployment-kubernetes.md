@@ -108,7 +108,7 @@ MailFathom verifies the schema while starting and refuses to serve against one i
 therefore does *not* become ready, and its log says why:
 
 ```
-DatabaseSchemaOutOfDateException: The database has not applied 1 migration(s) this build defines: 20260730152610_Initial.
+DatabaseSchemaOutOfDateException: The database has not applied 1 migration(s) this build defines: 20260731132336_Initial.
 ```
 
 That is the design, and the chart deliberately renders nothing that answers it: a Job carrying a Helm hook would be the

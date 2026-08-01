@@ -2,6 +2,13 @@
 
 This documentation set explains the durable design and operating model for MailFathom.
 
+## For users
+
+[The user guide](users/README.md) is the guided path for people who install, configure, and use MailFathom rather
+than develop it: [choosing an installation](users/installation.md), [getting started](users/getting-started.md) from
+first mailbox to first tool call, and [using the tools](users/usage.md). It links into the sections below for depth
+instead of duplicating them.
+
 ## Sections
 
 - [Architecture](architecture/solution-structure.md) describes the clean-architecture boundaries and project layout.
@@ -9,6 +16,8 @@ This documentation set explains the durable design and operating model for MailF
 - [Features](features/initial-scope.md) summarizes the first scaffolded capability scope.
 - [Operations](operations/local-development.md) covers local .NET and Aspire development commands.
 - [Configuration sources](operations/configuration-sources.md) covers the source precedence, the deployment-provisioned JSON directory and file, and the Kubernetes ConfigMap and Secret mapping.
+- [Configuration reference](operations/configuration-reference.md) lists every user-settable option in one place, with its type, default, constraints, and whether changing it needs a restart.
+- [Telemetry](operations/telemetry.md) records what the host emits over OpenTelemetry, the one environment variable that decides whether it is exported, the Aspire dashboard as the local destination, and why deployments export nothing by default.
 - [Secret provisioning](operations/secret-provisioning.md) covers secret references, the systemd and container provisioning paths, and in-memory exposure.
 - [Host startup telemetry](operations/host-startup-telemetry.md) describes the bootstrap logging pipeline that reports process start, startup failure, and shutdown.
 - [MCP endpoint](operations/mcp-endpoint.md) covers enabling the protocol surface, the API keys and explicit unauthenticated mode that guard it, the origins it answers, and the domains and certificates it terminates TLS for.
