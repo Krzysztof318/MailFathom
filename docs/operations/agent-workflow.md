@@ -120,7 +120,7 @@ then comment on the pull request itself: Codex and Claude. Both post threads
 carrying a `P1`, `P2`, or `P3` severity, so one pass over the pull request's
 threads answers both rather than two passes reading two vocabularies.
 
-The Claude pass is the `Claude review` workflow. It runs by itself once, when a
+The Claude pass is the `Fathom review` workflow. It runs by itself once, when a
 pull request whose branch is in this repository becomes reviewable: `opened`,
 `reopened`, or `ready_for_review`. A draft is skipped, because a draft is still
 being written and reviewing it spends subscription usage on a moving target. A
@@ -128,11 +128,23 @@ later push is not reviewed either — it runs the required checks and nothing
 else, since those gate the merge while a re-review would mostly repeat findings
 the author is already answering. Two things ask for a review anyway:
 
-- a comment on the pull request containing `claude-review`, from an author with
-  write access. Adding `sonnet` to that comment selects the cheaper model;
-  `opus` is the default. The phrase is not `@claude`, which collides with GitHub
-  Copilot's own trigger;
-- the `claude-review` label, which is how a fork's pull request is reviewed at
+- a comment on the pull request that *begins a line* with `fathom-review` or
+  `@fathom-review`, from an author with write access. Adding `opus` to that comment
+  buys a second, costlier opinion; `claude-sonnet-5` is the default.
+
+  Three things about that phrase are deliberate. It is not `@claude`, which
+  collides with GitHub Copilot's own trigger. It has to lead a line rather than
+  appear anywhere in the body, because `fathom-review` names this pipeline and is
+  therefore exactly the word somebody writes when discussing it — "I'll rerun the
+  fathom-review workflow" mid-sentence must not spend subscription usage on a run
+  nobody asked for. And the `@` is
+  optional rather than required, because every other reviewer is summoned with
+  one and a trigger that silently ignores the spelling a hand reaches for first
+  is a trap. `@fathom-review` addresses no account: the App is named
+  `Fathom reviewer`, so GitHub renders it as plain text. Leading whitespace is
+  fine, so a list item or a quoted line still counts, and `fathom-reviewer` does
+  not;
+- the `fathom-review` label, which is how a fork's pull request is reviewed at
   all. A fork's own pushes never start a review, so a maintainer decides.
 
 The workflow reports no status check and is not in the `main` ruleset. It
@@ -158,7 +170,22 @@ Claude then runs with `Read`, `Grep`, `Glob`, and `Write` and nothing else: no
 shell, no editor, no network tool, no MCP tool, and no read access to `.git`,
 where the action leaves a token for its own use. It holds no credential it could
 use and posts nothing. It writes findings to one file, and the step after it
-validates them and submits a single review with `event: COMMENT`.
+validates them and submits a single review: `event: COMMENT` when the file holds
+findings, `event: APPROVE` when it holds none.
+
+The model is named exactly rather than by alias: `claude-sonnet-5` at
+`--effort high`. An alias re-points at whatever ships next, and findings are only
+comparable across runs when the model that produced them is the one the workflow
+names.
+
+Effort decides how much the reviewer works before answering, which is the
+difference between a sweep over the whole change and a close reading of the first
+few files followed by a shrug. `high` is a deliberate step down rather than the
+value that would apply otherwise — Claude Code runs `xhigh` by default — because
+this workflow spends a personal subscription with no per-run ceiling anywhere in
+it, and the extra depth `xhigh` buys has not been measured against that cost
+here. A missed finding is what would justify raising it, and the measurement
+would come with the change.
 
 That split is the point. Everything the reviewer reads about the change is
 untrusted — a diff, a comment, or an issue body can carry an instruction aimed
@@ -194,6 +221,23 @@ migration paths, and a request for tests that names no untested case, so the two
 reviewers do not spend threads on findings this repository has already decided
 against.
 
+The prompt splits the work into two passes and forbids interleaving them, which
+is what separates coverage from the bar. The first pass reads every entry in
+`files.json` and the resulting file around every hunk, collecting candidates
+without filtering or ranking any of them; it is finished when every file has been
+read, not when the list feels long enough. The second pass confirms each
+candidate against the file it concerns, names the rule it rests on, and drops
+whatever cannot be confirmed, is already answered by the surrounding file, or was
+already raised by another reviewer.
+
+Both failure modes that split addresses are real and opposite. Judging a
+candidate while still looking suppresses findings that were not yet understood,
+which is how a reviewer stops searching once it has a few; reporting a candidate
+it never went back to check is how a review fills with hedged noise. So the cap
+of twenty findings is stated as a ceiling and never a target: a change with two
+defects gets two findings, a change with none gets none, and an entry written to
+lengthen the list is itself a defect in the review.
+
 ### When the reviewer stops
 
 `claude-code-action` hides everything the reviewer produced, and rightly so: that output
@@ -220,16 +264,102 @@ would otherwise turn every review into a refusal that reads like a credential le
 It validates each finding's anchor against the same patches the reviewer was
 given, so a line that moved cannot make GitHub reject the whole review; an
 unanchored finding moves into the review body instead of being dropped. It caps
-the review at fifteen findings, sets `start_side` alongside `start_line` for a
+the review at twenty findings, sets `start_side` alongside `start_line` for a
 ranged comment, submits with an explicit `POST`, and refuses to post at all if
-the findings contain either credential this workflow holds or anything shaped
-like one.
+the findings contain any credential this workflow holds or anything shaped like
+one.
 
-Authentication is the `CLAUDE_CODE_OAUTH_TOKEN` repository secret, produced by
-`claude setup-token` against the owner's Claude subscription. Without it the run
-fails at the action step. `THIRD_PARTY_LICENSES.md` records exactly what the run
-sends and under whose terms, including the consumer-plan data-training setting
-that decides whether what is submitted this way trains future models.
+A run that found nothing takes the other branch: `event: APPROVE`, carrying the
+reviewer's summary as the review body and no inline comments. Nothing found is a
+verdict, so it is delivered where GitHub renders a verdict. The alternatives are
+both worse — `event: COMMENT` with an empty comment list records that a review
+happened without saying what it concluded, and an ordinary issue comment says it
+somewhere nothing reads as a verdict at all.
+
+`commit_id` ties the approval to the head the reviewer actually saw, and the
+`main` ruleset sets `dismiss_stale_reviews_on_push`, so the next push dismisses
+it and an approval can never describe code that has since changed.
+
+**The approval cannot merge anything on its own.** The ruleset requires one
+approving review *from a code owner*, `CODEOWNERS` makes the repository owner the
+code owner of every path, and a GitHub App cannot be a code owner — so the
+owner's approval is still required and this one sits beside it as a signal.
+`REQUEST_CHANGES` is never used in either branch: a reviewer that reports no
+status check and gates nothing must not be able to block a merge either.
+
+### Who publishes it
+
+Not `github-actions`. The submission step authenticates as the owner's
+`Fathom reviewer` GitHub App, whose installation token it mints from the
+`REVIEWER_APP_ID` repository *variable* and the `REVIEWER_APP_PRIVATE_KEY`
+repository *secret*. The split is deliberate: an App id is visible on the App's
+own page and in every installation, so it is not a credential, and keeping it out
+of the secret store is what lets a failed run name the App it tried to
+authenticate as rather than printing `***`. The private key is the credential,
+and it is the only one.
+
+Two things follow, and the second is the reason for the first. The review carries
+an identity that names what produced it instead of the identity every other
+workflow in this repository posts under. And the workflow token drops to
+read-only across the whole job — `contents: read`, `pull-requests: read`,
+`issues: read` — because the only credential that can write to a pull request is
+now minted per run, scoped to this repository, expiring with the job, and held by
+the single step that makes no model call. The App itself needs exactly one
+permission, `Pull requests: Read and write`, which covers submitting a review and
+commenting on a pull request alike.
+
+A missing or invalid App credential fails the run at its first step, before the
+change is collected and before any subscription usage is spent.
+
+### Provisioning the App
+
+Once, by the owner. A GitHub App is an account-level object that is then
+*installed* on repositories, so the two halves are created in different places
+and both are required before a review can be posted.
+
+1. At <https://github.com/settings/apps/new>, create an App named
+   `Fathom reviewer`. The name is what appears as the review's author, so it is
+   the one field with a user-visible consequence. App names are unique across all
+   of GitHub rather than per account, so this one may be unavailable; pick
+   another and update this file and the workflow's comments, which are the only
+   two places that name it. Give it any homepage URL — the field is required and
+   unused — and clear **Webhook → Active**, because nothing here receives events.
+2. Under **Permissions → Repository permissions**, grant
+   **Pull requests: Read and write** and nothing else. That single scope covers
+   both API calls the workflow makes. Leave **Where can this GitHub App be
+   installed?** at **Only on this account**.
+3. On the App's settings page after creation, note the **App ID**, then under
+   **Private keys** choose **Generate a private key**. GitHub downloads a `.pem`
+   file and keeps only its fingerprint; the file is the credential and cannot be
+   recovered from GitHub if it is lost.
+4. Under **Install App**, install it on this repository. An App that is created
+   but never installed mints no token, and the workflow fails at its first step
+   with an authentication error rather than a missing-secret one.
+5. In the repository's **Settings → Secrets and variables → Actions**, add both,
+   on their own tabs:
+   - the **Variables** tab: `REVIEWER_APP_ID`, the numeric App ID;
+   - the **Secrets** tab: `REVIEWER_APP_PRIVATE_KEY`, the entire contents of the
+     `.pem` file including the `-----BEGIN…-----` and `-----END…-----` lines and
+     the trailing newline. A key pasted without its header lines fails to parse.
+
+   The tabs are not interchangeable. The workflow reads the id through `vars` and
+   the key through `secrets`, so an id added as a secret resolves to an empty
+   string and the token step fails with an authentication error that names
+   nothing.
+6. Delete the downloaded `.pem` from the machine that generated it. It exists in
+   the secret store now, and a second copy on disk is a second thing to protect.
+
+Rotating the key is generating a new one, replacing `REVIEWER_APP_PRIVATE_KEY`,
+and then deleting the old key from the App — in that order, so no run falls
+between a revoked key and its replacement.
+
+The reviewer authenticates with the `CLAUDE_CODE_OAUTH_TOKEN` repository secret,
+produced by `claude setup-token` against the owner's Claude subscription. Without
+it the run fails at the action step. That secret buys model time and nothing
+else; publishing is the App's, and the two credentials are never held by the same
+step. `THIRD_PARTY_LICENSES.md` records exactly what the run sends and under
+whose terms, including the consumer-plan data-training setting that decides
+whether what is submitted this way trains future models.
 
 ## Instruction scope
 

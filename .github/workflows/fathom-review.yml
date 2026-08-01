@@ -1,4 +1,4 @@
-name: Claude review
+name: Fathom review
 
 # A second reviewer, next to the Codex review that already comments here, in the same P1/P2/P3
 # vocabulary so one pass over the threads answers both. It reports no status check and is not in the
@@ -16,11 +16,27 @@ name: Claude review
 # after it validates every anchor against the frozen diff and submits one review. That split is what
 # keeps a prompt injection in the diff, in a comment, or in the linked issue from reaching an
 # authenticated API call.
+#
+# What that step posts, it posts as the `Fathom reviewer` GitHub App rather than as `github-actions`.
+# The App is the owner's, so the review carries an identity that says what produced it, and the
+# workflow token it replaces drops to read-only: the only credential in this file that can write to
+# a pull request is minted from the App's private key, held by one step, and expires with the job.
+#
+# A run that finds nothing above the bar approves the pull request, and one that finds something
+# submits `event: COMMENT`. The verdict is the whole content of an all-clear, so it is said in the
+# one place GitHub renders as a verdict rather than as a wall of threads that each read "this is
+# fine". `REQUEST_CHANGES` is deliberately never used: this reviewer advises and gates nothing.
+#
+# The approval cannot merge anything on its own. The `main` ruleset requires one approving review
+# *from a code owner*, `CODEOWNERS` makes the repository owner the code owner of every path, and a
+# GitHub App cannot be a code owner — so the owner's own approval is still required, and this one
+# sits beside it as a signal. `dismiss_stale_reviews_on_push` then discards it on the next push, so
+# an approval never outlives the commit it was given for.
 on:
   # No `synchronize`. A push to a pull request that is already open runs the required checks and
   # nothing else: those are cheap, deterministic, and gate the merge, while a re-review costs
   # subscription usage and would repeat findings the author is already answering. A review of the
-  # updated branch is asked for, with a `claude-review` comment.
+  # updated branch is asked for, with a `fathom-review` comment.
   pull_request_target:
     types:
       - opened
@@ -72,7 +88,11 @@ jobs:
           set -euo pipefail
 
           review='false'
-          model='opus'
+          # Sonnet 5 by default, at the exact identifier rather than the `sonnet` alias: an alias
+          # silently re-points at whatever ships next, and a review's findings are only comparable
+          # across runs when the model that produced them is the one this file names. The prompt is
+          # written for this model, so a run on another one is a deliberate exception.
+          model='claude-sonnet-5'
           reason='no rule matched this event'
 
           case "$EVENT_NAME" in
@@ -80,39 +100,60 @@ jobs:
               if [[ "$EVENT_ACTION" == 'labeled' ]]; then
                 # The label is the maintainer's explicit ask, which is the only way a fork's pull
                 # request reaches this workflow and the only way a draft does.
-                if [[ "$ADDED_LABEL" == 'claude-review' ]]; then
+                if [[ "$ADDED_LABEL" == 'fathom-review' ]]; then
                   review='true'
-                  reason='a maintainer applied the claude-review label'
+                  reason='a maintainer applied the fathom-review label'
                 else
                   reason="the applied label is '${ADDED_LABEL}'"
                 fi
               elif [[ "$PULL_REQUEST_DRAFT" == 'true' ]]; then
-                reason='the pull request is a draft; label it claude-review or comment claude-review to review it anyway'
+                reason='the pull request is a draft; label it fathom-review or comment fathom-review to review it anyway'
               elif [[ "$HEAD_REPOSITORY" != "$REPOSITORY" ]]; then
                 # A fork's own pull request never starts a review by being opened. The label
                 # does, and the action's own write-permission check on the actor agrees: on a
                 # `labeled` event the actor is the maintainer who applied it.
-                reason="the head branch is in ${HEAD_REPOSITORY}; a maintainer applies the claude-review label to review a fork"
+                reason="the head branch is in ${HEAD_REPOSITORY}; a maintainer applies the fathom-review label to review a fork"
               else
                 review='true'
                 reason="the pull request was ${EVENT_ACTION}"
               fi
               ;;
             issue_comment)
-              # `claude-review` rather than `@claude`: an at-mention collides with GitHub Copilot's
-              # own trigger, and a bare phrase cannot be typed by accident in prose about this
-              # workflow because the check below also requires write-level authorship.
+              # `fathom-review` rather than `@claude`: an at-mention collides with GitHub Copilot's
+              # own trigger.
+              #
+              # The phrase has to begin a line, which is stricter than matching it anywhere in the
+              # body and is the whole reason this is a variable rather than a literal pattern.
+              # `fathom-review` names this pipeline, so it is exactly the word somebody writes when
+              # they discuss it — "I'll rerun the fathom-review workflow", "see the fathom-review
+              # docs" — and an anywhere-match would spend subscription usage on a run nobody asked
+              # for every time that sentence appears on a pull request. Somebody asking for a review
+              # types the phrase as an instruction, at the start of a line; somebody talking about
+              # it does not. Leading
+              # whitespace is allowed because a list item or a quote is still an instruction, and
+              # the trailing `[^a-z-]` keeps `fathom-reviewer` from counting.
+              #
+              # The `@` is optional because every other reviewer on the market is summoned with one,
+              # so it is the first thing a hand types, and a trigger that silently ignores the
+              # obvious spelling is a trap rather than a guard. It addresses no account here — the
+              # App is named `Fathom reviewer` — so GitHub renders it as plain text, and accepting it
+              # weakens nothing: `@fathom-review` is not a phrase that turns up in prose about the
+              # workflow, so the line-start rule above still carries the whole guard.
+              trigger_pattern=$'(^|\n)[[:space:]]*@?fathom-review([^a-z-]|$)'
+
               if [[ "$IS_PULL_REQUEST_COMMENT" != 'true' ]]; then
                 reason='the comment is on an issue rather than a pull request'
-              elif [[ ! "${COMMENT_BODY,,}" =~ (^|[^a-z-])claude-review([^a-z-]|$) ]]; then
-                reason='the comment does not ask for claude-review'
+              elif [[ ! "${COMMENT_BODY,,}" =~ $trigger_pattern ]]; then
+                reason='the comment does not ask for fathom-review'
               elif [[ "$COMMENT_ASSOCIATION" != 'OWNER' && "$COMMENT_ASSOCIATION" != 'MEMBER' && "$COMMENT_ASSOCIATION" != 'COLLABORATOR' ]]; then
                 reason="the comment author is ${COMMENT_ASSOCIATION} and cannot spend review usage"
               else
                 review='true'
-                reason='a maintainer asked for claude-review in a comment'
-                if [[ "${COMMENT_BODY,,}" == *sonnet* ]]; then
-                  model='sonnet'
+                reason='a maintainer asked for fathom-review in a comment'
+                # The escape hatch to the more expensive model, for a change where the default
+                # reviewer's verdict is worth a second, costlier opinion.
+                if [[ "${COMMENT_BODY,,}" == *opus* ]]; then
+                  model='claude-opus-5'
                 fi
               fi
               ;;
@@ -126,8 +167,8 @@ jobs:
 
           echo "Review: ${review} (${reason})."
 
-  claude-review:
-    name: Claude review
+  fathom-review:
+    name: Fathom review
     needs:
       - decide
     if: needs.decide.outputs.review == 'true'
@@ -135,16 +176,32 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      # Posting the review needs it. It is the widest privilege here and wider than the job uses:
-      # it also permits closing or relabelling a pull request, and GitHub offers no narrower scope
-      # for commenting alone. Nothing that reads the pull request's own content ever holds it — the
-      # reviewer has no shell and no token, and the step that does hold it runs no model output as
-      # code.
-      pull-requests: write
+      # Read-only throughout. The workflow token collects the change and nothing else; every write
+      # this job performs is made with the `Fathom reviewer` App's installation token, minted below.
+      # That is what lets this block stay narrower than the job's behavior suggests: `write` here
+      # would also permit closing or relabelling a pull request, which nothing in this file does.
+      pull-requests: read
       # The pull request's body names the issue it closes, and that issue is the change's stated
       # contract. Reading it on a private repository needs this scope of its own.
       issues: read
     steps:
+      # The identity the review is published under. `create-github-app-token` exchanges the App's
+      # id and private key for an installation token scoped to this repository, valid for an hour
+      # and revoked when the job ends, so the long-lived credential in the secret store is a
+      # signing key rather than something that can call the API on its own. The App needs exactly
+      # one permission: `Pull requests: Read and write`, which covers both submitting a review and
+      # commenting on a pull request.
+      - name: Mint the reviewer App's token
+        id: reviewer
+        uses: actions/create-github-app-token@v3
+        with:
+          # A variable rather than a secret, because an App id is not one: it is visible on the
+          # App's own page and in every installation. Only the private key is a credential, and
+          # keeping the id out of the secret store is what makes a failed run say which App it
+          # tried to authenticate as instead of printing `***`.
+          app-id: ${{ vars.REVIEWER_APP_ID }}
+          private-key: ${{ secrets.REVIEWER_APP_PRIVATE_KEY }}
+
       # The base commit, which is code that already merged, and never the branch under review. It
       # supplies the repository's own instructions — `AGENTS.md`, the `review-change` skill, the
       # specifications and ADRs — so the reviewer measures the change against the contract as it
@@ -387,6 +444,34 @@ jobs:
             A finding another reviewer already raised in `review-comments.json` or
             `issue-comments.json` is not raised again, whatever its wording.
 
+            Every instruction in this prompt applies to the whole change, not to the first file
+            that happens to illustrate it.
+
+            ## How to work through this
+
+            Two passes, in this order, and do not interleave them.
+
+            **First pass — cover the change.** Read every entry in `files.json`, and for each one
+            read the resulting file around every hunk before moving on. Write down every candidate
+            defect you notice, including the ones you are not yet sure about. Nothing is filtered,
+            ranked, or dropped in this pass, and nothing about what you have already found changes
+            how the rest is read: a serious defect in the third file is not a reason to read the
+            fourth less carefully, and ten clean files are not evidence about the eleventh. This
+            pass is finished when every file in `files.json` has been read and every rubric below
+            that the change actually reaches has been applied to it — not when the list of
+            candidates feels long enough.
+
+            **Second pass — decide what survives.** Take each candidate and confirm it against the
+            file it concerns, naming the rule it rests on. Drop it when you cannot confirm it
+            there, when the surrounding file already answers it, when it is something the section
+            below rules out, or when another reviewer already raised it. What survives is what you
+            write down, and nothing else is.
+
+            The split is deliberate. Judging a candidate while you are still looking suppresses
+            findings you have not finished understanding, and reporting one you never went back to
+            check is how a review fills with noise. Coverage is the first pass's job; the bar is
+            the second pass's.
+
             ## What to look for
 
             Five rubrics. Apply each one the change actually reaches, and say nothing about the
@@ -523,9 +608,14 @@ jobs:
             - **P3** — something a later change will pay for: a name that misleads, a boundary
               crossed for convenience, a method that hides two responsibilities.
 
-            Post nothing below P3, and at most fifteen findings; when more clear the bar, keep the
-            most severe. Verify each one against the file it concerns before writing it down; if you
-            cannot confirm it there, drop it rather than hedging it.
+            Post nothing below P3, and at most twenty findings; when more clear the bar, keep the
+            most severe and say in the summary how many you left out.
+
+            Twenty is a ceiling, never a target. A change with two defects gets two findings, and a
+            change with none gets none: an entry that exists to fill the list is a defect in the
+            review, and so is a hedged one you could not confirm. Both directions of that rule are
+            load-bearing — do not stop searching because you already have a few, and do not keep
+            writing because you have only a few.
 
             ## What is not a finding here
 
@@ -555,7 +645,7 @@ jobs:
 
             ```json
             {
-              "summary": "One to five lines: what you reviewed, the count by severity, and any concern that had no line to sit on.",
+              "summary": "One to five lines: what the change does, how much of it you covered, the count by severity, anything you left out against the cap, and any concern that had no line to sit on.",
               "findings": [
                 {
                   "severity": "P1",
@@ -575,15 +665,36 @@ jobs:
             correction; a ```suggestion``` block belongs there only when the replacement is a
             syntactically complete drop-in for exactly the lines you anchored to.
 
-            When nothing clears the bar, write the file with an empty `findings` array and a summary
-            that says so plainly.
+            When nothing survives the second pass, write the file with an empty `findings` array and
+            a summary that says plainly what you covered and that you found nothing above the bar.
+            That is a finished review rather than a failed one, and the step after you turns it into
+            an approval of the pull request carrying your summary as its body. Your summary is
+            therefore the entire content of that verdict — say what you covered in two or three
+            lines and stop, and do not invent a finding to avoid approving. Approving cannot merge
+            anything on its own; a code owner still has to approve separately.
           # `--setting-sources user` keeps the deny list above as the only settings the session
           # loads. The action would otherwise load `user`, `project`, and `local`, and a project
           # source means settings and hooks read out of the working directory. Nothing untrusted is
           # in that directory today, and this is what keeps that true if a later change puts
           # something there.
+          #
+          # `--effort high` is what buys the two-pass sweep the prompt asks for. Effort decides how
+          # much the model thinks and how much work it does before answering, and a review is the
+          # shape of task where that matters most: the cheap failure is a reviewer that reads the
+          # first few files closely, finds something, and coasts.
+          #
+          # It is stated because it is a decision, and because it is not the value that would apply
+          # otherwise: Claude Code runs `xhigh` by default. `high` is the deliberate step down —
+          # this workflow spends a personal subscription with no per-run ceiling anywhere in it, and
+          # the extra depth `xhigh` buys has not been measured against that cost here. Raise it if a
+          # missed finding ever justifies the measurement.
+          #
+          # `--model` and `--effort` are not inputs the action declares. It forwards a flag it does
+          # not recognize to the CLI unchanged, which is the documented way to reach a CLI option
+          # from here.
           claude_args: |
             --model ${{ needs.decide.outputs.model }}
+            --effort high
             --allowedTools "Read,Grep,Glob,Write"
             --setting-sources user
 
@@ -647,11 +758,15 @@ jobs:
         if: always() && steps.collect.outcome == 'success'
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          # The App's installation token, not the workflow token: this is the step that publishes,
+          # and what it publishes is attributed to whatever minted this. It is also the only write
+          # credential in the job, held by the one step that makes no model call.
+          GH_TOKEN: ${{ steps.reviewer.outputs.token }}
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
           HEAD_SHA: ${{ steps.collect.outputs.head_sha }}
           WORKFLOW_TOKEN: ${{ github.token }}
+          REVIEWER_TOKEN: ${{ steps.reviewer.outputs.token }}
           # Held only by this step, which runs no model output and makes one API call, so that a
           # credential the reviewer was never able to read still cannot be published if it somehow
           # reaches the findings.
@@ -690,11 +805,56 @@ jobs:
             exit 1
           fi
 
+          # Refused rather than compared, for the reason given above: an empty pattern matches every
+          # file. An empty token also means the step is about to call the API unauthenticated, which
+          # would fail later and less clearly than this does.
+          if [[ -z "$REVIEWER_TOKEN" ]]; then
+            echo '::error::The reviewer App minted no token, so there is nothing to publish the review with.'
+            exit 1
+          fi
+
+          # The App's own token is compared literally as well as by shape. Its `ghs_` prefix already
+          # matches the pattern below, but this is the credential the step is about to authenticate
+          # with, and a literal comparison does not depend on the pattern continuing to describe it.
           if grep -qE 'gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{16,}' "$FINDINGS_FILE" \
             || grep -qF "$WORKFLOW_TOKEN" "$FINDINGS_FILE" \
+            || grep -qF "$REVIEWER_TOKEN" "$FINDINGS_FILE" \
             || grep -qF "$CLAUDE_CREDENTIAL" "$FINDINGS_FILE"; then
             echo '::error::The findings contain something shaped like a credential and were not posted.'
             exit 1
+          fi
+
+          # Nothing found is a verdict, so it is delivered as one: an approval carrying the summary
+          # and no inline comments. The alternative shapes are both worse. `event: COMMENT` with an
+          # empty `comments` array records that a review happened without saying what it concluded,
+          # and an ordinary issue comment says it in the timeline where nothing reads it as a
+          # verdict at all.
+          #
+          # `commit_id` ties the approval to the head the reviewer actually saw. With
+          # `dismiss_stale_reviews_on_push` set on the `main` ruleset, the next push dismisses it,
+          # so an approval can never describe code that has since changed.
+          #
+          # This cannot merge anything by itself: the ruleset requires an approving review from a
+          # code owner, and a GitHub App cannot be one. `REQUEST_CHANGES` is never used in either
+          # branch — a reviewer that gates nothing must not be able to block a merge either.
+          if [[ "$(jq '(.findings // []) | length' "$FINDINGS_FILE")" == '0' ]]; then
+            jq --arg commit "$HEAD_SHA" \
+               --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" '
+              {
+                commit_id: $commit,
+                event: "APPROVE",
+                body: (
+                  [((.summary // "") | if . == "" then "The review found nothing above the bar in this change." else . end)]
+                  + (if $truncation == "" then [] else ["", $truncation] end)
+                  | join("\n")
+                )
+              }' "$FINDINGS_FILE" > "$payload_file"
+
+            gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews" \
+              --method POST --input "$payload_file" --silent
+
+            echo 'Approved: the review found nothing above the bar.'
+            exit 0
           fi
 
           # Anchors are checked against the same patches the reviewer was given, so a line that has
@@ -709,7 +869,7 @@ jobs:
               and (($finding.start_line == null)
                    or ((allowed($finding.path) | index($finding.start_line)) != null));
 
-            (.findings // [])[0:15] as $findings
+            (.findings // [])[0:20] as $findings
             | ($findings | map(select(anchored(.)))) as $kept
             | ($findings - $kept) as $dropped
             | {
