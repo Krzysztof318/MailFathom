@@ -13,9 +13,10 @@
 
 *       @Krzysztof318
 
-# `.github/`, `.config/`, `.agents/`, and `.claude/` decide how every other change is judged, and the
-# `Protected paths` workflow refuses a change to them from anyone but the repository owner. They get
-# no entry of their own here, because the rule above already makes the owner their code owner and a
-# restatement would neither add to that nor survive a path rule added below it; the last matching
-# pattern wins either way. The place to name a directory as needing the owner is a rule that gives it
-# other owners too.
+# The `Protected paths` workflow refuses a change from anyone but the repository owner to the four
+# configuration directories, to the configuration files matched at any depth, and to the
+# repository-root build, package-source, SDK, license, and changelog files; `protected-paths.yml`
+# lists them with the reason each one joined. They get no entry of their own here, because the rule
+# above already makes the owner their code owner and a restatement would neither add to that nor
+# survive a path rule added below it; the last matching pattern wins either way. The place to name a
+# path as needing the owner is a rule that gives it other owners too.

@@ -10,18 +10,50 @@ name: Protected paths
 #   `.agents/`  the skills that define the task, review, verification, and completion contract
 #   `.claude/`  the tracked entry points to those same skills
 #
-# One file joins them for a different reason, which is why it is listed separately rather than folded
-# into the four above:
+# Three files decide the same thing from wherever they sit, so they are matched by name anywhere in
+# the tree rather than at the repository root. A nested copy of each overrides the root one for its
+# own subtree, and that override — a rule relaxed for one directory, quietly — is the part worth
+# catching:
 #
-#   `CHANGELOG.md`  what a published release claims it shipped. It is written by the release pull
-#                   request alone — the one whose merge commit is tagged and pushed to the container
-#                   registries — so an edit arriving through ordinary work is, by construction, out of
-#                   band. This job is what makes that visible while it is still a diff.
+#   `.editorconfig`     which analyzer and style diagnostics `TreatWarningsAsErrors` turns into build
+#                       failures, and the file header IDE0073 requires of every source file
+#   `.gitattributes`    how the diff a reviewer reads is produced: text and binary classification,
+#                       line endings, merge drivers, `export-ignore`. A path reclassified as binary
+#                       stops having reviewable content at all
+#   `.worktreeinclude`  which gitignored files, local secrets among them, are copied into every
+#                       worktree an agent works in
 #
-# A pull request that edits any of them is editing the gate it has to pass, or the record a release
-# stands on, so the repository owner is the only author for whom that is ordinary work. `CODEOWNERS`
-# says this to the reviewer; this job says it to the author, within seconds of the push and without a
-# reviewer having to notice.
+# The remaining entries are single repository-root files, matched whole. Each is either written by
+# one deliberate flow, so every other edit to it is out of band, or states terms and pins that the
+# rest of the repository is built and distributed against:
+#
+#   `CHANGELOG.md`            what a published release claims it shipped. It is written by the
+#                             release pull request alone — the one whose merge commit is tagged and
+#                             pushed to the container registries — so an edit arriving through
+#                             ordinary work is, by construction, out of band. This job is what makes
+#                             that visible while it is still a diff.
+#   `Directory.Build.props`   the analyzer and warning policy every project inherits, the declared
+#                             version every build is stamped with, and the SPDX and copyright
+#                             metadata that ships inside the assemblies
+#   `LICENSE`                 the grant MailFathom is distributed under. GitHub detects it by
+#                             matching the file against the known Apache-2.0 text, so any edit at all
+#                             turns a detected `Apache-2.0` into `NOASSERTION`
+#   `NOTICE`                  the attribution Apache-2.0 section 4(d) asks a derivative distribution
+#                             to preserve
+#   `NuGet.config`            which feeds a package may come from. It clears the inherited source
+#                             list, so adding a source is a supply-chain and licensing decision
+#                             rather than a configuration tweak
+#   `global.json`             the SDK pin every build, every gate, and every CI run resolves against
+#
+# A pull request that edits any of them is editing the gate it has to pass, the terms the project is
+# published under, or the record a release stands on, so the repository owner is the only author for
+# whom that is ordinary work. `CODEOWNERS` says this to the reviewer; this job says it to the author,
+# within seconds of the push and without a reviewer having to notice.
+#
+# Whichever way it decides, the job names the protected files the pull request touched, in the step
+# log and in the job summary. The refusal needs that list to be actionable, and the pass needs it
+# just as much: the owner is allowed to change these paths, not expected to have meant to, and an
+# `.editorconfig` that arrived with a rebase is only visible if something says so.
 #
 # It is not a security boundary on its own. A `pull_request` run uses the workflow file as the pull
 # request would leave it, so a change to this file changes the check that judges it. The pair is what
@@ -81,8 +113,16 @@ jobs:
           set -euo pipefail
 
           protected_prefixes=('.github/' '.agents/' '.claude/' '.config/')
-          protected_files=('CHANGELOG.md')
-          protected_paths="${protected_prefixes[*]} ${protected_files[*]}"
+          protected_names=('.editorconfig' '.gitattributes' '.worktreeinclude')
+          protected_files=(
+            'CHANGELOG.md'
+            'Directory.Build.props'
+            'LICENSE'
+            'NOTICE'
+            'NuGet.config'
+            'global.json'
+          )
+          protected_paths="${protected_prefixes[*]} ${protected_names[*]} ${protected_files[*]}"
           reportable_file_limit=3000
 
           # The changed-files endpoint stops at 3000 entries, so a larger pull request cannot be shown
@@ -100,14 +140,22 @@ jobs:
               --paginate --jq '.[] | .filename, (.previous_filename // empty)'
           )"
 
-          # Prefix matching rather than a regular expression, so the leading dot of each directory is
-          # a dot and a sibling whose name merely ends that way is not protected by accident. A
-          # protected file is matched whole, so a differently placed file of the same name is not
-          # caught and a longer name beginning the same way is not either.
+          # Literal matching rather than a regular expression, so the leading dot of each entry is a
+          # dot and a sibling whose name merely ends that way is not protected by accident. A
+          # prefix covers a directory and everything beneath it. A protected name matches at the
+          # repository root or after a `/`, so `docs/.editorconfig` is caught and `docs/my.editorconfig`
+          # is not. A protected file is matched whole, so a differently placed file of the same name
+          # is not caught and a longer name beginning the same way is not either.
           protected_changes=()
           while IFS= read -r changed_path; do
             for protected_prefix in "${protected_prefixes[@]}"; do
               if [[ "$changed_path" == "${protected_prefix}"* ]]; then
+                protected_changes+=("$changed_path")
+                continue 2
+              fi
+            done
+            for protected_name in "${protected_names[@]}"; do
+              if [[ "$changed_path" == "$protected_name" || "$changed_path" == *"/${protected_name}" ]]; then
                 protected_changes+=("$changed_path")
                 continue 2
               fi
@@ -120,21 +168,42 @@ jobs:
             done
           done <<< "$changed_paths"
 
+          # A rename reports two paths, and a pull request that both edits and moves a file within a
+          # protected directory reports the same path twice, so the list is deduplicated before it is
+          # counted or printed.
+          if (( ${#protected_changes[@]} > 0 )); then
+            mapfile -t protected_changes < <(printf '%s\n' "${protected_changes[@]}" | sort --unique)
+          fi
+
           if (( ${#protected_changes[@]} == 0 )); then
             echo "This pull request changes nothing under ${protected_paths}."
             exit 0
           fi
 
+          # The list goes to the job summary as well as to the log, so the paths are readable from
+          # the pull request's checks tab without expanding a step.
+          {
+            echo "### Protected paths this pull request changes"
+            echo
+            printf -- '- `%s`\n' "${protected_changes[@]}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "This pull request changes ${#protected_changes[@]} protected path(s):"
+          printf '  %s\n' "${protected_changes[@]}"
+
           # GitHub logins are compared case-insensitively, because the same account is addressable
           # under either casing and the two spellings must not decide a gate differently.
           if [[ "${PULL_REQUEST_AUTHOR,,}" == "${REPOSITORY_OWNER,,}" ]]; then
-            echo "The repository owner authored this pull request, so its changes under ${protected_paths} are allowed."
+            echo "The repository owner authored this pull request, so those changes are allowed."
             exit 0
           fi
 
+          # A `file=` annotation attaches each path to its own entry in the pull request's Files
+          # changed view, so the refusal is readable where the change is read rather than only in the
+          # step log.
           for protected_change in "${protected_changes[@]}"; do
-            echo "::error file=${protected_change}::${protected_change} decides how other changes are judged, or what a release claims it shipped, and only ${REPOSITORY_OWNER} may change it in a pull request."
+            echo "::error file=${protected_change}::${protected_change} decides how other changes are judged, what the project is published under, or what a release claims it shipped, and only ${REPOSITORY_OWNER} may change it in a pull request."
           done
 
-          echo "::error::This pull request is authored by ${PULL_REQUEST_AUTHOR} and changes ${protected_paths}. Open that change separately, or ask ${REPOSITORY_OWNER} to make it."
+          echo "::error::This pull request is authored by ${PULL_REQUEST_AUTHOR} and changes ${#protected_changes[@]} protected path(s): ${protected_changes[*]}. Open that change separately, or ask ${REPOSITORY_OWNER} to make it."
           exit 1
