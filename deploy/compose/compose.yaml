@@ -118,10 +118,13 @@ services:
       # port to a network means exposing synchronized mail without transport protection; put a reverse proxy in front
       # of it and change MAILFATHOM_HTTP_BIND only once that proxy is what listens publicly.
       - "${MAILFATHOM_HTTP_BIND:-127.0.0.1}:${MAILFATHOM_HTTP_PORT:-8080}:8080"
+      # The probes, on a listener of their own. They answer without a credential, so what controls who can ask them is
+      # which network the port is published to — here loopback, and never the same port the MCP endpoint is served on.
+      # A probe path asked on 8080 is answered with 404, and so is `/mcp` asked on this one.
+      - "${MAILFATHOM_HEALTH_BIND:-127.0.0.1}:${MAILFATHOM_HEALTH_PORT:-8081}:8081"
     # No health check. The image declares none — a chiseled image has no shell or HTTP client to run one in — and one
-    # written here would need the same thing: a client inside the container. `/health` and `/alive` are served on the
-    # published port and can be asked from outside; #179 is what makes the probe surface something a deployment
-    # configures rather than something each shape improvises.
+    # written here would need the same thing: a client inside the container. The probes are asked from outside instead,
+    # on the port published above; docs/operations/health-endpoints.md states what each one answers.
     read_only: true
     tmpfs:
       # The one path the runtime needs to write. Everything else, /app included, is owned by root and mounted

@@ -41,6 +41,40 @@ public sealed class SecretConfigurationStartupValidatorTests
     }
 
     [Fact]
+    public async Task StartingAsync_EveryReferenceResolvable_ReportsTheSecretGateToTheStartupProbe()
+    {
+        // Arrange
+        var harness = CreateHarness(
+            ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")),
+            new PersistenceOptions());
+
+        // Act
+        await harness.Validator.StartingAsync(CancellationToken.None);
+
+        // Assert
+        Assert.True(harness.StartupGates.Completed);
+    }
+
+    /// <summary>
+    /// A host whose secrets are unusable never comes up, so the gate stays outstanding rather than reporting a step
+    /// that raised.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_UnresolvableReference_LeavesTheSecretGateOutstanding()
+    {
+        // Arrange
+        var harness = CreateHarness(
+            ConfiguredAccounts.WithPasswordReferences(("primary", "file:/run/secrets/absent")),
+            new PersistenceOptions());
+
+        // Act
+        await Assert.ThrowsAsync<OptionsValidationException>(() => harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        Assert.False(harness.StartupGates.Completed);
+    }
+
+    [Fact]
     public async Task StartingAsync_NoSecretConfigured_CompletesBecauseNothingWasDiscovered()
     {
         // Arrange
@@ -609,6 +643,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         var connectionSettingsValidator = databaseConnectionSettings ?? new StubDatabaseConnectionSettingsValidator();
         var validationLogger = new RecordingLogger<SecretConfigurationValidator>();
         var startupLogger = new RecordingLogger<SecretConfigurationStartupValidator>();
+        var startupGates = new HostStartupGates(HostStartupGate.SecretConfiguration);
 
         var validator = new SecretConfigurationStartupValidator(
             new StubSettingsSnapshot<MailSynchronizationOptions>(synchronizationOptions),
@@ -624,13 +659,15 @@ public sealed class SecretConfigurationStartupValidatorTests
                 new FakeTimeProvider(ValidatedAt),
                 validationLogger),
             new SecretResolutionOptions(interpretation),
+            startupGates,
             startupLogger);
 
-        return new ValidatorHarness(validator, startupLogger, validationLogger);
+        return new ValidatorHarness(validator, startupGates, startupLogger, validationLogger);
     }
 
     private sealed record ValidatorHarness(
         SecretConfigurationStartupValidator Validator,
+        HostStartupGates StartupGates,
         RecordingLogger<SecretConfigurationStartupValidator> StartupLogger,
         RecordingLogger<SecretConfigurationValidator> ValidationLogger)
     {

@@ -113,7 +113,10 @@ ENV ASPNETCORE_HTTP_PORTS=8080 \
     # for one session, when a dump is genuinely needed.
     DOTNET_EnableDiagnostics=0
 
-EXPOSE 8080
+# Two ports, because the image serves two listeners: 8080 for `/` and `/mcp`, and 8081 for the probes, which
+# HealthEndpoints:Port moves. Declaring only the first would leave `docker image inspect`, `docker run -P`, and a
+# registry's port list describing an image that answers on one socket more than it admits to.
+EXPOSE 8080 8081
 
 # Owned by root and copied with the default mode, so the unprivileged account below can read and execute the
 # application and write none of it. An explicit `--chmod` is deliberately not used: it applies one mode to directories
@@ -127,9 +130,9 @@ COPY --from=build --chown=root:root /app .
 # path of its own; mount a tmpfs at /tmp, which is where the runtime expects to be able to write.
 USER $APP_UID
 
-# No HEALTHCHECK, deliberately. The host serves `/health` and `/alive`, and Kubernetes probes them over HTTP without
-# needing anything from the image — but Docker and Podman run a health check as a command *inside* the container, and a
-# chiseled image has no shell and no HTTP client for one to be written in. Asking the endpoint would therefore mean
-# adding a probe mode to the application itself, which is #179's: it decides the listener, the transport, and whether
-# the probes are served at all. A check written here would be replaced by that change rather than extended by it.
+# No HEALTHCHECK, deliberately. The host serves `/started`, `/health`, and `/alive` on a listener of their own — port
+# 8081 unless a deployment configures another — and Kubernetes probes them over HTTP without needing anything from the
+# image. Docker and Podman run a health check as a command *inside* the container instead, and a chiseled image has no
+# shell and no HTTP client for one to be written in; adding either to reach an endpoint that is already reachable from
+# outside would grow the image's attack surface for nothing. Compose publishes the probe port and asks from there.
 ENTRYPOINT ["dotnet", "/app/MailFathom.Host.dll"]
