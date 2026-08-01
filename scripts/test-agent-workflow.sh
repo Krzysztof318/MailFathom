@@ -547,7 +547,7 @@ run_protected_paths_step() {
   (
     export PATH="$protected_paths_bin_directory:$PATH"
     export GH_TOKEN='fake-token'
-    export REPOSITORY='Krzysztof318/MailMcp'
+    export REPOSITORY='Krzysztof318/MailFathom'
     export REPOSITORY_OWNER='Krzysztof318'
     export PULL_REQUEST_NUMBER='1'
     export PULL_REQUEST_AUTHOR="$pull_request_author"

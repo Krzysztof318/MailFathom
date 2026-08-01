@@ -14,9 +14,9 @@ body:
 
 
         **Do not report a security vulnerability here.**
-        [SECURITY.md](https://github.com/Krzysztof318/MailMcp/blob/main/SECURITY.md) has the private
-        channel. Anything touching credentials, tokens, certificates, or unauthorized access to mail
-        goes there instead.
+        [SECURITY.md](https://github.com/Krzysztof318/MailFathom/blob/main/SECURITY.md) has the
+        private channel. Anything touching credentials, tokens, certificates, or unauthorized
+        access to mail goes there instead.
 
 
         **Send no real mail data.** Redact addresses, subjects, and message content in every log,
