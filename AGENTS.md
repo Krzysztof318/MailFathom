@@ -6,7 +6,7 @@ The product and solution name is `MailFathom`. The solution file is `MailFathom.
 
 ## Project status
 
-MailFathom is under continuous development and has not had a first release. Nothing is published, no deployment runs it, and no consumer outside this repository depends on any of its contracts. Builds are stamped with the version `Directory.Build.props` declares, but no tag has ever been pushed, so every build is a preview of a release that has not happened. The first release is milestone `0.1.0 — first public release`, tracked by the checklist in #112.
+MailFathom is under continuous development and has not had a first release. Nothing is published, no deployment runs it, and no consumer outside this repository depends on any of its contracts. Builds are stamped with the version `Directory.Build.props` declares, but no tag has ever been pushed, so every build is a preview of a release that has not happened. The first release is milestone `0.1.0 — first public release`.
 
 This is a working constraint, not a disclaimer. A breaking change to a configuration key, a database schema, an MCP tool contract, or a public API is taken now, in full, while it costs one edit and nothing has to be migrated — deferring it behind a compatibility shim trades a free change today for a permanent one later. It cuts the other way too: do not write versioning machinery, migration paths, deprecation shims, or fallbacks for a released version that does not exist. Say plainly in the change that a contract moved, and correct every caller in the same change set.
 
@@ -229,7 +229,7 @@ Each question has exactly one owner, and no mechanism answers a question another
 - Do not copy specification text into an issue. The specification is the contract, and a duplicated copy goes stale silently.
 - Express dependencies as issue references so the board shows them as links. Specification dependencies always point backwards to lower-numbered specifications.
 - Nothing on the board schedules work. The owner works alone at irregular times, so order is recorded and timing is not. The board carries a one-week `Week` field, kept deliberately informational: no rule reads it, no view filters on it, and an issue is complete without it. Never make it load-bearing, never add a deadline, day estimate, sprint, or capacity field beside it, and do not read `Size` as one — it estimates a diff, not a duration.
-- Use sub-issues only when the parent is itself a delivery gate that several issues have to clear, such as the first release checklist. Thematic grouping belongs to the `Track` field, so a parent issue opened only to group work creates a second hierarchy next to the roadmap.
+- Do not use sub-issues. A parent standing over the issues a release needs answers the question the milestone already answers, and thematic grouping belongs to the `Track` field, so both shapes create a second hierarchy next to the roadmap. An issue that needs several others finished first says so through the dependency references its body already carries.
 
 ### Labels
 
@@ -255,7 +255,7 @@ The remaining labels are flags, applied only when they are true: `blocked` when 
 
 A milestone answers which release an issue ships in, and nothing else. An issue with no milestone is deliberately outside the current release rather than merely unsorted, which is what makes the absence of one meaningful.
 
-`0.1.0 — first public release` is the release checklist under #112 and the read side that makes the product usable: mailbox query read models, the email content read model, lexical search, the three MCP tools, and one baseline migration on a settled schema. Assign it to a new issue when the release as described cannot ship without that issue, and leave it empty otherwise; both are decisions the rule already makes, so neither needs asking. Widening what `0.1.0` means is the owner's call, so raise it rather than assigning a milestone that stretches the definition. Do not open a further milestone in advance; the next one is created when the current release closes.
+`0.1.0 — first public release` is the work of reaching a first release and the read side that makes the product usable: mailbox query read models, the email content read model, lexical search, the three MCP tools, and one baseline migration on a settled schema. Assign it to a new issue when the release as described cannot ship without that issue, and leave it empty otherwise; both are decisions the rule already makes, so neither needs asking. Widening what `0.1.0` means is the owner's call, so raise it rather than assigning a milestone that stretches the definition. Do not open a further milestone in advance; the next one is created when the current release closes.
 
 ### Board fields
 
@@ -317,7 +317,7 @@ A pull request the project did not open is read in a fixed order, so a change is
 ### Status transitions
 
 - The board's `Status` field has `Todo`, `In Progress`, and `Done`.
-- The board's built-in workflows own every transition: `Auto-add to project` and `Auto-add sub-issues to project` place a newly opened issue on the board, `Item added to project` puts it in `Todo`, `Pull request linked to issue` moves it to `In Progress`, and `Pull request merged`, `Auto-close issue`, and `Item closed` carry it to `Done`. Do not set those statuses by hand; a manual status that contradicts the automation hides the real state.
+- The board's built-in workflows own every transition: `Auto-add to project` places a newly opened issue on the board, `Item added to project` puts it in `Todo`, `Pull request linked to issue` moves it to `In Progress`, and `Pull request merged`, `Auto-close issue`, and `Item closed` carry it to `Done`. Do not set those statuses by hand; a manual status that contradicts the automation hides the real state.
 - `Status` records what has happened and `Queue` records what is intended, which is why neither substitutes for the other. Work that stalls keeps whatever `Status` the automation gave it and moves to `Later` or `Parked` in `Queue`.
 - Automation does not add an issue that is already closed when it is created. Add a retrospective `shipped` issue to the board explicitly and set it to `Done`.
 - When work stops without merging, say so on the issue and leave the status to the automation rather than moving the card.
