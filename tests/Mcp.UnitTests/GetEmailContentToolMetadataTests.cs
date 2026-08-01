@@ -1,6 +1,7 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+using System.Text.Json;
 using MailFathom.Mcp.Tools;
 using ModelContextProtocol.Protocol;
 using Xunit;
@@ -55,11 +56,24 @@ public sealed class GetEmailContentToolMetadataTests
         Assert.Contains("attachment content is never returned", description, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>A model reads the count bound and the attachment default here, so both are part of what is advertised.</summary>
     [Fact]
-    public void AddMailFathomServer_AdvertisesTheEmailIdentifierAndTheHtmlFlagAsInputSchemaProperties()
+    public void AddMailFathomServer_AdvertisesADescriptionStatingTheCountBoundAndTheAttachmentDefault()
+    {
+        // Arrange, Act
+        var description = AdvertisedGetEmailContentTool().Description;
+
+        // Assert
+        Assert.NotNull(description);
+        Assert.Contains("up to 10 emails", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("includeAttachmentDetails", description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AddMailFathomServer_AdvertisesTheEmailIdentifiersAndTheTwoFlagsAsInputSchemaProperties()
     {
         // Arrange
-        string[] expectedProperties = ["storedEmailId", "includeSanitizedHtml"];
+        string[] expectedProperties = ["storedEmailIds", "includeSanitizedHtml", "includeAttachmentDetails"];
 
         // Act
         var advertisedProperties = AdvertisedGetEmailContentTool()
@@ -89,16 +103,31 @@ public sealed class GetEmailContentToolMetadataTests
         Assert.All(describedProperties, property => Assert.True(property.HasDescription, $"'{property.Name}' carries no usable description."));
     }
 
-    /// <summary>The email is named rather than defaulted, so a call that names none is refused by the schema instead of answering about some email.</summary>
+    /// <summary>The emails are named rather than defaulted, so a call that names none is refused instead of answering about some email.</summary>
     [Fact]
-    public void AddMailFathomServer_AdvertisesTheEmailIdentifierAsRequiredAndTheHtmlFlagAsOptional()
+    public void AddMailFathomServer_AdvertisesTheEmailIdentifiersAsRequiredAndBothFlagsAsOptional()
     {
         // Arrange, Act
         var inputSchema = AdvertisedGetEmailContentTool().InputSchema;
 
         // Assert
         var requiredProperties = inputSchema.GetProperty("required").EnumerateArray().Select(value => value.ToString()).ToArray();
-        Assert.Equal(["storedEmailId"], requiredProperties);
+        Assert.Equal(["storedEmailIds"], requiredProperties);
+    }
+
+    /// <summary>Several emails per call is the whole point of the contract, so the argument is advertised as a list.</summary>
+    [Fact]
+    public void AddMailFathomServer_AdvertisesTheEmailIdentifiersAsAListOfStrings()
+    {
+        // Arrange, Act
+        var storedEmailIds = AdvertisedGetEmailContentTool()
+            .InputSchema
+            .GetProperty("properties")
+            .GetProperty("storedEmailIds");
+
+        // Assert
+        Assert.Equal("array", storedEmailIds.GetProperty("type").GetString());
+        Assert.Equal("string", storedEmailIds.GetProperty("items").GetProperty("type").GetString());
     }
 
     /// <summary>The cancellation token the tool takes is the host's concern and must never become a protocol argument.</summary>
@@ -120,13 +149,43 @@ public sealed class GetEmailContentToolMetadataTests
 
         // Assert
         Assert.NotNull(outputSchema);
-        var properties = outputSchema.Value.GetProperty("properties");
-        Assert.True(properties.TryGetProperty("headers", out _));
-        Assert.True(properties.TryGetProperty("body", out _));
-        Assert.True(properties.TryGetProperty("attachments", out _));
-        Assert.True(properties.TryGetProperty("attachmentCounts", out _));
-        Assert.True(properties.TryGetProperty("remoteFlags", out _));
+        var emails = outputSchema.Value.GetProperty("properties").GetProperty("emails");
+        Assert.Equal("array", emails.GetProperty("type").GetString());
     }
+
+    /// <summary>The per-email entry is what a client writes against, so its two mutually exclusive halves are advertised.</summary>
+    [Fact]
+    public void AddMailFathomServer_AdvertisesEachEmailEntryAsEitherContentOrAFailure()
+    {
+        // Arrange, Act
+        var outputSchema = AdvertisedGetEmailContentTool().OutputSchema;
+
+        // Assert
+        Assert.NotNull(outputSchema);
+        var advertisedProperties = SchemaText(outputSchema.Value);
+        Assert.Contains("storedEmailId", advertisedProperties, StringComparison.Ordinal);
+        Assert.Contains("content", advertisedProperties, StringComparison.Ordinal);
+        Assert.Contains("failure", advertisedProperties, StringComparison.Ordinal);
+        Assert.Contains("attachmentCounts", advertisedProperties, StringComparison.Ordinal);
+        Assert.Contains("truncatedBy", advertisedProperties, StringComparison.Ordinal);
+    }
+
+    /// <summary>The member names are the wire values, so a rename inside the boundary must fail the build rather than the client.</summary>
+    [Fact]
+    public void AddMailFathomServer_AdvertisesTheTruncationCausesUnderTheirPublishedSpellings()
+    {
+        // Arrange, Act
+        var outputSchema = AdvertisedGetEmailContentTool().OutputSchema;
+
+        // Assert
+        Assert.NotNull(outputSchema);
+        var advertisedSchema = SchemaText(outputSchema.Value);
+        Assert.Contains("\"none\"", advertisedSchema, StringComparison.Ordinal);
+        Assert.Contains("\"bodyCharacterLimit\"", advertisedSchema, StringComparison.Ordinal);
+        Assert.Contains("\"readCharacterBudget\"", advertisedSchema, StringComparison.Ordinal);
+    }
+
+    private static string SchemaText(JsonElement schema) => schema.GetRawText();
 
     private static Tool AdvertisedGetEmailContentTool() =>
         RegisteredMcpToolSurface.AdvertisedTool(GetEmailContentTool.ToolName);

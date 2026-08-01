@@ -116,7 +116,61 @@ public sealed class MimeKitEmailContentRendererTests
         // Assert
         Assert.Equal(100, rendering.PlainTextBody.Text.Length);
         Assert.Equal(500, rendering.PlainTextBody.OriginalCharacterCount);
-        Assert.True(rendering.PlainTextBody.WasTruncated);
+        Assert.Equal(EmailBodyTruncation.BodyCharacterLimit, rendering.PlainTextBody.Truncation);
+    }
+
+    /// <summary>
+    /// The narrower of the two bounds is what applies, and which one it was is the caller's next decision: a body cut by
+    /// the read's budget is one that would return more in a call naming fewer emails.
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_ReadBudgetNarrowerThanTheBodyBound_CutsToTheBudgetAndNamesIt()
+    {
+        // Arrange
+        var content = PlainTextMessage(new string('a', 500));
+
+        // Act
+        var rendering = await RenderAsync(content, maxBodyCharacters: 100, remainingCharactersForRead: 40);
+
+        // Assert
+        Assert.Equal(40, rendering.PlainTextBody.Text.Length);
+        Assert.Equal(EmailBodyTruncation.ReadCharacterBudget, rendering.PlainTextBody.Truncation);
+    }
+
+    /// <summary>
+    /// The plain text is bounded first and the markup gets what is left, so the representation every caller receives is
+    /// never starved by the one it opted into.
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_ReadBudgetCoveringOnlyThePlainText_SpendsItThereAndLeavesTheMarkupEmpty()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/alternative; boundary=\"alt\"",
+            string.Empty,
+            "--alt",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            new string('a', 500),
+            "--alt",
+            "Content-Type: text/html; charset=utf-8",
+            string.Empty,
+            "<p>" + new string('b', 500) + "</p>",
+            "--alt--");
+
+        // Act
+        var rendering = await RenderAsync(
+            content,
+            includeSanitizedHtml: true,
+            maxBodyCharacters: 100,
+            remainingCharactersForRead: 100);
+
+        // Assert
+        Assert.Equal(100, rendering.PlainTextBody.Text.Length);
+        Assert.NotNull(rendering.SanitizedHtmlBody);
+        Assert.Empty(rendering.SanitizedHtmlBody.Text);
+        Assert.Equal(EmailBodyTruncation.ReadCharacterBudget, rendering.SanitizedHtmlBody.Truncation);
     }
 
     /// <summary>Markup is cut before it is parsed, and the parse then closes what the cut left open.</summary>
@@ -221,6 +275,76 @@ public sealed class MimeKitEmailContentRendererTests
 
         // The summary still records that the message carries encrypted content, which is a different question.
         Assert.True(rendering.Attachments.IsEncrypted);
+    }
+
+    /// <summary>
+    /// A budget the earlier emails of the same call already spent empties this representation for a reason that belongs
+    /// to the call rather than to the message. Reading that as the encrypted-unreadable state would tell a caller the
+    /// message can never be read locally, when naming it alone returns the readable alternative in full.
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_ReadableAlternativeBesideAnEncryptedMemberStarvedByTheBudget_StaysReadableAndSaysTheBudgetCutIt()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/alternative; boundary=\"alt\"",
+            string.Empty,
+            "--alt",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            "The readable alternative.",
+            "--alt",
+            "Content-Type: multipart/encrypted; protocol=\"application/pgp-encrypted\"; boundary=\"enc\"",
+            string.Empty,
+            "--enc",
+            "Content-Type: application/pgp-encrypted",
+            string.Empty,
+            "Version: 1",
+            "--enc",
+            "Content-Type: application/octet-stream",
+            string.Empty,
+            "-----BEGIN PGP MESSAGE-----",
+            "-----END PGP MESSAGE-----",
+            "--enc--",
+            "--alt--");
+
+        // Act
+        var rendering = await RenderAsync(content, remainingCharactersForRead: 0);
+
+        // Assert
+        Assert.False(rendering.BodyIsEncrypted);
+        Assert.Empty(rendering.PlainTextBody.Text);
+        Assert.Equal(EmailBodyTruncation.ReadCharacterBudget, rendering.PlainTextBody.Truncation);
+        Assert.Equal("The readable alternative.".Length, rendering.PlainTextBody.OriginalCharacterCount);
+    }
+
+    /// <summary>The exhausted budget must not turn a genuinely encrypted body into a readable one either.</summary>
+    [Fact]
+    public async Task RenderAsync_EncryptedBodyStarvedByTheBudget_StillReportsItAsEncrypted()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/encrypted; protocol=\"application/pgp-encrypted\"; boundary=\"enc\"",
+            string.Empty,
+            "--enc",
+            "Content-Type: application/pgp-encrypted",
+            string.Empty,
+            "Version: 1",
+            "--enc",
+            "Content-Type: application/octet-stream",
+            string.Empty,
+            "-----BEGIN PGP MESSAGE-----",
+            "-----END PGP MESSAGE-----",
+            "--enc--");
+
+        // Act
+        var rendering = await RenderAsync(content, remainingCharactersForRead: 0);
+
+        // Assert
+        Assert.True(rendering.BodyIsEncrypted);
+        Assert.Empty(rendering.PlainTextBody.Text);
     }
 
     /// <summary>One header cannot decide how large a result is by carrying an unbounded number of addresses.</summary>
@@ -376,7 +500,7 @@ public sealed class MimeKitEmailContentRendererTests
         // Act
         var result = await CreateRenderer().RenderAsync(
             content,
-            includeSanitizedHtml: false,
+            BoundsOf(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -407,7 +531,7 @@ public sealed class MimeKitEmailContentRendererTests
         // Act
         var result = await renderer.RenderAsync(
             content,
-            includeSanitizedHtml: false,
+            BoundsOf(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -441,11 +565,12 @@ public sealed class MimeKitEmailContentRendererTests
     private static async Task<EmailContentRendering> RenderAsync(
         StoredEmailContent content,
         bool includeSanitizedHtml = false,
-        int maxBodyCharacters = 100_000)
+        int maxBodyCharacters = 100_000,
+        int remainingCharactersForRead = int.MaxValue)
     {
-        var result = await CreateRenderer(maxBodyCharacters: maxBodyCharacters).RenderAsync(
+        var result = await CreateRenderer().RenderAsync(
             content,
-            includeSanitizedHtml,
+            new EmailContentRenderingBounds(includeSanitizedHtml, maxBodyCharacters, remainingCharactersForRead),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(EmailContentRenderingOutcome.Rendered, result.Outcome);
@@ -453,11 +578,14 @@ public sealed class MimeKitEmailContentRendererTests
         return result.Rendering!;
     }
 
-    private static MimeKitEmailContentRenderer CreateRenderer(
+    private static EmailContentRenderingBounds BoundsOf(
+        bool includeSanitizedHtml = false,
         int maxBodyCharacters = 100_000,
-        int maxPartCount = 1000) => new(
-        new EmailMimeExtractionOptions { MaxPartCount = maxPartCount },
-        new EmailContentReadOptions { MaxBodyCharacters = maxBodyCharacters });
+        int remainingCharactersForRead = int.MaxValue) =>
+        new(includeSanitizedHtml, maxBodyCharacters, remainingCharactersForRead);
+
+    private static MimeKitEmailContentRenderer CreateRenderer(int maxPartCount = 1000) =>
+        new(new EmailMimeExtractionOptions { MaxPartCount = maxPartCount });
 
     private static StoredEmailContent PlainTextMessage(string body) => MimeFixtures.StoredMessage(
         "From: sender@example.test",

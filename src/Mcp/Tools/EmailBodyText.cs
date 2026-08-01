@@ -20,12 +20,12 @@ internal sealed record EmailBodyText
     public required string Text { get; init; }
 
     /// <summary>Gets how many characters the source held before the bound was applied.</summary>
-    [Description("How many characters this representation's source held before the bound was applied. Compare it with wasTruncated rather than with the length of text, which a re-serialized representation can change on its own.")]
+    [Description("How many characters this representation's source held before the bound was applied. Read truncatedBy rather than comparing this with the length of text, which a re-serialized representation can change on its own.")]
     public required int OriginalCharacterCount { get; init; }
 
-    /// <summary>Gets whether the bound removed anything.</summary>
-    [Description("Whether the bound removed anything. When true the text ends mid-message, so state that the message continues rather than presenting it as complete.")]
-    public required bool WasTruncated { get; init; }
+    /// <summary>Gets which bound removed something, or that none did.</summary>
+    [Description("Which bound cut the text: 'none' when it is the whole representation, 'bodyCharacterLimit' when this email alone is longer than one call returns, or 'readCharacterBudget' when the emails named before it had already spent the call's total budget. Anything other than 'none' means the text ends mid-message, so state that the message continues rather than presenting it as complete; 'readCharacterBudget' additionally means that naming fewer emails in one call returns more of this one.")]
+    public required EmailBodyTruncationCause TruncatedBy { get; init; }
 
     /// <summary>Publishes one bounded representation.</summary>
     /// <param name="representation">The representation the use case produced.</param>
@@ -39,7 +39,24 @@ internal sealed record EmailBodyText
         {
             Text = representation.Text,
             OriginalCharacterCount = representation.OriginalCharacterCount,
-            WasTruncated = representation.WasTruncated,
+            TruncatedBy = PublishedCause(representation.Truncation),
         };
     }
+
+    /// <summary>Reads the published value the application state names.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when an application state has no published value, which means one was added without deciding what a
+    /// client should be told about it.
+    /// </exception>
+    private static EmailBodyTruncationCause PublishedCause(EmailBodyTruncation truncation) =>
+        truncation switch
+        {
+            EmailBodyTruncation.None => EmailBodyTruncationCause.None,
+            EmailBodyTruncation.BodyCharacterLimit => EmailBodyTruncationCause.BodyCharacterLimit,
+            EmailBodyTruncation.ReadCharacterBudget => EmailBodyTruncationCause.ReadCharacterBudget,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(truncation),
+                truncation,
+                "The body truncation has no published protocol value."),
+        };
 }

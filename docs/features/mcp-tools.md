@@ -34,8 +34,11 @@ Three properties hold for every tool and are proven by test rather than asserted
   a stack trace, or an internal identifier. What a boundary withholds is not lost: the detail is logged on the server,
   correlated by the trace the request already carries.
 - No result carries raw MIME or attachment bytes. Message content itself is a result only where the tool exists to
-  return it: `get_email_content` returns a bounded body, `search_emails` returns bounded extracts of one, and
+  return it: `get_email_content` returns bounded bodies, `search_emails` returns bounded extracts of one, and
   `list_emails` returns summaries and no body text at all.
+- Every tool bounds how much mail one call can draw out of a mailbox, in the count of items and in their volume alike:
+  `list_emails` pages at 100 summaries, `search_emails` windows at 50 ranked matches, and `get_email_content` reads at
+  most 10 emails under a shared character budget. A caller can never raise any of them.
 
 ## Descriptor conventions
 
@@ -97,7 +100,9 @@ configured name for an account and carries nothing the caller did not already wr
 | `51001` | A page size outside the range the query serves | A page size of 0 or above 100, refused rather than clamped |
 | `51002` | A filter carries a value, a count, or a length the query does not accept | An unusable address, a subject fragment over 256 characters or carrying a control character, a received range that ends before it starts, more than 64 accounts or folder aliases, an account identifier or folder alias that is blank, over 256 characters, or carrying a control character, a search query that is blank, over 512 characters, or carrying a control character |
 | `51003` | A search asked for more ranked results than a search serves | A `resultLimit` of 0 or above 50, refused rather than clamped |
-| `51004` | The call named an email with text that is no identifier this system issues | A `storedEmailId` that is blank, not a UUID, or the all-zero UUID, refused before anything is looked up |
+| `51004` | The call named an email with text that is no identifier this system issues | A `storedEmailIds` element that is blank, not a UUID, or the all-zero UUID, refused before anything is looked up |
+| `51005` | A content read named no emails, or more than one call serves | A `storedEmailIds` list that is empty or holds more than 10 entries, refused rather than truncated |
+| `51006` | A content read named the same email more than once | A `storedEmailIds` list carrying one identifier twice, in any spelling, refused rather than served twice or collapsed |
 | `52001` | A continuation cursor is not one this system issued | A truncated, hand-written, or foreign cursor |
 | `52002` | A continuation cursor was issued for different filters | A cursor reused after a filter or the reading direction changed |
 | `53001` | The call named a mail account this deployment does not serve | An account identifier nobody configured, or one belonging to someone else — the two are deliberately one answer |
@@ -111,6 +116,12 @@ failure whose code belongs to that category is published as it stands, and a fai
 mismatch, an IMAP authentication refusal, a concurrency conflict — describes MailFathom's internals to whoever asked and
 collapses into `54001`. Stating the rule as a category rather than as a list of exception types is what stops a failure
 added later from reaching a client because nobody remembered to add it to a list.
+
+Two of those codes also appear inside a *successful* result. `get_email_content` answers per email, so `53002` and
+`55001` reach a caller as a `failure` on the entry they belong to rather than as a failed call — one email this
+deployment cannot serve must not discard the content of the nine beside it. The code and the message are the same ones a
+failed call would have carried, so a client matches on one set of numbers either way, and `isError` continues to mean
+that the *request* was refused.
 
 `54001` is therefore the only answer an unexpected failure ever produces, and a failure the MCP SDK itself raises —
 while binding an argument to the advertised schema, for instance — collapses into it too. Those messages are the SDK's,
@@ -221,24 +232,36 @@ configuration leaves its stored rows in place.
 
 ## `get_email_content`
 
-Returns one email from the local mailbox copy: its normalized headers, the plain-text body, optionally a sanitized HTML
-body, and one entry per attachment. [Email content](email-content.md) documents the use case behind it — the
-representations, the sanitization policy, the truncation rule, and the consistency behavior — where they are enforced.
-This section describes the surface.
+Returns up to ten emails from the local mailbox copy in one call: for each one its normalized headers, the plain-text
+body, optionally a sanitized HTML body, how many attachments it carries, and optionally one entry per attachment.
+[Email content](email-content.md) documents the use case behind it — the representations, the sanitization policy, the
+two bounds, the attachment default, and the consistency behavior — where they are enforced. This section describes the
+surface.
 
 ### Arguments
 
 | Argument | Type | Meaning |
 |---|---|---|
-| `storedEmailId` | `string` | **Required.** The `storedEmailId` a listing or a search returned. A UUID; anything else is refused with `51004` |
-| `includeSanitizedHtml` | `boolean` | Whether to also return the sanitized HTML body. Omitted returns plain text alone |
+| `storedEmailIds` | `string[]` | **Required.** The `storedEmailId` values a listing or a search returned, 1 to 10 of them, each named at most once. Each is a UUID; anything else is refused with `51004` |
+| `includeSanitizedHtml` | `boolean` | Whether to also return the sanitized HTML body of each email. Omitted returns plain text alone |
+| `includeAttachmentDetails` | `boolean` | Whether to describe each attachment rather than only count them. Omitted returns the counts alone |
 
-The identifier is the one argument this boundary converts, and it converts it before anything is looked up. Text that is
-blank, longer than any UUID form, is not a UUID, or is the all-zero UUID names no email this system could have issued,
+Naming several emails is what the tool exists for: a call that has just listed or searched routinely wants the top few
+results, and one round trip per email spends the protocol overhead, the rate-limit budget, and a turn of the model's own
+attention on a read that touches nothing outside the local copy.
+
+The identifiers are the one argument this boundary converts, and it converts them before anything is looked up. Text that
+is blank, longer than any UUID form, is not a UUID, or is the all-zero UUID names no email this system could have issued,
 so it is refused with `51004` rather than looked up and reported as absent — a typo and a deleted message are different
-findings. The length is checked before the parse rather than after it, because a parse scans whatever it is handed and
-a caller nobody vouches for decides how much that is. The refusal never repeats the text, because it is caller input on
-its way into a client-readable result and the log line beside it.
+findings. The count is checked before the first parse and each identifier's length before that identifier's parse,
+because a parse scans whatever it is handed and a caller nobody vouches for decides both how long each one is and how
+many there are. No refusal repeats the text or says which position carried it, because that is caller input on its way
+into a client-readable result and the log line beside it — and the caller holds the list it sent.
+
+Three refusals end the call rather than one entry, because none of them leaves an email to report an outcome against: a
+list of more than ten or of none at all is `51005`, a repeated identifier is `51006`, and text that names no email is
+`51004`. A list is refused rather than truncated or de-duplicated, so a caller never has to compare what came back
+against what it asked for to find out what it did not receive.
 
 `51004` and `53002` are therefore deliberately distinct, as are `53002` and `55001`: the first pair separates "you named
 no email" from "that email is not here", and the second separates "not here" from "here and currently unservable". Only
@@ -246,30 +269,54 @@ the last is worth repeating.
 
 ### Result
 
+The result is one `emails` entry per named email, in the order the call named them. Each entry names the email and
+carries exactly one of two things.
+
 | Field | Meaning |
 |---|---|
-| `storedEmailId`, `accountId`, `folderAlias` | Where the email is, in MailFathom's own names |
+| `storedEmailId` | The email this entry answers for, present whether or not there was content |
+| `content` | The email as it was read, or `null` when it could not be served |
+| `failure` | The stable `code` and `message` saying why there is no content, or `null` when there is |
+
+One email this deployment cannot serve therefore costs the caller that email rather than the whole call — which is the
+reason the tool answers per email at all. The codes on `failure` are the same ones a failed call reports, `53002` and
+`55001`, so a client matches on one set of numbers whether the finding was about the request or about one of the emails
+in it.
+
+`content` carries what a read produced.
+
+| Field | Meaning |
+|---|---|
+| `accountId`, `folderAlias` | Where the email is, in MailFathom's own names |
 | `sizeBytes` | The size of the whole email as the mail server reported it |
 | `headers` | Subject, sent and received timestamps, every participant with its header role, and the three threading identifiers |
 | `body` | The representations, or the reason there are none |
-| `attachments` | One entry per attachment: normalized file name, media type, decoded size — never bytes |
-| `attachmentCounts` | What the email carries besides its body, or `null` when nothing has ever read its parts |
+| `attachments` | One entry per attachment when the call asked for them: normalized file name, media type, decoded size — never bytes |
+| `attachmentCounts` | What the email carries besides its body, returned either way, or `null` when nothing has ever read its parts |
 | `remoteFlags` | The flags a server last showed, and when they were read |
 
-Four parts of it are worth reading before a caller writes against them:
+Five parts of it are worth reading before a caller writes against them:
 
-- **Truncation travels inside each representation.** `plainText` and `sanitizedHtml` each carry `text`,
-  `originalCharacterCount`, and `wasTruncated`, because a body and the fact that it is incomplete are never useful apart:
-  a model handed only the text would summarize a cut message as a whole one. A message can exceed the bound in one
-  representation and not in the other, which is why the metadata is not shared between them.
+- **Truncation travels inside each representation, and names the bound.** `plainText` and `sanitizedHtml` each carry
+  `text`, `originalCharacterCount`, and `truncatedBy`, because a body and the fact that it is incomplete are never useful
+  apart: a model handed only the text would summarize a cut message as a whole one. `truncatedBy` is `none`,
+  `bodyCharacterLimit` when this email alone is longer than one call returns, or `readCharacterBudget` when the emails
+  named before it had already spent the call's total budget — the one case where naming fewer emails at once returns
+  more. A message can exceed a bound in one representation and not in the other, which is why the metadata is not shared
+  between them.
 - **`availability` rather than an empty body.** `readable` means the text is the message, and an empty body under it
   means the message displayed nothing. `encryptedNotReadableLocally` is mail this deployment cannot decrypt, and
   `notStoredExceededSizeLimit` is mail whose bytes the configured limit deliberately kept out of storage. The last two
   return an empty text because nothing could be read, and a caller that ignored the distinction would report an empty
   message.
+- **`attachments` is `null` unless it was asked for, which is not an empty list.** A file name is text the sender chose
+  and is often the most identifying string an email carries, so an ordinary read of a body publishes none. `null` means
+  the call did not ask; `[]` means the email carries none. `attachmentCounts` answers how many either way, so a caller
+  can tell that asking again would describe something.
 - **`attachments` carries no content, in any shape.** Nothing reachable from the published result can hold bytes, which
   `Mcp.UnitTests` asserts structurally over the whole contract rather than response by response. Attachment download and
-  message export are out of scope for the first release.
+  message export are out of scope for the first release, and withholding file names by default narrows what is described
+  rather than beginning to publish what is not.
 - **File names are normalized and may say so.** A file name is attacker-controlled text that reaches a model directly, so
   what is published is the domain's normalized form: a bare name, never a path or a traversal segment, never a control
   character or a bidirectional override, at most 200 characters. `wasFileNameNormalized` states whether MailFathom had to
@@ -290,8 +337,9 @@ The `remoteFlags` a result carries are an observation from the last synchronizat
 whether any run has looked.
 
 Authorization is the use case's, as it is for `list_emails`: an email of an account this deployment does not serve is
-refused with `53002`, the same answer an email that was never stored gets, so a read cannot be used to discover which
-identifiers exist.
+reported as `53002`, the same answer an email that was never stored gets, so a read cannot be used to discover which
+identifiers exist. In a call naming several emails that answer is one entry's, and the emails the deployment does serve
+come back beside it.
 
 ## `search_emails`
 

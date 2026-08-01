@@ -152,6 +152,7 @@ search](../features/lexical-email-search.md) records how snippets are cut.
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `EmailContent:MaxBodyCharacters` | int | `100000` | 1000 – 1000000; each body representation is truncated to it, explicitly | restart |
+| `EmailContent:MaxCharactersPerRead` | int | `200000` | 2000 – 2000000, and at least twice `MaxBodyCharacters`; the body characters one call returns across every email it names | restart |
 
 ## `MailExtractionBackfill`
 

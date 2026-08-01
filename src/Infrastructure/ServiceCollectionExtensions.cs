@@ -156,8 +156,7 @@ public static class ServiceCollectionExtensions
         // The HTML sanitizer the renderer owns is built per instance rather than shared, so no configuration of it can
         // be changed by one request and observed by another.
         services.AddScoped<IEmailContentRenderer>(provider => new MimeKitEmailContentRenderer(
-            provider.GetRequiredService<EmailMimeExtractionOptions>(),
-            provider.GetRequiredService<EmailContentReadOptions>()));
+            provider.GetRequiredService<EmailMimeExtractionOptions>()));
         services.AddScoped<IMailFolderResolutionStore, MailFolderResolutionStore>();
         services.AddScoped<IMailFolderMappingChangeAuditor, LoggedMailFolderMappingChangeAuditor>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();

@@ -5,25 +5,30 @@ using MailFathom.Application.EmailContent;
 
 namespace MailFathom.Mcp.UnitTests;
 
-/// <summary>Answers a render with one fixed outcome and records whether HTML was asked for.</summary>
+/// <summary>Answers a render with one fixed outcome and records the bounds it was given.</summary>
 /// <remarks>
-/// The requested representation is what a test asserts against: the tool owns the flag a caller sets, and the value the
-/// renderer received is the observable result of passing it through the use case.
+/// The bounds are what a test asserts against: the tool owns the flags a caller sets, and the values the renderer
+/// received are the observable result of passing them through the use case.
 /// </remarks>
 internal sealed class StubEmailContentRenderer(EmailContentRenderingResult result) : IEmailContentRenderer
 {
     /// <summary>Gets whether the last render was asked for the sanitized HTML representation.</summary>
     public bool? LastIncludeSanitizedHtml { get; private set; }
 
+    /// <summary>Gets how many renders were asked for.</summary>
+    public int RenderCount { get; private set; }
+
     /// <inheritdoc />
     public Task<EmailContentRenderingResult> RenderAsync(
         StoredEmailContent content,
-        bool includeSanitizedHtml,
+        EmailContentRenderingBounds bounds,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(bounds);
         cancellationToken.ThrowIfCancellationRequested();
 
-        this.LastIncludeSanitizedHtml = includeSanitizedHtml;
+        this.LastIncludeSanitizedHtml = bounds.IncludeSanitizedHtml;
+        this.RenderCount++;
 
         return Task.FromResult(result);
     }

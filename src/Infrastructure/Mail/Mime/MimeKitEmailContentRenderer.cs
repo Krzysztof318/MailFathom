@@ -29,35 +29,34 @@ namespace MailFathom.Infrastructure.Mail.Mime;
 /// stopped early; markup is the exception and is cut before it is parsed, since sanitizing is the expensive step and
 /// there is nothing to learn from parsing what will not be returned.
 /// </para>
+/// <para>
+/// How much may be returned is the caller's to state rather than this adapter's to hold, because one of the two bounds
+/// is spent across the emails of a single read. The adapter applies whichever is smaller and reports which one it was.
+/// </para>
 /// </remarks>
 internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
 {
     private readonly EmailMimeExtractionOptions structuralLimits;
-    private readonly EmailContentReadOptions readOptions;
     private readonly EmailHtmlSanitizer sanitizer = new();
 
     /// <summary>Initializes a renderer.</summary>
     /// <param name="structuralLimits">The limits a stored message's structure must stay within to be parsed at all.</param>
-    /// <param name="readOptions">What one read may return.</param>
-    /// <exception cref="ArgumentNullException">Thrown when either argument is <see langword="null" />.</exception>
-    public MimeKitEmailContentRenderer(
-        EmailMimeExtractionOptions structuralLimits,
-        EmailContentReadOptions readOptions)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="structuralLimits" /> is <see langword="null" />.</exception>
+    public MimeKitEmailContentRenderer(EmailMimeExtractionOptions structuralLimits)
     {
         ArgumentNullException.ThrowIfNull(structuralLimits);
-        ArgumentNullException.ThrowIfNull(readOptions);
 
         this.structuralLimits = structuralLimits;
-        this.readOptions = readOptions;
     }
 
     /// <inheritdoc />
     public async Task<EmailContentRenderingResult> RenderAsync(
         StoredEmailContent content,
-        bool includeSanitizedHtml,
+        EmailContentRenderingBounds bounds,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(bounds);
 
         await using var structuralPass = RawMimeStream.Open(content.RawMime);
 
@@ -82,7 +81,7 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
                 cancellationToken);
 
             return EmailContentRenderingResult.Rendered(
-                await this.RenderAsync(message, includeSanitizedHtml, cancellationToken));
+                await this.RenderAsync(message, bounds, cancellationToken));
         }
         catch (FormatException)
         {
@@ -98,25 +97,47 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
         }
     }
 
+    /// <summary>Renders the parsed message within the bounds the read allows it.</summary>
+    /// <remarks>
+    /// The plain text is bounded first and what it returned is taken off the read's remaining budget before the markup
+    /// is bounded, because the plain text is the representation every caller receives and the markup the one it opted
+    /// into. A shared budget spent the other way round would starve the default representation for the sake of the
+    /// extra one.
+    /// </remarks>
     private async Task<EmailContentRendering> RenderAsync(
         MimeMessage message,
-        bool includeSanitizedHtml,
+        EmailContentRenderingBounds bounds,
         CancellationToken cancellationToken)
     {
         var classification = await MimeAttachmentClassifier.ClassifyAsync(message, cancellationToken);
-        var plainTextBody = this.ReadPlainTextBody(classification);
+        var plainTextBody = ReadPlainTextBody(
+            classification,
+            EmailBodyCharacterAllowance.Of(
+                bounds.MaxCharactersPerRepresentation,
+                bounds.RemainingCharactersForRead));
 
         // Encrypted content and an unreadable body are not the same claim. A multipart/alternative can offer a
         // readable member beside an encrypted one, and the classifier marks the branch encrypted because it holds
         // encrypted content somewhere; reporting that as "nothing can read this body" would discard text the message
         // itself provided for exactly this purpose. The state is therefore reserved for a body that is both encrypted
         // and left nothing readable behind.
-        var bodyIsUnreadable = classification.BodyIsEncrypted && plainTextBody.Text.Length == 0;
+        //
+        // What the message left behind is the source length, not the returned one. A read's character budget can empty
+        // this representation for a reason that belongs to the call rather than to the message — the emails named
+        // before it spent the budget — and judging emptiness after the bound would answer "this message can never be
+        // read locally" to a message that reads fine when named on its own.
+        var bodyIsUnreadable = classification.BodyIsEncrypted && plainTextBody.OriginalCharacterCount == 0;
 
         return new EmailContentRendering(
             MimeMessageHeaderReader.Read(message),
             bodyIsUnreadable ? EmailBodyRepresentation.Empty : plainTextBody,
-            includeSanitizedHtml && !bodyIsUnreadable ? this.ReadSanitizedHtmlBody(classification) : null,
+            bounds.IncludeSanitizedHtml && !bodyIsUnreadable
+                ? this.ReadSanitizedHtmlBody(
+                    classification,
+                    EmailBodyCharacterAllowance.Of(
+                        bounds.MaxCharactersPerRepresentation,
+                        bounds.RemainingCharactersForRead - plainTextBody.Text.Length))
+                : null,
             bodyIsUnreadable,
             classification.Attachments);
     }
@@ -128,13 +149,15 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
     /// signature block are part of the message a person asked to read, and removing them by heuristic would hand back
     /// a message nobody sent.
     /// </remarks>
-    private EmailBodyRepresentation ReadPlainTextBody(MimeContentClassification classification)
+    private static EmailBodyRepresentation ReadPlainTextBody(
+        MimeContentClassification classification,
+        EmailBodyCharacterAllowance allowance)
     {
         var body = ReadPlainTextParts(classification.BodyTextParts)
             ?? DeriveTextFromHtmlParts(classification.BodyTextParts)
             ?? string.Empty;
 
-        return EmailBodyRepresentation.Bounded(body, this.readOptions.MaxBodyCharacters);
+        return EmailBodyRepresentation.Bounded(body, allowance);
     }
 
     /// <summary>Sanitizes the HTML the message displays, or reports that it displays none.</summary>
@@ -155,7 +178,9 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
     /// reaches a second pass.
     /// </para>
     /// </remarks>
-    private EmailBodyRepresentation? ReadSanitizedHtmlBody(MimeContentClassification classification)
+    private EmailBodyRepresentation? ReadSanitizedHtmlBody(
+        MimeContentClassification classification,
+        EmailBodyCharacterAllowance allowance)
     {
         var htmlParts = classification.BodyTextParts.Where(part => part.IsHtml).ToArray();
         if (htmlParts.Length == 0)
@@ -163,7 +188,7 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
             return null;
         }
 
-        var maxCharacters = this.readOptions.MaxBodyCharacters;
+        var maxCharacters = allowance.MaxCharacters;
         var source = string.Join('\n', htmlParts.Select(part => part.Text));
         var sourceBudget = maxCharacters;
         string boundedSource;
@@ -191,7 +216,7 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
                 ? MailTextBounds.TruncateAtTextElementBoundary(sanitized, maxCharacters)
                 : sanitized,
             source.Length,
-            boundedSource.Length < source.Length);
+            boundedSource.Length < source.Length ? allowance.TruncationWhenCut : EmailBodyTruncation.None);
     }
 
     /// <summary>Reads the plain-text body, joining the parts when a message resolved several as its body.</summary>
