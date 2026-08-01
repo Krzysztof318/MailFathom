@@ -9,6 +9,32 @@ Almost every mail server meets that. A few, still in service, do not: one offeri
 1024-bit group as its only cipher suite, with no ECDHE suite and no TLS 1.3, is refused by a stock Ubuntu machine
 however MailFathom is configured. This page is what to do about that, and what it costs.
 
+## Everything here is opt-in
+
+**Nothing on this page is on by default, and no default in this repository moves because it exists.** A MailFathom
+that names no OpenSSL configuration file negotiates the strongest protocol and cipher suite the two ends agree on —
+TLS 1.3 wherever the server supports it — under the platform's own full-strength policy, and refuses anything that
+policy considers weak. That is what a checkout, a container, and a published artifact all do out of the box.
+
+The mechanism below changes that for one process, only when an operator deliberately sets one environment variable,
+and it stays visible while it is set: the host says so at startup, every time it starts. A deployment that never meets
+a legacy mail server never touches any of it, and reading this page is not a step in an ordinary installation.
+
+## Which OpenSSL
+
+**MailFathom supports OpenSSL 3.0 and later**, which is what every current distribution ships and what everything
+below is measured against.
+
+**1.1.1 is a hard floor set by .NET rather than by this project.** .NET 10 requires OpenSSL 1.1.1 or later on Unix and
+[fails to start](https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/10.0/openssl-version-requirement)
+without it, so a machine below that never reaches a handshake to fail.
+
+**Between the two, MailFathom may work and may not, and that is not a promise this project can make.** The mechanism
+this page uses is old enough — security levels and the `@SECLEVEL` cipher-string keyword arrived in
+[OpenSSL 1.1.0](https://docs.openssl.org/1.1.1/man3/SSL_CTX_set_security_level/) — but 1.1.1 left upstream support in
+September 2023, nothing here is verified against it, and its own defaults differ from 3.x's. Treat a failure that
+reproduces only on such a machine as an environment to upgrade rather than as a defect to report.
+
 ## What the failure looks like
 
 Synchronization reports an authentication failure:
@@ -38,7 +64,14 @@ what refused it.
 
 ## The one supported relaxation
 
-Write a configuration file that lowers the security level to 1, and point OpenSSL at it with `OPENSSL_CONF`:
+Copy the sample this repository ships and point `OPENSSL_CONF` at the copy:
+
+```bash
+cp deploy/openssl/legacy-mail-server.cnf.example /etc/mailfathom/openssl-legacy.cnf
+```
+
+[`deploy/openssl/legacy-mail-server.cnf.example`](../../deploy/openssl/legacy-mail-server.cnf.example) is that file
+with its reasoning in comments. Stripped to what it configures, it is:
 
 ```ini
 # /etc/mailfathom/openssl-legacy.cnf
@@ -72,30 +105,65 @@ without saying so, the process starts, and the handshake fails exactly as it did
 platform, against the same server. The startup warning below reports that the variable is set, which is all it can
 know; it is not evidence that the file was read.
 
-### Pointing a deployment at it
+### Pointing the host at it
 
-The variable has to be in the environment of the MailFathom process before it starts.
+**The variable has to be in the environment of the MailFathom host process itself.** That process is what opens the
+IMAP connection, so nothing else needs it and nothing else can supply it after the fact: an orchestrator, a unit file,
+or a container runtime matters here only as the thing that hands the host its environment. Every shape below is
+therefore the same act written for a different launcher, and each is equally supported.
 
-- **Locally, through Aspire.** Export it in the shell you start the orchestration from, and the app model passes it
-  through to the `mailfathom-host` resource. It passes the value through rather than setting one, so a checkout that
-  exports nothing runs under the platform default; the integration-test topology never receives it at all.
+- **The host, run directly.** The process inherits the environment it was started in, so exporting the variable — or
+  prefixing the command with it — is the whole mechanism, whether the host is run from the repository or from a publish
+  output.
 
   ```bash
-  export OPENSSL_CONF=/etc/mailfathom/openssl-legacy.cnf
-  dotnet run --project src/AppHost/AppHost.csproj
+  OPENSSL_CONF=/etc/mailfathom/openssl-legacy.cnf dotnet run --project src/Host/Host.csproj
+  OPENSSL_CONF=/etc/mailfathom/openssl-legacy.cnf dotnet /opt/mailfathom/MailFathom.Host.dll
   ```
 
-- **As a native process.** Set it in the unit's own environment — `Environment=OPENSSL_CONF=/etc/mailfathom/openssl-legacy.cnf`
-  in a systemd unit — rather than in a login profile, so it reaches the service and nothing else on the machine.
+  The startup warning below is how to confirm the host actually received it.
 
-- **With Docker Compose.** Add the file to the service as a read-only bind mount and name it in the `environment:`
-  block of the `mailfathom` service in [`deploy/compose/compose.yaml`](../../deploy/compose/compose.yaml). The
-  container's own OpenSSL enforces the same policy the host's does, so the file has to be inside the container.
+- **As a systemd service.** Put it in the unit rather than in a login profile, so it reaches the service and nothing
+  else on the machine. The service account has to be able to read the file, which is worth checking against whatever
+  sandboxing directives the unit carries.
+
+  ```ini
+  [Service]
+  Environment=OPENSSL_CONF=/etc/mailfathom/openssl-legacy.cnf
+  ```
+
+- **In the container.** The container's own OpenSSL enforces the same policy the machine's does, so the file has to be
+  inside the container: mount it read-only and name it in the environment. For the Compose deployment that is one
+  entry added to each of the two blocks the `mailfathom` service in
+  [`deploy/compose/compose.yaml`](../../deploy/compose/compose.yaml) already has:
+
+  ```yaml
+      environment:
+        OPENSSL_CONF: /etc/mailfathom/openssl-legacy.cnf
+      volumes:
+        - type: bind
+          source: ./openssl-legacy.cnf
+          target: /etc/mailfathom/openssl-legacy.cnf
+          read_only: true
+  ```
+
+  The repository's `.gitignore` does not cover that source path, so a Compose deployment run out of a clone shows the
+  copied file as untracked.
 
 - **On Kubernetes.** `config.extraEnvironment` sets the variable, but the chart mounts only the JSON configuration
   directory and the secret directory, and the configuration ConfigMap rejects a file name that does not end in `.json`.
   There is currently no chart hook for an arbitrary file, so the file has to reach the container another way — an image
   built on top of the published one is the straightforward path.
+
+- **Through Aspire, locally.** The AppHost starts the host as a child resource, which inherits nothing of the kind on
+  its own, so it passes the variable through from the shell the orchestration was started in. It passes a value through
+  rather than setting one, so a checkout that exports nothing runs under the platform default; the integration-test
+  topology never receives it at all.
+
+  ```bash
+  export OPENSSL_CONF=/etc/mailfathom/openssl-legacy.cnf
+  dotnet run --project src/AppHost/AppHost.csproj
+  ```
 
 ## It cannot be an `appsettings.json` setting
 
