@@ -290,9 +290,13 @@ status check and gates nothing must not be able to block a merge either.
 ### Who publishes it
 
 Not `github-actions`. The submission step authenticates as the owner's
-`Fathom reviewer` GitHub App, whose installation token it mints from an app id and
-a private key held as the `REVIEWER_APP_ID` and `REVIEWER_APP_PRIVATE_KEY`
-secrets.
+`Fathom reviewer` GitHub App, whose installation token it mints from the
+`REVIEWER_APP_ID` repository *variable* and the `REVIEWER_APP_PRIVATE_KEY`
+repository *secret*. The split is deliberate: an App id is visible on the App's
+own page and in every installation, so it is not a credential, and keeping it out
+of the secret store is what lets a failed run name the App it tried to
+authenticate as rather than printing `***`. The private key is the credential,
+and it is the only one.
 
 Two things follow, and the second is the reason for the first. The review carries
 an identity that names what produced it instead of the identity every other
@@ -331,11 +335,17 @@ and both are required before a review can be posted.
 4. Under **Install App**, install it on this repository. An App that is created
    but never installed mints no token, and the workflow fails at its first step
    with an authentication error rather than a missing-secret one.
-5. In the repository's **Settings → Secrets and variables → Actions**, add
-   `REVIEWER_APP_ID` with the numeric App ID, and `REVIEWER_APP_PRIVATE_KEY`
-   with the entire contents of the `.pem` file, including the
-   `-----BEGIN…-----` and `-----END…-----` lines and the trailing newline. A key
-   pasted without its header lines fails to parse.
+5. In the repository's **Settings → Secrets and variables → Actions**, add both,
+   on their own tabs:
+   - the **Variables** tab: `REVIEWER_APP_ID`, the numeric App ID;
+   - the **Secrets** tab: `REVIEWER_APP_PRIVATE_KEY`, the entire contents of the
+     `.pem` file including the `-----BEGIN…-----` and `-----END…-----` lines and
+     the trailing newline. A key pasted without its header lines fails to parse.
+
+   The tabs are not interchangeable. The workflow reads the id through `vars` and
+   the key through `secrets`, so an id added as a secret resolves to an empty
+   string and the token step fails with an authentication error that names
+   nothing.
 6. Delete the downloaded `.pem` from the machine that generated it. It exists in
    the secret store now, and a second copy on disk is a second thing to protect.
 

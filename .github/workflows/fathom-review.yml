@@ -195,7 +195,11 @@ jobs:
         id: reviewer
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.REVIEWER_APP_ID }}
+          # A variable rather than a secret, because an App id is not one: it is visible on the
+          # App's own page and in every installation. Only the private key is a credential, and
+          # keeping the id out of the secret store is what makes a failed run say which App it
+          # tried to authenticate as instead of printing `***`.
+          app-id: ${{ vars.REVIEWER_APP_ID }}
           private-key: ${{ secrets.REVIEWER_APP_PRIVATE_KEY }}
 
       # The base commit, which is code that already merged, and never the branch under review. It
