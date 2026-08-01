@@ -39,6 +39,11 @@ public sealed class OrchestrationContractTests
     }
 
     /// <summary>Two runs that state nothing collide over nothing, which is the whole point of generating an identifier.</summary>
+    /// <remarks>
+    /// The one assertion here that reads a random value rather than its shape. Four bytes make a repeat a
+    /// one-in-four-billion event, so this is not the nondeterminism the unit-test policy excludes; uniqueness is the
+    /// property the identifier exists for, and a test that never observed two values could not state it.
+    /// </remarks>
     [Fact]
     public void ResolveEphemeralResourceNamePrefix_CalledTwiceWithNoIdentifier_ProducesDifferentPrefixes()
     {
