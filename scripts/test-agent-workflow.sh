@@ -803,7 +803,12 @@ run_fathom_review_settle() {
     export REPOSITORY='Krzysztof318/MailFathom'
     export PULL_REQUEST_NUMBER='1'
     export SETTLE_MINIMUM_SECONDS='2'
-    export SETTLE_QUIET_SECONDS='1'
+    # Three rather than one, because the fake `gh` reports whole seconds. A conversation it answers
+    # as `now` is already up to a second old by the time the loop reads its own clock, so a quiet
+    # window of one second is decided by which side of a second boundary the two `date` calls fall
+    # on, and the tests that require the ceiling would settle instead. Truncation can cost only one
+    # second, so any window above it leaves the decision to the loop.
+    export SETTLE_QUIET_SECONDS='3'
     export SETTLE_LIMIT_SECONDS='4'
     export SETTLE_POLL_SECONDS='1'
     bash "$step_script"
