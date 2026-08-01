@@ -22,6 +22,10 @@ a legacy mail server never touches any of it, and reading this page is not a ste
 
 ## Which OpenSSL
 
+The whole page assumes Linux, because [that is the only platform this project officially supports](../users/installation.md#what-every-shape-needs)
+and it is where .NET hands the handshake to OpenSSL at all. Running on Windows may work and is not verified here;
+`OPENSSL_CONF` means nothing there, and so does everything below it.
+
 **MailFathom supports OpenSSL 3.0 and later**, which is what every current distribution ships and what everything
 below is measured against.
 

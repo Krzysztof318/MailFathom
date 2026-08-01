@@ -8,11 +8,19 @@ namespace MailFathom.Host.Hosting;
 /// <summary>States at startup that this process reads its TLS parameters from a configured OpenSSL file rather than from the platform default.</summary>
 /// <remarks>
 /// <para>
-/// On Linux every TLS connection this process makes or terminates is handshaked by the system OpenSSL, and
+/// Every TLS connection this process makes or terminates is handshaked by the system OpenSSL, and
 /// <c>OPENSSL_CONF</c> replaces the configuration that library initializes from. A deployment sets it for one reason:
 /// a mail server whose cipher suite, key size, or protocol version the platform's own policy refuses, which is a
 /// legitimate posture where the alternative is not synchronizing that mailbox at all. It is therefore reported rather
 /// than refused, the same way <see cref="McpTransportEncryptionWarning" /> reports a clear-text endpoint.
+/// </para>
+/// <para>
+/// That statement is unconditional because every environment MailFathom targets is one where it holds: the deployment
+/// shapes are a container, Kubernetes, and a systemd service, and the image is built for <c>linux/amd64</c> and
+/// <c>linux/arm64</c> alone. Nothing here therefore asks which operating system it is running on. A platform where
+/// .NET hands the handshake to something other than OpenSSL is a platform where much else in this repository — the
+/// systemd credential provisioning above all — does not apply either, so a guard here would answer that question in
+/// one place and leave it unasked everywhere it matters equally.
 /// </para>
 /// <para>
 /// What it refuses to let happen is that the relaxation outlives the server that needed it. The variable is read while

@@ -32,6 +32,12 @@ lists all three before the install command.
 
 ## What every shape needs
 
+- **Linux.** It is the only platform this project officially supports, and everything below assumes it: the image is
+  built for `linux/amd64` and `linux/arm64`, the native shape is a systemd service with systemd credentials, and TLS
+  goes through the system OpenSSL. **MailFathom may well run on Windows — it is ordinary .NET — but expect problems
+  and a setup of your own**: credential provisioning, TLS parameters, and file-permission expectations all differ
+  there, nothing in this repository is verified against it, and a defect that reproduces only on Windows is not one
+  this project can act on today.
 - **PostgreSQL with the `vector` extension.** The synchronized mail, its indexes, and the raw message content all live
   there. The Compose deployment brings its own (`pgvector/pgvector`, PostgreSQL 17); the other shapes expect yours.
 - **An IMAP account to synchronize** and its password or app password, provisioned as a
