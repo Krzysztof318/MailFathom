@@ -277,6 +277,17 @@ than once for the job, because `runner` is not among the contexts a job-level
 `env` block may read and naming it there fails the whole file's validation before
 any job exists.
 
+The reviewer's instructions are a file of their own,
+`.github/fathom-review/reviewer-prompt.md`, and a step substitutes the run's
+values into its `{{PLACEHOLDER}}` markers before the action is reached. GitHub
+compiles every string holding a `${{ }}` expression into one `format(...)`
+expression and refuses a workflow whose expression passes 21000 characters, so
+instructions written inline eventually invalidate the file that carries them —
+every trigger included, which stops the pipeline rather than degrading it. The
+expressions stay here, where they are six short lines; the prose sits where no
+length limit reaches it. The template is read from the workspace, which holds the
+base commit, so a pull request cannot supply the prompt that reviews it.
+
 ### Waiting for the conversation before collecting it
 
 A step before the collection waits for the pull request's conversation to stop
