@@ -131,5 +131,3 @@ Contributions to this repository are offered under Apache-2.0, by section 5 of t
 Third-party components that MailFathom consumes are reviewed separately in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). That register records what MailFathom depends on and under which terms; it grants nothing in MailFathom itself, which `LICENSE` alone does.
 
 The application icon in [`assets/`](assets) is MailFathom's own asset rather than a third-party component, and the same grant covers it. The register records how it was produced and why no one else holds rights in it.
-</content>
-</invoke>
