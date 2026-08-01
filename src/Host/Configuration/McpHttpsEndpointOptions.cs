@@ -3,7 +3,6 @@
 
 using System.Net;
 using MailFathom.Infrastructure.Certificates;
-using MailFathom.Infrastructure.Secrets;
 
 namespace MailFathom.Host.Configuration;
 
@@ -107,7 +106,9 @@ internal sealed class McpHttpsEndpointOptions
             yield return error;
         }
 
-        foreach (var error in this.FindServerCertificateErrors(configurationPath))
+        // The shape of the material block is the same question for every listener that terminates TLS, so it is asked
+        // by the type that carries it rather than restated per section.
+        foreach (var error in this.ServerCertificate.FindConfigurationErrors($"{configurationPath}:{nameof(this.ServerCertificate)}"))
         {
             yield return error;
         }
@@ -115,35 +116,18 @@ internal sealed class McpHttpsEndpointOptions
 
     private IEnumerable<string> FindDomainErrors(string configurationPath)
     {
-        var domain = this.Domain?.Trim() ?? string.Empty;
         var settingPath = $"{configurationPath}:{nameof(this.Domain)}";
 
-        if (string.IsNullOrEmpty(domain))
+        if (string.IsNullOrWhiteSpace(this.Domain))
         {
             yield return $"{settingPath} — an HTTPS profile must state the DNS domain it publishes, which is the name clients connect to and the name its certificate has to cover.";
 
             yield break;
         }
 
-        if (!domain.All(char.IsAscii))
+        foreach (var error in ConfiguredDnsName.FindErrors(this.Domain, settingPath))
         {
-            yield return $"{settingPath} — state an internationalized domain in its punycode A-label form, because that is what a client sends and what a certificate's subject alternative names carry.";
-
-            yield break;
-        }
-
-        var hostNameKind = Uri.CheckHostName(domain);
-
-        if (hostNameKind is UriHostNameType.IPv4 or UriHostNameType.IPv6)
-        {
-            yield return $"{settingPath} — an IP address cannot be the published identity: a client sends no server name for one, so no profile could be selected. State the DNS domain and bind the address through '{nameof(this.BindAddress)}'.";
-
-            yield break;
-        }
-
-        if (hostNameKind != UriHostNameType.Dns)
-        {
-            yield return $"{settingPath} — '{domain}' is not a DNS domain. Wildcard and catch-all names are deliberately not accepted; state the exact name this profile serves.";
+            yield return error;
         }
     }
 
@@ -182,49 +166,4 @@ internal sealed class McpHttpsEndpointOptions
             yield return $"{settingPath} — '{nameof(McpHttpProtocol.Http3)}' is configured and this host cannot provide the QUIC transport it needs; install the platform's QUIC support or remove the version rather than have it quietly fall back.";
         }
     }
-
-    /// <summary>Refuses a certificate block that names neither material or both kinds of it.</summary>
-    /// <remarks>
-    /// Only the shape is decided here. Whether the referenced material resolves, parses, carries a matching private
-    /// key, and covers the domain is the loader's question, answered against real material before the endpoint serves.
-    /// </remarks>
-    private IEnumerable<string> FindServerCertificateErrors(string configurationPath)
-    {
-        var settingPath = $"{configurationPath}:{nameof(this.ServerCertificate)}";
-        var bundleConfigured = IsConfigured(this.ServerCertificate?.Bundle);
-        var chainConfigured = IsConfigured(this.ServerCertificate?.CertificateChain);
-        var privateKeyConfigured = IsConfigured(this.ServerCertificate?.PrivateKey);
-
-        if (bundleConfigured && (chainConfigured || privateKeyConfigured))
-        {
-            yield return $"{settingPath} — a PKCS#12 bundle and separate PEM material are both configured; state one or the other, because which of them supplies the identity would otherwise be decided by nothing an operator wrote.";
-
-            yield break;
-        }
-
-        if (bundleConfigured)
-        {
-            yield break;
-        }
-
-        if (!chainConfigured && !privateKeyConfigured)
-        {
-            yield return $"{settingPath} — an HTTPS profile must state where its certificate comes from: a '{nameof(TlsServerCertificateOptions.Bundle)}' holding a PKCS#12 bundle, or a '{nameof(TlsServerCertificateOptions.CertificateChain)}' beside its '{nameof(TlsServerCertificateOptions.PrivateKey)}'.";
-
-            yield break;
-        }
-
-        if (!chainConfigured)
-        {
-            yield return $"{settingPath}:{nameof(TlsServerCertificateOptions.CertificateChain)} — a private key is configured with no certificate to pair it with.";
-        }
-
-        if (!privateKeyConfigured)
-        {
-            yield return $"{settingPath}:{nameof(TlsServerCertificateOptions.PrivateKey)} — a certificate is configured with no private key, so the endpoint could name the domain but not prove it is the domain.";
-        }
-    }
-
-    private static bool IsConfigured(ConfiguredSecret? block) =>
-        block is not null && !string.IsNullOrWhiteSpace(block.SecretReference);
 }

@@ -273,6 +273,26 @@ public sealed class HealthEndpointOptionsTests
         Assert.Contains(errors, error => error.Contains("HealthEndpoints:Domain", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// An orchestrator dials this listener by address, so an IP address is the mistake an operator is most likely to
+    /// make here — and a certificate is matched against DNS subject alternative names, which never carry one.
+    /// </summary>
+    [Theory]
+    [InlineData("10.0.0.5")]
+    [InlineData("*.example.test")]
+    public void FindConfigurationErrors_ADomainThatIsNotADnsName_IsRefused(string domain)
+    {
+        // Arrange
+        var options = TlsOptions(HealthEndpointTransport.HttpsOnly);
+        options.Domain = domain;
+
+        // Act
+        var errors = options.FindConfigurationErrors(ApplicationPorts);
+
+        // Assert
+        Assert.Contains(errors, error => error.StartsWith("HealthEndpoints:Domain", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void FindConfigurationErrors_APrivateKeyWithNoCertificate_IsRefused()
     {

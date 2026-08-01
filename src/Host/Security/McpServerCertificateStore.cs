@@ -33,10 +33,6 @@ namespace MailFathom.Host.Security;
 /// </remarks>
 internal sealed partial class McpServerCertificateStore : IDisposable
 {
-    /// <summary>How close to expiry a certificate has to be before startup reports it as something to act on.</summary>
-    /// <remarks>Thirty days is the window in which a renewal is still routine rather than urgent, and it is long enough that an operator reading the log on a Monday has not already lost the weekend.</remarks>
-    private static readonly TimeSpan ExpiryNoticeWindow = TimeSpan.FromDays(30);
-
     private readonly McpHttpsOptions httpsSettings;
     private readonly TlsServerCertificateLoader certificateLoader;
     private readonly TimeProvider timeProvider;
@@ -178,9 +174,9 @@ internal sealed partial class McpServerCertificateStore : IDisposable
     /// </remarks>
     private void ReportLoaded(string profileName, X509Certificate2 leaf)
     {
-        var expiration = leaf.NotAfter.ToUniversalTime();
+        var expiration = ServerCertificateExpiry.ExpirationOf(leaf);
 
-        if (expiration - this.timeProvider.GetUtcNow() <= ExpiryNoticeWindow)
+        if (ServerCertificateExpiry.IsExpiringSoon(expiration, this.timeProvider.GetUtcNow()))
         {
             this.LogServerCertificateExpiringSoon(profileName, expiration);
 

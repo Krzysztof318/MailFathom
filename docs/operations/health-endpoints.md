@@ -185,6 +185,12 @@ operator wrote.
 kubelet's HTTPS probe skips certificate validation entirely — which does not make the claim optional: the operator
 still says which certificate this is, and a certificate provisioned for another name is a mistake worth failing on.
 
+It has to be a DNS name, and startup refuses anything else. **An IP address does not work here**, which is worth
+stating because the probe listener is the one thing an orchestrator dials by address: matching is against the
+certificate's DNS subject alternative names, and those never carry an address, so a certificate with an IP SAN would be
+refused too. Wildcards belong in the certificate rather than in this setting — a certificate whose SAN is
+`*.example.test` covers a `Domain` of `probe.example.test`, one label deep, exactly as a client would accept it.
+
 **A TLS transport never downgrades.** Material that is missing, unresolvable, expired, or unusable fails startup with
 nothing listening. There is no development-certificate fallback and no self-signed fallback, because a probe answering
 on a port an operator believed was TLS is worse than one that does not answer.

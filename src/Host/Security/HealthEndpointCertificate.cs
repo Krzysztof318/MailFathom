@@ -29,10 +29,6 @@ namespace MailFathom.Host.Security;
 /// </remarks>
 internal sealed partial class HealthEndpointCertificate : IDisposable
 {
-    /// <summary>How close to expiry the certificate has to be before startup reports it as something to act on.</summary>
-    /// <remarks>Thirty days is the window in which a renewal is still routine rather than urgent, and it is long enough that an operator reading the log on a Monday has not already lost the weekend.</remarks>
-    private static readonly TimeSpan ExpiryNoticeWindow = TimeSpan.FromDays(30);
-
     private readonly HealthEndpointOptions healthEndpointSettings;
     private readonly TlsServerCertificateLoader certificateLoader;
     private readonly TimeProvider timeProvider;
@@ -112,9 +108,9 @@ internal sealed partial class HealthEndpointCertificate : IDisposable
     /// <remarks>The expiry instant is the whole of it. The subject, the serial number, and the thumbprint identify the certificate wherever this log is read or shipped, and an operator renewing it needs to know by when rather than which certificate it was.</remarks>
     private void ReportLoaded(X509Certificate2 leaf)
     {
-        var expiration = leaf.NotAfter.ToUniversalTime();
+        var expiration = ServerCertificateExpiry.ExpirationOf(leaf);
 
-        if (expiration - this.timeProvider.GetUtcNow() <= ExpiryNoticeWindow)
+        if (ServerCertificateExpiry.IsExpiringSoon(expiration, this.timeProvider.GetUtcNow()))
         {
             this.LogServerCertificateExpiringSoon(expiration);
 

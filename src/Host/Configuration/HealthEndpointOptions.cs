@@ -4,7 +4,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using MailFathom.Infrastructure.Certificates;
-using MailFathom.Infrastructure.Secrets;
 
 namespace MailFathom.Host.Configuration;
 
@@ -216,9 +215,7 @@ internal sealed class HealthEndpointOptions
 
         if (!this.TerminatesTls)
         {
-            if (IsConfigured(this.ServerCertificate?.Bundle)
-                || IsConfigured(this.ServerCertificate?.CertificateChain)
-                || IsConfigured(this.ServerCertificate?.PrivateKey))
+            if (this.ServerCertificate.IsConfigured)
             {
                 yield return $"{SectionName}:{nameof(this.ServerCertificate)} — a server certificate is configured while '{nameof(this.Transport)}' opens no TLS listener, so nothing presents it; select '{nameof(HealthEndpointTransport.HttpAndHttps)}' or '{nameof(HealthEndpointTransport.HttpsOnly)}', or remove the material.";
             }
@@ -226,53 +223,39 @@ internal sealed class HealthEndpointOptions
             yield break;
         }
 
-        if (string.IsNullOrWhiteSpace(this.Domain))
+        foreach (var error in this.FindDomainErrors())
         {
-            yield return $"{SectionName}:{nameof(this.Domain)} — a TLS transport must state the DNS domain its certificate covers, which is what the configured material is proven against before the listener is opened.";
+            yield return error;
         }
 
-        foreach (var error in this.FindServerCertificateErrors())
+        // The shape of the material block is the same question for every listener that terminates TLS, so it is asked
+        // by the type that carries it rather than restated per section.
+        foreach (var error in this.ServerCertificate.FindConfigurationErrors($"{SectionName}:{nameof(this.ServerCertificate)}"))
         {
             yield return error;
         }
     }
 
-    /// <summary>Refuses a certificate block that names neither kind of material or both of them.</summary>
-    /// <remarks>Only the shape is decided here, on the same terms the MCP HTTPS profiles state it. Whether the referenced material resolves, parses, carries a matching private key, and covers the domain is the loader's question.</remarks>
-    private IEnumerable<string> FindServerCertificateErrors()
+    /// <summary>Refuses a name the configured certificate could not be proven against.</summary>
+    /// <remarks>
+    /// The shape rules are the ones every TLS listener's name is subject to, because the certificate is matched against
+    /// DNS subject alternative names either way. An IP address is worth stating separately here: an orchestrator dials
+    /// this listener by address, so it is the plausible mistake, and a certificate's DNS names never carry one.
+    /// </remarks>
+    private IEnumerable<string> FindDomainErrors()
     {
-        var settingPath = $"{SectionName}:{nameof(this.ServerCertificate)}";
-        var bundleConfigured = IsConfigured(this.ServerCertificate?.Bundle);
-        var chainConfigured = IsConfigured(this.ServerCertificate?.CertificateChain);
-        var privateKeyConfigured = IsConfigured(this.ServerCertificate?.PrivateKey);
+        var settingPath = $"{SectionName}:{nameof(this.Domain)}";
 
-        if (bundleConfigured && (chainConfigured || privateKeyConfigured))
+        if (string.IsNullOrWhiteSpace(this.Domain))
         {
-            yield return $"{settingPath} — a PKCS#12 bundle and separate PEM material are both configured; state one or the other, because which of them supplies the identity would otherwise be decided by nothing an operator wrote.";
+            yield return $"{settingPath} — a TLS transport must state the DNS name its certificate covers, which is what the configured material is proven against before the listener is opened.";
 
             yield break;
         }
 
-        if (bundleConfigured)
+        foreach (var error in ConfiguredDnsName.FindErrors(this.Domain, settingPath))
         {
-            yield break;
-        }
-
-        if (!chainConfigured && !privateKeyConfigured)
-        {
-            yield return $"{settingPath} — a TLS transport must state where its certificate comes from: a '{nameof(TlsServerCertificateOptions.Bundle)}' holding a PKCS#12 bundle, or a '{nameof(TlsServerCertificateOptions.CertificateChain)}' beside its '{nameof(TlsServerCertificateOptions.PrivateKey)}'. There is no development-certificate fallback and no self-signed one, because a probe answering on a port an operator believed was TLS is worse than one that does not answer.";
-
-            yield break;
-        }
-
-        if (!chainConfigured)
-        {
-            yield return $"{settingPath}:{nameof(TlsServerCertificateOptions.CertificateChain)} — a private key is configured with no certificate to pair it with.";
-        }
-
-        if (!privateKeyConfigured)
-        {
-            yield return $"{settingPath}:{nameof(TlsServerCertificateOptions.PrivateKey)} — a certificate is configured with no private key, so the listener could name the domain but not prove it is the domain.";
+            yield return error;
         }
     }
 
@@ -283,7 +266,4 @@ internal sealed class HealthEndpointOptions
             yield return $"{SectionName}:{settingName} — '{port}' is not a TCP port; state a value between 1 and 65535.";
         }
     }
-
-    private static bool IsConfigured(ConfiguredSecret? block) =>
-        block is not null && !string.IsNullOrWhiteSpace(block.SecretReference);
 }
