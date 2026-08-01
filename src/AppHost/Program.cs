@@ -3,6 +3,8 @@
 
 using System.Globalization;
 using MailFathom.AppHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -14,7 +16,24 @@ var builder = DistributedApplication.CreateBuilder(args);
 // ephemeral database and leave its volume under the prefix the test script deletes.
 var runsIntegrationTests = args.Contains(OrchestrationContract.IntegrationTestingArgument, StringComparer.Ordinal);
 
-var postgres = builder.AddPostgres(OrchestrationContract.PostgresResourceName)
+// One identifier per run, so two suites started on one machine name different containers and volumes instead of racing
+// for one name — and so the caller that started a run can remove exactly what it created. The ordinary topology names
+// nothing with it and leaves it empty.
+var ephemeralResourceNamePrefix = runsIntegrationTests
+    ? OrchestrationContract.ResolveEphemeralResourceNamePrefix(
+        builder.Configuration[OrchestrationContract.EphemeralRunIdentifierVariable])
+    : string.Empty;
+
+// Stated rather than generated, because this server exists to be developed and tested against. Aspire would otherwise
+// generate the password per run and keep it stable only by persisting it, which a data volume can outlive: PostgreSQL
+// applies a password when it initializes an empty data directory and never again, so the two diverge and the server
+// reports an authentication failure about a database nothing was wrong with. A fixed value cannot diverge from itself,
+// and it is what lets psql or a database tool connect with nothing but the host and the port.
+var postgresUserName = builder.AddParameter("postgres-username", OrchestrationContract.PostgresUserName);
+var postgresPassword = builder.AddParameter("postgres-password", OrchestrationContract.PostgresPassword, secret: true);
+
+var postgres = builder
+    .AddPostgres(OrchestrationContract.PostgresResourceName, postgresUserName, postgresPassword)
     .WithImage("pgvector/pgvector")
     .WithImageTag("0.8.2-pg17");
 
@@ -24,9 +43,13 @@ if (runsIntegrationTests)
     // killed run as something the prefix identifies. A container the test topology left behind would otherwise be
     // indistinguishable from the developer's own, and skipping the volume entirely would let the image's own VOLUME
     // declaration create an anonymous one that outlives the container under a name nobody can filter on.
+    //
+    // The run identifier inside that name is what keeps two suites on one machine apart. It also makes the volume new
+    // on every run, which is what the baseline migration has to apply to for a run to prove it applies cleanly at all;
+    // a volume reused across runs would quietly turn every later run into an upgrade of the first one's database.
     postgres
-        .WithContainerName($"{OrchestrationContract.EphemeralResourceNamePrefix}-postgres")
-        .WithDataVolume($"{OrchestrationContract.EphemeralResourceNamePrefix}-postgres-data");
+        .WithContainerName($"{ephemeralResourceNamePrefix}-postgres")
+        .WithDataVolume($"{ephemeralResourceNamePrefix}-postgres-data");
 }
 else
 {
@@ -34,7 +57,35 @@ else
     // an initial IMAP synchronization every time the orchestration is stopped. Recreating the schema is therefore a
     // deliberate step — the migration resource's Reset Database command — rather than a side effect of losing the
     // container.
-    postgres.WithDataVolume();
+    //
+    // The container itself outlives the run for the same reason the volume outlives the container. A session lifetime
+    // removes the server on every shutdown and builds it again on the next start, which costs an image check, an
+    // initialization pass, and a health wait several times a day against data that was never in question. A persistent
+    // one is reattached instead, so the server a developer stops is the server they get back — and stays reachable to
+    // psql or a database tool while the orchestration is not running.
+    //
+    // Stated through the lifetime enumeration rather than through the newer WithPersistentLifetime, which Aspire gates
+    // behind ASPIREPERSISTENCE001 as evaluation-only. Taking it would mean suppressing an experimental-API diagnostic
+    // to reach behavior the stable overload already expresses.
+    //
+    // Kept is not the same as left running, and the lifetime has no third value for that, so PersistentContainerStopper
+    // below stops it during shutdown. What outlives the orchestration is then the container and its data rather than a
+    // PostgreSQL process and the port it holds.
+    //
+    // The host port is fixed for the same reason the host's own ports are: a connection string typed into a database
+    // tool once should keep working. PostgreSQL's own port is the convenient one, and Aspire publishes it on the
+    // loopback address, so the server a developer reaches is not one anything else on their network can.
+    postgres
+        .WithDataVolume()
+        .WithLifetime(ContainerLifetime.Persistent)
+        .WithHostPort(5432);
+
+    // Registered last, which is what makes its shutdown run first: a hosted service stops in reverse registration
+    // order, and the orchestrator that carries out the stop is registered while the builder is created.
+    builder.Services.AddHostedService(provider => new PersistentContainerStopper(
+        provider.GetRequiredService<ResourceCommandService>(),
+        [postgres.Resource],
+        provider.GetRequiredService<ILogger<PersistentContainerStopper>>()));
 }
 
 if (runsIntegrationTests)
@@ -49,7 +100,7 @@ if (runsIntegrationTests)
     // Only the two protocols the suite speaks are started, plus the API server, whose readiness endpoint is what makes
     // this resource reach Healthy instead of merely Running. Without it a test would race the server's first listener.
     builder.AddContainer(OrchestrationContract.MailServerResourceName, "greenmail/standalone", "2.1.11")
-        .WithContainerName($"{OrchestrationContract.EphemeralResourceNamePrefix}-mailserver")
+        .WithContainerName($"{ephemeralResourceNamePrefix}-mailserver")
         .WithEnvironment(
             "GREENMAIL_OPTS",
             string.Join(
@@ -139,6 +190,50 @@ if (runsIntegrationTests)
         .WithEnvironment(
             "McpEndpoint__RateLimiting__MaxConcurrentRequests",
             OrchestrationContract.McpRateLimitMaxConcurrentRequests.ToString(CultureInfo.InvariantCulture));
+}
+else
+{
+    // Fixed rather than allocated, and bound by the host itself rather than by a proxy in front of it. An MCP client's
+    // configuration names an address once, so a port that moved with a launch profile or with the orchestrator's own
+    // allocation would make that address a per-run detail; unproxied also means the socket a client connects to is the
+    // socket Kestrel opened, which is what keeps a TLS handshake and a client certificate a conversation with the host.
+    //
+    // 8080 and 8081 are the numbers the container image already publishes, so a local run and a deployed one answer on
+    // the same ports. 8443 is this topology's own: the image serves no TLS listener, and 443 is privileged, which a
+    // developer's process cannot bind without a capability the repository has no business requiring.
+    //
+    // Only the ordinary topology pins them. The integration suite starts this same app model, and a fixed port there
+    // would let one run refuse to bind because another still holds it.
+    mailFathomHost
+        .WithHttpEndpoint(
+            name: OrchestrationContract.HostHttpEndpointName,
+            port: 8080,
+            targetPort: 8080,
+            isProxied: false)
+        // Served out of the ASP.NET Core development certificate, which is what Kestrel presents for an HTTPS address
+        // no endpoint configuration claims. The MCP endpoint's own HTTPS profiles are the deployed shape and stay
+        // unconfigured here, so a developer needs `dotnet dev-certs https --trust` once rather than certificate
+        // material per checkout.
+        .WithHttpsEndpoint(port: 8443, targetPort: 8443, isProxied: false)
+        // The probe listener, declared here so that all three ports are read in one place and the orchestrator shows
+        // the one a developer curls. The endpoint states the port to the app model and injects it into the host's own
+        // configuration key, so the number is written once rather than declared here and configured again beside it.
+        //
+        // Its scheme is tcp rather than http, and that is the whole reason this works. Aspire builds ASPNETCORE_URLS
+        // from the http and https endpoints, so an http one here would make 8081 an application listener — and the
+        // host refuses exactly that, because the probes answer without a credential and must not share a socket with
+        // the MCP endpoint: `HealthEndpoints — port 8081 is already the application listener's`. A tcp endpoint is
+        // recorded and published without reaching that variable, which leaves the two listeners separate.
+        //
+        // WithHttpHealthCheck is unavailable for the same reason: it derives its address from an endpoint, and the
+        // only endpoint that would give it one is the http endpoint that stops the host from starting.
+        .WithEndpoint(
+            name: "health",
+            scheme: "tcp",
+            port: 8081,
+            targetPort: 8081,
+            isProxied: false,
+            env: "HealthEndpoints__Port");
 }
 
 // Host is the startup project because it is the project resource the connection string is issued to; Infrastructure

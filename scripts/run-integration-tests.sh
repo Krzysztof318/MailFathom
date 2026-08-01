@@ -19,6 +19,17 @@ integration_test_project='tests/IntegrationTests/IntegrationTests.csproj'
 # find them again without knowing what a given run produced.
 ephemeral_resource_prefix='mailfathom-integrationtests'
 
+# One identifier per run, generated here rather than by the app model because the removal below has to
+# know it before the suite starts. Every container and volume this run creates is named under it, so a
+# second suite started while this one is in progress collides with nothing and is destroyed by nothing:
+# the sweep at the end names this run's resources instead of every resource the shared prefix matches.
+#
+# Short option spellings, because these two are the only commands here whose long forms are GNU-only: BSD `od` and
+# BSD `tr` reject `--address-radix` and `--delete`, and the failure would land on a developer before the suite starts.
+ephemeral_run_identifier="$(od -A n -N 4 -t x1 /dev/urandom | tr -d ' \n')"
+export MAILFATHOM_INTEGRATIONTESTS_RUN_ID="$ephemeral_run_identifier"
+ephemeral_run_prefix="${ephemeral_resource_prefix}-${ephemeral_run_identifier}"
+
 container_runtime="${MAILFATHOM_CONTAINER_RUNTIME:-docker}"
 
 if ! command -v "$container_runtime" > /dev/null; then
@@ -27,13 +38,14 @@ if ! command -v "$container_runtime" > /dev/null; then
   exit 1
 fi
 
-# Removed before the run as well as after it. Before, because the baseline migration is only proven
-# to apply cleanly when it applies to an empty database, and a volume left by an earlier run would
-# quietly turn every subsequent run into an upgrade of that database instead. After, because nothing
-# this suite creates is meant to outlive it.
+# Removed when the run ends, whether it passed, failed, or was interrupted, because nothing this suite
+# creates is meant to outlive it. Nothing is removed beforehand: a name no earlier run could have used
+# is already an empty database, which is what the baseline migration has to apply to for a run to prove
+# it applies cleanly, and a sweep of the shared prefix would destroy a concurrent run's containers to
+# establish something this run's own name already establishes.
 remove_ephemeral_resources() {
   mapfile -t ephemeral_containers < <(
-    "$container_runtime" ps --all --quiet --filter "name=^${ephemeral_resource_prefix}"
+    "$container_runtime" ps --all --quiet --filter "name=^${ephemeral_run_prefix}"
   )
 
   if ((${#ephemeral_containers[@]} > 0)); then
@@ -41,15 +53,41 @@ remove_ephemeral_resources() {
   fi
 
   mapfile -t ephemeral_volumes < <(
-    "$container_runtime" volume ls --quiet --filter "name=^${ephemeral_resource_prefix}"
+    "$container_runtime" volume ls --quiet --filter "name=^${ephemeral_run_prefix}"
   )
 
   if ((${#ephemeral_volumes[@]} > 0)); then
     "$container_runtime" volume rm "${ephemeral_volumes[@]}" > /dev/null
   fi
+
+  report_foreign_ephemeral_resources
 }
 
-remove_ephemeral_resources
+# What a run killed with SIGKILL leaves behind, which no later run can safely delete on its own: at this
+# point the resources still carrying the shared prefix belong either to a suite running right now or to
+# one that died, and nothing here can tell those apart. Reported rather than removed, with the command
+# that removes them once nothing else is running.
+report_foreign_ephemeral_resources() {
+  mapfile -t foreign_resources < <(
+    {
+      "$container_runtime" ps --all --format '{{.Names}}' --filter "name=^${ephemeral_resource_prefix}"
+      "$container_runtime" volume ls --format '{{.Name}}' --filter "name=^${ephemeral_resource_prefix}"
+    } | sort
+  )
+
+  if ((${#foreign_resources[@]} == 0)); then
+    return
+  fi
+
+  printf '\n%d ephemeral resource(s) from another run are still present:\n' "${#foreign_resources[@]}" >&2
+  printf '  %s\n' "${foreign_resources[@]}" >&2
+  printf 'They belong to a suite running now or to one that was killed. Once nothing else is running:\n' >&2
+  printf '  %s rm --force --volumes $(%s ps --all --quiet --filter name=^%s)\n' \
+    "$container_runtime" "$container_runtime" "$ephemeral_resource_prefix" >&2
+  printf '  %s volume rm $(%s volume ls --quiet --filter name=^%s)\n' \
+    "$container_runtime" "$container_runtime" "$ephemeral_resource_prefix" >&2
+}
+
 trap remove_ephemeral_resources EXIT
 
 raw_results_directory='artifacts/integration-tests/raw'

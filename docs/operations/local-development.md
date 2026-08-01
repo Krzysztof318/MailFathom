@@ -99,10 +99,40 @@ Three resources come up, in dependency order. The `postgres` container starts fi
 `mailfathom-migrations` resource then applies every pending migration to it; and `mailfathom-host` waits for that run
 to complete before starting, which is why the schema gate that fails a fresh deployment on purpose never fires on a
 local run — the explicit schema step the deployments require is performed here by the orchestration, before the host
-looks. The host runs in the `Development` environment with the endpoints its launch profile names, so the application
-listener answers at `http://localhost:5171` and the probes at `http://127.0.0.1:8081`; the AppHost pins the probe
-listener to loopback deliberately, because the probes answer without a credential and nothing on a local network has
-any business asking them.
+looks. The host runs in the `Development` environment on ports the app model states rather than allocates, so the
+application listener answers at `http://localhost:8080`, the TLS one at `https://localhost:8443`, and the probes at
+`http://127.0.0.1:8081`. An MCP client's configuration therefore names an address once instead of following whatever a
+launch profile or the orchestrator's port allocation produced that run. None of the three is proxied either: the socket
+a client connects to is the socket Kestrel opened, which is what keeps a TLS handshake — and a client certificate — a
+conversation with the host itself. The probe listener is pinned to loopback deliberately, because the probes answer
+without a credential and nothing on a local network has any business asking them.
+
+All three ports are stated by the app model, but not in the same way. The two application ones are HTTP endpoints, and
+the probe port is a TCP one that injects itself into the host's `HealthEndpoints:Port` setting — declared once rather
+than declared and then configured again beside it. The scheme is what makes that possible: Aspire builds
+`ASPNETCORE_URLS` from HTTP and HTTPS endpoints, so an HTTP endpoint on the probe port would make it an application
+listener, and the host refuses to start when the two collide. That refusal is the design working, not a limitation to
+route around; it is also why the resource carries no `WithHttpHealthCheck`, which derives its address from an endpoint
+and would need the HTTP one that stops the host from starting.
+
+`8080` and `8081` are the ports [the container image](container-image.md) publishes, so a local run and a deployed one
+answer on the same numbers. `8443` belongs to this topology alone: the image serves no TLS listener, and `443` is a
+privileged port a developer's process cannot bind without a capability nothing here should require.
+
+A fixed port is one port, so two ordinary orchestrations cannot run at once on one machine — a second one fails to bind
+and says so. The integration-test topology is left on allocated ports for exactly that reason, which is what keeps a
+suite run and a developer's run able to coexist.
+
+That TLS listener presents the ASP.NET Core development certificate, which Kestrel uses for an address no endpoint
+configuration claims. Create and trust it once per machine — without a certificate at all the host fails to start with
+nothing to present, and with an untrusted one it starts while every client refuses the handshake:
+
+```bash
+dotnet dev-certs https --trust
+```
+
+The MCP endpoint's own HTTPS profiles are the deployed shape and stay unconfigured locally, so a checkout needs no
+certificate material of its own. [The MCP endpoint](mcp-endpoint.md) describes what a deployment configures instead.
 
 The AppHost prints the dashboard address, including a one-time login link, as it starts. The dashboard is where a
 local run is observed: per-resource console output, structured logs, traces, and metrics, all delivered over OTLP
@@ -130,22 +160,61 @@ what it costs, and how to confirm the handshake is what failed. The AppHost pass
 sets one, so a checkout that exports nothing runs under the platform default; the integration-test topology receives it
 under no circumstances, because a suite whose handshakes depended on the machine that ran it would prove nothing.
 
-An MCP client then connects to `http://localhost:5171/mcp` with `Authorization: Bearer dev-key`. Stopping the
-orchestration with `Ctrl+C` — or `aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive` — leaves the
-synchronized mail in place, because the database volume outlives the container.
+An MCP client then connects to `http://localhost:8080/mcp`, or to `https://localhost:8443/mcp`, with
+`Authorization: Bearer dev-key`. Stopping the orchestration with `Ctrl+C` — or
+`aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive` — leaves the synchronized mail in place, because
+the database volume outlives the container and the container outlives the run. The container is stopped rather than
+left running, so the next start is a restart of the server that was there.
 
 The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.2-pg17` image so local development starts with a PostgreSQL server that can support the `vector` extension required by the RAG and embedding slices. It keeps its data in a named Docker volume, so synchronized mail survives a restart instead of costing a full IMAP synchronization every time the orchestration stops.
 
-That volume is why `src/AppHost/AppHost.csproj` declares a `UserSecretsId` and `src/AppHost/Properties/launchSettings.json` sets `DOTNET_ENVIRONMENT=Development`. Aspire generates the PostgreSQL password and keeps it stable by writing it to user secrets, which are only loaded in the Development environment. Without both, every run generates a new password while the volume keeps the one it was initialized with, and the container never becomes healthy. If it ever does report `password authentication failed`, the volume and the current password have diverged; remove the volume and start again:
+The resource is also given a persistent container lifetime, which the ephemeral integration-test topology deliberately
+is not. A session lifetime removes the server on every shutdown and builds it again on the next start — an image check,
+an initialization pass, and a health wait, several times a day, against data that was never in question. A persistent
+container is reattached instead, so the server a developer stops is the server they get back, and removing it is an
+explicit `docker rm -f` rather than something stopping the app host does.
+
+Aspire's persistent lifetime also leaves the container *running* after the app host exits, which is not what a stopped
+orchestration should leave behind, and the lifetime has no third value between that and destroying the container. So
+`PersistentContainerStopper` stops it during shutdown: what outlives an orchestration is the container and its data
+rather than a PostgreSQL process and the port it holds. A shutdown that runs — `aspire stop`, or an ordinary
+termination — stops it; a process killed outright runs nothing and leaves the container up, which is then stopped with
+`docker stop` like any other.
+
+The server is reached on the conventional port with conventional credentials, so a database tool needs nothing this
+repository has to tell it:
+
+| | |
+| --- | --- |
+| Host and port | `localhost:5432` |
+| Database | `mailfathom` |
+| User and password | `postgres` / `postgres` |
+
+Both credentials are stated by the app model rather than generated. A generated password has to be persisted to stay
+stable, and PostgreSQL applies a password once — when it initializes an empty data directory — so a persisted password
+and a volume that outlives it can drift apart and the server then refuses a database nothing was wrong with. A value
+that never changes cannot drift from itself. It authenticates one local development database whose port Aspire
+publishes on the loopback address alone, and no deployment is reached this way: a deployed MailFathom takes its
+connection string from [secret provisioning](secret-provisioning.md), which this app model has no part in.
+
+The fixed port is a convenience with one consequence worth knowing: a PostgreSQL already listening on `5432`, whether a
+system service or another orchestration, takes the port first and the container then fails to start with an
+address-in-use error naming it.
+
+`src/AppHost/AppHost.csproj` still declares a `UserSecretsId`, and `src/AppHost/Properties/launchSettings.json` still
+sets `DOTNET_ENVIRONMENT=Development`, because that is where Aspire persists what it generates for the app model
+itself — the dashboard and OTLP API keys — and user secrets are loaded in the `Development` environment only.
+
+To discard the local database and start from an empty one, remove the container and its volume:
 
 ```bash
-docker volume ls --filter name=-postgres-data
 aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive
+docker volume ls --filter name=-postgres-data
 docker rm -f $(docker ps -aq --filter volume=<volume>)
 docker volume rm <volume>
 ```
 
-Aspire names that volume after the AppHost project's path, so every clone and every worktree owns a different one and the name has to be read rather than assumed. List them first and take the one belonging to the checkout being repaired; removing another one destroys a database the repair was not about.
+Aspire names that volume after the AppHost project's path, so every clone and every worktree owns a different one and the name has to be read rather than assumed. List them first and take the one belonging to the checkout being reset; removing another one destroys a database the reset was not about.
 
 ## Development secrets
 
@@ -156,6 +225,11 @@ Secrets are never written into configuration as values, in development either. `
   "Secrets": { "Interpretation": "ReferenceOrInline" }
 }
 ```
+
+`src/Host/Host.csproj` declares the `UserSecretsId` those commands write into. It is a fixed identifier rather than one
+generated per clone, so every checkout reads the same store and the commands below can be named here at all. The secret
+store is loaded by the framework in the `Development` environment only, which is the environment the orchestration and
+both launch profiles run the host in.
 
 Configure a development account in `appsettings.Development.json` or, better, in user secrets:
 
@@ -245,7 +319,7 @@ Three files decide what a restore produces, and each answers a different questio
 
 Lock files close the gap central pinning leaves open. The 46 pins in `Directory.Packages.props` are direct references; `src/Infrastructure` alone resolves 47 further packages transitively, and nothing recorded those before. The content hash also means a package republished under a version already pinned no longer passes unnoticed, and a dependency bump shows every transitive move in the pull request diff.
 
-Thirteen of the fifteen projects carry one. `AppHost` and `IntegrationTests` do not, because `Aspire.AppHost.Sdk` adds `Aspire.Dashboard.Sdk.<rid>` and `Aspire.Hosting.Orchestration.<rid>` as references chosen from `NETCoreSdkRuntimeIdentifier`. That part of the graph describes the machine running restore rather than this repository, so a lock file written on Linux names packages a Windows, macOS, or Linux ARM64 developer never asks for, and locked mode there fails with `NU1004: A new package reference was found Aspire.Dashboard.Sdk.win-x64` before a build can start. `IntegrationTests` follows `AppHost` because it references the project and inherits those packages transitively, and a lock file cannot exclude a subtree. Both ship nowhere, and their versions stay pinned centrally like every other project's.
+Fourteen of the sixteen projects carry one. `AppHost` and `IntegrationTests` do not, because `Aspire.AppHost.Sdk` adds `Aspire.Dashboard.Sdk.<rid>` and `Aspire.Hosting.Orchestration.<rid>` as references chosen from `NETCoreSdkRuntimeIdentifier`. That part of the graph describes the machine running restore rather than this repository, so a lock file written on Linux names packages a Windows, macOS, or Linux ARM64 developer never asks for, and locked mode there fails with `NU1004: A new package reference was found Aspire.Dashboard.Sdk.win-x64` before a build can start. `IntegrationTests` follows `AppHost` because it references the project and inherits those packages transitively, and a lock file cannot exclude a subtree. Both ship nowhere, and their versions stay pinned centrally like every other project's.
 
 The lock files are committed. Both verification scripts restore in locked mode, `scripts/run-integration-tests.sh` does the same for the integration project — where the flag still enforces the lock files of every project it references — and the `CI` workflow does it in both of its restoring jobs; the `Integration tests` workflow inherits it through the script it calls. A restore that would have to rewrite a lock file fails there instead:
 
@@ -302,12 +376,31 @@ It is deliberately not part of any other command. `scripts/verify-fast.sh` and `
 
 The app host is started with the argument `IntegrationTesting=true`, which selects a second topology in `src/AppHost/Program.cs`:
 
-- the PostgreSQL container is named `mailfathom-integrationtests-postgres` and its data volume `mailfathom-integrationtests-postgres-data`, rather than taking Aspire's random postfix and the path-derived volume name a developer's orchestration uses;
-- a `mailserver` container named `mailfathom-integrationtests-mailserver` is added, which a developer's orchestration never gets — it exists so the suite has a real IMAP server to synchronize against, and starting one beside a developer's own accounts would advertise a mailbox nothing points at;
+- every container and volume is named `mailfathom-integrationtests-<run>-…`, where `<run>` is eight hex characters
+  generated for that run, rather than taking Aspire's random postfix and the path-derived volume name a developer's
+  orchestration uses. The shared leading part is what a filter finds them all by; the run identifier is what keeps two
+  suites started on one machine from racing for one name, and what lets a run remove exactly what it created;
+- the PostgreSQL container is therefore `mailfathom-integrationtests-<run>-postgres` and its data volume
+  `mailfathom-integrationtests-<run>-postgres-data`. The volume is new on every run by construction, which is what the
+  baseline migration has to apply to for a run to prove it applies cleanly at all;
+- a `mailserver` container named `mailfathom-integrationtests-<run>-mailserver` is added, which a developer's orchestration never gets — it exists so the suite has a real IMAP server to synchronize against, and starting one beside a developer's own accounts would advertise a mailbox nothing points at;
 - the `mailfathom-host` project resource is added to the model but never started, because the suite exercises classes against real infrastructure and a running MailFathom would synchronize mail underneath the data a test is asserting on;
 - a second project resource, `mailfathom-mtls-host`, is added on the same terms and started by a collection of its own, `MutualTlsHostCollectionDefinition`, which the assembly's orderer places after the collection that starts the host above — starting a second project process must not be what a rate limit is measured against. It serves the endpoint over an HTTPS profile behind a `Required` client-certificate profile, which is what lets the suite prove the mTLS rules against a real handshake; a certificate requirement is one answer for a whole process, so it cannot be a posture applied to the host above. Its server certificate, private key, and trust anchor are issued in memory per run by the test suite and injected into the environment variables the app model's `env:` secret references name, so nothing of the kind is committed and a developer's orchestration never gets this resource at all.
 
-Both names come from `OrchestrationContract` in `src/AppHost`, and nothing else in the repository uses that prefix. The script removes every container and volume carrying it before the run as well as after it: before, because the baseline migration is only proven to apply cleanly when it applies to an empty database; after, because nothing the suite creates is meant to outlive it. A run killed with `SIGKILL` skips the trap, and the next run's opening removal is what cleans up after it. To check by hand:
+The prefix comes from `OrchestrationContract` in `src/AppHost`, and nothing else in the repository uses it. The run
+identifier is generated by `scripts/run-integration-tests.sh` and passed to the app model in
+`MAILFATHOM_INTEGRATIONTESTS_RUN_ID`; the script needs it before the suite starts, because it is what scopes the
+removal afterwards. An unset variable makes the app model generate one, which is what a suite started by hand gets —
+and what nothing then removes, since only the script cleans up.
+
+The script removes this run's containers and volumes when the run ends, whether it passed, failed, or was interrupted,
+because nothing the suite creates is meant to outlive it. It removes nothing beforehand: a name no earlier run could
+have used is already an empty database, and a sweep of the shared prefix would destroy a concurrent run's containers to
+establish what this run's own name already establishes.
+
+A run killed with `SIGKILL` skips that removal. What it leaves cannot be cleaned up automatically by a later run, which
+has no way to tell a dead run's containers from a live one's, so the script reports them at the end instead and prints
+the command that removes them once nothing else is running. To look by hand:
 
 ```bash
 docker ps --all --filter name=mailfathom-integrationtests

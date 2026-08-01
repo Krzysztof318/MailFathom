@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <!-- Required by the data volume, not by any secret this repository owns. Aspire generates the PostgreSQL password
-         per run and can only keep it stable by writing it to user secrets, so without this identifier a second run
-         authenticates with a new password against a volume that kept the first one and the server never becomes
-         healthy. The value is a fixed identifier, and the generated password lives in the developer's own profile. -->
+    <!-- Where Aspire persists the values it generates for the app model itself — the dashboard and OTLP API keys —
+         rather than anything this repository owns. The PostgreSQL credentials are not among them: they are stated in
+         the app model, which is what keeps a password and a data volume that outlives it from ever diverging. The value
+         is a fixed identifier, and what Aspire writes under it lives in the developer's own profile. -->
     <UserSecretsId>aspire-apphost-6f1c0a24-8a2c-4f5c-9d3a-4c2d0f8b71e5</UserSecretsId>
   </PropertyGroup>
   <Sdk Name="Aspire.AppHost.Sdk" Version="13.4.6" />
