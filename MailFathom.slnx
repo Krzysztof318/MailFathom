@@ -10,6 +10,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AI.UnitTests/AI.UnitTests.csproj" />
+    <Project Path="tests/AppHost.UnitTests/AppHost.UnitTests.csproj" />
     <Project Path="tests/Application.UnitTests/Application.UnitTests.csproj" />
     <Project Path="tests/Domain.UnitTests/Domain.UnitTests.csproj" />
     <Project Path="tests/Host.UnitTests/Host.UnitTests.csproj" />

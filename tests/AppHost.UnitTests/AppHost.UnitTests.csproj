@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="xunit.v3.mtp-v2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Compiled in rather than reached through a project reference, which is what keeps this project under the
+         lock-file guarantee. Referencing AppHost would pull in Aspire.AppHost.Sdk's runtime-identifier-specific
+         packages, and a project that carries those cannot hold a committed lock file — which is why AppHost and
+         IntegrationTests are the two that do not. The file this names depends on nothing but the base class library,
+         so compiling it here exercises the same code the app model runs. -->
+    <Compile Include="..\..\src\AppHost\OrchestrationContract.cs" Link="OrchestrationContract.cs" />
+  </ItemGroup>
+</Project>

@@ -23,7 +23,10 @@ ephemeral_resource_prefix='mailfathom-integrationtests'
 # know it before the suite starts. Every container and volume this run creates is named under it, so a
 # second suite started while this one is in progress collides with nothing and is destroyed by nothing:
 # the sweep at the end names this run's resources instead of every resource the shared prefix matches.
-ephemeral_run_identifier="$(od --address-radix=n --read-bytes=4 --format=x1 /dev/urandom | tr --delete ' \n')"
+#
+# Short option spellings, because these two are the only commands here whose long forms are GNU-only: BSD `od` and
+# BSD `tr` reject `--address-radix` and `--delete`, and the failure would land on a developer before the suite starts.
+ephemeral_run_identifier="$(od -A n -N 4 -t x1 /dev/urandom | tr -d ' \n')"
 export MAILFATHOM_INTEGRATIONTESTS_RUN_ID="$ephemeral_run_identifier"
 ephemeral_run_prefix="${ephemeral_resource_prefix}-${ephemeral_run_identifier}"
 
