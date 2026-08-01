@@ -203,6 +203,18 @@ the automatic path is refused by the answer: a label or a comment still starts a
 review afterwards, because somebody with write access asking has already made the
 decision the ceiling makes when nobody made it.
 
+A run also ends before it finishes when the pull request it is reading closes. A
+merge — the owner's ruleset bypass included — and a close both arrive as
+`closed`, and the gate refuses that event outright: it is a trigger only so that
+it enters the pull request's concurrency group and cancels the review still
+running there. Without it the reviewer reads the rest of a change that has
+already landed and posts a verdict nobody can act on, which is the one shape of
+wasted subscription usage that cancelling on a push does not cover. The
+submission step is skipped by the same cancellation, which is why it tests
+`!cancelled()` rather than `always()`: GitHub documents `always()` as running a
+step even when the run was cancelled, so it would publish the verdict the
+cancellation exists to prevent.
+
 The workflow reports no status check and is not in the `main` ruleset. It
 advises; nothing waits on it.
 
@@ -309,7 +321,9 @@ because each closes a different way the bill could grow:
 - a draft is never reviewed automatically, so a branch still being written is
   pushed to freely and spends nothing;
 - `concurrency` with `cancel-in-progress` means a superseded head never finishes
-  a review, so a rapid series of pushes costs one run rather than one per push;
+  a review, so a rapid series of pushes costs one run rather than one per push,
+  and a merge or a close ends the run reading a pull request that has stopped
+  being worth a verdict;
 - a fork's own pushes never start a review; a maintainer's label does;
 - the comment trigger requires an `OWNER`, `MEMBER`, or `COLLABORATOR` author, so
   nobody outside the project can spend the subscription by typing;

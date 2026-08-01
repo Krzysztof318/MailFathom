@@ -23,6 +23,7 @@ repository_root="$test_directory/repository"
 remote_repository_root="$test_directory/remote"
 fake_bin_directory="$test_directory/bin"
 protected_paths_bin_directory="$test_directory/protected-paths-bin"
+fathom_review_bin_directory="$test_directory/fathom-review-bin"
 invocation_log="$test_directory/dotnet-invocations.log"
 workflow_invocation_log="$test_directory/workflow-invocations.log"
 fixture_branch='agent/workflow-fixture'
@@ -83,6 +84,17 @@ cat > "$protected_paths_bin_directory/gh" <<'FAKE_GH'
 printf '%s\n' "$FAKE_CHANGED_PATHS"
 FAKE_GH
 chmod +x "$protected_paths_bin_directory/gh"
+
+# The `Fathom review` gate makes one API call, counting the reviews its App has already submitted on
+# the pull request. This fake `gh` prints the per-page count the real `--jq` would leave, so the
+# ceiling arithmetic in the step runs unchanged. It answers zero, which is a pull request the App has
+# not reviewed yet — the state both contracts below are about.
+mkdir -p "$fathom_review_bin_directory"
+cat > "$fathom_review_bin_directory/gh" <<'FAKE_GH'
+#!/usr/bin/env bash
+printf '0\n'
+FAKE_GH
+chmod +x "$fathom_review_bin_directory/gh"
 
 export FAKE_DOTNET_LOG="$invocation_log"
 export FAKE_WORKFLOW_LOG="$workflow_invocation_log"
@@ -673,6 +685,81 @@ protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit() {
   assert_contains 'cannot be verified' "$output_file"
 }
 
+# The gate that decides whether a review runs is a shell block inside `fathom-review.yml`, and it
+# cannot be a script in `scripts/` for the reason the protected-paths guard cannot: the workflow
+# never checks the branch out. Extracting it verbatim is again what makes these contracts run the
+# runner's own code. The block is the `run: |` under `id: gate`, indented ten spaces, and it ends at
+# the first line that leaves that indentation, so a step added after it changes nothing here.
+extract_fathom_review_gate() {
+  local step_script="$1"
+
+  awk '
+    /^        id: gate$/ { found = 1; next }
+    found && !extracting && /^        run: \|$/ { extracting = 1; next }
+    extracting {
+      if ($0 != "" && $0 !~ /^          /) { exit }
+      sub(/^          /, "")
+      print
+    }
+  ' "$source_repository_root/.github/workflows/fathom-review.yml" > "$step_script"
+
+  [[ -s "$step_script" ]]
+  bash -n "$step_script"
+}
+
+# The decision is read from `GITHUB_OUTPUT`, which is where the reviewing job reads it, rather than
+# from the log line beside it that no other job consumes.
+run_fathom_review_gate() {
+  local event_action="$1"
+  local output_file="$2"
+  local step_output_file="$3"
+  local step_script="$test_directory/fathom-review-gate.sh"
+
+  extract_fathom_review_gate "$step_script"
+  : > "$step_output_file"
+
+  (
+    export PATH="$fathom_review_bin_directory:$PATH"
+    export EVENT_NAME='pull_request_target'
+    export EVENT_ACTION="$event_action"
+    export REPOSITORY='Krzysztof318/MailFathom'
+    export PULL_REQUEST_NUMBER='1'
+    export PULL_REQUEST_DRAFT='false'
+    export HEAD_REPOSITORY='Krzysztof318/MailFathom'
+    export ADDED_LABEL=''
+    export IS_PULL_REQUEST_COMMENT='false'
+    export COMMENT_BODY=''
+    export COMMENT_ASSOCIATION=''
+    export GH_TOKEN='fake-token'
+    export REVIEWER_LOGIN='fathom-reviewer[bot]'
+    export GITHUB_OUTPUT="$step_output_file"
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+}
+
+fathom_review_reviews_a_push_to_a_published_pull_request() {
+  local output_file="$test_directory/fathom-review-push-output"
+  local step_output_file="$test_directory/fathom-review-push-step-output"
+
+  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file"
+
+  assert_contains 'review=true' "$step_output_file"
+  assert_contains 'the branch was pushed to' "$output_file"
+}
+
+# A merge, the owner's ruleset bypass included, arrives as this event, and its whole purpose is the
+# cancellation it caused before the job started. Starting a review of its own would spend
+# subscription usage on a change that has already landed.
+fathom_review_refuses_a_closed_pull_request() {
+  local output_file="$test_directory/fathom-review-closed-output"
+  local step_output_file="$test_directory/fathom-review-closed-step-output"
+
+  run_fathom_review_gate 'closed' "$output_file" "$step_output_file"
+
+  assert_contains 'review=false' "$step_output_file"
+  assert_contains 'the pull request is closed' "$output_file"
+}
+
 workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
   [[ -x "$source_repository_root/scripts/verify-fast.sh" ]]
@@ -704,6 +791,8 @@ run_test protected_paths_matches_the_configuration_files_at_every_depth
 run_test protected_paths_ignores_paths_that_only_resemble_a_protected_one
 run_test protected_paths_reports_the_paths_it_found_when_the_owner_is_the_author
 run_test protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit
+run_test fathom_review_reviews_a_push_to_a_published_pull_request
+run_test fathom_review_refuses_a_closed_pull_request
 run_test workflow_scripts_use_flat_manual_layout
 
 printf '%s passed, %s failed\n' "$passed_count" "$failed_count"

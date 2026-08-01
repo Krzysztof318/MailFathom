@@ -47,6 +47,13 @@ on:
   # It costs subscription usage per push, and the gate below is where that cost is contained: a
   # draft is not reviewed, so a branch still being written spends nothing however often it is pushed
   # to, and marking it ready is the deliberate act that opts every later push in.
+  #
+  # `closed` is the one action here that never starts a review. It is listed so that a merge — a
+  # ruleset bypass included — or a close reaches the concurrency group below and ends the review
+  # still running against the pull request. Without it a merge taken mid-run leaves the reviewer
+  # reading the rest of a change that has already landed, which is subscription usage spent on a
+  # verdict nobody can act on. The gate refuses the event, so it costs one short `decide` job and
+  # no model call.
   pull_request_target:
     types:
       - opened
@@ -54,6 +61,7 @@ on:
       - ready_for_review
       - synchronize
       - labeled
+      - closed
     branches:
       - main
   issue_comment:
@@ -61,9 +69,11 @@ on:
       - created
 
 concurrency:
-  # One run per pull request, and the newest head wins. A push while a review is still running
+  # One run per pull request, and the newest event wins. A push while a review is still running
   # leaves that review describing a head nobody will merge, so it is cancelled rather than allowed
-  # to post a verdict against superseded code and threads anchored to lines that have moved.
+  # to post a verdict against superseded code and threads anchored to lines that have moved. A merge
+  # or a close does the same to the whole pull request rather than to one head, and it is the reason
+  # `closed` is a trigger at all: that run reviews nothing and exists only to enter this group.
   #
   # Cancelling is safe and worth the saved usage: the review is one POST at the end of the job, so a
   # run stopped before it posts nothing at all, and a run stopped after it has already finished.
@@ -123,7 +133,13 @@ jobs:
 
           case "$EVENT_NAME" in
             pull_request_target)
-              if [[ "$EVENT_ACTION" == 'labeled' ]]; then
+              if [[ "$EVENT_ACTION" == 'closed' ]]; then
+                # There is nothing left to advise on: the change has either merged or been
+                # abandoned. What this event accomplishes it accomplished before this job started,
+                # by entering the concurrency group and cancelling the review that was still
+                # reading a pull request nobody will act on again.
+                reason='the pull request is closed'
+              elif [[ "$EVENT_ACTION" == 'labeled' ]]; then
                 # The label is the maintainer's explicit ask, which is the only way a fork's pull
                 # request reaches this workflow and the only way a draft does.
                 if [[ "$ADDED_LABEL" == 'fathom-review' ]]; then
@@ -918,8 +934,14 @@ jobs:
 
           printf '::error::The reviewer stopped: %s\n' "$reason"
 
+      # `!cancelled()` rather than `always()`, which GitHub documents as running a step even when the
+      # run was cancelled. This step must still run after a reviewer that failed, because a run that
+      # died holding findings has something worth posting — but a cancelled run has the opposite
+      # property: it was cancelled because the head was superseded or the pull request closed, and
+      # `always()` would let it publish the very verdict the cancellation was meant to prevent. The
+      # `${{ }}` is required, because a YAML scalar may not begin with `!`.
       - name: Submit the review
-        if: always() && steps.collect.outcome == 'success'
+        if: ${{ !cancelled() && steps.collect.outcome == 'success' }}
         shell: bash
         env:
           # The App's installation token, not the workflow token: this is the step that publishes,
