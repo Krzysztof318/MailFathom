@@ -1,0 +1,78 @@
+# No `labels:` key, for the reason `bug_report.yml` records: the `type:*` label is applied during
+# triage, and a form that applied one would make every arrival look already read.
+name: Work item
+description: A feature, a change, a refactor, or any other unit of work that is not a defect.
+
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Title it with what this produces, in one line. Issues here carry no prefix or tag in the
+        title.
+
+
+        This is the shape every issue here takes: what the situation is, who wants what and why, and
+        what has to be true before it can close. Two or three user stories and a short acceptance
+        list beat a long description — the acceptance list is what a pull request is judged against.
+
+
+        Proposing an idea rather than scope? [Discussions →
+        Ideas](https://github.com/Krzysztof318/MailMcp/discussions) is the cheaper place to start,
+        and a discussion that turns out to be work gets converted into an issue.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: >-
+        What is true today, and why that is a problem or an opportunity. Name the specification under
+        `specs/`, the ADR under `docs/decisions/`, or the issue this follows from; if none backs it,
+        say so plainly. Link a specification rather than copying its text — a copy goes stale in
+        silence.
+    validations:
+      required: true
+
+  - type: textarea
+    id: user-stories
+    attributes:
+      label: User stories
+      description: Two or three. Who, what, and — the part that matters — why.
+      value: |
+        **As a** <role> **I want** <capability>, **so that** <outcome>.
+
+        **As a** <role> **I want** <capability>, **so that** <outcome>.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance
+      description: >-
+        What has to be true before this closes, as a condensed checklist. Prefer statements that can
+        be checked over intentions that cannot.
+      value: |
+        -
+        -
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: >-
+        What this deliberately does not do. Stating it is what keeps a reviewer from asking for it
+        and keeps the change from growing into a second one.
+    validations:
+      required: false
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: >-
+        Issues this waits on, as `#<number>` references so the board shows them as links.
+    validations:
+      required: false

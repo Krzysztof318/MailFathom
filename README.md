@@ -17,6 +17,14 @@ dotnet test --no-build
 dotnet format --verify-no-changes
 ```
 
+## Contributing
+
+[CONTRIBUTING.md](CONTRIBUTING.md) gets you from a clone to a passing verification run and states the rules a pull request has to satisfy. [docs/operations/local-development.md](docs/operations/local-development.md) is the full setup, and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) applies to everyone taking part.
+
+## Security
+
+MailFathom holds mailbox credentials, OAuth tokens, certificate material, and a local copy of someone's mail. Report a vulnerability privately through [SECURITY.md](SECURITY.md) rather than in a public issue.
+
 ## License
 
 MailFathom is licensed under the [Apache License, Version 2.0](LICENSE), SPDX identifier `Apache-2.0`. Source files repeat that grant in a header the build enforces, and a published artifact carries `LICENSE` and `NOTICE` beside the binaries. The container image is that same publish output, so it carries both files and declares `org.opencontainers.image.licenses`; the Helm chart states the identifier as `artifacthub.io/license`.
