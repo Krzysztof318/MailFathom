@@ -34,7 +34,19 @@ else
     // an initial IMAP synchronization every time the orchestration is stopped. Recreating the schema is therefore a
     // deliberate step — the migration resource's Reset Database command — rather than a side effect of losing the
     // container.
-    postgres.WithDataVolume();
+    //
+    // The container itself outlives the run for the same reason the volume outlives the container. A session lifetime
+    // removes the server on every shutdown and builds it again on the next start, which costs an image check, an
+    // initialization pass, and a health wait several times a day against data that was never in question. A persistent
+    // one is reattached instead, so the server a developer stops is the server they get back — and stays reachable to
+    // psql or a database tool while the orchestration is not running.
+    //
+    // Stated through the lifetime enumeration rather than through the newer WithPersistentLifetime, which Aspire gates
+    // behind ASPIREPERSISTENCE001 as evaluation-only. Taking it would mean suppressing an experimental-API diagnostic
+    // to reach behavior the stable overload already expresses.
+    postgres
+        .WithDataVolume()
+        .WithLifetime(ContainerLifetime.Persistent);
 }
 
 if (runsIntegrationTests)
@@ -139,6 +151,35 @@ if (runsIntegrationTests)
         .WithEnvironment(
             "McpEndpoint__RateLimiting__MaxConcurrentRequests",
             OrchestrationContract.McpRateLimitMaxConcurrentRequests.ToString(CultureInfo.InvariantCulture));
+}
+else
+{
+    // Fixed rather than allocated, and bound by the host itself rather than by a proxy in front of it. An MCP client's
+    // configuration names an address once, so a port that moved with a launch profile or with the orchestrator's own
+    // allocation would make that address a per-run detail; unproxied also means the socket a client connects to is the
+    // socket Kestrel opened, which is what keeps a TLS handshake and a client certificate a conversation with the host.
+    //
+    // 8080 and 8081 are the numbers the container image already publishes, so a local run and a deployed one answer on
+    // the same ports. 8443 is this topology's own: the image serves no TLS listener, and 443 is privileged, which a
+    // developer's process cannot bind without a capability the repository has no business requiring.
+    //
+    // Only the ordinary topology pins them. The integration suite starts this same app model, and a fixed port there
+    // would let one run refuse to bind because another still holds it.
+    mailFathomHost
+        .WithHttpEndpoint(
+            name: OrchestrationContract.HostHttpEndpointName,
+            port: 8080,
+            targetPort: 8080,
+            isProxied: false)
+        // Served out of the ASP.NET Core development certificate, which is what Kestrel presents for an HTTPS address
+        // no endpoint configuration claims. The MCP endpoint's own HTTPS profiles are the deployed shape and stay
+        // unconfigured here, so a developer needs `dotnet dev-certs https --trust` once rather than certificate
+        // material per checkout.
+        .WithHttpsEndpoint(port: 8443, targetPort: 8443, isProxied: false)
+        // The probe listener's own default, restated where the other two ports are stated so all three are read in one
+        // place. It is not an Aspire endpoint for the reason the bind address above is set: an endpoint would reach
+        // ASPNETCORE_URLS and the host would serve `/` and `/mcp` on the probe port as well.
+        .WithEnvironment("HealthEndpoints__Port", "8081");
 }
 
 // Host is the startup project because it is the project resource the connection string is issued to; Infrastructure

@@ -99,10 +99,32 @@ Three resources come up, in dependency order. The `postgres` container starts fi
 `mailfathom-migrations` resource then applies every pending migration to it; and `mailfathom-host` waits for that run
 to complete before starting, which is why the schema gate that fails a fresh deployment on purpose never fires on a
 local run — the explicit schema step the deployments require is performed here by the orchestration, before the host
-looks. The host runs in the `Development` environment with the endpoints its launch profile names, so the application
-listener answers at `http://localhost:5171` and the probes at `http://127.0.0.1:8081`; the AppHost pins the probe
-listener to loopback deliberately, because the probes answer without a credential and nothing on a local network has
-any business asking them.
+looks. The host runs in the `Development` environment on ports the app model states rather than allocates, so the
+application listener answers at `http://localhost:8080`, the TLS one at `https://localhost:8443`, and the probes at
+`http://127.0.0.1:8081`. An MCP client's configuration therefore names an address once instead of following whatever a
+launch profile or the orchestrator's port allocation produced that run. None of the three is proxied either: the socket
+a client connects to is the socket Kestrel opened, which is what keeps a TLS handshake — and a client certificate — a
+conversation with the host itself. The probe listener is pinned to loopback deliberately, because the probes answer
+without a credential and nothing on a local network has any business asking them.
+
+`8080` and `8081` are the ports [the container image](container-image.md) publishes, so a local run and a deployed one
+answer on the same numbers. `8443` belongs to this topology alone: the image serves no TLS listener, and `443` is a
+privileged port a developer's process cannot bind without a capability nothing here should require.
+
+A fixed port is one port, so two ordinary orchestrations cannot run at once on one machine — a second one fails to bind
+and says so. The integration-test topology is left on allocated ports for exactly that reason, which is what keeps a
+suite run and a developer's run able to coexist.
+
+That TLS listener presents the ASP.NET Core development certificate, which Kestrel uses for an address no endpoint
+configuration claims. Create and trust it once per machine — without a certificate at all the host fails to start with
+nothing to present, and with an untrusted one it starts while every client refuses the handshake:
+
+```bash
+dotnet dev-certs https --trust
+```
+
+The MCP endpoint's own HTTPS profiles are the deployed shape and stay unconfigured locally, so a checkout needs no
+certificate material of its own. [The MCP endpoint](mcp-endpoint.md) describes what a deployment configures instead.
 
 The AppHost prints the dashboard address, including a one-time login link, as it starts. The dashboard is where a
 local run is observed: per-resource console output, structured logs, traces, and metrics, all delivered over OTLP
@@ -130,11 +152,19 @@ what it costs, and how to confirm the handshake is what failed. The AppHost pass
 sets one, so a checkout that exports nothing runs under the platform default; the integration-test topology receives it
 under no circumstances, because a suite whose handshakes depended on the machine that ran it would prove nothing.
 
-An MCP client then connects to `http://localhost:5171/mcp` with `Authorization: Bearer dev-key`. Stopping the
-orchestration with `Ctrl+C` — or `aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive` — leaves the
-synchronized mail in place, because the database volume outlives the container.
+An MCP client then connects to `http://localhost:8080/mcp`, or to `https://localhost:8443/mcp`, with
+`Authorization: Bearer dev-key`. Stopping the orchestration with `Ctrl+C` — or
+`aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive` — leaves the synchronized mail in place, because
+the database volume outlives the container and the container outlives the run.
 
 The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.2-pg17` image so local development starts with a PostgreSQL server that can support the `vector` extension required by the RAG and embedding slices. It keeps its data in a named Docker volume, so synchronized mail survives a restart instead of costing a full IMAP synchronization every time the orchestration stops.
+
+The resource is also given a persistent container lifetime, which the ephemeral integration-test topology deliberately
+is not. A session lifetime removes the server on every shutdown and builds it again on the next start — an image check,
+an initialization pass, and a health wait, several times a day, against data that was never in question. A persistent
+container is reattached instead, so the server a developer stops is the server they get back, and it stays reachable to
+`psql` or a database tool while the orchestration is not running. Removing it is therefore an explicit `docker rm -f`
+rather than something stopping the app host does.
 
 That volume is why `src/AppHost/AppHost.csproj` declares a `UserSecretsId` and `src/AppHost/Properties/launchSettings.json` sets `DOTNET_ENVIRONMENT=Development`. Aspire generates the PostgreSQL password and keeps it stable by writing it to user secrets, which are only loaded in the Development environment. Without both, every run generates a new password while the volume keeps the one it was initialized with, and the container never becomes healthy. If it ever does report `password authentication failed`, the volume and the current password have diverged; remove the volume and start again:
 
@@ -156,6 +186,11 @@ Secrets are never written into configuration as values, in development either. `
   "Secrets": { "Interpretation": "ReferenceOrInline" }
 }
 ```
+
+`src/Host/Host.csproj` declares the `UserSecretsId` those commands write into. It is a fixed identifier rather than one
+generated per clone, so every checkout reads the same store and the commands below can be named here at all. The secret
+store is loaded by the framework in the `Development` environment only, which is the environment the orchestration and
+both launch profiles run the host in.
 
 Configure a development account in `appsettings.Development.json` or, better, in user secrets:
 

@@ -1,4 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <!-- The store a developer's mailbox password and MCP key live in. Every credential this host reads is a secret
+         reference or, under the Development interpretation, an inline value, and both belong outside the tree; the
+         secret store the framework already loads in Development is where they go, so nothing has to be un-staged
+         before a commit. The identifier is fixed rather than generated per clone, so the operations documentation can
+         name the command that writes into it and every checkout writes into the same store. -->
+    <UserSecretsId>mailfathom-host-c24be749-2609-4926-a560-be8b4c8aac0e</UserSecretsId>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <!-- Design-time only, and referenced for the tooling rather than for any code here: dotnet-ef requires the startup
