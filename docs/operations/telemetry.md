@@ -71,8 +71,9 @@ The startup records from the bootstrap pipeline arrive in the same dashboard, be
 that pipeline reads — a host that fails while binding its options is therefore diagnosable from the dashboard's
 structured logs, not only from the console.
 
-[Local development](local-development.md) covers the rest of the orchestration: the PostgreSQL resource, the data
-volume, and the migration resource that applies the schema before the host starts.
+[Running locally with Aspire](local-development.md#running-locally-with-aspire) covers the rest of the orchestration:
+the resource start order, the PostgreSQL data volume, and the migration resource that applies the schema before the
+host starts.
 
 ## Deployments export nothing by default
 

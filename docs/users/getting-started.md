@@ -3,8 +3,8 @@
 This page walks from an installed MailFathom to a first successful tool call: provision the credentials, configure a
 mailbox, start the service, verify it, connect an MCP client, and read a result correctly. It assumes an installation
 from [installing MailFathom](installation.md); a developer evaluating from the checkout can run the
-[Aspire orchestration](../operations/local-development.md) instead, which provisions PostgreSQL and applies the schema
-on its own.
+[Aspire orchestration](../operations/local-development.md#running-locally-with-aspire) instead, which provisions
+PostgreSQL and applies the schema on its own.
 
 The examples write configuration as JSON. Every setting can arrive as an environment variable instead — `:` becomes
 `__`, so `MailSynchronization:Enabled` is `MailSynchronization__Enabled` — and the

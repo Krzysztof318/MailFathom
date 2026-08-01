@@ -68,23 +68,52 @@ is about to touch. Check out the branch that carries the change first. A
 detached `HEAD` and any other branch name are accepted, in the primary checkout
 as well as in a linked worktree.
 
-Run the web host directly:
+Run the web host directly, against a PostgreSQL server you provide yourself:
 
 ```bash
 dotnet run --project src/Host/Host.csproj
 ```
 
-Run the Aspire orchestration host:
+## Running locally with Aspire
+
+The Aspire orchestration is the intended local start: it provisions the database, applies the schema, and starts the
+host in the right order, so a working MailFathom is one command on a machine with the pinned SDK and a running Docker
+daemon:
 
 ```bash
 dotnet run --project src/AppHost/AppHost.csproj
 ```
+
+Three resources come up, in dependency order. The `postgres` container starts first and has to report healthy; the
+`mailfathom-migrations` resource then applies every pending migration to it; and `mailfathom-host` waits for that run
+to complete before starting, which is why the schema gate that fails a fresh deployment on purpose never fires on a
+local run — the explicit schema step the deployments require is performed here by the orchestration, before the host
+looks. The host runs in the `Development` environment with the endpoints its launch profile names, so the application
+listener answers at `http://localhost:5171` and the probes at `http://127.0.0.1:8081`; the AppHost pins the probe
+listener to loopback deliberately, because the probes answer without a credential and nothing on a local network has
+any business asking them.
 
 The AppHost prints the dashboard address, including a one-time login link, as it starts. The dashboard is where a
 local run is observed: per-resource console output, structured logs, traces, and metrics, all delivered over OTLP
 because Aspire injects `OTEL_EXPORTER_OTLP_ENDPOINT` into the resources it starts. That injection is currently the
 only place telemetry export is configured at all — a deployment exports nothing until an operator sets the variable
 themselves. [Telemetry](telemetry.md) records what the host emits and where it goes.
+
+A freshly started host synchronizes nothing and serves no MCP endpoint, because both defaults are the shipped ones.
+Configure a development mailbox through user secrets as [development secrets](#development-secrets) below shows, and
+enable the endpoint the same way when a tool call is what is being tested — in Development the `ReferenceOrInline`
+interpretation keeps the credential a one-liner:
+
+```bash
+dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:Enabled" "true"
+dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:Authentication" "ApiKey"
+dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:ApiKeys:0:Name" "dev"
+dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:ApiKeys:0:SecretReference" "plaintext:dev-key"
+```
+
+An MCP client then connects to `http://localhost:5171/mcp` with `Authorization: Bearer dev-key`. Stopping the
+orchestration with `Ctrl+C` — or `aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive` — leaves the
+synchronized mail in place, because the database volume outlives the container.
 
 The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.2-pg17` image so local development starts with a PostgreSQL server that can support the `vector` extension required by the RAG and embedding slices. It keeps its data in a named Docker volume, so synchronized mail survives a restart instead of costing a full IMAP synchronization every time the orchestration stops.
 
