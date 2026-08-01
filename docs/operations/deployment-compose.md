@@ -88,7 +88,7 @@ build defines: 20260731132336_Initial.
 ```
 
 > **The schema artifact does not exist yet.** The reviewed, idempotent artifact a released installation applies — and
-> the command that applies it — are tracked by [issue #126](https://github.com/Krzysztof318/MailFathom/issues/126). Until
+> the command that applies it — are tracked by [issue #238](https://github.com/Krzysztof318/MailFathom/issues/238). Until
 > it ships, establishing the schema is your own step against the `mailfathom` database: publish the database port
 > temporarily, or attach a `psql` container to the `backend` network, and apply the migrations this build defines.
 > Whatever you use, apply it once, read it before applying it, and take a backup first. That is the same discipline the

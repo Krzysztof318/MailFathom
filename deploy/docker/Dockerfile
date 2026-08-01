@@ -7,7 +7,7 @@
 # applies migrations" a property of the image rather than a rule somebody has to remember.
 #
 # `DatabaseSchemaStartupGate` refuses to start against a schema it does not recognize, and the artifact that answers
-# that refusal is #126's — the reviewed, operator-invoked schema step for a released installation. Nothing here
+# that refusal is #238's — the reviewed, operator-invoked schema step for a released installation. Nothing here
 # produces or applies one, so a deployment built from this file reaches a database whose schema was established
 # separately and deliberately.
 #
