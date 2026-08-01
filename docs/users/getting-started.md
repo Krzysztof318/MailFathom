@@ -101,7 +101,7 @@ Start the service the way the installation shape does. The first start against a
 naming the migration it expects:
 
 ```text
-The database has not applied 1 migration(s) this build defines: 20260730152610_Initial.
+The database has not applied 1 migration(s) this build defines: 20260731132336_Initial.
 ```
 
 That is the explicit schema step described in [installing MailFathom](installation.md#what-every-shape-needs):

@@ -84,7 +84,7 @@ Take a backup before you answer.
 
 ```
 MailFathom.Application.Persistence.DatabaseSchemaOutOfDateException: The database has not applied 1 migration(s) this
-build defines: 20260730152610_Initial.
+build defines: 20260731132336_Initial.
 ```
 
 > **The schema artifact does not exist yet.** The reviewed, idempotent artifact a released installation applies — and
