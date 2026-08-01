@@ -206,4 +206,19 @@ public static class OrchestrationContract
     /// removal part of every run.
     /// </remarks>
     public const string EphemeralResourceNamePrefix = "mailfathom-integrationtests";
+
+    /// <summary>The environment variable OpenSSL reads the path of its configuration file from.</summary>
+    /// <remarks>
+    /// <para>
+    /// A variable this app model passes through rather than one it publishes a value for. It exists here because a
+    /// developer whose mailbox is served by a mail server the platform's own TLS policy refuses sets it before starting
+    /// the orchestration, and a resource Aspire starts inherits nothing of the kind on its own.
+    /// </para>
+    /// <para>
+    /// The distinction is deliberate: deciding that a weaker TLS policy applies is an operator's act, taken once, in
+    /// the environment they start MailFathom from. An app model that named a file of its own would take that decision
+    /// for every developer who ever runs it.
+    /// </para>
+    /// </remarks>
+    public const string OpenSslConfigurationVariable = "OPENSSL_CONF";
 }

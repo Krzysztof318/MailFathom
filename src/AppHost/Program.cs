@@ -81,6 +81,21 @@ var mailFathomHost = builder.AddProject<Projects.Host>(OrchestrationContract.Hos
     // it knows about and the host would then serve `/` and `/mcp` on the probe port as well.
     .WithEnvironment("HealthEndpoints__BindAddress", "127.0.0.1");
 
+// Passed through from this process's own environment rather than set here, and only when a developer set it. OpenSSL
+// reads it while it initializes, so it is the one way to reach a mail server whose cipher suite or key size the
+// platform's TLS policy refuses — and it relaxes that policy for every connection the host makes, the database
+// included. Which is exactly why the app model must not be the thing that decides it applies: it carries the value an
+// operator chose, or nothing at all.
+//
+// Never under the integration-test topology. That suite proves what MailFathom does against servers it starts itself,
+// and a policy inherited from whichever machine ran it would make the handshakes it exercises depend on that machine.
+var openSslConfigurationPath = Environment.GetEnvironmentVariable(OrchestrationContract.OpenSslConfigurationVariable);
+
+if (!runsIntegrationTests && !string.IsNullOrWhiteSpace(openSslConfigurationPath))
+{
+    mailFathomHost.WithEnvironment(OrchestrationContract.OpenSslConfigurationVariable, openSslConfigurationPath);
+}
+
 if (runsIntegrationTests)
 {
     // Nothing starts the host with the application. Most of the suite verifies classes against a real database and a

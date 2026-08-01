@@ -2,6 +2,12 @@
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
+**Linux is the only officially supported platform**, for development as much as for deployment: the orchestration starts Linux containers, the deployment shapes are a container, Kubernetes, and a systemd service, and TLS goes through the system OpenSSL. Development on Windows may work — the solution is ordinary .NET — but **expect problems and a setup of your own**, and nothing in this repository is verified against it.
+
+A development machine also needs **OpenSSL 3.0 or later**, because every TLS connection a running MailFathom makes — to the mail server, to PostgreSQL — is handshaked by the system library rather than by .NET, and its security policy decides which servers are reachable at all. **1.1.1 is the hard floor**: .NET 10 requires it on Unix and [fails to start](https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/10.0/openssl-version-requirement) without it. **Anything between 1.1.1 and 3.0 may work and may not** — it is out of upstream support and nothing in this repository is verified against it, so treat a failure that reproduces only there as an environment problem rather than a defect.
+
+Nothing has to be configured for a mail server that clears the distribution's default policy, which is nearly all of them: a checkout that sets nothing runs at that full-strength policy and negotiates the newest TLS both ends support. Relaxing it is an opt-in for one process — a development mailbox on a server the policy refuses is what [the platform TLS policy](platform-tls-policy.md) is for, and it applies to the host however the host is started.
+
 ## Commands
 
 For the normal implementation loop, run:
@@ -74,6 +80,11 @@ Run the web host directly, against a PostgreSQL server you provide yourself:
 dotnet run --project src/Host/Host.csproj
 ```
 
+The host inherits the environment it is started in, so a development mailbox on a mail server the platform's TLS
+policy refuses is reached by prefixing that command with `OPENSSL_CONF=<path>` — see
+[the platform TLS policy](platform-tls-policy.md#pointing-the-host-at-it). The host says at startup that it is running
+under a configured file, which is also how to confirm it received one.
+
 ## Running locally with Aspire
 
 The Aspire orchestration is the intended local start: it provisions the database, applies the schema, and starts the
@@ -110,6 +121,14 @@ dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:Authenticati
 dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:ApiKeys:0:Name" "dev"
 dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:ApiKeys:0:SecretReference" "plaintext:dev-key"
 ```
+
+A development mailbox served by a mail server whose TLS parameters the platform refuses needs one more thing, and the
+symptom sends most people the wrong way: the handshake fails, but reads as an authentication failure. Export
+`OPENSSL_CONF` in the shell the orchestration starts from and the AppHost passes it through to `mailfathom-host`, which
+then reports at startup that it is running under it. [The platform TLS policy](platform-tls-policy.md) covers the file,
+what it costs, and how to confirm the handshake is what failed. The AppHost passes an exported value through and never
+sets one, so a checkout that exports nothing runs under the platform default; the integration-test topology receives it
+under no circumstances, because a suite whose handshakes depended on the machine that ran it would prove nothing.
 
 An MCP client then connects to `http://localhost:5171/mcp` with `Authorization: Bearer dev-key`. Stopping the
 orchestration with `Ctrl+C` — or `aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive` — leaves the

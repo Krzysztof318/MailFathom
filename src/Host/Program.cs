@@ -221,6 +221,11 @@ try
     builder.Services.AddHostedService<McpTransportAuthenticationWarning>();
     builder.Services.AddHostedService<McpTransportEncryptionWarning>();
     builder.Services.AddHostedService<McpRateLimitingStartupReport>();
+    // Composed from the environment rather than resolved from the container, because the value it reports is one
+    // OpenSSL read while it initialized and no configuration source can influence it afterwards. Registered
+    // unconditionally for the same reason the warnings above are: the condition belongs in one place.
+    builder.Services.AddHostedService(provider => OpenSslConfigurationWarning.FromEnvironment(
+        provider.GetRequiredService<ILogger<OpenSslConfigurationWarning>>()));
 
     // Read once and registered, so the value that decides the route is the one every consumer resolves. Whether the
     // endpoint exists is decided while the application is being built, before a container that could resolve a snapshot

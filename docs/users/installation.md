@@ -32,10 +32,30 @@ lists all three before the install command.
 
 ## What every shape needs
 
+- **Linux.** It is the only platform this project officially supports, and everything below assumes it: the image is
+  built for `linux/amd64` and `linux/arm64`, the native shape is a systemd service with systemd credentials, and TLS
+  goes through the system OpenSSL. **MailFathom may well run on Windows — it is ordinary .NET — but expect problems
+  and a setup of your own**: credential provisioning, TLS parameters, and file-permission expectations all differ
+  there, nothing in this repository is verified against it, and a defect that reproduces only on Windows is not one
+  this project can act on today.
 - **PostgreSQL with the `vector` extension.** The synchronized mail, its indexes, and the raw message content all live
   there. The Compose deployment brings its own (`pgvector/pgvector`, PostgreSQL 17); the other shapes expect yours.
 - **An IMAP account to synchronize** and its password or app password, provisioned as a
   [secret reference](../operations/secret-provisioning.md) rather than written into configuration.
+- **OpenSSL 3.0 or later**, because MailFathom connects to the mail server over TLS and .NET hands every handshake to
+  the system library. **1.1.1 is the floor below which nothing runs at all**: .NET 10 requires it on Unix and
+  [fails to start](https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/10.0/openssl-version-requirement)
+  without it. **Between the two, MailFathom may work and may not.** 1.1.1 has been out of upstream support since
+  September 2023, nothing here is verified against it, and a defect that reproduces only there is not one this project
+  can act on. Every current distribution ships 3.x, so this is a constraint on old machines rather than on new ones.
+
+  The library's *security policy* is part of the installation too, not a detail of it: an OpenSSL that considers a
+  server's cipher suite or key size too weak ends the connection before any credential is sent, and reports it as an
+  authentication failure. **An installation that configures nothing runs at that full-strength policy and negotiates
+  the newest TLS both ends support**, which is what almost every mail server wants. One that does not clear the policy
+  is reached by opting in to a relaxed one — an OpenSSL configuration file named in the environment, which
+  [the platform TLS policy](../operations/platform-tls-policy.md) covers with a sample file. It is an exception you
+  choose per deployment, never a default, and nothing in MailFathom's own configuration can substitute for it.
 - **An explicit schema step.** MailFathom never applies database migrations while starting: it verifies the schema and
   refuses to serve against one it does not recognize, so bringing a new build up *tells* you a migration is
   outstanding rather than silently applying one. The reviewed artifact a released installation will apply is still
@@ -64,6 +84,9 @@ Build with the SDK pinned in `global.json`. The process is then an ordinary ASP.
   answer on their own port, `8081` by default. [Health endpoints](../operations/health-endpoints.md) records how to
   move or disable that listener.
 - PostgreSQL, the `vector` extension, and the schema step are yours, exactly as they are under Kubernetes.
+- A mail server whose TLS parameters the machine's own OpenSSL refuses is reached by naming an OpenSSL configuration
+  file in the service's environment, which is a pre-start concern no MailFathom setting can replace.
+  [The platform TLS policy](../operations/platform-tls-policy.md) has the sample file and the unit fragment.
 
 ## Verifying any installation
 
