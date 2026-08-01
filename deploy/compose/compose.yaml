@@ -11,7 +11,7 @@
 # This file applies no schema and contains nothing that can. MailFathom never applies a schema change while starting — it
 # verifies the schema and refuses to serve against one it does not recognize — so bringing the stack up after a version
 # change tells you whether a migration is outstanding rather than silently applying one. The reviewed artifact that
-# answers that refusal is #126's, and until it exists the schema step is an explicit operator action the documentation
+# answers that refusal is #238's, and until it exists the schema step is an explicit operator action the documentation
 # describes.
 
 name: mailfathom

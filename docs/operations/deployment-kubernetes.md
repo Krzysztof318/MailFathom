@@ -116,7 +116,7 @@ automatic migration this whole arrangement exists to prevent, and one without a 
 the project has not published.
 
 > **The schema artifact does not exist yet.** The reviewed, idempotent artifact and the step that applies it are
-> tracked by [issue #126](https://github.com/Krzysztof318/MailFathom/issues/126). Until it ships, apply the schema to the
+> tracked by [issue #238](https://github.com/Krzysztof318/MailFathom/issues/238). Until it ships, apply the schema to the
 > database yourself before the pod can become ready — a `psql` Job of your own, a migration run from outside the
 > cluster, or whatever your database's operations already use. Take a backup first, and read the SQL before applying
 > it.
