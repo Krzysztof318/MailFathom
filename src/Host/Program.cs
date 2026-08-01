@@ -307,13 +307,20 @@ try
     builder.Services.AddSingleton(Options.Create(healthEndpointSettings));
 
     // The addresses the application listener would bind, read before anything is added to the Kestrel configuration
-    // below. Where the MCP HTTPS profiles bind their own listeners, they are the application listener, and the
-    // URL-shaped addresses are already being ignored.
+    // below, and read from whichever of the three sources Kestrel would actually have bound: the MCP HTTPS profiles
+    // when they bind their own listeners, the endpoints an operator named otherwise, and the URL-shaped addresses only
+    // when neither exists. Reading the wrong one would leave the collision check comparing the probe port against
+    // sockets nothing opens, which is the check passing on the strength of a number nobody binds.
     var applicationListenerUrls = ConfiguredApplicationListeners.ResolveUrls(builder.Configuration);
     var mcpTerminatesTls = mcpEndpointSettings.Enabled && mcpEndpointSettings.Https.TerminatesTls;
-    IReadOnlyCollection<int> applicationListenerPorts = mcpTerminatesTls
-        ? [.. mcpEndpointSettings.Https.Endpoints.Select(static endpoint => endpoint.Port)]
-        : ConfiguredApplicationListeners.ListenerPorts(applicationListenerUrls);
+    var configuredKestrelEndpoints = ConfiguredKestrelEndpoints.AnyConfigured(builder.Configuration);
+
+    IReadOnlyCollection<int> applicationListenerPorts = (mcpTerminatesTls, configuredKestrelEndpoints) switch
+    {
+        (true, _) => [.. mcpEndpointSettings.Https.Endpoints.Select(static endpoint => endpoint.Port)],
+        (false, true) => ConfiguredKestrelEndpoints.ListenerPorts(builder.Configuration),
+        _ => ConfiguredApplicationListeners.ListenerPorts(applicationListenerUrls),
+    };
 
     var healthEndpointConfigurationErrors = healthEndpointSettings.FindConfigurationErrors(applicationListenerPorts);
 
@@ -338,7 +345,7 @@ try
         // restated where the addresses were already being ignored: a deployment that names its own Kestrel endpoints
         // keeps them, and one whose MCP HTTPS profiles bind in code keeps the promise that no clear-text listener
         // stays open behind them.
-        if (!mcpTerminatesTls && !ConfiguredKestrelEndpoints.AnyConfigured(builder.Configuration))
+        if (!mcpTerminatesTls && !configuredKestrelEndpoints)
         {
             builder.Configuration.AddInMemoryCollection(
                 ConfiguredApplicationListeners.AsKestrelEndpointConfiguration(applicationListenerUrls));

@@ -21,10 +21,18 @@ public sealed class HealthEndpointIsolationTests
 {
     private static readonly IReadOnlySet<int> ProbeListenerPorts = new HashSet<int> { 8081 };
 
+    /// <summary>
+    /// The trailing-slash forms are here because routing answers them: it ignores a trailing slash, so a rule that
+    /// compared for exact equality would read <c>/health/</c> as an application path, let it through, and serve the
+    /// aggregate dependency status unauthenticated on the listener MCP clients reach.
+    /// </summary>
     [Theory]
     [InlineData("/health")]
     [InlineData("/alive")]
     [InlineData("/started")]
+    [InlineData("/health/")]
+    [InlineData("/alive/")]
+    [InlineData("/started/")]
     public void ListenerServesPath_AProbePathOnTheApplicationPort_IsNotServed(string path)
     {
         // Arrange
@@ -41,6 +49,9 @@ public sealed class HealthEndpointIsolationTests
     [InlineData("/health")]
     [InlineData("/alive")]
     [InlineData("/started")]
+    [InlineData("/health/")]
+    [InlineData("/alive/")]
+    [InlineData("/started/")]
     public void ListenerServesPath_AProbePathOnTheProbePort_IsServed(string path)
     {
         // Arrange

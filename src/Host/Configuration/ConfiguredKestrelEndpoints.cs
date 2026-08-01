@@ -42,6 +42,29 @@ internal static class ConfiguredKestrelEndpoints
             .Any(static endpoint => !string.IsNullOrWhiteSpace(endpoint[UrlKey]));
     }
 
+    /// <summary>Reads the TCP ports the configured endpoints bind.</summary>
+    /// <param name="configuration">The application configuration, read at the root because the Kestrel section is not nested under this product's own.</param>
+    /// <returns>The ports, without duplicates, empty when the deployment names no endpoint of its own.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// These are the application listener's ports whenever this section is populated, because the URL-shaped addresses
+    /// are ignored as soon as it is. A second listener that has to avoid the application's therefore has to read them
+    /// from here rather than from the addresses the deployment is no longer being bound from.
+    /// </remarks>
+    internal static IReadOnlyList<int> ListenerPorts(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        return ConfiguredApplicationListeners.ListenerPorts(
+        [
+            .. configuration.GetSection(SectionName)
+                .GetChildren()
+                .Select(static endpoint => endpoint[UrlKey])
+                .Where(static url => !string.IsNullOrWhiteSpace(url))
+                .Select(static url => url!),
+        ]);
+    }
+
     /// <summary>Finds the configured Kestrel endpoints that would stay open behind the configured HTTPS profiles.</summary>
     /// <param name="configuration">The application configuration, read at the root because the Kestrel section is not nested under this product's own.</param>
     /// <param name="httpsSettings">The HTTPS profiles the MCP endpoint is served over.</param>

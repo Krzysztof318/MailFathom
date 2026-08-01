@@ -189,9 +189,9 @@
               },
               {
                 "not": {
-                  "pattern": "^(ConnectionStrings__|Persistence__Password__|ConfigurationSources__|ASPNETCORE_)"
+                  "pattern": "^(ConnectionStrings__|Persistence__Password__|ConfigurationSources__|HealthEndpoints__|ASPNETCORE_)"
                 },
-                "description": "These settings are the chart's, not an override's. The environment block outranks every mounted file, so re-declaring one of them here would silently replace what the templates emit \u2014 and `ConnectionStrings__mailfathom` is the one that matters: the conventional Npgsql form carries `Password=`, which would put a credential into the rendered Deployment and bypass the mounted-file path entirely. Change `database`, `config`, and `secrets` instead."
+                "description": "These settings are the chart's, not an override's. The environment block outranks every mounted file, so re-declaring one of them here would silently replace what the templates emit \u2014 and `ConnectionStrings__mailfathom` is the one that matters: the conventional Npgsql form carries `Password=`, which would put a credential into the rendered Deployment and bypass the mounted-file path entirely. `HealthEndpoints__` is the chart's for a different reason: `probes.port` sets both the container port the kubelet dials and the port the host binds, so moving one of them here would leave all three probes dialling a port nothing listens on and the pod never becoming ready. Change `database`, `config`, `secrets`, and `probes` instead."
               }
             ]
           },

@@ -36,6 +36,12 @@ public sealed class HealthProbeTests
     [InlineData("/health", true)]
     [InlineData("/alive", true)]
     [InlineData("/HEALTH", true)]
+    // Routing ignores a trailing slash, so a probe endpoint answers these. Reading them as application paths is what
+    // would let the readiness answer past the listener isolation and onto the port MCP clients reach.
+    [InlineData("/health/", true)]
+    [InlineData("/alive/", true)]
+    [InlineData("/started/", true)]
+    [InlineData("/HEALTH/", true)]
     [InlineData("/mcp", false)]
     [InlineData("/", false)]
     public void IsProbePath_APath_ReportsWhetherAProbeAnswersIt(string path, bool expected)
@@ -54,11 +60,13 @@ public sealed class HealthProbeTests
     /// A probe answers one path. Treating everything beneath it as a probe path would keep requests off the application
     /// listener that no probe was ever going to answer, which is a silent way to lose a route.
     /// </summary>
-    [Fact]
-    public void IsProbePath_APathBeneathAProbe_IsNotAProbePath()
+    [Theory]
+    [InlineData("/health/details")]
+    [InlineData("/healthz")]
+    public void IsProbePath_APathNoProbeAnswers_IsNotAProbePath(string path)
     {
         // Arrange
-        var requestPath = new PathString("/health/details");
+        var requestPath = new PathString(path);
 
         // Act
         var isProbePath = HealthProbe.IsProbePath(requestPath);

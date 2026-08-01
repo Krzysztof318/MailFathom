@@ -113,7 +113,10 @@ ENV ASPNETCORE_HTTP_PORTS=8080 \
     # for one session, when a dump is genuinely needed.
     DOTNET_EnableDiagnostics=0
 
-EXPOSE 8080
+# Two ports, because the image serves two listeners: 8080 for `/` and `/mcp`, and 8081 for the probes, which
+# HealthEndpoints:Port moves. Declaring only the first would leave `docker image inspect`, `docker run -P`, and a
+# registry's port list describing an image that answers on one socket more than it admits to.
+EXPOSE 8080 8081
 
 # Owned by root and copied with the default mode, so the unprivileged account below can read and execute the
 # application and write none of it. An explicit `--chmod` is deliberately not used: it applies one mode to directories

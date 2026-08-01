@@ -44,15 +44,25 @@ internal sealed record HealthProbe(string Path, string Tag)
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
     internal static IReadOnlyList<HealthProbe> All { get; } = [Startup, Readiness, Liveness];
 
-    /// <summary>Reports whether a request path is one of the probe paths.</summary>
+    /// <summary>Reports whether a request path is one a probe endpoint answers.</summary>
     /// <param name="path">The request path.</param>
-    /// <returns><see langword="true" /> when the path is served by a probe, otherwise <see langword="false" />.</returns>
+    /// <returns><see langword="true" /> when a probe endpoint would answer the path, otherwise <see langword="false" />.</returns>
     /// <remarks>
-    /// The comparison is exact rather than by segment prefix. A probe answers one path, so treating <c>/health/x</c> as
-    /// a probe path would keep a request off the application listener that no probe was ever going to answer.
+    /// <para>
+    /// This has to match what routing matches, not what the path literally reads as, because the two decide the same
+    /// request. Routing ignores a trailing slash, so <c>/health/</c> reaches the readiness endpoint; a comparison for
+    /// exact equality would call that path an application one, let it past the listener isolation, and serve the
+    /// aggregate dependency status on the listener MCP clients reach.
+    /// </para>
+    /// <para>
+    /// The trailing slash is the whole of the tolerance. A path beneath a probe — <c>/health/details</c> — is not a
+    /// probe path, because no probe answers it and treating it as one would keep a request off the application
+    /// listener that nothing here was ever going to serve.
+    /// </para>
     /// </remarks>
     internal static bool IsProbePath(PathString path) =>
-        All.Any(probe => path.Equals(probe.Path, StringComparison.OrdinalIgnoreCase));
+        All.Any(probe => path.StartsWithSegments(probe.Path, StringComparison.OrdinalIgnoreCase, out var remaining)
+            && (!remaining.HasValue || string.Equals(remaining.Value, "/", StringComparison.Ordinal)));
 
     /// <summary>Reports whether a registered health check belongs to this probe.</summary>
     /// <param name="registration">The health-check registration.</param>
