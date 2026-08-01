@@ -24,7 +24,9 @@ Everyone participating in this repository — through issues, discussions, pull 
 - Publishing someone's private information, or the private contents of a conversation, without their permission.
 - Impersonating someone, or using an identity to evade a previous enforcement action.
 - Threats of any kind, and encouragement of harm.
-- Deliberately wasting others' time: knowingly false reports, contributions submitted without the right to submit them, and content generated to look like work rather than to be it.
+- Deliberately wasting others' time: knowingly false reports, contributions submitted without the right to submit them, and content produced to look like work rather than to be it.
+
+The last one is not a rule about using AI. This project is [built with it](CONTRIBUTING.md#how-this-project-is-built), and an agent-written pull request is the normal shape of a contribution here. What it rules out is submitting output nobody has read — by volume, or as an answer nobody checked — so that the reading falls to whoever responds. The tool that produced a change says nothing about it; whether the person submitting it stands behind it says everything.
 
 ## Where it applies
 
