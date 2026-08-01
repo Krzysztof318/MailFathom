@@ -1,6 +1,8 @@
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+using System.Security.Cryptography;
+
 namespace MailFathom.AppHost;
 
 /// <summary>The resource names and switches this app model publishes to anything that drives it.</summary>
@@ -14,6 +16,30 @@ public static class OrchestrationContract
 {
     /// <summary>The PostgreSQL server resource.</summary>
     public const string PostgresResourceName = "postgres";
+
+    /// <summary>The login the orchestrated PostgreSQL server is created with.</summary>
+    /// <remarks>
+    /// The conventional one, so a <c>psql</c> invocation or a database tool needs nothing beyond the host and the port.
+    /// </remarks>
+    public const string PostgresUserName = "postgres";
+
+    /// <summary>The password that login is created with.</summary>
+    /// <remarks>
+    /// <para>
+    /// A literal under the same restriction as <see cref="MailServerAccountPassword" />. It authenticates one
+    /// development database, on a container whose port Aspire publishes on the loopback address alone, and it unlocks
+    /// nothing a deployment runs: a deployed MailFathom reaches PostgreSQL through a connection string whose secret is
+    /// provisioned, and this app model builds none of it.
+    /// </para>
+    /// <para>
+    /// Stated rather than generated, which is what removes a failure mode instead of documenting one. Aspire generates
+    /// a password per run and can only keep it stable by persisting it, while PostgreSQL applies a password once, when
+    /// it initializes an empty data directory — so a generated password and a data volume that outlives it can diverge,
+    /// and the server then reports <c>password authentication failed</c> on a database nothing was wrong with. A value that
+    /// never changes cannot diverge from one.
+    /// </para>
+    /// </remarks>
+    public const string PostgresPassword = "postgres";
 
     /// <summary>The database the connection string is issued for.</summary>
     public const string DatabaseResourceName = "mailfathom";
@@ -202,8 +228,8 @@ public static class OrchestrationContract
     /// <remarks>
     /// Test containers and volumes are ephemeral, and a run that is killed rather than shut down leaves both behind.
     /// The shared prefix is what makes the leftovers identifiable without inspecting them, so removing them is one
-    /// filtered command rather than a decision per resource; <c>scripts/run-integration-tests.sh</c> makes exactly that
-    /// removal part of every run.
+    /// filtered command rather than a decision per resource. It is the leading part of a name rather than the whole of
+    /// one: <see cref="ResolveEphemeralResourceNamePrefix" /> appends this run's own identifier after it.
     /// </remarks>
     public const string EphemeralResourceNamePrefix = "mailfathom-integrationtests";
 
@@ -221,4 +247,60 @@ public static class OrchestrationContract
     /// </para>
     /// </remarks>
     public const string OpenSslConfigurationVariable = "OPENSSL_CONF";
+
+    /// <summary>The environment variable a caller states this run's ephemeral resource identifier in.</summary>
+    /// <remarks>
+    /// <para>
+    /// Set by <c>scripts/run-integration-tests.sh</c>, which needs the identifier before the suite starts so that the
+    /// removal it performs afterwards can name what this run created rather than everything the shared prefix matches.
+    /// A sweep of the shared prefix would take a concurrent run's containers with it, which is the collision the
+    /// identifier exists to prevent.
+    /// </para>
+    /// <para>
+    /// An environment variable rather than an argument, unlike <see cref="IntegrationTestingArgument" />, and the
+    /// difference is what each one decides. The argument selects a topology, so an ambient value could divert an
+    /// ordinary run onto the ephemeral one; this names resources within a topology already selected, so an ambient
+    /// value can only produce a differently named container. Left unset, the run generates its own.
+    /// </para>
+    /// </remarks>
+    public const string EphemeralRunIdentifierVariable = "MAILFATHOM_INTEGRATIONTESTS_RUN_ID";
+
+    /// <summary>How many characters a generated run identifier has.</summary>
+    /// <remarks>Four bytes of randomness, which is short enough to read in a container listing and long enough that two runs starting in the same minute do not collide.</remarks>
+    private const int GeneratedRunIdentifierLength = 8;
+
+    /// <summary>How long a stated run identifier may be.</summary>
+    /// <remarks>Container names are bounded and already carry the prefix, the run identifier, and a resource name; this keeps the caller's part of that from growing into the limit.</remarks>
+    private const int MaximumRunIdentifierLength = 16;
+
+    /// <summary>Builds the prefix this run names its ephemeral containers and volumes with.</summary>
+    /// <param name="runIdentifier">The identifier the caller stated, or <see langword="null" /> when it stated none.</param>
+    /// <returns><see cref="EphemeralResourceNamePrefix" /> followed by the run's identifier.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when a stated identifier cannot appear in a container name.</exception>
+    /// <remarks>
+    /// A stated identifier is refused rather than replaced when it is unusable. Replacing it silently would leave the
+    /// caller removing a prefix nothing was named with, which is the one outcome worse than not being given one at all:
+    /// a run that leaks every container and volume it created while reporting that it cleaned up.
+    /// </remarks>
+    public static string ResolveEphemeralResourceNamePrefix(string? runIdentifier)
+    {
+        if (string.IsNullOrWhiteSpace(runIdentifier))
+        {
+            return $"{EphemeralResourceNamePrefix}-{RandomNumberGenerator.GetHexString(GeneratedRunIdentifierLength, lowercase: true)}";
+        }
+
+        var statedIdentifier = runIdentifier.Trim();
+
+        if (!IsUsableInAContainerName(statedIdentifier))
+        {
+            throw new InvalidOperationException(
+                $"{EphemeralRunIdentifierVariable} is '{statedIdentifier}', which cannot appear in a container name. State between 1 and {MaximumRunIdentifierLength} characters, each an ASCII lowercase letter or a digit, or leave it unset to have one generated.");
+        }
+
+        return $"{EphemeralResourceNamePrefix}-{statedIdentifier}";
+    }
+
+    private static bool IsUsableInAContainerName(string identifier) =>
+        identifier.Length <= MaximumRunIdentifierLength
+        && identifier.All(static character => char.IsAsciiLetterLower(character) || char.IsAsciiDigit(character));
 }

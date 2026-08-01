@@ -166,16 +166,40 @@ container is reattached instead, so the server a developer stops is the server t
 `psql` or a database tool while the orchestration is not running. Removing it is therefore an explicit `docker rm -f`
 rather than something stopping the app host does.
 
-That volume is why `src/AppHost/AppHost.csproj` declares a `UserSecretsId` and `src/AppHost/Properties/launchSettings.json` sets `DOTNET_ENVIRONMENT=Development`. Aspire generates the PostgreSQL password and keeps it stable by writing it to user secrets, which are only loaded in the Development environment. Without both, every run generates a new password while the volume keeps the one it was initialized with, and the container never becomes healthy. If it ever does report `password authentication failed`, the volume and the current password have diverged; remove the volume and start again:
+The server is reached on the conventional port with conventional credentials, so a database tool needs nothing this
+repository has to tell it:
+
+| | |
+| --- | --- |
+| Host and port | `localhost:5432` |
+| Database | `mailfathom` |
+| User and password | `postgres` / `postgres` |
+
+Both credentials are stated by the app model rather than generated. A generated password has to be persisted to stay
+stable, and PostgreSQL applies a password once — when it initializes an empty data directory — so a persisted password
+and a volume that outlives it can drift apart and the server then refuses a database nothing was wrong with. A value
+that never changes cannot drift from itself. It authenticates one local development database whose port Aspire
+publishes on the loopback address alone, and no deployment is reached this way: a deployed MailFathom takes its
+connection string from [secret provisioning](secret-provisioning.md), which this app model has no part in.
+
+The fixed port is a convenience with one consequence worth knowing: a PostgreSQL already listening on `5432`, whether a
+system service or another orchestration, takes the port first and the container then fails to start with an
+address-in-use error naming it.
+
+`src/AppHost/AppHost.csproj` still declares a `UserSecretsId`, and `src/AppHost/Properties/launchSettings.json` still
+sets `DOTNET_ENVIRONMENT=Development`, because that is where Aspire persists what it generates for the app model
+itself — the dashboard and OTLP API keys — and user secrets are loaded in the `Development` environment only.
+
+To discard the local database and start from an empty one, remove the container and its volume:
 
 ```bash
-docker volume ls --filter name=-postgres-data
 aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive
+docker volume ls --filter name=-postgres-data
 docker rm -f $(docker ps -aq --filter volume=<volume>)
 docker volume rm <volume>
 ```
 
-Aspire names that volume after the AppHost project's path, so every clone and every worktree owns a different one and the name has to be read rather than assumed. List them first and take the one belonging to the checkout being repaired; removing another one destroys a database the repair was not about.
+Aspire names that volume after the AppHost project's path, so every clone and every worktree owns a different one and the name has to be read rather than assumed. List them first and take the one belonging to the checkout being reset; removing another one destroys a database the reset was not about.
 
 ## Development secrets
 
@@ -337,12 +361,31 @@ It is deliberately not part of any other command. `scripts/verify-fast.sh` and `
 
 The app host is started with the argument `IntegrationTesting=true`, which selects a second topology in `src/AppHost/Program.cs`:
 
-- the PostgreSQL container is named `mailfathom-integrationtests-postgres` and its data volume `mailfathom-integrationtests-postgres-data`, rather than taking Aspire's random postfix and the path-derived volume name a developer's orchestration uses;
-- a `mailserver` container named `mailfathom-integrationtests-mailserver` is added, which a developer's orchestration never gets — it exists so the suite has a real IMAP server to synchronize against, and starting one beside a developer's own accounts would advertise a mailbox nothing points at;
+- every container and volume is named `mailfathom-integrationtests-<run>-…`, where `<run>` is eight hex characters
+  generated for that run, rather than taking Aspire's random postfix and the path-derived volume name a developer's
+  orchestration uses. The shared leading part is what a filter finds them all by; the run identifier is what keeps two
+  suites started on one machine from racing for one name, and what lets a run remove exactly what it created;
+- the PostgreSQL container is therefore `mailfathom-integrationtests-<run>-postgres` and its data volume
+  `mailfathom-integrationtests-<run>-postgres-data`. The volume is new on every run by construction, which is what the
+  baseline migration has to apply to for a run to prove it applies cleanly at all;
+- a `mailserver` container named `mailfathom-integrationtests-<run>-mailserver` is added, which a developer's orchestration never gets — it exists so the suite has a real IMAP server to synchronize against, and starting one beside a developer's own accounts would advertise a mailbox nothing points at;
 - the `mailfathom-host` project resource is added to the model but never started, because the suite exercises classes against real infrastructure and a running MailFathom would synchronize mail underneath the data a test is asserting on;
 - a second project resource, `mailfathom-mtls-host`, is added on the same terms and started by a collection of its own, `MutualTlsHostCollectionDefinition`, which the assembly's orderer places after the collection that starts the host above — starting a second project process must not be what a rate limit is measured against. It serves the endpoint over an HTTPS profile behind a `Required` client-certificate profile, which is what lets the suite prove the mTLS rules against a real handshake; a certificate requirement is one answer for a whole process, so it cannot be a posture applied to the host above. Its server certificate, private key, and trust anchor are issued in memory per run by the test suite and injected into the environment variables the app model's `env:` secret references name, so nothing of the kind is committed and a developer's orchestration never gets this resource at all.
 
-Both names come from `OrchestrationContract` in `src/AppHost`, and nothing else in the repository uses that prefix. The script removes every container and volume carrying it before the run as well as after it: before, because the baseline migration is only proven to apply cleanly when it applies to an empty database; after, because nothing the suite creates is meant to outlive it. A run killed with `SIGKILL` skips the trap, and the next run's opening removal is what cleans up after it. To check by hand:
+The prefix comes from `OrchestrationContract` in `src/AppHost`, and nothing else in the repository uses it. The run
+identifier is generated by `scripts/run-integration-tests.sh` and passed to the app model in
+`MAILFATHOM_INTEGRATIONTESTS_RUN_ID`; the script needs it before the suite starts, because it is what scopes the
+removal afterwards. An unset variable makes the app model generate one, which is what a suite started by hand gets —
+and what nothing then removes, since only the script cleans up.
+
+The script removes this run's containers and volumes when the run ends, whether it passed, failed, or was interrupted,
+because nothing the suite creates is meant to outlive it. It removes nothing beforehand: a name no earlier run could
+have used is already an empty database, and a sweep of the shared prefix would destroy a concurrent run's containers to
+establish what this run's own name already establishes.
+
+A run killed with `SIGKILL` skips that removal. What it leaves cannot be cleaned up automatically by a later run, which
+has no way to tell a dead run's containers from a live one's, so the script reports them at the end instead and prints
+the command that removes them once nothing else is running. To look by hand:
 
 ```bash
 docker ps --all --filter name=mailfathom-integrationtests

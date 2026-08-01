@@ -14,7 +14,24 @@ var builder = DistributedApplication.CreateBuilder(args);
 // ephemeral database and leave its volume under the prefix the test script deletes.
 var runsIntegrationTests = args.Contains(OrchestrationContract.IntegrationTestingArgument, StringComparer.Ordinal);
 
-var postgres = builder.AddPostgres(OrchestrationContract.PostgresResourceName)
+// One identifier per run, so two suites started on one machine name different containers and volumes instead of racing
+// for one name — and so the caller that started a run can remove exactly what it created. The ordinary topology names
+// nothing with it and leaves it empty.
+var ephemeralResourceNamePrefix = runsIntegrationTests
+    ? OrchestrationContract.ResolveEphemeralResourceNamePrefix(
+        builder.Configuration[OrchestrationContract.EphemeralRunIdentifierVariable])
+    : string.Empty;
+
+// Stated rather than generated, because this server exists to be developed and tested against. Aspire would otherwise
+// generate the password per run and keep it stable only by persisting it, which a data volume can outlive: PostgreSQL
+// applies a password when it initializes an empty data directory and never again, so the two diverge and the server
+// reports an authentication failure about a database nothing was wrong with. A fixed value cannot diverge from itself,
+// and it is what lets psql or a database tool connect with nothing but the host and the port.
+var postgresUserName = builder.AddParameter("postgres-username", OrchestrationContract.PostgresUserName);
+var postgresPassword = builder.AddParameter("postgres-password", OrchestrationContract.PostgresPassword, secret: true);
+
+var postgres = builder
+    .AddPostgres(OrchestrationContract.PostgresResourceName, postgresUserName, postgresPassword)
     .WithImage("pgvector/pgvector")
     .WithImageTag("0.8.2-pg17");
 
@@ -24,9 +41,13 @@ if (runsIntegrationTests)
     // killed run as something the prefix identifies. A container the test topology left behind would otherwise be
     // indistinguishable from the developer's own, and skipping the volume entirely would let the image's own VOLUME
     // declaration create an anonymous one that outlives the container under a name nobody can filter on.
+    //
+    // The run identifier inside that name is what keeps two suites on one machine apart. It also makes the volume new
+    // on every run, which is what the baseline migration has to apply to for a run to prove it applies cleanly at all;
+    // a volume reused across runs would quietly turn every later run into an upgrade of the first one's database.
     postgres
-        .WithContainerName($"{OrchestrationContract.EphemeralResourceNamePrefix}-postgres")
-        .WithDataVolume($"{OrchestrationContract.EphemeralResourceNamePrefix}-postgres-data");
+        .WithContainerName($"{ephemeralResourceNamePrefix}-postgres")
+        .WithDataVolume($"{ephemeralResourceNamePrefix}-postgres-data");
 }
 else
 {
@@ -44,9 +65,14 @@ else
     // Stated through the lifetime enumeration rather than through the newer WithPersistentLifetime, which Aspire gates
     // behind ASPIREPERSISTENCE001 as evaluation-only. Taking it would mean suppressing an experimental-API diagnostic
     // to reach behavior the stable overload already expresses.
+    //
+    // The host port is fixed for the same reason the host's own ports are: a connection string typed into a database
+    // tool once should keep working. PostgreSQL's own port is the convenient one, and Aspire publishes it on the
+    // loopback address, so the server a developer reaches is not one anything else on their network can.
     postgres
         .WithDataVolume()
-        .WithLifetime(ContainerLifetime.Persistent);
+        .WithLifetime(ContainerLifetime.Persistent)
+        .WithHostPort(5432);
 }
 
 if (runsIntegrationTests)
@@ -61,7 +87,7 @@ if (runsIntegrationTests)
     // Only the two protocols the suite speaks are started, plus the API server, whose readiness endpoint is what makes
     // this resource reach Healthy instead of merely Running. Without it a test would race the server's first listener.
     builder.AddContainer(OrchestrationContract.MailServerResourceName, "greenmail/standalone", "2.1.11")
-        .WithContainerName($"{OrchestrationContract.EphemeralResourceNamePrefix}-mailserver")
+        .WithContainerName($"{ephemeralResourceNamePrefix}-mailserver")
         .WithEnvironment(
             "GREENMAIL_OPTS",
             string.Join(
