@@ -98,6 +98,11 @@ if [[ -z "${ConnectionStrings__mailfathom:-}" && -z "${MAILFATHOM_DESIGN_TIME_CO
   export MAILFATHOM_DESIGN_TIME_CONNECTION_STRING='Host=127.0.0.1;Port=1;Database=unreachable-by-design;Username=none;Timeout=2'
 fi
 
+# dotnet-ef is a manifest-local tool, so it exists for this checkout only once the manifest has been restored. A
+# developer with a global install would not notice the difference, which is exactly why this is not left to chance.
+report 'Restoring the local tools.'
+dotnet tool restore
+
 # The startup project is what dotnet-ef loads MailFathom.Infrastructure.dll from, so building Infrastructure alone would
 # leave a stale assembly there and the tool would read the model the previous build produced.
 report 'Building the startup project so the tool sees the current model.'

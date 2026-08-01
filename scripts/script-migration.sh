@@ -63,8 +63,12 @@ if [[ -z "${ConnectionStrings__mailfathom:-}" && -z "${MAILFATHOM_DESIGN_TIME_CO
   export MAILFATHOM_DESIGN_TIME_CONNECTION_STRING='Host=127.0.0.1;Port=1;Database=unreachable-by-design;Username=none;Timeout=2'
 fi
 
-# Built separately and quietly so standard output carries the SQL and nothing else: dotnet-ef writes the build banner
-# there too, which would otherwise land in a file a reviewer redirected this into.
+# dotnet-ef is a manifest-local tool, so it exists for this checkout only once the manifest has been restored. Both this
+# and the build below write to standard error, because standard output carries the SQL and nothing else: a reviewer
+# redirects it into a file, and a restore banner in there would be part of the artifact.
+dotnet tool restore >&2
+
+# Built separately and quietly for the same reason: dotnet-ef writes the build banner to standard output too.
 dotnet build "$startup_project" --nologo --verbosity quiet >&2
 
 dotnet ef migrations script "$from_migration" "$to_migration" \
