@@ -25,8 +25,8 @@ MailFathom is developed and run on Linux.
 ## From a clone to a green run
 
 ```bash
-git clone https://github.com/Krzysztof318/MailMcp.git
-cd MailMcp
+git clone https://github.com/Krzysztof318/MailFathom.git
+cd MailFathom
 dotnet restore MailFathom.slnx
 dotnet build MailFathom.slnx --no-restore
 dotnet test MailFathom.slnx --no-build
@@ -130,4 +130,4 @@ Those files are written for the autonomous agents that do most of the work here,
 
 ## Questions
 
-Use [Discussions](https://github.com/Krzysztof318/MailMcp/discussions) — `Q&A` for questions, `Ideas` for proposals that are not yet scope. A question is not a unit of work and does not become one by arriving as an issue; one that turns out to be work gets converted.
+Use [Discussions](https://github.com/Krzysztof318/MailFathom/discussions) — `Q&A` for questions, `Ideas` for proposals that are not yet scope. A question is not a unit of work and does not become one by arriving as an issue; one that turns out to be work gets converted.

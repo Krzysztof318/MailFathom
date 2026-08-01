@@ -17,8 +17,8 @@ body:
 
 
         Proposing an idea rather than scope? [Discussions →
-        Ideas](https://github.com/Krzysztof318/MailMcp/discussions) is the cheaper place to start,
-        and a discussion that turns out to be work gets converted into an issue.
+        Ideas](https://github.com/Krzysztof318/MailFathom/discussions) is the cheaper place to
+        start, and a discussion that turns out to be work gets converted into an issue.
 
   - type: textarea
     id: context

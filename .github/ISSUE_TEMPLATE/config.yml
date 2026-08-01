@@ -5,19 +5,19 @@ blank_issues_enabled: true
 
 contact_links:
   - name: Question or idea
-    url: https://github.com/Krzysztof318/MailMcp/discussions
+    url: https://github.com/Krzysztof318/MailFathom/discussions
     about: >-
       Ask in Discussions instead. A question is not a unit of work and does not become one by
       arriving as an issue; one that turns out to be work gets converted into a tracked issue.
 
   - name: Security vulnerability
-    url: https://github.com/Krzysztof318/MailMcp/security/policy
+    url: https://github.com/Krzysztof318/MailFathom/security/policy
     about: >-
       Never report a vulnerability in a public issue. MailFathom holds mailbox credentials and mail
       content; SECURITY.md has the private channel and what to expect.
 
   - name: How to contribute
-    url: https://github.com/Krzysztof318/MailMcp/blob/main/CONTRIBUTING.md
+    url: https://github.com/Krzysztof318/MailFathom/blob/main/CONTRIBUTING.md
     about: >-
       Setup, the verification loop, branch and pull-request rules, and how contributions are
       licensed. Read this before your first change.
