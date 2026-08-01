@@ -109,13 +109,28 @@ public static class OrchestrationContract
     /// <remarks>
     /// Declared here because the suite has to send more than this to observe a refusal, and a value that reached only
     /// the app model would leave the burst either too small to refuse anything or needlessly large. It is deliberately
-    /// well above what any other test in the suite spends, and it is restored every
-    /// <see cref="McpRateLimitReplenishmentPeriod" />, so exhausting it disturbs nothing that runs afterwards.
+    /// well above what any other test in the suite spends, and only <see cref="McpExpendableApiKeyName" /> ever spends
+    /// it, so exhausting it disturbs nothing that runs afterwards.
     /// </remarks>
     public const int McpRateLimitTokenCapacity = 20;
 
     /// <summary>How often the integration-test topology restores a client's spent MCP capacity.</summary>
-    public const string McpRateLimitReplenishmentPeriod = "00:00:01";
+    /// <remarks>
+    /// <para>
+    /// Long enough that no capacity comes back while a run is in progress, which is what makes a refusal a property of
+    /// how much the burst spent rather than of how fast the machine dispatched it. A period of a second, which this
+    /// deliberately is not, makes the outcome depend on arrival pacing: the framework restores the whole capacity every
+    /// period, so a burst that trickles in below that rate is served in full and refuses nothing. Measured on a cold
+    /// host, sixty requests dispatched together arrived over thirteen seconds — under five a second against twenty a
+    /// second being restored — and the test that exists to observe a refusal observed none.
+    /// </para>
+    /// <para>
+    /// Nothing is lost by the spent client staying spent. Rate limits are counted per client, and
+    /// <see cref="McpExpendableApiKeyName" /> exists to be taken to zero exactly once; every other test authenticates
+    /// with <see cref="McpApiKeyName" />, whose own capacity the burst never touches.
+    /// </para>
+    /// </remarks>
+    public const string McpRateLimitReplenishmentPeriod = "00:10:00";
 
     /// <summary>How many MCP requests the integration-test topology's host serves at once, across every client.</summary>
     /// <remarks>

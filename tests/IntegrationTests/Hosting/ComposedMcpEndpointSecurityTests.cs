@@ -163,9 +163,12 @@ public sealed class ComposedMcpEndpointSecurityTests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The burst is dispatched together rather than one request after another, so what the limiter sees is a burst
-    /// however fast the host answers. Sending them in sequence against a slow machine would let capacity replenish
-    /// between them and leave the test passing because nothing was ever over the limit.
+    /// The burst is dispatched together rather than one request after another, and that alone is not what makes the
+    /// refusal certain: dispatching sixty requests at once against a host that has just started still delivers them
+    /// over seconds, and a limiter that restored its whole capacity every second served all of them. What decides the
+    /// outcome is the topology's replenishment period, which outlasts the run, so the client's capacity is spent once
+    /// and the count of refusals follows from the size of the burst rather than from how fast the machine dispatched
+    /// it.
     /// </para>
     /// <para>
     /// Two limiters can answer <c>429</c> on this route, so the refusals are checked for the one signal only the client
@@ -194,7 +197,10 @@ public sealed class ComposedMcpEndpointSecurityTests
         // Assert
         var refusals = burst.Where(answer => answer.StatusCode == HttpStatusCode.TooManyRequests).ToArray();
 
-        Assert.NotEmpty(refusals);
+        // An exact count rather than "some", because the topology restores nothing while the burst is in flight: the
+        // bucket starts full, queues nothing, and therefore serves its capacity and refuses the rest. A test that only
+        // asked for one refusal would still pass on a limiter that had started refusing everything.
+        Assert.Equal(burstSize - OrchestrationContract.McpRateLimitTokenCapacity, refusals.Length);
         Assert.All(refusals, refusal => Assert.Empty(refusal.Body));
         Assert.All(refusals, refusal => Assert.Equal("no-store", refusal.CacheControl));
         Assert.All(refusals, refusal => Assert.NotNull(refusal.RetryAfter));

@@ -103,7 +103,8 @@ if (runsIntegrationTests)
         .WithEnvironment("McpEndpoint__Cors__AllowedOrigins__0", OrchestrationContract.McpPermittedOrigin)
         // Narrowed from the product defaults for the same reason the origins are: a burst small enough to exhaust
         // deliberately is what makes the difference between a limiter that is wired in and one that is not observable.
-        // The period is a second, so a spent client is whole again long before anything else in the suite runs.
+        // The replenishment period outlasts the run, so what a client spent stays spent and a refusal cannot depend on
+        // how quickly the machine dispatched the burst.
         .WithEnvironment(
             "McpEndpoint__RateLimiting__TokenCapacity",
             OrchestrationContract.McpRateLimitTokenCapacity.ToString(CultureInfo.InvariantCulture))
