@@ -20,14 +20,31 @@ namespace MailFathom.Host.Hosting;
 /// restart the process.
 /// </para>
 /// <para>
-/// Both the path and the tag are published identities: the path is what a Kubernetes probe or a Compose health check
-/// names, and the tag is what a registration writes. Neither is renamed without changing what a deployment configured.
+/// It is a closed enumeration rather than a C# <see langword="enum" />, because each member carries the two published
+/// identities that make it what it is: the path a Kubernetes probe or a Compose health check names, and the tag a
+/// registration writes. Keeping either in a table beside the members would let the two drift, and neither is renamed
+/// without changing what a deployment configured. The set is closed because these three are the questions an
+/// orchestrator asks; a fourth probe is a change to what the listener serves, not a value a caller constructs.
+/// </para>
+/// <para>
+/// Nothing parses this from outside the process or serializes it out of one — the paths reach configuration as literals
+/// an operator writes and the tags reach registrations as literals the host writes — so the type carries no
+/// <c>TryParse</c> and no JSON converter. Being a struct, <see langword="default" /> is reachable and is not a probe;
+/// it reports itself through <see cref="IsSpecified" /> and refuses to answer for a path or a tag.
 /// </para>
 /// </remarks>
-/// <param name="Path">The request path this probe answers on, served only on the health-endpoint listener.</param>
-/// <param name="Tag">The health-check tag that selects the checks this probe reports.</param>
-internal sealed record HealthProbe(string Path, string Tag)
+internal readonly record struct HealthProbe
 {
+    private readonly string? path;
+
+    private readonly string? tag;
+
+    private HealthProbe(string path, string tag)
+    {
+        this.path = path;
+        this.tag = tag;
+    }
+
     /// <summary>Gets the probe reporting whether the host's startup gates have completed.</summary>
     /// <remarks>It answers "has this process finished coming up", which is what distinguishes a slow first start from one that is failing.</remarks>
     internal static HealthProbe Startup { get; } = new("/started", "startup");
@@ -43,6 +60,19 @@ internal sealed record HealthProbe(string Path, string Tag)
     /// <summary>Gets every probe the health-endpoint listener serves.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
     internal static IReadOnlyList<HealthProbe> All { get; } = [Startup, Readiness, Liveness];
+
+    /// <summary>Gets whether this value names a probe rather than the unusable struct default.</summary>
+    internal bool IsSpecified => this.path is not null;
+
+    /// <summary>Gets the request path this probe answers on, served only on the health-endpoint listener.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a probe.</exception>
+    internal string Path => this.path
+        ?? throw new InvalidOperationException("The value is the default of the struct and answers no probe path.");
+
+    /// <summary>Gets the health-check tag that selects the checks this probe reports.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a probe.</exception>
+    internal string Tag => this.tag
+        ?? throw new InvalidOperationException("The value is the default of the struct and selects no health check.");
 
     /// <summary>Reports whether a request path is one a probe endpoint answers.</summary>
     /// <param name="path">The request path.</param>
@@ -74,4 +104,8 @@ internal sealed record HealthProbe(string Path, string Tag)
 
         return registration.Tags.Contains(this.Tag);
     }
+
+    /// <inheritdoc />
+    /// <remarks>The path, because that is the identity a probe is read by wherever this reaches a diagnostic.</remarks>
+    public override string ToString() => this.path ?? "(unspecified)";
 }

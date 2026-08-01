@@ -520,7 +520,7 @@
       "properties": {
         "path": {
           "const": "/health",
-          "description": "Readiness consults every registered check, the database included, so a pod that cannot serve leaves the Service's endpoints. /alive would report a process that is running but cannot answer, which is the opposite of what readiness decides."
+          "description": "Readiness consults the dependencies a request needs, the database included, so a pod that cannot serve leaves the Service's endpoints. /alive would report a process that is running but cannot answer, which is the opposite of what readiness decides."
         },
         "initialDelaySeconds": {
           "$ref": "#/definitions/probeTiming/initialDelaySeconds"

@@ -75,6 +75,31 @@ public sealed class HealthProbeTests
         Assert.False(isProbePath);
     }
 
+    /// <summary>
+    /// The set is closed, so the struct default is the one value that is not a probe. C# gives no way to forbid it, so
+    /// it reports itself instead of answering for a path or a tag it does not have.
+    /// </summary>
+    [Fact]
+    public void IsSpecified_TheStructDefault_ReportsItselfAndRefusesToAnswer()
+    {
+        // Arrange
+        var unspecified = default(HealthProbe);
+
+        // Act, Assert
+        Assert.False(unspecified.IsSpecified);
+        Assert.Throws<InvalidOperationException>(() => unspecified.Path);
+        Assert.Throws<InvalidOperationException>(() => unspecified.Tag);
+        Assert.Equal("(unspecified)", unspecified.ToString());
+    }
+
+    [Fact]
+    public void IsSpecified_EveryDeclaredProbe_NamesAPathAndATag()
+    {
+        // Act, Assert
+        Assert.All(HealthProbe.All, probe => Assert.True(probe.IsSpecified));
+        Assert.Equal(HealthProbe.All.Select(probe => probe.Path), HealthProbe.All.Select(probe => probe.ToString()));
+    }
+
     [Fact]
     public void Selects_ARegistration_ReadsTheProbeMembershipItStated()
     {
