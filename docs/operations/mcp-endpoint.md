@@ -786,10 +786,19 @@ Several deliberate strictnesses are worth knowing before a profile is written:
   [Whose capacity a request spends](#whose-capacity-a-request-spends) for the rule between the two.
 
 **mTLS needs an HTTPS endpoint.** A client certificate only exists on a TLS connection, so a deployment serving plain
-HTTP presents none: an `Optional` profile then identifies nothing, and a `Required` profile refuses every request.
-Serving MCP over HTTPS with operator-provided certificates is
-[#142](https://github.com/Krzysztof318/MailFathom/issues/142); until it lands, terminate TLS in front of MailFathom only if you
-are not using these profiles, because a proxy that terminates TLS is exactly what stops the certificate from arriving.
+HTTP presents none: an `Optional` profile then identifies nothing, and a `Required` profile refuses every request. Give
+the endpoint a handshake of its own by configuring an [HTTPS profile](#https-and-your-own-domain), or terminate TLS in
+front of MailFathom only if you are not using these profiles, because a proxy that terminates TLS is exactly what stops
+the certificate from arriving.
+
+**This is verified over a real handshake, not only in unit tests.** The integration suite serves a whole MailFathom over
+an HTTPS profile with a `Required` client-certificate profile, against certificates it issues per run, and connects to
+it as a client. It establishes that the handshake asks for a certificate; that a client presenting one the profile
+accepts reaches the protocol surface; that a wrong authority, a wrong subject alternative name, and a certificate
+limited to server authentication are each refused with `403` over a connection that was established rather than
+dropped; and that a client presenting none is refused the same way rather than meeting a handshake error. The same
+requests carry the accepted certificate in the four headers a reverse proxy sets, and the verdict follows the connection
+in every case, which is the wire-level form of the rule above that no header is read.
 
 ### The ChatGPT connector profile
 
@@ -829,11 +838,6 @@ than accepting one, because an anchor that has become unreadable must never wide
 That refusal is the *profile's*, not the endpoint's. Another profile still accepts a certificate its own anchors verify,
 because the broken material took no part in that verdict — one deleted file closes the clients it belongs to, not the
 ones whose trust material is intact.
-
-They will need MailFathom to terminate TLS itself, which is what the HTTPS profiles above make possible: a client
-certificate is presented during the handshake, and a deployment that terminates TLS at a reverse proxy has no handshake
-here to read one from. Certificate-like HTTP headers are ignored and will stay ignored; trusting a proxy to assert a
-client's identity is its own reviewed design, not something a header enables.
 
 ## Rate limiting
 

@@ -23,6 +23,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The same builder the unit suites link, because the certificates a real handshake needs are issued by it rather
+         than committed: nothing here provisions material a second way. -->
+    <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- The app model under test, which is also where the Projects.AppHost metadata the testing builder starts comes
          from. -->
     <ProjectReference Include="..\..\src\AppHost\AppHost.csproj" />

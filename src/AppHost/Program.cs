@@ -103,7 +103,8 @@ if (runsIntegrationTests)
         .WithEnvironment("McpEndpoint__Cors__AllowedOrigins__0", OrchestrationContract.McpPermittedOrigin)
         // Narrowed from the product defaults for the same reason the origins are: a burst small enough to exhaust
         // deliberately is what makes the difference between a limiter that is wired in and one that is not observable.
-        // The period is a second, so a spent client is whole again long before anything else in the suite runs.
+        // The replenishment period outlasts the run, so what a client spent stays spent and a refusal cannot depend on
+        // how quickly the machine dispatched the burst.
         .WithEnvironment(
             "McpEndpoint__RateLimiting__TokenCapacity",
             OrchestrationContract.McpRateLimitTokenCapacity.ToString(CultureInfo.InvariantCulture))
@@ -139,5 +140,69 @@ var migrations = mailFathomHost.AddEFMigrations(OrchestrationContract.Migrations
 // Applying migrations before the host starts is what lets the host refuse to serve traffic against a schema it does not
 // recognize without that refusal firing on every local run.
 mailFathomHost.WaitForCompletion(migrations);
+
+if (runsIntegrationTests)
+{
+    // A second MailFathom, served over HTTPS behind mutual TLS, because a client certificate exists only on a TLS
+    // connection this process terminated and nothing above serves one. Whether a certificate is required is one answer
+    // for a whole process, so this cannot be a posture applied to the host above: that host is reached without a
+    // certificate by every test written about a credential, an origin, or a limiter, and a Required profile there would
+    // refuse all of them.
+    //
+    // No launch profile, so the listeners come from the endpoint declared here rather than from applicationUrl — two
+    // resources built from the same project would otherwise ask for the same fixed ports. The HTTPS profile then binds
+    // the port this endpoint allocated, which is what keeps the address the suite connects to and the socket the host
+    // opens one number rather than two.
+    var mutualTlsHost = builder
+        .AddProject<Projects.Host>(OrchestrationContract.MutualTlsHostResourceName, launchProfileName: null)
+        .WithHttpsEndpoint(name: OrchestrationContract.MutualTlsHostHttpsEndpointName)
+        .WithReference(database)
+        .WaitFor(database)
+        .WithExplicitStart()
+        .WithEnvironment("MailSynchronization__Enabled", "false")
+        .WithEnvironment("McpEndpoint__Enabled", "true")
+        // Deliberately unauthenticated: what this host exists to prove is which certificate the endpoint judges, and a
+        // credential in front of that would make every refusal answerable by two controls instead of one.
+        .WithEnvironment("McpEndpoint__Authentication", "None")
+        .WithEnvironment("McpEndpoint__Https__Endpoints__0__Name", "integration-tests")
+        .WithEnvironment("McpEndpoint__Https__Endpoints__0__Domain", OrchestrationContract.MutualTlsHostDomain)
+        .WithEnvironment("McpEndpoint__Https__Endpoints__0__BindAddress", OrchestrationContract.MutualTlsHostBindAddress)
+        .WithEnvironment(
+            "McpEndpoint__Https__Endpoints__0__ServerCertificate__CertificateChain__Name",
+            "integration-tests-server-certificate")
+        .WithEnvironment(
+            "McpEndpoint__Https__Endpoints__0__ServerCertificate__CertificateChain__SecretReference",
+            $"env:{OrchestrationContract.MutualTlsServerCertificateChainVariable}")
+        .WithEnvironment(
+            "McpEndpoint__Https__Endpoints__0__ServerCertificate__PrivateKey__Name",
+            "integration-tests-server-private-key")
+        .WithEnvironment(
+            "McpEndpoint__Https__Endpoints__0__ServerCertificate__PrivateKey__SecretReference",
+            $"env:{OrchestrationContract.MutualTlsServerPrivateKeyVariable}")
+        .WithEnvironment(
+            "McpEndpoint__ClientCertificateProfiles__0__Name",
+            OrchestrationContract.MutualTlsClientProfileName)
+        // Required, so a request presenting no certificate is refused by the endpoint rather than served. That refusal
+        // is the claim only a real handshake can carry: it arrives as an HTTP response, which means the connection was
+        // established for a client that had nothing to present.
+        .WithEnvironment("McpEndpoint__ClientCertificateProfiles__0__Requirement", "Required")
+        .WithEnvironment(
+            "McpEndpoint__ClientCertificateProfiles__0__TrustAnchors__0__Name",
+            "integration-tests-client-authority")
+        .WithEnvironment(
+            "McpEndpoint__ClientCertificateProfiles__0__TrustAnchors__0__SecretReference",
+            $"env:{OrchestrationContract.MutualTlsClientTrustAnchorVariable}")
+        .WithEnvironment(
+            "McpEndpoint__ClientCertificateProfiles__0__SubjectAlternativeNames__0",
+            OrchestrationContract.MutualTlsClientDnsName);
+
+    mutualTlsHost.WithEnvironment(
+        "McpEndpoint__Https__Endpoints__0__Port",
+        mutualTlsHost
+            .GetEndpoint(OrchestrationContract.MutualTlsHostHttpsEndpointName)
+            .Property(EndpointProperty.TargetPort));
+
+    mutualTlsHost.WaitForCompletion(migrations);
+}
 
 builder.Build().Run();

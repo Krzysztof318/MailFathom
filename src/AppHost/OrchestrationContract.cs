@@ -24,6 +24,59 @@ public static class OrchestrationContract
     /// <summary>The HTTP endpoint the MailFathom host serves its surface on, including the MCP endpoint.</summary>
     public const string HostHttpEndpointName = "http";
 
+    /// <summary>The second MailFathom host project resource, the one served over HTTPS behind mutual TLS.</summary>
+    /// <remarks>
+    /// <para>
+    /// Present only under <see cref="IntegrationTestingArgument" />, and a second resource rather than a posture applied
+    /// to <see cref="HostResourceName" />. Whether a client certificate is required is one answer for a whole process,
+    /// so a host that refuses a request presenting none cannot also be the host every other composed test reaches
+    /// without one. Keeping them apart is what lets those tests stay about the credential, the origin, and the limiter
+    /// they were written for.
+    /// </para>
+    /// <para>
+    /// It is started explicitly, like <see cref="HostResourceName" /> and for the same reason: it opens the database the
+    /// rest of the suite writes to.
+    /// </para>
+    /// </remarks>
+    public const string MutualTlsHostResourceName = "mailfathom-mtls-host";
+
+    /// <summary>The HTTPS endpoint that host serves its surface on, including the MCP endpoint.</summary>
+    public const string MutualTlsHostHttpsEndpointName = "https";
+
+    /// <summary>The DNS domain the mutual-TLS host's HTTPS profile publishes and selects on.</summary>
+    /// <remarks>
+    /// The loopback name, because that is the name the suite's client asks for during the handshake and the only one an
+    /// orchestrated endpoint resolves to. A profile publishes an exact name and refuses every other, so the certificate
+    /// the suite issues has to carry this one as a subject alternative name.
+    /// </remarks>
+    public const string MutualTlsHostDomain = "localhost";
+
+    /// <summary>The IP address the mutual-TLS host's HTTPS listener binds.</summary>
+    /// <remarks>Both loopback families, because whether a client resolves <see cref="MutualTlsHostDomain" /> to IPv4 or IPv6 first is the machine's choice rather than the suite's.</remarks>
+    public const string MutualTlsHostBindAddress = "::";
+
+    /// <summary>The name of the one client-certificate trust profile that host configures.</summary>
+    public const string MutualTlsClientProfileName = "integration-tests-client";
+
+    /// <summary>The DNS name a certificate must carry as a subject alternative name for that profile to accept it.</summary>
+    /// <remarks>The domain is reserved for testing, like every other name this topology invents.</remarks>
+    public const string MutualTlsClientDnsName = "client.mailfathom.test";
+
+    /// <summary>The environment variable the mutual-TLS host reads its server certificate chain from.</summary>
+    /// <remarks>
+    /// The material itself is deliberately absent from this app model and from the repository: the suite generates a
+    /// certificate authority, a server identity, and the client certificates per run and injects them into these
+    /// variables before the application is built. The app model states only where the host looks, which is what keeps a
+    /// private key out of source control while both sides still read one name.
+    /// </remarks>
+    public const string MutualTlsServerCertificateChainVariable = "MAILFATHOM_INTEGRATIONTESTS_SERVER_CERTIFICATE_CHAIN";
+
+    /// <summary>The environment variable the mutual-TLS host reads its server private key from.</summary>
+    public const string MutualTlsServerPrivateKeyVariable = "MAILFATHOM_INTEGRATIONTESTS_SERVER_PRIVATE_KEY";
+
+    /// <summary>The environment variable the mutual-TLS host reads its one client-certificate trust anchor from.</summary>
+    public const string MutualTlsClientTrustAnchorVariable = "MAILFATHOM_INTEGRATIONTESTS_CLIENT_TRUST_ANCHOR";
+
     /// <summary>The name the integration-test topology configures its one MCP API key under.</summary>
     /// <remarks>Present only under <see cref="IntegrationTestingArgument" />, like the key itself.</remarks>
     public const string McpApiKeyName = "integration-tests";
@@ -56,13 +109,28 @@ public static class OrchestrationContract
     /// <remarks>
     /// Declared here because the suite has to send more than this to observe a refusal, and a value that reached only
     /// the app model would leave the burst either too small to refuse anything or needlessly large. It is deliberately
-    /// well above what any other test in the suite spends, and it is restored every
-    /// <see cref="McpRateLimitReplenishmentPeriod" />, so exhausting it disturbs nothing that runs afterwards.
+    /// well above what any other test in the suite spends, and only <see cref="McpExpendableApiKeyName" /> ever spends
+    /// it, so exhausting it disturbs nothing that runs afterwards.
     /// </remarks>
     public const int McpRateLimitTokenCapacity = 20;
 
     /// <summary>How often the integration-test topology restores a client's spent MCP capacity.</summary>
-    public const string McpRateLimitReplenishmentPeriod = "00:00:01";
+    /// <remarks>
+    /// <para>
+    /// Long enough that no capacity comes back while a run is in progress, which is what makes a refusal a property of
+    /// how much the burst spent rather than of how fast the machine dispatched it. A period of a second, which this
+    /// deliberately is not, makes the outcome depend on arrival pacing: the framework restores the whole capacity every
+    /// period, so a burst that trickles in below that rate is served in full and refuses nothing. Measured on a cold
+    /// host, sixty requests dispatched together arrived over thirteen seconds — under five a second against twenty a
+    /// second being restored — and the test that exists to observe a refusal observed none.
+    /// </para>
+    /// <para>
+    /// Nothing is lost by the spent client staying spent. Rate limits are counted per client, and
+    /// <see cref="McpExpendableApiKeyName" /> exists to be taken to zero exactly once; every other test authenticates
+    /// with <see cref="McpApiKeyName" />, whose own capacity the burst never touches.
+    /// </para>
+    /// </remarks>
+    public const string McpRateLimitReplenishmentPeriod = "00:10:00";
 
     /// <summary>How many MCP requests the integration-test topology's host serves at once, across every client.</summary>
     /// <remarks>

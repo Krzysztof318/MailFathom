@@ -21,6 +21,8 @@ public sealed class TestCertificatesTests
 
     private const string DnsName = "client.example.test";
 
+    private const string ServerDnsName = "server.example.test";
+
     [Fact]
     public void CreateCertificateAuthority_AnAuthority_CanIssueAndIsMarkedAsOne()
     {
@@ -158,6 +160,40 @@ public sealed class TestCertificatesTests
         Assert.True(intermediate.HasPrivateKey);
         Assert.Equal(rootAuthority.Subject, intermediate.Issuer);
         Assert.Equal(intermediate.Subject, certificate.Issuer);
+    }
+
+    /// <summary>An identity presented during a real handshake signs the transcript with its key, so an issued one that lost it would fail every connection.</summary>
+    [Fact]
+    public void IssueClientIdentity_AnIssuedIdentity_KeepsItsKeyAndIsUsableForClientAuthentication()
+    {
+        // Arrange
+        using var authority = TestCertificates.CreateCertificateAuthority("Test Root");
+
+        // Act
+        using var identity = TestCertificates.IssueClientIdentity(authority, DnsName);
+
+        // Assert
+        Assert.True(identity.HasPrivateKey);
+        Assert.Equal(authority.Subject, identity.Issuer);
+        Assert.Equal([ClientAuthenticationOid], ExtendedKeyUsagesOf(identity));
+        Assert.Equal([DnsName], DnsNamesOf(identity));
+    }
+
+    /// <summary>The server side of the same claim, and the material a client refuses when it is presented as a client certificate instead.</summary>
+    [Fact]
+    public void IssueServerIdentity_AnIssuedIdentity_KeepsItsKeyAndIsUsableForServerAuthentication()
+    {
+        // Arrange
+        using var authority = TestCertificates.CreateCertificateAuthority("Test Root");
+
+        // Act
+        using var identity = TestCertificates.IssueServerIdentity(authority, ServerDnsName);
+
+        // Assert
+        Assert.True(identity.HasPrivateKey);
+        Assert.Equal(authority.Subject, identity.Issuer);
+        Assert.Equal([ServerAuthenticationOid], ExtendedKeyUsagesOf(identity));
+        Assert.Equal([ServerDnsName], DnsNamesOf(identity));
     }
 
     /// <summary>Serial numbers must be unique per issuer, or a chain built from two of them is not the chain the test described.</summary>

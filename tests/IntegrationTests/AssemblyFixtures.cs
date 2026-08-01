@@ -8,6 +8,7 @@ using Xunit;
 // PostgreSQL container per test class, which is the cost this suite is designed to pay exactly once.
 [assembly: AssemblyFixture(typeof(MailFathomOrchestrationFixture))]
 
-// The composed host connects to the same database the rest of the suite writes to and asserts on, so it runs after all
-// of it. The orderer states that one constraint and leaves every other collection in the order xUnit produced.
-[assembly: TestCollectionOrderer(typeof(ComposedHostRunsLastCollectionOrderer))]
+// A composed host connects to the same database the rest of the suite writes to and asserts on, so both of them run
+// after all of it, and after each other. The orderer states those two constraints and leaves every other collection in
+// the order xUnit produced.
+[assembly: TestCollectionOrderer(typeof(ComposedHostsRunLastCollectionOrderer))]
