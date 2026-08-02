@@ -216,8 +216,8 @@ deployment that does not name the overlay cannot reach one however it is configu
 Read [what a nightly build risks](container-image.md#what-a-nightly-build-risks) before using one. The short of it is
 that a nightly has no upgrade path in either direction, that a database it has touched may not be usable by a release,
 and that the tag you deployed is deleted once thirty newer nightlies exist. Name the exact `-nightly.<n>-<short revision>` identifier
-rather than the moving `nightly` tag, so what is running does not change under you. While the repository is private the
-package is too, so `docker login ghcr.io` with a `read:packages` token comes first.
+rather than the moving `nightly` tag, so what is running does not change under you. The package is public, so nothing
+has to be logged in to before the pull.
 
 Using one is deliberately awkward:
 

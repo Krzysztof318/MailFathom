@@ -289,8 +289,9 @@ indistinguishable from a release in a query that reads that label.
 [What a nightly build risks](container-image.md#what-a-nightly-build-risks) states what the acknowledgement is
 acknowledging: a schema that can be ahead of any published migration, no upgrade path in either direction, four public
 surfaces that move without notice, and a tag that is deleted once thirty newer nightlies exist. Name the exact
-`-nightly.<n>-<short revision>` identifier or a digest rather than the moving `nightly` tag, and give the cluster a pull secret while
-the package is private.
+`-nightly.<n>-<short revision>` identifier or a digest rather than the moving `nightly` tag. The package is public, so
+the cluster needs no pull secret to reach it; `image.pullSecrets` stays in the chart for a mirror or a private registry
+an operator pulls through instead.
 
 ## Verification
 

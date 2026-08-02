@@ -15,8 +15,7 @@ What does exist is the nightly channel: `ghcr.io/krzysztof318/mailfathom:nightly
 night's build, published from `main` when it has moved. **A nightly is not a release and is a poor place to keep data
 you care about** — its schema can be ahead of any migration, it has no upgrade path in either direction, and it is
 deleted once thirty newer ones exist. [What a nightly build risks](../operations/container-image.md#what-a-nightly-build-risks)
-states the whole of it before you choose one. While this repository is private the package is private too, so pulling
-one means logging in to GHCR with a token that has `read:packages`.
+states the whole of it before you choose one. The package is public, so pulling one needs no GHCR login.
 
 ```bash
 git clone https://github.com/Krzysztof318/MailFathom.git

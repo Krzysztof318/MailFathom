@@ -160,14 +160,15 @@ Images are published to the GitHub Container Registry, at `ghcr.io/krzysztof318/
 same manifest list under the same digest once issue #235 lands; until then this is the only registry a MailFathom image
 reaches.
 
-**While this repository is private, the package is private too**, so a pull is authenticated even for a nightly:
+**The package is public**, so a pull needs no authentication and no GitHub account:
 
 ```bash
-echo "$GITHUB_TOKEN" | docker login ghcr.io --username <your-github-login> --password-stdin
+docker pull ghcr.io/krzysztof318/mailfathom:nightly
 ```
 
-The token is a personal access token with `read:packages`. The publishing run asserts the package's visibility rather
-than trusting the registry's default, and fails when the repository is private and the package is not.
+A package's visibility is a setting of its own rather than something it inherits from the repository, and it is
+configured to follow the repository's access. Nothing in a workflow reads it back, so the settings page is where it is
+confirmed.
 
 Two channels are published, and what separates them is the version identifier rather than where the image sits:
 

@@ -23,8 +23,7 @@
 #
 # The identifier to name is the `<x.y.z>-nightly.<n>-<short revision>` tag of one night's build rather than the moving
 # `nightly` tag, so
-# what a deployment runs does not change under it. While the repository is private the package is private too, which
-# makes `docker login ghcr.io` with a `read:packages` token part of using this overlay.
+# what a deployment runs does not change under it. The package is public, so the pull needs no registry login.
 
 services:
   mailfathom:

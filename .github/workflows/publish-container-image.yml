@@ -162,34 +162,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # While this repository is private its packages are too, and that is asserted rather than assumed: a package that
-      # turned public would publish an unreleased product's artifacts and every layer inside them. It runs here, before
-      # anything is built or pushed, because a check that ran afterwards would have already exposed what it exists to
-      # protect. Reading a package's visibility needs a token GITHUB_TOKEN is not always accepted as, so a read that
-      # fails says so and leaves the check unmade instead of failing a publication over a permission.
-      - name: Assert the package is as private as the repository
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPOSITORY_IS_PRIVATE: ${{ github.event.repository.private }}
-          PACKAGE_OWNER: ${{ github.repository_owner }}
-          PACKAGE_NAME: ${{ github.event.repository.name }}
-        run: |
-          set -euo pipefail
-
-          package_name="$(printf '%s' "$PACKAGE_NAME" | tr '[:upper:]' '[:lower:]')"
-
-          if ! visibility="$(gh api "/users/${PACKAGE_OWNER}/packages/container/${package_name}" --jq '.visibility' 2>/dev/null)"; then
-            echo "::warning::The package's visibility could not be read with the workflow token, so it was not checked. Confirm it under Packages > ${package_name} > Package settings."
-            exit 0
-          fi
-
-          if [[ "$REPOSITORY_IS_PRIVATE" == 'true' && "$visibility" != 'private' ]]; then
-            echo "::error::The repository is private but the ${package_name} package is ${visibility}. Make the package private under Packages > ${package_name} > Package settings, and delete what was published while it was not."
-            exit 1
-          fi
-
-          echo "The package is ${visibility}, which matches a repository whose private flag is ${REPOSITORY_IS_PRIVATE}."
-
       # Publication is idempotent rather than merely retryable. A run that finds this version already in the registry,
       # built from this commit, reports the digest that is there and rebuilds nothing — which is what makes a re-run
       # after a failed later step safe. A version present from a *different* commit is the one case that must never be

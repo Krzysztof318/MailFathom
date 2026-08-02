@@ -280,7 +280,8 @@ jobs:
       # would also permit closing or relabelling a pull request, which nothing in this file does.
       pull-requests: read
       # The pull request's body names the issue it closes, and that issue is the change's stated
-      # contract. Reading it on a private repository needs this scope of its own.
+      # contract. `contents: read` does not reach an issue, so the scope is stated rather than
+      # inherited — and stating it keeps the read from depending on the repository staying public.
       issues: read
       # No `actions: write`, which is why every run logs `Cache reservation failed: cache write
       # denied: token has no writable scopes`. `claude-code-action` installs Bun through
