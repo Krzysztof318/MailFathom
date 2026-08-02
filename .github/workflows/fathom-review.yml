@@ -120,6 +120,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           PULL_REQUEST_DRAFT: ${{ github.event.pull_request.draft }}
+          PULL_REQUEST_AUTHOR: ${{ github.event.pull_request.user.login }}
           HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           ADDED_LABEL: ${{ github.event.label.name }}
           IS_PULL_REQUEST_COMMENT: ${{ github.event.issue.pull_request.url != '' }}
@@ -132,6 +133,12 @@ jobs:
           # publishes as `fathom-reviewer[bot]` — so anything that touches the App's identity means
           # re-reading this from the API rather than deriving it from the settings page.
           REVIEWER_LOGIN: 'fathom-reviewer[bot]'
+          # The updater whose pull requests the gate below declines to review, named the way it
+          # authors them rather than the way `.github/dependabot.yml` is spelled. It is the only
+          # account here that opens a pull request without a person having written the diff, which
+          # is the whole of why it is singled out; a second bot would earn its own line and its own
+          # argument rather than a widened match on `[bot]`.
+          UPDATER_LOGIN: 'dependabot[bot]'
         run: |
           set -euo pipefail
 
@@ -165,6 +172,18 @@ jobs:
                 else
                   reason="the applied label is '${ADDED_LABEL}'"
                 fi
+              elif [[ "$PULL_REQUEST_AUTHOR" == "$UPDATER_LOGIN" ]]; then
+                # A version bump is not a change this reviewer can advise on. What decides one is
+                # whether the upstream release renamed an input or dropped a runner, and whether
+                # `THIRD_PARTY_LICENSES.md` still names the version the workflow pins — both read
+                # from upstream release notes and from the register, neither of them present in the
+                # diff. The diff itself is a version number in a `uses:` line, and it is reviewed
+                # again on every rebase the updater performs.
+                #
+                # This is the one skip that is about the author rather than about the change's
+                # state, so it is placed with the other checks the label escapes rather than
+                # anywhere earlier: a major bump worth a second opinion is still one label away.
+                reason="the pull request is authored by ${UPDATER_LOGIN}; label it fathom-review or comment fathom-review to review a bump anyway"
               elif [[ "$PULL_REQUEST_DRAFT" == 'true' ]]; then
                 # This is the one check that contains what `synchronize` costs: a draft is pushed
                 # to while it is being written, and none of those pushes is reviewed.

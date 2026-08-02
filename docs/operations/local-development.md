@@ -651,12 +651,16 @@ one grouped pull request each Monday, a major on its own, at most three open at 
 newer than a week old; the file states why each of those numbers is what it is and why the `nuget`
 ecosystem stays off, with the upstream issue that decides it.
 
-Two things about those pull requests belong here rather than there. They edit `.github/workflows/**`
+Three things about those pull requests belong here rather than there. They edit `.github/workflows/**`
 by definition, so `Protected paths` recognises `dependabot[bot]` for that directory and refuses it
 everywhere else — that workflow carries the argument for why the exception removes a signal rather
-than an approval. And they are not exempt from anything else: the `main` ruleset asks the same
-code-owner review of them as of any other pull request, `Required CI` still has to pass, nothing
-auto-merges, and the updater holds no write-capable token.
+than an approval. `Fathom review` declines them, by author, because what decides a bump is the
+upstream release notes and the register rather than the diff; the `fathom-review` label still
+reaches one, and
+[Dependency update pull requests](agent-workflow.md#dependency-update-pull-requests) carries the
+argument. And they are exempt from nothing else: the `main` ruleset asks the same code-owner review
+of them as of any other pull request, `Required CI` still has to pass, nothing auto-merges, and the
+updater holds no write-capable token.
 
 ## Repository security features
 

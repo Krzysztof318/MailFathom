@@ -251,7 +251,14 @@ A draft is skipped, because a draft is still being written and reviewing it
 spends subscription usage on a moving target. That is also what contains the cost
 of reviewing pushes: a branch still being written is pushed to freely and spends
 nothing, and marking it ready is the deliberate act that opts every later push in.
-Two things ask for a review anyway:
+
+A pull request authored by `dependabot[bot]` is skipped as well, and that one is
+about who opened it rather than about what state it is in: the updater's batch
+arrives published and non-draft, so the check above would let it straight
+through. [Dependency update pull requests](#dependency-update-pull-requests)
+carries the reasoning, next to the questions a bump is actually read against.
+
+Two things ask for a review anyway, whichever skip refused it:
 
 - a comment on the pull request that *begins a line* with `fathom-review` or
   `@fathom-review`, from an author with write access. A draft is reviewed this
@@ -279,7 +286,10 @@ Two things ask for a review anyway:
   instruction. The marker must be followed by whitespace, so the hyphenated
   `-fathom-review` does not count, and neither does `fathom-reviewer`;
 - the `fathom-review` label, which is how a fork's pull request is reviewed at
-  all. A fork's own pushes never start a review, so a maintainer decides.
+  all. A fork's own pushes never start a review, so a maintainer decides. It is
+  also how a dependency bump gets the pass anyway, which is worth doing for a
+  major that touches a workflow's inputs and is not worth doing for the weekly
+  batch.
 
 An automatic review is bounded per pull request: once ten reviews by
 `fathom-reviewer[bot]` stand on it, the gate refuses and says so in the run log
@@ -866,6 +876,16 @@ included.
 `finish-change` writes a board field, and neither has anything to do here: the
 change is already written, it closes no issue, and it belongs to no roadmap
 item. What it needs is a reading, and the reading is the maintainer's.
+
+**`Fathom review` does not run on one either**, and the four questions below are
+why. Three of them are answered somewhere the diff does not reach — the upstream
+release notes, the action's ownership, the register — and the fourth is answered
+by the checks. A reviewer given the diff sees a version number in a `uses:` line
+and can confirm none of them, so a run would spend subscription usage restating
+what the tag already says, again on every rebase the updater performs. The gate
+refuses by author, before the draft and fork checks that would otherwise let a
+published bump straight through; the `fathom-review` label still reaches one,
+which is what a major touching a workflow's inputs is worth.
 
 Four questions answer a Dependabot pull request, and the first is the one an
 automated bump makes easy to skip.
