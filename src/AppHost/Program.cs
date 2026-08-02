@@ -156,6 +156,15 @@ if (runsIntegrationTests)
     // them, once nothing else is asserting on the infrastructure it would touch.
     mailFathomHost
         .WithExplicitStart()
+        // The probe listener, on a port the orchestration allocates rather than on the one the host defaults to. This
+        // topology runs two MailFathom processes on one machine and a default is the same number in both, so the second
+        // to start would fail to bind and exit — which reaches a test as a request that never answers rather than as a
+        // host that never started. Allocated for the reason every other port here is: nothing this suite opens may
+        // depend on a number another run, or another host, already holds.
+        //
+        // Its scheme is tcp rather than http, for the reason the pinned topology's is: an http endpoint would join
+        // ASPNETCORE_URLS and make the probe port an application listener, which the host refuses.
+        .WithEndpoint(name: "health", scheme: "tcp", env: "HealthEndpoints__Port")
         // Stated here rather than left to appsettings.json, because the isolation above is a promise this app model
         // makes: a default edited elsewhere must not be able to turn the started host into a synchronizing one.
         .WithEnvironment("MailSynchronization__Enabled", "false")
@@ -282,6 +291,9 @@ if (runsIntegrationTests)
     var mutualTlsHost = builder
         .AddProject<Projects.Host>(OrchestrationContract.MutualTlsHostResourceName, launchProfileName: null)
         .WithHttpsEndpoint(name: OrchestrationContract.MutualTlsHostHttpsEndpointName)
+        // Its own probe listener, allocated for the reason the host above allocates one: both processes run at once
+        // under this topology, and the port a host defaults to is the same number in each.
+        .WithEndpoint(name: "health", scheme: "tcp", env: "HealthEndpoints__Port")
         .WithReference(database)
         .WaitFor(database)
         .WithExplicitStart()
