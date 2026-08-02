@@ -308,6 +308,21 @@ submission step is skipped by the same cancellation, which is why it tests
 step even when the run was cancelled, so it would publish the verdict the
 cancellation exists to prevent.
 
+Those two events are the whole of what may cancel, and the rule they share is
+worth stating in the other direction: **a comment never ends a review already
+running.** A push replaces the head and a close removes it, so in both cases what
+is running has stopped describing the code that will merge. Everything else —
+a comment, a label, a pull request marked ready — asks for a review without
+invalidating one, and queues on the same group instead. `cancel-in-progress` is
+therefore an expression naming those two events rather than the literal `true`,
+because `issue_comment` fires for *any* comment on a pull request, a bot's
+included, and the gate that tells a request apart from a passing remark runs
+inside the run — after the run has entered the group. Left unconditional, a
+notice posted by another workflow ends a review several minutes in and then
+declines to start one, which spends the entire cost of a review to publish
+nothing. `a_comment_never_cancels_a_review_in_flight` in
+`scripts/test-agent-workflow.sh` is what keeps it from quietly reverting.
+
 The workflow reports no status check and is not in the `main` ruleset. It
 advises; nothing waits on it.
 
@@ -489,10 +504,11 @@ because each closes a different way the bill could grow:
 
 - a draft is never reviewed automatically, so a branch still being written is
   pushed to freely and spends nothing;
-- `concurrency` with `cancel-in-progress` means a superseded head never finishes
-  a review, so a rapid series of pushes costs one run rather than one per push,
-  and a merge or a close ends the run reading a pull request that has stopped
-  being worth a verdict;
+- `concurrency` with a conditional `cancel-in-progress` means a superseded head
+  never finishes a review, so a rapid series of pushes costs one run rather than
+  one per push, and a merge or a close ends the run reading a pull request that
+  has stopped being worth a verdict — while a comment, which cannot supersede
+  anything, queues rather than throwing a finished review away;
 - a fork's own pushes never start a review; a maintainer's label does;
 - the comment trigger requires an `OWNER`, `MEMBER`, or `COLLABORATOR` author, so
   nobody outside the project can spend the subscription by typing;

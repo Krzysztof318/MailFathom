@@ -2366,6 +2366,38 @@ only_the_reviewer_workflow_uses_pull_request_target() {
   fi
 }
 
+# `issue_comment` fires for every comment on a pull request, a bot's included, and the gate that
+# tells a review request apart from any other comment runs *inside* the run — after the run has
+# already entered the concurrency group. An unconditional `cancel-in-progress: true` therefore means
+# a comment ends the review already running and then declines to start one, spending the whole cost
+# of a review to publish nothing. Only the two events that stop the running review from describing
+# the head worth a verdict may cancel: a push replaces that head, and a close removes it.
+a_comment_never_cancels_a_review_in_flight() {
+  local reviewer_workflow="$source_repository_root/.github/workflows/fathom-review.yml"
+  local cancel_in_progress
+  local required_term
+
+  cancel_in_progress="$(sed -nE 's/^  cancel-in-progress:[[:space:]]*(.*)$/\1/p' "$reviewer_workflow")"
+
+  if [[ -z "$cancel_in_progress" ]]; then
+    printf 'fathom-review.yml declares no cancel-in-progress, so a superseded head finishes its review\n' >&2
+    return 1
+  fi
+
+  if [[ "$cancel_in_progress" == 'true' ]]; then
+    printf 'fathom-review.yml cancels unconditionally, so any comment on a pull request ends the review in flight\n' >&2
+    return 1
+  fi
+
+  for required_term in "github.event_name == 'pull_request_target'" 'synchronize' 'closed'; do
+    if [[ "$cancel_in_progress" != *"$required_term"* ]]; then
+      printf 'fathom-review.yml cancel-in-progress does not name %s, so it no longer cancels exactly the two events that replace or remove the head\n' \
+        "$required_term" >&2
+      return 1
+    fi
+  done
+}
+
 workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
   [[ -x "$source_repository_root/scripts/assert-release-tag.sh" ]]
@@ -2468,6 +2500,7 @@ run_test every_write_scope_is_one_the_policy_records
 run_test every_checkout_refuses_to_persist_credentials
 run_test the_release_restores_the_annotated_tag_before_asserting_it
 run_test only_the_reviewer_workflow_uses_pull_request_target
+run_test a_comment_never_cancels_a_review_in_flight
 run_test workflow_scripts_use_flat_manual_layout
 
 printf '%s passed, %s failed\n' "$passed_count" "$failed_count"

@@ -69,16 +69,32 @@ on:
       - created
 
 concurrency:
-  # One run per pull request, and the newest event wins. A push while a review is still running
-  # leaves that review describing a head nobody will merge, so it is cancelled rather than allowed
-  # to post a verdict against superseded code and threads anchored to lines that have moved. A merge
-  # or a close does the same to the whole pull request rather than to one head, and it is the reason
-  # `closed` is a trigger at all: that run reviews nothing and exists only to enter this group.
+  # One run per pull request, so two reviews never post to the same change at once. What decides
+  # whether an arriving run cancels the one already running is not which event is newer but whether
+  # the head being read has stopped being the head worth a verdict, and exactly two events do that.
   #
-  # Cancelling is safe and worth the saved usage: the review is one POST at the end of the job, so a
-  # run stopped before it posts nothing at all, and a run stopped after it has already finished.
+  # A push replaces the head. The review still running describes code nobody will merge and would
+  # anchor threads to lines that have moved, so it is cancelled. A merge or a close removes the
+  # whole pull request from consideration, and it is the reason `closed` is a trigger at all: that
+  # run reviews nothing and exists only to enter this group. Cancelling is safe in both cases and
+  # worth the saved usage, because the review is one POST at the end of the job — a run stopped
+  # before it posts nothing at all, and a run stopped after it has already finished.
+  #
+  # **Every other event asks for a review rather than invalidating one, so it waits.** A comment, a
+  # label, and a pull request marked ready all leave the head alone: what is running is still
+  # reading the code that will merge, and its verdict is still worth having. They queue on this
+  # group instead, which costs a pending run and produces two verdicts in order rather than one
+  # verdict thrown away.
+  #
+  # That distinction is the whole reason `cancel-in-progress` is an expression. `issue_comment`
+  # fires for *any* comment on a pull request, including one written by a bot with no interest in
+  # this workflow — the code-scanning notice is the one that found this — and the gate below is the
+  # only thing that can tell such a comment apart from a request. The gate runs inside the run, and
+  # the run enters this group before the gate can speak, so an unconditional `true` here means a
+  # comment cancels a review in flight several minutes in and then declines to start one, which is
+  # the entire cost of a review spent to publish nothing.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request_target' && (github.event.action == 'synchronize' || github.event.action == 'closed') }}
 
 permissions:
   contents: read
