@@ -59,6 +59,10 @@ jobs:
       # produce, which is the tree worth checking: it is what the words will look like once merged.
       - name: Check out the merge commit this pull request would produce
         uses: actions/checkout@v5
+        with:
+          # Nothing after this step uses Git against the remote — the changed-file query below reads
+          # the REST API through an explicit `GH_TOKEN`, and the checker only reads the working tree.
+          persist-credentials: false
 
       - name: Collect the files this pull request changes
         id: changed-files

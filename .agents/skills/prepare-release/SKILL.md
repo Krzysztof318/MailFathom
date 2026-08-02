@@ -150,7 +150,7 @@ Release x.y.z is prepared. Merge in this order — the tag has to land between t
   merged. Merge it, then re-cut.
 - **Publication fails after the image is built.** Retry by digest rather than by rebuilding — a rebuild produces a
   second artifact for one version, which is what the release workflow's immutability assertion exists to prevent. The
-  release workflows and their recovery are #156's.
+  `Release` workflow is what publishes, and `docs/operations/release-procedure.md` records its sequence.
 - **The release is abandoned before the tag.** Close both pull requests. Nothing was published and no tag exists, so
   there is nothing to undo.
 - **The release is abandoned after the tag.** It is not abandoned; it is released. Cut a patch from the release branch.

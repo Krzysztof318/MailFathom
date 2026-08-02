@@ -44,8 +44,8 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     /// <summary>
-    /// The container must be the only owner of the data source. It was previously built inside the startup provider,
-    /// which the container never sees, so a host that resolved no context shut down leaving a connection pool open.
+    /// The container must be the only owner of the data source. One built inside the startup provider is invisible to
+    /// the container, so a host that resolved no context would shut down leaving its connection pool open.
     /// </summary>
     [Fact]
     public async Task AddInfrastructure_AfterStartup_HandsTheContainerADataSourceItCreatedItself()

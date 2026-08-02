@@ -8,7 +8,7 @@ type: application
 #
 # It still reads its initial value because no chart has been published. Moving it distinguishes what an installer can
 # already have from what this directory now says, and nobody can have anything yet, so a bump before the first
-# publication only counts edits. #156 owns that publication; from it onward the rule above applies literally.
+# publication only counts edits. From the first published chart onward the rule above applies literally.
 version: 0.1.0
 
 # No `appVersion` here, deliberately. A version written in this file would be a second place to remember one, and the

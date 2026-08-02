@@ -217,5 +217,5 @@ podLabels: {}
 #
 # The chart applies none and renders nothing that could. MailFathom never applies a schema change while starting — it
 # verifies the schema and refuses to serve against one it does not recognize — and the reviewed artifact that answers
-# that refusal is #126's, together with the Job or command that runs it. Until it exists, establish the schema before
-# installing this chart; `docs/operations/deployment-kubernetes.md` describes the step.
+# that refusal is the idempotent SQL file each release ships. The chart renders no Job and no command that applies it,
+# so establish the schema before installing this chart; `docs/operations/deployment-kubernetes.md` describes the step.

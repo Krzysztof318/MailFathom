@@ -20,7 +20,11 @@ scripts_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source_repository_root="$(cd "$scripts_directory/.." && pwd -P)"
 test_directory="$(mktemp -d)"
 repository_root="$test_directory/repository"
-remote_repository_root="$test_directory/remote"
+# The remote's own path names the canonical repository, because the scripts identify their base
+# remote by where it points rather than by its name. A fixture remote called anything else would
+# be a fork as far as they are concerned, which is what
+# `verify_full_refuses_a_checkout_with_no_upstream_remote` asserts deliberately.
+remote_repository_root="$test_directory/upstream/Krzysztof318/MailFathom"
 fake_bin_directory="$test_directory/bin"
 protected_paths_bin_directory="$test_directory/protected-paths-bin"
 typo_check_bin_directory="$test_directory/typo-check-bin"
@@ -369,7 +373,7 @@ verify_full_stops_when_the_remote_is_unreachable() {
 
   : > "$invocation_log"
   : > "$workflow_invocation_log"
-  git -C "$repository_root" remote set-url origin "$test_directory/missing-remote"
+  git -C "$repository_root" remote set-url origin "$test_directory/missing-remote/Krzysztof318/MailFathom"
 
   (
     cd "$repository_root"
@@ -561,7 +565,8 @@ workspace_inspection_is_read_only_and_labeled() {
   assert_contains 'Branch:' "$output_file"
   assert_contains 'Worktree:' "$output_file"
   assert_contains 'Upstream:' "$output_file"
-  assert_contains 'Contains origin/main:' "$output_file"
+  assert_contains 'Base branch: origin/main' "$output_file"
+  assert_contains 'Contains base branch:' "$output_file"
   assert_contains 'Working tree:' "$output_file"
   assert_contains 'Registered worktrees:' "$output_file"
   assert_contains '.NET SDK:' "$output_file"
@@ -577,6 +582,153 @@ workspace_inspection_reports_unavailable_sdk() {
   ) > "$output_file"
 
   assert_contains '.NET SDK: unavailable' "$output_file"
+}
+
+# A contributor's workspace: an ordinary clone of a fork, on a branch they named. The contracts below
+# are what stops the gates from silently verifying such a branch against the fork's own `main`, which
+# is whatever the contributor last synced rather than the base the pull request will merge into.
+#
+# The fork is a real second repository rather than a renamed remote, because the failure this guards
+# against is exactly that `origin` resolves to a repository that is not MailFathom.
+create_fork_fixture() {
+  local fork_root="$1"
+  local fork_remote_root="$test_directory/fork/a-contributor/MailFathom"
+
+  rm -rf "$fork_root" "$fork_remote_root"
+  git clone --quiet "$remote_repository_root" "$fork_remote_root"
+  git clone --quiet "$fork_remote_root" "$fork_root"
+  git -C "$fork_root" config user.email agent-workflow@example.invalid
+  git -C "$fork_root" config user.name 'Agent Workflow Tests'
+  git -C "$fork_root" checkout --quiet -b 'fix-the-listing-bug'
+}
+
+fork_workspace_resolves_its_base_against_the_upstream_remote() {
+  local fork_root="$test_directory/fork-checkout"
+  local output_file="$test_directory/fork-workspace-output"
+
+  create_fork_fixture "$fork_root"
+  git -C "$fork_root" remote add upstream "$remote_repository_root"
+  git -C "$fork_root" fetch --quiet upstream main
+
+  (
+    cd "$fork_root"
+    "$scripts_directory/inspect-workspace.sh"
+  ) > "$output_file"
+
+  assert_contains 'Branch: fix-the-listing-bug' "$output_file"
+  assert_contains 'Base branch: upstream/main' "$output_file"
+  assert_contains 'Contains base branch: yes' "$output_file"
+}
+
+# The fork's own `origin` is not MailFathom, so nothing here is a base. Reporting `unresolved` rather
+# than falling back to `origin/main` is the whole point: the fallback is the answer that looks right.
+fork_workspace_reports_an_unresolved_base_without_an_upstream_remote() {
+  local fork_root="$test_directory/fork-checkout-no-upstream"
+  local output_file="$test_directory/fork-no-upstream-output"
+
+  create_fork_fixture "$fork_root"
+
+  (
+    cd "$fork_root"
+    "$scripts_directory/inspect-workspace.sh"
+  ) > "$output_file"
+
+  assert_contains 'Base branch: unresolved' "$output_file"
+  assert_excludes 'Contains base branch: yes' "$output_file"
+}
+
+# The full gate fetches and compares against the upstream remote, so a fork branch cut from a base
+# that has since moved fails the same way the owner's own branch does — and passes the same way.
+verify_full_verifies_a_fork_against_its_upstream_remote() {
+  local fork_root="$test_directory/fork-verify-full"
+
+  : > "$invocation_log"
+  : > "$workflow_invocation_log"
+  create_fork_fixture "$fork_root"
+  git -C "$fork_root" remote add upstream "$remote_repository_root"
+
+  (
+    cd "$fork_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  # Written by the fetch inside the run rather than by the fixture, which never fetched upstream.
+  [[ "$(git -C "$fork_root" rev-parse refs/remotes/upstream/main)" == "$(git -C "$remote_repository_root" rev-parse main)" ]]
+  assert_file_content 'workflow-contracts' "$workflow_invocation_log"
+}
+
+verify_full_stops_when_a_fork_branch_is_behind_upstream_main() {
+  local fork_root="$test_directory/fork-behind-upstream"
+  local behind_output="$test_directory/fork-behind-upstream-output"
+  local script_status=0
+
+  : > "$invocation_log"
+  : > "$workflow_invocation_log"
+  create_fork_fixture "$fork_root"
+  git -C "$fork_root" remote add upstream "$remote_repository_root"
+  git -C "$remote_repository_root" commit --quiet --allow-empty -m 'upstream main moved ahead'
+
+  (
+    cd "$fork_root"
+    "$scripts_directory/verify-full.sh"
+  ) > "$behind_output" 2>&1 || script_status=$?
+
+  git -C "$remote_repository_root" reset --quiet --hard HEAD~1
+
+  if ((script_status == 0)); then
+    printf 'verify-full.sh accepted a fork branch behind upstream/main\n' >&2
+    return 1
+  fi
+
+  assert_contains 'HEAD does not contain the current upstream/main.' "$behind_output"
+  assert_file_content '' "$invocation_log"
+  assert_file_content '' "$workflow_invocation_log"
+}
+
+# The message is the whole value of this refusal. A gate that stops without naming the command that
+# fixes it is indistinguishable, to a first-time contributor, from a repository that does not build.
+verify_full_refuses_a_checkout_with_no_upstream_remote() {
+  local fork_root="$test_directory/fork-no-upstream-gate"
+  local refusal_output="$test_directory/fork-no-upstream-gate-output"
+  local script_status=0
+
+  : > "$invocation_log"
+  : > "$workflow_invocation_log"
+  create_fork_fixture "$fork_root"
+
+  (
+    cd "$fork_root"
+    "$scripts_directory/verify-full.sh"
+  ) > "$refusal_output" 2>&1 || script_status=$?
+
+  if ((script_status == 0)); then
+    printf 'verify-full.sh verified a fork with no upstream remote\n' >&2
+    return 1
+  fi
+
+  assert_contains 'No remote points at Krzysztof318/MailFathom' "$refusal_output"
+  assert_contains 'git remote add upstream https://github.com/Krzysztof318/MailFathom.git' "$refusal_output"
+  assert_file_content '' "$invocation_log"
+  assert_file_content '' "$workflow_invocation_log"
+}
+
+# The fast loop only decides which files to format, so a fork with no upstream costs a narrower
+# scope rather than a refusal. It must still run: a contributor fixing their remotes cannot be
+# blocked from building and testing meanwhile.
+verify_fast_runs_in_a_fork_with_no_upstream_remote() {
+  local fork_root="$test_directory/fork-verify-fast"
+
+  : > "$invocation_log"
+  create_fork_fixture "$fork_root"
+  mkdir -p "$fork_root/src"
+  printf 'namespace Fork;\n' > "$fork_root/src/ForkSample.cs"
+
+  (
+    cd "$fork_root"
+    "$scripts_directory/verify-fast.sh"
+  )
+
+  assert_contains 'format MailFathom.slnx --no-restore --include src/ForkSample.cs' "$invocation_log"
 }
 
 # The `Protected paths` workflow never checks the branch out, so its guard cannot be a script in
@@ -1911,6 +2063,148 @@ changelog_section_reading_returns_only_the_requested_release() {
   assert_excludes 'The first release.' "$output_file"
 }
 
+# The Actions policy, as far as a committed file can state it. Half of that policy lives in GitHub's
+# repository settings — which action owners are allowed at all, whether a mutable `uses:` is
+# accepted, how long an artifact is kept — and settings do not fail a pull request. These five
+# contracts are the half that can, and they run against the real `.github/workflows/` rather than a
+# fixture for the same reason the `describes:` marker contracts do: what is worth failing over is
+# whether *this* repository still satisfies the policy, not whether the check works.
+#
+# `docs/operations/local-development.md` § "GitHub Actions policy" records the settings half and why
+# each value is what it is. A change to either half reads the other.
+workflow_files() {
+  find "$source_repository_root/.github/workflows" -name '*.yml' | sort
+}
+
+# The owners whose actions this repository executes. Each was reviewed when the workflow that needs
+# it landed and carries a row in `THIRD_PARTY_LICENSES.md`; `actions` and `github` are GitHub's own.
+# Adding a name here is a supply-chain decision, so it fails here first and is argued in the pull
+# request rather than discovered in a run.
+every_external_action_names_an_approved_owner() {
+  local approved_owners=' actions github Krzysztof318 dorny anthropics docker crate-ci aquasecurity '
+  local owner
+  local unapproved=''
+
+  while read -r owner; do
+    [[ -n "$owner" ]] || continue
+
+    if [[ "$approved_owners" != *" $owner "* ]]; then
+      unapproved+="$owner "
+    fi
+  done < <(
+    grep -rhoE '^[[:space:]]+uses:[[:space:]]+[^./][^@[:space:]]+' "$source_repository_root/.github/workflows" |
+      sed -E 's#^[[:space:]]+uses:[[:space:]]+##; s#/.*##' |
+      sort --unique
+  )
+
+  if [[ -n "$unapproved" ]]; then
+    printf 'Workflows reference actions from unapproved owners: %s\n' "$unapproved" >&2
+    return 1
+  fi
+}
+
+# A job with no `permissions:` above it inherits the repository default, which is a setting rather
+# than a file — so the least-privilege contract would live outside Git and change without a diff.
+# Either form satisfies this: a workflow-level block covering every job, or a block on each job.
+every_workflow_job_declares_its_permissions() {
+  local workflow_file
+  local undeclared=''
+
+  while read -r workflow_file; do
+    grep -q '^permissions:' "$workflow_file" && continue
+
+    if ! awk '
+      /^jobs:/ { in_jobs = 1; next }
+      in_jobs && /^  [a-zA-Z0-9_-]+:[[:space:]]*$/ { jobs++; declared_here = 0 }
+      in_jobs && /^    permissions:/ && !declared_here { declared++; declared_here = 1 }
+      END { exit !(jobs > 0 && jobs == declared) }
+    ' "$workflow_file"; then
+      undeclared+="$(basename "$workflow_file") "
+    fi
+  done < <(workflow_files)
+
+  if [[ -n "$undeclared" ]]; then
+    printf 'Workflows leave a job on the repository default permissions: %s\n' "$undeclared" >&2
+    return 1
+  fi
+}
+
+# Every write scope in the repository, named here so a new one is a deliberate edit to this list
+# rather than a line nobody reviewed. The three publishing jobs need a registry write and the two an
+# attestation takes; `announce` needs to write the release it announces. Nothing else writes at all.
+every_write_scope_is_one_the_policy_records() {
+  local recorded_scopes
+  local declared_scopes
+
+  recorded_scopes="$(
+    printf '%s\n' \
+      'nightly.yml attestations: write' \
+      'nightly.yml id-token: write' \
+      'nightly.yml packages: write' \
+      'nightly.yml packages: write' \
+      'publish-container-image.yml attestations: write' \
+      'publish-container-image.yml id-token: write' \
+      'publish-container-image.yml packages: write' \
+      'release.yml attestations: write' \
+      'release.yml contents: write' \
+      'release.yml id-token: write' \
+      'release.yml packages: write' |
+      sort
+  )"
+
+  declared_scopes="$(
+    grep -rnE '^[[:space:]]+(actions|attestations|checks|contents|deployments|discussions|id-token|issues|packages|pages|pull-requests|repository-projects|security-events|statuses): write$' \
+      "$source_repository_root/.github/workflows" |
+      sed -E 's#^.*/([^/:]+):[0-9]+:[[:space:]]+#\1 #' |
+      sort
+  )"
+
+  if [[ "$recorded_scopes" != "$declared_scopes" ]]; then
+    printf 'Write scopes differ from the recorded policy.\nRecorded:\n%s\nDeclared:\n%s\n' \
+      "$recorded_scopes" "$declared_scopes" >&2
+    return 1
+  fi
+}
+
+# A checkout that persists its credential leaves the workflow token in `.git/config` for every step
+# after it, including anything a build script runs. Nothing here needs that, and a job that grows a
+# reason to needs the reason written down rather than the default quietly changing under it.
+every_checkout_refuses_to_persist_credentials() {
+  local checkout_count
+  local refusing_count
+
+  checkout_count="$(grep -rcE '^[[:space:]]+uses:[[:space:]]+actions/checkout' "$source_repository_root/.github/workflows" |
+    awk -F: '{ total += $2 } END { print total + 0 }')"
+
+  # Counted within the seven lines a checkout step's `with:` block occupies, so a
+  # `persist-credentials: false` belonging to some other step cannot stand in for a missing one.
+  refusing_count="$(grep -rhA7 -E '^[[:space:]]+uses:[[:space:]]+actions/checkout' "$source_repository_root/.github/workflows" |
+    grep -cE '^[[:space:]]+persist-credentials:[[:space:]]+false$')"
+
+  if ((checkout_count == 0 || checkout_count != refusing_count)); then
+    printf 'Checkout steps: %s, of which %s set persist-credentials: false.\n' \
+      "$checkout_count" "$refusing_count" >&2
+    return 1
+  fi
+}
+
+# `pull_request_target` runs the base branch's workflow with the repository's secrets against a
+# contribution nobody has reviewed. `fathom-review.yml` uses it deliberately, #189 decided so, and
+# `docs/operations/agent-workflow.md` records why the purpose of the rule is still met there — it
+# checks out `base.sha`, executes nothing from the contribution, and starts on a maintainer's act
+# alone. A second one would be none of that, and this is what stops it appearing unnoticed.
+only_the_reviewer_workflow_uses_pull_request_target() {
+  local using_workflows
+
+  using_workflows="$(grep -rlE '^[[:space:]]*pull_request_target:' "$source_repository_root/.github/workflows" |
+    xargs -r -n1 basename | sort | tr '\n' ' ')"
+
+  if [[ "$using_workflows" != 'fathom-review.yml ' ]]; then
+    printf 'pull_request_target is used by: %s(expected fathom-review.yml alone)\n' "$using_workflows" >&2
+    return 1
+  fi
+}
+
 workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
   [[ -x "$source_repository_root/scripts/assert-release-tag.sh" ]]
@@ -1944,6 +2238,12 @@ run_test verify_fast_skips_formatting_when_no_csharp_file_changed
 run_test verification_stops_after_first_failure
 run_test workspace_inspection_is_read_only_and_labeled
 run_test workspace_inspection_reports_unavailable_sdk
+run_test fork_workspace_resolves_its_base_against_the_upstream_remote
+run_test fork_workspace_reports_an_unresolved_base_without_an_upstream_remote
+run_test verify_full_verifies_a_fork_against_its_upstream_remote
+run_test verify_full_stops_when_a_fork_branch_is_behind_upstream_main
+run_test verify_full_refuses_a_checkout_with_no_upstream_remote
+run_test verify_fast_runs_in_a_fork_with_no_upstream_remote
 run_test protected_paths_allows_a_change_that_touches_nothing_protected
 run_test protected_paths_refuses_a_contributor_changing_repository_root_configuration
 run_test protected_paths_refuses_a_contributor_changing_a_protected_directory
@@ -1996,6 +2296,11 @@ run_test release_tag_assertion_accepts_a_patch_from_a_release_branch
 run_test release_tag_assertion_refuses_a_version_already_released_on_its_line
 run_test release_tag_assertion_refuses_an_empty_changelog_section
 run_test changelog_section_reading_returns_only_the_requested_release
+run_test every_external_action_names_an_approved_owner
+run_test every_workflow_job_declares_its_permissions
+run_test every_write_scope_is_one_the_policy_records
+run_test every_checkout_refuses_to_persist_credentials
+run_test only_the_reviewer_workflow_uses_pull_request_target
 run_test workflow_scripts_use_flat_manual_layout
 
 printf '%s passed, %s failed\n' "$passed_count" "$failed_count"

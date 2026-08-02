@@ -2,6 +2,8 @@
 
 These instructions apply under `tests/` in addition to the repository root instructions.
 
+The **.NET and C# conventions** in `src/AGENTS.md` apply to test code as well. A test is C# compiled by the same build with the same analyzers, so naming, async shape, LINQ, disposal, and the rest hold here exactly as they do under `src/`. The directory cascade does not load that file for a change under `tests/`, which is why this line points at it.
+
 ## Unit testing policy
 
 - Write or update the failing test before production code when practical.

@@ -112,7 +112,7 @@ The derived search document is not a lesser classification of the same data. Bod
 
 One reviewed migration, `Initial`, creates all of it. There is no bootstrap that builds the schema from the model at startup any more: the host reads the migration history, and refuses to start when the database has not applied every migration the running build defines.
 
-Locally the AppHost's `mailfathom-migrations` resource applies it before the host starts. Elsewhere applying it is an explicit deployment step. [Local development](../operations/local-development.md) documents both, and the `add-migration` skill documents how the baseline is regenerated while MailFathom is pre-release.
+Locally the AppHost's `mailfathom-migrations` resource applies it before the host starts. Elsewhere applying it is an explicit deployment step. [Local development](../operations/local-development.md) documents both. Every migration is permanent: a model change appends one and never regenerates this baseline, and the `add-migration` skill is that workflow.
 
 `uid_validity` and `uid` are modelled as CLR `uint` because that is the IMAP wire type, and PostgreSQL has no native unsigned 32-bit integer. The generated migration maps both to `bigint`, which represents the whole unsigned 32-bit range exactly, so the unique index on `(mail_folder_id, uid_validity, uid)` and the checkpoint comparisons order the same way the IMAP values do.
 
