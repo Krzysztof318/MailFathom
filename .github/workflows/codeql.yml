@@ -1,0 +1,184 @@
+name: CodeQL
+
+# Taint tracking over MailFathom's own code, which is the one question nothing else here answers.
+#
+# Trivy, in `publish-container-image.yml`, reads a built image's OS packages and resolved dependency
+# graph against a vulnerability database: what MailFathom *consumes*, and only when an image is built.
+# The build's analyzer set — the configured `CA` and `IDE` diagnostics, Roslynator, the banned-symbol
+# list, all under `TreatWarningsAsErrors` — is per-file and per-method. Neither follows a value across
+# a project boundary, and that is the whole of what this workflow is for.
+#
+# It matters more here than it would elsewhere, because untrusted input is not an edge case in
+# MailFathom, it is the input. `AGENTS.md` requires email HTML, headers, filenames, URLs, tool
+# arguments, and model output to be treated as untrusted and encoded for their destination context.
+# Every one of those is a source in the C# query pack, and the sinks are all present: raw SQL beside
+# EF Core, filesystem paths built from secret references, certificate and PEM parsing, MIME decoding,
+# and an MCP surface that accepts arguments from a model. A rule saying a value is untrusted states an
+# intent; a query that follows the value is what checks the intent held.
+#
+# **Advanced setup rather than default setup.** Default setup is GitHub-managed and commits no file,
+# which would put the one check that reads this repository's source outside the repository — invisible
+# to a diff, unreviewable in a pull request, and unable to see the SDK `global.json` pins or the
+# locked restore `NuGet.config` and the lock files decide. Every other check here is a workflow, and
+# so is this one.
+#
+# **Build mode `manual`, not `none` and not `autobuild`.** `none` resolves dependencies itself, which
+# is guesswork against a repository whose entire closure is pinned centrally and fixed by fifteen
+# committed lock files; it would analyse a graph nothing else here builds. `autobuild` guesses the
+# build. The restore and build below are the ones `build-test-format-and-migrations.yml` runs, so the
+# analysis sees the graph the compiler saw and the one a release is built from. The cost of that
+# choice is a full Release build under extraction, which is the most expensive check in this
+# repository; Actions minutes are free for a public repository on standard GitHub-hosted runners, so
+# what it spends is wall-clock rather than money.
+#
+# **The SDK is verified rather than assumed.** CodeQL support for a language is not support for a
+# runtime: 2.24.0 added basic .NET 10 extraction and left the C# 14 language features unsupported,
+# and 2.25.6 is where the extractor, the QL library, and the data-flow models cover both. The bundle
+# `github/codeql-action` v4 ships is past that. What makes this a check rather than a belief is the
+# last step: a bundle that cannot extract this SDK's output produces a database with nothing in it and
+# a green run, which is worse than no analysis at all, so the run fails when the database holds fewer
+# source files than `src/` does.
+#
+# **A finding does not block a merge.** This workflow is not in the `main` ruleset and reports no
+# required status check. The reasoning is not `Typo check`'s — a misspelling is worth less than a
+# taint path, and if the argument were only about severity this would be required. It is that the
+# query pack updates upstream, so a commit that was clean when it merged becomes a finding with
+# nothing in this repository having changed; making that block a merge lets somebody else's release
+# stop MailFathom's. The alert is read, and the code-owner review the ruleset already requires is
+# where a security question is answered by a person. Revisit once the pack's false-positive rate here
+# has been observed rather than guessed at.
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      # Listed so a conversion reaches the concurrency group and cancels a run still going, exactly
+      # as in `typo-check.yml`. The job's draft condition skips the replacement.
+      - converted_to_draft
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  # A weekly analysis of `main`, and the reason it is not a job of `nightly.yml`. That workflow
+  # publishes an image and deliberately does nothing when `main` has not moved; this has to run
+  # exactly when `main` has not moved, because what changed is the query pack rather than the code.
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+# No `paths` filter. Nothing waits on this check, so an uninstantiated run would block nothing, and
+# the set of files that can introduce a taint path is not one a path filter can name: a build file
+# that adds a project, a package pin that changes what a call resolves to, and this workflow itself
+# all move the answer without a `.cs` file changing.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze C#
+    # The same draft exemption `Typo check` carries, for the same reason and with more at stake: this
+    # is the one check here that occupies a runner for minutes, and a draft is a change still being
+    # written. `ready_for_review` opts every later push back in.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The one write scope in this repository that does not belong to a publishing job. It writes
+      # code-scanning alerts and nothing else — not repository contents, not packages, not a release
+      # — and the analysis is worthless without it, because an alert nobody can record is a log line.
+      security-events: write
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # The same cache and the same key as every other job that restores, for the reason
+      # `build-test-format-and-migrations.yml` records.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+
+      # Before CodeQL initializes, deliberately. Restore compiles nothing, so tracing it would add
+      # nothing to the database; keeping it outside the traced window leaves that window holding the
+      # compiler invocations alone. `--locked-mode` is what makes the analysed graph the graph the
+      # committed lock files fix, rather than whatever resolves on the day.
+      - name: Restore dependencies
+        run: dotnet restore MailFathom.slnx --locked-mode
+
+      # `db-location` is written out rather than left to the action's default, because the step that
+      # verifies the database has to name the same directory and a documented default is a weaker
+      # agreement than a stated path. It is outside the checkout, so nothing extracts the database
+      # into the database. The literal appears here and in that step, and the two must stay equal.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: csharp
+          build-mode: manual
+          db-location: ${{ runner.temp }}/codeql-databases
+
+      # The build the pull-request gate runs, minus its restore. CodeQL injects the flags manual mode
+      # needs — shared compilation off among them — so nothing here has to ask for them.
+      - name: Build solution
+        run: dotnet build MailFathom.slnx --configuration Release --no-restore
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:csharp
+
+      # The step that makes the run's verdict mean something. "CodeQL detected code written in C# but
+      # could not process any of it" is a failure loud enough to notice; a database holding a fraction
+      # of the source is not, and it produces the same green check as a clean analysis. The source
+      # archive is compared against what `src/` actually contains, so a partial extraction — a new SDK
+      # the bundle cannot read, a project that stopped compiling into the traced window — fails here
+      # instead of being reported as no findings. The bound is `src/` alone even though a solution
+      # build extracts the test projects and the generated sources as well, which is the headroom that
+      # keeps a true statement from becoming a brittle one.
+      - name: Verify the database holds this repository's source
+        shell: bash
+        env:
+          DATABASE_DIRECTORY: ${{ runner.temp }}/codeql-databases
+        run: |
+          set -euo pipefail
+
+          source_archive="${DATABASE_DIRECTORY}/csharp/src.zip"
+
+          if [[ ! -f "$source_archive" ]]; then
+            echo "::error::CodeQL wrote no source archive at ${source_archive}, so the analysis ran against a database this workflow cannot inspect."
+            exit 1
+          fi
+
+          extracted_count="$(unzip -Z1 "$source_archive" | grep -c '\.cs$' || true)"
+          expected_count="$(git ls-files -- ':(glob)src/**/*.cs' | grep -c '' || true)"
+
+          if (( expected_count == 0 )); then
+            echo "::error::No C# source was found under src/, so there is nothing to compare the CodeQL database against."
+            exit 1
+          fi
+
+          if (( extracted_count < expected_count )); then
+            echo "::error::The CodeQL database holds ${extracted_count} C# source file(s) and src/ contains ${expected_count}. The analysis saw less than the repository's own production code, so its findings say nothing about the rest."
+            exit 1
+          fi
+
+          echo "The CodeQL database holds ${extracted_count} C# source file(s), covering the ${expected_count} under src/."

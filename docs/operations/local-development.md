@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, src/AppHost/**, .github/workflows/** -->
+<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, src/AppHost/**, .github/workflows/**, .github/dependabot.yml -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -485,7 +485,7 @@ The `Integration tests` workflow runs the same script and is `workflow_dispatch`
 
 ## Pull request checks
 
-Three workflows run for every pull request targeting `main`. Two of them always run; the third, `Typo check`, always runs except on a draft. `CI` carries four jobs:
+Four workflows run for every pull request targeting `main`. Two of them always run; `Typo check` and `CodeQL` always run except on a draft. `CI` carries four jobs:
 
 - `Detect changes` reads the pull request's changed files through the GitHub REST API with `dorny/paths-filter` and publishes three decisions: whether the change can affect the build, whether it can affect formatting, and whether it can affect the EF Core model. It checks nothing out, needs `contents: read` and `pull-requests: read`, and takes seconds. A manual dispatch has no pull request to compare against, so all three decisions are `true` there and an explicitly started run always does the work.
 - `Build and unit test` runs when the change touches production code, tests, the solution or SDK selection, shared build and package configuration, coverage tooling, or the workflow file. It restores `MailFathom.slnx` in locked mode and repository-local tools, builds the solution in Release configuration, runs all unit-test projects through Microsoft Testing Platform with unique coverage prefixes, merges their Cobertura reports, and fails below 85% aggregate line coverage for the complete configured production scope. It uploads raw and merged coverage artifacts and TRX results even when the threshold fails.
@@ -517,6 +517,12 @@ Two situations leave the job unable to pass a list it can trust, and both widen 
 
 `_typos.toml` at the repository root is that configuration, and it separates two kinds of entry that a single list would blur. Accepted vocabulary is spellings MailFathom uses on purpose — `unparseable`, `requeueing`, `HashiCorp` — where correcting the dictionary's objection would be a repository-wide rename in service of no reader. Fixtures are the opposite: `Directroy`, `Enabeld`, `Authentcation`, `Passwrod`, and `MaxAttemps` are misspelled because that is their job. Every security-sensitive configuration section binds strictly, so a key nobody defined fails startup instead of binding silently, and the tests that prove it and the documentation that explains it have to name the misspelling the rule catches; correcting one deletes the example and, in a test, its assertion. The file also turns off the tool's default of skipping hidden files, because most of the prose that decides how this repository works sits behind a leading dot — `.github/workflows/`, the skills under `.agents/`, `.editorconfig`. Version-control metadata under `.git/` stays excluded regardless.
 
+The fourth workflow, `CodeQL`, carries one job, `Analyze C#`, and is the only check here that reads what the code *does* with a value rather than how it is written. It restores in locked mode, initializes CodeQL in `manual` build mode, builds `MailFathom.slnx` in Release configuration inside the traced window, and runs GitHub's C# security query pack over the resulting database. It runs for a pull request, for a push to `main`, weekly on a schedule, and on manual dispatch, and it carries the same draft exemption `Typo check` does — for a stronger reason, since it is the one check that occupies a runner for minutes.
+
+Three of its decisions are the ones a reader would otherwise have to reconstruct, and the workflow file argues each at length. It is an advanced setup rather than GitHub's default setup, so the check that reads this repository's source is a file a pull request can change and a reviewer can read, and so it can see the SDK pin and the locked restore. Its build mode is `manual` rather than `none`, so the analysis sees the graph the committed lock files fix instead of one CodeQL resolved for itself. And its last step compares the extracted source archive against what `src/` contains, because a bundle that cannot extract this SDK's output produces an empty database and a green check — an answer that looks like "no findings" and means "no analysis". The weekly run exists for a fourth reason that has nothing to do with this repository: a query pack updates upstream, so a commit that was clean when it merged can become a finding with nothing here having changed.
+
+On a pull request from a fork the run gets the token GitHub grants that event, which is not the token a branch in this repository gets, and whether the alert upload succeeds there follows from GitHub's rules rather than from anything in this file. The check is required by nothing either way, so no merge waits on how it resolves, and the push to `main` after the merge analyses the same code under a token that certainly can upload.
+
 ### Why the typo check is a third workflow
 
 The reasoning is the protected-paths one applied to a different verdict. `Required CI` says the change is sound and `Protected paths` says its author may make it; this says a word is misspelled, which is a third unlike answer and deserves its own status line rather than a share of one. Folding it into `CI` would also tie a job that needs no SDK, no restore, no cache, and no build to the concurrency group, the change detection, and the aggregate of the jobs that need all four.
@@ -543,13 +549,15 @@ An outside contributor whose change genuinely needs one of these directories —
 
 ### Draft pull requests
 
-Draft pull requests skip the build, formatting, model-check, and typo-check jobs without allocating a runner; only the seconds-long `Detect changes`, `Required CI`, and `Protected paths` jobs do any work, and `Required CI` succeeds because a skipped job is a valid outcome. Skipping is not disappearing: each skipped job still reports a `skipped` conclusion and is listed among the pull request's checks, `Typo check` included. Its workflow puts no draft condition on the trigger, for the same reason `CI` puts no path filter on one — the run is instantiated and the decision is taken inside, where a job that declines to work still says so. A draft cannot be merged regardless. Marking a draft ready for review starts the applicable jobs immediately through the `ready_for_review` activity, and later commits continue to start them through `synchronize`. Converting a ready pull request back to draft cancels the superseded active run through the concurrency group and skips the replacement jobs. `CI` remains available through manual dispatch regardless of pull request state; `Typo check` and `Protected paths` carry no `workflow_dispatch` and run only for a pull request.
+Draft pull requests skip the build, formatting, model-check, typo-check, and code-scanning jobs without allocating a runner; only the seconds-long `Detect changes`, `Required CI`, and `Protected paths` jobs do any work, and `Required CI` succeeds because a skipped job is a valid outcome. Skipping is not disappearing: each skipped job still reports a `skipped` conclusion and is listed among the pull request's checks, `Typo check` and `CodeQL` included. Its workflow puts no draft condition on the trigger, for the same reason `CI` puts no path filter on one — the run is instantiated and the decision is taken inside, where a job that declines to work still says so. A draft cannot be merged regardless. Marking a draft ready for review starts the applicable jobs immediately through the `ready_for_review` activity, and later commits continue to start them through `synchronize`. Converting a ready pull request back to draft cancels the superseded active run through the concurrency group and skips the replacement jobs. `CI` and `CodeQL` remain available through manual dispatch regardless of pull request state; `Typo check` and `Protected paths` carry no `workflow_dispatch` and run only for a pull request.
 
 ### Branch protection
 
 The `main` branch ruleset requires a pull request with one approving review from a code owner, dismisses stale approvals when a new commit is pushed, requires review conversations to be resolved, permits squash as the only merge method, and requires the branch to be current with `main` and the `Required CI` and `Protected paths` status checks to pass. Creation, deletion, and force-pushes of `main` are refused. The repository admin role bypasses the rules when merging a pull request, for the reason [Code owners](#code-owners) below gives. The GitHub repository coverage rule must remain disabled because GitHub Code Quality coverage uploads are unavailable for this user-owned repository; the required repository-owned check enforces the same 85% minimum against the complete configured code scope.
 
 The required checks are exactly `Required CI` and `Protected paths`, and both are added to the ruleset by hand under **Require status checks to pass**. Requiring any other job reintroduces exactly the problem this arrangement removes: a job that legitimately skipped never reports a conclusion the ruleset accepts. `Typo check` is the live example — it skips on every draft — and it would not be required even if it never skipped, because a misspelling is a thing to fix rather than a thing to block a merge on. Those two never skip, which is what qualifies them and what their workflows are written to preserve — neither name may become conditional on the event, the changed files, the source branch, or a matrix dimension, because the name is the entire contract with the ruleset.
+
+`CodeQL` skips on a draft for the same mechanical reason, but its case against being required is a different one and worth stating separately, because the severity argument runs the other way: a taint path is worth more than a misspelling, and if severity decided this it would be required. What decides it is that the verdict moves without a commit. The query pack is maintained upstream and updates on its own schedule, so the same tree can be clean one week and a finding the next; requiring the check would let somebody else's release stop MailFathom's, and it would do so at the moment a release is being cut rather than while the code is being written. GitHub's separate **code scanning merge protection**, which blocks on alerts above a chosen severity, is off for the same reason. What answers a security question here is the code-owner review the ruleset already requires, reading an alert that is on the pull request either way. Revisit both once the pack's false-positive rate against this code has been observed rather than guessed at.
 
 `Protected paths` is required for a reason `Required CI` does not share. Its value when it passes is small; its value is that it cannot be removed. A pull request that deletes or renames the job stops the check from ever reporting, and a required check that never reports blocks the merge, so the only way to disable the guard is a change the guard's other half already sends to the repository owner. Leaving it unrequired would turn that into a red check anyone could ignore.
 
@@ -598,11 +606,18 @@ down somewhere a change to the other half will read.
 | `every_checkout_refuses_to_persist_credentials` | An `actions/checkout` step that leaves the workflow token in `.git/config` for the steps after it |
 | `only_the_reviewer_workflow_uses_pull_request_target` | A second `pull_request_target` trigger beside the one `fathom-review.yml` holds |
 
-Every write scope in the repository belongs to a publishing job: `packages: write` with
-`id-token: write` and `attestations: write` in `nightly.yml`, `release.yml`, and
-`publish-container-image.yml`, plus `packages: write` on the nightly prune job and `contents: write`
-on the job that writes the release announcement. Nothing that runs for a pull request holds one, and
-the contract above is what keeps that true rather than a reader noticing.
+Every write scope in the repository but one belongs to a publishing job: `packages: write` with
+`id-token: write` and `attestations: write` in `nightly.yml`, `publish-container-image.yml`,
+`publish-helm-chart.yml`, and `release.yml` — which carries each of the three twice, because it calls
+both publishing workflows and a caller states the permissions it hands down — plus `packages: write`
+on the nightly prune job and `contents: write` on the job that writes the release announcement.
+
+The exception is `security-events: write` in `codeql.yml`, and it is the only write scope held by a
+job that runs for a pull request. It is what the analysis is for: the scope writes code-scanning
+alerts and nothing else — not repository contents, not a package, not a release — and an analysis
+that cannot record an alert produces a log line instead of a check. The contract above is what keeps
+the list honest, so adding a second such scope is an edit somebody argues rather than a line nobody
+notices.
 
 **What lives in the repository settings**, which no check here can read:
 
@@ -610,8 +625,8 @@ the contract above is what keeps that true rather than a reader noticing.
 |---|---|---|
 | Default workflow token | `read` | A job that needs more says so in its own `permissions:` block, which is reviewable; a permissive default is not |
 | Actions may create or approve pull requests | disabled | A workflow approving its own change would satisfy the ruleset's review requirement without a person |
-| Allowed actions | `all` today, `selected` once the pins land | The allowlist is the settings-side twin of the owner contract above, and pinning is what makes an allowed owner mean an allowed *revision* |
-| Require actions pinned to a full-length commit SHA | off today, on once #214 exists | A SHA follows no upstream security fix, so pinning without an updater is worse than a mutable tag. #214 supplies the updater and #160 lands the pins and this setting together |
+| Allowed actions | `all` today; #160 owns narrowing it | The allowlist is the settings-side twin of the owner contract above. The contract suite already refuses an owner outside the reviewed set on every pull request, so what the setting adds is coverage of a workflow that reaches the repository some other way |
+| Require actions pinned to a full-length commit SHA | off, and deliberately | A repository-wide setting would impose one answer where this repository already gives two. A job holding registry write, a signing identity, or the token that publishes a release pins its steps to a commit, because what a moving tag resolves to is otherwise decided by somebody else and would reach a published artifact; every other job follows the major tag, and `crate-ci/typos` is pinned for a third reason its own workflow states. `security-events: write` in `codeql.yml` is a write scope and not a publishing one, so it does not pull the pinning rule with it. `THIRD_PARTY_LICENSES.md` records which step is pinned which way and why. The setting stays off because turning it on would collapse that distinction into a sweep, not because the pins are unfinished |
 | Artifact and log retention | 30 days | The REST API exposes no retention field, so the settings page is both where it is set and the only evidence it was |
 | Cache retention and size | 7 days, 10 GB | Unchanged unless measured eviction pressure argues otherwise |
 | Fork pull request approval | `Require approval for first-time contributors` | The workflows a fork's push can start hold a read-only token and no repository secret, so a wider setting protects nothing this one does not, and a narrower one turns every first contribution into a maintainer's click. The REST API exposes no field for it, so the settings page is the only place it can be read |
@@ -620,9 +635,57 @@ the contract above is what keeps that true rather than a reader noticing.
 The retention rows, the fork approval, and the package access are the ones to re-read after any
 settings change, because no API exposes them and nothing else will notice them moving.
 
-**A fork's pull request** runs `CI`, `Protected paths`, and `Typo check` on the `pull_request` event
-with a read-only token and no repository secret, which is what makes running a contribution's code
-safe at all. `Fathom review` is the exception and stays one: it holds an App private key, so a
-fork's own pushes never start it and only a maintainer's `fathom-review` label or comment does.
+**A fork's pull request** runs `CI`, `Protected paths`, `Typo check`, and `CodeQL` on the
+`pull_request` event with a read-only token and no repository secret, which is what makes running a
+contribution's code safe at all. `Fathom review` is the exception and stays one: it holds an App
+private key, so a fork's own pushes never start it and only a maintainer's `fathom-review` label or
+comment does.
 [Why `pull_request_target` is a granted exception](agent-workflow.md#why-pull_request_target-is-a-granted-exception)
 records the reasoning, and the contract above is the automated half of it.
+
+### Keeping the pinned actions current
+
+`.github/dependabot.yml` is the only thing in this repository that updates a dependency it has
+pinned, and it covers the `github-actions` ecosystem alone. It proposes minor and patch updates as
+one grouped pull request each Monday, a major on its own, at most three open at a time, and nothing
+newer than a week old; the file states why each of those numbers is what it is and why the `nuget`
+ecosystem stays off, with the upstream issue that decides it.
+
+Two things about those pull requests belong here rather than there. They edit `.github/workflows/**`
+by definition, so `Protected paths` recognises `dependabot[bot]` for that directory and refuses it
+everywhere else — that workflow carries the argument for why the exception removes a signal rather
+than an approval. And they are not exempt from anything else: the `main` ruleset asks the same
+code-owner review of them as of any other pull request, `Required CI` still has to pass, nothing
+auto-merges, and the updater holds no write-capable token.
+
+## Repository security features
+
+Every setting below is a repository setting rather than a file, so no check here can read one and no
+diff will show it moving. This section is the record; the commands beside it are how the state is
+read back, which is the only thing that confirms a setting rather than confirming that a call
+succeeded.
+
+```bash
+gh api repos/Krzysztof318/MailFathom --jq '.security_and_analysis'
+gh api repos/Krzysztof318/MailFathom/private-vulnerability-reporting
+gh api repos/Krzysztof318/MailFathom/vulnerability-alerts -i | head -1   # 204 enabled, 404 disabled
+gh api repos/Krzysztof318/MailFathom/automated-security-fixes
+```
+
+| Feature | State | Why |
+|---|---|---|
+| Private vulnerability reporting | enabled | `SECURITY.md` names the *Report a vulnerability* button as one of its two channels, and a policy naming a button that is not there sends the first researcher who reads it to the fallback. A report arriving this way carries a draft advisory, a private fork for the fix, and a CVE request path, instead of an email thread to convert by hand |
+| Secret scanning alerts | enabled | An alert says a credential is already public and must be rotated. It is the half that covers what push protection did not stop, including anything a bypass let through |
+| Push protection | enabled | The other half, and the more valuable one: it refuses the object before it reaches GitHub, which is the only point in a credential's life where the remedy is free. `CONTRIBUTING.md` states what a contributor sees when it fires and what to do about it |
+| Secret scanning validity checks | unavailable | Part of paid GitHub Secret Protection. Recorded so a later reader reads the configuration as complete for what a free public repository gets rather than as half-finished |
+| Non-provider (generic) patterns | unavailable | The same entitlement. Provider patterns — the credential formats GitHub's partners publish detectors for — are what a free public repository does get, and they are what the two rows above run on |
+| Push-protection bypass | nobody but the repository owner | Delegated bypass, which routes a bypass request to a reviewer, is a paid feature. Without it the question reduces to who holds write access, and that is the owner alone. A contributor who believes a block is a false positive says so in the pull request; there is deliberately nothing for them to click |
+| Dependabot alerts | enabled | The advisory database's opinion about the pinned closure, which is worth having whatever can be done about it automatically |
+| Dependabot malware alerts | enabled | The same shape of thing for a different failure: a package that is not vulnerable but hostile. It reports and opens nothing, so the lock-file argument below does not reach it |
+| Dependabot version updates | enabled | The switch `.github/dependabot.yml` needs to do anything at all. The file decides what is proposed and when; this decides whether it runs |
+| Dependabot security updates | off, and deliberately | This is the half that opens a pull request, and for NuGet it would open one that cannot go green: the fix edits a central pin without regenerating the lock files, and every gated restore runs in locked mode. The alert is what the owner acts on; the bump is made by hand |
+| Code scanning | advanced setup, `.github/workflows/codeql.yml` | Described under [Pull request checks](#pull-request-checks) above |
+| Code scanning merge protection | off | The reasoning is [Branch protection](#branch-protection)'s: a query pack updates upstream, so a required verdict here can change with no commit on either side |
+| Copilot Autofix | off, and deliberately | It drafts a patch for a CodeQL alert by sending the code around it to a hosted model. Every AI service this repository uses carries a row in `THIRD_PARTY_LICENSES.md` naming exactly what a run submits and under whose terms, and a suggested patch on a repository where one maintainer reads every finding anyway does not earn that row. Turning it on means writing the row in the same change |
+| Code scanning check-run failure threshold | `High or higher` for security alerts, `Only errors` for standard ones | This decides when the `CodeQL` check reports failure, not when a merge is refused — the second would take a branch ruleset, which the row above declines. A high-severity finding is worth a red check somebody looks at |
+| Automatic dependency submission | off | It submits dependencies observed during a build, for ecosystems that resolve at build time. The committed lock files already give the dependency graph the exact closure, so there is nothing here for it to discover |

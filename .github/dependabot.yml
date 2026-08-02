@@ -1,0 +1,71 @@
+# Nothing else in this repository updates a dependency it has pinned. Every version here is fixed on
+# purpose — the SDK in `global.json`, the packages in `Directory.Packages.props` and the fifteen
+# `packages.lock.json` files, the base images in the Dockerfile, and the actions the workflows run —
+# and a pin with nothing watching it is a decision to stay behind rather than a decision to be
+# reproducible. This file is what watches one of those sets.
+#
+# **The `github-actions` ecosystem, and that one alone.** Half the `uses:` references here are a
+# moving major tag and half are an immutable commit with the version in a trailing comment. Dependabot
+# updates both spellings, rewriting the SHA and the comment together, so the mixture costs nothing
+# here and neither spelling is the reason this exists: an action's upstream fix reaches this
+# repository through a pull request somebody reads, or it does not reach it at all.
+#
+# **The `nuget` ecosystem stays off, and the evidence is the reason.** Versions are pinned centrally
+# in `Directory.Packages.props`, the resolved transitive closure is fixed by the committed
+# `packages.lock.json` files, and every restore that is gated runs with `--locked-mode`. A bump that
+# edits the central pin without regenerating each affected lock file therefore fails the restore with
+# `NU1004` instead of resolving, and regenerating them is exactly what Dependabot's NuGet updater does
+# not do: dependabot/dependabot-core#13950 records that lock files of projects reached transitively
+# through a `<ProjectReference>` are left untouched under central package management, and it is open.
+# The updater would open a pull request that cannot go green, every week, for a repository whose
+# required check is the restore it breaks. A NuGet bump is made by hand instead, by
+# `dotnet restore MailFathom.slnx --force-evaluate`, which is where the transitive diff gets read.
+# Re-enable this the day that issue closes and a bump is shown to restore in locked mode — not on the
+# strength of NuGet support existing.
+#
+# **Dependabot alerts are enabled on the repository and automatic security updates are not**, for the
+# same reason and recorded in `docs/operations/local-development.md`. An alert about a vulnerable
+# NuGet package is worth having whatever the updater can do about it; the pull request it would open
+# to fix one would fail the same restore.
+#
+# A pull request opened here edits `.github/workflows/**` by definition, which the `Protected paths`
+# check refuses from every author but the owner. That workflow carries the exception, scoped to this
+# author, with the argument for why it removes no approval.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    # The repository root, which is where this ecosystem is configured from: Dependabot reads
+    # `.github/workflows/` and the composite actions beside it, rather than a directory named here.
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      # Expressed in the maintainer's own time zone, so a batch lands at the start of a week rather
+      # than at whatever hour UTC happens to be.
+      time: '07:00'
+      timezone: Europe/Warsaw
+    # A freshly published release is not proposed for a week. That window is where a compromised,
+    # yanked, or immediately-patched release is usually caught by somebody else, and nothing here
+    # needs an action's newest tag on its first day.
+    cooldown:
+      default-days: 7
+    # Three at a time. The board is read by one person, and an updater that can fill a page of it
+    # trains its reader to stop looking.
+    open-pull-requests-limit: 3
+    labels:
+      # The repository's own vocabulary rather than Dependabot's default `dependencies`, which would
+      # have to be created first: a workflow's pinned action is repository tooling, which is what
+      # this label already means. `fathom-review` is deliberately not here and must never be — that
+      # label starts a workflow holding a credential, and nothing but a maintainer's act may.
+      - type:workflow
+    groups:
+      github-actions:
+        patterns:
+          - '*'
+        # Minor and patch updates arrive as one pull request, because reading them separately is
+        # reading the same changelog five times. A major is left out of the group on purpose: it can
+        # rename an input or drop a runner, so it is a change to judge on its own.
+        update-types:
+          - minor
+          - patch

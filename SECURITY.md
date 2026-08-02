@@ -9,7 +9,7 @@ MailFathom holds mailbox credentials, OAuth tokens, certificate material, and a 
 Report it privately, through either channel:
 
 - **Email <security-mail-fathom@impe.pl>.** This channel always works and needs no GitHub account. Encrypt if you prefer; ask in a first message carrying no details and a key will be supplied.
-- **GitHub private vulnerability reporting** — the *Report a vulnerability* button on the repository's **Security** tab.
+- **GitHub private vulnerability reporting** — the *Report a vulnerability* button on the repository's **Security** tab, or [this form](https://github.com/Krzysztof318/MailFathom/security/advisories/new) directly. It needs a GitHub account and opens a draft security advisory, which is where the fix, the credit, and any CVE request are then handled.
 
 A useful report contains the affected version or commit, the configuration the issue needs, reproduction steps or a proof of concept, and what an attacker gains. Say so explicitly if you intend to publish, and when.
 

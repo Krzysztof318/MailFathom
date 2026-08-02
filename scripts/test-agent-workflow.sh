@@ -942,6 +942,66 @@ protected_paths_reports_the_paths_it_found_when_the_owner_is_the_author() {
   assert_contains '- `global.json`' "$summary_file"
 }
 
+protected_paths_allows_dependabot_to_update_the_workflows() {
+  local output_file="$test_directory/protected-paths-dependabot-output"
+  local summary_file="$test_directory/protected-paths-dependabot-summary"
+
+  # Every pull request `.github/dependabot.yml` produces looks like this one, and without the
+  # exception each would be permanently unmergeable against a required check.
+  if ! run_protected_paths_step \
+    'dependabot[bot]' \
+    $'.github/workflows/ci.yml\n.github/workflows/codeql.yml\n.github/workflows/nightly.yml' \
+    "$output_file" \
+    "$summary_file"; then
+    printf 'Protected paths refused a Dependabot pull request that only updates the workflows\n' >&2
+    return 1
+  fi
+
+  assert_contains 'Dependabot authored this pull request' "$output_file"
+  assert_excludes '::error' "$output_file"
+
+  # The pass still names what it let through, exactly as the owner's does.
+  assert_contains '- `.github/workflows/ci.yml`' "$summary_file"
+}
+
+protected_paths_refuses_dependabot_outside_the_workflows() {
+  local output_file="$test_directory/protected-paths-dependabot-wide-output"
+  local summary_file="$test_directory/protected-paths-dependabot-wide-summary"
+
+  # The author alone does not decide this check. A dependency update edits the workflows; an ADR
+  # arriving under the same login is not one whatever it calls itself, and the exception is scoped so
+  # that it says so rather than taking the author's word for what the change is.
+  if run_protected_paths_step \
+    'dependabot[bot]' \
+    $'.github/workflows/ci.yml\ndocs/decisions/0001-application-owned-repositories-for-persistence-ports.md' \
+    "$output_file" \
+    "$summary_file"; then
+    printf 'Protected paths allowed Dependabot to change a protected path outside the workflows\n' >&2
+    return 1
+  fi
+
+  assert_contains 'outside .github/workflows/: docs/decisions/0001-application-owned-repositories-for-persistence-ports.md' "$output_file"
+}
+
+protected_paths_refuses_an_author_merely_resembling_dependabot() {
+  local output_file="$test_directory/protected-paths-dependabot-lookalike-output"
+  local summary_file="$test_directory/protected-paths-dependabot-lookalike-summary"
+
+  # The bracketed suffix is part of the login GitHub sets, and it is what a chosen account name
+  # cannot contain. Matching it literally rather than by prefix is what keeps `dependabot` — a login
+  # anybody could have registered — outside the exception.
+  if run_protected_paths_step \
+    'dependabot' \
+    '.github/workflows/ci.yml' \
+    "$output_file" \
+    "$summary_file"; then
+    printf 'Protected paths allowed an author whose login only resembles the updater\n' >&2
+    return 1
+  fi
+
+  assert_contains '::error file=.github/workflows/ci.yml::' "$output_file"
+}
+
 protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit() {
   local output_file="$test_directory/protected-paths-oversized-output"
   local summary_file="$test_directory/protected-paths-oversized-summary"
@@ -2193,13 +2253,17 @@ every_workflow_job_declares_its_permissions() {
 # rather than a line nobody reviewed. The publishing jobs need a registry write and the two an
 # attestation takes; `announce` needs to write the release it announces. `release.yml` carries each of
 # the three twice because it calls two publishing workflows, one for the image and one for the chart,
-# and a caller states the permissions it hands down. Nothing else writes at all.
+# and a caller states the permissions it hands down. One scope belongs to no publishing job:
+# `codeql.yml` holds `security-events: write` and runs for a pull request, which is the one exception
+# to the rule the rest of this list describes. It writes code-scanning alerts and nothing else, and an
+# analysis that cannot record one is a log line rather than a check. Nothing else writes at all.
 every_write_scope_is_one_the_policy_records() {
   local recorded_scopes
   local declared_scopes
 
   recorded_scopes="$(
     printf '%s\n' \
+      'codeql.yml security-events: write' \
       'nightly.yml attestations: write' \
       'nightly.yml id-token: write' \
       'nightly.yml packages: write' \
@@ -2348,6 +2412,9 @@ run_test protected_paths_refuses_a_contributor_changing_a_protected_directory
 run_test protected_paths_matches_the_configuration_files_at_every_depth
 run_test protected_paths_ignores_paths_that_only_resemble_a_protected_one
 run_test protected_paths_reports_the_paths_it_found_when_the_owner_is_the_author
+run_test protected_paths_allows_dependabot_to_update_the_workflows
+run_test protected_paths_refuses_dependabot_outside_the_workflows
+run_test protected_paths_refuses_an_author_merely_resembling_dependabot
 run_test protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit
 run_test typo_check_passes_the_files_the_pull_request_changed
 run_test typo_check_checks_nothing_when_the_pull_request_only_removes_files

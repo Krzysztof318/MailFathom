@@ -836,6 +836,53 @@ step. `THIRD_PARTY_LICENSES.md` records exactly what the run sends and under
 whose terms, including the consumer-plan data-training setting that decides
 whether what is submitted this way trains future models.
 
+## Dependency update pull requests
+
+Not every pull request here comes from a task. Once a week `dependabot[bot]`
+opens one of its own, because `.github/dependabot.yml` configures the
+`github-actions` ecosystem and nothing else in this repository updates a pin it
+has made. Minor and patch updates arrive grouped into a single pull request and
+a major arrives alone; `docs/operations/local-development.md` records the
+schedule, the limits, and why the `nuget` ecosystem is deliberately not
+included.
+
+**No skill runs on one and none should.** `start-task` opens an issue and
+`finish-change` writes a board field, and neither has anything to do here: the
+change is already written, it closes no issue, and it belongs to no roadmap
+item. What it needs is a reading, and the reading is the maintainer's.
+
+Four questions answer a Dependabot pull request, and the first is the one an
+automated bump makes easy to skip.
+
+1. **Is the new revision one this repository would have chosen?** Read the
+   upstream release notes the pull request links, not just the version numbers.
+   A major is separated from the group for this reason: it can rename an input
+   or drop a runner, and the diff shows the tag moving rather than what moved
+   with it.
+2. **Does the owner stay inside the reviewed set?** An update never introduces a
+   new owner, and `every_external_action_names_an_approved_owner` in
+   `scripts/test-agent-workflow.sh` refuses one on this pull request as on any
+   other. A version that changed what an action *is* — a transfer, a rename, a
+   fork under the same name — is the case that contract cannot see and a reader
+   can.
+3. **Does `THIRD_PARTY_LICENSES.md` still describe the truth?** Its continuous
+   integration rows name each action and, where one is pinned to a commit, that
+   commit and its version. A bump moves what those rows record, so the register
+   is updated in the same pull request — which is `$check-docs-licenses`'s rule
+   reached from the one direction where no agent is running to apply it.
+4. **Do the checks pass on their own terms?** `Required CI` and
+   `Protected paths` are required on this pull request exactly as on any other,
+   and `Protected paths` passes only because the exception it carries recognises
+   this author for `.github/workflows/` alone. A red one is a red one; nothing
+   here is exempt and nothing auto-merges.
+
+The pull request is merged the same way everything else is: a code owner
+approves it, and the owner merges it. If a bump has to be declined, close the
+pull request and say why in it. Closing settles that version and not the
+dependency — a later release is proposed again, which is the behaviour worth
+having — and the comment is where the next reader finds out the version was
+considered rather than missed.
+
 ## Instruction scope
 
 Root `AGENTS.md` is loaded into every agent session, so it carries what has to be

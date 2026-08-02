@@ -59,9 +59,11 @@ name: Protected paths
 #   `global.json`             the SDK pin every build, every gate, and every CI run resolves against
 #
 # A pull request that edits any of them is editing the gate it has to pass, the terms the project is
-# published under, or the record a release stands on, so the repository owner is the only author for
-# whom that is ordinary work. `CODEOWNERS` says this to the reviewer; this job says it to the author,
-# within seconds of the push and without a reviewer having to notice.
+# published under, or the record a release stands on, so the repository owner is the only human author
+# for whom that is ordinary work. `CODEOWNERS` says this to the reviewer; this job says it to the
+# author, within seconds of the push and without a reviewer having to notice. One automated author is
+# recognised beside the owner, for `.github/workflows/` alone; the step below carries the exception
+# and the argument for why it removes a signal rather than an approval.
 #
 # Whichever way it decides, the job names the protected files the pull request touched, in the step
 # log and in the job summary. The refusal needs that list to be actionable, and the pass needs it
@@ -212,6 +214,42 @@ jobs:
           if [[ "${PULL_REQUEST_AUTHOR,,}" == "${REPOSITORY_OWNER,,}" ]]; then
             echo "The repository owner authored this pull request, so those changes are allowed."
             exit 0
+          fi
+
+          # Dependabot is the one other author this check recognises, and it is recognised for
+          # `.github/workflows/` alone. `.github/dependabot.yml` configures the `github-actions`
+          # ecosystem, so every pull request the updater opens edits a workflow by definition, and
+          # without this the mechanism that keeps the pinned actions current would arrive
+          # permanently unmergeable against a required check.
+          #
+          # What the exception removes is one author-side signal — *you are editing the gate you
+          # have to pass* — from an author that cannot read it. It removes no approval. The `main`
+          # ruleset still requires an approving review from a code owner on this pull request like
+          # on any other, `CODEOWNERS` still names the repository owner for `.github/`, and
+          # `Required CI` still has to pass. A human contributor's verdict is unchanged, because
+          # `user.login` is set by GitHub when the pull request is created and nothing in a
+          # contribution can set it to this value.
+          #
+          # The path condition is what keeps this from meaning *this author may change anything*. One
+          # ecosystem is configured and it edits `.github/workflows/`; a pull request arriving under
+          # this login and proposing an ADR, a skill, or the license is not a dependency update
+          # whatever it calls itself, and a second ecosystem reaching a different protected path
+          # would be a second argument to make rather than one this exception already made.
+          if [[ "$PULL_REQUEST_AUTHOR" == 'dependabot[bot]' ]]; then
+            outside_the_workflows=()
+            for protected_change in "${protected_changes[@]}"; do
+              if [[ "$protected_change" != .github/workflows/* ]]; then
+                outside_the_workflows+=("$protected_change")
+              fi
+            done
+
+            if (( ${#outside_the_workflows[@]} == 0 )); then
+              echo "Dependabot authored this pull request and it changes nothing protected outside .github/workflows/, so those changes are allowed."
+              exit 0
+            fi
+
+            echo "::error::This pull request is authored by ${PULL_REQUEST_AUTHOR} and changes ${#outside_the_workflows[@]} protected path(s) outside .github/workflows/: ${outside_the_workflows[*]}. The dependency updater is recognised for the workflows alone; anything else it proposes is ${REPOSITORY_OWNER}'s to make."
+            exit 1
           fi
 
           # A `file=` annotation attaches each path to its own entry in the pull request's Files
