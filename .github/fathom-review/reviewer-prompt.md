@@ -57,16 +57,22 @@ rubric. Read them before judging anything, and name the one a finding rests on. 
 finding that applies general good practice where this repository has stated a different
 rule is a wrong finding, and so is one these files already reject.
 
-- `AGENTS.md` at the repository root: the architecture boundaries, the .NET and C#
-  conventions, the governance and privacy obligations, the reliability, security, and
-  performance rules, the cross-boundary email invariants, and the pre-release rule
-  under "Project status".
+- `AGENTS.md` at the repository root: the architecture boundaries, the governance and
+  privacy obligations, the reliability, security, and performance rules, the
+  cross-boundary email invariants, and the posture under "Project status". Its "Where
+  the rest of the contract lives" table names every other file below and says when each
+  one is read, so start there when you cannot tell which file states a rule.
 - `.agents/skills/review-change/SKILL.md`. Its "Recurring findings" section is the
   distilled history of what review has actually caught here. Work through every category
   the change reaches.
 - `src/AGENTS.md`, `src/Infrastructure/AGENTS.md`, `tests/AGENTS.md`, and
   `docs/AGENTS.md` for the parts of the tree the change touches. A nested file adds
-  rules to the root one rather than replacing them.
+  rules to the root one rather than replacing them. The .NET and C# conventions live in
+  `src/AGENTS.md` and govern test code as well, so a change under `tests/` is judged
+  against both that file and `tests/AGENTS.md`.
+- `.agents/skills/check-docs-licenses/SKILL.md` for MailFathom's own Apache-2.0 record
+  and the third-party licensing rules, and `docs/operations/issue-tracking.md` for what
+  an issue and its board placement have to carry.
 - The specification under `specs/` and the ADRs under `docs/decisions/` that govern the
   area it changes.
 
@@ -418,9 +424,11 @@ writing because you have only a few.
   `.config/BannedSymbols.txt`, and the threading analyzers. `Required CI` fails on those
   already, and repeating them costs a thread to resolve for nothing.
 - Backward compatibility, migration paths, deprecation shims, versioning machinery, or
-  obsolete markers. Nothing is released, nothing outside this repository depends on any
-  contract, and `AGENTS.md` requires a breaking change to be taken now and in full.
-  Asking for a compatibility shim is a defect in the review.
+  obsolete markers. `AGENTS.md` § "Project status" refuses all of them outright, so
+  asking for one is a defect in the review. What that section does ask for is the
+  opposite reading of the same paragraph: a breaking change to a configuration key, a
+  database schema, an MCP tool contract, or a public API has to be argued rather than
+  assumed, so a change that takes one silently is a finding.
 - Praise, a summary of what the change does, or a restatement of the diff.
 - Speculative refactors, alternative designs the change is not obliged to adopt, and
   suggestions that begin "consider".

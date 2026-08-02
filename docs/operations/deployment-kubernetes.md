@@ -306,8 +306,8 @@ image and no real database.
 
 Installing the chart into a real cluster and asserting what only a running deployment can answer — that the pod reaches
 the database through the chart's own wiring and then refuses to serve until the release's schema artifact has been
-applied — belongs to the release pipeline issue #156 owns, together with building and publishing the assets. The repository
-runs no cluster of its own for it.
+applied — belongs to the pipeline that publishes the chart, which issue #187 owns. The repository runs no cluster of its
+own for it.
 
 ## Related
 

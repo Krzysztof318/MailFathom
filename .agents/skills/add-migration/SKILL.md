@@ -10,9 +10,8 @@ Appends one EF Core migration for the current model, reviews it as SQL, and appl
 **Every migration in this repository is permanent.** Nothing regenerates, renames, reorders, or deletes one, and no
 command here does either. A migration identifier is written into `__EFMigrationsHistory` on every database that applies
 it, so a regenerated baseline leaves that database recording an identifier no later migration can reach — it can then
-only be recreated, which means destroying whatever mail it held. That is why the workflow is additive from here on
-rather than from the first release: the guarantee has to be in place before anything is published, not once something
-already has been.
+only be recreated, which means destroying whatever mail it held. The workflow is additive for every database that
+exists, which includes the persistent local one, not only the ones a release will create.
 
 Clearing local data is a different operation with a different command, and it touches no file:
 

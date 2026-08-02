@@ -97,9 +97,74 @@ because a ref left behind by an earlier fetch describes the base as it was, not
 as it is. The fetch names its destination explicitly as
 `+refs/heads/main:refs/remotes/origin/main`: a bare `git fetch origin main` only
 writes `FETCH_HEAD`, so a repository with a missing or remapped
-`remote.origin.fetch` would keep a stale `refs/remotes/origin/main` and satisfy
-the base check against it. An unreachable remote is a failure and never degrades
+`remote.<remote>.fetch` would keep a stale remote-tracking ref and satisfy the
+base check against it. An unreachable remote is a failure and never degrades
 into verifying against the stale ref.
+
+## Which remote is the base
+
+Every script above needs one answer: which remote is MailFathom. In the owner's
+checkout that is `origin` and nothing else was ever needed. In a fork `origin` is
+the fork, whose `main` is whatever the contributor last synced, and the
+convention every Git host documents is a second remote named `upstream`.
+
+`scripts/resolve-base-remote.sh` is that one answer, sourced by
+`inspect-workspace.sh`, `verify-fast.sh`, and `verify-full.sh` rather than
+reimplemented in each. It identifies the remote by the repository it points at,
+not by its name: a URL whose trailing `owner/name` is `Krzysztof318/MailFathom`,
+with an optional `.git` suffix, in any of the forms Git accepts. `upstream` and
+`origin` are preferred in that order so a fork configuring both gets a stable
+answer, and a remote under any other name still resolves.
+
+Assuming `origin` in a fork is the worse of the two failures available. The
+branch either fails the base check with a message naming no fix a fork owner can
+apply, or — the quiet one — passes against a base that is not the one it will
+merge into, which is a green run that proves nothing. So when no remote names
+MailFathom, the full gate refuses before any `dotnet` invocation and prints the
+two commands that fix it:
+
+```bash
+git remote add upstream https://github.com/Krzysztof318/MailFathom.git
+git fetch upstream main
+```
+
+`inspect-workspace.sh` reports the same state without failing, as `Base branch:
+unresolved`, because it changes nothing and is read before the work rather than
+at the gate. The fast loop degrades instead of refusing: the base only decides
+which files it formats, so a missing one narrows the scope rather than producing
+a wrong verdict, and a contributor repairing their remotes is not also blocked
+from building and testing. `scripts/test-agent-workflow.sh` carries a contract
+for each of those four behaviours against a real second repository.
+
+## The two roles
+
+The repository is public and the roadmap board is not, so the contract runs in
+two places. Root `AGENTS.md` § *The two roles this contract is written for*
+states which rules belong to only one; this is how the skills tell them apart.
+
+`start-task` resolves the role from the workspace rather than from a question.
+`Base branch: origin/main` means `origin` is MailFathom, which is the owner's
+checkout; anything else means `origin` is a fork. A clone of MailFathom made
+without write access is the one case that reads the same as the owner's checkout,
+so the resolution then asks `gh project item-list 4 --owner Krzysztof318` and
+takes a failure as the fork role. Two checks, the second only when the first is
+inconclusive, and neither needs the network in the ordinary case.
+
+What differs is narrow and is listed in both skills at the step it applies to:
+the branch name and the linked worktree, the issue's label, milestone, and board
+fields, the `Queue: Next` write when the pull request opens, and which repository
+is pushed to. What does not differ is everything else, including both
+verification scripts, every gate, the draft pull request, and the
+`Closes #<issue>` reference.
+
+The board write is the one that has to be reported carefully. In the fork role it
+is not a gate that was skipped — project `4` is private to the maintainer, so the
+step does not exist there, and `finish-change` reports `not applicable (fork)`
+rather than leaving a report that looks incomplete. `review-change`,
+`check-docs-licenses`, `closed-enumeration`, and `add-migration` need no
+authority over this repository at all and run unchanged in both roles.
+`prepare-release` is the owner's alone for a different reason: its frontmatter
+sets `disable-model-invocation`, so no agent reaches it in either role.
 
 ## Skills
 
@@ -127,12 +192,16 @@ The canonical skills are:
   `docs/operations/release-procedure.md` records the same sequence for a reader
   without the skill.
 
-Root `AGENTS.md` holds the issue rules themselves: which work needs an issue,
-what an issue body contains, the `type:*` label it carries, the `Track`, `Queue`
-and `Size` fields that place it on the board, the milestone that scopes it to a
-release, and which board transitions belong to the project automation rather
-than to an agent. Placing an issue is part of opening it, because the built-in
-workflows set `Status` and nothing else.
+[Issue tracking and the roadmap board](issue-tracking.md) holds the issue rules
+themselves: which work needs an issue, what an issue body contains, the `type:*`
+label it carries, the `Track`, `Queue` and `Size` fields that place it on the
+board, the milestone that scopes it to a release, and which board transitions
+belong to the project automation rather than to an agent. It sits there rather
+than in root `AGENTS.md` because it is acted on twice per task and read by
+nothing else, so an always-loaded copy would cost every session that touches no
+issue. `start-task` and `finish-change` each name it at the step that writes the
+board. Placing an issue is part of opening it, because the built-in workflows set
+`Status` and nothing else.
 
 That same limit is why `Queue: Next` is written by a skill rather than by an
 automation. No project workflow can set a custom single-select field, and the
@@ -143,7 +212,7 @@ that already exists is already in use, and a pull request opened outside
 
 Those rules describe an issue an agent opened. A public repository also receives
 issues nobody here opened, and one arrives with no `type:*` label and no board
-fields because none of the rules reached its author. Root `AGENTS.md` holds that
+fields because none of the rules reached its author. The same page holds that
 path too: the missing `type:*` label is what marks an issue untriaged, triage
 either places it by the ordinary rules or closes it as `not planned` with a
 reason, a question moves to Discussions instead of being given a label so the
@@ -769,16 +838,58 @@ whether what is submitted this way trains future models.
 
 ## Instruction scope
 
-Root `AGENTS.md` and `CLAUDE.md` carry repository-wide rules. More specific
-instructions are next to the affected content:
+Root `AGENTS.md` is loaded into every agent session, so it carries what has to be
+true before a file is read and nothing else. Its *Where the rest of the contract
+lives* table names every other file and says when each one is read; this section
+is the same split seen from the other end, with the reason each destination is
+reached whenever its rule matters.
 
-- `src/` contains application and dependency-injection rules;
-- `src/Infrastructure/` contains persistence and email-protocol rules;
-- `tests/` contains test and coverage rules;
-- `docs/` contains documentation and ADR rules.
+| File | Loaded when | Reached because |
+|---|---|---|
+| `AGENTS.md` | Always | `CLAUDE.md` is a single `@AGENTS.md` include |
+| `src/AGENTS.md` | A change under `src/` | The directory cascade. It holds the .NET and C# conventions, which govern test code too, so `tests/AGENTS.md` points at it rather than repeating them |
+| `src/Infrastructure/AGENTS.md` | A change under `src/Infrastructure/` | The directory cascade |
+| `tests/AGENTS.md` | A change under `tests/` | The directory cascade, and root `AGENTS.md` names it wherever tests are owed |
+| `docs/AGENTS.md` | A change under `docs/` | The directory cascade |
+| `docs/operations/issue-tracking.md` | An issue is opened, placed, or linked | `start-task` step 8 and `finish-change` both name it at the step that writes the board — the only two points at which the rules are acted on |
+| `docs/operations/agent-workflow.md` | A workflow script or skill is in question | Root `AGENTS.md` § *Agent workflow and verification* opens by naming it |
+| `docs/operations/local-development.md` | The SDK, database, packages, or Actions policy are involved | Root `AGENTS.md` and `CONTRIBUTING.md` both point at it for setup, and it is where the settings that live outside Git are recorded |
+| `.agents/skills/check-docs-licenses/SKILL.md` | Every change | It is the mandatory completion gate, so the licensing rules it holds are read on every change by construction |
+| `.agents/skills/add-migration/SKILL.md` | A model change needs a migration | Root `AGENTS.md` names it as the only way to add one |
 
-The shared .NET and C# conventions remain at the root because they also apply
-to test code. Each nested `CLAUDE.md` imports its sibling `AGENTS.md`.
+Each nested `CLAUDE.md` imports its sibling `AGENTS.md`.
+
+### What is here for the process rather than for the product
+
+The repository is public, so everything below is read by people who did not write
+it. Each was classified deliberately rather than left in place by default:
+
+- **`specs/` — kept in place.** The architecture draft is named as required
+  context and the numbered specifications are what an issue links to instead of
+  restating. Roughly half describe work that has shipped, and that is what a
+  specification becomes rather than a defect in it: `specs/README.md` states which,
+  and a page under `docs/` is the statement of fact beside it.
+- **The five `AGENTS.md` files and their `CLAUDE.md` imports — kept in place.**
+  They are the contract the agents execute, they are what makes a contribution
+  produced by an agent satisfy the same rules, and `AGENTS.md` is a convention
+  other projects now share rather than a private artifact.
+- **`.agents/skills/` — kept in place.** The skills run in a fork, which is the
+  whole of *The two roles* above; removing them would leave a contributor's agent
+  with the rules and none of the procedure.
+- **`.claude/skills` — kept.** It is a relative symlink to `../.agents/skills`,
+  inside the repository, and it is what makes those skills reachable from Claude
+  Code in any clone. Copying the tree instead would create a second copy to keep
+  true.
+- **`.worktreeinclude` — kept.** It names the gitignored files a new worktree
+  needs and is inert everywhere else, which costs a reader one file and saves the
+  next person configuring a worktree from rediscovering the list.
+- **This page — kept.** How the project is worked is part of what a contributor
+  needs, not residue from it.
+
+Nothing here is retained for sentiment: a dated implementation plan or design
+note is the shape that was removed, because it records how a change was arrived
+at, is not allowed to be rewritten, and therefore can only drift from the code
+while sitting in a tree a reader takes as fact.
 
 ## Failure recovery
 

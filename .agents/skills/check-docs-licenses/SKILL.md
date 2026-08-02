@@ -30,7 +30,23 @@ Use `n/a` only when the change cannot affect user, operator, contributor, archit
 
 The verdict below is therefore `n/a` for every ordinary change, and `fail` for a diff that edits the file outside a release.
 
+## The project's own license
+
+MailFathom is licensed under the Apache License, Version 2.0. That decision is recorded in five places and each one has a single job, so a change that touches licensing keeps them consistent rather than picking whichever is nearest.
+
+- The root `LICENSE` is the unmodified official Apache-2.0 text. Never edit it, never append attribution, third-party terms, or commentary to it: GitHub detects the license by matching that file against the known text, and an edit turns a detected `Apache-2.0` into `NOASSERTION`.
+- The root `NOTICE` names Krzysztof Kasprowicz as the original author, which is what Apache-2.0 section 4(d) asks a derivative distribution to preserve, and the repository the project lives in, for the reason the file header below carries the same URL: `NOTICE` travels beside the binaries into the publish output and the container image, so it is often the only thing a reader has to work back from. It stays informational — it adds no use restriction, changes no license term, and claims nothing about contributions by other copyright holders. Third-party notice text may join the distributed bundle beside it, never inside it.
+- `Directory.Build.props` carries the machine-readable form: `PackageLicenseExpression`, the copyright, and the SPDX assembly metadata that ships in the assemblies. `src/Host` copies `LICENSE` and `NOTICE` into its publish output, and `VerifyPublishedLicenseAndNotice` in `src/Host/Host.csproj` fails the publish when either is missing, so a native artifact cannot ship without them.
+- `.editorconfig` holds the three-line `file_header_template` that IDE0073 enforces on every source file: the copyright, the grant, and the repository URL that tells a reader who meets one file outside this checkout where the project lives. Changing it rewrites every file in the repository, so treat it as a repository-wide change rather than a formatting tweak — one edit to the template and one whole-solution `dotnet format` pass, never a hand-edited header.
+- The deployment assets state the same identifier where their own ecosystems read it: `org.opencontainers.image.licenses` in `deploy/docker/Dockerfile` and `artifacthub.io/license` in the chart's `Chart.yaml`. Those are claims about terms rather than the terms themselves, and nothing asserts either one mechanically, so a change touching either is read: check that both still name `Apache-2.0` and that the build context still admits `LICENSE` and `NOTICE`. A label that outlived the files it names is the failure worth catching, and the publish check above is what catches the files' half of it.
+
+`README.md` and `CONTRIBUTING.md` carry none of those jobs and are still written to match them. Each explains the decision to a reader rather than recording it — that contributions arrive under the license by section 5 and need nothing signed, that contributors keep their copyright, that the header the `.editorconfig` template applies is one project's mark rather than a claim about who wrote a line, and that sections 7 and 8 give the software with no warranty and no contributor liability. That last one is there because `README.md` is the only one of these files rendered outside the repository, where a reader who never opens `LICENSE` would otherwise meet the grant without the disclaimer; it summarizes and points at the text, and never restates a term as though the summary were operative. A change to the five above therefore reads both, because prose that contradicts the record is what a contributor will act on.
+
+`THIRD_PARTY_LICENSES.md` is none of the above. It reviews what MailFathom consumes, and the section below governs it.
+
 ## Licenses
+
+MailFathom must remain compatible with both commercial closed-source distribution and open-source publication. Only use third-party components whose licenses permit commercial use and do not require MailFathom itself to be relicensed or distributed as source code; prefer permissive licenses such as MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, and the PostgreSQL License. Do not introduce GPL, AGPL, SSPL, BUSL, Commons Clause, PolyForm Noncommercial, source-available-only, field-of-use-restricted, or otherwise non-permissive dependencies without explicit owner approval.
 
 Inventory added, upgraded, replaced, bundled, or newly used third-party packages, tools, services, provider APIs, protocols, container images, models, generated assets, and copied samples.
 
@@ -42,6 +58,8 @@ For every affected item, verify current official upstream evidence for:
 - separate service, model, telemetry, data-use, trademark, and data-processing terms when applicable.
 
 Ensure `THIRD_PARTY_LICENSES.md` is updated in the same change. A permissive SDK does not approve its hosted service. Unknown, conflicting, or unofficial evidence is a failure. Use `n/a` only when the inventory is empty.
+
+When a dependency is pinned in `Directory.Packages.props`, record the exact package name, version, license expression, upstream URL, and any required attribution or `NOTICE` handling. Record the version the artifact's own graph resolves when nearest-wins resolution raises a pin that is only a floor.
 
 `THIRD_PARTY_LICENSES.md` records what the repository actually pins, bundles, or calls, and is not the project's own `LICENSE` or a generated notice bundle. Put an entry in the section that matches the component's exposure — redistributed, build-time, test-only, orchestration, continuous integration, developer tooling, externally sourced source, or hosted service — because that is what decides whether a release obligation follows.
 

@@ -14,7 +14,8 @@ docker build --target runtime --file deploy/docker/Dockerfile --tag mailfathom:l
 It produces one image: the service. It carries no migration tool, no SQL, and no credential that could apply one, which
 is what makes "the host never applies a migration" a property of what was built rather than a rule someone has to
 remember. `DatabaseSchemaStartupGate` refuses to start against a schema this build does not recognize, in every
-environment, and the reviewed artifact that answers that refusal belongs to issue #126 rather than to anything here.
+environment, and the reviewed artifact that answers that refusal is the idempotent SQL file each release ships rather
+than anything in here. [Applying the database schema](database-schema.md) documents it.
 
 ## What is inside, and what is not
 

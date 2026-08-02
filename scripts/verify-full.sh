@@ -8,6 +8,11 @@ fi
 
 cd "$repository_root"
 
+# Resolved from this script's own location rather than from the repository it verifies, because the
+# workflow contract suite runs the committed scripts against a fixture checkout that carries none.
+# shellcheck source=scripts/resolve-base-remote.sh
+source "$(dirname "${BASH_SOURCE[0]}")/resolve-base-remote.sh"
+
 # Refusing here, before the fetch and before any dotnet invocation, is what makes the refusal
 # meaningful: the base check below passes trivially on main, because origin/main is its own
 # ancestor. A detached HEAD is left alone, because it is not a branch anyone pushes to.
@@ -25,17 +30,24 @@ if ((${#untracked_files[@]} > 0)); then
   exit 1
 fi
 
-# The explicit destination refspec is what makes the next check meaningful. A bare
-# `git fetch origin main` only writes FETCH_HEAD, so a repository whose
-# remote.origin.fetch is missing or remapped would keep a stale
-# refs/remotes/origin/main and pass the base check against it.
-if ! git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main'; then
-  printf 'verify-full.sh cannot fetch origin main. Restore access to the remote instead of verifying against a stale base.\n' >&2
+if ! base_remote="$(resolve_base_remote)"; then
+  base_remote_resolution_hint >&2
   exit 1
 fi
 
-if ! git merge-base --is-ancestor origin/main HEAD; then
-  printf 'HEAD does not contain the current origin/main. Rebase the branch onto the fetched base before verifying.\n' >&2
+# The explicit destination refspec is what makes the next check meaningful. A bare
+# `git fetch <remote> main` only writes FETCH_HEAD, so a repository whose
+# remote.<remote>.fetch is missing or remapped would keep a stale
+# refs/remotes/<remote>/main and pass the base check against it.
+if ! git fetch --quiet "$base_remote" "+refs/heads/main:refs/remotes/$base_remote/main"; then
+  printf 'verify-full.sh cannot fetch %s main. Restore access to the remote instead of verifying against a stale base.\n' \
+    "$base_remote" >&2
+  exit 1
+fi
+
+if ! git merge-base --is-ancestor "$base_remote/main" HEAD; then
+  printf 'HEAD does not contain the current %s/main. Rebase the branch onto the fetched base before verifying.\n' \
+    "$base_remote" >&2
   exit 1
 fi
 
@@ -45,9 +57,9 @@ dotnet restore MailFathom.slnx --locked-mode
 dotnet build MailFathom.slnx --configuration Release --no-restore
 dotnet msbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release
 dotnet format MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic
-# Two dots, not three. The ancestor check above already proves origin/main is reachable from HEAD,
-# so the two forms agree today; three dots would diff from the merge base and silently keep agreeing
+# Two dots, not three. The ancestor check above already proves the base is reachable from HEAD, so
+# the two forms agree today; three dots would diff from the merge base and silently keep agreeing
 # if that check were ever relaxed, which is exactly the drift this gate exists to catch.
-git diff --check origin/main..HEAD
+git diff --check "$base_remote/main..HEAD"
 git diff --cached --check
 git diff --check

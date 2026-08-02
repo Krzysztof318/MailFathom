@@ -8,6 +8,11 @@ fi
 
 cd "$repository_root"
 
+# Resolved from this script's own location rather than from the repository it verifies, because the
+# workflow contract suite runs the committed scripts against a fixture checkout that carries none.
+# shellcheck source=scripts/resolve-base-remote.sh
+source "$(dirname "${BASH_SOURCE[0]}")/resolve-base-remote.sh"
+
 # The integration branch is never the subject of a change, so a run there reports on code nobody is
 # about to modify. verify-full.sh cannot catch this through its base check: origin/main is trivially
 # its own ancestor. A detached HEAD is left alone, because it is not a branch anyone pushes to.
@@ -18,18 +23,27 @@ if [[ "$current_branch" == 'main' || "$current_branch" == 'master' ]]; then
   exit 1
 fi
 
-# The branch base, preferred as the remote-tracking ref and falling back to the local branch, so the
-# loop keeps working offline. Printing nothing when neither exists widens the scope below to the
-# uncommitted work alone rather than failing the run.
+# The branch base, preferred as the remote-tracking ref of whichever remote is the upstream
+# repository and falling back to the local branch, so the loop keeps working offline. Printing
+# nothing when neither exists widens the scope below to the uncommitted work alone rather than
+# failing the run: this loop only decides which files to format, so a missing base costs a narrower
+# scope rather than a wrong verdict, and the full gate refuses the same state outright.
 resolve_branch_base() {
+  local base_remote
   local candidate_ref
 
-  for candidate_ref in 'refs/remotes/origin/main' 'refs/heads/main'; do
+  if base_remote="$(resolve_base_remote)"; then
+    candidate_ref="refs/remotes/$base_remote/main"
+
     if git rev-parse --verify --quiet "$candidate_ref" > /dev/null; then
       printf '%s\n' "$candidate_ref"
       return 0
     fi
-  done
+  fi
+
+  if git rev-parse --verify --quiet 'refs/heads/main' > /dev/null; then
+    printf 'refs/heads/main\n'
+  fi
 }
 
 # Every path this branch touches: committed since the base, staged, modified, or newly added.

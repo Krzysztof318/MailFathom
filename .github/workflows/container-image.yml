@@ -1,8 +1,8 @@
 name: Container image
 
 # Proves that the image still builds for both supported architectures, and nothing else. Testing the
-# deployment it goes into, and publishing it, both belong to the release pipeline #156 owns; until that
-# exists, this is what keeps a Dockerfile change from being discovered broken at release time.
+# deployment it goes into, and publishing it, belong to `Release` and `Nightly`. This is what keeps a
+# Dockerfile change from being discovered broken at release time instead.
 #
 # Manual dispatch only, deliberately, and for the same reason the integration suite is: a two-architecture
 # build is minutes of runner time on a change that usually touches neither. Nothing here publishes — no

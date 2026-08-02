@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, src/AppHost/** -->
+<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, src/AppHost/**, .github/workflows/** -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -64,16 +64,22 @@ checks the Git diff. It rejects remaining untracked files, so inspect the
 staged diff before running it. See [Agent workflow](agent-workflow.md) for the
 workspace inspection command and shared skills.
 
-The full script fetches `origin main` and refuses to continue when the branch
-does not contain that base, so it needs access to the remote and cannot run
-offline. Rebase onto the fetched base when it reports the branch is behind.
-The fast script queries only local Git state and remains available offline.
+The full script fetches the base branch and refuses to continue when the branch
+does not contain it, so it needs access to the remote and cannot run offline.
+Rebase onto the fetched base when it reports the branch is behind. The fast
+script queries only local Git state and remains available offline.
+
+The base is `main` on whichever remote points at `Krzysztof318/MailFathom` —
+`origin` here, and conventionally `upstream` in a fork, where `origin` is the
+fork and its `main` is whatever was last synced.
+[Which remote is the base](agent-workflow.md#which-remote-is-the-base) describes
+how that is resolved and what the gate prints when nothing resolves.
 
 Neither gate covers the deployment assets, and no script here does either. Testing, building, and publishing what
 `deploy/` produces is one pipeline's job rather than several local scripts' — a developer would otherwise need a Docker
-daemon, a Kubernetes cluster, and Helm on the machine to learn what a runner can decide once. That pipeline is issue
-#156; [the container image](container-image.md) and [Kubernetes and Helm](deployment-kubernetes.md) describe what it
-has to establish.
+daemon, a Kubernetes cluster, and Helm on the machine to learn what a runner can decide once. `Release` and `Nightly`
+are that pipeline for the image; issue #187 joins the Helm chart to it. [The container image](container-image.md) and
+[Kubernetes and Helm](deployment-kubernetes.md) describe what each has to establish.
 
 What is useful locally is reading the chart, which needs only Helm:
 
@@ -333,7 +339,7 @@ scripts/build-schema-artifact.sh      # artifacts/schema/mailfathom-schema-<vers
 
 It runs `aspire publish`, which reads the `PublishAsMigrationScript` declaration in `src/AppHost/Program.cs`, so the file a release attaches and the file this produces come from one statement rather than two. Like the other commands that only read the checkout it reaches no database: the SQL is generated from the migration assembly, so it produces identical output against a server that does not exist. Unlike them it needs the Aspire CLI rather than `dotnet-ef`, because the declaration it reads lives in the app model. [Applying the database schema](database-schema.md) is what an operator then does with it.
 
-The GitHub CLI (`gh`) is installed separately through the operating system package manager and is required for the issue and pull-request workflow in root `AGENTS.md`. It needs the `project` scope on top of its default scopes so it can read and update the roadmap board.
+The GitHub CLI (`gh`) is installed separately through the operating system package manager and is required for the issue and pull-request workflow in [Issue tracking and the roadmap board](issue-tracking.md). It needs the `project` scope on top of its default scopes so it can read and update the roadmap board.
 
 On a machine that has never authenticated, log in and request the scope in the same step:
 
@@ -571,3 +577,50 @@ GitHub does not let the author of a pull request approve it. Every pull request 
 Both expensive jobs restore from a cached `~/.nuget/packages` keyed on `Directory.Packages.props`, `global.json`, `NuGet.config`, `.config/dotnet-tools.json`, and every `packages.lock.json`. Those files decide the versions, the permitted sources, and the resolved transitive closure, which together are the whole of what restore downloads, so a changed pin or a changed source policy misses the cache rather than resolving against a stale package set.
 
 The workflow uses the SDK pinned in `global.json`, cancels superseded runs for the same pull request, requests read-only repository permissions, and avoids credentials or service-specific secrets.
+
+## GitHub Actions policy
+
+Half of what governs Actions here is committed and half is a repository setting, and neither half is
+worth anything alone: restricting the settings while the YAML references a mutable tag leaves the
+reference mutable, and hardening the YAML while the settings admit any action lets the next workflow
+introduce one nobody reviewed. This section records both, so the half that no diff shows is written
+down somewhere a change to the other half will read.
+
+**What the contract suite asserts**, on every pull request, through
+`scripts/test-agent-workflow.sh`:
+
+| Contract | What it refuses |
+|---|---|
+| `every_external_action_names_an_approved_owner` | An action from an owner outside the reviewed set: `actions`, `github`, `Krzysztof318`, `dorny`, `anthropics`, `docker`, `crate-ci`, `aquasecurity` |
+| `every_workflow_job_declares_its_permissions` | A job that inherits the repository default instead of declaring a `permissions:` block, at the workflow level or its own |
+| `every_write_scope_is_one_the_policy_records` | A write scope appearing anywhere the list in that contract does not already name |
+| `every_checkout_refuses_to_persist_credentials` | An `actions/checkout` step that leaves the workflow token in `.git/config` for the steps after it |
+| `only_the_reviewer_workflow_uses_pull_request_target` | A second `pull_request_target` trigger beside the one `fathom-review.yml` holds |
+
+Every write scope in the repository belongs to a publishing job: `packages: write` with
+`id-token: write` and `attestations: write` in `nightly.yml`, `release.yml`, and
+`publish-container-image.yml`, plus `packages: write` on the nightly prune job and `contents: write`
+on the job that writes the release announcement. Nothing that runs for a pull request holds one, and
+the contract above is what keeps that true rather than a reader noticing.
+
+**What lives in the repository settings**, which no check here can read:
+
+| Setting | Value | Why |
+|---|---|---|
+| Default workflow token | `read` | A job that needs more says so in its own `permissions:` block, which is reviewable; a permissive default is not |
+| Actions may create or approve pull requests | disabled | A workflow approving its own change would satisfy the ruleset's review requirement without a person |
+| Allowed actions | `all` today, `selected` once the pins land | The allowlist is the settings-side twin of the owner contract above, and pinning is what makes an allowed owner mean an allowed *revision* |
+| Require actions pinned to a full-length commit SHA | off today, on once #214 exists | A SHA follows no upstream security fix, so pinning without an updater is worse than a mutable tag. #214 supplies the updater and #160 lands the pins and this setting together |
+| Artifact and log retention | 30 days | The REST API exposes no retention field, so the settings page is both where it is set and the only evidence it was |
+| Cache retention and size | 7 days, 10 GB | Unchanged unless measured eviction pressure argues otherwise |
+| Fork pull request approval | not yet set | The API refuses the setting while a repository is private, so it is read and chosen after the visibility flip |
+
+The last three rows are the ones to re-read after any settings change, because nothing else will
+notice them moving.
+
+**A fork's pull request** runs `CI`, `Protected paths`, and `Typo check` on the `pull_request` event
+with a read-only token and no repository secret, which is what makes running a contribution's code
+safe at all. `Fathom review` is the exception and stays one: it holds an App private key, so a
+fork's own pushes never start it and only a maintainer's `fathom-review` label or comment does.
+[Why `pull_request_target` is a granted exception](agent-workflow.md#why-pull_request_target-is-a-granted-exception)
+records the reasoning, and the contract above is the automated half of it.

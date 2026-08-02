@@ -12,6 +12,10 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 **You are encouraged to work the same way.** Point an agent at your checkout — Claude Code, Codex, and anything else that reads `AGENTS.md` pick the rules up on their own — give it the issue, and let it produce the change, the tests, and the documentation in one pass. A hand-written patch is equally welcome and is judged identically; the point is that the conventions here are dense enough that an agent which has actually read them will satisfy them faster than a person skimming them.
 
+**The skills run in your fork too.** `.agents/skills/` holds the seven workflow skills the maintainer's agents use, and Claude Code finds them through the `.claude/skills` symlink in any clone. `start-task` works out from your remotes that it is running in a fork and adjusts three things: your branch keeps the name you gave it, the base it verifies against is `upstream/main` rather than `origin/main`, and it opens an issue without trying to label it or place it on a board. `review-change`, `check-docs-licenses`, `add-migration`, and `closed-enumeration` need nothing from this repository and run unchanged. `finish-change` runs the same gates and opens the same draft pull request against `main` here, and reports the one step it does not take — the maintainer's planning board is private, so there is nothing for it to write and nothing missing when it does not.
+
+**What your agent should not spend a session on.** The protected paths below are refused from anyone but the maintainer, so a change to one cannot merge however good it is. `start-task` checks the task against them before the work rather than leaving the check to find out; if your idea needs one, open an issue and say so.
+
 Two things are unchanged by whoever or whatever typed the code:
 
 - **You are responsible for what you submit.** Read the diff before opening the pull request. Output nobody has read is not a contribution, it is a request that someone else read it for you.
@@ -36,12 +40,16 @@ MailFathom is developed and run on Linux.
 ## From a clone to a green run
 
 ```bash
-git clone https://github.com/Krzysztof318/MailFathom.git
+git clone https://github.com/<you>/MailFathom.git
 cd MailFathom
+git remote add upstream https://github.com/Krzysztof318/MailFathom.git
+git fetch upstream main
 dotnet restore MailFathom.slnx
 dotnet build MailFathom.slnx --no-restore
 dotnet test MailFathom.slnx --no-build
 ```
+
+**The `upstream` remote is not optional.** Every gate here verifies your branch against the base it will actually merge into, and in your fork `origin/main` is whatever you last synced. The scripts find that base by looking for the remote that points at `Krzysztof318/MailFathom` — under any name, `upstream` is just the convention — and the full gate refuses to run rather than measure your work against the wrong base. Its refusal prints the two commands above.
 
 While you work, run the fast loop instead of the individual commands:
 
@@ -86,7 +94,7 @@ It prints what your change obliges the rest of the repository to do — the test
 ## Opening the pull request
 
 - **Open it as a draft.** Mark it ready for review when it is complete and the full gate passes. A draft skips the expensive checks, so you are not burning runner minutes on work in progress.
-- **Put `Closes #<issue>` in the body.** It closes the issue on merge and moves the roadmap board item.
+- **Put `Closes #<issue>` in the body.** It closes the issue on merge, which is also how the maintainer's own planning view learns the work is done. That view is a private project board you neither see nor need; the issue is where the conversation lives.
 - **No co-author trailers.** Do not put `Co-authored-by:` or any other co-author trailer on a commit. No check enforces this; a pull request carrying one is asked to remove it, which means rewriting the commits.
 - **One change per pull request.** Split out anything the reviewer would have to judge separately.
 
@@ -99,7 +107,9 @@ A third check, **`Typo check`**, runs on every pull request that is not a draft 
 
 Merging additionally requires an approving review from a code owner and a branch that is current with `main`. [`docs/operations/local-development.md`](docs/operations/local-development.md#pull-request-checks) documents all three workflows and the branch ruleset in full.
 
-A separate `Fathom review` workflow may post an automated review on a published pull request. It reports no status check and gates nothing; treat it as a second opinion. On a pull request from a fork it runs only after a maintainer applies the `fathom-review` label.
+A separate `Fathom review` workflow may post an automated review on a published pull request. It reports no status check and gates nothing; treat it as a second opinion.
+
+**From a fork it runs only when a maintainer asks for it**, by applying the `fathom-review` label or by commenting. Your own pushes never start one, and that is the security boundary rather than an oversight — the workflow holds a credential, so nothing a contribution can do may start it. Two practical consequences: pushing a fix does not queue a re-review the way it does on a maintainer's own branch, so say in the pull request that you have pushed and let them relabel; and a review that has not appeared is waiting on a person rather than on a queue. Nothing is lost by not having one — the required checks and the maintainer's own review are what decide the merge.
 
 ## Licensing your contribution
 
@@ -142,9 +152,12 @@ The files that carry the licensing decision itself are not merely off limits by 
 
 | Document | What it governs |
 |---|---|
-| [`AGENTS.md`](AGENTS.md) | Architecture boundaries, .NET and C# conventions, naming, reliability and security rules, the licensing obligations, and the issue and board conventions |
+| [`AGENTS.md`](AGENTS.md) | The non-negotiables, the architecture boundaries, the privacy and licensing obligations, the reliability and security rules — and a table naming every file below and when each one is read |
+| [`src/AGENTS.md`](src/AGENTS.md) | The .NET and C# conventions and naming, API and failure design, asynchronous return types, dependency injection and configuration. The conventions govern test code too |
 | [`tests/AGENTS.md`](tests/AGENTS.md) | Unit-test policy, coverage rules, and what belongs in the integration suite |
-| [`docs/AGENTS.md`](docs/AGENTS.md) | Documentation rules |
+| [`docs/AGENTS.md`](docs/AGENTS.md) | Documentation rules and the `describes:` marker every page carries |
+| [`docs/operations/issue-tracking.md`](docs/operations/issue-tracking.md) | Which work needs an issue, what its body carries, and how a maintainer triages one that arrives from outside the project |
+| [`docs/operations/agent-workflow.md`](docs/operations/agent-workflow.md) | The verification scripts and the skills at length, and how the automated review behaves |
 | [`docs/decisions/`](docs/decisions/) | Architectural decision records — required context before an architectural change |
 | [`specs/`](specs/) | What a planned change must do. A specification is intent; a page under `docs/` is fact |
 

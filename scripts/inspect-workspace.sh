@@ -8,6 +8,11 @@ fi
 
 cd "$repository_root"
 
+# Resolved from this script's own location rather than from the repository it inspects, because the
+# workflow contract suite runs the committed scripts against a fixture checkout that carries none.
+# shellcheck source=scripts/resolve-base-remote.sh
+source "$(dirname "${BASH_SOURCE[0]}")/resolve-base-remote.sh"
+
 branch_name="$(git branch --show-current)"
 if [[ -z "$branch_name" ]]; then
   branch_name='detached HEAD'
@@ -27,14 +32,21 @@ else
   upstream_name='none'
 fi
 
-if git show-ref --verify --quiet refs/remotes/origin/main; then
-  if git merge-base --is-ancestor origin/main HEAD; then
-    contains_origin_main='yes'
+if base_remote="$(resolve_base_remote)"; then
+  base_branch="$base_remote/main"
+
+  if git show-ref --verify --quiet "refs/remotes/$base_branch"; then
+    if git merge-base --is-ancestor "$base_branch" HEAD; then
+      contains_base='yes'
+    else
+      contains_base='no'
+    fi
   else
-    contains_origin_main='no'
+    contains_base="unknown ($base_branch is unavailable)"
   fi
 else
-  contains_origin_main='unknown (origin/main is unavailable)'
+  base_branch='unresolved'
+  contains_base='unknown (no remote points at the upstream repository)'
 fi
 
 dirty_paths="$(git status --porcelain)"
@@ -64,7 +76,8 @@ printf 'Repository: %s\n' "$repository_root"
 printf 'Branch: %s\n' "$branch_name"
 printf 'Worktree: %s\n' "$worktree_kind"
 printf 'Upstream: %s\n' "$upstream_name"
-printf 'Contains origin/main: %s\n' "$contains_origin_main"
+printf 'Base branch: %s\n' "$base_branch"
+printf 'Contains base branch: %s\n' "$contains_base"
 printf 'Working tree: %s\n' "$working_tree_state"
 printf 'Registered worktrees: %s\n' "$registered_worktree_count"
 printf '.NET SDK: %s\n' "$dotnet_sdk_version"
