@@ -126,12 +126,17 @@ ARG IMAGE_RELEASE_CHANNEL=local
 # label is only the claim; what discharges the obligation is the LICENSE and NOTICE copied in with the publish output
 # below, which is where a reader of a pulled image finds the terms themselves.
 #
+# `org.opencontainers.image.description` is the sentence every registry that indexes labels shows beside the image, and
+# it is also what the publish workflow pushes as Docker Hub's short description rather than keeping a second literal
+# there. Docker Hub accepts 100 bytes for that field and silently truncates a longer one, so this line stays inside that
+# budget and the workflow fails the release if it ever stops fitting — see docs/operations/container-image.md.
+#
 # `io.artifacthub.package.logo-url` is the one label here that OCI does not define: the specification has no field for a
 # project icon, so a listing reads a vendor label instead. It names the same asset as the Helm chart's `icon`, and it is
 # a URL rather than a copied file because a label carries no payload.
 LABEL org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.title="MailFathom" \
-      org.opencontainers.image.description="Read-only MCP server over synchronized IMAP mailboxes." \
+      org.opencontainers.image.description="A brain for your mail: self-hosted and AI-native, IMAP synchronized and served over MCP." \
       org.opencontainers.image.source="https://github.com/Krzysztof318/MailFathom" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.revision="${IMAGE_REVISION}" \
