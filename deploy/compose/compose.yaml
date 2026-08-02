@@ -69,8 +69,8 @@ services:
 
   mailfathom:
     # `mailfathom:local` is a name no registry can serve, so an operator who has configured nothing gets the image this
-    # checkout builds and never a tag pulled from somewhere. Point MAILFATHOM_IMAGE at a published release when one
-    # exists. ADR 0004 defines the channels and the tags they carry; none has been published yet.
+    # checkout builds and never a tag pulled from somewhere. Point MAILFATHOM_IMAGE at a published release to run one
+    # instead — `ghcr.io/krzysztof318/mailfathom:<version>`. ADR 0004 defines the channels and the tags they carry.
     image: ${MAILFATHOM_IMAGE:-mailfathom:local}
     build:
       context: ../..

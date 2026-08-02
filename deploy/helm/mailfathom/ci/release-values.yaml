@@ -1,7 +1,7 @@
 # The values the repository's own verification renders the chart with, standing in for a deployment on the supported
-# release channel. Nothing here names a real image or a real database: no MailFathom release exists, and the point of
-# this file is to give `helm lint` and `helm template` a values document that satisfies the schema so the templates
-# themselves are what gets checked.
+# release channel. Nothing here names a real image or a real database, deliberately: the point of this file is to give
+# `helm lint` and `helm template` a values document that satisfies the schema, so the templates themselves are what
+# gets checked rather than a deployment somebody would have to keep current.
 image:
   channel: release
   registry: docker.io

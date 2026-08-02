@@ -117,7 +117,7 @@ Referenced by the unit and integration suites and by nothing that ships.
 
 Two kinds of thing, kept in one section because both are container images and their obligations are read together.
 
-Most are started by the Aspire AppHost on a developer machine or by the integration-test script, and are neither derived from nor published by this repository. The last two are different: `deploy/docker/Dockerfile` builds MailFathom's own image on them, so the runtime base is redistributed inside every image a deployment runs. Nothing has been published yet — issue #210 cuts the first release — but the obligation attaches to the derived image rather than to its publication, so it is recorded now.
+Most are started by the Aspire AppHost on a developer machine or by the integration-test script, and are neither derived from nor published by this repository. The last two are different: `deploy/docker/Dockerfile` builds MailFathom's own image on them, so the runtime base is redistributed inside every image a deployment runs, on the release channel and the nightly one alike. The obligation attaches to the derived image rather than to the registry it is pushed to, which is why it is recorded here rather than beside a publication step.
 
 | Component and exact version | Use in this repository | License terms verified | Compatibility decision and obligations | Sources reviewed |
 |---|---|---|---|---|

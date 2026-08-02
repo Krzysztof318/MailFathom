@@ -30,14 +30,13 @@ A confirmed vulnerability is fixed on `main`, published as a GitHub Security Adv
 
 ## Supported versions
 
-**Nothing has been released yet.** No tag has been pushed, no artifact has been published, and no deployment is being run by anyone. Every build is a preview of a release that has not happened.
-
-Until the first release, the supported version is the current `main`, and a fix lands there rather than being backported anywhere. This table is filled in when `0.1.0` ships.
+A confirmed vulnerability is fixed on `main` and reaches you in a release that carries the fix. **Only the newest released minor line is patched by default**, from the permanent `release/<major>.<minor>.x` branch that [`docs/decisions/0004-versioning-and-release-policy.md`](docs/decisions/0004-versioning-and-release-policy.md) describes. Reaching further back is a deliberate decision recorded on the issue that asks for it, never something that follows from an older branch still existing: one maintainer cannot support an unbounded number of lines, and a policy implying otherwise would make a promise this project cannot keep.
 
 | Version | Supported |
 |---|---|
-| `main` | Yes |
-| Everything else | Nothing else exists |
+| `0.1.x` | Yes — the newest released minor line |
+| Any older release line | Only by a decision recorded on the issue asking for it |
+| `main`, and the `-nightly.<n>` builds from it | No. A fix lands here first, but nothing built from `main` carries a release promise |
 
 ## Scope
 

@@ -98,7 +98,7 @@ wrong.
   {{- fail "image.tag and image.digest are both set. Supply exactly one, so what a rollback goes back to is unambiguous." -}}
 {{- end -}}
 {{- if not (or .Values.image.tag .Values.image.digest) -}}
-  {{- fail "Neither image.tag nor image.digest is set. MailFathom publishes no release yet, so the chart cannot default to one; name the immutable reference your deployment uses." -}}
+  {{- fail "Neither image.tag nor image.digest is set. The chart defaults to neither, so that no cluster runs a version nobody named; name the immutable reference your deployment uses." -}}
 {{- end -}}
 {{- if not .Values.image.repository -}}
   {{- fail "image.repository is not set. There is no default: a chart that guessed one would deploy an image nobody named." -}}
