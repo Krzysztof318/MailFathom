@@ -95,12 +95,33 @@ On a branch off the release branch, and touching nothing else:
 - say, when the database schema moved, whether a migration must be applied, whether it applies while the previous
   version still runs, and whether the release deploys over the previous release's data at all;
 - update the link references at the foot of the file so the new section resolves;
-- leave `VersionPrefix` alone. It already reads `x.y.z`, which is what makes the tagged tree self-consistent.
+- leave `VersionPrefix` alone. It already reads `x.y.z`, which is what makes the tagged tree self-consistent;
+- **bring the three files that name a version in prose onto `x.y.z`**, per the list below.
 
 Nothing else belongs in this diff. **This is the pull request whose merge commit is tagged and published**, so it is
 both the last point at which the release's contents are read as a whole and the thing the published artifact is built
 from; an unrelated change in it is a change nobody reviewed as part of the release. `CHANGELOG.md` is a protected path,
 which is what makes an edit to it outside this flow visible.
+
+#### The files that name a version in prose
+
+`<VersionPrefix>` is the only place a version is written for the *build*. Three files additionally name one in prose,
+where nothing derives it and nothing checks it, so they are read here by name rather than left to be noticed:
+
+| File | What to bring onto `x.y.z` |
+| --- | --- |
+| `README.md` | The **Project status** paragraph — which release is current and what it ships |
+| `docs/users/installation.md` | The image references in the opening paragraph, which quote the version literally |
+| `SECURITY.md` | The **Supported versions** table. `x.y` becomes the supported line and the one it replaces moves down a row, per ADR 0004's rule that only the newest released minor is patched by default |
+
+**They belong in this pull request rather than the bump one, and the reason is what the whole ordering rests on:** this
+diff's merge commit is what gets tagged, so it is the tree an operator reads at `v<x.y.z>`. A `SECURITY.md` corrected
+after the tag names the previous line in the artifact people actually download, and `docs/` at a tag is read far more
+often than `docs/` on `main`. The bump pull request cannot carry them for the same reason it cannot carry the changelog.
+
+Nothing gates this, deliberately: no check can tell prose describing the release from prose quoting a version as an
+example, and one that tried would be satisfied by a search-and-replace through `docs/`. The list above is short and
+fixed instead, and a file joining it is an edit to this table.
 
 ### 4. Open the version-bump pull request
 
@@ -114,6 +135,10 @@ are both supplied at package time from the same declaration.
 edits to the chart directory would need raising on every release anyway — a packaged chart embeds its `appVersion`, so
 each release produces chart content that differs from the last, and a published chart version is immutable — and it
 would leave an operator mapping two numbers onto one artifact.
+
+**Do not bring the three prose files here either.** They name the release that has just been *published*, and this
+pull request merges after the tag — so a `README.md` corrected here is a `README.md` that was wrong in the tagged tree.
+Step 3 owns them.
 
 ### 5. Draft both, and cross-reference them
 
