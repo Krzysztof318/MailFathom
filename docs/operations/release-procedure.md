@@ -125,7 +125,8 @@ whole procedure, and it is recorded here so it survives the skill being unavaila
    `VersionPrefix`, against the highest existing tag on the same `major.minor` line, and against the changelog section
    for that version — `scripts/assert-release-tag.sh` is that check. It then builds and gates the image, pushes it
    under `<x.y.z>`, moves `latest` onto the same digest, attests it, and opens the GitHub release with that changelog
-   section as its notes.
+   section as its notes. Under the section it links `CHANGELOG.md` at the tag, so a reader of an older release reaches
+   the file as that release shipped it rather than a copy already describing versions they have not upgraded to.
 
    ```bash
    git tag --annotate v0.1.0 --message 'MailFathom 0.1.0'
