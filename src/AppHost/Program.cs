@@ -292,8 +292,12 @@ if (runsIntegrationTests)
         .AddProject<Projects.Host>(OrchestrationContract.MutualTlsHostResourceName, launchProfileName: null)
         .WithHttpsEndpoint(name: OrchestrationContract.MutualTlsHostHttpsEndpointName)
         // Its own probe listener, allocated for the reason the host above allocates one: both processes run at once
-        // under this topology, and the port a host defaults to is the same number in each.
+        // under this topology, and the port a host defaults to is the same number in each. On loopback for that host's
+        // reason as well — the probes answer without a credential, and the machine a suite runs on is a developer's as
+        // often as it is a runner's. The binding is restated rather than inherited: it is set on the resource above,
+        // and this is a second resource that shares nothing but the project it is built from.
         .WithEndpoint(name: "health", scheme: "tcp", env: "HealthEndpoints__Port")
+        .WithEnvironment("HealthEndpoints__BindAddress", "127.0.0.1")
         .WithReference(database)
         .WaitFor(database)
         .WithExplicitStart()
