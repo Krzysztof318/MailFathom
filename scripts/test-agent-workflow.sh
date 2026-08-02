@@ -639,6 +639,33 @@ protected_paths_refuses_a_contributor_changing_repository_root_configuration() {
   done
 }
 
+protected_paths_refuses_a_contributor_changing_a_protected_directory() {
+  local output_file="$test_directory/protected-paths-directory-output"
+  local summary_file="$test_directory/protected-paths-directory-summary"
+
+  # `docs/decisions/` is the entry that is neither dotted nor configuration, so it is the one whose
+  # prefix match is worth asserting alongside the four that are.
+  if run_protected_paths_step \
+    'outside-contributor' \
+    $'.github/workflows/ci.yml\n.config/BannedSymbols.txt\n.agents/skills/start-task/SKILL.md\n.claude/settings.json\ndocs/decisions/0001-application-owned-repositories-for-persistence-ports.md\ndocs/decisions/adr-template.md' \
+    "$output_file" \
+    "$summary_file"; then
+    printf 'Protected paths allowed a contributor to change a protected directory\n' >&2
+    return 1
+  fi
+
+  local protected_directory_path
+  for protected_directory_path in \
+    .github/workflows/ci.yml \
+    .config/BannedSymbols.txt \
+    .agents/skills/start-task/SKILL.md \
+    .claude/settings.json \
+    docs/decisions/0001-application-owned-repositories-for-persistence-ports.md \
+    docs/decisions/adr-template.md; do
+    assert_contains "::error file=${protected_directory_path}::" "$output_file"
+  done
+}
+
 protected_paths_matches_the_configuration_files_at_every_depth() {
   local output_file="$test_directory/protected-paths-nested-output"
   local summary_file="$test_directory/protected-paths-nested-summary"
@@ -667,7 +694,7 @@ protected_paths_ignores_paths_that_only_resemble_a_protected_one() {
   # longer name beginning the same way, a suffix of one, and a copy placed elsewhere all pass.
   if ! run_protected_paths_step \
     'outside-contributor' \
-    $'docs/my.editorconfig\n.editorconfiguration\ndeploy/global.json\nsrc/Host/NOTICE.md\n.githubbed/stale.yml\ndocs/CONTRIBUTING-AGENTS.md' \
+    $'docs/my.editorconfig\n.editorconfiguration\ndeploy/global.json\nsrc/Host/NOTICE.md\n.githubbed/stale.yml\ndocs/CONTRIBUTING-AGENTS.md\ndocs/decisions-notes.md' \
     "$output_file" \
     "$summary_file"; then
     printf 'Protected paths refused paths that only resemble a protected one\n' >&2
@@ -1384,6 +1411,7 @@ run_test workspace_inspection_is_read_only_and_labeled
 run_test workspace_inspection_reports_unavailable_sdk
 run_test protected_paths_allows_a_change_that_touches_nothing_protected
 run_test protected_paths_refuses_a_contributor_changing_repository_root_configuration
+run_test protected_paths_refuses_a_contributor_changing_a_protected_directory
 run_test protected_paths_matches_the_configuration_files_at_every_depth
 run_test protected_paths_ignores_paths_that_only_resemble_a_protected_one
 run_test protected_paths_reports_the_paths_it_found_when_the_owner_is_the_author

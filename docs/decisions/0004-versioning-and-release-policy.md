@@ -195,7 +195,7 @@ Choosing the file settles nothing on its own; a changelog decays unless the rule
 
 Composing it is a reading rather than a transcription, which is what keeps the result from collapsing into the list of pull-request titles that generated release notes already produce for free. The rules below are what that reading applies, and they are also what makes the increment decidable: the section and the version are two outputs of one judgement about the four surfaces.
 
-`CHANGELOG.md` is a protected path in `.github/workflows/protected-paths.yml`, beside the four configuration directories, so an edit arriving outside a release is visible while it is still a diff.
+`CHANGELOG.md` is a protected path in `.github/workflows/protected-paths.yml`, beside the five protected directories, so an edit arriving outside a release is visible while it is still a diff.
 
 **What earns an entry is what a consumer of a release would notice.** That means anything reaching one of the four surfaces: a tool contract, a configuration key, the database schema, or the deployment contract; plus a fixed defect that was observable from outside, and any change with a security consequence. Nothing else does. A refactor, a new test, a CI adjustment, a documentation edit, and an internal rename get no entry, because a file that records them stops being read and then stops being written. When a change is genuinely invisible from outside, the correct entry is none.
 
