@@ -308,6 +308,21 @@ submission step is skipped by the same cancellation, which is why it tests
 step even when the run was cancelled, so it would publish the verdict the
 cancellation exists to prevent.
 
+Those two events are the whole of what may cancel, and the rule they share is
+worth stating in the other direction: **a comment never ends a review already
+running.** A push replaces the head and a close removes it, so in both cases what
+is running has stopped describing the code that will merge. Everything else —
+a comment, a label, a pull request marked ready — asks for a review without
+invalidating one, and queues on the same group instead. `cancel-in-progress` is
+therefore an expression naming those two events rather than the literal `true`,
+because `issue_comment` fires for *any* comment on a pull request, a bot's
+included, and the gate that tells a request apart from a passing remark runs
+inside the run — after the run has entered the group. Left unconditional, a
+notice posted by another workflow ends a review several minutes in and then
+declines to start one, which spends the entire cost of a review to publish
+nothing. `a_comment_never_cancels_a_review_in_flight` in
+`scripts/test-agent-workflow.sh` is what keeps it from quietly reverting.
+
 The workflow reports no status check and is not in the `main` ruleset. It
 advises; nothing waits on it.
 
@@ -489,10 +504,11 @@ because each closes a different way the bill could grow:
 
 - a draft is never reviewed automatically, so a branch still being written is
   pushed to freely and spends nothing;
-- `concurrency` with `cancel-in-progress` means a superseded head never finishes
-  a review, so a rapid series of pushes costs one run rather than one per push,
-  and a merge or a close ends the run reading a pull request that has stopped
-  being worth a verdict;
+- `concurrency` with a conditional `cancel-in-progress` means a superseded head
+  never finishes a review, so a rapid series of pushes costs one run rather than
+  one per push, and a merge or a close ends the run reading a pull request that
+  has stopped being worth a verdict — while a comment, which cannot supersede
+  anything, queues rather than throwing a finished review away;
 - a fork's own pushes never start a review; a maintainer's label does;
 - the comment trigger requires an `OWNER`, `MEMBER`, or `COLLABORATOR` author, so
   nobody outside the project can spend the subscription by typing;
@@ -835,6 +851,53 @@ else; publishing is the App's, and the two credentials are never held by the sam
 step. `THIRD_PARTY_LICENSES.md` records exactly what the run sends and under
 whose terms, including the consumer-plan data-training setting that decides
 whether what is submitted this way trains future models.
+
+## Dependency update pull requests
+
+Not every pull request here comes from a task. Once a week `dependabot[bot]`
+opens one of its own, because `.github/dependabot.yml` configures the
+`github-actions` ecosystem and nothing else in this repository updates a pin it
+has made. Minor and patch updates arrive grouped into a single pull request and
+a major arrives alone; `docs/operations/local-development.md` records the
+schedule, the limits, and why the `nuget` ecosystem is deliberately not
+included.
+
+**No skill runs on one and none should.** `start-task` opens an issue and
+`finish-change` writes a board field, and neither has anything to do here: the
+change is already written, it closes no issue, and it belongs to no roadmap
+item. What it needs is a reading, and the reading is the maintainer's.
+
+Four questions answer a Dependabot pull request, and the first is the one an
+automated bump makes easy to skip.
+
+1. **Is the new revision one this repository would have chosen?** Read the
+   upstream release notes the pull request links, not just the version numbers.
+   A major is separated from the group for this reason: it can rename an input
+   or drop a runner, and the diff shows the tag moving rather than what moved
+   with it.
+2. **Does the owner stay inside the reviewed set?** An update never introduces a
+   new owner, and `every_external_action_names_an_approved_owner` in
+   `scripts/test-agent-workflow.sh` refuses one on this pull request as on any
+   other. A version that changed what an action *is* — a transfer, a rename, a
+   fork under the same name — is the case that contract cannot see and a reader
+   can.
+3. **Does `THIRD_PARTY_LICENSES.md` still describe the truth?** Its continuous
+   integration rows name each action and, where one is pinned to a commit, that
+   commit and its version. A bump moves what those rows record, so the register
+   is updated in the same pull request — which is `$check-docs-licenses`'s rule
+   reached from the one direction where no agent is running to apply it.
+4. **Do the checks pass on their own terms?** `Required CI` and
+   `Protected paths` are required on this pull request exactly as on any other,
+   and `Protected paths` passes only because the exception it carries recognises
+   this author for `.github/workflows/` alone. A red one is a red one; nothing
+   here is exempt and nothing auto-merges.
+
+The pull request is merged the same way everything else is: a code owner
+approves it, and the owner merges it. If a bump has to be declined, close the
+pull request and say why in it. Closing settles that version and not the
+dependency — a later release is proposed again, which is the behaviour worth
+having — and the comment is where the next reader finds out the version was
+considered rather than missed.
 
 ## Instruction scope
 

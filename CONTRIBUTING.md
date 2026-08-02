@@ -91,6 +91,10 @@ It prints what your change obliges the rest of the repository to do — the test
 - **Do not edit `CHANGELOG.md`.** It states what a release shipped and is written by the release pull request alone.
 - **Do not create or modify an ADR** under `docs/decisions/` without the maintainer's explicit approval. Reading the relevant ones first is expected for any architectural change.
 
+**A push carrying something credential-shaped is refused, by GitHub, before the objects reach it.** Push protection is on for this repository. The refusal names the file, the line, and what it thinks it found, and it is not a review comment you can answer — the push simply does not happen.
+
+Fix it in the commit rather than on top of it. A secret that reached a commit is in the history even after a later commit removes it, so amend or rebase the commit that introduced it, and rotate the credential if it was ever real. Every fixture in this repository uses a synthetic value for exactly this reason; if you need a realistic-looking one, invent it. If the block is a false positive — a value that looks like a token and is not — say so in the pull request and ask the maintainer rather than looking for a bypass; bypassing is a repository permission you do not have, and that is deliberate.
+
 ## Opening the pull request
 
 - **Open it as a draft.** Mark it ready for review when it is complete and the full gate passes. A draft skips the expensive checks, so you are not burning runner minutes on work in progress.
@@ -105,7 +109,9 @@ Two checks gate the merge and both always report:
 
 A third check, **`Typo check`**, runs on every pull request that is not a draft and spell-checks the files you changed, annotating each finding in the Files changed view. It gates nothing, so a red one does not block the merge — fix what it names, or, if it flagged a word this project uses on purpose or a misspelling that is deliberate, say so in the pull request and add it to `_typos.toml` with a line explaining which of the two it is.
 
-Merging additionally requires an approving review from a code owner and a branch that is current with `main`. [`docs/operations/local-development.md`](docs/operations/local-development.md#pull-request-checks) documents all three workflows and the branch ruleset in full.
+A fourth, **`CodeQL`**, also runs on every pull request that is not a draft and takes the longest of the four: it builds the solution under extraction and runs GitHub's C# security queries over the result, so a finding is a value followed from an untrusted source to somewhere it should not reach rather than a style objection. Findings appear as annotations on the pull request. It gates nothing either, and for a reason worth knowing: the query pack updates upstream, so a change that was clean when it merged can become a finding later without anybody touching the code. Treat one as a question to answer in the pull request — fix it, or explain why the path is not reachable — rather than as something to route around.
+
+Merging additionally requires an approving review from a code owner and a branch that is current with `main`. [`docs/operations/local-development.md`](docs/operations/local-development.md#pull-request-checks) documents all four workflows and the branch ruleset in full.
 
 A separate `Fathom review` workflow may post an automated review on a published pull request. It reports no status check and gates nothing; treat it as a second opinion.
 
