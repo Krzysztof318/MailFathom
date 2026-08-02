@@ -613,10 +613,11 @@ the contract above is what keeps that true rather than a reader noticing.
 | Require actions pinned to a full-length commit SHA | off today, on once #214 exists | A SHA follows no upstream security fix, so pinning without an updater is worse than a mutable tag. #214 supplies the updater and #160 lands the pins and this setting together |
 | Artifact and log retention | 30 days | The REST API exposes no retention field, so the settings page is both where it is set and the only evidence it was |
 | Cache retention and size | 7 days, 10 GB | Unchanged unless measured eviction pressure argues otherwise |
-| Fork pull request approval | not yet set | The API refuses the setting while a repository is private, so it is read and chosen after the visibility flip |
+| Fork pull request approval | `Require approval for first-time contributors` | The workflows a fork's push can start hold a read-only token and no repository secret, so a wider setting protects nothing this one does not, and a narrower one turns every first contribution into a maintainer's click. The REST API exposes no field for it, so the settings page is the only place it can be read |
+| GHCR package access | inherited from the repository | A package's visibility is its own setting rather than one it takes from the repository, so it is configured to follow the repository's access instead of being set again beside it. A private package would break the anonymous `docker pull` every installation path documents |
 
-The last three rows are the ones to re-read after any settings change, because nothing else will
-notice them moving.
+The retention rows, the fork approval, and the package access are the ones to re-read after any
+settings change, because no API exposes them and nothing else will notice them moving.
 
 **A fork's pull request** runs `CI`, `Protected paths`, and `Typo check` on the `pull_request` event
 with a read-only token and no repository secret, which is what makes running a contribution's code

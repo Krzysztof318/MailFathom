@@ -218,8 +218,8 @@ either places it by the ordinary rules or closes it as `not planned` with a
 reason, a question moves to Discussions instead of being given a label so the
 board has somewhere to put it, and a contribution is read cheapest-check-first —
 required checks, then `Protected paths`, then the code-owner review. The `Triage`
-board view is where an arrival waits, which is why it is expected to be empty
-only while the repository is private.
+board view is where an arrival waits, and an item the project opened itself never
+reaches it.
 
 The three Discussions categories that routing rule names — `Q&A`, `Ideas`, and
 `Announcements` — are the ones this project answers. The remaining defaults

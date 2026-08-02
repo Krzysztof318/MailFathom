@@ -140,7 +140,7 @@ reaches `main` without its migration fails before merge rather than at a host's 
   than assumed. Removing another worktree's volume destroys a database this repair was not about.
 
 - **`dotnet build` hangs at "Determining projects to restore".** A previous orchestration is still holding the build
-  output. `aspire stop` does not always reap it; `pkill -9 -f '/home/krzysiek/.aspire/versions'` and
+  output. `aspire stop` does not always reap it; `pkill -9 -f "$HOME/.aspire/versions"` and
   `pkill -9 -f aspire.hosting.orchestration` clear it. Orphaned `aspire-managed` helpers from a failed start do the
   same by starving the machine — `pkill -9 -f aspire-managed`.
 
