@@ -132,6 +132,13 @@ themselves are `/app/LICENSE` and `/app/NOTICE`, which arrive as part of the pub
 `Host` fails its own publish when either is missing, so the image cannot be built without them. The third-party
 notices that must accompany them are not in the image yet — see `THIRD_PARTY_LICENSES.md` and issue #191.
 
+`org.opencontainers.image.description` is the sentence a registry shows beside the image, and it is also what the
+release pushes as the Docker Hub repository's short description — that field is read off the published manifest rather
+than written a second time in the workflow, so the registry page and the label every other registry indexes cannot come
+to describe different products. Docker Hub accepts 100 bytes there and truncates anything longer without failing, so
+the label is written to fit and the release asserts that it does; [Verification](#verification) states what happens when
+it stops fitting.
+
 `io.artifacthub.package.logo-url` is the only label the image carries that OCI does not define. The specification has no
 field for a project icon, so a listing reads a vendor label instead. It points at `assets/icon-1254.png` in the
 repository, which is the asset the Helm chart's `icon` names as well, and it stays a URL because a label carries no
@@ -282,8 +289,14 @@ platforms, to identify itself as the channel and version it was published as, an
 registry. A failure anywhere above publishes nothing.
 
 A release additionally synchronizes this repository's root `README.md` onto the Docker Hub repository page, which is
-the one registry overview that is not rendered from the repository itself. GHCR reads the repository through the
-image's `org.opencontainers.image.source` label and needs nothing pushed to it.
+the one registry overview that is not rendered from the repository itself, together with the short description that sits
+above it — taken from the published image's own `org.opencontainers.image.description`. GHCR reads the repository
+through the image's `org.opencontainers.image.source` label and needs nothing pushed to it.
+
+Docker Hub's two limits are checked before that write rather than left to the action performing it, which truncates
+over-long content and reports success: a release fails if the README exceeds 25000 bytes or if the description label
+exceeds 100. The second is the one worth failing for. A truncated overview is visibly broken and would be noticed, while
+a truncated short description is a sentence cut mid-word that reads like a sentence the project meant to write.
 
 A re-run of a publication is safe and does not rebuild. A version already present in both registries from the same
 commit is reported and its image left untouched; a version present in one and missing from the other — what a partial publication

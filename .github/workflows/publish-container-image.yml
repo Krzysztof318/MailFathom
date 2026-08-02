@@ -527,15 +527,27 @@ jobs:
 
           echo "${DIGEST} is in both registries, carries both platforms, and identifies itself as ${EXPECTED_CHANNEL} ${EXPECTED_VERSION}."
 
-      # Docker Hub renders a repository overview and GHCR renders this repository's README on the package page, so only
-      # one of the two needs anything done about it. The canonical overview is the root README — the file
-      # `AGENTS.md` already requires to carry absolute links for exactly this reason — rather than a copy maintained
-      # beside it that would go stale the first time the product description changed.
+      # Docker Hub renders a repository overview and a short description beside it; GHCR renders this repository's README
+      # on the package page and reads the image's own labels, so only one of the two registries needs anything pushed to
+      # it. Both halves come from the repository rather than from a copy maintained beside it: the overview is the root
+      # README — the file `AGENTS.md` already requires to carry absolute links for exactly this reason — and the short
+      # description is the image's own `org.opencontainers.image.description`, read back off the manifest this run just
+      # published. That is what keeps the registry page and the label every other registry indexes from drifting into
+      # saying different things, and it is why the repository's GitHub description is not what goes here: that field is
+      # 300-odd characters of pitch, and Docker Hub takes 100.
+      #
+      # Both limits are asserted rather than left to the action, which truncates over-long content and carries on. A
+      # truncated overview is visibly broken; a truncated short description is not — it is a sentence cut mid-word, and
+      # it reads as though the project meant to say that much.
       #
       # Release only. A nightly re-pushing an unchanged README would spend a write on nothing, and the overview
       # describes the product rather than the night's snapshot.
-      - name: Check the overview against Docker Hub's limit
+      - name: Resolve the Docker Hub description and check both halves against its limits
+        id: overview
         if: inputs.channel == 'release'
+        env:
+          IMAGE: ${{ steps.reference.outputs.image }}
+          DIGEST: ${{ steps.published.outputs.digest }}
         run: |
           set -euo pipefail
 
@@ -546,7 +558,29 @@ jobs:
             exit 1
           fi
 
-          printf 'README.md is %s characters, within the 25000 Docker Hub accepts.\n' "$overview_length"
+          short_description="$(docker buildx imagetools inspect "${IMAGE}@${DIGEST}" --format '{{json .}}' |
+            jq -r '[.. | objects | .config?.Labels?["org.opencontainers.image.description"]? // empty] | unique | join(",")')"
+
+          if [[ -z "$short_description" ]]; then
+            echo "::error::The published image carries no org.opencontainers.image.description. That label is where Docker Hub's short description comes from, so a release cannot describe the repository it publishes to."
+            exit 1
+          fi
+
+          short_description_length="$(printf '%s' "$short_description" | wc -c)"
+
+          if (( short_description_length > 100 )); then
+            echo "::error::The image describes itself in ${short_description_length} bytes and Docker Hub accepts 100 as a short description. Shorten org.opencontainers.image.description in deploy/docker/Dockerfile; publishing it as it stands would put a sentence cut mid-word on the repository page."
+            exit 1
+          fi
+
+          {
+            printf 'short-description<<SHORT_DESCRIPTION\n'
+            printf '%s\n' "$short_description"
+            printf 'SHORT_DESCRIPTION\n'
+          } >> "$GITHUB_OUTPUT"
+
+          printf 'README.md is %s characters, within the 25000 Docker Hub accepts. The short description is %s bytes, within 100: %s\n' \
+            "$overview_length" "$short_description_length" "$short_description"
 
       - name: Synchronize the Docker Hub repository overview
         if: inputs.channel == 'release'
@@ -556,7 +590,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ steps.reference.outputs.docker-hub-repository }}
           readme-filepath: ./README.md
-          short-description: ${{ github.event.repository.description }}
+          short-description: ${{ steps.overview.outputs.short-description }}
 
       - name: Summarize the publication
         env:

@@ -1,6 +1,17 @@
 apiVersion: v2
 name: mailfathom
-description: A read-only MCP server over synchronized IMAP mailboxes, backed by PostgreSQL.
+
+# The one line a chart listing shows, so it says what the product is rather than which protocol reaches it. MCP is how
+# an agent connects and is named last for that reason; a listing of MCP servers is not what somebody browsing charts is
+# trying to tell this one apart from. The wording is the repository's own — the README's opening line and the GitHub
+# description say the same thing — and it stops at what the release implements, because a chart description is read by
+# an operator deciding what to install rather than by a reader of the roadmap.
+#
+# Artifact Hub sets no length limit here, so the length is a choice rather than a constraint. The first sentence says
+# what the product is and stands on its own; the second is for a reader who has not already moved on.
+description: >-
+  A brain for your mail: MailFathom turns IMAP mailboxes into a self-hosted, AI-native service. Mail synchronizes into
+  your own PostgreSQL and is served read-only to AI agents over the Model Context Protocol.
 type: application
 
 # A placeholder, and as close as a required field can come to declaring nothing. The release run supplies the real
@@ -31,10 +42,23 @@ sources:
 # projects.
 icon: https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/icon-1254.png
 
+# What a chart search matches on. These are the repository's own topics, narrowed twice. The implementation topics are
+# left out — `csharp`, `dotnet`, `aspnet-core`, `dotnet-aspire`, `clean-architecture` describe the source, and nobody
+# searching a chart registry for something to install searches for the language it was written in. So are the topics
+# naming capabilities this release does not implement: `rag`, `semantic-search`, and `smtp` are the roadmap, and a
+# keyword is a claim about the artifact it is attached to.
 keywords:
   - mcp
-  - imap
+  - mcp-server
+  - model-context-protocol
+  - ai
+  - ai-agents
   - email
+  - email-search
+  - imap
+  - postgresql
+  - self-hosted
+  - privacy
 
 maintainers:
   - name: Krzysztof Kasprowicz
@@ -48,9 +72,15 @@ maintainers:
 # `links` is what a listing has instead of a repository's own navigation. The `support` key is the one Artifact Hub
 # treats specially, rendering it as where a problem is reported.
 #
+# `category` is stated because Artifact Hub otherwise predicts one from the keywords with a machine-learning model, and
+# a filed category is not something to leave to a guess about a package whose keywords name a protocol, a mail server,
+# and a database. `ai-machine-learning` is one of the eight values Artifact Hub accepts and is the one this belongs
+# under: what the chart deploys exists to put mail in front of an agent.
+#
 # The overview beside them is not an annotation: Artifact Hub renders the `README.md` inside the package, and the
 # release run copies the repository's root README in at package time so there is one overview rather than two.
 annotations:
+  artifacthub.io/category: ai-machine-learning
   artifacthub.io/license: Apache-2.0
   artifacthub.io/links: |
     - name: Documentation

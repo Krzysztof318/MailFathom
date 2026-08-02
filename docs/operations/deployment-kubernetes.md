@@ -111,6 +111,15 @@ The chart is on GHCR alone, where the image is on both registries. Docker Hub's 
 nothing deeper, so a chart pushed there would land in the repository the image already occupies and collide with its
 tags. It is also listed on [Artifact Hub](https://artifacthub.io/packages/helm/mailfathom/mailfathom).
 
+That listing is rendered entirely from the chart package, which is why `Chart.yaml` carries more than the fields Helm
+requires. Its `description` is the summary the listing shows, so it opens with what the product is and names the
+protocol last; Artifact Hub imposes no length there. Its `keywords` are what a search there matches, narrowed to terms
+an operator would search for and to capabilities this release implements — a keyword is a claim about the artifact it
+is attached to, so the roadmap's terms are absent from it. `artifacthub.io/category` is stated rather than omitted,
+because Artifact Hub otherwise predicts a category from those keywords with a machine-learning model. The overview
+below all of it is the repository's root `README.md`, copied into the package at release time so there is one overview
+rather than two that drift.
+
 Installing the chart directory out of a checkout is the development path and stays available:
 
 ```bash
