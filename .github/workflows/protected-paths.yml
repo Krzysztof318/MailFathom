@@ -218,10 +218,11 @@ jobs:
           fi
 
           # Dependabot is the one other author this check recognises, and it is recognised for
-          # `.github/workflows/` alone. `.github/dependabot.yml` configures the `github-actions`
-          # ecosystem, so every pull request the updater opens edits a workflow by definition, and
-          # without this the mechanism that keeps the pinned actions current would arrive
-          # permanently unmergeable against a required check.
+          # `.github/workflows/` alone. This repository configures no version updates, so that
+          # author appears only when the owner acts on an advisory through the repository's
+          # `Dependabot security updates` setting; a pull request arriving that way against an
+          # action edits a workflow by definition, and without this it would arrive permanently
+          # unmergeable against a required check.
           #
           # What the exception removes is one author-side signal — *you are editing the gate you
           # have to pass* — from an author that cannot read it. It removes no approval. The `main`
@@ -231,11 +232,11 @@ jobs:
           # `user.login` is set by GitHub when the pull request is created and nothing in a
           # contribution can set it to this value.
           #
-          # The path condition is what keeps this from meaning *this author may change anything*. One
-          # ecosystem is configured and it edits `.github/workflows/`; a pull request arriving under
-          # this login and proposing an ADR, a skill, or the license is not a dependency update
-          # whatever it calls itself, and a second ecosystem reaching a different protected path
-          # would be a second argument to make rather than one this exception already made.
+          # The path condition is what keeps this from meaning *this author may change anything*. An
+          # action's version lives in `.github/workflows/`; a pull request arriving under this login
+          # and proposing an ADR, a skill, or the license is not a dependency update whatever it
+          # calls itself, and this author reaching a different protected path would be a second
+          # argument to make rather than one this exception already made.
           if [[ "$PULL_REQUEST_AUTHOR" == 'dependabot[bot]' ]]; then
             outside_the_workflows=()
             for protected_change in "${protected_changes[@]}"; do

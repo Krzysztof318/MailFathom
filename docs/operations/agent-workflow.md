@@ -253,10 +253,11 @@ of reviewing pushes: a branch still being written is pushed to freely and spends
 nothing, and marking it ready is the deliberate act that opts every later push in.
 
 A pull request authored by `dependabot[bot]` is skipped as well, and that one is
-about who opened it rather than about what state it is in: the updater's batch
+about who opened it rather than about what state it is in: such a pull request
 arrives published and non-draft, so the check above would let it straight
 through. [Dependency update pull requests](#dependency-update-pull-requests)
-carries the reasoning, next to the questions a bump is actually read against.
+carries the reasoning and when that author appears at all, next to the questions
+a bump is actually read against.
 
 Two things ask for a review anyway, whichever skip refused it:
 
@@ -288,8 +289,8 @@ Two things ask for a review anyway, whichever skip refused it:
 - the `fathom-review` label, which is how a fork's pull request is reviewed at
   all. A fork's own pushes never start a review, so a maintainer decides. It is
   also how a dependency bump gets the pass anyway, which is worth doing for a
-  major that touches a workflow's inputs and is not worth doing for the weekly
-  batch.
+  major that touches a workflow's inputs and is not worth doing for a version
+  number the register already answers.
 
 An automatic review is bounded per pull request: once ten reviews by
 `fathom-reviewer[bot]` stand on it, the gate refuses and says so in the run log
@@ -864,18 +865,22 @@ whether what is submitted this way trains future models.
 
 ## Dependency update pull requests
 
-Not every pull request here comes from a task. Once a week `dependabot[bot]`
-opens one of its own, because `.github/dependabot.yml` configures the
-`github-actions` ecosystem and nothing else in this repository updates a pin it
-has made. Minor and patch updates arrive grouped into a single pull request and
-a major arrives alone; `docs/operations/local-development.md` records the
-schedule, the limits, and why the `nuget` ecosystem is deliberately not
-included.
+Nothing here opens one on a schedule. Actions are referenced by major tag, so an
+upstream patch arrives without a commit, and a major arrives when somebody looks;
+`docs/operations/local-development.md` records how that looking is done and why an
+updater is not what does it. A bump is therefore ordinary task-shaped work — a
+branch, an issue, and the skills — rather than a pull request that appears.
 
-**No skill runs on one and none should.** `start-task` opens an issue and
-`finish-change` writes a board field, and neither has anything to do here: the
-change is already written, it closes no issue, and it belongs to no roadmap
-item. What it needs is a reading, and the reading is the maintainer's.
+One author can still open one without a task behind it. `Dependabot security
+updates` is a repository setting, off today and one click from not being, and an
+advisory the owner decides to act on that way arrives as a pull request from
+`dependabot[bot]`. The paragraphs below are about that case, and the four
+questions are what answers a version bump whoever wrote it.
+
+**No skill runs on such a pull request and none should.** `start-task` opens an
+issue and `finish-change` writes a board field, and neither has anything to do
+there: the change is already written, it closes no issue, and it belongs to no
+roadmap item. What it needs is a reading, and the reading is the maintainer's.
 
 **`Fathom review` does not run on one either**, and the four questions below are
 why. Three of them are answered somewhere the diff does not reach — the upstream
@@ -887,14 +892,14 @@ refuses by author, before the draft and fork checks that would otherwise let a
 published bump straight through; the `fathom-review` label still reaches one,
 which is what a major touching a workflow's inputs is worth.
 
-Four questions answer a Dependabot pull request, and the first is the one an
-automated bump makes easy to skip.
+Four questions answer a version bump, and the first is the one a version number
+on its own makes easy to skip.
 
 1. **Is the new revision one this repository would have chosen?** Read the
-   upstream release notes the pull request links, not just the version numbers.
-   A major is separated from the group for this reason: it can rename an input
-   or drop a runner, and the diff shows the tag moving rather than what moved
-   with it.
+   upstream release notes, not just the version numbers. A major is where this
+   matters: it can rename an input, drop a runner, or refuse something the
+   previous one allowed, and the diff shows the tag moving rather than what
+   moved with it.
 2. **Does the owner stay inside the reviewed set?** An update never introduces a
    new owner, and `every_external_action_names_an_approved_owner` in
    `scripts/test-agent-workflow.sh` refuses one on this pull request as on any
@@ -902,10 +907,10 @@ automated bump makes easy to skip.
    fork under the same name — is the case that contract cannot see and a reader
    can.
 3. **Does `THIRD_PARTY_LICENSES.md` still describe the truth?** Its continuous
-   integration rows name each action and, where one is pinned to a commit, that
-   commit and its version. A bump moves what those rows record, so the register
-   is updated in the same pull request — which is `$check-docs-licenses`'s rule
-   reached from the one direction where no agent is running to apply it.
+   integration rows name each action, the version its reference resolves to, and
+   the argument for allowing it. A bump moves what those rows record, so the
+   register is updated in the same change — which is `$check-docs-licenses`'s
+   rule, and the reason a bump is worth a task rather than a click.
 4. **Do the checks pass on their own terms?** `Required CI` and
    `Protected paths` are required on this pull request exactly as on any other,
    and `Protected paths` passes only because the exception it carries recognises
@@ -915,9 +920,9 @@ automated bump makes easy to skip.
 The pull request is merged the same way everything else is: a code owner
 approves it, and the owner merges it. If a bump has to be declined, close the
 pull request and say why in it. Closing settles that version and not the
-dependency — a later release is proposed again, which is the behaviour worth
-having — and the comment is where the next reader finds out the version was
-considered rather than missed.
+dependency, and the comment is where the next reader finds out the version was
+considered rather than missed — which matters more when nothing will raise it a
+second time.
 
 ## Instruction scope
 

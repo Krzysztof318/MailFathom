@@ -10,9 +10,10 @@ name: Publish container image
 # point of failure for reaching a MailFathom version and the registry an operator happened to use is not part of what
 # they have to trust.
 #
-# Every action here is pinned to an immutable commit SHA, which the read-only workflows in this repository deliberately
-# do not do. The difference is the privilege: these jobs hold a token that can write to a registry and sign an
-# attestation, so what a moving major tag resolves to at run time is not something to discover afterwards.
+# Every action here is referenced by its major tag, the same spelling every other workflow uses. These jobs do hold a
+# token that can write to a registry and sign an attestation, so what the tag resolves to at run time matters more here
+# than anywhere else; what answers that is the review a version bump gets rather than a second spelling, because nothing
+# in this repository proposes one automatically any more and a major arrives only when somebody writes it.
 on:
   workflow_call:
     inputs:
@@ -122,7 +123,7 @@ jobs:
       already-published: ${{ steps.existing.outputs.already-published }}
     steps:
       - name: Check out the commit being published
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
@@ -190,14 +191,14 @@ jobs:
           fi
 
       - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@v4
         with:
           username: ${{ steps.reference.outputs.docker-hub-namespace }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -286,7 +287,7 @@ jobs:
 
       - name: Set up Docker Buildx
         if: steps.existing.outputs.build == 'true'
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@v4
 
       # Built for one architecture and loaded rather than pushed, so the gates below run against the artifact itself
       # before anything reaches a registry. No QEMU is involved: the application publishes as portable IL on the build
@@ -294,7 +295,7 @@ jobs:
       # carries the expensive half of this build into the push that follows.
       - name: Build the image for gating
         if: steps.existing.outputs.build == 'true'
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/docker/Dockerfile
@@ -361,7 +362,7 @@ jobs:
       # with the channel rather than being re-argued here.
       - name: Scan the image for known vulnerabilities
         if: steps.existing.outputs.build == 'true'
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: mailfathom:gate
           format: table
@@ -385,7 +386,7 @@ jobs:
       - name: Build and push the multi-architecture image
         id: push
         if: steps.existing.outputs.build == 'true'
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/docker/Dockerfile
@@ -465,14 +466,14 @@ jobs:
       # documentation says can be verified and cannot. Attesting a digest that already carries one costs a signature
       # and adds a second valid statement, which verification accepts, so converging is cheaper than detecting.
       - name: Attest the image published to GHCR
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ steps.reference.outputs.image }}
           subject-digest: ${{ steps.published.outputs.digest }}
           push-to-registry: ${{ inputs.channel == 'release' }}
 
       - name: Attest the image published to Docker Hub
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ steps.reference.outputs.docker-hub-image }}
           subject-digest: ${{ steps.published.outputs.digest }}
@@ -584,7 +585,7 @@ jobs:
 
       - name: Synchronize the Docker Hub repository overview
         if: inputs.channel == 'release'
-        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
+        uses: peter-evans/dockerhub-description@v5
         with:
           username: ${{ steps.reference.outputs.docker-hub-namespace }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
