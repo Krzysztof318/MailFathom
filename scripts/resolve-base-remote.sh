@@ -24,16 +24,30 @@ CANONICAL_REPOSITORY='Krzysztof318/MailFathom'
 # a repository name case-insensitively, so this does too; a fork under another owner does not match,
 # which is the whole point.
 #
+# The two segments are split out and compared whole rather than matched as a string suffix, because a
+# suffix has no left-hand boundary: `*krzysztof318/mailfathom` also accepts an owner named
+# `notkrzysztof318` or `some-krzysztof318`, and the caller would then fetch and compare against that
+# remote's `main` — the silent wrong base this whole file exists to prevent. The SCP form separates
+# host from path with `:` rather than `/`, so that is normalized first and the split is then one rule
+# for every form.
+#
 # Folded with `tr` rather than with `${x,,}`: that expansion is bash-only, and under any other shell
 # it fails the whole function, which would leave the caller reading "no remote names MailFathom" and
 # refusing a checkout that was correct. Every caller runs bash today; a gate whose failure mode is
 # refusing valid work should not depend on that staying true.
 names_canonical_repository() {
   local remote_url="${1%/}"
+  local repository_name
+  local owner_path
+  local owner_name
 
-  remote_url="$(printf '%s' "${remote_url%.git}" | tr '[:upper:]' '[:lower:]')"
+  remote_url="$(printf '%s' "${remote_url%.git}" | tr '[:upper:]' '[:lower:]' | tr ':' '/')"
 
-  [[ "$remote_url" == *"$(printf '%s' "$CANONICAL_REPOSITORY" | tr '[:upper:]' '[:lower:]')" ]]
+  repository_name="${remote_url##*/}"
+  owner_path="${remote_url%/*}"
+  owner_name="${owner_path##*/}"
+
+  [[ "$owner_name/$repository_name" == "$(printf '%s' "$CANONICAL_REPOSITORY" | tr '[:upper:]' '[:lower:]')" ]]
 }
 
 # The remote to resolve the base branch against, or nothing when no remote names MailFathom.

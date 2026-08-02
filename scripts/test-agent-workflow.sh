@@ -637,6 +637,48 @@ fork_workspace_reports_an_unresolved_base_without_an_upstream_remote() {
   assert_excludes 'Contains base branch: yes' "$output_file"
 }
 
+# An owner whose name merely ends with the canonical one. The base remote is identified by the
+# repository a remote points at, and a suffix match has no left-hand boundary: `notkrzysztof318` and
+# `some-krzysztof318` both end in `krzysztof318`, so a raw suffix would accept either as MailFathom
+# and the gate would fetch and compare against a stranger's `main`. That is the silent wrong base the
+# resolver exists to prevent, and it is the one case the exact-match fixtures above cannot reach.
+fork_workspace_refuses_an_owner_whose_name_merely_ends_with_the_canonical_one() {
+  local fork_root="$test_directory/fork-lookalike-owner"
+  local lookalike_remote_root="$test_directory/lookalike/notKrzysztof318/MailFathom"
+  local output_file="$test_directory/fork-lookalike-output"
+  local refusal_output="$test_directory/fork-lookalike-refusal"
+  local script_status=0
+
+  create_fork_fixture "$fork_root"
+  git clone --quiet "$remote_repository_root" "$lookalike_remote_root"
+  git -C "$fork_root" remote add upstream "$lookalike_remote_root"
+
+  (
+    cd "$fork_root"
+    "$scripts_directory/inspect-workspace.sh"
+  ) > "$output_file"
+
+  assert_contains 'Base branch: unresolved' "$output_file"
+
+  # Cleared after the inspection rather than before it, because inspecting a workspace reports the
+  # SDK version and that is a `dotnet` call of its own. What the assertion below is about is that the
+  # gate refused before it built anything.
+  : > "$invocation_log"
+
+  (
+    cd "$fork_root"
+    "$scripts_directory/verify-full.sh"
+  ) > "$refusal_output" 2>&1 || script_status=$?
+
+  if ((script_status == 0)); then
+    printf 'verify-full.sh accepted a remote whose owner merely ends with the canonical one\n' >&2
+    return 1
+  fi
+
+  assert_contains 'No remote points at Krzysztof318/MailFathom' "$refusal_output"
+  assert_file_content '' "$invocation_log"
+}
+
 # The full gate fetches and compares against the upstream remote, so a fork branch cut from a base
 # that has since moved fails the same way the owner's own branch does — and passes the same way.
 verify_full_verifies_a_fork_against_its_upstream_remote() {
@@ -2240,6 +2282,7 @@ run_test workspace_inspection_is_read_only_and_labeled
 run_test workspace_inspection_reports_unavailable_sdk
 run_test fork_workspace_resolves_its_base_against_the_upstream_remote
 run_test fork_workspace_reports_an_unresolved_base_without_an_upstream_remote
+run_test fork_workspace_refuses_an_owner_whose_name_merely_ends_with_the_canonical_one
 run_test verify_full_verifies_a_fork_against_its_upstream_remote
 run_test verify_full_stops_when_a_fork_branch_is_behind_upstream_main
 run_test verify_full_refuses_a_checkout_with_no_upstream_remote
