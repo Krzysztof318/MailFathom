@@ -352,7 +352,7 @@ jobs:
       # specifications and ADRs — so the reviewer measures the change against the contract as it
       # stands on `main` rather than as the branch would rewrite it.
       - name: Check out the base commit
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
           persist-credentials: false
