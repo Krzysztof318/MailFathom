@@ -50,7 +50,7 @@ jobs:
       NUGET_XMLDOC_MODE: skip
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
@@ -109,7 +109,7 @@ jobs:
       NUGET_XMLDOC_MODE: skip
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
@@ -142,7 +142,7 @@ jobs:
       NUGET_XMLDOC_MODE: skip
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
