@@ -207,6 +207,53 @@ public sealed class MailOAuthContractTests
         Assert.Equal(saslName, saslMechanism.MechanismName);
     }
 
+    /// <summary>
+    /// The value comes from a machine this process does not own and RFC 6749 bounds neither its length nor its
+    /// content, so a server that has been replaced or misconfigured must not be able to inject a second-looking log
+    /// record through an exception message.
+    /// </summary>
+    [Theory]
+    [InlineData("invalid_grant", "invalid_grant")]
+    [InlineData("  invalid_client  ", "invalid_client")]
+    [InlineData("bad\ncode: forged log line", "badcode:forgedlogline")]
+    [InlineData("drop\r\ntable", "droptable")]
+    [InlineData("", "unspecified")]
+    [InlineData(null, "unspecified")]
+    [InlineData("\u0000\u0007", "unspecified")]
+    public void Sanitize_ServerSuppliedErrorCode_KeepsOnlyPrintableSingleLineText(string? serverValue, string expected)
+    {
+        // Arrange, Act
+        var sanitized = AuthorizationServerErrorText.Sanitize(serverValue);
+
+        // Assert
+        Assert.Equal(expected, sanitized);
+    }
+
+    [Fact]
+    public void Sanitize_UnboundedErrorCode_IsTruncatedSoALogLineStaysALogLine()
+    {
+        // Arrange
+        var serverValue = new string('a', 4096);
+
+        // Act
+        var sanitized = AuthorizationServerErrorText.Sanitize(serverValue);
+
+        // Assert
+        Assert.Equal(64, sanitized.Length);
+    }
+
+    [Fact]
+    public void AuthorizationServerErrorCode_OnTheException_IsTheSanitizedValueTheMessageCarries()
+    {
+        // Arrange, Act
+        var failure = new MailAccessTokenUnavailableException("primary", "invalid_grant\nforged");
+
+        // Assert: the payload a caller reads and the message an operator reads cannot disagree.
+        Assert.Equal("invalid_grantforged", failure.AuthorizationServerErrorCode);
+        Assert.Contains("invalid_grantforged", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain('\n', failure.Message);
+    }
+
     private static MailAuthenticationPolicy CreatePolicy(params MailAuthenticationMechanism[] permittedMechanisms) =>
         MailAuthenticationPolicy.Create(
             permittedMechanisms,

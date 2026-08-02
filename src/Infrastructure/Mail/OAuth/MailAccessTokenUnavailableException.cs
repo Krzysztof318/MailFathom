@@ -9,11 +9,12 @@ namespace MailFathom.Infrastructure.Mail.OAuth;
 /// <summary>Indicates that an account's authorization server did not issue an access token its OAuth mechanisms require.</summary>
 /// <remarks>
 /// <para>
-/// The payload names the account and the authorization server's own <c>error</c> code, which RFC 6749 defines as a
-/// fixed vocabulary — <c>invalid_grant</c>, <c>invalid_client</c>, and their siblings — and which is what an operator
-/// needs to tell a revoked refresh token from a mistyped client secret. Nothing else from the response travels: the
-/// <c>error_description</c> is free text an authorization server may populate with the request it rejected, so it is
-/// read by nobody here.
+/// The payload names the account and the authorization server's own <c>error</c> code — <c>invalid_grant</c>,
+/// <c>invalid_client</c>, and their siblings — which is what an operator needs to tell a revoked refresh token from a
+/// mistyped client secret. It arrives from a machine this process does not own and RFC 6749 bounds neither its length
+/// nor its content, so <see cref="AuthorizationServerErrorText" /> reduces it before it reaches a message. Nothing
+/// else from the response travels: the <c>error_description</c> is free text an authorization server may populate with
+/// the request it rejected, so it is read by nobody here.
 /// </para>
 /// <para>
 /// The token endpoint address is deliberately absent. It is a host name, which
@@ -28,12 +29,15 @@ public sealed class MailAccessTokenUnavailableException : MailFathomException
     /// <param name="authorizationServerErrorCode">The authorization server's RFC 6749 error code.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public MailAccessTokenUnavailableException(string accountId, string authorizationServerErrorCode)
-        : base(DescribeUnavailableToken(accountId, authorizationServerErrorCode))
+        : base(DescribeUnavailableToken(accountId, AuthorizationServerErrorText.Sanitize(authorizationServerErrorCode)))
     {
         ArgumentNullException.ThrowIfNull(authorizationServerErrorCode);
 
         this.AccountId = accountId;
-        this.AuthorizationServerErrorCode = authorizationServerErrorCode;
+
+        // Sanitized on the way in rather than on the way out, so the payload a caller reads and the message an
+        // operator reads cannot disagree, and neither can carry unbounded text from a server this process does not own.
+        this.AuthorizationServerErrorCode = AuthorizationServerErrorText.Sanitize(authorizationServerErrorCode);
     }
 
     /// <summary>Initializes a failure that happened before any response could state one.</summary>

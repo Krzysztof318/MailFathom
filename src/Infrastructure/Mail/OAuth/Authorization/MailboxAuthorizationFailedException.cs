@@ -21,8 +21,10 @@ public sealed class MailboxAuthorizationFailedException : MailFathomException
     /// <param name="authorizationServerErrorCode">The error code the authorization server returned, or one of the two MailFathom names.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="authorizationServerErrorCode" /> is <see langword="null" />.</exception>
     public MailboxAuthorizationFailedException(string authorizationServerErrorCode)
-        : base(DescribeFailedAuthorization(authorizationServerErrorCode)) =>
-        this.AuthorizationServerErrorCode = authorizationServerErrorCode;
+        : base(DescribeFailedAuthorization(AuthorizationServerErrorText.Sanitize(authorizationServerErrorCode))) =>
+        // Sanitized on the way in, so the value an operator is shown carries no line breaks and no unbounded text from
+        // a server this process does not own. See AuthorizationServerErrorText for what survives.
+        this.AuthorizationServerErrorCode = AuthorizationServerErrorText.Sanitize(authorizationServerErrorCode);
 
     /// <inheritdoc />
     public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.MailboxAuthorizationFailed;
@@ -30,10 +32,6 @@ public sealed class MailboxAuthorizationFailedException : MailFathomException
     /// <summary>Gets the error code the authorization server returned.</summary>
     public string AuthorizationServerErrorCode { get; }
 
-    private static string DescribeFailedAuthorization(string authorizationServerErrorCode)
-    {
-        ArgumentNullException.ThrowIfNull(authorizationServerErrorCode);
-
-        return $"The mailbox authorization did not produce a refresh token [{authorizationServerErrorCode}].";
-    }
+    private static string DescribeFailedAuthorization(string sanitizedErrorCode) =>
+        $"The mailbox authorization did not produce a refresh token [{sanitizedErrorCode}].";
 }

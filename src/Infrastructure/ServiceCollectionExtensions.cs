@@ -21,6 +21,7 @@ using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Security;
 using MailKit.Net.Imap;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,6 +37,10 @@ public static class ServiceCollectionExtensions
     /// <summary>Names the transport reserved for mailbox authorization-server requests.</summary>
     /// <remarks>A key rather than the container's <see cref="HttpClient" />, so nothing else inherits a timeout and a handler chain chosen for a token endpoint.</remarks>
     private const string MailOAuthTokenTransportKey = "mailfathom.mail-oauth";
+
+    /// <summary>The largest token endpoint response read, beyond which the request fails.</summary>
+    /// <remarks>An RFC 6749 token response is a few hundred bytes; even a JWT access token stays well inside this. The limit exists so a replaced or compromised authorization server cannot make a synchronization run buffer an unbounded body.</remarks>
+    private const int MailOAuthTokenResponseSizeLimitInBytes = 64 * 1024;
 
     /// <summary>Registers the secret reference grammar, the shipped scheme adapters, and the composite dispatch.</summary>
     /// <param name="services">The service collection.</param>
@@ -186,10 +191,19 @@ public static class ServiceCollectionExtensions
         // It is keyed rather than registered as the container's HttpClient. Its timeout is chosen for a small form
         // post to a token endpoint and it carries none of the service defaults' standard resilience handler, so an
         // unrelated adapter resolving it later would silently inherit a budget meant for something else.
-        services.AddKeyedSingleton(MailOAuthTokenTransportKey, (_, _) => new HttpClient(new SocketsHttpHandler
-        {
-            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-        })
+        //
+        // The bounds are the ones the inbound metadata backchannel already applies, for the same reason: an
+        // authorization server is a machine this process does not own, it is reached inside an authentication path,
+        // and one that has been replaced or misconfigured must not be able to answer with an unbounded body or send
+        // the request somewhere the configuration never named.
+        services.AddKeyedSingleton(MailOAuthTokenTransportKey, (_, _) => new HttpClient(
+            new BoundedMetadataHttpMessageHandler(
+                new SocketsHttpHandler
+                {
+                    PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+                    AllowAutoRedirect = false,
+                },
+                MailOAuthTokenResponseSizeLimitInBytes))
         {
             // Deliberately tighter than the mailbox session establishment timeout that encloses it, so a hung
             // authorization server surfaces as itself rather than as a mailbox timeout.
