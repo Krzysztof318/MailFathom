@@ -25,6 +25,12 @@ MailFathom uses a clean-architecture modular monolith. Dependencies point inward
   in.
 - `AppHost` is the Aspire local-development orchestration host.
 
+`Cli` also authorizes a mailbox, because one thing a headless service structurally cannot do is ask a person to sign
+in, and a mailbox at a provider that has withdrawn password authentication needs exactly that once. Keeping it in the
+operator's command is what lets the host serve no consent page, own no redirect endpoint, and hold no
+authorization-server credential it has no run-time use for; [mailbox OAuth](../operations/mailbox-oauth.md) describes
+the exchange it performs.
+
 ## What the published artifact carries
 
 `Host` is the project that gets published, so it is also where the project's licensing travels with the binaries. Its publish output includes the repository-root `LICENSE` and `NOTICE` beside the assemblies, and a `VerifyPublishedLicenseAndNotice` target fails the publish when either is missing from the output directory. The check inspects the artifact rather than the source tree, because the failure worth preventing is an artifact that ships without its license — a missing source file would otherwise resolve to an empty item and publish quietly.

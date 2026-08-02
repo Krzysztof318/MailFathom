@@ -313,7 +313,7 @@ public sealed class MailKitImapMailboxSessionTests
 
         // Assert
         var material = Assert.Single(resolvedMaterial);
-        Assert.Throws<ObjectDisposedException>(() => material.Password.RevealAsString());
+        Assert.Throws<ObjectDisposedException>(() => material.Password!.RevealAsString());
     }
 
     [Fact]
@@ -374,7 +374,7 @@ public sealed class MailKitImapMailboxSessionTests
 
         // Assert
         var material = Assert.Single(resolvedMaterial);
-        Assert.Throws<ObjectDisposedException>(() => material.Password.RevealAsString());
+        Assert.Throws<ObjectDisposedException>(() => material.Password!.RevealAsString());
     }
 
     [Fact]

@@ -78,6 +78,7 @@ internal static class MailKitImapSessionTestContext
         return new MailKitRemoteFolderCatalog(
             () => client.Client,
             CreateSettingsProvider(),
+            new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier);
     }
@@ -116,6 +117,7 @@ internal static class MailKitImapSessionTestContext
         new(
             clientFactory,
             settingsProvider,
+            new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier,
             new FakeTimeProvider(ObservedAt));

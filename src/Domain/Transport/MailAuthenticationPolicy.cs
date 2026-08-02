@@ -39,6 +39,19 @@ public sealed record MailAuthenticationPolicy
     /// <summary>Gets whether any permitted mechanism sends the password in clear text.</summary>
     public bool PermitsClearTextCredentials => this.PermittedMechanisms.Any(mechanism => mechanism.TransmitsCredentialsInClearText);
 
+    /// <summary>Gets whether any permitted mechanism authenticates with an access token.</summary>
+    /// <remarks>The account then needs a token source, and configuration validation requires one at startup.</remarks>
+    public bool PermitsAccessTokenAuthentication => this.PermittedMechanisms.Any(mechanism => mechanism.AuthenticatesWithAccessToken);
+
+    /// <summary>Gets whether any permitted mechanism authenticates with a password.</summary>
+    /// <remarks>
+    /// This is not the negation of <see cref="PermitsAccessTokenAuthentication" />. An allow-list may hold both kinds,
+    /// which is what lets an account keep a working password while a token source is being provisioned, and the
+    /// clear-text <c>LOGIN</c> fallback a server without an <c>AUTH=</c> capability leaves as the last resort is a
+    /// password path too. Only an allow-list that is entirely token-bearing frees the account from configuring one.
+    /// </remarks>
+    public bool PermitsPasswordAuthentication => this.PermittedMechanisms.Any(mechanism => !mechanism.AuthenticatesWithAccessToken);
+
     /// <summary>Creates an authentication policy from configured mechanisms and opt-ins.</summary>
     /// <param name="permittedMechanisms">The permitted mechanisms.</param>
     /// <param name="allowInsecureConnection">Whether a connection mode that can stay unencrypted is accepted.</param>

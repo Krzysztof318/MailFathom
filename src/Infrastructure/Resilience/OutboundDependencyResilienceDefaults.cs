@@ -119,6 +119,24 @@ internal static class OutboundDependencyResilienceDefaults
             ConcurrencyLimit = 4,
         },
 
+        // A token endpoint is a fast, highly available HTTP service, and its answer gates a mailbox session that is
+        // already waiting, so the budget is short on every axis. The attempt timeout is deliberately well inside the
+        // session establishment timeout that encloses it: a token request that hangs must fail before the connection
+        // attempt it serves does, or the operator sees a mailbox timeout whose cause was the authorization server.
+        OutboundDependency.MailAuthorizationServerInvocation => new OutboundDependencyResilienceOptions
+        {
+            MaxAttempts = 3,
+            BaseDelay = TimeSpan.FromMilliseconds(500),
+            MaxDelay = TimeSpan.FromSeconds(5),
+            AttemptTimeout = TimeSpan.FromSeconds(10),
+            TotalTimeout = TimeSpan.FromSeconds(30),
+            CircuitBreakerFailureRatio = 0.5,
+            CircuitBreakerMinimumThroughput = 10,
+            CircuitBreakerSamplingDuration = TimeSpan.FromSeconds(60),
+            CircuitBreakerBreakDuration = TimeSpan.FromSeconds(30),
+            ConcurrencyLimit = 8,
+        },
+
         _ => throw new ArgumentOutOfRangeException(
             nameof(dependency),
             dependency,

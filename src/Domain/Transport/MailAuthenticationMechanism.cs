@@ -18,9 +18,9 @@ namespace MailFathom.Domain.Transport;
 /// </para>
 /// <para>
 /// The set is closed on purpose so a policy can classify a mechanism as clear-text without interpreting
-/// server-provided text. OAuth mechanisms are absent until mailbox OAuth authentication is implemented, and GSSAPI is
-/// unsupported. Being a struct, <see langword="default" /> is reachable and is not a mechanism; it is rejected where
-/// it matters, in <see cref="MailAuthenticationPolicy.Create" />.
+/// server-provided text, and so it can tell a mechanism that authenticates with a password from one that authenticates
+/// with a bearer token. GSSAPI is unsupported. Being a struct, <see langword="default" /> is reachable and is not a
+/// mechanism; it is rejected where it matters, in <see cref="MailAuthenticationPolicy.Create" />.
 /// </para>
 /// </remarks>
 [JsonConverter(typeof(MailAuthenticationMechanismJsonConverter))]
@@ -28,10 +28,14 @@ public readonly record struct MailAuthenticationMechanism
 {
     private readonly string? saslName;
 
-    private MailAuthenticationMechanism(string saslName, bool transmitsCredentialsInClearText)
+    private MailAuthenticationMechanism(
+        string saslName,
+        bool transmitsCredentialsInClearText,
+        bool authenticatesWithAccessToken = false)
     {
         this.saslName = saslName;
         this.TransmitsCredentialsInClearText = transmitsCredentialsInClearText;
+        this.AuthenticatesWithAccessToken = authenticatesWithAccessToken;
     }
 
     /// <summary>Gets the mechanism that sends the user name and password in clear text inside the SASL exchange.</summary>
@@ -67,6 +71,28 @@ public readonly record struct MailAuthenticationMechanism
     /// <summary>Gets the mechanism that proves the password with the NTLM challenge-response exchange.</summary>
     public static MailAuthenticationMechanism Ntlm { get; } = new("NTLM", transmitsCredentialsInClearText: false);
 
+    /// <summary>Gets the mechanism that presents an OAuth 2.0 access token in Google's originally published format.</summary>
+    /// <remarks>
+    /// The name carries the <c>X</c> prefix of a mechanism that was never registered with IANA, and it is nonetheless
+    /// the one a server is most likely to advertise: Google defined it and Exchange Online accepts it. It is unrelated
+    /// to <c>XOAUTH</c> without the digit, which carried an OAuth 1.0a signature and is withdrawn.
+    /// </remarks>
+    public static MailAuthenticationMechanism XOAuth2 { get; } = new(
+        "XOAUTH2",
+        transmitsCredentialsInClearText: false,
+        authenticatesWithAccessToken: true);
+
+    /// <summary>Gets the registered mechanism that presents an OAuth 2.0 bearer token, as defined by RFC 7628.</summary>
+    /// <remarks>
+    /// This is the standards-track equivalent of <see cref="XOAuth2" />, and a server advertising both is authenticated
+    /// with either. It carries the larger SASL response of the two, which is why the choice between them is left to
+    /// what the server advertises rather than fixed here.
+    /// </remarks>
+    public static MailAuthenticationMechanism OAuthBearer { get; } = new(
+        "OAUTHBEARER",
+        transmitsCredentialsInClearText: false,
+        authenticatesWithAccessToken: true);
+
     /// <summary>Gets every supported mechanism.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
     public static IReadOnlyList<MailAuthenticationMechanism> All { get; } =
@@ -82,6 +108,8 @@ public readonly record struct MailAuthenticationMechanism
         ScramSha512,
         ScramSha512Plus,
         Ntlm,
+        XOAuth2,
+        OAuthBearer,
     ];
 
     /// <summary>Gets whether this value names a supported mechanism rather than the unusable struct default.</summary>
@@ -93,6 +121,14 @@ public readonly record struct MailAuthenticationMechanism
     /// clear-text mechanism hands over the reusable password itself, which is why the policy singles them out.
     /// </remarks>
     public bool TransmitsCredentialsInClearText { get; }
+
+    /// <summary>Gets whether the mechanism authenticates with a short-lived access token instead of a password.</summary>
+    /// <remarks>
+    /// The distinction decides which credential an account has to supply, so it belongs with the mechanism rather than
+    /// with the adapter that authenticates: an account permitting only token-bearing mechanisms needs no password, and
+    /// one permitting no token-bearing mechanism has nothing to do with a token endpoint.
+    /// </remarks>
+    public bool AuthenticatesWithAccessToken { get; }
 
     /// <summary>Gets the registered SASL name used on the wire and in configuration.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a mechanism.</exception>

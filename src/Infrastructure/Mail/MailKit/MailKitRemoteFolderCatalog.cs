@@ -7,6 +7,7 @@ using MailFathom.Application.Resilience;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Resilience;
 using MailKit;
 using MailKit.Net.Imap;
@@ -22,6 +23,7 @@ namespace MailFathom.Infrastructure.Mail.MailKit;
 internal sealed class MailKitRemoteFolderCatalog(
     Func<IImapClient> clientFactory,
     IImapAccountSettingsProvider settingsProvider,
+    IMailAccessTokenSource accessTokenSource,
     OutboundOperationExecutor operationExecutor,
     ITransientFailureClassifier transientFailureClassifier) : IRemoteFolderCatalog
 {
@@ -51,6 +53,7 @@ internal sealed class MailKitRemoteFolderCatalog(
         await using var connection = new MailKitImapConnection(
             clientFactory,
             settingsProvider,
+            accessTokenSource,
             operationExecutor,
             transientFailureClassifier,
             accountId,

@@ -232,8 +232,14 @@ public sealed class MailSynchronizationOptionsTests
     }
 
     /// <summary>The password is no longer a configuration value, so its absence is a resolution failure rather than a binding rule.</summary>
+    /// <summary>
+    /// The rule reads the account's permitted mechanisms rather than the presence of a block, which is what lets a
+    /// token-authenticated account configure no password while an account that will authenticate with one still has
+    /// to. Before OAuth existed the absence was left entirely to secret resolution; it is checked here now because a
+    /// missing block is no longer distinguishable from a deliberate one without reading the policy.
+    /// </summary>
     [Fact]
-    public void ValidateForSynchronization_EnabledAccountWithoutASecretReference_ReportsNoPasswordRule()
+    public void ValidateForSynchronization_PasswordMechanismWithoutASecretReference_ReportsTheMissingCredential()
     {
         // Arrange
         var options = new MailSynchronizationOptions
@@ -246,7 +252,7 @@ public sealed class MailSynchronizationOptionsTests
         var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
 
         // Assert
-        Assert.DoesNotContain(messages, message => message!.Contains("password", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(messages, message => message!.Contains("no password secret reference", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -535,7 +541,7 @@ public sealed class MailSynchronizationOptionsTests
             CancellationToken.None)).Material;
 
         // Assert
-        Assert.Equal("dev-password", settings.Password.RevealAsString());
+        Assert.Equal("dev-password", settings.Password!.RevealAsString());
     }
 
     [Fact]
@@ -602,7 +608,7 @@ public sealed class MailSynchronizationOptionsTests
 
         // Assert
         var account = Assert.Single(options.Accounts);
-        Assert.Equal("systemd-credential:imap-primary-password", account.Secrets.Password.SecretReference);
+        Assert.Equal("systemd-credential:imap-primary-password", account.Secrets.Password!.SecretReference);
         Assert.Empty(options.ValidateForSynchronization());
     }
 

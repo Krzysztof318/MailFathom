@@ -354,7 +354,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     {
         // Arrange
         var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
-        synchronization.Accounts[0].Secrets.Password.Name = string.Empty;
+        synchronization.Accounts[0].Secrets.Password!.Name = string.Empty;
         var harness = CreateHarness(synchronization, new PersistenceOptions());
 
         // Act
@@ -373,7 +373,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         var synchronization = ConfiguredAccounts.WithPasswordReferences(
             ("primary", "plaintext:dev-password"),
             ("secondary", "plaintext:dev-password"));
-        synchronization.Accounts[1].Secrets.Password.Name = synchronization.Accounts[0].Secrets.Password.Name;
+        synchronization.Accounts[1].Secrets.Password!.Name = synchronization.Accounts[0].Secrets.Password!.Name;
         var harness = CreateHarness(synchronization, new PersistenceOptions());
 
         // Act
@@ -395,7 +395,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         {
             Password = new ConfiguredSecret
             {
-                Name = synchronization.Accounts[0].Secrets.Password.Name,
+                Name = synchronization.Accounts[0].Secrets.Password!.Name,
                 SecretReference = "plaintext:postgres-password",
             },
         };
@@ -410,7 +410,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     {
         // Arrange
         var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
-        synchronization.Accounts[0].Secrets.Password.Lifetime = "next Tuesday";
+        synchronization.Accounts[0].Secrets.Password!.Lifetime = "next Tuesday";
         var harness = CreateHarness(synchronization, new PersistenceOptions());
 
         // Act
@@ -431,7 +431,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     {
         // Arrange
         var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
-        synchronization.Accounts[0].Secrets.Password.Lifetime = "2026-07-30T00:00:00Z";
+        synchronization.Accounts[0].Secrets.Password!.Lifetime = "2026-07-30T00:00:00Z";
         var harness = CreateHarness(synchronization, new PersistenceOptions());
 
         // Act
@@ -449,7 +449,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     {
         // Arrange
         var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
-        synchronization.Accounts[0].Secrets.Password.Lifetime = "2027-07-30T00:00:00Z";
+        synchronization.Accounts[0].Secrets.Password!.Lifetime = "2027-07-30T00:00:00Z";
         var harness = CreateHarness(synchronization, new PersistenceOptions());
 
         // Act

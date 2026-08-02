@@ -53,6 +53,42 @@ public sealed class SecretBoundaryArchitectureTests
         Assert.Empty(rawSecretProperties);
     }
 
+    [Theory]
+    [InlineData("Password")]
+    [InlineData("ClientSecret")]
+    [InlineData("RefreshToken")]
+    [InlineData("ApiKey")]
+    [InlineData("PrivateKey")]
+    public void NamesASecret_CredentialBearingName_IsRecognized(string propertyName)
+    {
+        // Arrange, Act, Assert
+        Assert.True(SecretPropertyNaming.NamesASecret(propertyName));
+    }
+
+    /// <summary>
+    /// An address locates a credential's issuer rather than holding one. OAuth's <c>TokenEndpoint</c> is the case
+    /// that forces the distinction: it is the published name for the address a grant is exchanged at, every accurate
+    /// name for it contains "token", and classifying it as a secret would make an operator provision a public URL as
+    /// though it were a credential.
+    /// </summary>
+    [Theory]
+    [InlineData("TokenEndpoint")]
+    [InlineData("TokenUri")]
+    [InlineData("CredentialServiceUrl")]
+    public void NamesASecret_AddressOfWhereACredentialComesFrom_IsNotRecognizedAsOne(string propertyName)
+    {
+        // Arrange, Act, Assert
+        Assert.False(SecretPropertyNaming.NamesASecret(propertyName));
+    }
+
+    [Fact]
+    public void NamesASecret_NameThatOnlyStartsWithAnAddressWord_IsStillRecognizedAsASecret()
+    {
+        // Arrange, Act, Assert: the suffix is what makes a name an address, so this stays a secret.
+        Assert.True(SecretPropertyNaming.NamesASecret("EndpointToken"));
+        Assert.True(SecretPropertyNaming.NamesASecret("UrlSigningSecret"));
+    }
+
     private static IReadOnlyList<string> FindRawSecretProperties(Type optionsType)
     {
         var visitedTypes = new HashSet<Type>();

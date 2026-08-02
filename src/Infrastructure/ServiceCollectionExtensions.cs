@@ -17,6 +17,7 @@ using MailFathom.Infrastructure.Folders;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.MailKit;
 using MailFathom.Infrastructure.Mail.Mime;
+using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets;
@@ -32,6 +33,10 @@ namespace MailFathom.Infrastructure;
 [RequiresIntegrationCoverage]
 public static class ServiceCollectionExtensions
 {
+    /// <summary>Names the transport reserved for mailbox authorization-server requests.</summary>
+    /// <remarks>A key rather than the container's <see cref="HttpClient" />, so nothing else inherits a timeout and a handler chain chosen for a token endpoint.</remarks>
+    private const string MailOAuthTokenTransportKey = "mailfathom.mail-oauth";
+
     /// <summary>Registers the secret reference grammar, the shipped scheme adapters, and the composite dispatch.</summary>
     /// <param name="services">The service collection.</param>
     /// <param name="interpretation">How configured secret-bearing values are interpreted.</param>
@@ -169,15 +174,46 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailboxTimelineReader>();
         services.AddScoped<EmailContentReader>();
         services.AddScoped<MailboxSearchReader>();
+        // The cache outlives every scope because a token is valid for whichever work unit next needs the account,
+        // while the source that fills it is scoped to the configuration snapshot it resolves settings from.
+        services.AddSingleton<MailAccessTokenCache>();
+
+        // One long-lived client rather than one per request, with a connection lifetime that lets DNS changes at the
+        // authorization server be picked up. This is what IHttpClientFactory would provide, written out because the
+        // package that supplies it is not in this project's dependency closure and one client for one endpoint class
+        // does not justify adding it.
+        //
+        // It is keyed rather than registered as the container's HttpClient. Its timeout is chosen for a small form
+        // post to a token endpoint and it carries none of the service defaults' standard resilience handler, so an
+        // unrelated adapter resolving it later would silently inherit a budget meant for something else.
+        services.AddKeyedSingleton(MailOAuthTokenTransportKey, (_, _) => new HttpClient(new SocketsHttpHandler
+        {
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+        })
+        {
+            // Deliberately tighter than the mailbox session establishment timeout that encloses it, so a hung
+            // authorization server surfaces as itself rather than as a mailbox timeout.
+            Timeout = TimeSpan.FromSeconds(15),
+        });
+
+        services.AddScoped<IMailAccessTokenSource>(provider => new MailOAuthAccessTokenSource(
+            provider.GetRequiredKeyedService<HttpClient>(MailOAuthTokenTransportKey),
+            provider.GetRequiredService<IMailOAuthSettingsProvider>(),
+            provider.GetRequiredService<MailAccessTokenCache>(),
+            provider.GetRequiredService<OutboundOperationExecutor>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILogger<MailOAuthAccessTokenSource>>()));
         services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(
             static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),
+            provider.GetRequiredService<IMailAccessTokenSource>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<ITransientFailureClassifier>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IRemoteFolderCatalog>(provider => new MailKitRemoteFolderCatalog(
             static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),
+            provider.GetRequiredService<IMailAccessTokenSource>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<ITransientFailureClassifier>()));
 

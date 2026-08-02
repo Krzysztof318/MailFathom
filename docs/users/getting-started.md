@@ -20,7 +20,10 @@ is therefore safe to review and back up: leaking it leaks paths, not passwords.
 
 You need two pieces of material before anything is configured:
 
-- **The mailbox password** or app password of the IMAP account to synchronize.
+- **The mailbox password** or app password of the IMAP account to synchronize. A mailbox whose provider no longer
+  accepts one — a Google Workspace or Exchange Online account — is authenticated with an OAuth refresh token instead;
+  obtain it first with [mailbox OAuth](../operations/mailbox-oauth.md) and substitute that block for the password
+  below.
 - **An MCP API key** for the client that will connect. Generate it rather than inventing it:
 
 ```bash

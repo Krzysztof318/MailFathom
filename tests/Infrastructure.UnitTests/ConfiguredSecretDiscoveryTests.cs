@@ -39,8 +39,8 @@ public sealed class ConfiguredSecretDiscoveryTests
         {
             Accounts =
             [
-                new AccountOptionsUnderTest(),
-                new AccountOptionsUnderTest(),
+                CreateAccountWithAPasswordBlock(),
+                CreateAccountWithAPasswordBlock(),
             ],
         };
 
@@ -187,6 +187,13 @@ public sealed class ConfiguredSecretDiscoveryTests
     {
         public List<AccountOptionsUnderTest> Accounts { get; set; } = [];
     }
+
+    /// <summary>Builds an account that configures a password, which is what an account list carries by default.</summary>
+    /// <remarks>The block is set explicitly because it is optional now that an account may authenticate with an access token instead.</remarks>
+    private static AccountOptionsUnderTest CreateAccountWithAPasswordBlock() => new()
+    {
+        Secrets = new MailAccountSecretOptions { Password = new ConfiguredSecret() },
+    };
 
     private sealed class AccountOptionsUnderTest
     {

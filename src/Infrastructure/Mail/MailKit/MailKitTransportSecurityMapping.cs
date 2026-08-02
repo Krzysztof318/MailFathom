@@ -82,4 +82,64 @@ internal static class MailKitTransportSecurityMapping
             throw new MailAuthenticationMechanismUnavailableException(accountId, [.. permittedNames.Order(StringComparer.Ordinal)]);
         }
     }
+
+    /// <summary>Chooses the token-bearing mechanism to authenticate with, from what survived the allow-list.</summary>
+    /// <param name="advertisedMechanisms">The mechanism set left after <see cref="RestrictAdvertisedMechanisms" /> narrowed it.</param>
+    /// <param name="authentication">The policy that decides which mechanisms may be negotiated.</param>
+    /// <param name="mechanism">The chosen mechanism when one applies; otherwise the unspecified default.</param>
+    /// <returns><see langword="true" /> when the connection authenticates with an access token rather than a password.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="advertisedMechanisms" /> or <paramref name="authentication" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// The server's advertisement decides between the two, which is why this reads the set rather than a setting.
+    /// <c>OAUTHBEARER</c> is preferred where both are offered because it is the registered, standards-track mechanism
+    /// and <c>XOAUTH2</c> is a vendor extension that predates it; where only one is offered there is nothing to
+    /// prefer.
+    /// </para>
+    /// <para>
+    /// An emptied set never selects a token mechanism, however token-bearing the allow-list is. The fallback an empty
+    /// set permits is the IMAP <c>LOGIN</c> command, which carries a password and cannot carry a bearer token, so a
+    /// token-only account facing a server that advertises nothing has already been refused by
+    /// <see cref="RestrictAdvertisedMechanisms" />.
+    /// </para>
+    /// </remarks>
+    internal static bool TrySelectAccessTokenMechanism(
+        ISet<string> advertisedMechanisms,
+        MailAuthenticationPolicy authentication,
+        out MailAuthenticationMechanism mechanism)
+    {
+        ArgumentNullException.ThrowIfNull(advertisedMechanisms);
+        ArgumentNullException.ThrowIfNull(authentication);
+
+        mechanism = authentication.PermittedMechanisms
+            .Where(candidate => candidate.AuthenticatesWithAccessToken && advertisedMechanisms.Contains(candidate.SaslName))
+            .OrderBy(candidate => candidate == MailAuthenticationMechanism.OAuthBearer ? 0 : 1)
+            .FirstOrDefault();
+
+        return mechanism.IsSpecified;
+    }
+
+    /// <summary>Creates the MailKit SASL context that presents an access token.</summary>
+    /// <param name="mechanism">The mechanism chosen from the server's advertised set.</param>
+    /// <param name="userName">The mailbox the token acts for.</param>
+    /// <param name="accessToken">The bearer token to present.</param>
+    /// <returns>The SASL context MailKit authenticates with.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="mechanism" /> does not authenticate with an access token.</exception>
+    internal static SaslMechanism ToSaslMechanism(
+        MailAuthenticationMechanism mechanism,
+        string userName,
+        string accessToken)
+    {
+        if (mechanism == MailAuthenticationMechanism.OAuthBearer)
+        {
+            return new SaslMechanismOAuthBearer(userName, accessToken);
+        }
+
+        return mechanism == MailAuthenticationMechanism.XOAuth2
+            ? new SaslMechanismOAuth2(userName, accessToken)
+            : throw new ArgumentOutOfRangeException(
+                nameof(mechanism),
+                mechanism,
+                "The mechanism does not authenticate with an access token.");
+    }
 }

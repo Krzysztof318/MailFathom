@@ -8,6 +8,7 @@ using System.Net.Sockets;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
 using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Resilience;
 using MailKit;
 using MailKit.Net.Imap;
@@ -268,4 +269,69 @@ public sealed class TransientFailureClassifierTests
             () => this.classifier.IsTransientFailure(OutboundDependency.MailboxDataRetrieval, failure: null!));
     }
 
+
+    /// <summary>
+    /// An authorization server that answered with an RFC 6749 error code has decided: the refresh token is revoked,
+    /// the client secret is wrong, or the scope was not granted. Repeating the request receives the same answer and
+    /// spends the account's rate limit doing it.
+    /// </summary>
+    [Theory]
+    [InlineData("invalid_grant")]
+    [InlineData("invalid_client")]
+    [InlineData("invalid_scope")]
+    public void IsTransientFailure_AuthorizationServerRefusedTheGrant_IsTerminal(string authorizationServerErrorCode)
+    {
+        // Arrange
+        var failure = new MailAccessTokenUnavailableException("primary", authorizationServerErrorCode);
+
+        // Act
+        var isTransient = this.classifier.IsTransientFailure(
+            OutboundDependency.MailAuthorizationServerInvocation,
+            failure);
+
+        // Assert
+        Assert.False(isTransient);
+    }
+
+    [Fact]
+    public void IsTransientFailure_AuthorizationServerUnreachable_IsRepeatable()
+    {
+        // Arrange: no error code, because no response arrived to carry one.
+        var failure = new MailAccessTokenUnavailableException("primary", new HttpRequestException("no route", null, HttpStatusCode.ServiceUnavailable));
+
+        // Act
+        var isTransient = this.classifier.IsTransientFailure(
+            OutboundDependency.MailAuthorizationServerInvocation,
+            failure);
+
+        // Assert
+        Assert.True(isTransient);
+    }
+
+    [Fact]
+    public void IsTransientFailure_AuthorizationServerRejectedTheRequestOutright_IsTerminal()
+    {
+        // Arrange
+        var failure = new MailAccessTokenUnavailableException("primary", new HttpRequestException("bad request", null, HttpStatusCode.BadRequest));
+
+        // Act
+        var isTransient = this.classifier.IsTransientFailure(
+            OutboundDependency.MailAuthorizationServerInvocation,
+            failure);
+
+        // Assert
+        Assert.False(isTransient);
+    }
+
+    [Fact]
+    public void IsTransientFailure_TokenRefusalCarryingNeitherCodeNorCause_IsTerminal()
+    {
+        // Arrange
+        var failure = new MailAccessTokenUnavailableException("primary", "empty_response");
+
+        // Act, Assert
+        Assert.False(this.classifier.IsTransientFailure(
+            OutboundDependency.MailAuthorizationServerInvocation,
+            failure));
+    }
 }

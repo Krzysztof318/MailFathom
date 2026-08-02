@@ -8,6 +8,7 @@ using System.Net.Sockets;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
 using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Mail.OAuth;
 using MailKit;
 using MailKit.Net.Smtp;
 
@@ -39,7 +40,8 @@ internal sealed class TransientFailureClassifier : ITransientFailureClassifier
                 or OutboundDependency.MailboxDataRetrieval => IsTransientMailboxFailure,
             OutboundDependency.EmailDelivery => IsRepeatableDeliveryFailure,
             OutboundDependency.DatabaseCommandExecution => IsTransientDatabaseFailure,
-            OutboundDependency.AiProviderInvocation => (Func<Exception, bool>)IsTransientProviderFailure,
+            OutboundDependency.AiProviderInvocation => IsTransientProviderFailure,
+            OutboundDependency.MailAuthorizationServerInvocation => (Func<Exception, bool>)IsTransientAuthorizationServerFailure,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(dependency),
                 dependency,
@@ -102,6 +104,23 @@ internal sealed class TransientFailureClassifier : ITransientFailureClassifier
     /// <remarks>An HTTP status is the provider's own statement about whether the request may be sent again; a request that never reached a status failed in transport.</remarks>
     private static bool IsTransientProviderFailure(Exception failure) => failure switch
     {
+        HttpRequestException requestFailure => IsTransientHttpStatus(requestFailure.StatusCode),
+        _ => IsTransientTransportFailure(failure),
+    };
+
+    /// <summary>Classifies a token endpoint failure, where a rejected grant and an unreachable server mean opposite things.</summary>
+    /// <remarks>
+    /// An authorization server that answered with an RFC 6749 error code has decided: the refresh token is revoked,
+    /// the client secret is wrong, or the scope is not granted, and every repetition receives the same answer while
+    /// counting against the account's rate limit. A request that produced no error code never got that far.
+    /// </remarks>
+    private static bool IsTransientAuthorizationServerFailure(Exception failure) => failure switch
+    {
+        // The cause is classified rather than the wrapper, and its absence is terminal: a refusal that carries neither
+        // an error code nor an underlying failure is not something a repetition can improve on.
+        MailAccessTokenUnavailableException tokenFailure => tokenFailure.AuthorizationServerErrorCode is null
+            && tokenFailure.InnerException is { } acquisitionFailure
+            && IsTransientAuthorizationServerFailure(acquisitionFailure),
         HttpRequestException requestFailure => IsTransientHttpStatus(requestFailure.StatusCode),
         _ => IsTransientTransportFailure(failure),
     };

@@ -19,8 +19,16 @@ public sealed record MailAccountSecretConfigurationError(string PropertyName, Se
 /// </remarks>
 public sealed class MailAccountSecretOptions
 {
-    /// <summary>Gets or sets the reference to the mailbox password or app password.</summary>
-    public ConfiguredSecret Password { get; set; } = new();
+    /// <summary>Gets or sets the reference to the mailbox password or app password, absent when the account authenticates with an access token.</summary>
+    /// <remarks>
+    /// The block is nullable and defaults to absent rather than to an empty block. Secret discovery walks the bound
+    /// options graph by type and resolves every <see cref="ConfiguredSecret" /> it finds, so an empty block left here
+    /// by default would be discovered for an account that configures no password on purpose and fail startup with an
+    /// unresolvable reference the operator never wrote. That an account permitting a password mechanism does configure
+    /// one is settled by the account's own validation, which reads the permitted mechanisms rather than the presence of
+    /// this block.
+    /// </remarks>
+    public ConfiguredSecret? Password { get; set; }
 
     /// <summary>Resolves every secret and discards the material, reporting what an operator must fix.</summary>
     /// <param name="resolver">The resolver that turns references into material.</param>
@@ -40,7 +48,14 @@ public sealed class MailAccountSecretOptions
 
         var errors = new List<MailAccountSecretConfigurationError>();
 
-        var passwordResult = await resolver.ResolveAsync(this.Password?.SecretReference, cancellationToken);
+        // An account that configures no password authenticates with an access token, and the account's own validation
+        // has already refused the combination where that is not true.
+        if (this.Password is null)
+        {
+            return errors;
+        }
+
+        var passwordResult = await resolver.ResolveAsync(this.Password.SecretReference, cancellationToken);
         if (passwordResult.Secret is { } password)
         {
             password.Dispose();

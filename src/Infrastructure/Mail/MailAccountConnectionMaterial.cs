@@ -8,7 +8,10 @@ using MailFathom.Infrastructure.Secrets;
 namespace MailFathom.Infrastructure.Mail;
 
 /// <summary>Everything one account's connection attempt resolved from its configured references.</summary>
-/// <param name="Password">The mailbox password or app password.</param>
+/// <param name="Password">
+/// The mailbox password or app password, or <see langword="null" /> when the account's authentication policy permits
+/// only token-bearing mechanisms and it therefore configures none.
+/// </param>
 /// <param name="TrustedCertificateAuthority">
 /// The deployment-provisioned authority the server certificate must chain to, or <see langword="null" /> when the
 /// account validates against the system trust store alone.
@@ -26,9 +29,15 @@ namespace MailFathom.Infrastructure.Mail;
 /// certificate that may be logged by subject and thumbprint; it travels here because it shares the password's
 /// per-operation ownership and disposal rule, not its confidentiality.
 /// </para>
+/// <para>
+/// The password is optional because the mechanism decides whether one exists, not the record: an account whose policy
+/// permits only <c>XOAUTH2</c> or <c>OAUTHBEARER</c> authenticates with an access token obtained separately, and has
+/// no password to resolve. Which of the two an account needs is settled by startup validation rather than discovered
+/// at the point of authentication, so a <see langword="null" /> here is a configured shape and never a missing value.
+/// </para>
 /// </remarks>
 public sealed record MailAccountConnectionMaterial(
-    ResolvedSecret Password,
+    ResolvedSecret? Password,
     X509Certificate2? TrustedCertificateAuthority) : IDisposable
 {
     /// <inheritdoc />
@@ -36,7 +45,7 @@ public sealed record MailAccountConnectionMaterial(
     {
         GC.SuppressFinalize(this);
 
-        this.Password.Dispose();
+        this.Password?.Dispose();
         this.TrustedCertificateAuthority?.Dispose();
     }
 }
