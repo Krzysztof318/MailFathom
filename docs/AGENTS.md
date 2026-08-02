@@ -28,6 +28,6 @@ A page under `docs/` opens with one marker naming the paths it is written about:
 
 - Exactly one marker, in the first fifteen lines. Below that is where a page *quoting* the syntax puts its example, and this file is one of them.
 - Name what makes the page stale, not everything it mentions. `docs/architecture/solution-structure.md` describes the project files and the solution rather than `src/**`, because a new project changes it and a new method does not.
-- `*` stops at a directory separator and `**` crosses one, which is what separates `src/*/*.csproj` from `src/**`. Separate patterns with commas.
+- `*` stops at a directory separator and `**` crosses one, which is what separates `src/*/*.csproj` from `src/**`. Between two slashes `**` also matches *no* directory at all, so `src/**/*Options.cs` covers `src/FooOptions.cs` as well as `src/Host/Configuration/McpOptions.cs`; a leading `**/` reaches the repository root the same way. These are git's own `:(glob)` rules, and `scripts/test-agent-workflow.sh` resolves every marker through git, so a pattern means here exactly what `git ls-files -- ':(glob)<pattern>'` says it means. Separate patterns with commas.
 - `describes: none` for a page that documents no part of the repository. A `README`, an `AGENTS.md`, and the ADR templates need no marker at all.
 - An ADR carries one too. It records a decision the code implements, so the code moving away from it is exactly what a reader needs to be told.
