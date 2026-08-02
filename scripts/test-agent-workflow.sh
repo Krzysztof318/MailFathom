@@ -1170,6 +1170,10 @@ run_fathom_review_gate() {
   local event_action="$1"
   local output_file="$2"
   local step_output_file="$3"
+  # The author and the applied label default to the ordinary case — the owner's own pull request,
+  # and an event carrying no label — so a contract below names only the input it is about.
+  local pull_request_author="${4:-Krzysztof318}"
+  local added_label="${5:-}"
   local step_script="$test_directory/fathom-review-gate.sh"
 
   extract_fathom_review_step 'gate' "$step_script"
@@ -1182,13 +1186,15 @@ run_fathom_review_gate() {
     export REPOSITORY='Krzysztof318/MailFathom'
     export PULL_REQUEST_NUMBER='1'
     export PULL_REQUEST_DRAFT='false'
+    export PULL_REQUEST_AUTHOR="$pull_request_author"
     export HEAD_REPOSITORY='Krzysztof318/MailFathom'
-    export ADDED_LABEL=''
+    export ADDED_LABEL="$added_label"
     export IS_PULL_REQUEST_COMMENT='false'
     export COMMENT_BODY=''
     export COMMENT_ASSOCIATION=''
     export GH_TOKEN='fake-token'
     export REVIEWER_LOGIN='fathom-reviewer[bot]'
+    export UPDATER_LOGIN='dependabot[bot]'
     export GITHUB_OUTPUT="$step_output_file"
     bash "$step_script"
   ) > "$output_file" 2>&1
@@ -1215,6 +1221,32 @@ fathom_review_refuses_a_closed_pull_request() {
 
   assert_contains 'review=false' "$step_output_file"
   assert_contains 'the pull request is closed' "$output_file"
+}
+
+# The updater opens its batch as ordinary published pull requests, so every check that contains this
+# workflow's cost — the draft one especially — lets them straight through. What the reviewer would
+# read is a version number, and what decides a bump is the upstream release notes and the license
+# register instead.
+fathom_review_refuses_a_pull_request_the_updater_opened() {
+  local output_file="$test_directory/fathom-review-updater-output"
+  local step_output_file="$test_directory/fathom-review-updater-step-output"
+
+  run_fathom_review_gate 'opened' "$output_file" "$step_output_file" 'dependabot[bot]'
+
+  assert_contains 'review=false' "$step_output_file"
+  assert_contains 'authored by dependabot[bot]' "$output_file"
+}
+
+# The refusal above is a default and not a wall. A major bump that renames an input is worth the
+# pass, and the maintainer reaches it the same way a draft and a fork are reached.
+fathom_review_reviews_an_updater_pull_request_the_maintainer_labelled() {
+  local output_file="$test_directory/fathom-review-updater-labelled-output"
+  local step_output_file="$test_directory/fathom-review-updater-labelled-step-output"
+
+  run_fathom_review_gate 'labeled' "$output_file" "$step_output_file" 'dependabot[bot]' 'fathom-review'
+
+  assert_contains 'review=true' "$step_output_file"
+  assert_contains 'a maintainer applied the fathom-review label' "$output_file"
 }
 
 # The settle step waits for the pull request's conversation to stop moving before the snapshot is
@@ -2455,6 +2487,8 @@ run_test typo_check_falls_back_to_the_whole_checkout_for_a_path_containing_a_glo
 run_test typo_check_falls_back_to_the_whole_checkout_for_a_pull_request_beyond_the_reportable_limit
 run_test fathom_review_reviews_a_push_to_a_published_pull_request
 run_test fathom_review_refuses_a_closed_pull_request
+run_test fathom_review_refuses_a_pull_request_the_updater_opened
+run_test fathom_review_reviews_an_updater_pull_request_the_maintainer_labelled
 run_test fathom_review_collects_at_once_when_nobody_has_commented
 run_test fathom_review_waits_before_freezing_a_quiet_conversation
 run_test fathom_review_stops_waiting_at_the_ceiling
