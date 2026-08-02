@@ -156,9 +156,21 @@ leaves behind and the three startup failures a schema problem reports.
 
 ## Published images
 
-Images are published to the GitHub Container Registry, at `ghcr.io/krzysztof318/mailfathom`. Docker Hub will carry the
-same manifest list under the same digest once issue #235 lands; until then this is the only registry a MailFathom image
-reaches.
+Images are published to two registries:
+
+| Registry | Reference |
+| --- | --- |
+| GitHub Container Registry | `ghcr.io/krzysztof318/mailfathom` |
+| Docker Hub | `docker.io/krzysztof318/mailfathom` |
+
+Both carry the same manifest list under the same digest, for every version and on both channels. One build produces one
+manifest list and the publishing run pushes it to both, so they are mirrors rather than two artifacts that happen to
+share a name — which is why the registry you pull from is not part of what you have to trust, and why a network that
+can reach only one of them is not a reason a MailFathom version is unreachable. The run verifies that equality rather
+than assuming it, and a run that reached only one registry is a failed publication.
+
+GHCR is the canonical reference to quote, because it is where the repository, the package page, and the chart all sit.
+Docker Hub is the convenience mirror.
 
 **The package is public**, so a pull needs no authentication and no GitHub account:
 
@@ -264,9 +276,25 @@ the push rather than in front of it, for the same reason its vulnerability scan 
 the file on the workflow run — there is no release for it to be attached to. [Applying the database
 schema](database-schema.md) is what that artifact is and how it is applied.
 
-Only then is the multi-architecture manifest list built and pushed. After the push it is inspected by digest and
-required to carry both platforms and to identify itself as the channel and version it was published as. A failure
-anywhere above publishes nothing.
+Only then is the multi-architecture manifest list built and pushed — once, to both registries, because every reference
+it takes in either of them is in one tag list. After the push it is inspected by digest and required to carry both
+platforms, to identify itself as the channel and version it was published as, and to resolve to the same digest in each
+registry. A failure anywhere above publishes nothing.
+
+A release additionally synchronizes this repository's root `README.md` onto the Docker Hub repository page, which is
+the one registry overview that is not rendered from the repository itself. GHCR reads the repository through the
+image's `org.opencontainers.image.source` label and needs nothing pushed to it.
+
+A re-run of a publication is safe and does not rebuild. A version already present in both registries from the same
+commit is reported and its image left untouched; a version present in one and missing from the other — what a partial publication
+leaves behind — is copied across by digest, so the artifact that reaches the second registry is the one the first
+already answers for rather than a second build of the same source. A version present under a *different* commit is
+refused outright, because a published tag is immutable.
+
+The attestation is the one thing a re-run always redoes, because whether a digest is in a registry and whether it has
+been attested are different questions. A run whose push succeeded and whose attestation did not would otherwise be
+recovered by a re-run that skipped the attestation for good and reported success, leaving an image this page says can
+be verified and cannot. Re-attesting a digest adds a second valid statement, and verification accepts any of them.
 
 A published image can be verified the same way from outside:
 
@@ -278,6 +306,21 @@ gh attestation verify oci://ghcr.io/krzysztof318/mailfathom:latest --repo Krzysz
 The first prints the manifest list, its platforms, and the labels above. The second checks the signed provenance
 statement that says this digest was built by this repository's workflow from a named commit; a release carries that
 attestation in the registry as well, so verification does not depend on reaching GitHub's attestation store.
+
+Both commands take the Docker Hub reference in place of the GHCR one and answer the same, because the digest is the
+same and the run attests it under each repository name it published to:
+
+```bash
+docker buildx imagetools inspect docker.io/krzysztof318/mailfathom:latest
+gh attestation verify oci://docker.io/krzysztof318/mailfathom:latest --repo Krzysztof318/MailFathom
+```
+
+Comparing the two digests is the check that the mirrors agree, and it needs no credential:
+
+```bash
+docker buildx imagetools inspect ghcr.io/krzysztof318/mailfathom:latest --format '{{ .Manifest.Digest }}'
+docker buildx imagetools inspect docker.io/krzysztof318/mailfathom:latest --format '{{ .Manifest.Digest }}'
+```
 
 What no gate covers is the deployment around the image — that it reads its mounted configuration, resolves its mounted
 secret, reaches a real database, and then refuses an unrecognized schema. A change there is reviewed by reading it and,

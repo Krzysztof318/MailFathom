@@ -1841,10 +1841,28 @@ publish_qualifies_every_nightly_tag_with_the_repository_it_resolves() {
   read_published_references "$step_output_file" > "$references_file"
 
   assert_contains 'image=ghcr.io/krzysztof318/mailfathom' "$step_output_file"
+  assert_contains 'docker-hub-image=docker.io/krzysztof318/mailfathom' "$step_output_file"
   assert_contains 'primary-reference=ghcr.io/krzysztof318/mailfathom:0.1.0-nightly.12-616d0a6' "$step_output_file"
+  assert_contains 'docker-hub-primary-reference=docker.io/krzysztof318/mailfathom:0.1.0-nightly.12-616d0a6' "$step_output_file"
   assert_file_content \
-    $'ghcr.io/krzysztof318/mailfathom:0.1.0-nightly.12-616d0a6\nghcr.io/krzysztof318/mailfathom:nightly' \
+    $'ghcr.io/krzysztof318/mailfathom:0.1.0-nightly.12-616d0a6\nghcr.io/krzysztof318/mailfathom:nightly\ndocker.io/krzysztof318/mailfathom:0.1.0-nightly.12-616d0a6\ndocker.io/krzysztof318/mailfathom:nightly' \
     "$references_file"
+}
+
+# The Docker Hub account is this owner's login, and a registry namespace is lowercase where a GitHub
+# login need not be. One fold produces both, so a mirror cannot come to point at a namespace that is
+# somebody else's or at none at all.
+publish_folds_the_owner_login_into_the_docker_hub_namespace() {
+  local output_file="$test_directory/publish-reference-namespace-output"
+  local step_output_file="$test_directory/publish-reference-namespace-step-output"
+
+  if ! run_publish_reference_step $'0.1.0\n' "$output_file" "$step_output_file"; then
+    printf 'The publish workflow failed to resolve the Docker Hub namespace\n' >&2
+    return 1
+  fi
+
+  assert_contains 'docker-hub-namespace=krzysztof318' "$step_output_file"
+  assert_contains 'docker-hub-repository=krzysztof318/mailfathom' "$step_output_file"
 }
 
 # The release channel's own tag list, and the blank line a heredoc-built list carries. `latest` is the
@@ -1863,7 +1881,7 @@ publish_qualifies_the_release_tags_and_ignores_a_blank_line() {
   read_published_references "$step_output_file" > "$references_file"
 
   assert_file_content \
-    $'ghcr.io/krzysztof318/mailfathom:0.1.0\nghcr.io/krzysztof318/mailfathom:latest' \
+    $'ghcr.io/krzysztof318/mailfathom:0.1.0\nghcr.io/krzysztof318/mailfathom:latest\ndocker.io/krzysztof318/mailfathom:0.1.0\ndocker.io/krzysztof318/mailfathom:latest' \
     "$references_file"
 }
 
@@ -2123,7 +2141,7 @@ workflow_files() {
 # Adding a name here is a supply-chain decision, so it fails here first and is argued in the pull
 # request rather than discovered in a run.
 every_external_action_names_an_approved_owner() {
-  local approved_owners=' actions github Krzysztof318 dorny anthropics docker crate-ci aquasecurity '
+  local approved_owners=' actions github Krzysztof318 dorny anthropics docker crate-ci aquasecurity oras-project peter-evans '
   local owner
   local unapproved=''
 
@@ -2172,8 +2190,10 @@ every_workflow_job_declares_its_permissions() {
 }
 
 # Every write scope in the repository, named here so a new one is a deliberate edit to this list
-# rather than a line nobody reviewed. The three publishing jobs need a registry write and the two an
-# attestation takes; `announce` needs to write the release it announces. Nothing else writes at all.
+# rather than a line nobody reviewed. The publishing jobs need a registry write and the two an
+# attestation takes; `announce` needs to write the release it announces. `release.yml` carries each of
+# the three twice because it calls two publishing workflows, one for the image and one for the chart,
+# and a caller states the permissions it hands down. Nothing else writes at all.
 every_write_scope_is_one_the_policy_records() {
   local recorded_scopes
   local declared_scopes
@@ -2187,9 +2207,15 @@ every_write_scope_is_one_the_policy_records() {
       'publish-container-image.yml attestations: write' \
       'publish-container-image.yml id-token: write' \
       'publish-container-image.yml packages: write' \
+      'publish-helm-chart.yml attestations: write' \
+      'publish-helm-chart.yml id-token: write' \
+      'publish-helm-chart.yml packages: write' \
+      'release.yml attestations: write' \
       'release.yml attestations: write' \
       'release.yml contents: write' \
       'release.yml id-token: write' \
+      'release.yml id-token: write' \
+      'release.yml packages: write' \
       'release.yml packages: write' |
       sort
   )"
@@ -2329,6 +2355,7 @@ run_test review_obligations_reports_without_gating
 run_test obligation_index_leaves_migrations_out
 run_test publish_qualifies_every_nightly_tag_with_the_repository_it_resolves
 run_test publish_qualifies_the_release_tags_and_ignores_a_blank_line
+run_test publish_folds_the_owner_login_into_the_docker_hub_namespace
 run_test publish_refuses_a_tag_list_with_nothing_to_publish
 run_test release_tag_assertion_accepts_a_tag_that_matches_its_commit
 run_test release_tag_assertion_refuses_a_prerelease_tag

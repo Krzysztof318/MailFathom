@@ -23,12 +23,15 @@ image:
   # `release` is a published release image and the only supported channel. `nightly` is whatever `main` was the night
   # it was built: it carries no release promise, may expect a schema no published migration produces, is deleted once
   # thirty newer nightlies exist, and is never what `appVersion` describes. Selecting it requires the acknowledgement
-  # below, and the chart's notes say so on every install and upgrade. Both channels are published to GHCR; Docker Hub
-  # joins them under the same digest with issue #235.
+  # below, and the chart's notes say so on every install and upgrade.
+  #
+  # Both channels are published to both registries under the same digest, so the channel is decided by what the
+  # reference calls itself rather than by where it came from: a nightly tag carries a `-nightly.` identifier and a
+  # release tag never does. The chart refuses the two combinations that would misrepresent one as the other.
   channel: release
 
-  # Left empty for the release channel, where the schema requires it to be supplied. The nightly channel forces
-  # `ghcr.io` and rejects any other value, so a nightly reference cannot be made to look like a release.
+  # Whichever registry you pull from. Both carry every version under the same digest, so this is a question about your
+  # environment rather than about the artifact: `ghcr.io` or `docker.io`.
   registry: ""
   repository: ""
 

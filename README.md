@@ -79,6 +79,16 @@ From there, [installing MailFathom](https://github.com/Krzysztof318/MailFathom/b
 
 To evaluate MailFathom from the checkout instead of deploying it, the local Aspire orchestration provisions PostgreSQL and applies the schema on its own. [Local development](https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/local-development.md#running-locally-with-aspire) has that path.
 
+### Where the artifacts are published
+
+| Artifact | Where |
+| --- | --- |
+| Container image | `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` |
+| Helm chart | `oci://ghcr.io/krzysztof318/charts/mailfathom` |
+| Database schema script | attached to each [release](https://github.com/Krzysztof318/MailFathom/releases) |
+
+Both registries carry the same manifest list under the same digest, so the one to pull from is whichever your environment already reaches. Every published artifact carries a signed provenance statement; [the container image](https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/container-image.md#published-images) records what each tag means and how to verify one.
+
 ## Documentation
 
 [`docs/`](https://github.com/Krzysztof318/MailFathom/blob/main/docs/README.md) is the index. The pages you are most likely to want first:

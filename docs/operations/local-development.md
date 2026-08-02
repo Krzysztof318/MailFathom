@@ -78,8 +78,9 @@ how that is resolved and what the gate prints when nothing resolves.
 Neither gate covers the deployment assets, and no script here does either. Testing, building, and publishing what
 `deploy/` produces is one pipeline's job rather than several local scripts' — a developer would otherwise need a Docker
 daemon, a Kubernetes cluster, and Helm on the machine to learn what a runner can decide once. `Release` and `Nightly`
-are that pipeline for the image; issue #187 joins the Helm chart to it. [The container image](container-image.md) and
-[Kubernetes and Helm](deployment-kubernetes.md) describe what each has to establish.
+are that pipeline: `Release` publishes the image to both registries and the Helm chart beside it, and `Nightly`
+publishes the image alone. [The container image](container-image.md) and [Kubernetes and Helm](deployment-kubernetes.md)
+describe what each has to establish.
 
 What is useful locally is reading the chart, which needs only Helm:
 

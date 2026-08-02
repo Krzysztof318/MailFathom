@@ -1,9 +1,14 @@
 # The unsupported channel, rendered so the repository's verification proves that selecting it requires the
-# acknowledgement, forces ghcr.io, and marks every rendered object as unsupported. Nothing installs from this file.
+# acknowledgement, requires a reference that calls itself a nightly, and marks every rendered object as unsupported.
+# Nothing installs from this file.
+#
+# The tag is shaped like a real nightly identifier because that is what the chart now checks: the channel is decided by
+# what the reference says rather than by the registry it names, so a tag that could belong to a release is refused here.
 image:
   channel: nightly
+  registry: ghcr.io
   repository: krzysztof318/mailfathom
-  tag: nightly-00000000
+  tag: 0.0.0-nightly.1-0000000
   nightlyAcknowledgement: i-understand-this-is-unsupported
 
 database:

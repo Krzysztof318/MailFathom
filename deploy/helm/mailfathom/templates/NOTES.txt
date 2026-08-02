@@ -5,7 +5,7 @@ Database: {{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.dat
 Secrets:  {{ .Values.secrets.existingSecret }}, mounted read-only at {{ .Values.secrets.mountPath }}
 {{ if eq .Values.image.channel "nightly" }}
   ############################################################################
-  #  UNSUPPORTED: this release deploys a GHCR nightly build.                 #
+  #  UNSUPPORTED: this release deploys a nightly build.                      #
   #                                                                          #
   #  A nightly is whatever main was the night it was built. It is not a      #
   #  release: it carries no version promise, it may expect a schema no       #

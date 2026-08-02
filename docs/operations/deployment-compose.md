@@ -209,15 +209,17 @@ immutable tag once one exists — never a moving tag.
 
 ### Nightly builds
 
-GHCR nightly builds are unsupported development output: whatever `main` was the night it was built, carrying no release
-promise and possibly expecting a schema no published migration produces. Nothing in `compose.yaml` reads GHCR, so a
-deployment that does not name the overlay cannot reach one however it is configured.
+Nightly builds are unsupported development output: whatever `main` was the night it was built, carrying no release
+promise and possibly expecting a schema no published migration produces. Nothing in `compose.yaml` names a nightly
+image, so a deployment that does not name the overlay cannot reach one however it is configured.
 
 Read [what a nightly build risks](container-image.md#what-a-nightly-build-risks) before using one. The short of it is
 that a nightly has no upgrade path in either direction, that a database it has touched may not be usable by a release,
 and that the tag you deployed is deleted once thirty newer nightlies exist. Name the exact `-nightly.<n>-<short revision>` identifier
-rather than the moving `nightly` tag, so what is running does not change under you. The package is public, so nothing
-has to be logged in to before the pull.
+rather than the moving `nightly` tag, so what is running does not change under you. That identifier is also what makes
+a nightly a nightly: both registries carry both channels, so the reference says which one it is and the hostname says
+nothing. `MAILFATHOM_NIGHTLY_REGISTRY` selects between them and defaults to `ghcr.io`. The package is public, so
+nothing has to be logged in to before the pull.
 
 Using one is deliberately awkward:
 

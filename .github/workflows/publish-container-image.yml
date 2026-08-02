@@ -4,9 +4,11 @@ name: Publish container image
 # schedule — and neither builds anything of its own, so a change to how MailFathom is built, gated, scanned, or attested
 # is one edit rather than two that can drift apart.
 #
-# The build happens once and the push is the only per-registry part, which is what leaves #235 a login and a second
-# repository to qualify the tags against rather than a second pipeline. Until it lands, GHCR is the only registry a
-# MailFathom image reaches.
+# The build happens once and the push is the only per-registry part, which is what keeps two registries one login and one
+# more repository to qualify the tags against rather than a second pipeline. GHCR and Docker Hub receive the same
+# manifest list under the same digest, per docs/decisions/0004-versioning-and-release-policy.md, so neither is a single
+# point of failure for reaching a MailFathom version and the registry an operator happened to use is not part of what
+# they have to trust.
 #
 # Every action here is pinned to an immutable commit SHA, which the read-only workflows in this repository deliberately
 # do not do. The difference is the privilege: these jobs hold a token that can write to a registry and sign an
@@ -32,22 +34,29 @@ on:
         type: string
         default: ''
       tags:
-        description: 'Newline-separated image tags, without a repository: this workflow resolves that and qualifies each one. The first is the immutable tag this version owns; the rest are the moving tags it takes over.'
+        description: 'Newline-separated image tags, without a repository: this workflow resolves both registries and qualifies each tag against each of them. The first is the immutable tag this version owns; the rest are the moving tags it takes over.'
         required: true
         type: string
       block-on-vulnerabilities:
         description: 'Whether a vulnerability finding refuses to publish. True for a release; false for a nightly, which exists to be tried.'
         required: true
         type: boolean
+    secrets:
+      DOCKERHUB_TOKEN:
+        description: 'A Docker Hub personal access token with read, write, and delete scope. Write pushes the mirror, delete lets the nightly channel prune, and the description sync needs all three.'
+        required: true
     outputs:
       image:
-        description: 'The image repository that was published to.'
+        description: 'The GHCR repository that was published to. Both registries carry the same digest; this is the canonical one to quote.'
         value: ${{ jobs.publish.outputs.image }}
+      docker-hub-image:
+        description: 'The Docker Hub repository carrying the same digest.'
+        value: ${{ jobs.publish.outputs.docker-hub-image }}
       digest:
-        description: 'The digest of the published manifest list.'
+        description: 'The digest of the published manifest list, identical in both registries.'
         value: ${{ jobs.publish.outputs.digest }}
       already-published:
-        description: '`true` when this version was already in the registry from the same commit and nothing was rebuilt.'
+        description: '`true` when this version was already in both registries from the same commit and nothing was rebuilt.'
         value: ${{ jobs.publish.outputs.already-published }}
 
 env:
@@ -92,7 +101,7 @@ jobs:
       - integration-tests
     # `!cancelled()` is what lets a nightly publish at all: its integration-test job is skipped, and a skipped
     # dependency would otherwise skip this job with it. Every other outcome still has to be `success`, so nothing
-    # weaker than a passing gate reaches the registry, and a cancelled run publishes nothing at all.
+    # weaker than a passing gate reaches a registry, and a cancelled run publishes nothing at all.
     if: >-
       !cancelled()
       && needs.build-test-format-and-migrations.result == 'success'
@@ -101,12 +110,14 @@ jobs:
     permissions:
       contents: read
       # The registry write this whole workflow exists for, and the two an attestation needs: an OIDC token to prove the
-      # workflow's identity to the signing service, and the store the resulting attestation is recorded in.
+      # workflow's identity to the signing service, and the store the resulting attestation is recorded in. The Docker
+      # Hub half of the push authenticates with a secret instead, because no GitHub permission reaches another vendor.
       packages: write
       id-token: write
       attestations: write
     outputs:
       image: ${{ steps.reference.outputs.image }}
+      docker-hub-image: ${{ steps.reference.outputs.docker-hub-image }}
       digest: ${{ steps.published.outputs.digest }}
       already-published: ${{ steps.existing.outputs.already-published }}
     steps:
@@ -116,15 +127,17 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
 
-      # An OCI repository name is lowercase, and this owner's login is not, so the reference is folded once here rather
-      # than written as a literal that a rename would leave pointing at nothing.
+      # An OCI repository name is lowercase, and this owner's login is not, so both references are folded once here
+      # rather than written as literals that a rename would leave pointing at nothing. The same fold produces the Docker
+      # Hub account name, because that account is this owner's login: one identity, spelled the way each registry
+      # requires, so a mirror cannot come to point at somebody else's namespace.
       #
       # Qualifying the caller's tags is part of the same resolution, because a tag on its own is not a tag to a registry
       # client: an unqualified name is an image on the default registry, so pushing a bare `nightly` would reach
-      # `docker.io/library/nightly` rather than this repository. The callers therefore pass tags and every reference is
-      # composed here, which is also what keeps a second registry one more repository to qualify against rather than a
-      # rule each caller has to repeat.
-      - name: Resolve the image reference
+      # `docker.io/library/nightly` rather than either of these repositories. The callers therefore pass tags and every
+      # reference is composed here, which is what keeps a second registry one more line in this step rather than a rule
+      # each caller has to repeat.
+      - name: Resolve the image references
         id: reference
         env:
           REPOSITORY: ${{ github.repository }}
@@ -132,7 +145,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          image="ghcr.io/$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          repository="$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          image="ghcr.io/${repository}"
+          docker_hub_image="docker.io/${repository}"
           tags="$(printf '%s\n' "$IMAGE_TAGS" | sed '/^[[:space:]]*$/d')"
           primary_tag="$(printf '%s\n' "$tags" | head -n 1)"
 
@@ -143,10 +158,15 @@ jobs:
 
           {
             printf 'image=%s\n' "$image"
+            printf 'docker-hub-image=%s\n' "$docker_hub_image"
+            printf 'docker-hub-namespace=%s\n' "${repository%%/*}"
+            printf 'docker-hub-repository=%s\n' "$repository"
             printf 'primary-tag=%s\n' "$primary_tag"
             printf 'primary-reference=%s:%s\n' "$image" "$primary_tag"
+            printf 'docker-hub-primary-reference=%s:%s\n' "$docker_hub_image" "$primary_tag"
             printf 'references<<REFERENCES\n'
             printf '%s\n' "$tags" | sed "s|^|${image}:|"
+            printf '%s\n' "$tags" | sed "s|^|${docker_hub_image}:|"
             printf 'REFERENCES\n'
           } >> "$GITHUB_OUTPUT"
 
@@ -155,6 +175,20 @@ jobs:
           # when it was rebuilt.
           printf 'created=%s\n' "$(git show --no-patch --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
 
+      # A missing secret would otherwise surface as a login failure whose message is about credentials rather than about
+      # configuration, and it would surface after the gates have already run. `docs/operations/release-procedure.md`
+      # names what the token needs.
+      - name: Require the Docker Hub credential
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$DOCKERHUB_TOKEN" ]]; then
+            echo "::error::No DOCKERHUB_TOKEN is configured, so the Docker Hub half of this publication cannot run. Both registries carry every version, so a run that could reach only one publishes nothing. Add the secret with read, write, and delete scope."
+            exit 1
+          fi
+
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -162,47 +196,104 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Publication is idempotent rather than merely retryable. A run that finds this version already in the registry,
-      # built from this commit, reports the digest that is there and rebuilds nothing — which is what makes a re-run
-      # after a failed later step safe. A version present from a *different* commit is the one case that must never be
-      # overwritten, so it fails here instead of replacing an immutable tag with different content.
-      - name: Check whether this version is already published
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ steps.reference.outputs.docker-hub-namespace }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Publication is idempotent rather than merely retryable, and with two registries it is also *reconciling*. Three
+      # states matter per registry: this version is absent, it is there from this commit, or it is there from a
+      # different one. A version present from a different commit is the one case that must never be overwritten, so it
+      # fails here instead of replacing an immutable tag with different content.
+      #
+      # The mixed state is what a partial publication leaves behind, and it is why the recovery re-pushes rather than
+      # rebuilds: a rebuild would produce a second digest for a version one registry already answers for, which is the
+      # very thing publishing one manifest list to both registries exists to prevent. The reconciliation copies the
+      # published manifest across instead, so the digest stays the artifact's rather than the run's.
+      - name: Check what each registry already carries
         id: existing
         env:
           PRIMARY_REFERENCE: ${{ steps.reference.outputs.primary-reference }}
+          DOCKER_HUB_PRIMARY_REFERENCE: ${{ steps.reference.outputs.docker-hub-primary-reference }}
           EXPECTED_REVISION: ${{ inputs.ref }}
         run: |
           set -euo pipefail
 
-          if ! manifest="$(docker buildx imagetools inspect "$PRIMARY_REFERENCE" --format '{{json .Image}}' 2>/dev/null)"; then
-            echo "$PRIMARY_REFERENCE is not in the registry yet."
-            printf 'already-published=false\n' >> "$GITHUB_OUTPUT"
+          # Prints the revision label of a published reference, or nothing when the reference is absent. One reference
+          # resolves to one object for a single-platform image and to a map keyed by platform for a manifest list, so
+          # the revision is collected from whatever shape came back rather than from an assumed one.
+          published_revision() {
+            local reference="$1"
+            local manifest
+
+            manifest="$(docker buildx imagetools inspect "$reference" --format '{{json .Image}}' 2>/dev/null)" || return 0
+
+            printf '%s' "$manifest" |
+              jq -r '[.. | objects | .config?.Labels?["org.opencontainers.image.revision"]? // empty] | unique | join(",")'
+          }
+
+          ghcr_revision="$(published_revision "$PRIMARY_REFERENCE")"
+          docker_hub_revision="$(published_revision "$DOCKER_HUB_PRIMARY_REFERENCE")"
+
+          for state in "$PRIMARY_REFERENCE:$ghcr_revision" "$DOCKER_HUB_PRIMARY_REFERENCE:$docker_hub_revision"; do
+            reference="${state%:*}"
+            revision="${state##*:}"
+
+            if [[ -n "$revision" && "$revision" != "$EXPECTED_REVISION" ]]; then
+              echo "::error::${reference} already exists, built from revision '${revision}' rather than ${EXPECTED_REVISION}. A published version is immutable; publish a new version instead of replacing this one."
+              exit 1
+            fi
+          done
+
+          mirror_from=''
+          mirror_to=''
+
+          if [[ -n "$ghcr_revision" && -n "$docker_hub_revision" ]]; then
+            echo "$PRIMARY_REFERENCE and $DOCKER_HUB_PRIMARY_REFERENCE are both published from this commit. Nothing is rebuilt."
+            {
+              printf 'already-published=true\n'
+              printf 'build=false\n'
+              printf 'mirror-from=\n'
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # One reference resolves to one object for a single-platform image and to a map keyed by platform for a
-          # manifest list, so the revision is collected from whatever shape came back rather than from an assumed one.
-          published_revisions="$(printf '%s' "$manifest" |
-            jq -r '[.. | objects | .config?.Labels?["org.opencontainers.image.revision"]? // empty] | unique | .[]')"
-
-          if [[ "$published_revisions" != "$EXPECTED_REVISION" ]]; then
-            echo "::error::${PRIMARY_REFERENCE} already exists, built from revision '${published_revisions}' rather than ${EXPECTED_REVISION}. A published version is immutable; publish a new version instead of replacing this one."
-            exit 1
+          if [[ -n "$ghcr_revision" ]]; then
+            mirror_from="$PRIMARY_REFERENCE"
+            mirror_to='Docker Hub'
+          elif [[ -n "$docker_hub_revision" ]]; then
+            mirror_from="$DOCKER_HUB_PRIMARY_REFERENCE"
+            mirror_to='GHCR'
           fi
 
-          echo "$PRIMARY_REFERENCE is already published from this commit. Nothing is rebuilt."
-          printf 'already-published=true\n' >> "$GITHUB_OUTPUT"
+          if [[ -n "$mirror_from" ]]; then
+            echo "::warning::${mirror_from} is published from this commit but the mirror is not, which is what a partial publication leaves behind. The published manifest is copied to ${mirror_to} rather than rebuilt."
+            {
+              printf 'already-published=false\n'
+              printf 'build=false\n'
+              printf 'mirror-from=%s\n' "$mirror_from"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Neither registry carries this version yet."
+          {
+            printf 'already-published=false\n'
+            printf 'build=true\n'
+            printf 'mirror-from=\n'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
-        if: steps.existing.outputs.already-published != 'true'
+        if: steps.existing.outputs.build == 'true'
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       # Built for one architecture and loaded rather than pushed, so the gates below run against the artifact itself
-      # before anything reaches the registry. No QEMU is involved: the application publishes as portable IL on the build
+      # before anything reaches a registry. No QEMU is involved: the application publishes as portable IL on the build
       # platform, so the second architecture below only pulls a base image and copies into it, and the layer cache
       # carries the expensive half of this build into the push that follows.
       - name: Build the image for gating
-        if: steps.existing.outputs.already-published != 'true'
+        if: steps.existing.outputs.build == 'true'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
@@ -222,11 +313,11 @@ jobs:
           cache-to: type=gha,mode=max,scope=publish-${{ inputs.channel }}
 
       # What the smoke test proves is the claim every label on this image makes: that the artifact runs, and that the
-      # process inside it reports the same version and the same commit the registry will index it under. It stops at the
-      # database it has no configuration for, which is the correct behaviour for a host given none, and everything this
-      # step asserts happens before that point.
+      # process inside it reports the same version and the same commit the registries will index it under. It stops at
+      # the database it has no configuration for, which is the correct behaviour for a host given none, and everything
+      # this step asserts happens before that point.
       - name: Smoke-test the built image
-        if: steps.existing.outputs.already-published != 'true'
+        if: steps.existing.outputs.build == 'true'
         env:
           EXPECTED_VERSION: ${{ inputs.version }}
           EXPECTED_REVISION: ${{ inputs.ref }}
@@ -269,7 +360,7 @@ jobs:
       # nightly exists to be tried and a blocked one tells nobody what broke. The caller decides which, so the rule lives
       # with the channel rather than being re-argued here.
       - name: Scan the image for known vulnerabilities
-        if: steps.existing.outputs.already-published != 'true'
+        if: steps.existing.outputs.build == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: mailfathom:gate
@@ -279,7 +370,7 @@ jobs:
           exit-code: ${{ inputs.block-on-vulnerabilities && '1' || '0' }}
 
       - name: Record that the scan did not block
-        if: steps.existing.outputs.already-published != 'true' && !inputs.block-on-vulnerabilities
+        if: steps.existing.outputs.build == 'true' && !inputs.block-on-vulnerabilities
         run: |
           {
             printf '### Vulnerability scan\n\n'
@@ -288,11 +379,12 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # The push the whole workflow leads to: one build, both architectures, one manifest list, every tag this version
-      # takes pointing at that one digest. `provenance` and `sbom` travel inside the index BuildKit produces, so what
-      # was built and what is inside it are readable from the artifact itself.
+      # takes in either registry pointing at that one digest. Both registries appear in the same tag list, so the two
+      # pushes share a build rather than repeating one. `provenance` and `sbom` travel inside the index BuildKit
+      # produces, so what was built and what is inside it are readable from the artifact itself.
       - name: Build and push the multi-architecture image
         id: push
-        if: steps.existing.outputs.already-published != 'true'
+        if: steps.existing.outputs.build == 'true'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
@@ -312,6 +404,33 @@ jobs:
           cache-from: type=gha,scope=publish-${{ inputs.channel }}
           cache-to: type=gha,mode=max,scope=publish-${{ inputs.channel }}
 
+      # The recovery from a partial publication, run by re-running the release rather than by a command somebody has to
+      # remember. `imagetools create` copies a manifest list between registries by digest, so what lands in the registry
+      # that was missing it is the artifact the other one already answers for.
+      - name: Mirror the published manifest to the registry that is missing it
+        if: steps.existing.outputs.mirror-from != ''
+        env:
+          MIRROR_FROM: ${{ steps.existing.outputs.mirror-from }}
+          REFERENCES: ${{ steps.reference.outputs.references }}
+        run: |
+          set -euo pipefail
+
+          source_digest="$(docker buildx imagetools inspect "$MIRROR_FROM" --format '{{ .Manifest.Digest }}')"
+          source_repository="${MIRROR_FROM%:*}"
+
+          # Only the references the source does not already answer for, so a copy is never asked to rewrite the tag it
+          # is reading from.
+          targets=()
+          while read -r reference; do
+            [[ -n "$reference" ]] || continue
+            [[ "${reference%:*}" != "$source_repository" ]] || continue
+            targets+=(--tag "$reference")
+          done <<< "$REFERENCES"
+
+          docker buildx imagetools create "${targets[@]}" "${source_repository}@${source_digest}"
+
+          printf 'Copied %s@%s onto %d reference(s) in the mirror.\n' "$source_repository" "$source_digest" "$(( ${#targets[@]} / 2 ))"
+
       - name: Resolve the published digest
         id: published
         env:
@@ -325,32 +444,60 @@ jobs:
             exit 0
           fi
 
-          # Nothing was pushed because this version was already published, so the digest is read back from the registry
-          # rather than left empty: what the run reports has to name the artifact that exists either way.
+          # Nothing was pushed because this version was already published, or because it was copied from the registry
+          # that had it, so the digest is read back rather than left empty: what the run reports has to name the
+          # artifact that exists either way.
           digest="$(docker buildx imagetools inspect "$PRIMARY_REFERENCE" --format '{{ .Manifest.Digest }}')"
           printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
 
       # A signed statement that this digest was built by this workflow, from this commit, verifiable with
-      # `gh attestation verify`. A release also carries it in the registry as a referrer, so verification needs nothing
-      # but the image; a nightly deliberately does not, because its versions are pruned and a referrer manifest would
-      # outlive the image it describes.
-      - name: Attest the published image
-        if: steps.existing.outputs.already-published != 'true'
+      # `gh attestation verify`. It is made once per repository name because the subject is a name and a digest
+      # together, and an operator verifying the image they pulled names the registry they pulled it from. A release
+      # also carries the statement in the registry as a referrer — both registries answer the referrers API — so
+      # verification needs nothing but the image; a nightly deliberately does not, because its versions are pruned and a
+      # referrer manifest would outlive the image it describes.
+      #
+      # **Unconditional, unlike every step above it.** Those skip on what is already in the registry, which is a
+      # question about the *manifest*; whether this digest has been attested is a different question, and the step that
+      # answers it is this one. Gating these on the manifest is what would make the documented recovery hide the failure
+      # it exists for: a run whose push succeeded and whose attestation did not is re-run, finds both registries
+      # carrying the revision, skips the attestation for good, and reports success — leaving an artifact the
+      # documentation says can be verified and cannot. Attesting a digest that already carries one costs a signature
+      # and adds a second valid statement, which verification accepts, so converging is cheaper than detecting.
+      - name: Attest the image published to GHCR
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-name: ${{ steps.reference.outputs.image }}
-          subject-digest: ${{ steps.push.outputs.digest }}
+          subject-digest: ${{ steps.published.outputs.digest }}
           push-to-registry: ${{ inputs.channel == 'release' }}
 
-      - name: Verify the published image
+      - name: Attest the image published to Docker Hub
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ steps.reference.outputs.docker-hub-image }}
+          subject-digest: ${{ steps.published.outputs.digest }}
+          push-to-registry: ${{ inputs.channel == 'release' }}
+
+      # The equality the mirror exists to provide, asserted rather than assumed: the registry an operator pulled from is
+      # not part of what they have to trust only if both answer with the same bytes.
+      - name: Verify both registries carry the same image
         env:
           IMAGE: ${{ steps.reference.outputs.image }}
+          DOCKER_HUB_IMAGE: ${{ steps.reference.outputs.docker-hub-image }}
+          PRIMARY_TAG: ${{ steps.reference.outputs.primary-tag }}
           DIGEST: ${{ steps.published.outputs.digest }}
           EXPECTED_VERSION: ${{ inputs.version }}
           EXPECTED_REVISION: ${{ inputs.ref }}
           EXPECTED_CHANNEL: ${{ inputs.channel }}
         run: |
           set -euo pipefail
+
+          docker_hub_digest="$(docker buildx imagetools inspect "${DOCKER_HUB_IMAGE}:${PRIMARY_TAG}" --format '{{ .Manifest.Digest }}')"
+
+          if [[ "$docker_hub_digest" != "$DIGEST" ]]; then
+            echo "::error::${DOCKER_HUB_IMAGE}:${PRIMARY_TAG} is ${docker_hub_digest} while ${IMAGE}:${PRIMARY_TAG} is ${DIGEST}. The registries are mirrors of one manifest list, so a difference means one of them carries something this release did not publish."
+            exit 1
+          fi
 
           manifest="$(docker buildx imagetools inspect "${IMAGE}@${DIGEST}" --format '{{json .}}')"
 
@@ -378,17 +525,50 @@ jobs:
           assert_label 'org.opencontainers.image.revision' "$EXPECTED_REVISION"
           assert_label 'io.mailfathom.release-channel' "$EXPECTED_CHANNEL"
 
-          echo "${IMAGE}@${DIGEST} carries both platforms and identifies itself as ${EXPECTED_CHANNEL} ${EXPECTED_VERSION}."
+          echo "${DIGEST} is in both registries, carries both platforms, and identifies itself as ${EXPECTED_CHANNEL} ${EXPECTED_VERSION}."
+
+      # Docker Hub renders a repository overview and GHCR renders this repository's README on the package page, so only
+      # one of the two needs anything done about it. The canonical overview is the root README — the file
+      # `AGENTS.md` already requires to carry absolute links for exactly this reason — rather than a copy maintained
+      # beside it that would go stale the first time the product description changed.
+      #
+      # Release only. A nightly re-pushing an unchanged README would spend a write on nothing, and the overview
+      # describes the product rather than the night's snapshot.
+      - name: Check the overview against Docker Hub's limit
+        if: inputs.channel == 'release'
+        run: |
+          set -euo pipefail
+
+          overview_length="$(wc -c < README.md)"
+
+          if (( overview_length > 25000 )); then
+            echo "::error::README.md is ${overview_length} characters and Docker Hub accepts 25000 as a repository overview. Shorten it, or the release publishes an image whose registry page still describes the previous version."
+            exit 1
+          fi
+
+          printf 'README.md is %s characters, within the 25000 Docker Hub accepts.\n' "$overview_length"
+
+      - name: Synchronize the Docker Hub repository overview
+        if: inputs.channel == 'release'
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
+        with:
+          username: ${{ steps.reference.outputs.docker-hub-namespace }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ steps.reference.outputs.docker-hub-repository }}
+          readme-filepath: ./README.md
+          short-description: ${{ github.event.repository.description }}
 
       - name: Summarize the publication
         env:
           CHANNEL: ${{ inputs.channel }}
           VERSION: ${{ inputs.version }}
           IMAGE: ${{ steps.reference.outputs.image }}
+          DOCKER_HUB_IMAGE: ${{ steps.reference.outputs.docker-hub-image }}
           DIGEST: ${{ steps.published.outputs.digest }}
           REVISION: ${{ inputs.ref }}
           IMAGE_TAGS: ${{ inputs.tags }}
           ALREADY_PUBLISHED: ${{ steps.existing.outputs.already-published }}
+          MIRRORED_FROM: ${{ steps.existing.outputs.mirror-from }}
         run: |
           set -euo pipefail
 
@@ -396,13 +576,16 @@ jobs:
             printf '### %s %s\n\n' "$CHANNEL" "$VERSION"
 
             if [[ "$ALREADY_PUBLISHED" == 'true' ]]; then
-              printf 'Already published from this commit; nothing was rebuilt.\n\n'
+              printf 'Already published to both registries from this commit; nothing was rebuilt.\n\n'
+            elif [[ -n "$MIRRORED_FROM" ]]; then
+              printf 'Recovered a partial publication: the manifest already at `%s` was copied to the other registry, not rebuilt.\n\n' "$MIRRORED_FROM"
             fi
 
             printf '| | |\n| --- | --- |\n'
             printf '| Image | `%s` |\n' "$IMAGE"
+            printf '| Mirror | `%s` |\n' "$DOCKER_HUB_IMAGE"
             printf '| Digest | `%s` |\n' "$DIGEST"
             printf '| Revision | `%s` |\n' "$REVISION"
             printf '| Tags | %s |\n\n' "$(printf '%s\n' "$IMAGE_TAGS" | sed '/^[[:space:]]*$/d' | sed 's/^/`/; s/$/`/' | paste -sd ' ' -)"
-            printf '```\ndocker pull %s@%s\n```\n' "$IMAGE" "$DIGEST"
+            printf '```\ndocker pull %s@%s\ndocker pull %s@%s\n```\n' "$IMAGE" "$DIGEST" "$DOCKER_HUB_IMAGE" "$DIGEST"
           } >> "$GITHUB_STEP_SUMMARY"

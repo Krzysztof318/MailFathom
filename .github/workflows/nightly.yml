@@ -109,6 +109,9 @@ jobs:
             publish 'Dispatched explicitly, so the snapshot is built whether or not main has moved.'
           fi
 
+          # One registry answers this, because both carry the same digest under the same tag and a run that reached only
+          # one of them is a failed publication rather than a state to reason about here. Asking the second would add a
+          # login to a decision that has nothing to do with credentials.
           image="ghcr.io/$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
 
           # Any failure to read the published nightly — an absent tag, a registry hiccup, a manifest shape that changed
@@ -179,6 +182,8 @@ jobs:
       # publish because of a finding in a base image tells nobody what actually broke; the same finding blocks a
       # release, which is where the answer matters.
       block-on-vulnerabilities: false
+    secrets:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   prune:
     name: Prune superseded nightlies
@@ -190,10 +195,17 @@ jobs:
       packages: write
     steps:
       # Retention is stated rather than left to accumulate: the newest nightly versions are kept and the rest are
-      # deleted, so a channel that publishes every night does not grow without bound. Only versions whose every tag is a
-      # nightly identifier are considered — a version carrying `latest`, a release number, or no tag at all is never
-      # touched, which is what keeps a released image and an attestation manifest out of reach of this step.
-      - name: Delete nightly versions beyond the retained window
+      # deleted, so a channel that publishes every night does not grow without bound. It runs against both registries
+      # and keeps the same window in each, because a nightly that survived in one of them is still a published nightly.
+      #
+      # Only versions whose every tag is a nightly identifier are considered — a version carrying `latest`, a release
+      # number, or no tag at all is never touched, which is what keeps a released image and an attestation manifest out
+      # of reach of this step. The moving `nightly` tag fails that test by construction and is never deleted.
+      #
+      # The two registries model retention differently and the steps below follow each rather than pretending they are
+      # one: GHCR deletes a package *version*, which takes its tags with it, while Docker Hub deletes a *tag* and
+      # collects the manifest it leaves unreferenced.
+      - name: Delete nightly versions beyond the retained window on GHCR
         env:
           GH_TOKEN: ${{ secrets.GHCR_RETENTION_TOKEN || secrets.GITHUB_TOKEN }}
           PACKAGE_OWNER: ${{ github.repository_owner }}
@@ -230,6 +242,69 @@ jobs:
               printf 'Deleted nightly %s.\n' "$version_tags"
             else
               echo "::warning::Nightly ${version_tags} could not be deleted with this token. Supply a GHCR_RETENTION_TOKEN with delete:packages to enable retention."
+              exit 0
+            fi
+          done <<< "$superseded"
+
+      # The same window on Docker Hub, which has no workflow token and therefore always uses the release credential.
+      # Delete scope is part of what that token needs; a token without it fails here rather than at the push, which is
+      # the right place for the failure because retention is the only thing that needs it.
+      - name: Delete nightly tags beyond the retained window on Docker Hub
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          RETAINED_NIGHTLY_COUNT: '30'
+        run: |
+          set -euo pipefail
+
+          repository="$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          namespace="${repository%%/*}"
+          name="${repository##*/}"
+          tags_path="https://hub.docker.com/v2/namespaces/${namespace}/repositories/${name}/tags"
+
+          access_token="$(curl --silent --fail --show-error \
+            --header 'Content-Type: application/json' \
+            --data "$(jq --null-input --arg username "$namespace" --arg password "$DOCKERHUB_TOKEN" \
+              '{username: $username, password: $password}')" \
+            'https://hub.docker.com/v2/users/login' | jq -r '.token')"
+
+          if [[ -z "$access_token" || "$access_token" == 'null' ]]; then
+            echo "::error::Docker Hub refused the credential, so nothing was pruned there."
+            exit 1
+          fi
+
+          # Sorted here rather than by the server, which is what the GHCR step above does and for a stronger reason: on
+          # this API `ordering=last_updated` returns newest first, the opposite of what that parameter name means
+          # everywhere the convention comes from. A reader correcting it to what it looks like would invert the window
+          # and delete the thirty newest nightlies instead of keeping them, so the order this step acts on is its own.
+          #
+          # One page is the whole window. Each run prunes back to the retained count, so the newest hundred tags always
+          # contain every candidate unless a hundred nightlies were published between two runs.
+          #
+          # Only the immutable nightly identifiers are candidates; `nightly` and every release tag fail the pattern.
+          superseded="$(curl --silent --fail --show-error \
+            --header "Authorization: Bearer ${access_token}" \
+            "${tags_path}?page_size=100&ordering=last_updated" |
+            jq -r --argjson keep "$RETAINED_NIGHTLY_COUNT" '
+              [ .results[]
+                | select(.name | test("^[0-9]+\\.[0-9]+\\.[0-9]+-nightly\\.[0-9]+-[0-9a-f]{7,}$"))
+              ]
+              | sort_by(.last_updated) | reverse | .[$keep:] | .[] | .name')"
+
+          if [[ -z "$superseded" ]]; then
+            echo "Nothing to prune: at most ${RETAINED_NIGHTLY_COUNT} nightly tags are published to Docker Hub."
+            exit 0
+          fi
+
+          while read -r tag; do
+            [[ -n "$tag" ]] || continue
+
+            if curl --silent --fail --show-error --request DELETE \
+              --header "Authorization: Bearer ${access_token}" \
+              "${tags_path}/${tag}" > /dev/null; then
+              printf 'Deleted nightly %s from Docker Hub.\n' "$tag"
+            else
+              echo "::warning::Nightly ${tag} could not be deleted from Docker Hub with this token. It needs delete scope for retention to run."
               exit 0
             fi
           done <<< "$superseded"

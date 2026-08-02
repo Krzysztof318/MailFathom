@@ -3,22 +3,22 @@ name: mailfathom
 description: A read-only MCP server over synchronized IMAP mailboxes, backed by PostgreSQL.
 type: application
 
-# The chart's own version, moved when anything under this directory changes. It is not the application's version and
-# never follows it: a values default corrected without touching the image is a chart release on its own.
+# A placeholder, and as close as a required field can come to declaring nothing. The release run supplies the real
+# value, which is the same one it supplies as `appVersion`:
 #
-# It still reads its initial value because no chart has been published. Moving it distinguishes what an installer can
-# already have from what this directory now says, and nobody can have anything yet, so a bump before the first
-# publication only counts edits. From the first published chart onward the rule above applies literally.
-version: 0.1.0
+#   helm package deploy/helm/mailfathom --version "$V" --app-version "$V"
+#
+# The two carry one number rather than two. A published chart version is immutable and a packaged chart embeds its
+# `appVersion`, so every release produces chart content that has to be published under a new chart version; a version
+# counting edits to this directory would need bumping on every release anyway, and would leave an operator mapping two
+# numbers onto one artifact. `<VersionPrefix>` in `Directory.Build.props` stays the only place in this repository where
+# a version is written — see docs/operations/release-procedure.md.
+version: 0.0.0
 
-# No `appVersion` here, deliberately. A version written in this file would be a second place to remember one, and the
-# whole point of ADR 0004's scheme is that `<VersionPrefix>` in `Directory.Build.props` is the only place a version
-# number is written. The release run supplies it instead, from that same declaration:
-#
-#   helm package deploy/helm/mailfathom --app-version "$(scripts/read-declared-version.sh)"
-#
-# A packaged chart therefore always states the application version it deploys, and the chart as it sits in the
-# repository states none — which is honest, because an unpackaged chart directory is not a release of anything. The
+# No `appVersion` here, deliberately, and this field can say nothing where `version` above cannot: it is optional. A
+# version written here would be a second place to remember one, and the release run supplies it from the declaration
+# named above. A packaged chart therefore always states the application version it deploys, and the chart as it sits in
+# the repository states none — which is honest, because an unpackaged chart directory is not a release of anything. The
 # image/appVersion drift check in `_helpers.tpl` binds on a packaged chart and stands down without one.
 
 home: https://github.com/Krzysztof318/MailFathom
@@ -40,11 +40,25 @@ maintainers:
   - name: Krzysztof Kasprowicz
     url: https://github.com/Krzysztof318
 
-# MailFathom's own license, in the SPDX form Artifact Hub reads, matching the image's `org.opencontainers.image.licenses`
-# label and the root LICENSE. It covers the chart and the application it deploys, both of which are this repository,
-# and says nothing about the PostgreSQL server the operator supplies under its own terms.
+# What a chart listing renders beyond the fields above. `license` is MailFathom's own, in the SPDX form Artifact Hub
+# reads, matching the image's `org.opencontainers.image.licenses` label and the root LICENSE; it covers the chart and
+# the application it deploys, both of which are this repository, and says nothing about the PostgreSQL server the
+# operator supplies under its own terms.
+#
+# `links` is what a listing has instead of a repository's own navigation. The `support` key is the one Artifact Hub
+# treats specially, rendering it as where a problem is reported.
+#
+# The overview beside them is not an annotation: Artifact Hub renders the `README.md` inside the package, and the
+# release run copies the repository's root README in at package time so there is one overview rather than two.
 annotations:
   artifacthub.io/license: Apache-2.0
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://github.com/Krzysztof318/MailFathom/tree/main/docs
+    - name: Deploying to Kubernetes
+      url: https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/deployment-kubernetes.md
+    - name: support
+      url: https://github.com/Krzysztof318/MailFathom/issues
 
 # No dependencies, deliberately. The chart installs no database: MailFathom needs PostgreSQL with the `vector` extension,
 # and a subchart bundled here would make the chart responsible for the durability, backup, and upgrade of the store

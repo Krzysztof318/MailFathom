@@ -1,6 +1,6 @@
 # The release procedure
 
-<!-- describes: Directory.Build.props, .github/workflows/release.yml, scripts/assert-release-tag.sh, scripts/read-declared-version.sh -->
+<!-- describes: Directory.Build.props, .github/workflows/release.yml, .github/workflows/publish-helm-chart.yml, scripts/assert-release-tag.sh, scripts/read-declared-version.sh -->
 
 MailFathom's version number is a compatibility promise over four public surfaces, and it is written in one place. This
 page records how a build acquires that number, where it is observable, and the sequence that turns a commit on a
@@ -52,7 +52,7 @@ because an OCI tag would reject it later and further from the cause.
 | MCP `initialize` | the server's implementation version | no |
 | `org.opencontainers.image.version` and `.revision` | the image's version and commit | yes |
 | The image's tags, including `latest` | which release this is | yes |
-| A packaged chart's `appVersion` | the application version the chart deploys | yes |
+| A packaged chart's `version` and `appVersion` | the chart release, and the application version it deploys | yes |
 | The release's `mailfathom-schema-<version>.sql` | which schema that version expects | yes |
 | The published assemblies | `AssemblyInformationalVersion` | yes |
 
@@ -67,11 +67,18 @@ disk carries its own version and revision without being started.
 checked. The image's labels and tags arrive as build arguments, and the chart's `appVersion` arrives at package time:
 
 ```bash
-helm package deploy/helm/mailfathom --app-version "$(bash scripts/read-declared-version.sh)"
+version="$(bash scripts/read-declared-version.sh)"
+helm package deploy/helm/mailfathom --version "$version" --app-version "$version"
 ```
 
-`Chart.yaml` therefore carries no `appVersion` of its own. Its `version` field is not an exception — that is the
-chart's own version, which counts edits to the chart directory and never follows the application's.
+`Chart.yaml` therefore carries no `appVersion` of its own, and its `version` is a `0.0.0` placeholder that the release
+overrides — as close as a required field can come to declaring nothing.
+
+**The chart's version and the application's version are one number.** A packaged chart embeds its `appVersion`, so
+every release produces chart content that differs from the last, and a published chart version is immutable; a chart
+version counting edits to the chart directory would therefore need bumping on every release regardless, while leaving
+an operator to map two numbers onto one artifact. Making them equal costs nothing that was worth keeping: a chart
+change that ships without an application change is rare, and it ships under the release that carries it.
 
 ## The moving tags
 
@@ -90,8 +97,8 @@ at the same commit. `latest` is what an operator gets by not choosing, so it mus
   right answer, because `0.3.0` is higher.
 - **`nightly` follows the newest nightly**, and is the only other mutable reference. Every other tag is immutable.
 
-The `Release` and `Nightly` workflows implement this rule, publishing to `ghcr.io/krzysztof318/mailfathom`. Docker Hub
-carries the same manifest list under the same digest once issue #235 lands.
+The `Release` and `Nightly` workflows implement this rule, publishing to `ghcr.io/krzysztof318/mailfathom` and
+`docker.io/krzysztof318/mailfathom`. Both registries carry every version of both channels under the same digest.
 [The container image](container-image.md#published-images) records what each tag means and how a published image is
 verified.
 
@@ -125,10 +132,11 @@ whole procedure, and it is recorded here so it survives the skill being unavaila
 2. **Push the annotated tag `v<x.y.z>` on that merge commit.** This is what makes the release real and what triggers
    the release workflow. Before publishing anything the workflow asserts the tag against the tagged commit's
    `VersionPrefix`, against the highest existing tag on the same `major.minor` line, and against the changelog section
-   for that version — `scripts/assert-release-tag.sh` is that check. It then builds and gates the image, pushes it
-   under `<x.y.z>`, moves `latest` onto the same digest, attests it, and opens the GitHub release with that changelog
-   section as its notes. Under the section it links `CHANGELOG.md` at the tag, so a reader of an older release reaches
-   the file as that release shipped it rather than a copy already describing versions they have not upgraded to.
+   for that version — `scripts/assert-release-tag.sh` is that check. It then builds and gates the image, pushes it to
+   both registries under `<x.y.z>`, moves `latest` onto the same digest, attests it, publishes the Helm chart against
+   that digest, and opens the GitHub release with that changelog section as its notes. Under the section it links
+   `CHANGELOG.md` at the tag, so a reader of an older release reaches the file as that release shipped it rather than a
+   copy already describing versions they have not upgraded to.
 
    ```bash
    git tag --annotate v0.1.0 --message 'MailFathom 0.1.0'
@@ -146,6 +154,52 @@ whole procedure, and it is recorded here so it survives the skill being unavaila
 
 No step is safe out of order, and nothing in a pull request can express that, which is why the ordering is printed
 rather than automated. Nothing here pushes a tag on the owner's behalf.
+
+## What a release publishes, and what it needs to
+
+Three artifacts leave one run, in one order, and a failure in any of them leaves the release incomplete rather than
+half-published:
+
+| Artifact | Where | Depends on |
+| --- | --- | --- |
+| The image | `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` | the schema artifact building |
+| The Helm chart | `ghcr.io/krzysztof318/charts/mailfathom` | the image's digest |
+| `mailfathom-schema-<version>.sql` | the GitHub release's assets | nothing |
+
+The chart is published **after** the image and **against the digest it produced**, because a chart names the image it
+deploys: before pushing, the run renders the packaged chart against that digest and refuses to publish one that would
+deploy anything else. The chart goes to GHCR alone, which is the one place the two artifacts diverge — Docker Hub's
+namespace is `namespace/name` and nothing deeper, so a chart pushed there would land in the repository the image
+already occupies and collide with its tags. A chart is pulled once and then lives in the repository an operator
+deploys from, so it carries less of the availability argument that puts the image in both registries.
+
+The nightly channel publishes no chart. An operator running a nightly installs the most recent released chart and names
+the nightly image through `image.tag`, which the chart supports behind the acknowledgement it already requires.
+
+**Credentials.** GHCR authenticates with the workflow token and needs nothing configured. Docker Hub authenticates with
+the `DOCKERHUB_TOKEN` repository secret — a personal access token with read, write, and delete scope: write pushes the
+mirror, delete lets the nightly channel prune it, and the repository-overview sync needs all three. The publishing job
+refuses to start when the secret is missing, before it logs in or builds anything, so the failure names the missing
+configuration rather than arriving as a rejected credential half-way through a push. `GHCR_RETENTION_TOKEN` is optional
+and only affects nightly pruning on GHCR; without it that step warns and deletes nothing.
+
+### When one registry published and the other did not
+
+Re-run the release workflow on the same tag. It rebuilds nothing: a version already in both registries from that commit
+is reported and left alone, and a version in one but not the other is **copied across by digest**, so the artifact that
+reaches the second registry is the one the first already answers for. Rebuilding would produce a second digest for a
+version one registry already published, which is exactly what pushing one manifest list to both exists to prevent.
+
+The same holds for the chart. A chart version already published under this release's application version is left alone;
+one published under a different application version is refused, because a published chart version is immutable.
+
+**The attestations and the Artifact Hub ownership claim are redone on every run**, for both artifacts, because whether
+something is in the registry and whether it has been attested or claimed are different questions. A run whose push
+succeeded and whose attestation failed is exactly the run somebody re-runs, and a re-run that skipped the attestation
+because the push had already landed would report success while leaving an artifact permanently unverifiable.
+
+A version that exists under a *different commit* is refused outright in either registry. That is not a state to
+recover from — the tag has already been published as something else, and the answer is a new version.
 
 ## Major, minor, and patch branches
 
