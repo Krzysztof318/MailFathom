@@ -1,5 +1,7 @@
 # Configuration reference
 
+<!-- describes: src/**/*Options.cs, src/Host/Configuration/** -->
+
 Every user-settable option, in one place, checked against the options classes that bind it. Each section's table
 states the key, its type, the value a deployment gets by writing nothing, the constraint startup enforces, and what a
 change needs to take effect. The prose around a setting group — what it means, why it is shaped that way, how to

@@ -9,6 +9,8 @@ informed:
 
 # Use application-owned repository ports with explicit Unit of Work sessions and keep EF Core behind infrastructure adapters
 
+<!-- describes: src/Application/Persistence/**, src/Infrastructure/Persistence/** -->
+
 ## Context and Problem Statement
 
 MailFathom follows clean architecture: `Application` owns use cases and ports, while `Infrastructure` owns EF Core, PostgreSQL, SQL details, and migrations. The initial architecture also requires fast isolated unit tests, future PostgreSQL-backed integration tests, explicit privacy/governance seams, and no leakage of EF Core or provider-specific types into `Application` or `Domain`.

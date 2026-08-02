@@ -623,13 +623,44 @@ jobs:
             : > "$REVIEW_DIRECTORY/truncation.txt"
           fi
 
+          echo "Collected ${collected_files} changed files and ${fetched} head-content files."
+
+      # What the change obliges the rest of the repository to do, which is the part of a review no
+      # diff contains. A `.cs` file that changed while no test followed it, a page under `docs/`
+      # that still describes the behavior this change replaced, and a moved pin with no row in
+      # `THIRD_PARTY_LICENSES.md` are each a rule in `AGENTS.md`, and each of them is invisible in a
+      # diff because the defect *is* the absence of a second file from it.
+      #
+      # This calls no API. It reads the base checkout — code that already merged — and the
+      # `files.json` the step above froze, which is what lets `scripts/test-agent-workflow.sh` run
+      # the same script against a fixture tree with no `gh` stub, the way it runs the gate and the
+      # settle loop today.
+      #
+      # The script lives under `.github/` rather than in `scripts/` because `Protected paths`
+      # refuses a change from anyone but the owner there, and this decides what a reviewer is told
+      # to look for. It is read from the workspace, which holds the base commit, so a pull request
+      # cannot supply the index that judges it — the same reason the prompt is read from there.
+      - name: Index the obligations the change triggers
+        id: obligations
+        shell: bash
+        env:
+          REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          INDEX_SCRIPT: ${{ github.workspace }}/.github/fathom-review/index-obligations.sh
+        run: |
+          set -euo pipefail
+
+          "$INDEX_SCRIPT" \
+            "$GITHUB_WORKSPACE" \
+            "$REVIEW_DIRECTORY/files.json" \
+            "$REVIEW_DIRECTORY/obligations.json"
+
           # Read-only from here on. The reviewer reads these files and the submission step trusts
           # them — `lines.json` in particular is what makes an anchor valid — so nothing that runs
           # in between may rewrite them. Removing write permission from the directories as well as
-          # the files is what stops an entry being replaced rather than modified.
+          # the files is what stops an entry being replaced rather than modified. It happens here
+          # rather than at the end of the collection above because this is the last step that
+          # writes into the directory.
           chmod -R a-w "$REVIEW_DIRECTORY"
-
-          echo "Collected ${collected_files} changed files and ${fetched} head-content files."
 
       # The reviewer's instructions live in `.github/fathom-review/reviewer-prompt.md` rather than
       # in a block scalar here, because GitHub compiles any string holding a `${{ }}` expression

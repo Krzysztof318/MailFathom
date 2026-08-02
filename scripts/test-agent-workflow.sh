@@ -153,6 +153,24 @@ assert_contains() {
   fi
 }
 
+# For a step whose whole output is one JSON document, where the interesting assertion is a field
+# rather than the file. It names the filter in the failure, so a red test says which part disagreed
+# instead of printing two documents to compare by eye.
+assert_json() {
+  local expected_value="$1"
+  local filter="$2"
+  local actual_file="$3"
+  local actual_value
+
+  actual_value="$(jq -c "$filter" "$actual_file")"
+
+  if [[ "$actual_value" != "$expected_value" ]]; then
+    printf 'Expected %s of %s to be:\n%s\nActual:\n%s\n' \
+      "$filter" "$actual_file" "$expected_value" "$actual_value" >&2
+    return 1
+  fi
+}
+
 assert_excludes() {
   local unexpected_text="$1"
   local actual_file="$2"
@@ -1053,6 +1071,287 @@ fathom_review_reads_the_newest_comment_whatever_the_order() {
   assert_seconds_elapsed_at_least 4 "$started_at"
 }
 
+# The `describes:` marker is what tells a reviewer which pages a change to the code obliges, and it is
+# the half of that mapping nothing derives: a page is written about configuration keys and behavior
+# rather than about type names, so no name match finds the edge. The two contracts below are what
+# make a declaration that has rotted loud rather than silent, which is the whole reason the marker
+# lives in each page instead of in one central index.
+#
+# Both run against the real repository rather than a fixture. A fixture would prove the check works
+# and say nothing about whether this repository's own documentation is declared, which is the
+# question worth failing over.
+marker_preamble_lines=15
+
+documentation_page_requires_a_marker() {
+  local page="$1"
+  local name
+  name="$(basename "$page")"
+
+  # A `README`, an `AGENTS.md`, and its `CLAUDE.md` pointer describe the documentation set or the
+  # rules for writing it rather than any part of the system, and the ADR templates describe nothing
+  # at all until they are copied.
+  case "$name" in
+    README.md | AGENTS.md | CLAUDE.md) return 1 ;;
+    adr-template.md | adr-short-template.md) return 1 ;;
+  esac
+
+  return 0
+}
+
+page_markers() {
+  head -n "$marker_preamble_lines" "$1" | grep -oE '<!--[[:space:]]*describes:[^>]*-->' || true
+}
+
+marker_patterns() {
+  sed -E 's|^<!--[[:space:]]*describes:[[:space:]]*||; s|[[:space:]]*-->$||' \
+    | tr ',' '\n' \
+    | sed -E 's|^[[:space:]]+||; s|[[:space:]]+$||' \
+    | grep -v '^$' || true
+}
+
+every_documentation_page_declares_what_it_describes() {
+  local page markers marker_count failures=0
+
+  while IFS= read -r page; do
+    documentation_page_requires_a_marker "$page" || continue
+
+    markers="$(page_markers "$source_repository_root/$page")"
+    marker_count="$(grep -c . <<< "$markers" || true)"
+
+    if [[ "$marker_count" != '1' ]]; then
+      printf '%s carries %s describes markers in its first %s lines; it needs exactly one\n' \
+        "$page" "$marker_count" "$marker_preamble_lines" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done < <(git -C "$source_repository_root" ls-files -- ':(glob)docs/**/*.md')
+
+  (( failures == 0 ))
+}
+
+# The second way a declaration rots: the code it names is renamed or deleted and the page that
+# describes it stays behind, pointing at nothing. Git's own glob pathspec is what resolves each
+# pattern here, deliberately rather than the converter the index script carries — the two agree on
+# `**` crossing a directory separator and `*` not, so a defect in either is a disagreement this test
+# can see.
+every_describes_pattern_matches_something_that_exists() {
+  local page markers pattern failures=0
+
+  while IFS= read -r page; do
+    documentation_page_requires_a_marker "$page" || continue
+
+    markers="$(page_markers "$source_repository_root/$page")"
+    [[ -n "$markers" ]] || continue
+
+    while IFS= read -r pattern; do
+      [[ -n "$pattern" ]] || continue
+      [[ "$pattern" == 'none' ]] && continue
+
+      if [[ -z "$(git -C "$source_repository_root" ls-files -- ":(glob)$pattern")" ]]; then
+        printf '%s describes %s, which matches no tracked path\n' "$page" "$pattern" >&2
+        failures=$(( failures + 1 ))
+      fi
+    done < <(marker_patterns <<< "$markers")
+  done < <(git -C "$source_repository_root" ls-files -- ':(glob)docs/**/*.md')
+
+  (( failures == 0 ))
+}
+
+# The index itself. It calls no API, so unlike the gate and the settle loop it needs no `gh` stub and
+# no extraction from the workflow: the fixture is a tree on disk and a `files.json` beside it.
+create_obligation_fixture() {
+  local fixture_root="$1"
+
+  rm -rf "$fixture_root"
+  mkdir -p \
+    "$fixture_root/src/Application/Emails" \
+    "$fixture_root/src/Domain/Failures" \
+    "$fixture_root/tests/Application.UnitTests" \
+    "$fixture_root/docs/features"
+
+  printf 'internal sealed class MailboxWidget;\n' > "$fixture_root/src/Application/Emails/MailboxWidget.cs"
+  printf 'internal sealed class MailboxGadget;\n' > "$fixture_root/src/Application/Emails/MailboxGadget.cs"
+  printf 'public void Reads() => new MailboxGadget();\n' \
+    > "$fixture_root/tests/Application.UnitTests/MailboxGadgetTests.cs"
+
+  printf '%s\n' \
+    '# Mailbox widgets' \
+    '' \
+    '<!-- describes: src/Application/Emails/** -->' \
+    '' \
+    'What a widget answers.' \
+    > "$fixture_root/docs/features/widgets.md"
+}
+
+run_obligation_index() {
+  local fixture_root="$1" files_json="$2" output_file="$3"
+
+  bash "$source_repository_root/.github/fathom-review/index-obligations.sh" \
+    "$fixture_root" "$files_json" "$output_file" > /dev/null
+}
+
+obligation_index_reports_a_changed_source_no_test_reaches() {
+  local fixture_root="$test_directory/obligations-missing-test"
+  local files_json="$test_directory/obligations-missing-test-files.json"
+  local output_file="$test_directory/obligations-missing-test.json"
+
+  create_obligation_fixture "$fixture_root"
+  printf '%s\n' '[{"filename":"src/Application/Emails/MailboxWidget.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '[]' '.tests[0].referencing_tests' "$output_file"
+  assert_json '"tests/Application.UnitTests"' '.tests[0].expected_test_project' "$output_file"
+}
+
+# The case where reporting a missing test would be most obviously wrong: the change adds the class
+# and its test together. The added test is not in the base tree, so only the diff can show it, and an
+# index that read the tree alone would report a gap the author had already closed.
+obligation_index_credits_a_test_the_change_adds() {
+  local fixture_root="$test_directory/obligations-added-test"
+  local files_json="$test_directory/obligations-added-test-files.json"
+  local output_file="$test_directory/obligations-added-test.json"
+
+  create_obligation_fixture "$fixture_root"
+  printf '%s\n' '[{"filename":"src/Application/Emails/MailboxWidget.cs","status":"added","patch":"@@ -0,0 +1 @@\n+internal sealed class MailboxWidget;"},{"filename":"tests/Application.UnitTests/MailboxWidgetTests.cs","status":"added","patch":"@@ -0,0 +1 @@\n+public void Reads() => new MailboxWidget();"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '[{"path":"tests/Application.UnitTests/MailboxWidgetTests.cs","changed_by_this_pull_request":true}]' \
+    '.tests[0].referencing_tests' "$output_file"
+}
+
+# A test that exists and was left alone is the interesting middle case: the index has to name it
+# rather than stay silent, because a reviewer decides from the file whether the behavior that moved
+# is one it reaches.
+obligation_index_names_a_test_the_change_left_alone() {
+  local fixture_root="$test_directory/obligations-untouched-test"
+  local files_json="$test_directory/obligations-untouched-test-files.json"
+  local output_file="$test_directory/obligations-untouched-test.json"
+
+  create_obligation_fixture "$fixture_root"
+  printf '%s\n' '[{"filename":"src/Application/Emails/MailboxGadget.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '[{"path":"tests/Application.UnitTests/MailboxGadgetTests.cs","changed_by_this_pull_request":false}]' \
+    '.tests[0].referencing_tests' "$output_file"
+}
+
+obligation_index_maps_a_changed_path_to_the_page_that_describes_it() {
+  local fixture_root="$test_directory/obligations-documentation"
+  local files_json="$test_directory/obligations-documentation-files.json"
+  local output_file="$test_directory/obligations-documentation.json"
+
+  create_obligation_fixture "$fixture_root"
+  printf '%s\n' '[{"filename":"src/Application/Emails/MailboxWidget.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '[{"path":"docs/features/widgets.md","changed_by_this_pull_request":false}]' \
+    '.documentation[0].describing_documents' "$output_file"
+}
+
+# A page that documents the convention writes a marker out as an example — `docs/AGENTS.md` does —
+# and reading the whole file would turn that example into a declaration, so every path it names would
+# acquire a page that says nothing about it. Only the preamble counts, and this is the case that says
+# so.
+obligation_index_ignores_a_marker_below_the_preamble() {
+  local fixture_root="$test_directory/obligations-marker-example"
+  local files_json="$test_directory/obligations-marker-example-files.json"
+  local output_file="$test_directory/obligations-marker-example.json"
+
+  create_obligation_fixture "$fixture_root"
+  {
+    printf '# How to declare what a page describes\n\n'
+    printf 'Filler that pushes the example past the preamble.\n\n%.0s' {1..12}
+    printf '<!-- describes: src/Domain/Failures/** -->\n'
+  } > "$fixture_root/docs/conventions.md"
+  printf '%s\n' '[{"filename":"src/Domain/Failures/MailboxFailure.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '0' '.documentation | length' "$output_file"
+}
+
+obligation_index_reports_a_moved_pin_with_no_register_row() {
+  local fixture_root="$test_directory/obligations-register"
+  local files_json="$test_directory/obligations-register-files.json"
+  local output_file="$test_directory/obligations-register.json"
+
+  create_obligation_fixture "$fixture_root"
+  printf '%s\n' '[{"filename":"Directory.Packages.props","status":"modified","patch":"@@ -1 +1,2 @@\n+<PackageVersion Include=\"Something\" Version=\"1.0.0\" />"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '"THIRD_PARTY_LICENSES.md"' '.registers[0].register' "$output_file"
+  assert_json 'false' '.registers[0].register_changed' "$output_file"
+}
+
+# The obligation is discharged, so the pair says so rather than disappearing: a reviewer reads
+# `register_changed` and checks the row, instead of inferring from an empty section that no pin moved.
+obligation_index_records_a_register_the_change_updated() {
+  local fixture_root="$test_directory/obligations-register-met"
+  local files_json="$test_directory/obligations-register-met-files.json"
+  local output_file="$test_directory/obligations-register-met.json"
+
+  create_obligation_fixture "$fixture_root"
+  printf '%s\n' '[{"filename":"Directory.Packages.props","status":"modified","patch":"@@ -1 +1,2 @@\n+<PackageVersion Include=\"Something\" Version=\"1.0.0\" />"},{"filename":"THIRD_PARTY_LICENSES.md","status":"modified","patch":"@@ -1 +1,2 @@\n+| Something | 1.0.0 | MIT |"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json 'true' '.registers[0].register_changed' "$output_file"
+}
+
+# How many tests name a type is a property of how common the name is rather than of the change, so
+# the list is capped per entry as well as per section. The count survives the cut, because a reviewer
+# reading twenty entries needs to know whether that was all of them.
+obligation_index_caps_the_tests_it_lists_for_one_type() {
+  local fixture_root="$test_directory/obligations-common-name"
+  local files_json="$test_directory/obligations-common-name-files.json"
+  local output_file="$test_directory/obligations-common-name.json"
+  local index
+
+  create_obligation_fixture "$fixture_root"
+
+  for index in $(seq 1 25); do
+    printf 'public void Case%s() => new MailboxWidget();\n' "$index" \
+      > "$fixture_root/tests/Application.UnitTests/MailboxWidgetCase${index}Tests.cs"
+  done
+
+  printf '%s\n' '[{"filename":"src/Application/Emails/MailboxWidget.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '25' '.tests[0].referencing_test_count' "$output_file"
+  assert_json '20' '.tests[0].referencing_tests | length' "$output_file"
+  assert_json '1' '.notes | length' "$output_file"
+}
+
+# A migration owes no unit test. `AGENTS.md` makes migrations append-only and generated, so an index
+# that listed them would put the same wrong finding in front of the reviewer on every schema change.
+obligation_index_leaves_migrations_out() {
+  local fixture_root="$test_directory/obligations-migration"
+  local files_json="$test_directory/obligations-migration-files.json"
+  local output_file="$test_directory/obligations-migration.json"
+
+  create_obligation_fixture "$fixture_root"
+  mkdir -p "$fixture_root/src/Infrastructure/Persistence/Migrations"
+  printf '%s\n' '[{"filename":"src/Infrastructure/Persistence/Migrations/20260802_AddWidget.cs","status":"added","patch":"@@ -0,0 +1 @@\n+// generated"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '0' '.tests | length' "$output_file"
+}
+
 # `Publish container image` resolves the repository an image belongs to, and both callers hand it tags alone.
 # Qualifying those tags is therefore part of the same step, and nightly run 30725904948 is what leaving them bare
 # costs: an unqualified name is not a tag to a registry client but an image on the default registry, so the push asked
@@ -1390,6 +1689,10 @@ workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/scripts/verify-full.sh" ]]
   [[ -x "$source_repository_root/scripts/test-agent-workflow.sh" ]]
   [[ ! -e "$source_repository_root/eng/agent-workflow" ]]
+
+  # `Fathom review` invokes this one directly rather than through `bash`, so the mode git records is
+  # part of the contract. The tests above run it through `bash` and would pass without it.
+  [[ -x "$source_repository_root/.github/fathom-review/index-obligations.sh" ]]
 }
 
 run_test verify_fast_runs_restore_build_tests_and_formatting
@@ -1427,6 +1730,17 @@ run_test fathom_review_collects_at_once_when_nobody_has_commented
 run_test fathom_review_waits_before_freezing_a_quiet_conversation
 run_test fathom_review_stops_waiting_at_the_ceiling
 run_test fathom_review_reads_the_newest_comment_whatever_the_order
+run_test every_documentation_page_declares_what_it_describes
+run_test every_describes_pattern_matches_something_that_exists
+run_test obligation_index_reports_a_changed_source_no_test_reaches
+run_test obligation_index_credits_a_test_the_change_adds
+run_test obligation_index_names_a_test_the_change_left_alone
+run_test obligation_index_maps_a_changed_path_to_the_page_that_describes_it
+run_test obligation_index_ignores_a_marker_below_the_preamble
+run_test obligation_index_reports_a_moved_pin_with_no_register_row
+run_test obligation_index_records_a_register_the_change_updated
+run_test obligation_index_caps_the_tests_it_lists_for_one_type
+run_test obligation_index_leaves_migrations_out
 run_test publish_qualifies_every_nightly_tag_with_the_repository_it_resolves
 run_test publish_qualifies_the_release_tags_and_ignores_a_blank_line
 run_test publish_refuses_a_tag_list_with_nothing_to_publish

@@ -1,5 +1,7 @@
 # Secret provisioning
 
+<!-- describes: src/Infrastructure/Secrets/** -->
+
 Every secret-bearing setting holds a *reference* to material the deployment provisions, and the host resolves those references before any worker starts. Under the default `ReferenceOnly` mode with an externally provisioned scheme, a configuration file leaked from a backup or a repository therefore yields credential names and paths, not credentials.
 
 That guarantee is a property of how a deployment is configured, not of MailFathom. Three shapes break it deliberately, and each is a visible choice rather than an accident: `plaintext:` puts the value in the file by definition, the `ReferenceOrInline` and `InlineOnly` modes accept a raw secret in `SecretReference`, and a password written into the connection string never passes through a secret block at all. Each is logged at startup by setting name. When judging what a leaked configuration file exposes, read the deployment's mode and schemes rather than this paragraph.

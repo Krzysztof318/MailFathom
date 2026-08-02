@@ -1,5 +1,7 @@
 # IMAP synchronization
 
+<!-- describes: src/Application/Synchronization/**, src/Domain/Synchronization/**, src/Infrastructure/Mail/** -->
+
 MailFathom now includes the first vertical slice for read-only IMAP synchronization. The implemented slice is intentionally limited to periodic reconciliation so the persistence model, authenticated IMAP adapter seam, application ports, and safety invariants can be reviewed before adding long-lived IDLE or NOTIFY workers.
 
 ## Implemented behavior

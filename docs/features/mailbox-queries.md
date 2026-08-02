@@ -1,5 +1,7 @@
 # Mailbox queries
 
+<!-- describes: src/Application/Emails/ListEmails/**, src/Application/Folders/** -->
+
 MailFathom answers a mailbox listing from its local copy. `ListEmails` is the first read use case: it takes structured
 filters, returns a bounded page of email summaries, issues the cursor that continues the walk, and reports how current
 the local copy is. It reaches no mail server, so a listing behaves the same whether or not IMAP is available — and it

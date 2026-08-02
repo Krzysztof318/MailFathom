@@ -1,5 +1,7 @@
 # Solution structure
 
+<!-- describes: MailFathom.slnx, Directory.Build.props, src/*/*.csproj, tests/*/*.csproj, src/Host/ServiceDefaultsExtensions.cs -->
+
 MailFathom uses a clean-architecture modular monolith. Dependencies point inward from adapters and hosts toward application and domain contracts.
 
 ## Runtime projects

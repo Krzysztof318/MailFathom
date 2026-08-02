@@ -9,6 +9,8 @@ informed:
 
 # Give every first-party failure one base type and a five-digit stable error code
 
+<!-- describes: src/Domain/Failures/**, src/Mcp/Failures/** -->
+
 ## Context and Problem Statement
 
 MailFathom raised seven public sealed exception types across `Domain`, `Application`, and `Infrastructure`, each derived directly from `Exception` and unrelated to the others. `src/AGENTS.md` requires expected failures to carry stable machine-readable codes with safe human-readable messages, and requires MCP boundaries to translate failures into serialized errors that leak no inner-exception detail. Nothing in the type system carried either obligation: the code did not exist, and the message contract was stated in the XML remarks of two types and absent from the other five.

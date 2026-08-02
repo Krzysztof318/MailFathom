@@ -1,5 +1,7 @@
 # The container image
 
+<!-- describes: deploy/docker/** -->
+
 `deploy/docker/Dockerfile` is the only image definition MailFathom has. Both deployment shapes in `deploy/` build from it,
 and nothing else produces an image, so what this page describes is what runs wherever MailFathom runs in a container.
 

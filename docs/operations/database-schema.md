@@ -1,5 +1,7 @@
 # Applying the database schema
 
+<!-- describes: src/Infrastructure/Persistence/Migrations/**, src/AppHost/**, scripts/build-schema-artifact.sh -->
+
 MailFathom never applies a schema change while starting, in any environment. It verifies the migration history and
 refuses to serve against a schema it does not recognize, so bringing a new version up *tells* you a migration is
 outstanding rather than silently applying one — which is what leaves a point at which to take a backup, and what stops

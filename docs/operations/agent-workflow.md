@@ -1,5 +1,7 @@
 # Agent workflow
 
+<!-- describes: scripts/**, .agents/skills/**, .github/workflows/**, .github/fathom-review/** -->
+
 Codex and Claude Code share one repository-owned workflow. Deterministic Git and
 .NET operations live in scripts, while repository-specific judgment lives in
 skills.
@@ -243,6 +245,14 @@ ceiling on every one of them. What a ceiling drops is recorded and ends up in th
 review body, because a partial review that looks complete is worse than one that
 says what it did not see.
 
+A second step then writes `obligations.json` beside them, and unlike everything
+above it calls no API: it reads the base checkout and the collected `files.json`,
+and what it produces is what the change obliges the rest of the repository to do.
+The directory is made read-only after that step rather than after the collection,
+because it is the last one that writes into it — the reviewer reads those files
+and the submission step trusts them, so nothing running in between may rewrite
+the anchor list that validates a finding.
+
 Every one of those collections produces a single JSON array whatever the page
 count. `--paginate` runs `--jq` once per page, so a filter that built an array
 per page would leave a stream of them as soon as a pull request passed a hundred
@@ -433,8 +443,9 @@ against.
 The prompt splits the work into two passes and forbids interleaving them, which
 is what separates coverage from the bar. The first pass reads every entry in
 `files.json` and the resulting file around every hunk, collecting candidates
-without filtering or ranking any of them; it is finished when every file has been
-read, not when the list feels long enough. The second pass confirms each
+without filtering or ranking any of them; it is finished when every file and
+every row of `obligations.json` has been read, not when the list feels long
+enough. The second pass confirms each
 candidate against the file it concerns, names the rule it rests on, and drops
 whatever cannot be confirmed, is already answered by the surrounding file, or was
 already raised by another reviewer.
@@ -446,6 +457,57 @@ it never went back to check is how a review fills with hedged noise. So the cap
 of twenty findings is stated as a ceiling and never a target: a change with two
 defects gets two findings, a change with none gets none, and an entry written to
 lengthen the list is itself a defect in the review.
+
+### What the change obliges elsewhere
+
+A whole class of defect here is invisible in a diff, because the defect *is* the
+absence of a second file from it: a `.cs` file that changed while no test
+followed it, a page that still describes the behavior the change replaced, a
+moved pin with no row in `THIRD_PARTY_LICENSES.md`. Each is a rule in
+`AGENTS.md`, and a reviewer reading only the diff cannot see any of them.
+
+`.github/fathom-review/index-obligations.sh` produces the list of second files.
+It runs from the workspace, which holds the base commit, so a pull request cannot
+supply the index that judges it — the same reason the prompt is read from there —
+and it lives under `.github/` rather than in `scripts/` so that `Protected paths`
+refuses a change to it from anyone but the owner. Calling no API is what lets
+`scripts/test-agent-workflow.sh` run the real script against a fixture tree with
+no `gh` stub at all.
+
+The two kinds of edge it follows are recorded differently, and which one applies
+turns on whether the repository's own rules already derive it.
+
+A production type to its test is **derived and never written down**. `AGENTS.md`
+requires one primary type per file with a matching file name, and
+`tests/<Boundary>.UnitTests/` mirrors `src/<Boundary>/`, so the mapping is
+already a rule the build enforces; a recorded copy could drift from it. The index
+searches the base tree and the tests the change itself adds, because a change
+that adds a class together with its test is the case where reporting a missing
+test would be most obviously wrong.
+
+A source path to the page that documents it is **declared**, because nothing
+derives it: documentation is written about configuration keys and behavior rather
+than about type names, so no name match finds the edge. Each page names its own
+subject in a `describes:` marker under its heading, and `docs/AGENTS.md` states
+the convention. A central index was refused rather than not considered — it would
+go stale exactly when it matters and silently, since the pull request that adds a
+class and forgets its test forgets the edge too, and it would need a freshness
+gate of its own beside the check that already exists. In the page, both ways the
+declaration can rot are loud instead: `scripts/test-agent-workflow.sh` fails a
+page carrying no marker and a marker naming a pattern that matches nothing, so
+deleting a documented class fails the build rather than waiting for a review to
+notice.
+
+Nothing the index emits is a finding. It says where to look, and it is derived
+from file names and declared markers, so it points at obligations a change does
+not always incur — a rename owes no test, a page whose marker covers a path may
+say nothing about the part that moved, a register may already carry the row. The
+prompt requires each row to be confirmed in the file it points at and names what
+confirmation is: the behavior no test reaches, the sentence that stopped being
+true, the row that is missing. A finding whose whole content is that a file was
+not touched is a defect in the review. What survives is a `P2` anchored to the
+changed line that created the obligation, which is both the line the author would
+edit to discharge it and the only kind of line a review comment can reach.
 
 ### When the reviewer stops
 

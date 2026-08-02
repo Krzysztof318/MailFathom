@@ -1,5 +1,7 @@
 # Installing MailFathom
 
+<!-- describes: deploy/** -->
+
 MailFathom runs in three shapes, and each has one authoritative guide. This page is the decision: what each shape
 assumes, what it is good for, and what every shape shares. Follow the linked guide for the commands; the guides do not
 repeat each other and neither does this page.

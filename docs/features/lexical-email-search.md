@@ -1,5 +1,7 @@
 # Lexical email search
 
+<!-- describes: src/Application/Emails/SearchEmails/**, src/Infrastructure/Persistence/** -->
+
 MailFathom searches its local copy for text. `SearchEmails` is the second read use case: it takes a free-text query plus
 the same structured filters a listing takes, and returns a bounded window of matched emails ordered by relevance, each
 carrying the summary a listing would show, a relevance rank, and highlighted extracts of the body around what matched.

@@ -11,3 +11,22 @@ These instructions apply under `docs/` in addition to the repository root instru
 - Update examples, configuration snippets, command names, and diagrams with their corresponding behavior.
 - Check whether `AGENTS.md` files need updates when workflows, structure, tooling, or documentation rules change.
 - Explain purpose, contracts, invariants, data flow, operational impact, and reasons for decisions. Do not merely repeat type names or folder structure.
+- Every page states the part of the repository it describes, in the marker below. `scripts/test-agent-workflow.sh` fails a page that carries none and a marker that names nothing, so a new page without one does not merge.
+
+## What a page describes
+
+A page under `docs/` opens with one marker naming the paths it is written about:
+
+```markdown
+# The MCP endpoint and what protects it
+
+<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/** -->
+```
+
+`Fathom review` reads those markers to tell a pull request which pages its change obliges. Nothing derives that mapping: documentation is written about configuration keys and behavior rather than about type names, so no search over the source finds the page that documents it. The declaration lives in the page for the same reason it is not a central index — it sits in the file somebody is editing, it conflicts with nothing, and both ways it can rot are checked rather than trusted.
+
+- Exactly one marker, in the first fifteen lines. Below that is where a page *quoting* the syntax puts its example, and this file is one of them.
+- Name what makes the page stale, not everything it mentions. `docs/architecture/solution-structure.md` describes the project files and the solution rather than `src/**`, because a new project changes it and a new method does not.
+- `*` stops at a directory separator and `**` crosses one, which is what separates `src/*/*.csproj` from `src/**`. Separate patterns with commas.
+- `describes: none` for a page that documents no part of the repository. A `README`, an `AGENTS.md`, and the ADR templates need no marker at all.
+- An ADR carries one too. It records a decision the code implements, so the code moving away from it is exactly what a reader needs to be told.
