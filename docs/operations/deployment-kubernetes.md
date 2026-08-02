@@ -47,8 +47,8 @@ volume list is how a chart stops being able to say what its pod reads.
 ```yaml
 # values.yaml
 image:
-  registry: docker.io
-  repository: <namespace>/mailfathom
+  registry: ghcr.io             # or docker.io; both carry the same digest
+  repository: krzysztof318/mailfathom
   digest: sha256:…              # or an immutable tag
 
 database:
@@ -93,9 +93,31 @@ config:
 ```
 
 ```bash
-helm install mailfathom deploy/helm/mailfathom --namespace mailfathom --values values.yaml
+helm install mailfathom oci://ghcr.io/krzysztof318/charts/mailfathom \
+  --version <x.y.z> --namespace mailfathom --values values.yaml
 kubectl --namespace mailfathom rollout status deployment/mailfathom
 ```
+
+The chart is published to GHCR as an OCI artifact by the release that publishes the image, under the same version. Its
+`appVersion` is that release, so a chart says which application version it deploys without being unpacked:
+
+```bash
+helm show chart oci://ghcr.io/krzysztof318/charts/mailfathom --version <x.y.z>
+gh attestation verify oci://ghcr.io/krzysztof318/charts/mailfathom:<x.y.z> --repo Krzysztof318/MailFathom
+```
+
+The chart is on GHCR alone, where the image is on both registries. Docker Hub's namespace is `namespace/name` and
+nothing deeper, so a chart pushed there would land in the repository the image already occupies and collide with its
+tags. It is also listed on [Artifact Hub](https://artifacthub.io/packages/helm/mailfathom/mailfathom).
+
+Installing the chart directory out of a checkout is the development path and stays available:
+
+```bash
+helm install mailfathom deploy/helm/mailfathom --namespace mailfathom --values values.yaml
+```
+
+An unpackaged directory states no `appVersion`, because it is not a release of anything, so the version-drift check
+below stands down for it.
 
 A digest is preferred over a tag: it is the only reference a registry cannot repoint, so a rollback goes back to the
 same bytes. `values.schema.json` rejects `latest` and the other moving tags outright.
@@ -279,8 +301,10 @@ and the unpackaged chart directory, which states none because it is not a releas
 
 ### Nightly builds
 
-`image.channel: nightly` deploys unsupported GHCR development output. It requires
-`image.nightlyAcknowledgement: i-understand-this-is-unsupported`, forces `ghcr.io` and rejects any other registry,
+`image.channel: nightly` deploys unsupported development output. It requires
+`image.nightlyAcknowledgement: i-understand-this-is-unsupported`, requires an `image.tag` that carries a `-nightly.`
+identifier and rejects one on the release channel — the channel is decided by what the reference calls itself, not by
+the registry it came from, because both registries carry both channels —
 labels every rendered object `io.mailfathom/release-channel: nightly` — the same value the image carries as
 `io.mailfathom.release-channel`, spelled the way a Kubernetes label prefix has to be — prints a warning in the chart's
 notes, and labels the workload with the nightly identifier rather than with `appVersion` — so a nightly is never
@@ -292,6 +316,10 @@ surfaces that move without notice, and a tag that is deleted once thirty newer n
 `-nightly.<n>-<short revision>` identifier or a digest rather than the moving `nightly` tag. The package is public, so
 the cluster needs no pull secret to reach it; `image.pullSecrets` stays in the chart for a mirror or a private registry
 an operator pulls through instead.
+
+**The nightly channel has no chart of its own.** Install the most recent released chart and point it at the nightly
+image, which is what the values above are for; publishing a chart per nightly would fill the chart's version list with
+references deleted a month later.
 
 ## Verification
 
@@ -305,10 +333,13 @@ helm template verification deploy/helm/mailfathom --values deploy/helm/mailfatho
 `deploy/helm/mailfathom/ci/` holds those two values files. They are excluded from the packaged chart and name no real
 image and no real database.
 
+The release run performs the same two commands as a gate before it publishes anything, against both values files, so a
+chart that does not lint or render is never published. It additionally renders the packaged chart against the digest
+the release published and refuses one that would deploy anything else.
+
 Installing the chart into a real cluster and asserting what only a running deployment can answer — that the pod reaches
 the database through the chart's own wiring and then refuses to serve until the release's schema artifact has been
-applied — belongs to the pipeline that publishes the chart, which issue #187 owns. The repository runs no cluster of its
-own for it.
+applied — is still not done anywhere. The repository runs no cluster of its own for it.
 
 ## Related
 

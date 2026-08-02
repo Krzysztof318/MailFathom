@@ -82,12 +82,15 @@ wrong.
   {{- if ne .Values.image.nightlyAcknowledgement "i-understand-this-is-unsupported" -}}
     {{- fail "image.channel is 'nightly'. A nightly build is not a release: it is whatever main was the night it was built, its schema and configuration may move without notice, no support or upgrade path applies to it, and it is deleted once thirty newer nightlies exist. Set image.nightlyAcknowledgement=i-understand-this-is-unsupported to deploy one anyway." -}}
   {{- end -}}
-  {{- if and .Values.image.registry (ne .Values.image.registry "ghcr.io") -}}
-    {{- fail (printf "image.channel is 'nightly' but image.registry is %q. Nightly builds are published only to ghcr.io; naming another registry would present a nightly as a release from somewhere it was never published." .Values.image.registry) -}}
+  {{- if and .Values.image.tag (not (contains "-nightly." .Values.image.tag)) -}}
+    {{- fail (printf "image.channel is 'nightly' but image.tag is %q, which carries no '-nightly.' identifier. A nightly is a nightly because of what it calls itself, not because of the registry it came from: name the immutable '<x.y.z>-nightly.<n>-<revision>' tag of one night's build rather than a release tag or the moving 'nightly' tag." .Values.image.tag) -}}
   {{- end -}}
 {{- else -}}
   {{- if .Values.image.nightlyAcknowledgement -}}
     {{- fail "image.nightlyAcknowledgement is set while image.channel is 'release'. Remove it, or select the nightly channel deliberately." -}}
+  {{- end -}}
+  {{- if and .Values.image.tag (contains "-nightly." .Values.image.tag) -}}
+    {{- fail (printf "image.channel is 'release' but image.tag is %q, which is a nightly identifier. A nightly carries no release promise; select the nightly channel deliberately, with the acknowledgement it requires." .Values.image.tag) -}}
   {{- end -}}
 {{- end -}}
 
@@ -130,9 +133,6 @@ string when empty so Docker Hub's implicit default is not spelled out inconsiste
 */}}
 {{- define "mailfathom.image" -}}
 {{- $registry := .Values.image.registry -}}
-{{- if eq .Values.image.channel "nightly" -}}
-{{- $registry = "ghcr.io" -}}
-{{- end -}}
 {{- $repository := .Values.image.repository -}}
 {{- if $registry -}}
 {{- $repository = printf "%s/%s" $registry $repository -}}

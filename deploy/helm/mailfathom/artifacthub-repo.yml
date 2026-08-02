@@ -1,0 +1,8 @@
+# The metadata Artifact Hub reads to confirm that whoever registered `oci://ghcr.io/krzysztof318/charts/mailfathom`
+# controls the repository it points at. The release run pushes this file into that same repository under the reserved
+# `artifacthub.io` tag, which is where Artifact Hub looks for it; publishing it from the pipeline rather than by hand is
+# what restores the claim if the repository is ever recreated.
+#
+# The identifier is not a credential. It names a public listing and grants nothing on its own — the claim holds because
+# only someone who can push to the chart repository can put this file there.
+repositoryID: 583b98f1-90bb-42ba-bf17-67b557ad7ecf

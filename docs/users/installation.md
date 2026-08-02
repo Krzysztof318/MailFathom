@@ -11,8 +11,9 @@ checkout of this repository. That is a statement about today, not about the desi
 for released artifacts and will point at them once `0.1.0` ships. Until then, treat what you install as a development
 build of an unreleased product.
 
-What does exist is the nightly channel: `ghcr.io/krzysztof318/mailfathom:nightly` and the `-nightly.<n>-<short revision>` tag of each
-night's build, published from `main` when it has moved. **A nightly is not a release and is a poor place to keep data
+What does exist is the nightly channel: `ghcr.io/krzysztof318/mailfathom:nightly` — or
+`docker.io/krzysztof318/mailfathom:nightly`, which is the same digest in the other registry — and the
+`-nightly.<n>-<short revision>` tag of each night's build, published from `main` when it has moved. **A nightly is not a release and is a poor place to keep data
 you care about** — its schema can be ahead of any migration, it has no upgrade path in either direction, and it is
 deleted once thirty newer ones exist. [What a nightly build risks](../operations/container-image.md#what-a-nightly-build-risks)
 states the whole of it before you choose one. The package is public, so pulling one needs no GHCR login.

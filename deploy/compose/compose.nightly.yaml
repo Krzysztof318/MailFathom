@@ -1,4 +1,4 @@
-# The GHCR nightly channel. Unsupported.
+# The nightly channel. Unsupported.
 #
 # A nightly build is whatever `main` was the night it was built, or when someone dispatched one. It carries no release
 # promise: its schema may be ahead of any published migration, its configuration keys may have moved, and no version
@@ -11,8 +11,8 @@
 #   MAILFATHOM_NIGHTLY_TAG=<the nightly identifier> \
 #   docker compose -f compose.yaml -f compose.nightly.yaml up -d
 #
-# Leaving either variable out fails immediately with the reason. Nothing in compose.yaml reads GHCR, so a deployment
-# that does not name this file cannot reach a nightly image however it is configured.
+# Leaving either variable out fails immediately with the reason. Nothing in compose.yaml names a nightly image, so a
+# deployment that does not name this file cannot reach one however it is configured.
 #
 # What the acknowledgement is, precisely: Compose's `${VAR:?…}` can require that a variable *has* a value and nothing
 # more — it has no equality operator — so any non-empty string gets past it and the phrase above is the one to use
@@ -22,12 +22,16 @@
 # saying it is not a release.
 #
 # The identifier to name is the `<x.y.z>-nightly.<n>-<short revision>` tag of one night's build rather than the moving
-# `nightly` tag, so
-# what a deployment runs does not change under it. The package is public, so the pull needs no registry login.
+# `nightly` tag, so what a deployment runs does not change under it. That identifier is also what makes a nightly a
+# nightly: both registries carry both channels, so the reference says which one it is and the hostname says nothing.
+# The package is public, so the pull needs no registry login.
+#
+# `MAILFATHOM_NIGHTLY_REGISTRY` is therefore a convenience rather than a control. It defaults to the registry this
+# overlay was written against and accepts the other, because the two carry the same digest under the same tag.
 
 services:
   mailfathom:
-    image: ghcr.io/krzysztof318/mailfathom:${MAILFATHOM_NIGHTLY_TAG:?Name the nightly identifier to deploy. Nightly builds are unsupported development output and carry no release promise.}
+    image: ${MAILFATHOM_NIGHTLY_REGISTRY:-ghcr.io}/krzysztof318/mailfathom:${MAILFATHOM_NIGHTLY_TAG:?Name the nightly identifier to deploy. Nightly builds are unsupported development output and carry no release promise.}
     build: !reset null
     labels:
       # Readable from `docker inspect` and from any monitoring that reads labels, so a container started from this

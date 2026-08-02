@@ -1,0 +1,308 @@
+name: Publish Helm chart
+
+# The chart half of a release. It runs after the image is published and is handed the digest that publication produced,
+# because the chart is the one artifact that *names* the other: it renders an image reference and its `appVersion`
+# claims which application version it deploys. A chart published independently of its image is therefore the failure
+# this workflow exists to prevent — a chart in the registry pointing at an image tag no release ever produced.
+#
+# **Release only.** The nightly channel publishes no chart: an operator running a nightly installs the most recent
+# released chart and names the nightly image through `image.tag`, which the chart already supports behind its
+# acknowledgement gate. Publishing thirty chart versions a month would fill the chart's version list with references
+# that are deleted a month later, and Artifact Hub lists every one of them.
+#
+# **GHCR only**, which is the one place the two artifacts diverge. Docker Hub's namespace is flat — a repository is
+# `namespace/name` and nothing deeper — so a chart pushed there would land in `docker.io/<owner>/mailfathom`, the
+# repository the image already occupies, and its `0.1.0` tag would collide with the image's. GHCR admits a path, so the
+# chart lives beside the image rather than on top of it. The asymmetry costs less than the image's would: a chart is
+# pulled once and then lives in whatever repository the operator deploys from, while an image is pulled by every node
+# on every rollout.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'The commit SHA to package from. Resolved by the caller, so the chart and the image come from one tree.'
+        required: true
+        type: string
+      version:
+        description: 'The released application version, which the chart takes as both its own version and its `appVersion`.'
+        required: true
+        type: string
+      image:
+        description: 'The image repository this release published, which the packaged chart is rendered against.'
+        required: true
+        type: string
+      image-digest:
+        description: 'The digest this release published. The chart is verified to deploy this exact artifact.'
+        required: true
+        type: string
+    outputs:
+      chart:
+        description: 'The OCI repository the chart was published to.'
+        value: ${{ jobs.publish.outputs.chart }}
+      digest:
+        description: 'The digest of the published chart artifact.'
+        value: ${{ jobs.publish.outputs.digest }}
+      already-published:
+        description: '`true` when this chart version was already in the registry and nothing was pushed.'
+        value: ${{ jobs.publish.outputs.already-published }}
+
+jobs:
+  publish:
+    name: Publish chart ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      chart: ${{ steps.reference.outputs.chart }}
+      digest: ${{ steps.published.outputs.digest }}
+      already-published: ${{ steps.existing.outputs.already-published }}
+    steps:
+      - name: Check out the commit being released
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # Helm and ORAS are the two tools this job needs. Helm is preinstalled on the hosted runner, so it is read rather
+      # than installed and the version it resolved is recorded in the run; ORAS is not, and its action comes from the
+      # ORAS project itself rather than from a third party republishing it.
+      - name: Record the Helm version this run used
+        run: helm version --template '{{ printf "Helm %s\n" .Version }}'
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+
+      # An OCI repository name is lowercase and this owner's login is not, so the reference is folded here for the same
+      # reason the image's is. `charts/` is what keeps the chart out of the image's repository: both are OCI artifacts
+      # in one registry, and two artifacts sharing a repository would share its tags.
+      - name: Resolve the chart reference
+        id: reference
+        env:
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+
+          owner="$(printf '%s' "$REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+
+          {
+            printf 'registry=ghcr.io\n'
+            printf 'namespace=ghcr.io/%s/charts\n' "$owner"
+            printf 'chart=ghcr.io/%s/charts/mailfathom\n' "$owner"
+          } >> "$GITHUB_OUTPUT"
+
+      # The verification the deployment assets already have, run as a release gate rather than only on demand. Both
+      # channels are rendered, because the templates a release publishes include the ones a nightly install would reach.
+      - name: Lint and render the chart
+        run: |
+          set -euo pipefail
+
+          for values in deploy/helm/mailfathom/ci/*-values.yaml; do
+            printf '\n--- %s ---\n' "$values"
+            helm lint deploy/helm/mailfathom --strict --values "$values"
+            helm template mailfathom deploy/helm/mailfathom --values "$values" > /dev/null
+          done
+
+          echo "The chart lints and renders against every values document the repository verifies it with."
+
+      # `--version` and `--app-version` both come from the release, which is what makes the chart's version answerable
+      # from the tag rather than from a file somebody remembered to bump. `Chart.yaml` therefore declares neither: see
+      # ADR 0004 and docs/operations/release-procedure.md for why exactly one place in this repository writes a version.
+      #
+      # The overview a chart listing renders is the `README.md` inside the package, and the canonical overview is the
+      # root one — the same file Docker Hub's repository page receives, and the file `AGENTS.md` already requires to
+      # carry absolute links because it is read outside this repository. It is copied in at package time rather than
+      # committed under `deploy/helm/mailfathom/`, so there is one overview to keep true instead of two that drift.
+      - name: Package the chart at the released version
+        id: package
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          cp README.md deploy/helm/mailfathom/README.md
+
+          mkdir -p artifacts/chart
+          helm package deploy/helm/mailfathom \
+            --version "$VERSION" \
+            --app-version "$VERSION" \
+            --destination artifacts/chart
+
+          printf 'archive=artifacts/chart/mailfathom-%s.tgz\n' "$VERSION" >> "$GITHUB_OUTPUT"
+
+      # What the packaged chart claims, checked against what the release actually published rather than against the
+      # values that produced it. The rendered reference is asserted by digest, which is the only reference a registry
+      # cannot repoint, so a chart that would deploy a different artifact than this release fails here.
+      - name: Verify the chart deploys the image this release published
+        env:
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+          VERSION: ${{ inputs.version }}
+          IMAGE: ${{ inputs.image }}
+          IMAGE_DIGEST: ${{ inputs.image-digest }}
+        run: |
+          set -euo pipefail
+
+          # Read with `grep` rather than a YAML processor: `helm show chart` prints Chart.yaml, whose `version` and
+          # `appVersion` are top-level scalars, and this job already depends on enough tools.
+          packaged_chart="$(helm show chart "$ARCHIVE")"
+          packaged_version="$(printf '%s\n' "$packaged_chart" | sed -n 's/^version:[[:space:]]*//p')"
+          packaged_app_version="$(printf '%s\n' "$packaged_chart" | sed -n 's/^appVersion:[[:space:]]*//p')"
+
+          if [[ "$packaged_app_version" != "$VERSION" || "$packaged_version" != "$VERSION" ]]; then
+            echo "::error::The packaged chart states version ${packaged_version} and appVersion ${packaged_app_version} rather than ${VERSION}."
+            exit 1
+          fi
+
+          registry="${IMAGE%%/*}"
+          repository="${IMAGE#*/}"
+
+          # The tag the values document carries is cleared, because the chart refuses a values document naming both a
+          # tag and a digest — which is the same refusal that makes a rollback unambiguous.
+          rendered_image="$(helm template mailfathom "$ARCHIVE" \
+            --values deploy/helm/mailfathom/ci/release-values.yaml \
+            --set "image.registry=${registry}" \
+            --set "image.repository=${repository}" \
+            --set 'image.tag=' \
+            --set "image.digest=${IMAGE_DIGEST}" \
+            --show-only templates/deployment.yaml |
+            sed -n 's/^[[:space:]]*image:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p')"
+
+          if [[ "$rendered_image" != "${IMAGE}@${IMAGE_DIGEST}" ]]; then
+            echo "::error::The chart renders '${rendered_image}' rather than ${IMAGE}@${IMAGE_DIGEST}. A released chart has to deploy the artifact its own release published."
+            exit 1
+          fi
+
+          echo "The chart states ${VERSION} and renders ${rendered_image}."
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Helm keeps its own registry credentials rather than reading Docker's, so a job that pushes with both tools logs
+      # in with both. ORAS reads the file `docker/login-action` wrote.
+      - name: Log in to GHCR with Helm
+        env:
+          REGISTRY: ${{ steps.reference.outputs.registry }}
+          REGISTRY_USERNAME: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          printf '%s' "$REGISTRY_PASSWORD" |
+            helm registry login "$REGISTRY" --username "$REGISTRY_USERNAME" --password-stdin
+
+      # A published chart version is immutable, and a re-run of a release must not fail on the version it already
+      # published. Those are the same rule read from both ends: a version that is already there and states this
+      # release's application version is this release's chart, so the push is skipped; one that states a different
+      # application version is somebody else's, and replacing it would change what an installed chart means.
+      - name: Check whether this chart version is already published
+        id: existing
+        env:
+          CHART: ${{ steps.reference.outputs.chart }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if ! published="$(helm show chart "oci://${CHART}" --version "$VERSION" 2>/dev/null)"; then
+            echo "${CHART}:${VERSION} is not in the registry yet."
+            printf 'already-published=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          published_app_version="$(printf '%s\n' "$published" | sed -n 's/^appVersion:[[:space:]]*//p')"
+
+          if [[ "$published_app_version" != "$VERSION" ]]; then
+            echo "::error::${CHART}:${VERSION} already exists and deploys application version ${published_app_version} rather than ${VERSION}. A published chart version is immutable; publish a new version instead of replacing this one."
+            exit 1
+          fi
+
+          echo "${CHART}:${VERSION} is already published from this release. Nothing is pushed."
+          printf 'already-published=true\n' >> "$GITHUB_OUTPUT"
+
+      - name: Push the chart
+        if: steps.existing.outputs.already-published != 'true'
+        env:
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+          NAMESPACE: ${{ steps.reference.outputs.namespace }}
+        run: |
+          set -euo pipefail
+
+          helm push "$ARCHIVE" "oci://${NAMESPACE}"
+
+      - name: Resolve the published chart digest
+        id: published
+        env:
+          CHART: ${{ steps.reference.outputs.chart }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          # `manifest fetch --descriptor` rather than `oras resolve`, because the descriptor form is what every ORAS
+          # version since 1.0 answers with and the digest is the one field of it this job needs.
+          digest="$(oras manifest fetch --descriptor "${CHART}:${VERSION}" | jq -r '.digest')"
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+
+      # The same signed statement the image carries, so what an operator installs into a cluster is traceable to the
+      # workflow and the commit that produced it. `gh attestation verify oci://<chart>:<version>` is the check.
+      - name: Attest the published chart
+        if: steps.existing.outputs.already-published != 'true'
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ steps.reference.outputs.chart }}
+          subject-digest: ${{ steps.published.outputs.digest }}
+          push-to-registry: true
+
+      # Artifact Hub verifies that whoever registered a repository controls it by reading a metadata artifact under a
+      # reserved tag in that same repository. Pushing it on every release rather than once by hand is what makes it
+      # self-healing: the claim is restored by the next release if the repository is ever recreated, and pushing an
+      # unchanged file costs one small artifact.
+      #
+      # The layer's media type and the `artifacthub.io` tag are Artifact Hub's, not a convention chosen here. The file
+      # is copied into a directory of its own first, because ORAS records the path it was given as the layer title and
+      # Artifact Hub reads the file by name.
+      - name: Publish the Artifact Hub ownership claim
+        if: steps.existing.outputs.already-published != 'true'
+        env:
+          CHART: ${{ steps.reference.outputs.chart }}
+        run: |
+          set -euo pipefail
+
+          claim_directory="$(mktemp -d)"
+          cp deploy/helm/mailfathom/artifacthub-repo.yml "$claim_directory/artifacthub-repo.yml"
+
+          (
+            cd "$claim_directory"
+            oras push "${CHART}:artifacthub.io" \
+              --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml \
+              artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml
+          )
+
+      - name: Summarize the chart publication
+        env:
+          CHART: ${{ steps.reference.outputs.chart }}
+          VERSION: ${{ inputs.version }}
+          DIGEST: ${{ steps.published.outputs.digest }}
+          IMAGE: ${{ inputs.image }}
+          IMAGE_DIGEST: ${{ inputs.image-digest }}
+          ALREADY_PUBLISHED: ${{ steps.existing.outputs.already-published }}
+        run: |
+          set -euo pipefail
+
+          {
+            printf '### Helm chart %s\n\n' "$VERSION"
+
+            if [[ "$ALREADY_PUBLISHED" == 'true' ]]; then
+              printf 'Already published at this version; nothing was pushed.\n\n'
+            fi
+
+            printf '| | |\n| --- | --- |\n'
+            printf '| Chart | `%s` |\n' "$CHART"
+            printf '| Digest | `%s` |\n' "$DIGEST"
+            printf '| Deploys | `%s@%s` |\n\n' "$IMAGE" "$IMAGE_DIGEST"
+            printf '```\nhelm install mailfathom oci://%s --version %s\n```\n' "$CHART" "$VERSION"
+          } >> "$GITHUB_STEP_SUMMARY"

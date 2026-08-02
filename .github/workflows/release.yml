@@ -108,6 +108,29 @@ jobs:
       # A release publishes nothing while a fixable vulnerability is in it. The nightly channel reports the same finding
       # and publishes anyway; that difference is the channels' whole point.
       block-on-vulnerabilities: true
+    secrets:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  # The chart is published after the image and against the digest that publication produced, because a chart names the
+  # image it deploys and a chart pointing at an artifact no release produced is worse than no chart at all. A failure
+  # here leaves the release incomplete rather than half-published: the image is out, the chart is not, and re-running
+  # the release publishes the chart without rebuilding or re-pushing anything.
+  publish-chart:
+    name: Publish the Helm chart
+    needs:
+      - assert
+      - publish
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/publish-helm-chart.yml
+    with:
+      ref: ${{ needs.assert.outputs.revision }}
+      version: ${{ needs.assert.outputs.version }}
+      image: ${{ needs.publish.outputs.image }}
+      image-digest: ${{ needs.publish.outputs.digest }}
 
   announce:
     name: Publish the GitHub release
@@ -115,6 +138,7 @@ jobs:
       - assert
       - schema-artifact
       - publish
+      - publish-chart
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -149,7 +173,9 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           VERSION: ${{ needs.assert.outputs.version }}
           IMAGE: ${{ needs.publish.outputs.image }}
+          DOCKER_HUB_IMAGE: ${{ needs.publish.outputs.docker-hub-image }}
           DIGEST: ${{ needs.publish.outputs.digest }}
+          CHART: ${{ needs.publish-chart.outputs.chart }}
           SCHEMA_ARTIFACT: ${{ needs.schema-artifact.outputs.artifact }}
           SCHEMA_CHECKSUM: ${{ needs.schema-artifact.outputs.checksum }}
           SCHEMA_MIGRATIONS: ${{ needs.schema-artifact.outputs.migrations }}
@@ -165,8 +191,16 @@ jobs:
               "$REPOSITORY" "$RELEASE_TAG"
             printf 'carries the releases before this one and the surfaces each of them broke.\n'
 
-            printf '\n## The published image\n\n```\ndocker pull %s:%s\ndocker pull %s@%s\n```\n' \
-              "$IMAGE" "$VERSION" "$IMAGE" "$DIGEST"
+            printf '\n## The published image\n\n'
+            printf 'Both registries carry the same manifest list under the same digest, so the one to pull from is '
+            printf 'whichever your environment already reaches.\n\n'
+            printf '```\ndocker pull %s:%s\ndocker pull %s@%s\n```\n\n' "$IMAGE" "$VERSION" "$IMAGE" "$DIGEST"
+            printf '```\ndocker pull %s:%s\ndocker pull %s@%s\n```\n' \
+              "$DOCKER_HUB_IMAGE" "$VERSION" "$DOCKER_HUB_IMAGE" "$DIGEST"
+
+            printf '\n## The Helm chart\n\n```\nhelm install mailfathom oci://%s --version %s\n```\n' "$CHART" "$VERSION"
+            printf '\nThe chart is published to GHCR alone, because Docker Hub has no repository path to hold it beside '
+            printf 'the image. Its `appVersion` is this release, and it deploys the digest above.\n'
 
             printf '\n## The database schema\n\n'
             printf 'Apply `%s` before rolling this version out, and take a backup first. ' "$schema_artifact_name"

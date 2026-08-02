@@ -8,3 +8,6 @@
 *.orig
 # The values files below exist for the repository's own verification and are not part of what an operator installs.
 ci/
+# Artifact Hub reads this from a reserved tag in the chart's OCI repository, which the release run pushes it to. It
+# says who owns a listing rather than anything about the deployment, so it does not travel inside the package.
+artifacthub-repo.yml
