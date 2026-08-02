@@ -110,7 +110,17 @@ The database has not applied 1 migration(s) this build defines: 20260731132336_I
 
 That is the explicit schema step described in [installing MailFathom](installation.md#what-every-shape-needs):
 MailFathom verifies the schema and refuses to serve against one it does not recognize, and applying migrations is a
-step you take, with a backup first once there is data to lose. Apply the schema, start again, and the refusal is gone.
+step you take, with a backup first once there is data to lose.
+
+What you apply is one SQL file. A release attaches it; from a checkout, generate it:
+
+```bash
+scripts/build-schema-artifact.sh      # artifacts/schema/mailfathom-schema-<version>.sql
+```
+
+Read it, apply it with any PostgreSQL client, and start again — the refusal is gone. The role that applies it needs
+more privilege than the one MailFathom connects as, which
+[applying the database schema](../operations/database-schema.md) explains along with the grants that leaves behind.
 
 ## 5. Verify it is healthy
 

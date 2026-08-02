@@ -19,9 +19,11 @@ Watch it become ready:
   kubectl --namespace {{ .Release.Namespace }} rollout status deployment/{{ include "mailfathom.fullname" . }}
 
 MailFathom verifies the database schema while starting and refuses to serve against one it does not recognize. It never
-applies a migration itself, in any environment, and neither does this chart. If the pod reports a pending migration,
-apply the schema to {{ .Values.database.name }} yourself and let the rollout continue; the reviewed schema artifact and
-the Job that runs it are tracked by MailFathom issue #126.
+applies a migration itself, in any environment, and neither does this chart: a hook Job would be the automatic
+migration that arrangement prevents, and an initContainer would run one apply per replica. If the pod reports a pending
+migration, back up {{ .Values.database.name }}, read the release's mailfathom-schema-<version>.sql, apply it, and
+let the rollout continue. docs/operations/database-schema.md states the privileges it needs and what each failure
+means.
 {{ if not .Values.ingress.enabled }}
 No Ingress is configured, so the endpoint is reachable only from inside the cluster. Reach it for a check with:
 

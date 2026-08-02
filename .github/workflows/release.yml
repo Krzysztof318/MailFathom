@@ -74,10 +74,26 @@ jobs:
             printf 'tags<<TAGS\n%s\nTAGS\n' "$image_tags"
           } >> "$GITHUB_OUTPUT"
 
+  # The artifact a released installation applies, built from the definition both channels share. A release blocks its
+  # image push on it; docs/operations/database-schema.md is what an operator then does with the file.
+  schema-artifact:
+    name: Schema artifact
+    needs:
+      - assert
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-schema-artifact.yml
+    with:
+      ref: ${{ needs.assert.outputs.revision }}
+      version: ${{ needs.assert.outputs.version }}
+
   publish:
     name: Publish
     needs:
       - assert
+      # A release that cannot produce its schema artifact publishes no image. An operator handed an image and no way to
+      # reach the schema it requires has a deployment that starts, fails the startup gate, and stays down.
+      - schema-artifact
     permissions:
       contents: read
       packages: write
@@ -97,6 +113,7 @@ jobs:
     name: Publish the GitHub release
     needs:
       - assert
+      - schema-artifact
       - publish
     runs-on: ubuntu-latest
     permissions:
@@ -107,25 +124,54 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Download the schema artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: schema-artifact
+          path: artifacts/schema
+
       # The notes are the changelog section, not a list of pull-request titles: no arrangement of titles can state that
       # a release cannot be deployed over the previous release's data, which is the most important sentence a MailFathom
       # release note will ever carry.
+      #
+      # The schema section beside it is the per-release record the artifact needs to be usable years from now: which
+      # migrations it carries, the checksum that identifies the file, and the ordering and backup point applying it
+      # assumes. The reasoning behind each of those lives once, in docs/operations/database-schema.md, and the notes link
+      # to it rather than restating it per release.
       - name: Create or update the release from the changelog
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
           VERSION: ${{ needs.assert.outputs.version }}
           IMAGE: ${{ needs.publish.outputs.image }}
           DIGEST: ${{ needs.publish.outputs.digest }}
+          SCHEMA_ARTIFACT: ${{ needs.schema-artifact.outputs.artifact }}
+          SCHEMA_CHECKSUM: ${{ needs.schema-artifact.outputs.checksum }}
+          SCHEMA_MIGRATIONS: ${{ needs.schema-artifact.outputs.migrations }}
         run: |
           set -euo pipefail
 
           notes_file="$(mktemp)"
+          schema_artifact_name="$(basename "$SCHEMA_ARTIFACT")"
 
           {
             bash scripts/read-changelog-section.sh "$VERSION"
             printf '\n## The published image\n\n```\ndocker pull %s:%s\ndocker pull %s@%s\n```\n' \
               "$IMAGE" "$VERSION" "$IMAGE" "$DIGEST"
+
+            printf '\n## The database schema\n\n'
+            printf 'Apply `%s` before rolling this version out, and take a backup first. ' "$schema_artifact_name"
+            printf 'MailFathom applies no schema change while starting and refuses to serve against a schema it does '
+            printf 'not recognize, so the order is: back up, apply the script, then deploy the image.\n\n'
+            printf '| | |\n| --- | --- |\n'
+            printf '| Artifact | `%s` |\n' "$schema_artifact_name"
+            printf '| SHA-256 | `%s` |\n' "$SCHEMA_CHECKSUM"
+            printf '| Migrations | `%s` |\n\n' "$SCHEMA_MIGRATIONS"
+            printf 'The script is idempotent, so an installation already carrying some of those migrations takes only '
+            printf 'what it is missing. [Applying the database schema](https://github.com/%s/blob/%s/docs/operations/database-schema.md)' \
+              "$REPOSITORY" "$RELEASE_TAG"
+            printf ' states the privileges it needs, the locks it takes, and what each startup failure means.\n'
           } > "$notes_file"
 
           # Idempotent, because a re-run of a release must not fail on the release it already created.
@@ -134,3 +180,10 @@ jobs:
           else
             gh release create "$RELEASE_TAG" --title "MailFathom $VERSION" --notes-file "$notes_file" --verify-tag
           fi
+
+          # --clobber for the same reason the release itself is created idempotently: a re-run replaces the assets it
+          # uploaded rather than failing on them.
+          gh release upload "$RELEASE_TAG" \
+            "artifacts/schema/${schema_artifact_name}" \
+            "artifacts/schema/${schema_artifact_name}.sha256" \
+            --clobber

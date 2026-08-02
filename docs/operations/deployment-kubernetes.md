@@ -112,26 +112,23 @@ DatabaseSchemaOutOfDateException: The database has not applied 1 migration(s) th
 ```
 
 That is the design, and the chart deliberately renders nothing that answers it: a Job carrying a Helm hook would be the
-automatic migration this whole arrangement exists to prevent, and one without a hook would still need a schema artifact
-the project has not published.
+automatic migration this whole arrangement exists to prevent, and an `initContainer` would run one apply per replica.
 
-> **The schema artifact does not exist yet.** The reviewed, idempotent artifact and the step that applies it are
-> tracked by [issue #238](https://github.com/Krzysztof318/MailFathom/issues/238). Until it ships, apply the schema to the
-> database yourself before the pod can become ready — a `psql` Job of your own, a migration run from outside the
-> cluster, or whatever your database's operations already use. Take a backup first, and read the SQL before applying
-> it.
+The answer is `mailfathom-schema-<version>.sql`, attached to every release. Take a backup, read the SQL, and run it
+from wherever the database is already reachable:
 
-Two things about the role that applies it are worth knowing now, because they outlive whatever runs the SQL:
+```bash
+kubectl --namespace databases port-forward service/postgres 5432:5432 &
 
-**It needs privileges the service's role does not.** The schema installs the `vector` extension, which PostgreSQL does
-not permit an ordinary role to create. Either install the extension out of band, as the Compose deployment's
-initialization script does, or run the schema step as a more privileged role.
+psql "postgresql://mailfathom_migrator@127.0.0.1:5432/mailfathom" \
+  --set ON_ERROR_STOP=on \
+  --file mailfathom-schema-0.1.0.sql
+```
 
-**A separate role leaves ownership behind.** PostgreSQL makes whoever runs the DDL the **owner** of every table,
-sequence, and index it creates, and ownership grants nothing to anybody else — so a schema applied by `mailfathom_migrator`
-leaves MailFathom failing on permission errors against a schema that plainly exists. Grant `database.user` the DML
-privileges it needs and set `ALTER DEFAULT PRIVILEGES` so later migrations are covered too. Grant rather than transfer
-ownership: handing the tables over would leave the migrator unable to alter them next time.
+The role that applies it needs privileges `database.user` does not — the `vector` extension is one an ordinary role may
+not create — and PostgreSQL leaves whoever ran the DDL owning every object it created, so `database.user` needs grants
+rather than a transfer of ownership. [Applying the database schema](database-schema.md) states both in full, along with
+the locks the script takes and what each startup failure means.
 
 ## TLS and reaching it
 
@@ -242,6 +239,10 @@ them together: a grace period shorter than the drain kills the process with the 
 
 ## Upgrading, rolling back, and uninstalling
 
+Back up the database and apply the new release's `mailfathom-schema-<version>.sql` **before** the upgrade. The new pod
+refuses to start against a schema that is behind it, and the old pod keeps serving against a schema that is ahead — so
+that order is the one with no window in which nothing serves.
+
 ```bash
 helm upgrade mailfathom deploy/helm/mailfathom --namespace mailfathom --values values.yaml
 helm rollback mailfathom <revision> --namespace mailfathom
@@ -249,8 +250,9 @@ helm uninstall mailfathom --namespace mailfathom
 ```
 
 `helm rollback` returns the workload to a previous image. **It does not return the schema.** A migration only moves
-forward, so rolling back to an image that expects an earlier schema means restoring the database from a backup taken
-before the migration.
+forward, so returning to the earlier schema means restoring the database from the backup taken before the migration;
+[rolling back](database-schema.md#rolling-back) states when that is necessary and when rolling only the image back is
+enough.
 
 Uninstalling removes every object the chart owns. It removes **no** data: the database is not the chart's, and the
 Secret was created outside it and stays.
@@ -301,13 +303,15 @@ helm template verification deploy/helm/mailfathom --values deploy/helm/mailfatho
 image and no real database.
 
 Installing the chart into a real cluster and asserting what only a running deployment can answer — that the pod reaches
-the database through the chart's own wiring and then refuses to serve against a schema no reviewed artifact has applied
-— belongs to the release pipeline issue #156 owns, together with building and publishing the assets. The repository
+the database through the chart's own wiring and then refuses to serve until the release's schema artifact has been
+applied — belongs to the release pipeline issue #156 owns, together with building and publishing the assets. The repository
 runs no cluster of its own for it.
 
 ## Related
 
-- [The container image](container-image.md) — what is inside it, how it runs, and the schema script
+- [Applying the database schema](database-schema.md) — the release artifact, the privileges it needs, and the three
+  startup failures it answers
+- [The container image](container-image.md) — what is inside it, how it runs, and why it carries no schema tool
 - [Docker Compose](deployment-compose.md) — the same contract in the other shape
 - [The platform TLS policy](platform-tls-policy.md) — for a mail server whose handshake the pod's own OpenSSL refuses;
   `config.extraEnvironment` names the file, and the chart currently has no hook for mounting it
