@@ -113,7 +113,7 @@ jobs:
       # The same cache and the same key as every other job that restores, for the reason
       # `build-test-format-and-migrations.yml` records.
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
