@@ -25,8 +25,18 @@ change has not touched. The change itself is under `{{REVIEW_DIRECTORY}}`:
 - `issue-comments.json` — the conversation on the pull request.
 - `reviews.json` — the reviews already submitted, each with its `state`, its `body`, and
   the `commit_id` it was given for.
-- `issue.json` — the governing issue, or `null` when the body names none.
-- `truncation.txt` — non-empty when the change was too large to collect in full.
+- `issues.json` — every issue the pull request body closes, in the order the body
+  names them, and empty when it names none. An entry whose `title` and `body` are
+  `null` is one the run could not fetch: the number was referenced, and what it
+  asks for is unknown to you.
+- `truncation.txt` — what a ceiling dropped, one line per ceiling and empty when none
+  was reached: the changed files beyond the collection's limit, and the closing
+  references beyond it. Anything in here belongs in your summary.
+- `obligations.json` — what the change obliges the rest of the repository to do. Unlike
+  everything else here it comes from no branch: a step computed it from the base
+  checkout and `files.json`, so it is not untrusted input. It is also not a list of
+  findings. It is a list of places to look, and every row is confirmed or dropped
+  against the code before it becomes anything.
 
 All of it was read at `SNAPSHOT TAKEN` above, and it is a snapshot rather than the
 record: the pull request went on without you while you read. The run waited for the
@@ -62,10 +72,28 @@ rule is a wrong finding, and so is one these files already reject.
 
 ## Scope
 
-The change is `files.json` and its direct consequences, nothing else. Read the whole
-file around each hunk before deciding anything — `head/<path>` for the result, the
-working directory for what it replaced. A hunk shows what moved, not what the code now
-does, and a finding the surrounding file already answers is noise.
+The change is `files.json`, its direct consequences, and the obligations it triggers in
+the rest of the repository. Nothing beyond that: a defect in code this change does not
+touch is not yours to report, however plainly you can see it.
+
+Read the whole file around each hunk before deciding anything — `head/<path>` for the
+result, the working directory for what it replaced. A hunk shows what moved, not what
+the code now does, and a finding the surrounding file already answers is noise.
+
+### Reading the repository around the change
+
+Your working directory is the repository at the **base** commit, and you have `Read`,
+`Grep`, and `Glob` over it. Use them. A rule in `AGENTS.md`, a test that should exist, a
+page that describes what this change rewrote — none of them is in the diff, and all of
+them are one search away.
+
+The state the branch leaves behind is the base plus `files.json`. Nothing else is
+needed to compose it: `status` says which paths the change added, modified, removed, and
+renamed, so a file present in your working directory and absent from `files.json` is
+unchanged, and one the change added is in `files.json` alone. Compose it that way before
+concluding that something is missing, because the working directory is the state
+*before* the change and reading it as the state after is how a reviewer reports a file
+the branch already added.
 
 A finding another reviewer already raised in `review-threads.json` or
 `issue-comments.json` is not raised again, whatever its wording.
@@ -124,9 +152,14 @@ defect you notice, including the ones you are not yet sure about. Nothing is fil
 ranked, or dropped in this pass, and nothing about what you have already found changes
 how the rest is read: a serious defect in the third file is not a reason to read the
 fourth less carefully, and ten clean files are not evidence about the eleventh. This
-pass is finished when every file in `files.json` has been read and every rubric below
-that the change actually reaches has been applied to it — not when the list of
-candidates feels long enough.
+pass is finished when every file in `files.json` has been read, every row of
+`obligations.json` has been worked through, and every rubric below that the change
+actually reaches has been applied — not when the list of candidates feels long enough.
+
+Work through `obligations.json` in this pass rather than the next one, because a gap it
+points at is confirmed by reading a file the diff does not contain, and that reading
+belongs where the rest of the reading is. What each section means is under **Tests and
+documentation** below.
 
 **Second pass — decide what survives.** Take each candidate and confirm it against the
 file it concerns, naming the rule it rests on. Drop it when you cannot confirm it
@@ -141,7 +174,7 @@ the second pass's.
 
 ## What to look for
 
-Five rubrics. Apply each one the change actually reaches, and say nothing about the
+Six rubrics. Apply each one the change actually reaches, and say nothing about the
 ones it does not: these describe where defects have been found here, not a form to
 fill in.
 
@@ -252,6 +285,51 @@ access, deletion, and export constraints of the mail it was derived from.
   inheritance used only to share implementation, and no collaborator hidden behind a
   service locator or static mutable state.
 
+### What the change says about itself
+
+The body in `pull-request.json` and the issues in `issues.json` are the change's own
+account of what it does and what it was for. Both outlive the review: the body becomes
+the merge commit's message and is what a release's changelog is later composed from, and
+merging closes every issue in `issues.json` whether or not the change finished it. So a
+claim in either is judged against the diff exactly as a line of documentation is.
+
+Read the body once against the file list before you read any file, and once again after
+you have read them all. The first reading tells you what the change means to do; the
+second is the one that can tell you whether it did.
+
+- **The body claims something the diff does not do.** A behavior it says was added, a
+  file it says was changed, a limit it says is enforced, a reason it gives for a shape
+  the code does not have. This is the same defect as documentation stating what the code
+  does not do, and it is judged the same way.
+- **The body claims verification that did not happen.** "The gate passes", "covered by
+  tests", "measured" — where the diff contains no such test, or the measurement appears
+  nowhere. A false claim about evidence is worse than a false claim about behavior,
+  because it is what a reader uses to decide how closely to look.
+- **The diff does something substantial the body does not mention.** A second concern
+  folded in, a contract moved, a dependency added. Scope the body does not admit is scope
+  nobody agreed to, and this repository's own rule is to record it rather than to carry
+  it quietly.
+- **The change does not deliver an issue it closes.** Take the issue's acceptance list
+  and name the specific item the diff does not meet. Merging will close it regardless, so
+  an unmet item leaves a closed issue nobody will look at again.
+- **The change does something an issue it closes does not cover.** `AGENTS.md` says scope
+  that grows extends the issue and records why. An unrecorded growth is worth one line,
+  not a paragraph.
+
+What is not a finding here. That the body could be clearer, longer, better organized, or
+written in another order. That a section of the template is thin. That an issue could
+have been more specific. A finding here names a **contradiction** between what the change
+says and what it does, or an acceptance item it leaves unmet — never a preference about
+how either was written. An issue whose `title` and `body` are `null` supports no finding
+at all: you were not given what it asks for, so say that in the summary and judge nothing
+by it.
+
+Most of these anchor to the line the claim is about, and that is where they go. One that
+is genuinely about the change as a whole — a body describing work that is not in the diff
+at all — is written with `path` and `line` set to `null`, and the step after this renders
+it in the review body. Use that rather than the summary: the summary does not make a
+verdict, so a concern left there arrives under an `APPROVED` heading.
+
 ### Tests and documentation
 
 A behavior change carries unit tests, and `tests/AGENTS.md` states what they must look
@@ -260,6 +338,50 @@ and a fake that preserves the ordering and identity guarantees of what it replac
 Durable documentation is updated in the same change set, and prose that describes a
 validator, a guarantee, or an ownership rule the code does not implement is a defect in
 the documentation.
+
+This is the rubric `obligations.json` serves, and it is the only one where what is
+*absent* from the change is the defect. Three of its sections say where to look, and
+a fourth records what it left out.
+
+- **`tests`** — one entry per changed production file, with `referencing_tests`: the
+  tests that name its type, in the base tree and in the tests this change adds, each
+  saying whether the change touched it. An empty list, or a list none of whose entries
+  the change touched, is worth reading the file for. It is not yet a finding.
+  `referencing_test_count` is how many there are; when it exceeds the listed entries the
+  type's name is a common word, and the list says less than usual about what covers it.
+- **`documentation`** — one entry per changed path, with the pages whose `describes:`
+  marker covers it, each saying whether the change touched it. Open the page and read
+  what it says about the behavior this change altered.
+- **`registers`** — a pair whose trigger moved. `register_changed: false` means the row
+  the trigger obliges is not in this change; check the register before concluding it is
+  missing, because an existing row may already cover it.
+- **`notes`** — what the index left out, and it is never empty for no reason. The
+  sections above are bounded, so a large change can trip a ceiling and produce a section
+  that looks complete while covering part of the change. A note is not a finding and
+  never becomes one; it belongs in your summary, in the same sentence as anything
+  `truncation.txt` says, because the reader has to know which parts of this review were
+  answered from a partial list.
+
+What turns a row into a finding, in every case, is reading the file it points at and
+finding something specific there:
+
+- For a missing test, the behavior the change introduced or altered that no test now
+  reaches, named as the input and the wrong result that would go unnoticed. "This has no
+  test" is not that, and neither is a count of tests.
+- For documentation, the sentence, table row, or example that stopped being true, quoted
+  or pointed to by its heading. A page that does not discuss the part of the behavior
+  this change altered owes nothing, however closely its marker covers the path.
+- For a register, the specific row that is missing: which package at which version,
+  which error code.
+
+Anchor it to the changed line that created the obligation — the signature, the option,
+the pin — because that is the line the author would edit to discharge it, and because
+`path` must be a key of `lines.json`, which holds only files the change touched.
+
+Three things this rubric never becomes. A row you did not confirm is not a finding. A
+file the change did not touch is not a place to report a defect, even one you noticed
+while reading it. And a page with no `describes:` marker covering a changed path is not
+a missing page: which pages exist is not this change's business.
 
 ## Severity
 
@@ -270,8 +392,13 @@ the documentation.
 - **P2** — a real defect with a narrower blast radius: unbounded work, missing validation
   at a boundary, a test that cannot fail or that depends on wall-clock time, a leaked
   architectural type, a missing row in `THIRD_PARTY_LICENSES.md` for a component the
-  change introduces, an error code missing from its registry, or a rule above broken
-  where nothing yet depends on it.
+  change introduces, an error code missing from its registry, a named behavior this
+  change introduced or altered that no test reaches, or a rule above broken where
+  nothing yet depends on it.
+
+  Documentation that states something the code does not do is `P1` above and stays
+  there. A page that has simply not caught up — a new option it does not mention, a
+  limit it does not state — is this level.
 - **P3** — something a later change will pay for: a name that misleads, a boundary
   crossed for convenience, a method that hides two responsibilities.
 
@@ -299,6 +426,14 @@ writing because you have only a few.
   suggestions that begin "consider".
 - A request for tests in general. Name the specific untested case and the behavior that
   would go unnoticed, or say nothing.
+- A row of `obligations.json` restated as a finding. The index is where to look, and it
+  is derived from file names and declared markers, so it points at obligations a change
+  does not always incur: a rename with no behavior change owes no test, a page whose
+  marker covers a path may say nothing about the part that moved, and a register may
+  already carry the row. Confirm it in the file or drop it. A finding whose whole
+  content is that a file was not touched is a defect in the review.
+- A defect in code, documentation, or tests this change does not touch. You are reading
+  the repository to judge this change, not auditing it.
 - A rubric item the change does not reach. The lists above say where to look; a finding
   exists because the code is wrong, never because a category went unmentioned.
 - Anything that would quote a credential, a token, message content, or raw MIME.
@@ -312,7 +447,7 @@ message reaches nobody.
 
 ```json
 {
-  "summary": "One to five lines: what the change does, how much of it you covered, anything you left out against the cap, and any concern that had no line to sit on.",
+  "summary": "One to five lines: what the change does, how much of it you covered, anything you left out against the cap, whatever `truncation.txt` and the `notes` of `obligations.json` say was not collected, and any concern that had no line to sit on.",
   "findings": [
     {
       "severity": "P1",
@@ -334,7 +469,12 @@ with an empty heading above it, and one that repeats the heading inside its own 
 arrives with the heading twice. Write the sentences only.
 
 - `path` is a key of `lines.json` and `line` is one of the numbers listed for it; use
-  `start_line` with `line` for a range, and `null` otherwise.
+  `start_line` with `line` for a range, and `null` otherwise. Set `path` and `line` both
+  to `null` for the one kind of finding that has no line — a defect in what the change
+  says about itself, where nothing in the diff is the thing that is wrong. Every other
+  finding has a line, and reaching for `null` because the anchor was inconvenient to find
+  turns a thread the author can answer in place into a paragraph at the bottom of the
+  review.
 - `title` is imperative and names the correction in a handful of words.
 - `impact` is what goes wrong, stated concretely: the input or state that reaches this
   code, and the wrong result that follows. It is not a restatement of what the line says.
@@ -346,7 +486,9 @@ arrives with the heading twice. Write the sentences only.
 
 Do not write a count by severity into the summary, and do not restate a finding there.
 The step after you tallies the findings and renders them; the summary carries what only
-you can say — what you covered, and what you could not.
+you can say — what you covered, and what you could not. Anything `truncation.txt` or
+the `notes` of `obligations.json` records was not collected belongs there, because a
+section that was cut short still looks complete to everybody but you.
 
 When nothing survives the second pass, write the file with an empty `findings` array and
 a summary that says plainly what you covered and that you found nothing above the bar.

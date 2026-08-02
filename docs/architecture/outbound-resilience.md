@@ -1,5 +1,7 @@
 # Outbound resilience
 
+<!-- describes: src/Application/Resilience/**, src/Infrastructure/Resilience/**, src/Domain/Transport/** -->
+
 MailFathom calls dependencies it does not control: IMAP servers, SMTP servers, PostgreSQL, and chat and embedding
 providers. Each of them fails in ways that clear on their own and in ways that never will, and the difference decides
 whether repeating a call is recovery or damage. This page describes the one model that decision is made in.

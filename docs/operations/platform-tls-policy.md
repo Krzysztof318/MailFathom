@@ -1,5 +1,7 @@
 # The platform TLS policy and legacy mail servers
 
+<!-- describes: deploy/openssl/**, src/Infrastructure/Mail/**, src/Infrastructure/Certificates/** -->
+
 Every TLS connection MailFathom makes is handshaked by the system OpenSSL, and OpenSSL refuses parameters its own
 security policy considers too weak before MailFathom sees the server at all. On Ubuntu that policy is compiled in at
 security level 2 — `openssl version -a` reports `-DOPENSSL_TLS_SECURITY_LEVEL=2` — which requires at least 112 bits of

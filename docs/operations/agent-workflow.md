@@ -1,5 +1,7 @@
 # Agent workflow
 
+<!-- describes: scripts/**, .agents/skills/**, .github/workflows/**, .github/fathom-review/** -->
+
 Codex and Claude Code share one repository-owned workflow. Deterministic Git and
 .NET operations live in scripts, while repository-specific judgment lives in
 skills.
@@ -40,6 +42,20 @@ that follows scales with the files in scope: about 70 seconds for the whole
 solution against about 30 for a handful of files. Splitting the run into the
 `whitespace`, `style`, and `analyzers` subcommands is slower still, because it
 pays the workspace load three times for work one invocation already does.
+
+Ask what the change obliges elsewhere while reviewing it:
+
+```bash
+bash scripts/review-obligations.sh
+```
+
+That is the third kind of question a change raises and the only one no diff
+answers: not whether a changed line is correct, and not whether the build
+accepts it, but whether the change left the rest of the repository consistent
+with itself. [What the change obliges elsewhere](#what-the-change-obliges-elsewhere)
+describes what it indexes and why it asserts nothing. It gates nothing and takes
+about a second, so it belongs in the loop rather than in a checklist somebody
+reaches for when a change looks like it needs one.
 
 Run the complete gate before committing:
 
@@ -238,10 +254,22 @@ would rewrite them.
 The change arrives as data. A collection step reads the pull request, its
 changed files with their patches, the resulting content of each changed file,
 the inline threads and issue comments, the reviews already submitted, and the
-governing issue, and writes them under `$RUNNER_TEMP/review` with an explicit
+issues its body closes, and writes them under `$RUNNER_TEMP/review` with an explicit
 ceiling on every one of them. What a ceiling drops is recorded and ends up in the
 review body, because a partial review that looks complete is worse than one that
-says what it did not see.
+says what it did not see. `truncation.txt` is where each of them appends, so it is
+created empty before the first ceiling can run rather than written by whichever one
+happens to be last — the closing references carry a ceiling of their own, and it is
+the script that applies it that reports what it cut, which is also what lets the
+contract suite exercise both without a `gh` stub for the whole collection.
+
+A second step then writes `obligations.json` beside them, and unlike everything
+above it calls no API: it reads the base checkout and the collected `files.json`,
+and what it produces is what the change obliges the rest of the repository to do.
+The directory is made read-only after that step rather than after the collection,
+because it is the last one that writes into it — the reviewer reads those files
+and the submission step trusts them, so nothing running in between may rewrite
+the anchor list that validates a finding.
 
 Every one of those collections produces a single JSON array whatever the page
 count. `--paginate` runs `--jq` once per page, so a filter that built an array
@@ -421,10 +449,11 @@ skill, and the specifications and ADRs that govern the area the change touches. 
 finding names the rule it rests on in a field of its own, and one that applies
 generic advice where this repository has stated a different rule is itself wrong.
 
-Beyond that contract it works through five rubrics — the repository's rules,
-security and privacy, reliability, performance, and clean code — each stated as
-the specific things reviews have caught here rather than as a category name, and
-each applied only where the change reaches it. The same prompt still rules out
+Beyond that contract it works through six rubrics — the repository's rules,
+security and privacy, reliability, performance, clean code, and what the change
+says about itself — each stated as the specific things reviews have caught here
+rather than as a category name, and each applied only where the change reaches
+it. The same prompt still rules out
 what the build already enforces, anything about backward compatibility or
 migration paths, and a request for tests that names no untested case, so the two
 reviewers do not spend threads on findings this repository has already decided
@@ -433,8 +462,9 @@ against.
 The prompt splits the work into two passes and forbids interleaving them, which
 is what separates coverage from the bar. The first pass reads every entry in
 `files.json` and the resulting file around every hunk, collecting candidates
-without filtering or ranking any of them; it is finished when every file has been
-read, not when the list feels long enough. The second pass confirms each
+without filtering or ranking any of them; it is finished when every file and
+every row of `obligations.json` has been read, not when the list feels long
+enough. The second pass confirms each
 candidate against the file it concerns, names the rule it rests on, and drops
 whatever cannot be confirmed, is already answered by the surrounding file, or was
 already raised by another reviewer.
@@ -446,6 +476,129 @@ it never went back to check is how a review fills with hedged noise. So the cap
 of twenty findings is stated as a ceiling and never a target: a change with two
 defects gets two findings, a change with none gets none, and an entry written to
 lengthen the list is itself a defect in the review.
+
+### What the change says about itself
+
+The pull request body and the issues it closes are the change's own account of
+what it does and what it was for, and both outlive the review: the body becomes
+the merge commit's message and is what a release's changelog is later composed
+from, and merging closes every referenced issue whether or not the change
+finished it. The reviewer therefore judges a claim in either against the diff
+exactly as it judges a line of documentation, and reads the body twice — once
+against the file list before reading any file, once after reading them all,
+because only the second reading can tell whether the claim held.
+
+Four shapes are findings: a body claiming behavior the diff does not have; a body
+claiming verification that did not happen, which is worse because it is what a
+reader uses to decide how closely to look; a diff doing something substantial the
+body does not mention, which is scope nobody agreed to; and a change that does not
+deliver an acceptance item of an issue it closes, which leaves a closed issue
+nobody will look at again. Unrecorded scope growth against an issue is worth one
+line, because `AGENTS.md` asks for it to be recorded rather than for the change to
+be narrowed.
+
+None of that reaches how the body was written. A finding here names a
+contradiction between what the change says and what it does, never a preference
+about clarity, length, or order, and an issue the run could not fetch supports no
+finding at all — the reviewer says so in the summary and judges nothing by it.
+
+Every issue the body closes is collected, not the first one, and every keyword
+GitHub acts on is matched rather than the three a body usually spells:
+`.github/fathom-review/collect-closing-references.sh` owns that parsing, so which
+spellings count is pinned by `scripts/test-agent-workflow.sh` instead of living in
+a grep nobody rereads. Matching fewer than GitHub does is how an issue closes on
+merge with nothing having read what it asked for. A bare `#123` is a mention and
+closes nothing, so it is left out; a link to another project's issue is one this
+reviewer cannot fetch and must not hold the change to.
+
+A defect in what the change says about itself is usually a property of the change
+rather than of a line, so those findings carry a null `path` and the submission
+step renders them in the review body. That is deliberately not the summary: the
+verdict is decided by whether any finding exists, so a concern left in the summary
+would arrive under an `APPROVED` heading.
+
+### What the change obliges elsewhere
+
+A whole class of defect here is invisible in a diff, because the defect *is* the
+absence of a second file from it: a `.cs` file that changed while no test
+followed it, a page that still describes the behavior the change replaced, a
+moved pin with no row in `THIRD_PARTY_LICENSES.md`. Each is a rule in
+`AGENTS.md`, and a reviewer reading only the diff cannot see any of them.
+
+`.github/fathom-review/index-obligations.sh` produces the list of second files.
+It runs from the workspace, which holds the base commit, so a pull request cannot
+supply the index that judges it — the same reason the prompt is read from there —
+and it lives under `.github/` rather than in `scripts/` so that `Protected paths`
+refuses a change to it from anyone but the owner. Calling no API is what lets
+`scripts/test-agent-workflow.sh` run the real script against a fixture tree with
+no `gh` stub at all.
+
+The two kinds of edge it follows are recorded differently, and which one applies
+turns on whether the repository's own rules already derive it.
+
+A production type to its test is **derived and never written down**. `AGENTS.md`
+requires one primary type per file with a matching file name, and
+`tests/<Boundary>.UnitTests/` mirrors `src/<Boundary>/`, so the mapping is
+already a rule the build enforces; a recorded copy could drift from it. The index
+searches the base tree and the tests the change itself adds, because a change
+that adds a class together with its test is the case where reporting a missing
+test would be most obviously wrong.
+
+A source path to the page that documents it is **declared**, because nothing
+derives it: documentation is written about configuration keys and behavior rather
+than about type names, so no name match finds the edge. Each page names its own
+subject in a `describes:` marker under its heading, and `docs/AGENTS.md` states
+the convention. A central index was refused rather than not considered — it would
+go stale exactly when it matters and silently, since the pull request that adds a
+class and forgets its test forgets the edge too, and it would need a freshness
+gate of its own beside the check that already exists. In the page, both ways the
+declaration can rot are loud instead: `scripts/test-agent-workflow.sh` fails a
+page carrying no marker and a marker naming a pattern that matches nothing, so
+deleting a documented class fails the build rather than waiting for a review to
+notice.
+
+The same index answers the same question before a pull request exists.
+`scripts/review-obligations.sh` is the local entry point: it builds a document of
+the shape GitHub returns from `git diff <base>` and hands it to the script above,
+so the two callers share one implementation and a rule cannot hold in review
+while lapsing in the pipeline. `$review-change` runs it and works through what it
+reports, `$check-docs-licenses` starts its documentation verdict from it, and
+`$finish-change` names it in the diff inspection — which is the point of having
+it locally at all: an absent test costs least to add while the file that owes it
+is still open.
+
+The local report differs from the pipeline's in two ways, both because a working
+tree is not a pull request. It compares against the working tree rather than
+against a commit, since what is committed, what is staged, and what is neither
+are one change to a reader. And it names the untracked paths no diff contains,
+because a new class that owes a test is exactly the shape one takes, and a report
+silently describing less than the change is worse than one that says so.
+
+The index is bounded like every other collected input: eighty changed source files,
+and twenty listed tests per type. The second bound is the one that is not obvious —
+how many tests name a type is a property of how common the name is rather than of
+the change — so the true count survives the cut beside the shortened list. What a
+bound dropped is recorded in the index's `notes`, and the prompt requires those to
+reach the reviewer's summary alongside anything `truncation.txt` says, because a
+section that was cut short looks complete to everybody but the reviewer.
+
+The patterns a marker declares are resolved the way git's own `:(glob)` pathspec
+resolves them, and the two have to agree: the contract suite validates every marker
+through git, so a pattern the index read more narrowly would be called valid while
+the paths it covers were skipped. That is why `**` between two slashes matches zero
+directories as well as many — `src/**/*Options.cs` credits `src/FooOptions.cs`, not
+only a nested one — and why a leading `**/` reaches the repository root.
+
+Nothing the index emits is a finding. It says where to look, and it is derived
+from file names and declared markers, so it points at obligations a change does
+not always incur — a rename owes no test, a page whose marker covers a path may
+say nothing about the part that moved, a register may already carry the row. The
+prompt requires each row to be confirmed in the file it points at and names what
+confirmation is: the behavior no test reaches, the sentence that stopped being
+true, the row that is missing. A finding whose whole content is that a file was
+not touched is a defect in the review. What survives is a `P2` anchored to the
+changed line that created the obligation, which is both the line the author would
+edit to discharge it and the only kind of line a review comment can reach.
 
 ### When the reviewer stops
 

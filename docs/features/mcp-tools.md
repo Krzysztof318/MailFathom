@@ -1,5 +1,7 @@
 # MCP tools
 
+<!-- describes: src/Mcp/** -->
+
 MailFathom publishes its read side as Model Context Protocol tools over the Streamable HTTP transport. This page records the
 conventions every tool follows, the contract of the tools that exist, and what a client reads when a call fails.
 

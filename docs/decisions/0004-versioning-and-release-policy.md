@@ -9,6 +9,8 @@ informed:
 
 # Version the four public surfaces with SemVer, stamp builds from one declared prefix, and cut a release with a Git tag
 
+<!-- describes: Directory.Build.props, scripts/read-declared-version.sh, scripts/assert-release-tag.sh, deploy/docker/Dockerfile, deploy/helm/mailfathom/Chart.yaml -->
+
 ## Context and Problem Statement
 
 When this decision was opened, nothing in MailFathom set a version. `Directory.Build.props` declared no version property, so every assembly compiled to the MSBuild default of `1.0.0.0`; `deploy/helm/mailfathom/Chart.yaml` carried `appVersion: "0.0.0-unreleased"`; and `deploy/docker/Dockerfile` defaulted `IMAGE_VERSION` to `0.0.0-unversioned`. All three were placeholders written deliberately, each with a comment pointing at this decision, and none of them could be filled in until it was made.

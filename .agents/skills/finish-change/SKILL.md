@@ -11,7 +11,7 @@ description: Use when repository work is implemented and must be verified, commi
 2. Inspect status, stage only task files, and inspect the staged diff. Stop if any untracked or unrelated path remains.
 3. Invoke `$check-docs-licenses`. Fix every `fail` and repeat the gate until all three verdicts pass or are `n/a`. Its changelog verdict is `n/a` for ordinary work: `CHANGELOG.md` is written by the release pull request alone, so a diff that edits it here is a defect rather than diligence.
 4. Run `scripts/verify-full.sh`. Fix failures and rerun the complete script; earlier or partial results do not replace a fresh successful run. Repair a formatting failure through `scripts/verify-fast.sh`, which rewrites the changed files and reports what has no code fix, rather than through a hand-run `dotnet format` over the whole solution.
-5. Inspect status and the full diff for secrets, generated artifacts, unrelated edits, architecture violations, and missing tests or documentation.
+5. Inspect status and the full diff for secrets, generated artifacts, unrelated edits, architecture violations, and missing tests or documentation. `scripts/review-obligations.sh` is what answers the last of those without reading the whole tree: it names the tests and pages the change obliges and whether it touched them. It gates nothing, so a row it reports is answered — by the test, by the page, or by saying why nothing is owed — rather than treated as a blocker or as a licence to skip the reading.
 
 Do not proceed while a gate fails.
 

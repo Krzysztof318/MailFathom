@@ -16,9 +16,10 @@ description: Use when reviewing a working-tree diff, pull-request patch, or comp
    - IMAP content retrieval preserving `\Seen`;
    - unit-test, documentation, and third-party license impact;
    - unrelated edits, generated files, and secrets.
-4. Apply the recurring-findings checklist below to the changed code.
-5. Run `scripts/verify-fast.sh` when executable or test code changed since its last successful run. A green run that nothing has invalidated is already evidence; repeating it costs a Release build, the whole test suite, and two formatting passes to reprove the same thing. Report the run you are relying on. If it cannot run, state why.
-6. Never invoke `dotnet format` directly to act on a finding. The fast loop repairs the changed files and reports what has no code fix; fix that and rerun the loop.
+4. Run `scripts/review-obligations.sh` and work through what it reports. It names what the change obliges the rest of the repository to do — the tests naming each changed type, the pages whose `describes:` marker covers each changed path, the registers whose trigger moved — which is the part of a review no diff contains, because there the defect *is* the absence of a second file. It reports and never gates, and it costs a second, so run it on every change rather than on the ones that look like they need it.
+5. Apply the recurring-findings checklist below to the changed code.
+6. Run `scripts/verify-fast.sh` when executable or test code changed since its last successful run. A green run that nothing has invalidated is already evidence; repeating it costs a Release build, the whole test suite, and two formatting passes to reprove the same thing. Report the run you are relying on. If it cannot run, state why.
+7. Never invoke `dotnet format` directly to act on a finding. The fast loop repairs the changed files and reports what has no code fix; fix that and rerun the loop.
 
 ## Recurring findings
 
@@ -33,6 +34,7 @@ These categories account for most review findings raised against merged pull req
 - **Test doubles.** No test consumes a real clock, a real delay, or wall-clock ordering. A fake preserves the ordering and identity guarantees of the real collaborator it replaces, including which request produced which response.
 - **Telemetry.** A new meter, activity source, or exporter is actually subscribed by the host pipeline, and its resource attributes and endpoint match the pipeline the rest of the process uses.
 - **Documentation drift.** Prose describing a validator, a guarantee, or an ownership rule states what the code now does. A narrower implementation than the documentation claims is a defect in the documentation.
+- **Obligations elsewhere.** What `scripts/review-obligations.sh` reported is confirmed in the file it points at, never restated from the report. Confirmation is the behavior this change introduced or altered that no test now reaches, stated as the input and the wrong result that would go unnoticed; the sentence, table row, or example that stopped being true; the specific register row that is missing. A rename owes no test, a page whose marker covers a path may say nothing about the part that moved, and a register may already carry the row — so a row that survives none of that is dropped rather than reported. The same bar applies in reverse: a category the report is silent about is not evidence that nothing is owed, because the marker on a page or the name of a type is what the report reasons from.
 
 ## Reporting
 

@@ -16,8 +16,8 @@ For background on ADRs, see <https://adr.github.io/>.
    3. `consulted` lists people whose input was sought.
    4. `informed` lists people who must know about the decision but do not approve it.
 4. For each option, record meaningful good, neutral, and bad consequences.
-5. Update the status to `accepted` only after the decision is approved.
-6. Supersede old decisions with a new ADR instead of silently rewriting historical rationale.
+5. Update the status to `accepted` only after the decision is approved. That status closes the record: from then on the text is never corrected, extended, or brought up to date with what the code does. Every change made since was written against that text, so rewriting it replaces the reasoning retroactively and leaves nothing saying it ever changed.
+6. Supersede a decision with a new ADR rather than rewriting the old one. Mark the replaced ADR `superseded` and point it at its replacement; that transition and the `describes:` marker are the only edits an accepted ADR takes, and the marker says where the code lives rather than anything about the decision. An ADR still at `proposed` is editable, which is what that status is for.
 
 ## Records
 

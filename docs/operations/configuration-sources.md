@@ -1,5 +1,7 @@
 # Configuration sources
 
+<!-- describes: src/Host/Configuration/** -->
+
 MailFathom reads its settings through the ordinary .NET configuration pipeline, plus one addition: a deployment may name a directory or a file of JSON configuration that it provisioned outside the application's own content root. That addition is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see.
 
 Secrets are a separate contract and stay one. A secret-bearing setting holds a reference rather than material, whichever source the setting itself arrived from; [secret provisioning](secret-provisioning.md) is that contract, and the [Kubernetes mapping](#kubernetes) below states how the two meet.

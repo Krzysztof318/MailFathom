@@ -1,5 +1,7 @@
 # Stored email schema
 
+<!-- describes: src/Infrastructure/Persistence/**, src/Domain/Emails/** -->
+
 `stored_emails` holds the normalized metadata a mailbox timeline is read from. Its raw MIME lives in a separate one-to-one table, `email_message_contents`, and the text derived from that MIME lives in a third, `email_search_documents`, so nothing that lists or filters mail ever loads a `bytea` value, a body's worth of text, or a search vector — let alone tracks one in the change tracker.
 
 This page describes the table as the EF Core model declares it and as the reviewed baseline migration creates it. [Specification 19](../../specs/19-ef-core-migration-baseline-and-apply-policy.md) generated that migration, so PostgreSQL has now had its say: the types, constraints, and indexes below are the ones a schema dump reports rather than the ones a model was hoped to produce. How the schema reaches a database is at the end of this page.

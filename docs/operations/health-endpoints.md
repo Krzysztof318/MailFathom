@@ -1,5 +1,7 @@
 # The health endpoints and the listener they are served on
 
+<!-- describes: src/Host/Hosting/** -->
+
 An orchestrator decides three things about a process by asking it: whether it has finished coming up, whether it can
 serve a request right now, and whether it is still running rather than stuck. MailFathom answers those three questions on
 three paths, served on a listener of their own. This page records what each one consults, which port it answers on, how

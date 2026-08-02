@@ -66,11 +66,19 @@ Both scripts refuse to run on `main` or `master`. Check out your branch rather t
 
 The integration suite is not part of either script. It starts containers and is run deliberately, through `scripts/run-integration-tests.sh`, when a maintainer asks for it.
 
+Neither script answers the third question a change raises, so there is one more command worth a second of your time:
+
+```bash
+bash scripts/review-obligations.sh
+```
+
+It prints what your change obliges the rest of the repository to do — the tests naming each type you changed, the pages that document each path you touched, and the registers whose trigger you moved — each saying whether your change touched it. That is the part no diff shows, because there the defect is the *absence* of a second file. It gates nothing and asserts nothing: a row is a place to look, and a rename owes no test. The same index runs on your pull request, so what it says here is what the reviewer will see there.
+
 ## Making the change
 
 - **Branch off `main`, never commit to it.** In a fork the branch name is yours to choose; with write access, name it `agent/<short-description>`.
 - **Behavior changes come with unit tests.** The suite enforces at least 85% aggregate line coverage across `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`, and the gate fails below it. [`tests/AGENTS.md`](tests/AGENTS.md) is the unit-test policy — read it before adding tests, especially the rules on what belongs in the integration suite instead.
-- **Update the documentation in the same change.** Stale guidance is a defect. [`docs/AGENTS.md`](docs/AGENTS.md) applies under `docs/`.
+- **Update the documentation in the same change.** Stale guidance is a defect. [`docs/AGENTS.md`](docs/AGENTS.md) applies under `docs/`, and a new page there opens with a `describes:` marker naming the part of the repository it is written about — the contract suite fails a page without one, and a marker naming a path that no longer exists.
 - **Warnings are errors.** `TreatWarningsAsErrors` is on and the analyzer set is configured in `.editorconfig`; suppress a diagnostic only at the narrowest scope, with the concrete reason stated.
 - **Do not edit `CHANGELOG.md`.** It states what a release shipped and is written by the release pull request alone.
 - **Do not create or modify an ADR** under `docs/decisions/` without the maintainer's explicit approval. Reading the relevant ones first is expected for any architectural change.

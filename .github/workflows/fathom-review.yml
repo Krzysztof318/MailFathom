@@ -450,8 +450,14 @@ jobs:
           comment_body_limit=2000
           thread_limit=100
           thread_comment_limit=20
+          closing_reference_limit=5
 
           mkdir -p "$REVIEW_DIRECTORY/head" "$(dirname "$FINDINGS_FILE")"
+
+          # Every ceiling in this step appends what it dropped here, so it is created empty before
+          # the first one can run rather than written once at the end by whichever ceiling happens
+          # to be last. The submission step reads the whole file into the review body.
+          : > "$REVIEW_DIRECTORY/truncation.txt"
 
           # Taken before the first read rather than after the last, so it is a bound the reviewer
           # can rely on: nothing written after this instant is in what follows. The step above
@@ -598,38 +604,88 @@ jobs:
                  '[.[-$limit:][] | .body |= .[0:$bytes]]' \
             > "$REVIEW_DIRECTORY/issue-comments.json"
 
-          issue_number="$(
-            jq -r '.body // ""' "$REVIEW_DIRECTORY/pull-request.json" \
-              | grep -oiE '(closes|fixes|resolves) #[0-9]+' \
-              | head -n 1 \
-              | grep -oE '[0-9]+' \
-              || true
-          )"
+          # Every issue the body closes, not the first one. Merging closes all of them, so a review
+          # that read one can approve a change that finishes it and leaves another open with a
+          # closing reference pointing at it. The parsing is a script of its own under `.github/`,
+          # where `Protected paths` covers it and `scripts/test-agent-workflow.sh` can run it
+          # against a body without a `gh` stub: which keywords and which spellings count is a
+          # decision, and matching fewer of them than GitHub acts on is how an issue closes unread.
+          jq -r '.body // ""' "$REVIEW_DIRECTORY/pull-request.json" > "$REVIEW_DIRECTORY/body.txt"
 
-          if [[ -n "$issue_number" ]]; then
-            gh api "repos/${REPOSITORY}/issues/${issue_number}" \
-              --jq '{number, title, body}' > "$REVIEW_DIRECTORY/issue.json" \
-              || echo 'null' > "$REVIEW_DIRECTORY/issue.json"
-          else
-            echo 'null' > "$REVIEW_DIRECTORY/issue.json"
-          fi
+          : > "$REVIEW_DIRECTORY/issues.ndjson"
+
+          # The ceiling lives in the script rather than in this loop so that what it cuts is
+          # reported by the same code that cuts it, and so the contract suite can exercise both
+          # without standing up a `gh` stub for the whole collection. The list arrives on standard
+          # output and the note about what was dropped on standard error, which is why the two are
+          # redirected apart here.
+          "${GITHUB_WORKSPACE}/.github/fathom-review/collect-closing-references.sh" \
+            "$REVIEW_DIRECTORY/body.txt" "$REPOSITORY" "$closing_reference_limit" \
+            > "$REVIEW_DIRECTORY/closing-references.txt" \
+            2>> "$REVIEW_DIRECTORY/truncation.txt"
+
+          while IFS= read -r issue_number; do
+            [[ -n "$issue_number" ]] || continue
+
+            # A reference to an issue that cannot be fetched — deleted, or in a repository this
+            # token does not reach — is recorded as the number alone rather than dropped, so the
+            # reviewer can say the contract was unreadable instead of silently reviewing without it.
+            gh api "repos/${REPOSITORY}/issues/${issue_number}" --jq '{number, title, body}' \
+              >> "$REVIEW_DIRECTORY/issues.ndjson" \
+              || jq -nc --argjson number "$issue_number" \
+                   '{number: $number, title: null, body: null}' \
+                   >> "$REVIEW_DIRECTORY/issues.ndjson"
+          done < "$REVIEW_DIRECTORY/closing-references.txt"
+
+          jq -s . "$REVIEW_DIRECTORY/issues.ndjson" > "$REVIEW_DIRECTORY/issues.json"
+          rm -f "$REVIEW_DIRECTORY/issues.ndjson" "$REVIEW_DIRECTORY/body.txt" \
+            "$REVIEW_DIRECTORY/closing-references.txt"
 
           changed_files="$(jq -r '.changed_files' "$REVIEW_DIRECTORY/pull-request.json")"
           collected_files="$(jq -r 'length' "$REVIEW_DIRECTORY/files.json")"
           if (( changed_files > collected_files )); then
             printf 'The pull request changes %s files and this review covers the first %s.\n' \
-              "$changed_files" "$collected_files" > "$REVIEW_DIRECTORY/truncation.txt"
-          else
-            : > "$REVIEW_DIRECTORY/truncation.txt"
+              "$changed_files" "$collected_files" >> "$REVIEW_DIRECTORY/truncation.txt"
           fi
+
+          echo "Collected ${collected_files} changed files and ${fetched} head-content files."
+
+      # What the change obliges the rest of the repository to do, which is the part of a review no
+      # diff contains. A `.cs` file that changed while no test followed it, a page under `docs/`
+      # that still describes the behavior this change replaced, and a moved pin with no row in
+      # `THIRD_PARTY_LICENSES.md` are each a rule in `AGENTS.md`, and each of them is invisible in a
+      # diff because the defect *is* the absence of a second file from it.
+      #
+      # This calls no API. It reads the base checkout — code that already merged — and the
+      # `files.json` the step above froze, which is what lets `scripts/test-agent-workflow.sh` run
+      # the same script against a fixture tree with no `gh` stub, the way it runs the gate and the
+      # settle loop today.
+      #
+      # The script lives under `.github/` rather than in `scripts/` because `Protected paths`
+      # refuses a change from anyone but the owner there, and this decides what a reviewer is told
+      # to look for. It is read from the workspace, which holds the base commit, so a pull request
+      # cannot supply the index that judges it — the same reason the prompt is read from there.
+      - name: Index the obligations the change triggers
+        id: obligations
+        shell: bash
+        env:
+          REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          INDEX_SCRIPT: ${{ github.workspace }}/.github/fathom-review/index-obligations.sh
+        run: |
+          set -euo pipefail
+
+          "$INDEX_SCRIPT" \
+            "$GITHUB_WORKSPACE" \
+            "$REVIEW_DIRECTORY/files.json" \
+            "$REVIEW_DIRECTORY/obligations.json"
 
           # Read-only from here on. The reviewer reads these files and the submission step trusts
           # them — `lines.json` in particular is what makes an anchor valid — so nothing that runs
           # in between may rewrite them. Removing write permission from the directories as well as
-          # the files is what stops an entry being replaced rather than modified.
+          # the files is what stops an entry being replaced rather than modified. It happens here
+          # rather than at the end of the collection above because this is the last step that
+          # writes into the directory.
           chmod -R a-w "$REVIEW_DIRECTORY"
-
-          echo "Collected ${collected_files} changed files and ${fetched} head-content files."
 
       # The reviewer's instructions live in `.github/fathom-review/reviewer-prompt.md` rather than
       # in a block scalar here, because GitHub compiles any string holding a `${{ }}` expression
@@ -928,6 +984,13 @@ jobs:
           # since moved cannot make the API reject the whole review. A finding whose anchor does not
           # survive is not discarded; it moves into the body, where it still reaches the author.
           #
+          # A finding that never had an anchor takes the same path deliberately. Some defects are
+          # properties of the change rather than of a line — a body that claims something the diff
+          # does not do, an issue the change closes without finishing — and the reviewer writes those
+          # with a null `path`. Routing them here rather than into the summary is what makes them
+          # count: the verdict is decided by whether `findings` is empty, so a concern that lived
+          # only in the summary would arrive under an `APPROVED` heading.
+          #
           # Every finding is rendered here rather than by the reviewer, from the separate fields it
           # wrote. A thread then always answers the same three questions in the same order — what
           # breaks, what to change, and which rule says so — so an author reading a column of them
@@ -978,9 +1041,12 @@ jobs:
                   + ["", "**Findings** — \(tally($findings))"]
                   + (if $truncation == "" then [] else ["", $truncation] end)
                   + (if ($dropped | length) == 0 then [] else
-                      ["", "### Findings whose line is no longer in the diff"]
+                      ["", "### Findings with no line to sit on"]
                       + ($dropped
-                         | map(["", "**\(.severity) — \(.title)** — `\(.path)`"] + details(.))
+                         | map(["",
+                                "**\(.severity) — \(.title)**"
+                                + (if (.path // "") == "" then "" else " — `\(.path)`" end)]
+                               + details(.))
                          | add)
                     end)
                   | join("\n")

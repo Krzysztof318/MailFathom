@@ -1,5 +1,7 @@
 # Email content
 
+<!-- describes: src/Application/EmailContent/**, src/Application/Emails/GetEmailContent/**, src/Infrastructure/Mail/Mime/** -->
+
 MailFathom serves the content of the emails one call names, from its local copy. `EmailContentReader` is the second read
 use case: it takes the stable local identifiers a listing returned and answers for each of them with normalized headers,
 the body as plain text, optionally a sanitized HTML representation, attachment counts, optionally per-attachment

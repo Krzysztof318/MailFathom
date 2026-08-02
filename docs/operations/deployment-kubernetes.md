@@ -1,5 +1,7 @@
 # Deploying to Kubernetes
 
+<!-- describes: deploy/helm/** -->
+
 `deploy/helm/mailfathom/` is the chart. It installs MailFathom and the objects around it, and deliberately installs neither a
 database nor a Secret: both belong to whoever operates the cluster, and the chart is written so that it cannot pretend
 otherwise.

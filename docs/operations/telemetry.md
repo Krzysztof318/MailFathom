@@ -1,5 +1,7 @@
 # Telemetry and the Aspire dashboard
 
+<!-- describes: src/Host/Observability/**, src/Infrastructure/Observability/**, src/AppHost/** -->
+
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
 Aspire orchestration, whose dashboard is the destination. This page records what is emitted, the one switch that

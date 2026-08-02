@@ -1,5 +1,7 @@
 # Local development
 
+<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, src/AppHost/** -->
+
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
 **Linux is the only officially supported platform**, for development as much as for deployment: the orchestration starts Linux containers, the deployment shapes are a container, Kubernetes, and a systemd service, and TLS goes through the system OpenSSL. Development on Windows may work — the solution is ordinary .NET — but **expect problems and a setup of your own**, and nothing in this repository is verified against it.
@@ -22,6 +24,21 @@ Before committing, run the complete local gate:
 git add <task-files>
 bash scripts/verify-full.sh
 ```
+
+While reviewing the change, ask what it obliges elsewhere:
+
+```bash
+bash scripts/review-obligations.sh
+```
+
+That prints the tests naming each changed type, the pages whose `describes:`
+marker covers each changed path, and the registers whose trigger moved, each
+saying whether the change touched it. It is the same index `Fathom review` runs
+on a pull request, reached through an adapter that hands it a local diff, so the
+answer is the one the pipeline will give rather than an approximation of it. It
+reports and never gates: nothing it prints is a finding until it is confirmed in
+the file it points at, and it names the untracked paths no diff contains rather
+than describing less than the change while looking complete.
 
 The fast script restores the solution, builds it in Release configuration, runs
 all unit tests without rebuilding, and formats the C# files the branch changed.

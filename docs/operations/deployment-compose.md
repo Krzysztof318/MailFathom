@@ -1,5 +1,7 @@
 # Deploying with Docker Compose
 
+<!-- describes: deploy/compose/** -->
+
 `deploy/compose/` is the supported Compose deployment: MailFathom, PostgreSQL, and a one-shot schema step that only ever
 runs when an operator asks for it. It is the shape to use for self-hosting on one machine.
 

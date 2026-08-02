@@ -9,6 +9,8 @@ informed:
 
 # Use an application-owned configuration access layer for reading, mapping, and reloadable business settings
 
+<!-- describes: src/Host/Configuration/** -->
+
 ## Context and Problem Statement
 
 MailFathom will need configuration for mail accounts, synchronization limits, security policy, storage adapters, AI providers, MCP endpoints, operational guardrails, and future governance controls. .NET configuration providers and the Options pattern are useful host-level mechanisms, but reading raw `IConfiguration` or injecting provider-shaped options directly into use cases would couple business behavior to transport keys, mutable provider state, binder constraints, and reload timing.

@@ -15,6 +15,7 @@ Closes #
 - [ ] `bash scripts/verify-full.sh` passes on this branch, rebased onto current `main`.
 - [ ] Behavior changes are covered by unit tests, and the coverage gate passes.
 - [ ] Affected documentation is updated in this change set.
+- [ ] `bash scripts/review-obligations.sh` was run, and every row it reported is answered — by a test, by a page, or by why nothing is owed there.
 - [ ] No `Co-authored-by:` or other co-author trailer on any commit.
 - [ ] `CHANGELOG.md` is untouched — it is written by the release pull request alone.
 - [ ] Every new C# file carries the repository's standard header, applied by `scripts/verify-fast.sh` rather than typed, and no file gained a second copyright line, an author tag, a name, or a contact detail.

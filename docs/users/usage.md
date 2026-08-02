@@ -1,5 +1,7 @@
 # Using the tools
 
+<!-- describes: src/Mcp/Tools/** -->
+
 MailFathom publishes three MCP tools, and together they are the whole surface: an agent can list mail, read one
 message, and search — nothing else. This page is the user's view of that surface: what each tool answers, what every
 result carries, what the deliberate limits are, and how to read a failure. The full contracts — every argument, every
