@@ -87,12 +87,20 @@ MailFathom.Application.Persistence.DatabaseSchemaOutOfDateException: The databas
 build defines: 20260731132336_Initial.
 ```
 
-> **The schema artifact does not exist yet.** The reviewed, idempotent artifact a released installation applies — and
-> the command that applies it — are tracked by [issue #238](https://github.com/Krzysztof318/MailFathom/issues/238). Until
-> it ships, establishing the schema is your own step against the `mailfathom` database: publish the database port
-> temporarily, or attach a `psql` container to the `backend` network, and apply the migrations this build defines.
-> Whatever you use, apply it once, read it before applying it, and take a backup first. That is the same discipline the
-> shipped artifact will enforce; what is missing is the artifact, not the rule.
+The step is `mailfathom-schema-<version>.sql`, attached to the release you are installing. The database publishes no
+port, and the superuser password is already mounted inside its container, so the shortest route is to run psql there
+and hand it the script on standard input — which also keeps the credential off a command line:
+
+```bash
+docker compose exec --no-TTY postgres sh -c \
+  'PGPASSWORD="$(cat /run/secrets/postgres-superuser-password)" exec psql \
+     --username postgres --dbname "$MAILFATHOM_DATABASE" --set ON_ERROR_STOP=on' \
+  < mailfathom-schema-0.1.0.sql
+```
+
+Read the SQL before applying it, and take a backup first. The script is idempotent, so running it against a database
+that already carries some of its migrations applies only what is missing. [Applying the database
+schema](database-schema.md) states the privileges it needs, the locks it takes, and what each startup failure means.
 
 ### What the first `up` of PostgreSQL does
 
@@ -145,16 +153,25 @@ else.
 
 ## Upgrading
 
+Back up the database, then apply the new release's schema artifact, then bring the new image up. That order is the one
+with no window in which nothing serves: the new image refuses to start against a schema that is behind it, and the
+running one keeps serving against a schema that is ahead.
+
 ```bash
+docker compose exec --no-TTY postgres sh -c \
+  'PGPASSWORD="$(cat /run/secrets/postgres-superuser-password)" exec psql \
+     --username postgres --dbname "$MAILFATHOM_DATABASE" --set ON_ERROR_STOP=on' \
+  < mailfathom-schema-0.2.0.sql                            # the version being upgraded to
+
 docker compose pull                                        # or: docker compose build
-docker compose up -d
-# if the host reports a pending migration, apply the schema and bring it up again:
 docker compose up -d
 ```
 
 Rolling back is the same sequence with the previous image. **A schema change is not rolled back by it.** A migration
-only moves forward; going back to an image that expects an earlier schema means restoring the database from a backup
-taken before the migration, which is the reason applying one is a step you decide to take.
+only moves forward; returning to the earlier schema means restoring the database from the backup taken before the
+migration, which is the reason applying one is a step you decide to take.
+[Rolling back](database-schema.md#rolling-back) states when that is necessary and when rolling only the image back is
+enough.
 
 ## Backup and what survives removal
 
@@ -225,7 +242,9 @@ unset variable and the documented value mean the same thing.
 
 ## Related
 
-- [The container image](container-image.md) — what is inside it, how it runs, and the schema script
+- [Applying the database schema](database-schema.md) — the release artifact, the privileges it needs, and the three
+  startup failures it answers
+- [The container image](container-image.md) — what is inside it, how it runs, and why it carries no schema tool
 - [Kubernetes and Helm](deployment-kubernetes.md) — the same contract in the other shape
 - [The platform TLS policy](platform-tls-policy.md) — for a mail server whose handshake the container's own OpenSSL
   refuses; the file has to be mounted into the container and named in the service's `environment:` block

@@ -74,10 +74,80 @@ jobs:
             printf 'tags<<TAGS\n%s\nTAGS\n' "$image_tags"
           } >> "$GITHUB_OUTPUT"
 
+  # The schema artifact a released installation applies: one idempotent SQL script carrying every migration this build
+  # defines. It is generated from the app model's own PublishAsMigrationScript declaration rather than by invoking
+  # `dotnet ef` here, so what a release ships and what a developer generates come from one statement of which context,
+  # which migrations project, and which options — see docs/operations/database-schema.md.
+  #
+  # Nothing here reaches a database. Generating the script reads the migration assembly, so this job needs no PostgreSQL
+  # and produces identical output against a database that does not exist.
+  schema-artifact:
+    name: Build the schema artifact
+    needs:
+      - assert
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      artifact: ${{ steps.build.outputs.artifact }}
+      checksum: ${{ steps.build.outputs.checksum }}
+      migrations: ${{ steps.build.outputs.migrations }}
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.assert.outputs.revision }}
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          global-json-file: global.json
+
+      # The CLI is not a manifest tool, so it is installed rather than restored. Its version is read from the pinned
+      # hosting packages instead of written here: a CLI on a different Aspire generation from the app model it publishes
+      # is exactly the mismatch a second literal would hide.
+      - name: Install the pinned Aspire CLI
+        run: |
+          set -euo pipefail
+
+          aspire_version="$(
+            sed -n 's:.*<PackageVersion Include="Aspire.Hosting.AppHost" Version="\([^"]*\)".*:\1:p' \
+              Directory.Packages.props | head -n 1
+          )"
+
+          dotnet tool install --global Aspire.Cli --version "$aspire_version"
+
+          # Stated rather than assumed. A global tool lands here whatever the runner image happens to put on PATH, and
+          # the build step below refuses to run without `aspire` on it.
+          printf '%s\n' "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Build the schema artifact
+        id: build
+        env:
+          VERSION: ${{ needs.assert.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          # The script names the artifact, checksums it, and reports the migration range it read back out of the file it
+          # produced. Those three facts are what the release notes below record, so they are taken from the run that made
+          # the artifact rather than recomputed from anything.
+          bash scripts/build-schema-artifact.sh artifacts/schema "$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the schema artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: schema-artifact
+          path: artifacts/schema/
+          if-no-files-found: error
+
   publish:
     name: Publish
     needs:
       - assert
+      # A release that cannot produce its schema artifact publishes no image. An operator handed an image and no way to
+      # reach the schema it requires has a deployment that starts, fails the startup gate, and stays down.
+      - schema-artifact
     permissions:
       contents: read
       packages: write
@@ -97,6 +167,7 @@ jobs:
     name: Publish the GitHub release
     needs:
       - assert
+      - schema-artifact
       - publish
     runs-on: ubuntu-latest
     permissions:
@@ -107,25 +178,54 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Download the schema artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: schema-artifact
+          path: artifacts/schema
+
       # The notes are the changelog section, not a list of pull-request titles: no arrangement of titles can state that
       # a release cannot be deployed over the previous release's data, which is the most important sentence a MailFathom
       # release note will ever carry.
+      #
+      # The schema section beside it is the per-release record the artifact needs to be usable years from now: which
+      # migrations it carries, the checksum that identifies the file, and the ordering and backup point applying it
+      # assumes. The reasoning behind each of those lives once, in docs/operations/database-schema.md, and the notes link
+      # to it rather than restating it per release.
       - name: Create or update the release from the changelog
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
           VERSION: ${{ needs.assert.outputs.version }}
           IMAGE: ${{ needs.publish.outputs.image }}
           DIGEST: ${{ needs.publish.outputs.digest }}
+          SCHEMA_ARTIFACT: ${{ needs.schema-artifact.outputs.artifact }}
+          SCHEMA_CHECKSUM: ${{ needs.schema-artifact.outputs.checksum }}
+          SCHEMA_MIGRATIONS: ${{ needs.schema-artifact.outputs.migrations }}
         run: |
           set -euo pipefail
 
           notes_file="$(mktemp)"
+          schema_artifact_name="$(basename "$SCHEMA_ARTIFACT")"
 
           {
             bash scripts/read-changelog-section.sh "$VERSION"
             printf '\n## The published image\n\n```\ndocker pull %s:%s\ndocker pull %s@%s\n```\n' \
               "$IMAGE" "$VERSION" "$IMAGE" "$DIGEST"
+
+            printf '\n## The database schema\n\n'
+            printf 'Apply `%s` before rolling this version out, and take a backup first. ' "$schema_artifact_name"
+            printf 'MailFathom applies no schema change while starting and refuses to serve against a schema it does '
+            printf 'not recognize, so the order is: back up, apply the script, then deploy the image.\n\n'
+            printf '| | |\n| --- | --- |\n'
+            printf '| Artifact | `%s` |\n' "$schema_artifact_name"
+            printf '| SHA-256 | `%s` |\n' "$SCHEMA_CHECKSUM"
+            printf '| Migrations | `%s` |\n\n' "$SCHEMA_MIGRATIONS"
+            printf 'The script is idempotent, so an installation already carrying some of those migrations takes only '
+            printf 'what it is missing. [Applying the database schema](https://github.com/%s/blob/%s/docs/operations/database-schema.md)' \
+              "$REPOSITORY" "$RELEASE_TAG"
+            printf ' states the privileges it needs, the locks it takes, and what each startup failure means.\n'
           } > "$notes_file"
 
           # Idempotent, because a re-run of a release must not fail on the release it already created.
@@ -134,3 +234,10 @@ jobs:
           else
             gh release create "$RELEASE_TAG" --title "MailFathom $VERSION" --notes-file "$notes_file" --verify-tag
           fi
+
+          # --clobber for the same reason the release itself is created idempotently: a re-run replaces the assets it
+          # uploaded rather than failing on them.
+          gh release upload "$RELEASE_TAG" \
+            "artifacts/schema/${schema_artifact_name}" \
+            "artifacts/schema/${schema_artifact_name}.sha256" \
+            --clobber

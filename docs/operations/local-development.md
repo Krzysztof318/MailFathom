@@ -308,6 +308,14 @@ Generating a migration for a non-default configuration is therefore a deliberate
 
 Applying is one mechanism per environment: `mailfathom-migrations` locally, and an explicit deployment step elsewhere. A host that mutates schema while starting could race a second instance, could apply a destructive change nobody reviewed at deploy time, and would leave the operator no point at which to take a backup.
 
+That deployment step is one idempotent SQL file, and `scripts/build-schema-artifact.sh` produces it:
+
+```bash
+scripts/build-schema-artifact.sh      # artifacts/schema/mailfathom-schema-<version>.sql, and its .sha256
+```
+
+It runs `aspire publish`, which reads the `PublishAsMigrationScript` declaration in `src/AppHost/Program.cs`, so the file a release attaches and the file this produces come from one statement rather than two. Like the other commands that only read the checkout it reaches no database: the SQL is generated from the migration assembly, so it produces identical output against a server that does not exist. Unlike them it needs the Aspire CLI rather than `dotnet-ef`, because the declaration it reads lives in the app model. [Applying the database schema](database-schema.md) is what an operator then does with it.
+
 The GitHub CLI (`gh`) is installed separately through the operating system package manager and is required for the issue and pull-request workflow in root `AGENTS.md`. It needs the `project` scope on top of its default scopes so it can read and update the roadmap board.
 
 On a machine that has never authenticated, log in and request the scope in the same step:

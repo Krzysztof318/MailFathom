@@ -6,10 +6,12 @@
 # carries no migration tool, no SQL, and no credential that could apply one, which is what makes "the host never
 # applies migrations" a property of the image rather than a rule somebody has to remember.
 #
-# `DatabaseSchemaStartupGate` refuses to start against a schema it does not recognize, and the artifact that answers
-# that refusal is #238's — the reviewed, operator-invoked schema step for a released installation. Nothing here
-# produces or applies one, so a deployment built from this file reaches a database whose schema was established
-# separately and deliberately.
+# `DatabaseSchemaStartupGate` refuses to start against a schema it does not recognize, and what answers that refusal is
+# a file published beside this image rather than anything inside it: `mailfathom-schema-<version>.sql`, attached to
+# every release and run by an operator who has read it and taken a backup. Nothing here produces or applies one, so a
+# deployment built from this file reaches a database whose schema was established separately and deliberately. See
+# docs/operations/database-schema.md, which also records why a command in this image was refused: the credentials this
+# process runs with are not the ones that may create the `vector` extension or run DDL.
 #
 # The build context is the repository root, and the ignore-file beside this one is what bounds it:
 #

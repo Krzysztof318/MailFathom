@@ -65,10 +65,11 @@ lists all three before the install command.
   choose per deployment, never a default, and nothing in MailFathom's own configuration can substitute for it.
 - **An explicit schema step.** MailFathom never applies database migrations while starting: it verifies the schema and
   refuses to serve against one it does not recognize, so bringing a new build up *tells* you a migration is
-  outstanding rather than silently applying one. The reviewed artifact a released installation will apply is still
-  open — [issue #126](https://github.com/Krzysztof318/MailFathom/issues/126) tracks it — so today the step is your own,
-  performed against the `mailfathom` database as the [Compose guide](../operations/deployment-compose.md#starting)
-  describes.
+  outstanding rather than silently applying one. What you apply is one idempotent SQL file — a release attaches
+  `mailfathom-schema-<version>.sql`, and a checkout produces the same file with `scripts/build-schema-artifact.sh`.
+  Read it, back the database up, and run it with any PostgreSQL client;
+  [applying the database schema](../operations/database-schema.md) states the privileges it needs and what each
+  startup failure means.
 
 ## Native process
 

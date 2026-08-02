@@ -250,7 +250,17 @@ var migrations = mailFathomHost.AddEFMigrations(OrchestrationContract.Migrations
     .WithMigrationOutputDirectory("Persistence/Migrations")
     .WithReference(database)
     .WaitFor(database)
-    .RunDatabaseUpdateOnStart();
+    .RunDatabaseUpdateOnStart()
+    // The deployment artifact, written to `efmigrations/` under the publish output and executed by nothing: `aspire
+    // publish` produces the SQL an operator reads, takes a backup against, and runs deliberately. Idempotent, so the
+    // one artifact answers both the empty database and the one already carrying part of the chain — the operator does
+    // not have to know which migrations a given database holds to know which script to apply.
+    //
+    // Transactions are kept, which is the whole reason a failed apply leaves the database on the migration it was on
+    // rather than half way through one. EF wraps each migration in its own transaction, so a chain that fails at the
+    // third migration keeps the first two; PostgreSQL runs DDL transactionally, which is what makes that true here and
+    // is why ScriptNoTransactions would be a loss rather than a portability concession.
+    .PublishAsMigrationScript(idempotent: true);
 
 // Applying migrations before the host starts is what lets the host refuse to serve traffic against a schema it does not
 // recognize without that refusal firing on every local run.

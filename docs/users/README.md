@@ -21,10 +21,10 @@ Two properties hold everywhere and are worth knowing before anything is installe
 
 ## The state of the release
 
-MailFathom has not had a first release yet. No container image is published, no versioned artifact exists, and the
-schema-application artifact a released installation will use is still open. Every installation therefore starts from a
-checkout of this repository, and these pages say so where it matters instead of describing a release that does not
-exist. The first release is milestone `0.1.0`.
+MailFathom has not had a first release yet. No versioned artifact exists, so every installation starts from a checkout
+of this repository — including the schema file you apply, which a release will attach and which a checkout generates
+with `scripts/build-schema-artifact.sh`. These pages say so where it matters instead of describing a release that does
+not exist. The first release is milestone `0.1.0`.
 
 ## The path
 
@@ -45,6 +45,7 @@ exist. The first release is milestone `0.1.0`.
 | How do I provision and rotate credentials? | [Secret provisioning](../operations/secret-provisioning.md), [secret rotation](../operations/secret-rotation.md) |
 | How do I protect the MCP endpoint — keys, OAuth, TLS, client certificates, rate limits? | [The MCP endpoint](../operations/mcp-endpoint.md) |
 | How do I upgrade, back up, restore, or remove it? | [Docker Compose](../operations/deployment-compose.md), [Kubernetes](../operations/deployment-kubernetes.md) |
+| It refuses to start, saying a migration is pending. What now? | [Applying the database schema](../operations/database-schema.md) |
 | Where does configuration come from, and what reloads without a restart? | [Configuration sources](../operations/configuration-sources.md), [configuration reference](../operations/configuration-reference.md) |
 | What does it record about itself, and where do the records go? | [Telemetry](../operations/telemetry.md), [host startup telemetry](../operations/host-startup-telemetry.md) |
 | What exactly does synchronization store and reconcile? | [IMAP synchronization](../features/imap-synchronization.md) |

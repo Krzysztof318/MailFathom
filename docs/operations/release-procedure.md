@@ -51,6 +51,7 @@ because an OCI tag would reject it later and further from the cause.
 | `org.opencontainers.image.version` and `.revision` | the image's version and commit | yes |
 | The image's tags, including `latest` | which release this is | yes |
 | A packaged chart's `appVersion` | the application version the chart deploys | yes |
+| The release's `mailfathom-schema-<version>.sql` | which schema that version expects | yes |
 | The published assemblies | `AssemblyInformationalVersion` | yes |
 
 All of them come from the same declaration. The two runtime paths read the assembly's own metadata rather than a
@@ -130,6 +131,11 @@ whole procedure, and it is recorded here so it survives the skill being unavaila
    git tag --annotate v0.1.0 --message 'MailFathom 0.1.0'
    git push origin v0.1.0
    ```
+
+   It also builds the release's schema artifact and attaches it, and it blocks the push when that fails: an image
+   published without the SQL an operator needs to reach its schema is an image that starts, fails the startup gate, and
+   stays down. [Applying the database schema](database-schema.md) is what the artifact is; the release notes record its
+   name, its checksum, and the migrations it carries.
 
 3. **Merge the version-bump pull request.** It raises `VersionPrefix` to the next version. It merges after the tag, so
    `main` returns to naming the next release. Skipping it fails loudly rather than silently: the next tag push repeats

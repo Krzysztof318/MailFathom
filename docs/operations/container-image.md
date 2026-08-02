@@ -137,14 +137,19 @@ payload of its own.
 ## The schema
 
 The image applies none and carries nothing that could: no migration tool, no SQL, and no credential that could reach a
-database with DDL. The reviewed artifact a released installation applies, and the step that runs it, belong to issue
-#126. Until it ships, establishing the schema is an explicit operator action each deployment page describes.
+database with DDL. What a released installation applies is a file beside the image rather than something inside it —
+`mailfathom-schema-<version>.sql`, attached to the release — and running it is an explicit operator action each
+deployment page describes.
 
 The role that applies it needs more privilege than the service's: the schema installs the `vector` extension, which
-PostgreSQL does not permit an ordinary role to create. That asymmetry is why the step is separate — grant the service a
-role that can read and write rows and nothing more, and give the schema step a role that can do the rest. The Compose
-deployment installs the extension during initialization, while a superuser is still connected, so neither of its roles
-has to be one.
+PostgreSQL does not permit an ordinary role to create. That asymmetry is why the step is separate, and why a command
+inside this image would be the wrong shape for it whatever else it cost — the credentials this process runs with are
+not the ones that may run DDL. Grant the service a role that can read and write rows and nothing more, and give the
+schema step a role that can do the rest. The Compose deployment installs the extension during initialization, while a
+superuser is still connected, so neither of its roles has to be one.
+
+[Applying the database schema](database-schema.md) is the whole path, including the ownership grants a separate role
+leaves behind and the three startup failures a schema problem reports.
 
 ## Published images
 
@@ -202,9 +207,10 @@ attestation manifest are out of that step's reach by construction.
 A nightly is whatever `main` was that night. It is published so a change can be tried, and running one is a decision
 rather than a default — which is why both deployment shapes put an acknowledgement in front of it. What you take on:
 
-- **The database schema may be ahead of any release.** A nightly can carry a schema change that no published migration
-  applies, and MailFathom refuses to start against a schema it does not recognize. Recovering usually means restoring
-  the database rather than downgrading the image.
+- **The database schema may be ahead of any release, and no schema artifact is published for it.** A nightly can carry
+  a schema change no release's script applies, and MailFathom refuses to start against a schema it does not recognize.
+  Generating the script from that commit's checkout is the only way to get one; recovering usually means restoring the
+  database rather than downgrading the image.
 - **There is no upgrade path, in either direction.** Nothing tests that yesterday's nightly upgrades to today's, that a
   nightly upgrades to the release that follows it, or that a release can be put back after one. A production database
   that a nightly has touched may not be usable by a release.
@@ -247,6 +253,12 @@ Publication runs the gates instead, in an order that spends the cheap ones first
    it, which refuses to publish a release carrying a fixable `HIGH` or `CRITICAL` finding and only reports one on a
    nightly.
 
+A release additionally waits on its schema artifact, which is generated beside the gates above and blocks the push if
+it cannot be produced: an operator handed an image and no way to reach the schema it requires has a deployment that
+starts, fails the startup gate, and stays down. [Applying the database schema](database-schema.md) is what that
+artifact is. A nightly publishes none, which is one of the things
+[running a nightly takes on](#what-a-nightly-build-risks).
+
 Only then is the multi-architecture manifest list built and pushed. After the push it is inspected by digest and
 required to carry both platforms and to identify itself as the channel and version it was published as. A failure
 anywhere above publishes nothing.
@@ -271,3 +283,4 @@ where it is worth running, by starting the Compose deployment by hand as
 
 - [Docker Compose](deployment-compose.md)
 - [Kubernetes and Helm](deployment-kubernetes.md)
+- [Applying the database schema](database-schema.md)
