@@ -2256,6 +2256,35 @@ every_checkout_refuses_to_persist_credentials() {
   fi
 }
 
+# `actions/checkout` resolves a tag ref and then force-fetches the commit into that same ref name, so
+# `refs/tags/<tag>` is left pointing straight at a commit — which is what a lightweight tag is.
+# `assert-release-tag.sh` requires an annotated tag, so without the restoring fetch every correctly
+# pushed release tag is rejected and nothing can publish at all. The contracts above run that script
+# directly and cannot see this: a local annotated tag stays annotated, so they pass either way, which
+# is why the guard has to be asserted here against the workflow instead.
+the_release_restores_the_annotated_tag_before_asserting_it() {
+  local workflow="$source_repository_root/.github/workflows/release.yml"
+  local restore_line
+  local assert_line
+
+  restore_line="$(grep -nF 'git fetch --force origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"' \
+    "$workflow" | head -n 1 | cut -d: -f1)"
+  assert_line="$(grep -nF 'bash scripts/assert-release-tag.sh' "$workflow" | head -n 1 | cut -d: -f1)"
+
+  if [[ -z "$restore_line" || -z "$assert_line" ]]; then
+    printf 'release.yml restores the tag at line %s and asserts it at line %s; both are required.\n' \
+      "${restore_line:-<missing>}" "${assert_line:-<missing>}" >&2
+    return 1
+  fi
+
+  # Order is the whole point. A restoration after the assertion repairs a ref nothing reads again.
+  if ((restore_line >= assert_line)); then
+    printf 'release.yml restores the tag at line %s, which is not before the assertion at line %s.\n' \
+      "$restore_line" "$assert_line" >&2
+    return 1
+  fi
+}
+
 # `pull_request_target` runs the base branch's workflow with the repository's secrets against a
 # contribution nobody has reviewed. `fathom-review.yml` uses it deliberately, #189 decided so, and
 # `docs/operations/agent-workflow.md` records why the purpose of the rule is still met there — it
@@ -2370,6 +2399,7 @@ run_test every_external_action_names_an_approved_owner
 run_test every_workflow_job_declares_its_permissions
 run_test every_write_scope_is_one_the_policy_records
 run_test every_checkout_refuses_to_persist_credentials
+run_test the_release_restores_the_annotated_tag_before_asserting_it
 run_test only_the_reviewer_workflow_uses_pull_request_target
 run_test workflow_scripts_use_flat_manual_layout
 

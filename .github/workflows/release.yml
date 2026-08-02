@@ -39,6 +39,18 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # The checkout above brings the annotated tag object down and then destroys it: having resolved the ref, it
+      # force-fetches the *commit* into the same ref name — `+<sha>:refs/tags/<tag>` — so `refs/tags/<tag>` ends up
+      # pointing straight at the commit, which is what a lightweight tag is. The assertion below requires an annotated
+      # tag, per ADR 0004, and would therefore reject every correctly pushed release tag there is.
+      #
+      # This restores what the tag actually is on the remote. `fetch-tags: true` does not do it: the tags are already
+      # fetched by then and the overwrite happens after. Do not remove this as redundant with `fetch-depth: 0`.
+      - name: Restore the annotated tag the checkout overwrote
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: git fetch --force origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+
       - name: Assert the tag against the commit it names
         id: assert
         env:
