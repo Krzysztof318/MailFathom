@@ -23,12 +23,17 @@ CANONICAL_REPOSITORY='Krzysztof318/MailFathom'
 # `owner/name`, with an optional `.git` suffix and trailing slash removed. GitHub treats an owner and
 # a repository name case-insensitively, so this does too; a fork under another owner does not match,
 # which is the whole point.
+#
+# Folded with `tr` rather than with `${x,,}`: that expansion is bash-only, and under any other shell
+# it fails the whole function, which would leave the caller reading "no remote names MailFathom" and
+# refusing a checkout that was correct. Every caller runs bash today; a gate whose failure mode is
+# refusing valid work should not depend on that staying true.
 names_canonical_repository() {
   local remote_url="${1%/}"
 
-  remote_url="${remote_url%.git}"
+  remote_url="$(printf '%s' "${remote_url%.git}" | tr '[:upper:]' '[:lower:]')"
 
-  [[ "${remote_url,,}" == *"${CANONICAL_REPOSITORY,,}" ]]
+  [[ "$remote_url" == *"$(printf '%s' "$CANONICAL_REPOSITORY" | tr '[:upper:]' '[:lower:]')" ]]
 }
 
 # The remote to resolve the base branch against, or nothing when no remote names MailFathom.
