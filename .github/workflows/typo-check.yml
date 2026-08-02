@@ -1,0 +1,135 @@
+name: Typo check
+
+# A spell check over the files a pull request changes, deliberately not a job of `CI`.
+#
+# `CI` exists to answer whether a change is sound, and its interior is built around one required
+# check that aggregates jobs which are allowed to skip. This answers something else and answers it
+# without a runner of consequence: it needs no SDK, no restore, no cache, and no build, so folding it
+# in would tie a check that finishes in under a minute to the concurrency group, the change
+# detection, and the aggregate of the one that does not. Keeping it separate also keeps its verdict
+# separate — a red `Required CI` means the change does not build, and a red `Typo check` means a word
+# is misspelled, which are not facts a reader should have to disentangle from one status line.
+#
+# It is not in the `main` ruleset and reports no required status check. A misspelling is worth
+# surfacing on the pull request rather than worth blocking a merge over, and making it required would
+# mean a word this repository has not met yet stops a release.
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      # Never starts a check that does any work, and is listed so that a conversion reaches the
+      # concurrency group below and cancels a run still going. Without it, converting a ready pull
+      # request back to draft leaves the last verdict standing on a pull request that is no longer
+      # ready — an answer about a change still being written, which is the state the draft condition
+      # on the job exists to avoid.
+      - converted_to_draft
+    branches:
+      - main
+
+# No `paths` filter, deliberately, and for a different reason than the one `ci.yml` records. Nothing
+# waits on this check, so an uninstantiated run would block nothing; the reason is that there is no
+# such thing as a change this check does not concern. Prose is what it reads, and prose is in every
+# path — a C# doc comment, a workflow's own comments, a Helm value's description, this file.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  typo-check:
+    name: Typo check
+    # The one exception to always running. A draft is a change still being written, where a
+    # half-finished sentence is expected rather than reportable, and `ready_for_review` above is the
+    # deliberate act that opts every later push in.
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The changed-file query reads the pull request through the REST API. The checkout below reads
+      # the merge commit, which `contents: read` already covers.
+      pull-requests: read
+    steps:
+      # The default ref for a `pull_request` event is the merge commit the pull request would
+      # produce, which is the tree worth checking: it is what the words will look like once merged.
+      - name: Check out the merge commit this pull request would produce
+        uses: actions/checkout@v5
+
+      - name: Collect the files this pull request changes
+        id: changed-files
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          CHANGED_FILE_COUNT: ${{ github.event.pull_request.changed_files }}
+        run: |
+          set -euo pipefail
+
+          reportable_file_limit=3000
+
+          # `crate-ci/typos` receives its file list as one unquoted string, so a path survives only
+          # if the shell would leave it exactly as written, and the changed-files endpoint stops at
+          # 3000 entries, so a larger pull request would arrive as an incomplete list. Neither case
+          # is allowed to produce a list that is quietly wrong: both fall back to the whole checkout,
+          # which checks more than the pull request changed and never less. That fallback is only
+          # tenable because the tree is kept clean under `_typos.toml`, so scanning all of it passes.
+          fall_back_to_whole_checkout() {
+            echo "$1 Checking the whole checkout instead."
+            echo 'files=.' >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          if (( CHANGED_FILE_COUNT > reportable_file_limit )); then
+            fall_back_to_whole_checkout "This pull request changes ${CHANGED_FILE_COUNT} files, more than the ${reportable_file_limit} the changed-files endpoint reports."
+          fi
+
+          # A removed file is not in the checkout and cannot be read; a renamed one reports the path
+          # it moved to, which is the path that is there.
+          changed_paths_text="$(
+            gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/files?per_page=100" \
+              --paginate --jq '.[] | select(.status != "removed") | .filename'
+          )"
+
+          changed_paths=()
+          if [[ -n "$changed_paths_text" ]]; then
+            mapfile -t changed_paths <<< "$changed_paths_text"
+          fi
+
+          # A pull request that only deletes files leaves nothing to read. The step after this one
+          # reads the empty output and skips, rather than being handed the whole checkout for a
+          # change that removed words instead of adding any.
+          if (( ${#changed_paths[@]} == 0 )); then
+            echo 'This pull request leaves no changed file in the checkout, so there is nothing to check.'
+            echo 'files=' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Whitespace splits one path into two, and a glob character can expand it into different
+          # ones entirely — `docs/a[1].md` becomes `docs/a1.md` if that file happens to exist, which
+          # is the checker reading somewhere the pull request never went while the path it was given
+          # goes unread. Both are rare and neither is worth a partial answer.
+          for changed_path in "${changed_paths[@]}"; do
+            if [[ "$changed_path" == *[[:space:]]* || "$changed_path" == *[\*\?\[]* ]]; then
+              fall_back_to_whole_checkout "The changed path '${changed_path}' contains whitespace or a glob character, so it cannot survive being passed as one item of an unquoted list."
+            fi
+          done
+
+          echo "This pull request changes ${#changed_paths[@]} file(s) present in the checkout."
+          echo "files=${changed_paths[*]}" >> "$GITHUB_OUTPUT"
+
+      # Pinned to a commit rather than to a tag. The version tag is also what pins the `typos` binary
+      # — the action's entrypoint hard-codes the release it downloads — so the tag decides which
+      # dictionary a run is judged against, and a moving one would let a green pull request turn red
+      # without a commit on either side. Every finding is annotated in the Files changed view, and a
+      # second pass without the annotation formatter is what fails the job.
+      - name: Check those files for typos
+        if: steps.changed-files.outputs.files != ''
+        uses: crate-ci/typos@bee27e3a4fd1ea2111cf90ab89cd076c870fce14 # v1.48.0
+        with:
+          files: ${{ steps.changed-files.outputs.files }}

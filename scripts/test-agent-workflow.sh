@@ -23,6 +23,7 @@ repository_root="$test_directory/repository"
 remote_repository_root="$test_directory/remote"
 fake_bin_directory="$test_directory/bin"
 protected_paths_bin_directory="$test_directory/protected-paths-bin"
+typo_check_bin_directory="$test_directory/typo-check-bin"
 fathom_review_bin_directory="$test_directory/fathom-review-bin"
 settle_bin_directory="$test_directory/fathom-review-settle-bin"
 invocation_log="$test_directory/dotnet-invocations.log"
@@ -85,6 +86,17 @@ cat > "$protected_paths_bin_directory/gh" <<'FAKE_GH'
 printf '%s\n' "$FAKE_CHANGED_PATHS"
 FAKE_GH
 chmod +x "$protected_paths_bin_directory/gh"
+
+# The `Typo check` step makes the same shape of REST call and gets its own fake for the same reason.
+# It answers with the paths the contract supplies, which stand for what the real `--jq` would have
+# left after dropping the removed ones — the filtering itself is the endpoint's and jq's rather than
+# the step's, so what these contracts exercise is everything the step does with the answer.
+mkdir -p "$typo_check_bin_directory"
+cat > "$typo_check_bin_directory/gh" <<'FAKE_GH'
+#!/usr/bin/env bash
+printf '%s' "$FAKE_CHANGED_PATHS"
+FAKE_GH
+chmod +x "$typo_check_bin_directory/gh"
 
 # The `Fathom review` gate makes one API call, counting the reviews its App has already submitted on
 # the pull request. This fake `gh` prints the per-page count the real `--jq` would leave, so the
@@ -708,6 +720,128 @@ protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit() {
   assert_contains 'cannot be verified' "$output_file"
 }
 
+# The `Typo check` workflow decides in shell which files it hands the checker, and that decision is
+# the whole of what this repository wrote: the checking itself belongs to a pinned action. Extracting
+# the block verbatim is again what makes the contract run the runner's own code. The block ends at
+# the first line that leaves its ten-space indentation, so the step that follows it in the workflow
+# changes nothing here.
+extract_typo_check_step() {
+  local step_script="$1"
+
+  awk '
+    $0 == "        id: changed-files" { found = 1; next }
+    found && !extracting && /^        run: \|$/ { extracting = 1; next }
+    extracting {
+      if ($0 != "" && $0 !~ /^          /) { exit }
+      sub(/^          /, "")
+      print
+    }
+  ' "$source_repository_root/.github/workflows/typo-check.yml" > "$step_script"
+
+  [[ -s "$step_script" ]]
+  bash -n "$step_script"
+}
+
+# Returns the step's own exit status and writes the `GITHUB_OUTPUT` file the workflow would read, so
+# a caller asserts on what the next step is handed rather than on what the log says about it.
+run_typo_check_step() {
+  local changed_paths="$1"
+  local output_file="$2"
+  local step_output_file="$3"
+  local changed_file_count="${4:-$(printf '%s\n' "$changed_paths" | grep -c '')}"
+  local step_script="$test_directory/typo-check-step.sh"
+
+  extract_typo_check_step "$step_script"
+  : > "$step_output_file"
+
+  (
+    export PATH="$typo_check_bin_directory:$PATH"
+    export GH_TOKEN='fake-token'
+    export REPOSITORY='Krzysztof318/MailFathom'
+    export PULL_REQUEST_NUMBER='1'
+    export CHANGED_FILE_COUNT="$changed_file_count"
+    export FAKE_CHANGED_PATHS="$changed_paths"
+    export GITHUB_OUTPUT="$step_output_file"
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+}
+
+typo_check_passes_the_files_the_pull_request_changed() {
+  local output_file="$test_directory/typo-check-changed-output"
+  local step_output_file="$test_directory/typo-check-changed-step-output"
+
+  if ! run_typo_check_step \
+    $'README.md\nsrc/Domain/Emails/EmailAddress.cs\n.github/workflows/typo-check.yml' \
+    "$output_file" \
+    "$step_output_file"; then
+    printf 'Typo check failed to collect an ordinary changed-file list\n' >&2
+    return 1
+  fi
+
+  assert_file_content \
+    'files=README.md src/Domain/Emails/EmailAddress.cs .github/workflows/typo-check.yml' \
+    "$step_output_file"
+  assert_contains 'changes 3 file(s)' "$output_file"
+}
+
+typo_check_checks_nothing_when_the_pull_request_only_removes_files() {
+  local output_file="$test_directory/typo-check-removals-output"
+  local step_output_file="$test_directory/typo-check-removals-step-output"
+
+  if ! run_typo_check_step '' "$output_file" "$step_output_file" 2; then
+    printf 'Typo check failed on a pull request that only removes files\n' >&2
+    return 1
+  fi
+
+  assert_file_content 'files=' "$step_output_file"
+  assert_contains 'nothing to check' "$output_file"
+}
+
+typo_check_falls_back_to_the_whole_checkout_for_a_path_containing_whitespace() {
+  local output_file="$test_directory/typo-check-whitespace-output"
+  local step_output_file="$test_directory/typo-check-whitespace-step-output"
+
+  if ! run_typo_check_step \
+    $'README.md\ndocs/a file.md' \
+    "$output_file" \
+    "$step_output_file"; then
+    printf 'Typo check failed instead of widening its scope for a path containing whitespace\n' >&2
+    return 1
+  fi
+
+  assert_file_content 'files=.' "$step_output_file"
+  assert_contains 'docs/a file.md' "$output_file"
+}
+
+typo_check_falls_back_to_the_whole_checkout_for_a_path_containing_a_glob_character() {
+  local output_file="$test_directory/typo-check-glob-output"
+  local step_output_file="$test_directory/typo-check-glob-step-output"
+
+  if ! run_typo_check_step \
+    $'README.md\ndocs/a[1].md' \
+    "$output_file" \
+    "$step_output_file"; then
+    printf 'Typo check failed instead of widening its scope for a path containing a glob character\n' >&2
+    return 1
+  fi
+
+  assert_file_content 'files=.' "$step_output_file"
+  assert_contains 'docs/a[1].md' "$output_file"
+}
+
+typo_check_falls_back_to_the_whole_checkout_for_a_pull_request_beyond_the_reportable_limit() {
+  local output_file="$test_directory/typo-check-oversized-output"
+  local step_output_file="$test_directory/typo-check-oversized-step-output"
+
+  if ! run_typo_check_step 'README.md' "$output_file" "$step_output_file" 3001; then
+    printf 'Typo check failed instead of widening its scope for an oversized pull request\n' >&2
+    return 1
+  fi
+
+  assert_file_content 'files=.' "$step_output_file"
+  assert_contains '3001 files' "$output_file"
+}
+
 # The steps these contracts run are shell blocks inside `fathom-review.yml`, and they cannot be
 # scripts in `scripts/` for the reason the protected-paths guard cannot: the workflow never checks
 # the branch out. Extracting one verbatim is again what makes these contracts run the runner's own
@@ -1148,6 +1282,11 @@ run_test protected_paths_matches_the_configuration_files_at_every_depth
 run_test protected_paths_ignores_paths_that_only_resemble_a_protected_one
 run_test protected_paths_reports_the_paths_it_found_when_the_owner_is_the_author
 run_test protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit
+run_test typo_check_passes_the_files_the_pull_request_changed
+run_test typo_check_checks_nothing_when_the_pull_request_only_removes_files
+run_test typo_check_falls_back_to_the_whole_checkout_for_a_path_containing_whitespace
+run_test typo_check_falls_back_to_the_whole_checkout_for_a_path_containing_a_glob_character
+run_test typo_check_falls_back_to_the_whole_checkout_for_a_pull_request_beyond_the_reportable_limit
 run_test fathom_review_reviews_a_push_to_a_published_pull_request
 run_test fathom_review_refuses_a_closed_pull_request
 run_test fathom_review_collects_at_once_when_nobody_has_commented

@@ -87,7 +87,9 @@ Two checks gate the merge and both always report:
 - **`Required CI`** — the build, the unit tests, the coverage threshold, and formatting.
 - **`Protected paths`** — refuses a change from anyone but the repository owner to `.github/`, `.agents/`, `.claude/`, or `.config/`, to an `.editorconfig`, `.gitattributes`, `.worktreeinclude`, `AGENTS.md`, or `CLAUDE.md` at any depth, or to the repository-root `CHANGELOG.md`, `Directory.Build.props`, `LICENSE`, `NOTICE`, `NuGet.config`, or `global.json`. Those decide how every other change is judged rather than being judged by it, so a change to one is a separate conversation rather than a line inside a feature's diff. The check names the protected paths it found either way, so a passing run tells you which ones your change moved. If your work genuinely needs one — a new local tool, a coverage setting, a package pin, a workflow step — split it out and ask.
 
-Merging additionally requires an approving review from a code owner and a branch that is current with `main`. [`docs/operations/local-development.md`](docs/operations/local-development.md#pull-request-checks) documents both workflows and the branch ruleset in full.
+A third check, **`Typo check`**, runs on every pull request that is not a draft and spell-checks the files you changed, annotating each finding in the Files changed view. It gates nothing, so a red one does not block the merge — fix what it names, or, if it flagged a word this project uses on purpose or a misspelling that is deliberate, say so in the pull request and add it to `_typos.toml` with a line explaining which of the two it is.
+
+Merging additionally requires an approving review from a code owner and a branch that is current with `main`. [`docs/operations/local-development.md`](docs/operations/local-development.md#pull-request-checks) documents all three workflows and the branch ruleset in full.
 
 A separate `Fathom review` workflow may post an automated review on a published pull request. It reports no status check and gates nothing; treat it as a second opinion. On a pull request from a fork it runs only after a maintainer applies the `fathom-review` label.
 
