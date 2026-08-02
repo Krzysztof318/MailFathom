@@ -1,14 +1,21 @@
 name: Protected paths
 
-# Four directories decide how every other change is judged rather than being judged by it, which is
+# Five directories decide how every other change is judged rather than being judged by it, which is
 # what makes them one set:
 #
-#   `.github/`  who has to approve a change, which checks the `main` ruleset waits for, and which
-#               dependency updates open themselves
-#   `.config/`  which API calls the build bans, what the coverage gate demands, which local tools
-#               restore, and how the test runner is configured
-#   `.agents/`  the skills that define the task, review, verification, and completion contract
-#   `.claude/`  the tracked entry points to those same skills
+#   `.github/`         who has to approve a change, which checks the `main` ruleset waits for, and
+#                      which dependency updates open themselves
+#   `.config/`         which API calls the build bans, what the coverage gate demands, which local
+#                      tools restore, and how the test runner is configured
+#   `.agents/`         the skills that define the task, review, verification, and completion contract
+#   `.claude/`         the tracked entry points to those same skills
+#   `docs/decisions/`  the architectural decisions every later change is written to be consistent
+#                      with, the templates that shape the next record, and the process that admits
+#                      one. An ADR is required reading before architecture, boundaries, persistence,
+#                      configuration, or security-sensitive behavior move, so rewriting one moves
+#                      what the next change is judged against rather than what the repository does.
+#                      `docs/AGENTS.md` and `docs/decisions/README.md` both require the owner's
+#                      approval for an ADR; this line is what asks for it before a reviewer does
 #
 # Five files decide the same thing from wherever they sit, so they are matched by name anywhere in
 # the tree rather than at the repository root. A nested copy of each overrides the root one for its
@@ -69,8 +76,9 @@ name: Protected paths
 #
 # The set is a list rather than a pattern because each entry was added for a reason that had to be
 # stated. A directory joins it when a change to it decides what the repository enforces on every
-# other change; a dotted directory is not protected merely for being dotted. A file joins it only
-# when it is written by one deliberate flow and every other edit to it is out of band.
+# other change; a dotted directory is not protected merely for being dotted, and `docs/decisions/`
+# is the entry showing that a directory is not excluded merely for holding prose. A file joins it
+# only when it is written by one deliberate flow and every other edit to it is out of band.
 on:
   pull_request:
     types:
@@ -118,7 +126,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          protected_prefixes=('.github/' '.agents/' '.claude/' '.config/')
+          protected_prefixes=('.github/' '.agents/' '.claude/' '.config/' 'docs/decisions/')
           protected_names=('.editorconfig' '.gitattributes' '.worktreeinclude' 'AGENTS.md' 'CLAUDE.md')
           protected_files=(
             'CHANGELOG.md'
@@ -148,10 +156,12 @@ jobs:
 
           # Literal matching rather than a regular expression, so the leading dot of each entry is a
           # dot and a sibling whose name merely ends that way is not protected by accident. A
-          # prefix covers a directory and everything beneath it. A protected name matches at the
-          # repository root or after a `/`, so `docs/.editorconfig` is caught and `docs/my.editorconfig`
-          # is not. A protected file is matched whole, so a differently placed file of the same name
-          # is not caught and a longer name beginning the same way is not either.
+          # prefix ends in `/` and covers that directory and everything beneath it, so a sibling
+          # whose name merely begins the same way — `docs/decisions-notes.md` — is not caught. A
+          # protected name matches at the repository root or after a `/`, so `docs/.editorconfig` is
+          # caught and `docs/my.editorconfig` is not. A protected file is matched whole, so a
+          # differently placed file of the same name is not caught and a longer name beginning the
+          # same way is not either.
           protected_changes=()
           while IFS= read -r changed_path; do
             for protected_prefix in "${protected_prefixes[@]}"; do
