@@ -286,10 +286,15 @@ the one registry overview that is not rendered from the repository itself. GHCR 
 image's `org.opencontainers.image.source` label and needs nothing pushed to it.
 
 A re-run of a publication is safe and does not rebuild. A version already present in both registries from the same
-commit is reported and left alone; a version present in one and missing from the other — what a partial publication
+commit is reported and its image left untouched; a version present in one and missing from the other — what a partial publication
 leaves behind — is copied across by digest, so the artifact that reaches the second registry is the one the first
 already answers for rather than a second build of the same source. A version present under a *different* commit is
 refused outright, because a published tag is immutable.
+
+The attestation is the one thing a re-run always redoes, because whether a digest is in a registry and whether it has
+been attested are different questions. A run whose push succeeded and whose attestation did not would otherwise be
+recovered by a re-run that skipped the attestation for good and reported success, leaving an image this page says can
+be verified and cannot. Re-attesting a digest adds a second valid statement, and verification accepts any of them.
 
 A published image can be verified the same way from outside:
 

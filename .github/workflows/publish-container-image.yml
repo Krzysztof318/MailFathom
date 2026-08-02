@@ -456,8 +456,15 @@ jobs:
       # also carries the statement in the registry as a referrer — both registries answer the referrers API — so
       # verification needs nothing but the image; a nightly deliberately does not, because its versions are pruned and a
       # referrer manifest would outlive the image it describes.
+      #
+      # **Unconditional, unlike every step above it.** Those skip on what is already in the registry, which is a
+      # question about the *manifest*; whether this digest has been attested is a different question, and the step that
+      # answers it is this one. Gating these on the manifest is what would make the documented recovery hide the failure
+      # it exists for: a run whose push succeeded and whose attestation did not is re-run, finds both registries
+      # carrying the revision, skips the attestation for good, and reports success — leaving an artifact the
+      # documentation says can be verified and cannot. Attesting a digest that already carries one costs a signature
+      # and adds a second valid statement, which verification accepts, so converging is cheaper than detecting.
       - name: Attest the image published to GHCR
-        if: steps.existing.outputs.already-published != 'true'
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-name: ${{ steps.reference.outputs.image }}
@@ -465,7 +472,6 @@ jobs:
           push-to-registry: ${{ inputs.channel == 'release' }}
 
       - name: Attest the image published to Docker Hub
-        if: steps.existing.outputs.already-published != 'true'
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-name: ${{ steps.reference.outputs.docker-hub-image }}

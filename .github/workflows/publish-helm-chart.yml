@@ -249,8 +249,11 @@ jobs:
 
       # The same signed statement the image carries, so what an operator installs into a cluster is traceable to the
       # workflow and the commit that produced it. `gh attestation verify oci://<chart>:<version>` is the check.
+      #
+      # Unconditional, for the reason the image's attestation steps give: whether the chart is in the registry and
+      # whether it has been attested are different questions, and gating this on the first would let a re-run after a
+      # failed attestation skip it permanently while reporting success.
       - name: Attest the published chart
-        if: steps.existing.outputs.already-published != 'true'
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-name: ${{ steps.reference.outputs.chart }}
@@ -260,13 +263,13 @@ jobs:
       # Artifact Hub verifies that whoever registered a repository controls it by reading a metadata artifact under a
       # reserved tag in that same repository. Pushing it on every release rather than once by hand is what makes it
       # self-healing: the claim is restored by the next release if the repository is ever recreated, and pushing an
-      # unchanged file costs one small artifact.
+      # unchanged file costs one small artifact. It is unconditional for that reason — a claim skipped because the
+      # chart was already published is a claim the next release does not restore either.
       #
       # The layer's media type and the `artifacthub.io` tag are Artifact Hub's, not a convention chosen here. The file
       # is copied into a directory of its own first, because ORAS records the path it was given as the layer title and
       # Artifact Hub reads the file by name.
       - name: Publish the Artifact Hub ownership claim
-        if: steps.existing.outputs.already-published != 'true'
         env:
           CHART: ${{ steps.reference.outputs.chart }}
         run: |

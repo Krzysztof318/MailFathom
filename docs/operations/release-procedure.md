@@ -193,6 +193,11 @@ version one registry already published, which is exactly what pushing one manife
 The same holds for the chart. A chart version already published under this release's application version is left alone;
 one published under a different application version is refused, because a published chart version is immutable.
 
+**The attestations and the Artifact Hub ownership claim are redone on every run**, for both artifacts, because whether
+something is in the registry and whether it has been attested or claimed are different questions. A run whose push
+succeeded and whose attestation failed is exactly the run somebody re-runs, and a re-run that skipped the attestation
+because the push had already landed would report success while leaving an artifact permanently unverifiable.
+
 A version that exists under a *different commit* is refused outright in either registry. That is not a state to
 recover from — the tag has already been published as something else, and the answer is a new version.
 
