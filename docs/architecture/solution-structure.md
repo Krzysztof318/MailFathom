@@ -16,7 +16,7 @@ MailFathom uses a clean-architecture modular monolith. Dependencies point inward
 
 `Host` is the project that gets published, so it is also where the project's licensing travels with the binaries. Its publish output includes the repository-root `LICENSE` and `NOTICE` beside the assemblies, and a `VerifyPublishedLicenseAndNotice` target fails the publish when either is missing from the output directory. The check inspects the artifact rather than the source tree, because the failure worth preventing is an artifact that ships without its license — a missing source file would otherwise resolve to an empty item and publish quietly.
 
-The identity in those files is declared once, in `Directory.Build.props`: the product name, the author, the copyright, the repository URL, `PackageLicenseExpression`, and an `SPDX-License-Identifier` assembly metadata entry that puts the identifier into every assembly, since nothing here is packed as a NuGet package. Each source file repeats the grant in the two-line header that `.editorconfig` defines and `IDE0073` enforces.
+The identity in those files is declared once, in `Directory.Build.props`: the product name, the author, the copyright, the repository URL, `PackageLicenseExpression`, and an `SPDX-License-Identifier` assembly metadata entry that puts the identifier into every assembly, since nothing here is packed as a NuGet package. Each source file repeats the grant, and names the repository the file came from, in the three-line header that `.editorconfig` defines and `IDE0073` enforces.
 
 ## Keeping compiled source inside its project
 

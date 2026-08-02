@@ -114,18 +114,19 @@ Adding a dependency, a service, a container image, or an externally sourced code
 
 ### The file header
 
-Every C# file in this repository carries the same two-line header, and a new file is no exception:
+Every C# file in this repository carries the same three-line header, and a new file is no exception:
 
 ```csharp
 // Copyright © 2026 Krzysztof Kasprowicz
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
 ```
 
 You never type it. `IDE0073` fails the build on a file that is missing it, and `scripts/verify-fast.sh` inserts it for you — which is one more reason to run the fast loop after adding a file rather than before pushing.
 
 **Do not modify it, and do not add anything of your own beside it.** No second copyright line, no `@author` tag, no "modified by", no name, initials, handle, or contact detail in a comment, a file, or a header anywhere in the tree. A pull request that adds one is asked to remove it before review continues.
 
-This is a consistency rule, not a claim about who wrote which line. The header states one project, one copyright holder of record, and one license, so that a reader of any file — and a tool scanning the tree — gets the same answer everywhere. It transfers nothing: **you keep the copyright in what you write**, exactly as the section above and the root [`NOTICE`](NOTICE) say, and the `NOTICE` is explicit that it claims nothing about contributions by other copyright holders. Authorship is recorded where it is actually durable and verifiable — in the commit history and in the pull request — rather than in a comment that the next refactor moves to a different file.
+This is a consistency rule, not a claim about who wrote which line. The header states one project, one copyright holder of record, one license, and one place the project lives, so that a reader of any file — and a tool scanning the tree — gets the same answer everywhere, including from a file that has travelled far from this repository. It transfers nothing: **you keep the copyright in what you write**, exactly as the section above and the root [`NOTICE`](NOTICE) say, and the `NOTICE` is explicit that it claims nothing about contributions by other copyright holders. Authorship is recorded where it is actually durable and verifiable — in the commit history and in the pull request — rather than in a comment that the next refactor moves to a different file.
 
 The files that carry the licensing decision itself are not merely off limits by convention — `LICENSE`, `NOTICE`, and `.editorconfig` are all on the `Protected paths` list above, so a pull request touching one fails that check before a reviewer reads it. Editing `LICENSE` turns GitHub's detected `Apache-2.0` into `NOASSERTION`, and editing the `file_header_template` line rewrites every source file in the repository. Propose a change to any of them in an issue instead.
 
