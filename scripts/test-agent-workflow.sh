@@ -1026,6 +1026,112 @@ fathom_review_reads_the_newest_comment_whatever_the_order() {
   assert_seconds_elapsed_at_least 4 "$started_at"
 }
 
+# `Publish container image` resolves the repository an image belongs to, and both callers hand it tags alone.
+# Qualifying those tags is therefore part of the same step, and nightly run 30725904948 is what leaving them bare
+# costs: an unqualified name is not a tag to a registry client but an image on the default registry, so the push asked
+# `auth.docker.io` for a token instead of writing to GHCR and every gate before it passed. The block is extracted the
+# way the ones above are, because it is a step inside YAML rather than a script the job could call.
+extract_publish_reference_step() {
+  local step_script="$1"
+
+  awk '
+    $0 == "        id: reference" { found = 1; next }
+    found && !extracting && /^        run: \|$/ { extracting = 1; next }
+    extracting {
+      if ($0 != "" && $0 !~ /^          /) { exit }
+      sub(/^          /, "")
+      print
+    }
+  ' "$source_repository_root/.github/workflows/publish-container-image.yml" > "$step_script"
+
+  [[ -s "$step_script" ]]
+  bash -n "$step_script"
+}
+
+# The step reads the committed timestamp of the checkout it runs in, so it runs inside the fixture
+# repository rather than in the temporary directory beside it.
+run_publish_reference_step() {
+  local image_tags="$1"
+  local output_file="$2"
+  local step_output_file="$3"
+  local step_script="$test_directory/publish-reference-step.sh"
+
+  extract_publish_reference_step "$step_script"
+  : > "$step_output_file"
+
+  (
+    export REPOSITORY='Krzysztof318/MailFathom'
+    export IMAGE_TAGS="$image_tags"
+    export GITHUB_OUTPUT="$step_output_file"
+    cd "$repository_root"
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+}
+
+# What the pushing step is handed, read out of the multi-line output the way the runner reads it, so
+# the assertion is about every reference rather than about one line that happens to be present.
+read_published_references() {
+  awk '
+    /^references<<REFERENCES$/ { inside = 1; next }
+    $0 == "REFERENCES" { inside = 0 }
+    inside { print }
+  ' "$1"
+}
+
+publish_qualifies_every_nightly_tag_with_the_repository_it_resolves() {
+  local output_file="$test_directory/publish-reference-nightly-output"
+  local step_output_file="$test_directory/publish-reference-nightly-step-output"
+  local references_file="$test_directory/publish-reference-nightly-references"
+
+  if ! run_publish_reference_step $'0.1.0-nightly.12-616d0a6\nnightly\n' "$output_file" "$step_output_file"; then
+    printf 'The publish workflow failed to resolve a nightly tag list\n' >&2
+    return 1
+  fi
+
+  read_published_references "$step_output_file" > "$references_file"
+
+  assert_contains 'image=ghcr.io/krzysztof318/mailfathom' "$step_output_file"
+  assert_contains 'primary-reference=ghcr.io/krzysztof318/mailfathom:0.1.0-nightly.12-616d0a6' "$step_output_file"
+  assert_file_content \
+    $'ghcr.io/krzysztof318/mailfathom:0.1.0-nightly.12-616d0a6\nghcr.io/krzysztof318/mailfathom:nightly' \
+    "$references_file"
+}
+
+# The release channel's own tag list, and the blank line a heredoc-built list carries. `latest` is the
+# tag that made the defect cheap to miss: it looks like a tag everywhere else and resolves to
+# `docker.io/library/latest` here.
+publish_qualifies_the_release_tags_and_ignores_a_blank_line() {
+  local output_file="$test_directory/publish-reference-release-output"
+  local step_output_file="$test_directory/publish-reference-release-step-output"
+  local references_file="$test_directory/publish-reference-release-references"
+
+  if ! run_publish_reference_step $'0.1.0\n\nlatest\n' "$output_file" "$step_output_file"; then
+    printf 'The publish workflow failed to resolve a release tag list\n' >&2
+    return 1
+  fi
+
+  read_published_references "$step_output_file" > "$references_file"
+
+  assert_file_content \
+    $'ghcr.io/krzysztof318/mailfathom:0.1.0\nghcr.io/krzysztof318/mailfathom:latest' \
+    "$references_file"
+}
+
+# A tag list that is empty once blank lines are dropped would otherwise push `ghcr.io/<repository>:`,
+# which the registry answers for reasons that say nothing about the missing tag.
+publish_refuses_a_tag_list_with_nothing_to_publish() {
+  local output_file="$test_directory/publish-reference-empty-output"
+  local step_output_file="$test_directory/publish-reference-empty-step-output"
+
+  if run_publish_reference_step $'\n   \n' "$output_file" "$step_output_file"; then
+    printf 'The publish workflow resolved a reference from an empty tag list\n' >&2
+    return 1
+  fi
+
+  assert_contains 'No image tag was supplied' "$output_file"
+  assert_file_content '' "$step_output_file"
+}
+
 # The release gate is a script rather than a step inside `release.yml`, so the contracts below run it directly instead
 # of extracting it from YAML. Everything it decides — what a release tag may look like, which history it may come from,
 # and what the tagged tree has to say about itself — is decided once here, before a workflow builds anything, because
@@ -1293,6 +1399,9 @@ run_test fathom_review_collects_at_once_when_nobody_has_commented
 run_test fathom_review_waits_before_freezing_a_quiet_conversation
 run_test fathom_review_stops_waiting_at_the_ceiling
 run_test fathom_review_reads_the_newest_comment_whatever_the_order
+run_test publish_qualifies_every_nightly_tag_with_the_repository_it_resolves
+run_test publish_qualifies_the_release_tags_and_ignores_a_blank_line
+run_test publish_refuses_a_tag_list_with_nothing_to_publish
 run_test release_tag_assertion_accepts_a_tag_that_matches_its_commit
 run_test release_tag_assertion_refuses_a_prerelease_tag
 run_test release_tag_assertion_refuses_a_lightweight_tag

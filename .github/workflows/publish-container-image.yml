@@ -4,8 +4,9 @@ name: Publish container image
 # schedule — and neither builds anything of its own, so a change to how MailFathom is built, gated, scanned, or attested
 # is one edit rather than two that can drift apart.
 #
-# The build happens once and the push is the only per-registry part, which is what leaves #235 a login and a tag list to
-# add rather than a second pipeline. Until it lands, GHCR is the only registry a MailFathom image reaches.
+# The build happens once and the push is the only per-registry part, which is what leaves #235 a login and a second
+# repository to qualify the tags against rather than a second pipeline. Until it lands, GHCR is the only registry a
+# MailFathom image reaches.
 #
 # Every action here is pinned to an immutable commit SHA, which the read-only workflows in this repository deliberately
 # do not do. The difference is the privilege: these jobs hold a token that can write to a registry and sign an
@@ -31,7 +32,7 @@ on:
         type: string
         default: ''
       tags:
-        description: 'Newline-separated image tags. The first is the immutable one this version owns; the rest are the moving tags it takes over.'
+        description: 'Newline-separated image tags, without a repository: this workflow resolves that and qualifies each one. The first is the immutable tag this version owns; the rest are the moving tags it takes over.'
         required: true
         type: string
       block-on-vulnerabilities:
@@ -117,6 +118,12 @@ jobs:
 
       # An OCI repository name is lowercase, and this owner's login is not, so the reference is folded once here rather
       # than written as a literal that a rename would leave pointing at nothing.
+      #
+      # Qualifying the caller's tags is part of the same resolution, because a tag on its own is not a tag to a registry
+      # client: an unqualified name is an image on the default registry, so pushing a bare `nightly` would reach
+      # `docker.io/library/nightly` rather than this repository. The callers therefore pass tags and every reference is
+      # composed here, which is also what keeps a second registry one more repository to qualify against rather than a
+      # rule each caller has to repeat.
       - name: Resolve the image reference
         id: reference
         env:
@@ -126,12 +133,21 @@ jobs:
           set -euo pipefail
 
           image="ghcr.io/$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
-          primary_tag="$(printf '%s\n' "$IMAGE_TAGS" | sed '/^[[:space:]]*$/d' | head -n 1)"
+          tags="$(printf '%s\n' "$IMAGE_TAGS" | sed '/^[[:space:]]*$/d')"
+          primary_tag="$(printf '%s\n' "$tags" | head -n 1)"
+
+          if [[ -z "$primary_tag" ]]; then
+            echo "::error::No image tag was supplied, so there is nothing to publish this version as."
+            exit 1
+          fi
 
           {
             printf 'image=%s\n' "$image"
             printf 'primary-tag=%s\n' "$primary_tag"
             printf 'primary-reference=%s:%s\n' "$image" "$primary_tag"
+            printf 'references<<REFERENCES\n'
+            printf '%s\n' "$tags" | sed "s|^|${image}:|"
+            printf 'REFERENCES\n'
           } >> "$GITHUB_OUTPUT"
 
           # `created` names the instant the source was committed rather than the instant a runner happened to start.
@@ -312,7 +328,7 @@ jobs:
           target: runtime
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ inputs.tags }}
+          tags: ${{ steps.reference.outputs.references }}
           build-args: |
             IMAGE_VERSION=${{ inputs.version }}
             IMAGE_REVISION=${{ inputs.ref }}
