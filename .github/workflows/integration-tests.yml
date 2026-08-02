@@ -71,7 +71,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: integration-test-results
           path: 'artifacts/integration-tests/raw/**/*.trx'
@@ -81,7 +81,7 @@ jobs:
       # carry the marker; the only coverage threshold this repository has is the unit-test one.
       - name: Upload integration coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: integration-coverage
           path: |
