@@ -134,7 +134,8 @@ jobs:
           # re-reading this from the API rather than deriving it from the settings page.
           REVIEWER_LOGIN: 'fathom-reviewer[bot]'
           # The updater whose pull requests the gate below declines to review, named the way it
-          # authors them rather than the way `.github/dependabot.yml` is spelled. It is the only
+          # authors them. It appears only through the repository's `Dependabot security updates`
+          # setting, because no version updates are configured here. It is the only
           # account here that opens a pull request without a person having written the diff, which
           # is the whole of why it is singled out; a second bot would earn its own line and its own
           # argument rather than a widened match on `[bot]`.

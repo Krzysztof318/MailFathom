@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, .config/typos.toml, src/AppHost/**, .github/workflows/**, .github/dependabot.yml -->
+<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, .config/typos.toml, src/AppHost/**, .github/workflows/** -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -628,7 +628,7 @@ notices.
 | Default workflow token | `read` | A job that needs more says so in its own `permissions:` block, which is reviewable; a permissive default is not |
 | Actions may create or approve pull requests | disabled | A workflow approving its own change would satisfy the ruleset's review requirement without a person |
 | Allowed actions | `all` today; #160 owns narrowing it | The allowlist is the settings-side twin of the owner contract above. The contract suite already refuses an owner outside the reviewed set on every pull request, so what the setting adds is coverage of a workflow that reaches the repository some other way |
-| Require actions pinned to a full-length commit SHA | off, and deliberately | A repository-wide setting would impose one answer where this repository already gives two. A job holding registry write, a signing identity, or the token that publishes a release pins its steps to a commit, because what a moving tag resolves to is otherwise decided by somebody else and would reach a published artifact; every other job follows the major tag, and `crate-ci/typos` is pinned for a third reason its own workflow states. `security-events: write` in `codeql.yml` is a write scope and not a publishing one, so it does not pull the pinning rule with it. `THIRD_PARTY_LICENSES.md` records which step is pinned which way and why. The setting stays off because turning it on would collapse that distinction into a sweep, not because the pins are unfinished |
+| Require actions pinned to a full-length commit SHA | off, and deliberately | Turning it on would refuse every reference this repository makes. Actions are referenced by major tag so that an upstream fix arrives without a commit, which is the whole update mechanism now that nothing proposes one; a commit SHA freezes that and makes each patch a pull request somebody has to open. Two references are exact versions for reasons their own workflows state, and neither is a supply-chain one. `THIRD_PARTY_LICENSES.md` records each version and the argument for allowing it, which is where the trust in a reference actually comes from, and [Keeping the pinned actions current](#keeping-the-pinned-actions-current) carries the rest |
 | Artifact and log retention | 30 days | The REST API exposes no retention field, so the settings page is both where it is set and the only evidence it was |
 | Cache retention and size | 7 days, 10 GB | Unchanged unless measured eviction pressure argues otherwise |
 | Fork pull request approval | `Require approval for first-time contributors` | The workflows a fork's push can start hold a read-only token and no repository secret, so a wider setting protects nothing this one does not, and a narrower one turns every first contribution into a maintainer's click. The REST API exposes no field for it, so the settings page is the only place it can be read |
@@ -647,29 +647,45 @@ records the reasoning, and the contract above is the automated half of it.
 
 ### Keeping the pinned actions current
 
-`.github/dependabot.yml` is the only thing in this repository that updates a dependency it has
-pinned, and it covers the `github-actions` ecosystem alone. It proposes minor and patch updates as
-one grouped pull request each Monday, a major on its own, at most three open at a time, and nothing
-newer than a week old; the file states why each of those numbers is what it is and why the `nuget`
-ecosystem stays off, with the upstream issue that decides it.
+Every action a workflow runs is referenced by its major tag — `actions/checkout@v7`,
+`docker/login-action@v4`, `github/codeql-action@v4`. The tag *is* the update mechanism: a run already
+executes whatever the newest release under that major is, so an upstream fix reaches this repository
+without a commit on either side, and what a version bump costs here is a major.
 
-It ignores one thing, and that entry is about a spelling rather than about a dependency.
-`github/codeql-action` is referenced only as `@v4`, so the moving tag *is* how it updates: a run
-already executes whatever the newest `v4` release is, and a proposal to write that release's number
-into the reference converts the tag the pinning row above argues for into a third spelling. The file
-carries the whole argument, including why the entry names one dependency instead of the ecosystem and
-why a major stays proposed.
+Two references are exact versions instead, each for a reason of its own. `crate-ci/typos@v1.48.0` is
+pinned because the action's entrypoint hard-codes the `typos` binary it downloads, which makes the
+reference decide the dictionary a pull request is judged against; a moving tag there turns a green
+pull request red with no commit anywhere. `aquasecurity/trivy-action@v0.36.0` is pinned because the
+project publishes no moving major tag at all — its `v0` line is exact versions only — so there is
+nothing else to follow.
 
-Three things about those pull requests belong here rather than there. They edit `.github/workflows/**`
-by definition, so `Protected paths` recognises `dependabot[bot]` for that directory and refuses it
-everywhere else — that workflow carries the argument for why the exception removes a signal rather
-than an approval. `Fathom review` declines them, by author, because what decides a bump is the
-upstream release notes and the register rather than the diff; the `fathom-review` label still
-reaches one, and
-[Dependency update pull requests](agent-workflow.md#dependency-update-pull-requests) carries the
-argument. And they are exempt from nothing else: the `main` ruleset asks the same code-owner review
-of them as of any other pull request, `Required CI` still has to pass, nothing auto-merges, and the
-updater holds no write-capable token.
+Nothing in this repository proposes an update automatically, and that is the deliberate half. A bump
+is a licensing review before it is a diff: `THIRD_PARTY_LICENSES.md` records every action's version,
+terms, and the argument for allowing it, so the change that moves a reference is the change that
+updates the register, and neither half is worth having without the other. What a proposal would add
+is a version number somebody still has to research; what it costs is a pull request a maintainer
+reads every week.
+
+So a major is caught by looking, and the looking is worth scheduling rather than assuming. The two
+questions are whether a newer major exists and whether this repository would have chosen it, and
+both are answered from the upstream release notes rather than from the version number:
+
+```bash
+gh api repos/<owner>/<action>/git/matching-refs/tags/v --jq '[.[].ref | sub("refs/tags/";"")]'
+gh api repos/<owner>/<action>/releases/tags/<tag> --jq '.body'
+```
+
+[Dependabot alerts](#repository-security-features) are the other half and cover a different failure.
+They report a published advisory against something this repository pins, which is the case worth an
+interruption; they say nothing at all about a version merely being behind, so they are not what keeps
+a major current and reading them as if they were is the way a pin rots quietly.
+
+`Protected paths` and `Fathom review` both still recognise `dependabot[bot]`, because
+`Dependabot security updates` is a repository setting rather than a fact about this repository, and
+an advisory the owner decides to act on that way arrives as a pull request from that author. Neither
+recognition grants anything: the `main` ruleset asks the same code-owner review of such a pull
+request as of any other, `Required CI` still has to pass, nothing auto-merges, and that author holds
+no write-capable token.
 
 ## Repository security features
 
@@ -693,10 +709,10 @@ gh api repos/Krzysztof318/MailFathom/automated-security-fixes
 | Secret scanning validity checks | unavailable | Part of paid GitHub Secret Protection. Recorded so a later reader reads the configuration as complete for what a free public repository gets rather than as half-finished |
 | Non-provider (generic) patterns | unavailable | The same entitlement. Provider patterns — the credential formats GitHub's partners publish detectors for — are what a free public repository does get, and they are what the two rows above run on |
 | Push-protection bypass | nobody but the repository owner | Delegated bypass, which routes a bypass request to a reviewer, is a paid feature. Without it the question reduces to who holds write access, and that is the owner alone. A contributor who believes a block is a false positive says so in the pull request; there is deliberately nothing for them to click |
-| Dependabot alerts | enabled | The advisory database's opinion about the pinned closure, which is worth having whatever can be done about it automatically |
+| Dependabot alerts | enabled | The advisory database's opinion about the pinned closure, which is worth having whatever can be done about it automatically. It is the only Dependabot half that runs here, and it reports rather than proposes |
 | Dependabot malware alerts | enabled | The same shape of thing for a different failure: a package that is not vulnerable but hostile. It reports and opens nothing, so the lock-file argument below does not reach it |
-| Dependabot version updates | enabled | The switch `.github/dependabot.yml` needs to do anything at all. The file decides what is proposed and when; this decides whether it runs |
-| Dependabot security updates | off, and deliberately | This is the half that opens a pull request, and for NuGet it would open one that cannot go green: the fix edits a central pin without regenerating the lock files, and every gated restore runs in locked mode. The alert is what the owner acts on; the bump is made by hand |
+| Dependabot version updates | inert | The switch reads `.github/dependabot.yml`, which this repository does not have, so nothing is proposed whichever way it is set. The mechanism is the file, and leaving the switch alone keeps it one decision rather than two that can disagree. [Keeping the pinned actions current](#keeping-the-pinned-actions-current) carries why an updater is not what maintains a pin here |
+| Dependabot security updates | off, and deliberately | This is the half that opens a pull request, and for NuGet it would open one that cannot go green: the fix edits a central pin without regenerating the lock files, and every gated restore runs in locked mode, which fails with `NU1004` rather than resolving. Regenerating them is exactly what the NuGet updater does not do — [dependabot/dependabot-core#13950](https://github.com/dependabot/dependabot-core/issues/13950) records that lock files of projects reached transitively through a `<ProjectReference>` are left untouched under central package management, and it is open. Turn this on for NuGet the day that issue closes and a bump is shown to restore in locked mode, not on the strength of the updater existing; for actions it would work today, and what it would add over an alert is a diff the register still has to be written against by hand. The alert is what the owner acts on; the bump is made by hand, with `dotnet restore MailFathom.slnx --force-evaluate` |
 | Code scanning | advanced setup, `.github/workflows/codeql.yml` | Described under [Pull request checks](#pull-request-checks) above |
 | Code scanning merge protection | off | The reasoning is [Branch protection](#branch-protection)'s: a query pack updates upstream, so a required verdict here can change with no commit on either side |
 | Copilot Autofix | off, and deliberately | It drafts a patch for a CodeQL alert by sending the code around it to a hosted model. Every AI service this repository uses carries a row in `THIRD_PARTY_LICENSES.md` naming exactly what a run submits and under whose terms, and a suggested patch on a repository where one maintainer reads every finding anyway does not earn that row. Turning it on means writing the row in the same change |

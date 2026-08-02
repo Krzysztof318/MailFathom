@@ -946,8 +946,8 @@ protected_paths_allows_dependabot_to_update_the_workflows() {
   local output_file="$test_directory/protected-paths-dependabot-output"
   local summary_file="$test_directory/protected-paths-dependabot-summary"
 
-  # Every pull request `.github/dependabot.yml` produces looks like this one, and without the
-  # exception each would be permanently unmergeable against a required check.
+  # A Dependabot pull request against an action looks like this one, and without the exception it
+  # would be permanently unmergeable against a required check.
   if ! run_protected_paths_step \
     'dependabot[bot]' \
     $'.github/workflows/ci.yml\n.github/workflows/codeql.yml\n.github/workflows/nightly.yml' \
@@ -1223,10 +1223,10 @@ fathom_review_refuses_a_closed_pull_request() {
   assert_contains 'the pull request is closed' "$output_file"
 }
 
-# The updater opens its batch as ordinary published pull requests, so every check that contains this
-# workflow's cost — the draft one especially — lets them straight through. What the reviewer would
-# read is a version number, and what decides a bump is the upstream release notes and the license
-# register instead.
+# The updater opens an ordinary published pull request, so every check that contains this workflow's
+# cost — the draft one especially — lets it straight through. What the reviewer would read is a
+# version number, and what decides a bump is the upstream release notes and the license register
+# instead.
 fathom_review_refuses_a_pull_request_the_updater_opened() {
   local output_file="$test_directory/fathom-review-updater-output"
   local step_output_file="$test_directory/fathom-review-updater-step-output"

@@ -128,14 +128,15 @@ jobs:
           echo "This pull request changes ${#changed_paths[@]} file(s) present in the checkout."
           echo "files=${changed_paths[*]}" >> "$GITHUB_OUTPUT"
 
-      # Pinned to a commit rather than to a tag. The version tag is also what pins the `typos` binary
-      # — the action's entrypoint hard-codes the release it downloads — so the tag decides which
-      # dictionary a run is judged against, and a moving one would let a green pull request turn red
-      # without a commit on either side. Every finding is annotated in the Files changed view, and a
-      # second pass without the annotation formatter is what fails the job.
+      # Pinned to an exact version rather than to the moving `v1` every other action here follows.
+      # The version tag is also what pins the `typos` binary — the action's entrypoint hard-codes the
+      # release it downloads — so the tag decides which dictionary a run is judged against, and a
+      # moving one would let a green pull request turn red without a commit on either side. Every
+      # finding is annotated in the Files changed view, and a second pass without the annotation
+      # formatter is what fails the job.
       - name: Check those files for typos
         if: steps.changed-files.outputs.files != ''
-        uses: crate-ci/typos@bee27e3a4fd1ea2111cf90ab89cd076c870fce14 # v1.48.0
+        uses: crate-ci/typos@v1.48.0
         with:
           files: ${{ steps.changed-files.outputs.files }}
           # Named rather than discovered. `typos` looks for a configuration file only under the names
