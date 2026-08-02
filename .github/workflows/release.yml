@@ -134,6 +134,10 @@ jobs:
       # a release cannot be deployed over the previous release's data, which is the most important sentence a MailFathom
       # release note will ever carry.
       #
+      # That section describes one version, so the link under it says where the rest is. It points at the tag rather
+      # than at `main`, because an operator reading an older release wants the file as that release shipped it, not a
+      # copy that has since grown the sections describing everything they have not upgraded to yet.
+      #
       # The schema section beside it is the per-release record the artifact needs to be usable years from now: which
       # migrations it carries, the checksum that identifies the file, and the ordering and backup point applying it
       # assumes. The reasoning behind each of those lives once, in docs/operations/database-schema.md, and the notes link
@@ -157,6 +161,10 @@ jobs:
 
           {
             bash scripts/read-changelog-section.sh "$VERSION"
+            printf '\n[The full changelog at this tag](https://github.com/%s/blob/%s/CHANGELOG.md) ' \
+              "$REPOSITORY" "$RELEASE_TAG"
+            printf 'carries the releases before this one and the surfaces each of them broke.\n'
+
             printf '\n## The published image\n\n```\ndocker pull %s:%s\ndocker pull %s@%s\n```\n' \
               "$IMAGE" "$VERSION" "$IMAGE" "$DIGEST"
 
