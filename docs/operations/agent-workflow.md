@@ -257,7 +257,11 @@ the inline threads and issue comments, the reviews already submitted, and the
 issues its body closes, and writes them under `$RUNNER_TEMP/review` with an explicit
 ceiling on every one of them. What a ceiling drops is recorded and ends up in the
 review body, because a partial review that looks complete is worse than one that
-says what it did not see.
+says what it did not see. `truncation.txt` is where each of them appends, so it is
+created empty before the first ceiling can run rather than written by whichever one
+happens to be last — the closing references carry a ceiling of their own, and it is
+the script that applies it that reports what it cut, which is also what lets the
+contract suite exercise both without a `gh` stub for the whole collection.
 
 A second step then writes `obligations.json` beside them, and unlike everything
 above it calls no API: it reads the base checkout and the collected `files.json`,
@@ -569,6 +573,21 @@ against a commit, since what is committed, what is staged, and what is neither
 are one change to a reader. And it names the untracked paths no diff contains,
 because a new class that owes a test is exactly the shape one takes, and a report
 silently describing less than the change is worse than one that says so.
+
+The index is bounded like every other collected input: eighty changed source files,
+and twenty listed tests per type. The second bound is the one that is not obvious —
+how many tests name a type is a property of how common the name is rather than of
+the change — so the true count survives the cut beside the shortened list. What a
+bound dropped is recorded in the index's `notes`, and the prompt requires those to
+reach the reviewer's summary alongside anything `truncation.txt` says, because a
+section that was cut short looks complete to everybody but the reviewer.
+
+The patterns a marker declares are resolved the way git's own `:(glob)` pathspec
+resolves them, and the two have to agree: the contract suite validates every marker
+through git, so a pattern the index read more narrowly would be called valid while
+the paths it covers were skipped. That is why `**` between two slashes matches zero
+directories as well as many — `src/**/*Options.cs` credits `src/FooOptions.cs`, not
+only a nested one — and why a leading `**/` reaches the repository root.
 
 Nothing the index emits is a finding. It says where to look, and it is derived
 from file names and declared markers, so it points at obligations a change does

@@ -19,12 +19,20 @@
 # "as #123 describes" — and GitHub closes nothing on it. It is left out for that reason: the question
 # here is what merging this pull request completes.
 #
-# Usage: collect-closing-references.sh <body-file> [repository]
+# A limit bounds how many are printed, because the caller fetches one issue per line and a body is
+# untrusted text that can name five hundred references as easily as five. What the limit cut is
+# stated on standard error rather than dropped: this workflow's own rule is that every ceiling
+# reports what it discarded, and a reference nobody was told about is an issue that closes on merge
+# with its acceptance list unread. Standard error is the channel for it because standard output is
+# the list itself, and the caller redirects the two to different places.
+#
+# Usage: collect-closing-references.sh <body-file> [repository] [limit]
 
 set -euo pipefail
 
 body_file="${1:?the pull request body file is required}"
 repository="${2:-}"
+limit="${3:-0}"
 
 [[ -s "$body_file" ]] || exit 0
 
@@ -47,4 +55,21 @@ keywords='close[sd]?|fix(e[sd])?|resolve[sd]?'
       | grep -oE '[0-9]+$' \
       || true
   fi
-} | awk '!seen[$0]++'
+} | awk -v limit="$limit" '
+  !seen[$0]++ {
+    kept++
+
+    if (limit > 0 && kept > limit) {
+      dropped++
+      next
+    }
+
+    print
+  }
+
+  END {
+    if (dropped > 0) {
+      printf "The pull request body closes %d issues and this review covers the first %d.\n", \
+        kept, limit > "/dev/stderr"
+    }
+  }'

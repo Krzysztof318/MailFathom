@@ -454,6 +454,11 @@ jobs:
 
           mkdir -p "$REVIEW_DIRECTORY/head" "$(dirname "$FINDINGS_FILE")"
 
+          # Every ceiling in this step appends what it dropped here, so it is created empty before
+          # the first one can run rather than written once at the end by whichever ceiling happens
+          # to be last. The submission step reads the whole file into the review body.
+          : > "$REVIEW_DIRECTORY/truncation.txt"
+
           # Taken before the first read rather than after the last, so it is a bound the reviewer
           # can rely on: nothing written after this instant is in what follows. The step above
           # exists to make that instant late enough, and the prompt states it, because a reviewer
@@ -609,14 +614,18 @@ jobs:
 
           : > "$REVIEW_DIRECTORY/issues.ndjson"
 
-          collected_issues=0
+          # The ceiling lives in the script rather than in this loop so that what it cuts is
+          # reported by the same code that cuts it, and so the contract suite can exercise both
+          # without standing up a `gh` stub for the whole collection. The list arrives on standard
+          # output and the note about what was dropped on standard error, which is why the two are
+          # redirected apart here.
+          "${GITHUB_WORKSPACE}/.github/fathom-review/collect-closing-references.sh" \
+            "$REVIEW_DIRECTORY/body.txt" "$REPOSITORY" "$closing_reference_limit" \
+            > "$REVIEW_DIRECTORY/closing-references.txt" \
+            2>> "$REVIEW_DIRECTORY/truncation.txt"
 
           while IFS= read -r issue_number; do
             [[ -n "$issue_number" ]] || continue
-
-            if (( collected_issues >= closing_reference_limit )); then
-              break
-            fi
 
             # A reference to an issue that cannot be fetched — deleted, or in a repository this
             # token does not reach — is recorded as the number alone rather than dropped, so the
@@ -626,23 +635,17 @@ jobs:
               || jq -nc --argjson number "$issue_number" \
                    '{number: $number, title: null, body: null}' \
                    >> "$REVIEW_DIRECTORY/issues.ndjson"
-
-            collected_issues=$(( collected_issues + 1 ))
-          done < <(
-            "${GITHUB_WORKSPACE}/.github/fathom-review/collect-closing-references.sh" \
-              "$REVIEW_DIRECTORY/body.txt" "$REPOSITORY"
-          )
+          done < "$REVIEW_DIRECTORY/closing-references.txt"
 
           jq -s . "$REVIEW_DIRECTORY/issues.ndjson" > "$REVIEW_DIRECTORY/issues.json"
-          rm -f "$REVIEW_DIRECTORY/issues.ndjson" "$REVIEW_DIRECTORY/body.txt"
+          rm -f "$REVIEW_DIRECTORY/issues.ndjson" "$REVIEW_DIRECTORY/body.txt" \
+            "$REVIEW_DIRECTORY/closing-references.txt"
 
           changed_files="$(jq -r '.changed_files' "$REVIEW_DIRECTORY/pull-request.json")"
           collected_files="$(jq -r 'length' "$REVIEW_DIRECTORY/files.json")"
           if (( changed_files > collected_files )); then
             printf 'The pull request changes %s files and this review covers the first %s.\n' \
-              "$changed_files" "$collected_files" > "$REVIEW_DIRECTORY/truncation.txt"
-          else
-            : > "$REVIEW_DIRECTORY/truncation.txt"
+              "$changed_files" "$collected_files" >> "$REVIEW_DIRECTORY/truncation.txt"
           fi
 
           echo "Collected ${collected_files} changed files and ${fetched} head-content files."

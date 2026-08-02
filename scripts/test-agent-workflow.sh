@@ -1255,6 +1255,44 @@ obligation_index_maps_a_changed_path_to_the_page_that_describes_it() {
     '.documentation[0].describing_documents' "$output_file"
 }
 
+# `**` between two slashes matches zero directories as well as many — git documents `a/**/b` as
+# matching `a/b`, and `every_describes_pattern_matches_something_that_exists` resolves every marker
+# through git's own pathspec. A converter that required a directory there would leave the contract
+# suite calling a pattern valid while the index silently skipped the paths it covers, which is the
+# one disagreement between the two that nothing else would catch.
+obligation_index_credits_a_path_directly_under_a_double_star() {
+  local fixture_root="$test_directory/obligations-zero-directories"
+  local files_json="$test_directory/obligations-zero-directories-files.json"
+  local output_file="$test_directory/obligations-zero-directories.json"
+
+  create_obligation_fixture "$fixture_root"
+
+  printf '%s\n' \
+    '# Configuration reference' \
+    '' \
+    '<!-- describes: src/**/*Options.cs, **/*.slnx -->' \
+    '' \
+    'Every user-settable option.' \
+    > "$fixture_root/docs/features/configuration.md"
+
+  # One path directly under the boundary, one nested, and one at the repository root, which is the
+  # case a leading `**/` covers.
+  printf '%s\n' '[{"filename":"src/MailboxOptions.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"src/Application/Emails/TimelineOptions.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"MailFathom.slnx","status":"modified","patch":"@@ -1 +1,2 @@\n+<Solution />"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '"docs/features/configuration.md"' \
+    '[.documentation[] | select(.path == "src/MailboxOptions.cs")][0].describing_documents[0].path' \
+    "$output_file"
+  assert_json '"docs/features/configuration.md"' \
+    '[.documentation[] | select(.path == "src/Application/Emails/TimelineOptions.cs")][0].describing_documents[0].path' \
+    "$output_file"
+  assert_json '"docs/features/configuration.md"' \
+    '[.documentation[] | select(.path == "MailFathom.slnx")][0].describing_documents[0].path' \
+    "$output_file"
+}
+
 # A page that documents the convention writes a marker out as an example — `docs/AGENTS.md` does —
 # and reading the whole file would turn that example into a declaration, so every path it names would
 # acquire a page that says nothing about it. Only the preamble counts, and this is the case that says
@@ -1380,6 +1418,41 @@ closing_references_ignore_a_mention_and_another_repository() {
     "$output_file"
 
   assert_file_content '271' "$output_file"
+}
+
+# The ceiling reports what it cut, because the step that applies it promises exactly that of every
+# ceiling it defines. A reference nobody was told about is an issue that closes on merge with its
+# acceptance list unread, which is the failure the whole collection exists to prevent.
+closing_references_report_what_the_ceiling_cut() {
+  local output_file="$test_directory/closing-references-ceiling"
+  local note_file="$test_directory/closing-references-ceiling-note"
+
+  printf '%s\n' 'Closes #1 closes #2 fixes #3 resolved #4 close #5 fixed #6 resolves #7' \
+    > "$test_directory/closing-body.md"
+
+  bash "$source_repository_root/.github/fathom-review/collect-closing-references.sh" \
+    "$test_directory/closing-body.md" 'Krzysztof318/MailFathom' 5 \
+    > "$output_file" 2> "$note_file"
+
+  assert_file_content $'1\n2\n3\n4\n5' "$output_file"
+  assert_contains 'closes 7 issues and this review covers the first 5' "$note_file"
+}
+
+# The note is a report of a cut rather than a line the collection always writes, so a body under the
+# ceiling produces none. A truncation file that always had content would put a sentence about
+# completeness into every review body it appears in.
+closing_references_report_nothing_when_the_ceiling_is_not_reached() {
+  local output_file="$test_directory/closing-references-under-ceiling"
+  local note_file="$test_directory/closing-references-under-ceiling-note"
+
+  printf '%s\n' 'Closes #1 and closes #2' > "$test_directory/closing-body.md"
+
+  bash "$source_repository_root/.github/fathom-review/collect-closing-references.sh" \
+    "$test_directory/closing-body.md" 'Krzysztof318/MailFathom' 5 \
+    > "$output_file" 2> "$note_file"
+
+  assert_file_content $'1\n2' "$output_file"
+  assert_file_content '' "$note_file"
 }
 
 closing_references_report_each_issue_once() {
@@ -1879,11 +1952,14 @@ run_test every_describes_pattern_matches_something_that_exists
 run_test closing_references_collect_every_issue_the_body_closes
 run_test closing_references_match_every_keyword_github_acts_on
 run_test closing_references_ignore_a_mention_and_another_repository
+run_test closing_references_report_what_the_ceiling_cut
+run_test closing_references_report_nothing_when_the_ceiling_is_not_reached
 run_test closing_references_report_each_issue_once
 run_test obligation_index_reports_a_changed_source_no_test_reaches
 run_test obligation_index_credits_a_test_the_change_adds
 run_test obligation_index_names_a_test_the_change_left_alone
 run_test obligation_index_maps_a_changed_path_to_the_page_that_describes_it
+run_test obligation_index_credits_a_path_directly_under_a_double_star
 run_test obligation_index_ignores_a_marker_below_the_preamble
 run_test obligation_index_reports_a_moved_pin_with_no_register_row
 run_test obligation_index_records_a_register_the_change_updated

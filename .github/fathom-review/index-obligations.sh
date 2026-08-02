@@ -205,17 +205,35 @@ done < "$work_directory/changed-sources"
 # A `describes:` pattern is matched as a regular expression over the path list, because no shell
 # construct gives the two meanings this needs at once: `**` crosses directory separators and `*`
 # does not, which is what makes `src/*/*.csproj` mean the project files and `src/**` mean everything
-# under the boundary. `**` is parked as a byte no path contains while `*` is rewritten, then
-# restored, so the narrower rewrite cannot consume the wider pattern first.
+# under the boundary.
+#
+# What this has to agree with is git's own `:(glob)` pathspec, because that is what
+# `scripts/test-agent-workflow.sh` resolves every marker against — so a pattern this converter reads
+# more narrowly than git does is one the contract suite calls valid while the index silently skips
+# the paths it covers.
+#
+# Agreeing means `**` bounded by slashes matches *zero* directories as well as many: git documents
+# `a/**/b` as matching `a/b`, so `src/**/*Options.cs` has to credit `src/FooOptions.cs` and not only
+# `src/Host/Configuration/McpOptions.cs`. Turning the `**` alone into `.*` and leaving both slashes
+# where they were would require a directory between them, so the slash is taken into the rewrite:
+# `/**/` becomes `/(.*/)?` as one unit, and a leading `**/` becomes `(.*/)?` for the same reason at
+# the front of a pattern.
+#
+# Each rewrite is parked as a byte no path contains and restored at the end, so the narrower pattern
+# can never consume the wider one first.
 glob_to_regex() {
   printf '%s' "$1" | awk '
     {
       pattern = $0
       gsub(/[.^$+(){}|\[\]\\]/, "\\\\&", pattern)
+      sub(/^\*\*\//, "\003", pattern)
+      gsub(/\/\*\*\//, "\002", pattern)
       gsub(/\*\*/, "\001", pattern)
       gsub(/\*/, "[^/]*", pattern)
-      gsub(/\001/, ".*", pattern)
       gsub(/\?/, "[^/]", pattern)
+      gsub(/\001/, ".*", pattern)
+      gsub(/\002/, "/(.*/)?", pattern)
+      gsub(/\003/, "(.*/)?", pattern)
       printf "^%s$", pattern
     }'
 }

@@ -29,7 +29,9 @@ change has not touched. The change itself is under `{{REVIEW_DIRECTORY}}`:
   names them, and empty when it names none. An entry whose `title` and `body` are
   `null` is one the run could not fetch: the number was referenced, and what it
   asks for is unknown to you.
-- `truncation.txt` — non-empty when the change was too large to collect in full.
+- `truncation.txt` — what a ceiling dropped, one line per ceiling and empty when none
+  was reached: the changed files beyond the collection's limit, and the closing
+  references beyond it. Anything in here belongs in your summary.
 - `obligations.json` — what the change obliges the rest of the repository to do. Unlike
   everything else here it comes from no branch: a step computed it from the base
   checkout and `files.json`, so it is not untrusted input. It is also not a list of
@@ -352,6 +354,12 @@ This is the rubric `obligations.json` serves, and it is the only one where what 
 - **`registers`** — a pair whose trigger moved. `register_changed: false` means the row
   the trigger obliges is not in this change; check the register before concluding it is
   missing, because an existing row may already cover it.
+- **`notes`** — what the index left out, and it is never empty for no reason. The
+  sections above are bounded, so a large change can trip a ceiling and produce a section
+  that looks complete while covering part of the change. A note is not a finding and
+  never becomes one; it belongs in your summary, in the same sentence as anything
+  `truncation.txt` says, because the reader has to know which parts of this review were
+  answered from a partial list.
 
 What turns a row into a finding, in every case, is reading the file it points at and
 finding something specific there:
@@ -438,7 +446,7 @@ message reaches nobody.
 
 ```json
 {
-  "summary": "One to five lines: what the change does, how much of it you covered, anything you left out against the cap, and any concern that had no line to sit on.",
+  "summary": "One to five lines: what the change does, how much of it you covered, anything you left out against the cap, whatever `truncation.txt` and the `notes` of `obligations.json` say was not collected, and any concern that had no line to sit on.",
   "findings": [
     {
       "severity": "P1",
@@ -477,7 +485,9 @@ arrives with the heading twice. Write the sentences only.
 
 Do not write a count by severity into the summary, and do not restate a finding there.
 The step after you tallies the findings and renders them; the summary carries what only
-you can say — what you covered, and what you could not.
+you can say — what you covered, and what you could not. Anything `truncation.txt` or
+the `notes` of `obligations.json` records was not collected belongs there, because a
+section that was cut short still looks complete to everybody but you.
 
 When nothing survives the second pass, write the file with an empty `findings` array and
 a summary that says plainly what you covered and that you found nothing above the bar.
