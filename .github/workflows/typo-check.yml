@@ -82,7 +82,8 @@ jobs:
           # 3000 entries, so a larger pull request would arrive as an incomplete list. Neither case
           # is allowed to produce a list that is quietly wrong: both fall back to the whole checkout,
           # which checks more than the pull request changed and never less. That fallback is only
-          # tenable because the tree is kept clean under `_typos.toml`, so scanning all of it passes.
+          # tenable because the tree is kept clean under the configuration the step below names, so
+          # scanning all of it passes.
           fall_back_to_whole_checkout() {
             echo "$1 Checking the whole checkout instead."
             echo 'files=.' >> "$GITHUB_OUTPUT"
@@ -137,3 +138,11 @@ jobs:
         uses: crate-ci/typos@bee27e3a4fd1ea2111cf90ab89cd076c870fce14 # v1.48.0
         with:
           files: ${{ steps.changed-files.outputs.files }}
+          # Named rather than discovered. `typos` looks for a configuration file only under the names
+          # `typos.toml`, `_typos.toml`, and `.typos.toml`, in the directory of the file it is
+          # checking and in that directory's ancestors, so one kept beside the rest of this
+          # repository's check configuration is found by nothing on its own. The action passes this
+          # through as `--config` to both runs it makes — the one that formats annotations and the
+          # one whose exit code fails the job — and `typos` merges an explicitly named file after the
+          # implicit walk, which is what keeps `ignore-hidden = false` applying to the whole tree.
+          config: .config/typos.toml

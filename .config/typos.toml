@@ -1,5 +1,10 @@
 # Configuration for `typos`, which the `Typo check` workflow is the only thing to run.
 #
+# It sits here rather than at the repository root, beside the other files that decide what a check
+# rejects, restores, measures, or accepts. Nothing finds it on its own at this path — the workflow
+# names it, and the step that does argues why — so a `typos` run started by hand needs
+# `--config .config/typos.toml` or it applies none of what follows.
+#
 # Two unlike kinds of entry live here, and they are kept in separate tables rather than merged into
 # whichever one would happen to accept a given string.
 #
