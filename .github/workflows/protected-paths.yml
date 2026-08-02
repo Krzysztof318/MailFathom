@@ -6,7 +6,8 @@ name: Protected paths
 #   `.github/`         who has to approve a change, which checks the `main` ruleset waits for, and
 #                      which dependency updates open themselves
 #   `.config/`         which API calls the build bans, what the coverage gate demands, which local
-#                      tools restore, and how the test runner is configured
+#                      tools restore, how the test runner is configured, and which spellings the
+#                      typo check accepts
 #   `.agents/`         the skills that define the task, review, verification, and completion contract
 #   `.claude/`         the tracked entry points to those same skills
 #   `docs/decisions/`  the architectural decisions every later change is written to be consistent
