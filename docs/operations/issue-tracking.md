@@ -65,7 +65,9 @@ The remaining labels are flags, applied only when they are true: `blocked` when 
 
 A milestone answers which release an issue ships in, and nothing else. An issue with no milestone is deliberately outside the current release rather than merely unsorted, which is what makes the absence of one meaningful.
 
-`0.1.0 — first public release` is the work of reaching a first release and the read side that makes the product usable: mailbox query read models, the email content read model, lexical search, the three MCP tools, and one baseline migration on a settled schema. Assign it to a new issue when the release as described cannot ship without that issue, and leave it empty otherwise; both are decisions the rule already makes, so neither needs asking. Widening what `0.1.0` means is the owner's call, so raise it rather than assigning a milestone that stretches the definition. Do not open a further milestone in advance; the next one is created when the current release closes.
+`0.2.0 — second release` is the open milestone, and it declares no scope in advance: what ships in it is whatever is placed in it. That is the opposite of how `0.1.0 — first public release`, now closed, was written, and the difference decides how a new issue is placed. A milestone that describes its own contents can be tested against — an issue either is or is not something that release cannot ship without — and one that accumulates cannot, because the description is the placement rather than a rule for it.
+
+So a new issue takes no milestone, and that stays a decision rather than an omission: the absence means deliberately outside the release, exactly as it does everywhere else on this page. Placing an issue in `0.2.0` is what defines the release, so it is the owner's call and is raised rather than inferred. Do not open a further milestone beside the open one; the next is created when that one closes.
 
 ## Board fields
 
@@ -107,7 +109,7 @@ The absence of a `type:*` label is what marks an issue untriaged, because an age
 
 Triage is one pass over the issue and it is not implementation. Read it, then either place it or end it:
 
-- **Place it.** Assign exactly one `type:*` label, a `Track`, a `Queue`, and a milestone, by the same rules that govern an issue the project opened. `Later` is the value a placed arrival takes, and triage never assigns `Next`: that choice stays the owner's whoever opened the issue, and the other way into it is a pull request that does not exist yet. What the reporter asked for does not decide the label: a report that names a defect is `type:defect` even when it was written as a feature request.
+- **Place it.** Assign exactly one `type:*` label, a `Track`, a `Queue`, and a milestone if the rules above assign one, by the same rules that govern an issue the project opened. `Later` is the value a placed arrival takes, and triage never assigns `Next`: that choice stays the owner's whoever opened the issue, and the other way into it is a pull request that does not exist yet. What the reporter asked for does not decide the label: a report that names a defect is `type:defect` even when it was written as a feature request.
 - **End it.** Close it as `not planned` and state the reason on the issue. `Parked` is not that, for the reason the `Queue` rules give.
 
 A question is not a unit of work and does not become one by arriving as an issue. Move it to Discussions and close the issue with a link, rather than giving it a `type:*` label so the board has somewhere to put it. Discussions carries `Q&A` for questions, `Ideas` for proposals that are not yet scope, and `Announcements` for what the project says; a discussion that turns out to be work is converted to an issue and then triaged like any other.
