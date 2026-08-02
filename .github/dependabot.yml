@@ -59,6 +59,24 @@ updates:
       # this label already means. `fathom-review` is deliberately not here and must never be — that
       # label starts a workflow holding a credential, and nothing but a maintainer's act may.
       - type:workflow
+    # One entry, and it is about a spelling rather than about a dependency. `github/codeql-action` is
+    # referenced twice as `@v4` and nowhere as a commit, and the moving tag is the update mechanism:
+    # it dereferences to whatever the newest `v4` release is, so a run already executes the patch the
+    # updater would propose. Proposing it anyway rewrites `@v4` into `@v4.37.3`, which is a third
+    # pinning spelling next to the two `docs/operations/local-development.md` argues for, and it can
+    # pin *below* what the tag resolves to when the cooldown holds the newest release back — which is
+    # what the declined proposal did. A major is a different question and stays proposed: `v5` is the
+    # one update a `v4` reference cannot make by itself.
+    #
+    # This is scoped to the one dependency and must not be widened to the ecosystem. `actions/checkout`
+    # carries both spellings at once — a moving `@v5` in the ordinary jobs and a commit in the
+    # publishing ones — and an entry naming it would freeze the commit, which is the pin that has no
+    # other way to move.
+    ignore:
+      - dependency-name: github/codeql-action
+        update-types:
+          - version-update:semver-patch
+          - version-update:semver-minor
     groups:
       github-actions:
         patterns:

@@ -651,6 +651,13 @@ one grouped pull request each Monday, a major on its own, at most three open at 
 newer than a week old; the file states why each of those numbers is what it is and why the `nuget`
 ecosystem stays off, with the upstream issue that decides it.
 
+It ignores one thing, and that entry is about a spelling rather than about a dependency.
+`github/codeql-action` is referenced only as `@v4`, so the moving tag *is* how it updates: a run
+already executes whatever the newest `v4` release is, and a proposal to write that release's number
+into the reference converts the tag the pinning row above argues for into a third spelling. The file
+carries the whole argument, including why the entry names one dependency instead of the ecosystem and
+why a major stays proposed.
+
 Three things about those pull requests belong here rather than there. They edit `.github/workflows/**`
 by definition, so `Protected paths` recognises `dependabot[bot]` for that directory and refuses it
 everywhere else — that workflow carries the argument for why the exception removes a signal rather

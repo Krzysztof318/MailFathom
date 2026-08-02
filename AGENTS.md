@@ -5,7 +5,7 @@ These instructions apply to the entire repository.
 The product and solution name is `MailFathom`. The solution file is `MailFathom.slnx`; project directory and file names use short boundary names such as `Domain`, `Application`, and `Host`, while `Directory.Build.props` applies the `MailFathom.*` prefix to assembly names and root namespaces.
 ## Project status
 
-Work MailFathom as though first-phase development is over and `0.1.0` has shipped. The tag has not been pushed, no image has been published, and nothing has been deployed — #210 owns those acts, and no file may claim they have happened. What is settled is how a change is judged, not what has already occurred.
+First-phase development is over and `0.1.0` has shipped. The tag is pushed, the image and the Helm chart are published, and the GitHub release carries the schema artifact that brings a database to it; #210 owned those acts and is closed. A file may therefore say so, and every file describes something a reader can install rather than something being prepared for them. What follows is how a change against it is judged.
 
 - A breaking change to a configuration key, a database schema, an MCP tool contract, or a public API is no longer free. Treat all four public surfaces as consumed and argue the break rather than assuming it. Under `0.x`, ADR 0004 permits one in a minor version, but permitted is not costless, and "nobody depends on this yet" has stopped being the reason.
 - The schema is frozen the way the freeze was always going to work: a change appends a migration and never regenerates a baseline.
