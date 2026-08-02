@@ -1,0 +1,116 @@
+name: Build the schema artifact
+
+# The one place the schema artifact is produced. Both channels call it, for the same reason both call
+# `Publish container image`: a change to how the artifact is generated, named, or checksummed is one edit rather than
+# two that can drift apart.
+#
+# What differs between the channels is not this workflow but what each does with the result. A release blocks its image
+# push on it and attaches the file to the GitHub release; a nightly runs it beside the push and leaves the file on the
+# run. That difference belongs to the callers, and it is why this workflow gates nothing and publishes nothing itself.
+#
+# The artifact is one idempotent SQL script carrying every migration the built commit defines, generated from the app
+# model's own PublishAsMigrationScript declaration rather than by invoking `dotnet ef` here — see
+# docs/operations/database-schema.md.
+#
+# Nothing here reaches a database. Generating the script reads the migration assembly, so this needs no PostgreSQL and
+# produces identical output against a database that does not exist.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'The commit SHA to build. Resolved by the caller, so what is scripted is never re-resolved from a moving ref.'
+        required: true
+        type: string
+      version:
+        description: 'The full stamped version the artifact is named after, for example `0.1.0` or `0.1.0-nightly.41-3f1c9ab`.'
+        required: true
+        type: string
+    outputs:
+      artifact:
+        description: 'The path the artifact was written to, whose base name is what a caller uploads or attaches.'
+        value: ${{ jobs.build.outputs.artifact }}
+      checksum:
+        description: 'The artifact''s SHA-256, which is what a release records so the file stays identifiable.'
+        value: ${{ jobs.build.outputs.checksum }}
+      migrations:
+        description: 'The migration identifiers the artifact carries, in the order it applies them.'
+        value: ${{ jobs.build.outputs.migrations }}
+
+jobs:
+  build:
+    name: Build the schema artifact
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      artifact: ${{ steps.build.outputs.artifact }}
+      checksum: ${{ steps.build.outputs.checksum }}
+      migrations: ${{ steps.build.outputs.migrations }}
+    steps:
+      - name: Check out the commit being scripted
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          global-json-file: global.json
+
+      # The CLI is not a manifest tool, so it is installed rather than restored. Its version is read from the pinned
+      # hosting packages instead of written here: a CLI on a different Aspire generation from the app model it publishes
+      # is exactly the mismatch a second literal would hide.
+      - name: Install the pinned Aspire CLI
+        run: |
+          set -euo pipefail
+
+          aspire_version="$(
+            sed -n 's:.*<PackageVersion Include="Aspire.Hosting.AppHost" Version="\([^"]*\)".*:\1:p' \
+              Directory.Packages.props | head -n 1
+          )"
+
+          dotnet tool install --global Aspire.Cli --version "$aspire_version"
+
+          # Stated rather than assumed. A global tool lands here whatever the runner image happens to put on PATH, and
+          # the build step below refuses to run without `aspire` on it.
+          printf '%s\n' "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Build the schema artifact
+        id: build
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          # The script names the artifact, checksums it, and reports the migration range it read back out of the file it
+          # produced. Those three facts are what a caller records, so they are taken from the run that made the artifact
+          # rather than recomputed from anything.
+          bash scripts/build-schema-artifact.sh artifacts/schema "$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the schema artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: schema-artifact
+          path: artifacts/schema/
+          if-no-files-found: error
+
+      - name: Summarize the artifact
+        env:
+          VERSION: ${{ inputs.version }}
+          ARTIFACT: ${{ steps.build.outputs.artifact }}
+          CHECKSUM: ${{ steps.build.outputs.checksum }}
+          MIGRATIONS: ${{ steps.build.outputs.migrations }}
+        run: |
+          set -euo pipefail
+
+          {
+            printf '### The database schema for %s\n\n' "$VERSION"
+            printf '| | |\n| --- | --- |\n'
+            printf '| Artifact | `%s` |\n' "$(basename "$ARTIFACT")"
+            printf '| SHA-256 | `%s` |\n' "$CHECKSUM"
+            printf '| Migrations | `%s` |\n\n' "$MIGRATIONS"
+            printf 'Downloadable from this run under **schema-artifact**. '
+            printf 'Apply it before the build it belongs to serves traffic; '
+            printf 'docs/operations/database-schema.md states how.\n'
+          } >> "$GITHUB_STEP_SUMMARY"

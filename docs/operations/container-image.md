@@ -207,10 +207,10 @@ attestation manifest are out of that step's reach by construction.
 A nightly is whatever `main` was that night. It is published so a change can be tried, and running one is a decision
 rather than a default — which is why both deployment shapes put an acknowledgement in front of it. What you take on:
 
-- **The database schema may be ahead of any release, and no schema artifact is published for it.** A nightly can carry
-  a schema change no release's script applies, and MailFathom refuses to start against a schema it does not recognize.
-  Generating the script from that commit's checkout is the only way to get one; recovering usually means restoring the
-  database rather than downgrading the image.
+- **The database schema may be ahead of any release.** A nightly can carry a schema change no release's script applies,
+  and MailFathom refuses to start against a schema it does not recognize. Its own script is on the `Nightly` run that
+  built it, under `schema-artifact`, and that run is the only place it exists; recovering from a schema a nightly
+  established usually means restoring the database rather than downgrading the image.
 - **There is no upgrade path, in either direction.** Nothing tests that yesterday's nightly upgrades to today's, that a
   nightly upgrades to the release that follows it, or that a release can be put back after one. A production database
   that a nightly has touched may not be usable by a release.
@@ -253,11 +253,12 @@ Publication runs the gates instead, in an order that spends the cheap ones first
    it, which refuses to publish a release carrying a fixable `HIGH` or `CRITICAL` finding and only reports one on a
    nightly.
 
-A release additionally waits on its schema artifact, which is generated beside the gates above and blocks the push if
-it cannot be produced: an operator handed an image and no way to reach the schema it requires has a deployment that
-starts, fails the startup gate, and stays down. [Applying the database schema](database-schema.md) is what that
-artifact is. A nightly publishes none, which is one of the things
-[running a nightly takes on](#what-a-nightly-build-risks).
+Both channels also build the schema artifact, from one shared definition, and differ only in what they do with it. A
+release **waits** on it and refuses to push when it cannot be produced: an operator handed an image and no way to reach
+the schema it requires has a deployment that starts, fails the startup gate, and stays down. A nightly builds it beside
+the push rather than in front of it, for the same reason its vulnerability scan reports instead of blocking, and leaves
+the file on the workflow run — there is no release for it to be attached to. [Applying the database
+schema](database-schema.md) is what that artifact is and how it is applied.
 
 Only then is the multi-architecture manifest list built and pushed. After the push it is inspected by digest and
 required to carry both platforms and to identify itself as the channel and version it was published as. A failure

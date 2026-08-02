@@ -137,6 +137,27 @@ jobs:
             printf 'Nothing was built.\n'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+  # A nightly needs its schema script more than a release does, not less: its schema can be ahead of every published
+  # migration, so no release's artifact covers it and there is nothing else to reach for. It is left on the run rather
+  # than attached to anything, because a nightly is not a release and has nothing to attach to.
+  #
+  # It does not gate the push, which is the same rule the vulnerability scan follows on this channel. A nightly exists
+  # to be tried, and refusing to publish one because a tool install failed tells nobody what broke; a release blocks on
+  # exactly this, which is where the answer matters. What a failure here costs is a red run beside a published image,
+  # which is legible — the image is out and its schema script is not — and is answered by generating the script from the
+  # revision the image labels.
+  schema-artifact:
+    name: Schema artifact
+    needs:
+      - decide
+    if: needs.decide.outputs.publish == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-schema-artifact.yml
+    with:
+      ref: ${{ needs.decide.outputs.revision }}
+      version: ${{ needs.decide.outputs.version }}
+
   publish:
     name: Publish
     needs:

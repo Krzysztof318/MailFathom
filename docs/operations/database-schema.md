@@ -14,6 +14,11 @@ The artifact that answers that refusal is one file per release:
 
 Both are attached to the GitHub release. Nothing runs them for you.
 
+A **nightly** carries its own pair, named after the nightly identifier, and they live on the `Nightly` workflow run that
+built the image, under `schema-artifact`. That run is the only place they exist — a nightly is not a release and has
+nothing to attach an asset to — so a nightly whose run has aged out is answered by generating the file from the revision
+the image labels, as [what a release records](#what-a-release-records) describes.
+
 ## What the script is
 
 It is an **idempotent** script: every migration is wrapped in a check against the `__EFMigrationsHistory` table, so a
@@ -191,6 +196,16 @@ Generating the artifact from a checkout produces the same file:
 scripts/build-schema-artifact.sh                 # artifacts/schema/mailfathom-schema-<version>.sql
 ```
 
+An image states the commit it was built from, so a build whose script you no longer have is answered by checking that
+commit out and generating it. This is the path back for a nightly whose run has aged out, and the check that a file you
+were handed is the one that build expects:
+
+```bash
+docker image inspect <reference> --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
+git checkout <that revision>
+scripts/build-schema-artifact.sh
+```
+
 It comes from `aspire publish`, which reads the `PublishAsMigrationScript` declaration in the app model
 (`src/AppHost/Program.cs`) rather than from a second `dotnet ef` invocation written beside it — so the release path and
 a developer's path state which context, which migrations project, and which options exactly once. The script reaches no
@@ -204,8 +219,10 @@ Three other shapes were available, and each was refused for a reason that still 
 tool, SQL, or credential that could apply one, which is what makes "the host never applies migrations" a property of
 the artifact rather than a rule somebody has to remember. It is also the wrong role: the credentials the service runs
 with are not the ones that may create the `vector` extension or run DDL, and a second entry point in an image that
-otherwise stands and listens would put them in the same place. A turnkey path, if one is ever wanted, is a **separate**
-migration image whose credentials exist for one run.
+otherwise stands and listens would put them in the same place. A turnkey path is a **separate** artifact the operator
+invokes, whose credentials exist for one run;
+[issue #259](https://github.com/Krzysztof318/MailFathom/issues/259) owns it, and the manual path above stays supported
+whatever it produces.
 
 **A migration bundle.** `PublishAsMigrationBundle` produces a self-contained executable, and an executable cannot be
 read. Everything above asks the operator to read the SQL and take a backup against what it will do; a bundle would
