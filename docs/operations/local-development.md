@@ -25,6 +25,21 @@ git add <task-files>
 bash scripts/verify-full.sh
 ```
 
+While reviewing the change, ask what it obliges elsewhere:
+
+```bash
+bash scripts/review-obligations.sh
+```
+
+That prints the tests naming each changed type, the pages whose `describes:`
+marker covers each changed path, and the registers whose trigger moved, each
+saying whether the change touched it. It is the same index `Fathom review` runs
+on a pull request, reached through an adapter that hands it a local diff, so the
+answer is the one the pipeline will give rather than an approximation of it. It
+reports and never gates: nothing it prints is a finding until it is confirmed in
+the file it points at, and it names the untracked paths no diff contains rather
+than describing less than the change while looking complete.
+
 The fast script restores the solution, builds it in Release configuration, runs
 all unit tests without rebuilding, and formats the C# files the branch changed.
 Formatting runs in both scripts on purpose: style diagnostics such as `IDE0005`

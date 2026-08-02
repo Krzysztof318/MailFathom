@@ -18,6 +18,10 @@ Confirm that durable documentation describes implemented behavior:
 - treat stale guidance as a failure;
 - do not create or modify an ADR without explicit owner approval.
 
+Start from `scripts/review-obligations.sh`, whose documentation section names every page whose `describes:` marker covers a path this change touched and whether the change touched the page. That answers which pages are candidates without a search over `docs/`, so the reading left to do is the part only a reader can do: whether the page still says something true about the part that moved.
+
+It narrows the search and never settles the verdict. A page it lists may owe nothing, and a page it does not list may still be wrong — a marker is a declaration, so a page that was never given one, or given one too narrow, is invisible to it. When that happens, widening the marker belongs in this change, because a documentation gate that trusts a declaration is only as good as the declaration.
+
 Use `n/a` only when the change cannot affect user, operator, contributor, architectural, or security guidance.
 
 ## Changelog

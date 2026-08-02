@@ -43,6 +43,20 @@ solution against about 30 for a handful of files. Splitting the run into the
 `whitespace`, `style`, and `analyzers` subcommands is slower still, because it
 pays the workspace load three times for work one invocation already does.
 
+Ask what the change obliges elsewhere while reviewing it:
+
+```bash
+bash scripts/review-obligations.sh
+```
+
+That is the third kind of question a change raises and the only one no diff
+answers: not whether a changed line is correct, and not whether the build
+accepts it, but whether the change left the rest of the repository consistent
+with itself. [What the change obliges elsewhere](#what-the-change-obliges-elsewhere)
+describes what it indexes and why it asserts nothing. It gates nothing and takes
+about a second, so it belongs in the loop rather than in a checklist somebody
+reaches for when a change looks like it needs one.
+
 Run the complete gate before committing:
 
 ```bash
@@ -497,6 +511,23 @@ declaration can rot are loud instead: `scripts/test-agent-workflow.sh` fails a
 page carrying no marker and a marker naming a pattern that matches nothing, so
 deleting a documented class fails the build rather than waiting for a review to
 notice.
+
+The same index answers the same question before a pull request exists.
+`scripts/review-obligations.sh` is the local entry point: it builds a document of
+the shape GitHub returns from `git diff <base>` and hands it to the script above,
+so the two callers share one implementation and a rule cannot hold in review
+while lapsing in the pipeline. `$review-change` runs it and works through what it
+reports, `$check-docs-licenses` starts its documentation verdict from it, and
+`$finish-change` names it in the diff inspection — which is the point of having
+it locally at all: an absent test costs least to add while the file that owes it
+is still open.
+
+The local report differs from the pipeline's in two ways, both because a working
+tree is not a pull request. It compares against the working tree rather than
+against a commit, since what is committed, what is staged, and what is neither
+are one change to a reader. And it names the untracked paths no diff contains,
+because a new class that owes a test is exactly the shape one takes, and a report
+silently describing less than the change is worse than one that says so.
 
 Nothing the index emits is a finding. It says where to look, and it is derived
 from file names and declared markers, so it points at obligations a change does
