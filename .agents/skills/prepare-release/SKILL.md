@@ -104,13 +104,16 @@ which is what makes an edit to it outside this flow visible.
 
 ### 4. Open the version-bump pull request
 
-On a second branch off the release branch:
+On a second branch off the release branch, raise `<VersionPrefix>` in `Directory.Build.props` to the next version from
+the table above. **That is the whole diff**, because that property is the only place in the repository where a version
+number is written: the image's tags and labels arrive as build arguments, and the chart's `version` and `appVersion`
+are both supplied at package time from the same declaration.
 
-- raise `<VersionPrefix>` in `Directory.Build.props` to the next version from the table above. That is the only file
-  carrying a version number; the chart's `appVersion` and the image's tags and labels are all derived from it at
-  package and build time;
-- raise `version` in `deploy/helm/mailfathom/Chart.yaml` if anything under the chart directory changed, which is the
-  chart's own version and never follows the application's.
+**Do not touch `deploy/helm/mailfathom/Chart.yaml`.** Its `version` is a `0.0.0` placeholder and it declares no
+`appVersion` at all; the release run supplies both, as one number equal to the application's. A chart version counting
+edits to the chart directory would need raising on every release anyway — a packaged chart embeds its `appVersion`, so
+each release produces chart content that differs from the last, and a published chart version is immutable — and it
+would leave an operator mapping two numbers onto one artifact.
 
 ### 5. Draft both, and cross-reference them
 
@@ -134,8 +137,9 @@ Release x.y.z is prepared. Merge in this order — the tag has to land between t
        git push origin vx.y.z
    This is what triggers the release workflow. Before publishing anything it asserts the tag against VersionPrefix,
    against the highest existing tag on the same major.minor line, and against the changelog section for this version.
-   It then publishes the image under vx.y.z and moves `latest` onto it, in both registries — `latest` follows the
-   newest release and never a nightly.
+   It then publishes the image under vx.y.z to both registries as one manifest list under one digest, moves `latest`
+   onto that digest — `latest` follows the newest release and never a nightly — and publishes the Helm chart against
+   the digest the image publication produced, at the same version.
 
 3. Merge the version-bump pull request (#B).
    After the tag, so main returns to naming the next release rather than the one just published.
@@ -148,9 +152,11 @@ Release x.y.z is prepared. Merge in this order — the tag has to land between t
   the tag. Do not force the tag; delete it, fix the disagreement, and tag again.
 - **The tag names a version that already exists on its line.** The bump pull request from a previous release never
   merged. Merge it, then re-cut.
-- **Publication fails after the image is built.** Retry by digest rather than by rebuilding — a rebuild produces a
-  second artifact for one version, which is what the release workflow's immutability assertion exists to prevent. The
-  `Release` workflow is what publishes, and `docs/operations/release-procedure.md` records its sequence.
+- **Publication fails partway.** Re-run the `Release` workflow on the same tag rather than rebuilding anything. It
+  reconciles: a version both registries already carry from this commit is left alone, and one only a single registry
+  carries is copied across by digest, so the artifact that reaches the second registry is the one the first published.
+  A rebuild would produce a second artifact for one version, which is what the immutability assertion exists to
+  prevent. `docs/operations/release-procedure.md` records the whole sequence and what each failure means.
 - **The release is abandoned before the tag.** Close both pull requests. Nothing was published and no tag exists, so
   there is nothing to undo.
 - **The release is abandoned after the tag.** It is not abandoned; it is released. Cut a patch from the release branch.

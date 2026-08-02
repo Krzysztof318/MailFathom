@@ -128,11 +128,19 @@ is the whole surface, key by key, including which keys reload and which need a r
 
 **The deployment contract.**
 
-- A multi-architecture container image for `linux/amd64` and `linux/arm64`, published to GHCR under its immutable
-  version tag with `latest` moved onto the same digest
+- A multi-architecture container image for `linux/amd64` and `linux/arm64`, published to `ghcr.io` **and** `docker.io`
+  as one manifest list under one digest, under its immutable version tag with `latest` moved onto that same digest.
+  The registry to pull from is whichever your environment already reaches
   ([#240](https://github.com/Krzysztof318/MailFathom/pull/240),
-  [#256](https://github.com/Krzysztof318/MailFathom/pull/256)).
-- Three supported installation shapes: Docker Compose, which provisions PostgreSQL for you; a Helm chart, which
+  [#256](https://github.com/Krzysztof318/MailFathom/pull/256),
+  [#281](https://github.com/Krzysztof318/MailFathom/pull/281)).
+- The Helm chart is published with the image, in the same run and at the same version, as an OCI artifact at
+  `oci://ghcr.io/krzysztof318/charts/mailfathom`. Its `appVersion` is that release, so a chart states which application
+  version it deploys without being unpacked, and it is listed on Artifact Hub
+  ([#281](https://github.com/Krzysztof318/MailFathom/pull/281)).
+- Every published artifact, image and chart alike, carries a signed provenance statement that
+  `gh attestation verify` checks against this repository ([#281](https://github.com/Krzysztof318/MailFathom/pull/281)).
+- Three supported installation shapes: Docker Compose, which provisions PostgreSQL for you; the Helm chart, which
   deliberately installs neither a database nor a Secret; and a native systemd process taking its secrets as systemd
   credentials ([#180](https://github.com/Krzysztof318/MailFathom/pull/180)). Linux is the only platform this project
   supports.

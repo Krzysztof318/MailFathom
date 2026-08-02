@@ -15,8 +15,8 @@ fullnameOverride: ""
 ### The image
 #
 # There is no default repository or tag, deliberately. A default would pin every install to whichever version this
-# file happened to name or, worse, name a moving tag that a cluster would silently follow. Released images live at
-# `ghcr.io/krzysztof318/mailfathom`; set the values below to the immutable reference your deployment runs.
+# file happened to name or, worse, name a moving tag that a cluster would silently follow. Set the values below to the
+# immutable reference your deployment runs; `krzysztof318/mailfathom` on either registry named under `registry`.
 image:
   # `release` or `nightly`.
   #

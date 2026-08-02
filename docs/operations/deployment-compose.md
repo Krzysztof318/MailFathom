@@ -204,9 +204,10 @@ docker compose down --volumes --remove-orphans      # destroys it
 ## The image
 
 `MAILFATHOM_IMAGE` defaults to `mailfathom:local`, a name no registry can serve, so `docker compose up --build` builds this
-checkout and nothing is ever pulled by accident. Point it at a published release —
-`ghcr.io/krzysztof318/mailfathom:<version>` — to run one instead, naming an immutable tag and never a moving one, and
-set `MAILFATHOM_PULL_POLICY=missing` in the same edit so the two decisions stay one decision.
+checkout and nothing is ever pulled by accident. Point it at a published release to run one instead —
+`ghcr.io/krzysztof318/mailfathom:<version>` or `docker.io/krzysztof318/mailfathom:<version>`, the same digest either
+way — naming an immutable tag and never a moving one, and set `MAILFATHOM_PULL_POLICY=missing` in the same edit so the
+two decisions stay one decision.
 
 ### Nightly builds
 
