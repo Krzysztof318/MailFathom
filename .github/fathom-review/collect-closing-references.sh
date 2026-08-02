@@ -38,10 +38,27 @@ limit="${3:-0}"
 
 keywords='close[sd]?|fix(e[sd])?|resolve[sd]?'
 
+# The keyword has to stand as its own word, which is what GitHub requires and what an unanchored
+# match does not give: `resolve[sd]?` matches the tail of `unresolved` and `fix(e[sd])?` the tail of
+# `prefixes`, so "something unresolved #125" and "the pattern prefixes #124" would each be read as a
+# closing reference the author never wrote. That is worse than missing one — the reviewer judges the
+# change against an acceptance list nothing obliged it to meet, and reports it failing a contract
+# that does not exist.
+#
+# Only the front needs anchoring. The separator after the keyword admits whitespace and a colon and
+# nothing else, so a keyword that runs into another word — `closed-loop #5`, `closesomething #5` —
+# already fails to reach the `#`.
+#
+# `[^[:alnum:]]` rather than a word boundary, which POSIX ERE has no portable spelling for. It is
+# captured into the match and discarded by the digit extraction below, and excluding digits as well
+# as letters is what keeps that extraction from reading the boundary character as part of the issue
+# number.
+word_start='(^|[^[:alnum:]])'
+
 {
   # `-i` for the keyword, which a body writes as `Closes` as often as `closes`. The separator is
   # whitespace or a colon, which is what GitHub accepts between the keyword and the reference.
-  grep -oiE "(${keywords})[[:space:]]*:?[[:space:]]*#[0-9]+" "$body_file" \
+  grep -oiE "${word_start}(${keywords})[[:space:]]*:?[[:space:]]*#[0-9]+" "$body_file" \
     | grep -oE '[0-9]+' \
     || true
 
@@ -50,7 +67,7 @@ keywords='close[sd]?|fix(e[sd])?|resolve[sd]?'
     # a contract this change can be held to. `[0-9]+$` reads the number off the end of the matched
     # URL rather than the first digits in it, which would otherwise be whatever digits the owner's
     # login happens to contain.
-    grep -oiE "(${keywords})[[:space:]]*:?[[:space:]]*https://github\.com/${repository}/issues/[0-9]+" \
+    grep -oiE "${word_start}(${keywords})[[:space:]]*:?[[:space:]]*https://github\.com/${repository}/issues/[0-9]+" \
       "$body_file" \
       | grep -oE '[0-9]+$' \
       || true

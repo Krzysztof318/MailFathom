@@ -340,7 +340,8 @@ validator, a guarantee, or an ownership rule the code does not implement is a de
 the documentation.
 
 This is the rubric `obligations.json` serves, and it is the only one where what is
-*absent* from the change is the defect. Its three sections say where to look.
+*absent* from the change is the defect. Three of its sections say where to look, and
+a fourth records what it left out.
 
 - **`tests`** — one entry per changed production file, with `referencing_tests`: the
   tests that name its type, in the base tree and in the tests this change adds, each

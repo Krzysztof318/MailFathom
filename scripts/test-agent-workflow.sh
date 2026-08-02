@@ -1408,6 +1408,21 @@ closing_references_match_every_keyword_github_acts_on() {
   assert_file_content $'1\n2\n3\n4\n5\n6\n7\n8\n9' "$output_file"
 }
 
+# A keyword has to stand as its own word. Unanchored, `resolve[sd]?` matches the tail of
+# `unresolved` and `fix(e[sd])?` the tail of `prefixes`, so ordinary prose would be read as a closing
+# reference the author never wrote — and over-collecting is worse here than missing one, because the
+# reviewer then judges the change against an acceptance list nothing obliged it to meet and reports
+# it failing a contract that does not exist.
+closing_references_ignore_a_keyword_inside_another_word() {
+  local output_file="$test_directory/closing-references-word-boundary"
+
+  run_closing_references \
+    $'Something unresolved #125 in the design.\nThe pattern prefixes #124 with docs/.\nCloses #200' \
+    "$output_file"
+
+  assert_file_content '200' "$output_file"
+}
+
 # A bare reference is a mention rather than a contract — GitHub closes nothing on it — and a link to
 # another project's issue is one this reviewer cannot fetch and must not hold the change to.
 closing_references_ignore_a_mention_and_another_repository() {
@@ -1951,6 +1966,7 @@ run_test every_documentation_page_declares_what_it_describes
 run_test every_describes_pattern_matches_something_that_exists
 run_test closing_references_collect_every_issue_the_body_closes
 run_test closing_references_match_every_keyword_github_acts_on
+run_test closing_references_ignore_a_keyword_inside_another_word
 run_test closing_references_ignore_a_mention_and_another_repository
 run_test closing_references_report_what_the_ceiling_cut
 run_test closing_references_report_nothing_when_the_ceiling_is_not_reached
