@@ -16,8 +16,9 @@ otherwise.
 
 Two things have no default and the chart refuses to render without them.
 
-**An image.** MailFathom has published no release, so there is nothing to default to. A chart that guessed would deploy an
-image nobody named.
+**An image.** Released images are on both registries under the same digest, and the chart still defaults to none of
+them: a default would pin every install to whichever version this chart happened to name, and a moving one would let a
+cluster follow a version nobody chose. You name the immutable reference your deployment runs.
 
 **A database.** PostgreSQL with the `vector` extension. A store holding every synchronized message needs backup,
 durability, and an upgrade path that a subchart cannot own.

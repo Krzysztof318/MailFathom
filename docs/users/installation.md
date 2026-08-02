@@ -6,17 +6,22 @@ MailFathom runs in three shapes, and each has one authoritative guide. This page
 assumes, what it is good for, and what every shape shares. Follow the linked guide for the commands; the guides do not
 repeat each other and neither does this page.
 
-**There is no published release yet.** No release image and no binary artifact exist, so every path below starts from a
-checkout of this repository. That is a statement about today, not about the design: the deployment assets are written
-for released artifacts and will point at them once `0.1.0` ships. Until then, treat what you install as a development
-build of an unreleased product.
+**A release publishes an image, the chart, and the schema script.** The image is
+`ghcr.io/krzysztof318/mailfathom:0.1.0` and `docker.io/krzysztof318/mailfathom:0.1.0` — one manifest list under one
+digest, so the registry to pull from is whichever your environment already reaches — with `latest` on that same digest.
+The chart is `oci://ghcr.io/krzysztof318/charts/mailfathom` at the same version. Each release also attaches
+`mailfathom-schema-<version>.sql` and its checksum, which is the schema step below. Both packages are public, so
+pulling one needs no login.
 
-What does exist is the nightly channel: `ghcr.io/krzysztof318/mailfathom:nightly` — or
+**There is no binary artifact**, so the native shape below is published from a checkout, and so is the Compose
+deployment, whose `compose.yaml` lives here and is versioned with the code that reads it.
+
+Beside the release runs the nightly channel: `ghcr.io/krzysztof318/mailfathom:nightly` — or
 `docker.io/krzysztof318/mailfathom:nightly`, which is the same digest in the other registry — and the
 `-nightly.<n>-<short revision>` tag of each night's build, published from `main` when it has moved. **A nightly is not a release and is a poor place to keep data
 you care about** — its schema can be ahead of any migration, it has no upgrade path in either direction, and it is
 deleted once thirty newer ones exist. [What a nightly build risks](../operations/container-image.md#what-a-nightly-build-risks)
-states the whole of it before you choose one. The package is public, so pulling one needs no GHCR login.
+states the whole of it before you choose one.
 
 ```bash
 git clone https://github.com/Krzysztof318/MailFathom.git

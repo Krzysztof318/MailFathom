@@ -42,9 +42,9 @@ A connected agent can list, read, and search your mail. It cannot send, delete, 
 
 ## Project status
 
-MailFathom has not had a first release. No versioned artifact exists yet, so every installation starts from a checkout of this repository, and the documentation says so wherever it matters rather than describing a release that has not happened. The first release is milestone [`0.1.0`](https://github.com/Krzysztof318/MailFathom/milestone/1): the read side that makes the product usable — mailbox queries, email content, lexical search, and the three MCP tools — on a settled database schema.
+`0.1.0` is the first release: the read side that makes the product usable — mailbox queries, email content, lexical search, and the three MCP tools — on a settled database schema. It ships as a container image, a Helm chart, and the SQL script that creates the schema it expects — [where the artifacts are published](https://github.com/Krzysztof318/MailFathom#where-the-artifacts-are-published) has the references. There is no binary artifact, so a native installation starts from a checkout of this repository. [The changelog](https://github.com/Krzysztof318/MailFathom/blob/main/CHANGELOG.md) states what the release promises across the MCP tool contract, the configuration schema, the database schema, and the deployment contract.
 
-Nightly images are built from `main` and published to the GitHub Container Registry. A nightly is not a release: its schema can be ahead of any published migration, it has no upgrade path in either direction, and it is deleted once newer ones accumulate. [What a nightly build risks](https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/container-image.md#what-a-nightly-build-risks) states the whole of it before you choose one.
+Nightly images are built from `main` and published to both registries alongside the releases. A nightly is not a release: its schema can be ahead of any published migration, it has no upgrade path in either direction, and it is deleted once newer ones accumulate. [What a nightly build risks](https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/container-image.md#what-a-nightly-build-risks) states the whole of it before you choose one.
 
 ## What it does well
 

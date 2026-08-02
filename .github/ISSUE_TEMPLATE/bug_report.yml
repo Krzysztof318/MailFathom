@@ -50,8 +50,9 @@ body:
     attributes:
       label: Version or commit
       description: >-
-        The commit SHA you observed it on. Nothing has been released yet, so a version number will
-        exist only once `0.1.0` ships.
+        The released version you observed it on, or the commit SHA when you built it yourself.
+        A running MailFathom reports its own version in the host's startup record and in the MCP
+        `initialize` response.
     validations:
       required: true
 

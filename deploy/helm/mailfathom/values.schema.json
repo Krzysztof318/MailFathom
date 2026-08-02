@@ -44,7 +44,7 @@
         "repository": {
           "type": "string",
           "minLength": 1,
-          "description": "No default exists: MailFathom has published no release, and a chart that guessed one would deploy an image nobody named."
+          "description": "No default exists: a chart that guessed one would deploy an image nobody named."
         },
         "tag": {
           "type": "string",
