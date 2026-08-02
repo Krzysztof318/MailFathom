@@ -126,9 +126,14 @@ version becomes real is a decision rather than a consequence of work looking fin
 whole procedure, and it is recorded here so it survives the skill being unavailable:
 
 1. **Merge the changelog pull request.** It adds `## [x.y.z] - YYYY-MM-DD` with the release's entries, composed from
-   what merged since the previous tag, and touches nothing else. It merges first because **its merge commit is what
-   gets tagged and published**, so the tagged tree contains the released changelog rather than describing it
-   afterwards.
+   what merged since the previous tag, and it brings the three files that name a version in prose onto that version:
+   the **Project status** paragraph in `README.md`, the image references opening `docs/users/installation.md`, and the
+   **Supported versions** table in `SECURITY.md`. It touches nothing else. It merges first because **its merge commit
+   is what gets tagged and published**, so the tagged tree contains the released changelog — and the three files
+   describing the release they ship inside — rather than describing them afterwards.
+
+   Those three are the whole of what `<VersionPrefix>` does not reach. Everything a build stamps derives from that one
+   declaration; prose does not, and nothing checks it, which is why the list is stated rather than searched for.
 2. **Push the annotated tag `v<x.y.z>` on that merge commit.** This is what makes the release real and what triggers
    the release workflow. Before publishing anything the workflow asserts the tag against the tagged commit's
    `VersionPrefix`, against the highest existing tag on the same `major.minor` line, and against the changelog section
