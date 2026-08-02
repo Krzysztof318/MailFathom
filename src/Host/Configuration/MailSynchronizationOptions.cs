@@ -504,10 +504,25 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
                 [nameof(this.OAuth)]);
         }
 
-        if (string.IsNullOrWhiteSpace(this.OAuth.ClientSecret?.SecretReference))
+        // A public client holds no secret by registration, which is what the device grant expects and what
+        // 'mailfathom mailbox authorize --public-client' produces. Requiring one regardless would refuse an account
+        // the documented workflow just finished authorizing.
+        var configuresClientSecret = !string.IsNullOrWhiteSpace(this.OAuth.ClientSecret?.SecretReference);
+
+        if (!this.OAuth.PublicClient && !configuresClientSecret)
         {
             yield return new ValidationResult(
-                $"Account '{this.AccountId}': an OAuth client secret reference is required.",
+                $"Account '{this.AccountId}': an OAuth client secret reference is required unless the application is registered as a public client, which is declared with 'PublicClient: true'.",
+                [nameof(this.OAuth)]);
+        }
+
+        // Both together are a contradiction rather than a harmless extra: one of the two states the operator wrote is
+        // not what the account will do, and silently ignoring the secret would leave a provisioned credential whose
+        // disuse nobody can see.
+        if (this.OAuth.PublicClient && configuresClientSecret)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': a public client sends no client secret, so configuring one alongside 'PublicClient: true' is contradictory.",
                 [nameof(this.OAuth)]);
         }
 

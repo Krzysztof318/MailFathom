@@ -248,6 +248,121 @@ public sealed class MailboxAuthorizerTests
         Assert.DoesNotContain("a-refresh-token", grant.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A mistyped endpoint reaches a login page, a proxy, or an error page rather than a token endpoint. That has to
+    /// arrive as an authorization failure the command reports, not as an unhandled parse exception and a stack trace
+    /// in an operator's terminal.
+    /// </summary>
+    [Fact]
+    public async Task RedeemAuthorizationCodeAsync_NonJsonResponse_FailsAsAnAuthorizationFailureNamingTheStatus()
+    {
+        // Arrange
+        using var transport = new FakeHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            Content = new StringContent("<html><body>Not found</body></html>", Encoding.UTF8, "text/html"),
+        }));
+        using var httpClient = new HttpClient(transport);
+        var authorizer = new MailboxAuthorizer(httpClient, new FakeTimeProvider(Now));
+        var request = CreateRequest();
+        var pending = authorizer.BuildAuthorization(request);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<MailboxAuthorizationFailedException>(
+            () => authorizer.RedeemAuthorizationCodeAsync(request, pending, "code", CancellationToken.None));
+
+        // Assert: the status is named, and the body — attacker-influenced text — is not.
+        Assert.Equal("non_json_response_http_404", failure.AuthorizationServerErrorCode);
+        Assert.DoesNotContain("Not found", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AuthorizeWithDeviceCodeAsync_NonJsonResponse_FailsAsAnAuthorizationFailure()
+    {
+        // Arrange
+        using var transport = new FakeHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadGateway)
+        {
+            Content = new StringContent("upstream unavailable", Encoding.UTF8, "text/plain"),
+        }));
+        using var httpClient = new HttpClient(transport);
+        var authorizer = new MailboxAuthorizer(httpClient, new FakeTimeProvider(Now));
+
+        // Act, Assert
+        var failure = await Assert.ThrowsAsync<MailboxAuthorizationFailedException>(
+            () => authorizer.AuthorizeWithDeviceCodeAsync(
+                CreateRequest(),
+                new Progress<DeviceCodePrompt>(_ => { }),
+                CancellationToken.None));
+
+        Assert.Equal("non_json_response_http_502", failure.AuthorizationServerErrorCode);
+    }
+
+    [Fact]
+    public void MatchesReturnedState_TheValueTheAuthorizationWasIssuedWith_IsAccepted()
+    {
+        // Arrange
+        using var transport = new FakeHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage()));
+        using var httpClient = new HttpClient(transport);
+        var authorizer = new MailboxAuthorizer(httpClient, new FakeTimeProvider(Now));
+        var pending = authorizer.BuildAuthorization(CreateRequest());
+
+        // Act, Assert: surrounding whitespace survives because the value arrives by copy and paste.
+        Assert.True(pending.MatchesReturnedState(pending.ExpectedState));
+        Assert.True(pending.MatchesReturnedState($"  {pending.ExpectedState}  "));
+    }
+
+    /// <summary>
+    /// This is the anti-forgery check on the manual flow. A code that arrived with a state this process never issued
+    /// came from a different authorization, and redeeming it would bind the operator's mailbox to somebody else's
+    /// grant.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    [InlineData("0000000000000000")]
+    public void MatchesReturnedState_AValueThisAuthorizationDidNotIssue_IsRefused(string? returnedState)
+    {
+        // Arrange
+        using var transport = new FakeHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage()));
+        using var httpClient = new HttpClient(transport);
+        var authorizer = new MailboxAuthorizer(httpClient, new FakeTimeProvider(Now));
+        var pending = authorizer.BuildAuthorization(CreateRequest());
+
+        // Act, Assert
+        Assert.False(pending.MatchesReturnedState(returnedState));
+    }
+
+    [Fact]
+    public void MatchesReturnedState_TheStateOfADifferentAuthorization_IsRefused()
+    {
+        // Arrange
+        using var transport = new FakeHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage()));
+        using var httpClient = new HttpClient(transport);
+        var authorizer = new MailboxAuthorizer(httpClient, new FakeTimeProvider(Now));
+        var first = authorizer.BuildAuthorization(CreateRequest());
+        var second = authorizer.BuildAuthorization(CreateRequest());
+
+        // Act, Assert
+        Assert.False(first.MatchesReturnedState(second.ExpectedState));
+    }
+
+    [Fact]
+    public void MatchesReturnedState_TheExpectedValueInADifferentCase_IsRefused()
+    {
+        // Arrange
+        using var transport = new FakeHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage()));
+        using var httpClient = new HttpClient(transport);
+        var authorizer = new MailboxAuthorizer(httpClient, new FakeTimeProvider(Now));
+        var pending = authorizer.BuildAuthorization(CreateRequest());
+
+        // Arrange: the state is upper-case hexadecimal, so folding each character is what changes the value. Folded
+        // per character rather than through string.ToLowerInvariant, which CA1308 rejects.
+        var caseFolded = new string([.. pending.ExpectedState.Select(char.ToLowerInvariant)]);
+
+        // Act, Assert: the comparison is ordinal, so a case-folded echo is not the value that was issued.
+        Assert.False(pending.MatchesReturnedState(caseFolded));
+    }
+
     /// <summary>Advances virtual time in polling-sized steps until the authorization settles.</summary>
     /// <remarks>
     /// The device grant waits on <see cref="Task.Delay(TimeSpan, TimeProvider, CancellationToken)" />, which only

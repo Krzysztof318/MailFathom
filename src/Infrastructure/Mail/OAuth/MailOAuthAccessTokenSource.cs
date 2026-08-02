@@ -72,9 +72,13 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
             cancellationToken);
 
     /// <inheritdoc />
-    public Task<MailAccessToken> RenewAccessTokenAsync(string accountId, CancellationToken cancellationToken) =>
+    public Task<MailAccessToken> RenewAccessTokenAsync(
+        string accountId,
+        MailAccessToken rejectedToken,
+        CancellationToken cancellationToken) =>
         this.tokenCache.RenewAsync(
             accountId,
+            rejectedToken,
             issueToken => this.RequestAccessTokenAsync(accountId, issueToken),
             cancellationToken);
 
@@ -101,8 +105,14 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         {
             ["grant_type"] = settings.Grant.GrantTypeName,
             ["client_id"] = settings.ClientId,
-            ["client_secret"] = settings.Material.ClientSecret.RevealAsString(),
         };
+
+        // A public client sends no secret at all, rather than an empty one: an empty `client_secret` is a value the
+        // authorization server evaluates and rejects, while its absence is what identifies the client as public.
+        if (settings.Material.ClientSecret is { } clientSecret)
+        {
+            form["client_secret"] = clientSecret.RevealAsString();
+        }
 
         if (settings.Grant.RequiresRefreshToken)
         {

@@ -19,6 +19,9 @@ internal sealed class UnusedMailAccessTokenSource : IMailAccessTokenSource
         throw new InvalidOperationException("This connection authenticates with a password and must not request an access token.");
 
     /// <inheritdoc />
-    public Task<MailAccessToken> RenewAccessTokenAsync(string accountId, CancellationToken cancellationToken) =>
+    public Task<MailAccessToken> RenewAccessTokenAsync(
+        string accountId,
+        MailAccessToken rejectedToken,
+        CancellationToken cancellationToken) =>
         throw new InvalidOperationException("This connection authenticates with a password and must not request an access token.");
 }

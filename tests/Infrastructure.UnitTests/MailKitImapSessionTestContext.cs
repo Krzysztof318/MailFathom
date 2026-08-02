@@ -10,6 +10,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Transport;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.MailKit;
+using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Secrets;
 using MailKit;
 using MailKit.Net.Imap;
@@ -114,13 +115,25 @@ internal static class MailKitImapSessionTestContext
         OutboundResilienceTestHost resilience,
         Func<IImapClient> clientFactory,
         IImapAccountSettingsProvider settingsProvider) =>
+        CreateFactory(resilience, clientFactory, settingsProvider, new UnusedMailAccessTokenSource());
+
+    /// <summary>Builds a factory whose connections authenticate with an access token from the supplied source.</summary>
+    internal static MailKitImapMailboxSessionFactory CreateFactory(
+        OutboundResilienceTestHost resilience,
+        Func<IImapClient> clientFactory,
+        IImapAccountSettingsProvider settingsProvider,
+        IMailAccessTokenSource accessTokenSource) =>
         new(
             clientFactory,
             settingsProvider,
-            new UnusedMailAccessTokenSource(),
+            accessTokenSource,
             resilience.Executor,
             resilience.TransientFailureClassifier,
             new FakeTimeProvider(ObservedAt));
+
+    /// <summary>A policy that permits only the registered token-bearing mechanism, so no password path is reachable.</summary>
+    internal static MailTransportSecurityPolicy TlsOnConnectWithOAuthBearerPolicy { get; } =
+        CreatePolicy(MailConnectionSecurity.TlsOnConnect, MailAuthenticationMechanism.OAuthBearer);
 
     /// <summary>Hands out one client per establishment attempt, in the order a test scripted the reconnections.</summary>
     /// <remarks>A request beyond the scripted sequence is a test asserting on a reconnection it did not intend, so it fails loudly.</remarks>

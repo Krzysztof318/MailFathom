@@ -60,24 +60,33 @@ internal sealed class MailAccessTokenCache : IDisposable
 
         return this.TryReadUsableToken(accountId, out var cachedToken)
             ? cachedToken
-            : await this.IssueUnderAccountGateAsync(accountId, issueToken, acceptCached: true, cancellationToken);
+            : await this.IssueUnderAccountGateAsync(accountId, issueToken, rejectedToken: null, cancellationToken);
     }
 
-    /// <summary>Discards whatever is cached for one account and issues a replacement under its gate.</summary>
+    /// <summary>Replaces the token a mail server rejected, unless another caller has already replaced it.</summary>
     /// <param name="accountId">The normalized local account identifier.</param>
+    /// <param name="rejectedToken">The token the mail server refused, which must not be handed back.</param>
     /// <param name="issueToken">Reaches the authorization server.</param>
     /// <param name="cancellationToken">Cancels waiting for the gate and the issuing.</param>
-    /// <returns>A newly issued token.</returns>
-    /// <remarks>A renewal was asked for because a mail server rejected what this cache believes, so no cached value answers it however fresh it looks.</remarks>
+    /// <returns>A token that is not the rejected one.</returns>
+    /// <remarks>
+    /// The rejected token is passed in rather than the cache simply discarding what it holds, because a burst of
+    /// connections for one account fails together: a revoked refresh token or a changed mailbox password rejects every
+    /// live connection at once, and each one asks for a renewal. Comparing against what was refused lets the callers
+    /// behind the first one through the gate accept the replacement it already fetched, instead of each spending its
+    /// own request against an authorization server that rate-limits them.
+    /// </remarks>
     public Task<MailAccessToken> RenewAsync(
         string accountId,
+        MailAccessToken rejectedToken,
         Func<CancellationToken, Task<MailAccessToken>> issueToken,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accountId);
+        ArgumentNullException.ThrowIfNull(rejectedToken);
         ArgumentNullException.ThrowIfNull(issueToken);
 
-        return this.IssueUnderAccountGateAsync(accountId, issueToken, acceptCached: false, cancellationToken);
+        return this.IssueUnderAccountGateAsync(accountId, issueToken, rejectedToken, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -107,10 +116,20 @@ internal sealed class MailAccessTokenCache : IDisposable
         return false;
     }
 
+    /// <summary>Issues a token under the account's gate, accepting what a caller ahead of this one already fetched.</summary>
+    /// <param name="accountId">The normalized local account identifier.</param>
+    /// <param name="issueToken">Reaches the authorization server when no usable token is available.</param>
+    /// <param name="rejectedToken">
+    /// The token a mail server refused, when this is a renewal; <see langword="null" /> for an ordinary request. A
+    /// cached token that is no longer this value was fetched by another caller after the rejection and answers the
+    /// renewal; the same value does not, however fresh its expiry looks.
+    /// </param>
+    /// <param name="cancellationToken">Cancels waiting for the gate and the issuing.</param>
+    /// <returns>A usable token.</returns>
     private async Task<MailAccessToken> IssueUnderAccountGateAsync(
         string accountId,
         Func<CancellationToken, Task<MailAccessToken>> issueToken,
-        bool acceptCached,
+        MailAccessToken? rejectedToken,
         CancellationToken cancellationToken)
     {
         var gate = this.accountGates.GetOrAdd(accountId, _ => new SemaphoreSlim(1, 1));
@@ -119,7 +138,8 @@ internal sealed class MailAccessTokenCache : IDisposable
         try
         {
             // While this caller waited, the one holding the gate may already have fetched the token it came for.
-            if (acceptCached && this.TryReadUsableToken(accountId, out var tokenFetchedWhileWaiting))
+            if (this.TryReadUsableToken(accountId, out var tokenFetchedWhileWaiting)
+                && !IsTheRejectedToken(tokenFetchedWhileWaiting, rejectedToken))
             {
                 return tokenFetchedWhileWaiting;
             }
@@ -134,4 +154,12 @@ internal sealed class MailAccessTokenCache : IDisposable
             gate.Release();
         }
     }
+
+    /// <summary>Reports whether a cached token is the one a mail server just refused.</summary>
+    /// <remarks>
+    /// Compared by token value rather than by reference, because the cache is what both callers read and an equal
+    /// value is the same credential whichever instance carries it.
+    /// </remarks>
+    private static bool IsTheRejectedToken(MailAccessToken cachedToken, MailAccessToken? rejectedToken) =>
+        rejectedToken is not null && string.Equals(cachedToken.Value, rejectedToken.Value, StringComparison.Ordinal);
 }

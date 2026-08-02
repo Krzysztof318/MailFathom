@@ -29,11 +29,19 @@ internal interface IMailAccessTokenSource
     /// <exception cref="MailAccessTokenUnavailableException">Thrown when the authorization server refused or could not be reached.</exception>
     Task<MailAccessToken> GetAccessTokenAsync(string accountId, CancellationToken cancellationToken);
 
-    /// <summary>Discards the cached token for one account and issues a replacement.</summary>
+    /// <summary>Replaces a token a mail server rejected, unless another caller has already replaced it.</summary>
     /// <param name="accountId">The normalized local account identifier.</param>
+    /// <param name="rejectedToken">The token the mail server refused, which is never handed back.</param>
     /// <param name="cancellationToken">Cancels the token request.</param>
-    /// <returns>A newly issued token.</returns>
+    /// <returns>A token that is not the rejected one.</returns>
     /// <exception cref="MailAccessTokenUnavailableException">Thrown when the authorization server refused or could not be reached.</exception>
-    /// <remarks>Called after a mail server rejected a token this process considered valid, which is the one case the expiry instant cannot predict.</remarks>
-    Task<MailAccessToken> RenewAccessTokenAsync(string accountId, CancellationToken cancellationToken);
+    /// <remarks>
+    /// Called after a mail server rejected a token this process considered valid, which is the one case the expiry
+    /// instant cannot predict. The rejected token is named so that a burst of connections failing together over one
+    /// revoked credential collapses into a single replacement rather than one request each.
+    /// </remarks>
+    Task<MailAccessToken> RenewAccessTokenAsync(
+        string accountId,
+        MailAccessToken rejectedToken,
+        CancellationToken cancellationToken);
 }

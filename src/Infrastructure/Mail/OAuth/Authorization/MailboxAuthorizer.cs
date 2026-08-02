@@ -5,6 +5,7 @@
 using System.Globalization;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Web;
 
 namespace MailFathom.Infrastructure.Mail.OAuth.Authorization;
@@ -277,11 +278,23 @@ public sealed class MailboxAuthorizer
         using var content = new FormUrlEncodedContent(form);
         using var response = await this.httpClient.PostAsync(endpoint, content, cancellationToken);
 
-        // The status code is not the verdict. RFC 6749 requires a rejected grant to arrive as 400 with a machine
-        // readable `error`, so the body is read either way and the status is consulted only when it holds nothing.
-        var payload = await response.Content.ReadFromJsonAsync<TResponse>(
-            MailOAuthJsonContext.Default.Options,
-            cancellationToken);
+        TResponse? payload;
+        try
+        {
+            // The status code is not the verdict. RFC 6749 requires a rejected grant to arrive as 400 with a machine
+            // readable `error`, so the body is read either way and the status is consulted only when it holds nothing.
+            payload = await response.Content.ReadFromJsonAsync<TResponse>(
+                MailOAuthJsonContext.Default.Options,
+                cancellationToken);
+        }
+        catch (JsonException)
+        {
+            // A mistyped endpoint reaches a login page, a proxy, or an error page rather than a token endpoint, and an
+            // operator running this by hand should be told which status came back instead of meeting a stack trace.
+            // The body itself is not read: it is attacker-influenced text from a machine that is not the one intended.
+            throw new MailboxAuthorizationFailedException(
+                string.Create(CultureInfo.InvariantCulture, $"non_json_response_http_{(int)response.StatusCode}"));
+        }
 
         return payload ?? throw new MailboxAuthorizationFailedException(
             string.Create(CultureInfo.InvariantCulture, $"http_{(int)response.StatusCode}"));

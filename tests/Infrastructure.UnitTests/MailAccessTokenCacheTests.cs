@@ -80,10 +80,10 @@ public sealed class MailAccessTokenCacheTests
             return Task.FromResult(new MailAccessToken($"token-{issueCount}", Now.AddHours(1)));
         }
 
-        await cache.GetOrIssueAsync(PrimaryAccount, IssueAsync, CancellationToken.None);
+        var rejected = await cache.GetOrIssueAsync(PrimaryAccount, IssueAsync, CancellationToken.None);
 
         // Act: the mail server rejected a token this process believes is valid, which no expiry instant predicts.
-        var renewed = await cache.RenewAsync(PrimaryAccount, IssueAsync, CancellationToken.None);
+        var renewed = await cache.RenewAsync(PrimaryAccount, rejected, IssueAsync, CancellationToken.None);
 
         // Assert
         Assert.Equal(2, issueCount);
@@ -105,8 +105,8 @@ public sealed class MailAccessTokenCacheTests
             return Task.FromResult(new MailAccessToken($"token-{issueCount}", Now.AddHours(1)));
         }
 
-        await cache.GetOrIssueAsync(PrimaryAccount, IssueAsync, CancellationToken.None);
-        await cache.RenewAsync(PrimaryAccount, IssueAsync, CancellationToken.None);
+        var initial = await cache.GetOrIssueAsync(PrimaryAccount, IssueAsync, CancellationToken.None);
+        await cache.RenewAsync(PrimaryAccount, initial, IssueAsync, CancellationToken.None);
 
         // Act
         var subsequent = await cache.GetOrIssueAsync(PrimaryAccount, IssueAsync, CancellationToken.None);
@@ -167,6 +167,65 @@ public sealed class MailAccessTokenCacheTests
         // Assert
         Assert.Equal(1, issueCount);
         Assert.All(tokens, token => Assert.Equal("token", token.Value));
+    }
+
+    /// <summary>
+    /// A revoked refresh token or a changed mailbox password rejects every live connection for the account at once,
+    /// and each one asks for a renewal. They are serialized by the gate either way; what this proves is that the ones
+    /// behind the first accept the replacement it fetched instead of spending a request each.
+    /// </summary>
+    [Fact]
+    public async Task RenewAsync_ConcurrentCallersRejectingTheSameToken_ReachTheAuthorizationServerOnce()
+    {
+        // Arrange
+        var timeProvider = new FakeTimeProvider(Now);
+        using var cache = new MailAccessTokenCache(timeProvider);
+        var issueCount = 0;
+
+        Task<MailAccessToken> IssueAsync(CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref issueCount);
+
+            return Task.FromResult(new MailAccessToken($"token-{issueCount}", Now.AddHours(1)));
+        }
+
+        var rejected = await cache.GetOrIssueAsync(PrimaryAccount, IssueAsync, CancellationToken.None);
+
+        // Act: three connections meet the same refusal and all ask for a replacement.
+        var renewals = await Task.WhenAll(Enumerable
+            .Range(0, 3)
+            .Select(_ => cache.RenewAsync(PrimaryAccount, rejected, IssueAsync, CancellationToken.None))
+            .ToArray());
+
+        // Assert: one issue for the original and one for the shared replacement.
+        Assert.Equal(2, issueCount);
+        Assert.All(renewals, token => Assert.Equal("token-2", token.Value));
+        Assert.DoesNotContain(renewals, token => token.Value == rejected.Value);
+    }
+
+    [Fact]
+    public async Task RenewAsync_CachedTokenIsTheOneThatWasRejected_IssuesAReplacementRatherThanReturningIt()
+    {
+        // Arrange
+        var timeProvider = new FakeTimeProvider(Now);
+        using var cache = new MailAccessTokenCache(timeProvider);
+        var issueCount = 0;
+
+        Task<MailAccessToken> IssueAsync(CancellationToken cancellationToken)
+        {
+            issueCount++;
+
+            return Task.FromResult(new MailAccessToken($"token-{issueCount}", Now.AddHours(1)));
+        }
+
+        var rejected = await cache.GetOrIssueAsync(PrimaryAccount, IssueAsync, CancellationToken.None);
+
+        // Act
+        var renewed = await cache.RenewAsync(PrimaryAccount, rejected, IssueAsync, CancellationToken.None);
+
+        // Assert: the cached value looked fresh by its expiry, and was still not an answer to the refusal.
+        Assert.Equal(2, issueCount);
+        Assert.NotEqual(rejected.Value, renewed.Value);
     }
 
     [Fact]

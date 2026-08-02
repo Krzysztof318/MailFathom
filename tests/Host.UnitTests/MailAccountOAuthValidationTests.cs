@@ -163,6 +163,54 @@ public sealed class MailAccountOAuthValidationTests
         Assert.Contains(results, result => result.ErrorMessage!.Contains("no password secret reference", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The device grant Microsoft Entra offers expects a public-client registration, and
+    /// 'mailfathom mailbox authorize --public-client' produces exactly that. Refusing it at startup would leave an
+    /// operator holding a refresh token the documented workflow just issued and the service will not accept.
+    /// </summary>
+    [Fact]
+    public void Validate_PublicClientWithNoClientSecret_IsAccepted()
+    {
+        // Arrange
+        var account = CreateTokenAuthenticatedAccount();
+        account.OAuth.PublicClient = true;
+        account.OAuth.ClientSecret = new ConfiguredSecret();
+
+        // Act
+        var results = Validate(CreateOptions(account));
+
+        // Assert
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public void Validate_PublicClientCarryingAClientSecret_IsRefusedAsContradictory()
+    {
+        // Arrange: one of the two states the operator wrote is not what the account will do.
+        var account = CreateTokenAuthenticatedAccount();
+        account.OAuth.PublicClient = true;
+
+        // Act
+        var results = Validate(CreateOptions(account));
+
+        // Assert
+        Assert.Contains(results, result => result.ErrorMessage!.Contains("contradictory", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_ConfidentialClientWithNoClientSecret_NamesThePublicClientSettingInTheRefusal()
+    {
+        // Arrange
+        var account = CreateTokenAuthenticatedAccount();
+        account.OAuth.ClientSecret = new ConfiguredSecret();
+
+        // Act
+        var results = Validate(CreateOptions(account));
+
+        // Assert: the message says which setting turns the requirement off, so the fix does not need the source.
+        Assert.Contains(results, result => result.ErrorMessage!.Contains("PublicClient", StringComparison.Ordinal));
+    }
+
     private static IReadOnlyList<ValidationResult> Validate(MailSynchronizationOptions options) =>
         [.. options.Validate(new ValidationContext(options))];
 

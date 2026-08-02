@@ -322,7 +322,10 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
         }
         catch (global::MailKit.Security.AuthenticationException)
         {
-            var renewedToken = await this.accessTokenSource.RenewAccessTokenAsync(settings.AccountId, cancellationToken);
+            var renewedToken = await this.accessTokenSource.RenewAccessTokenAsync(
+                settings.AccountId,
+                accessToken,
+                cancellationToken);
 
             await attemptClient.AuthenticateAsync(
                 MailKitTransportSecurityMapping.ToSaslMechanism(tokenMechanism, settings.UserName, renewedToken.Value),

@@ -55,4 +55,25 @@ public sealed record PendingAuthorization
     /// holding a credential it has no use for.
     /// </remarks>
     internal PkceCodeChallenge ProofKey { get; }
+
+    /// <summary>Reports whether a redirect echoed the value this authorization was issued with.</summary>
+    /// <param name="returnedState">The <c>state</c> parameter the operator read back from the redirect address.</param>
+    /// <returns><see langword="true" /> when the code may be redeemed against this authorization.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the anti-forgery check, and it lives here rather than in the command that prompts for the value so that
+    /// it is covered where every other rule about this exchange is. A command is a composition root; a security
+    /// comparison written there would be reachable only through a console.
+    /// </para>
+    /// <para>
+    /// The comparison is ordinal and case-sensitive against a value this process generated from cryptographically
+    /// secure random material, and surrounding whitespace is removed because it comes from a copy and paste rather
+    /// than from the authorization server. It is not a constant-time comparison: the expected value is not a secret
+    /// the attacker is trying to learn — it is echoed back through the operator's own browser — and what it proves is
+    /// that the code arrived from the authorization this process started.
+    /// </para>
+    /// </remarks>
+    public bool MatchesReturnedState(string? returnedState) =>
+        !string.IsNullOrWhiteSpace(returnedState)
+        && string.Equals(returnedState.Trim(), this.ExpectedState, StringComparison.Ordinal);
 }

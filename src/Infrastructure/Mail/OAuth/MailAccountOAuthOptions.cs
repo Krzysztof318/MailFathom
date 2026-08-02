@@ -45,7 +45,17 @@ public sealed class MailAccountOAuthOptions
     /// </remarks>
     public string Scope { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets the reference to the registered application's client secret, absent when the account authenticates with a password.</summary>
+    /// <summary>Gets or sets whether the application is registered as a public client, which holds no secret.</summary>
+    /// <remarks>
+    /// A public client authenticates by proving possession of the grant alone, which is the registration Microsoft
+    /// Entra expects for the device flow and the one <c>mailfathom mailbox authorize --public-client</c> produces. It
+    /// is an explicit setting rather than an inference from a missing reference, because "no secret configured" and
+    /// "no secret exists" are the same shape and only one of them is safe to accept: inferring it would turn a
+    /// forgotten reference on a confidential client into a silently unauthenticated token request.
+    /// </remarks>
+    public bool PublicClient { get; set; }
+
+    /// <summary>Gets or sets the reference to the registered application's client secret, absent for a public client and when the account authenticates with a password.</summary>
     /// <remarks>
     /// The block is nullable and defaults to absent rather than to an empty block, and that is a correctness
     /// requirement rather than a style choice. Secret discovery walks the bound options graph by type and resolves
@@ -81,9 +91,15 @@ public sealed class MailAccountOAuthOptions
     {
         ArgumentNullException.ThrowIfNull(resolver);
 
-        var clientSecretResult = await resolver.ResolveAsync(this.ClientSecret?.SecretReference, cancellationToken);
-        var clientSecret = clientSecretResult.Secret ?? throw new InvalidOperationException(
-            $"The account OAuth client secret reference could not be resolved [{clientSecretResult.Failure}].");
+        // A public client has no secret to resolve, and validation has already refused the combination where one was
+        // expected and configured nothing.
+        ResolvedSecret? clientSecret = null;
+        if (!this.PublicClient)
+        {
+            var clientSecretResult = await resolver.ResolveAsync(this.ClientSecret?.SecretReference, cancellationToken);
+            clientSecret = clientSecretResult.Secret ?? throw new InvalidOperationException(
+                $"The account OAuth client secret reference could not be resolved [{clientSecretResult.Failure}].");
+        }
 
         if (!this.ParsedGrant.RequiresRefreshToken)
         {
@@ -101,7 +117,7 @@ public sealed class MailAccountOAuthOptions
         catch
         {
             // The client secret is already owned material, and the caller never receives it when this throws.
-            clientSecret.Dispose();
+            clientSecret?.Dispose();
             throw;
         }
     }

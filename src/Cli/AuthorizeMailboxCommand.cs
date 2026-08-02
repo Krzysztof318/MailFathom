@@ -199,7 +199,7 @@ internal static class AuthorizeMailboxCommand
         context.Console.WriteError(string.Empty);
 
         var returnedState = context.Console.ReadSecret("The 'state' parameter from the same address: ");
-        if (!string.Equals(returnedState.Trim(), pending.ExpectedState, StringComparison.Ordinal))
+        if (!pending.MatchesReturnedState(returnedState))
         {
             throw new MailboxAuthorizationFailedException("state_mismatch");
         }

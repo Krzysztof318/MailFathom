@@ -140,6 +140,11 @@ the account at them. The permitted mechanisms are what switch the account onto t
 }
 ```
 
+An application registered as a public client — which is what the Microsoft device grant expects and what
+`--public-client` authorizes against — declares `"PublicClient": true` and configures no `ClientSecret` at all.
+Configuring both is refused rather than ignored, because one of the two states then describes something the account
+will not do.
+
 No `Secrets:Password` block appears, and none is wanted: an allow-list that is entirely token-bearing frees the
 account from configuring one. Keeping a password mechanism in the list means the account still needs a password, which
 is the supported way to keep a working credential while a token is being provisioned.
@@ -183,6 +188,7 @@ warning as the signal to re-run the authorization before the configured token st
 | `state_mismatch` | The pasted values came from a different authorization run. Start the command again and use one browser tab. |
 | `expired_token` during the device grant | Nobody completed the sign-in before the code expired. Run the command again. |
 | Startup refuses the account naming `mailfathom mailbox authorize` | The account uses the `refresh_token` grant and configures no refresh token reference. |
+| Startup refuses the account asking for a client secret | The application is registered as a public client but the account does not say so. Add `"PublicClient": true`. |
 
 ## Related
 

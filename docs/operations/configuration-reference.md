@@ -117,7 +117,8 @@ credentials nothing can use. [Mailbox OAuth](mailbox-oauth.md) covers where each
 | `…:OAuth:TokenEndpoint` | string | — | Absolute HTTPS address; no opt-in exists for `http` | reload |
 | `…:OAuth:ClientId` | string | — | Required; an identifier, not a secret | reload |
 | `…:OAuth:Scope` | string | — | Space-delimited, as RFC 6749 defines it | reload |
-| `…:OAuth:ClientSecret` | secret block | unset | Required; must resolve at startup | reload; material per token request |
+| `…:OAuth:PublicClient` | bool | `false` | Set when the application is registered as a public client, which holds no secret | reload |
+| `…:OAuth:ClientSecret` | secret block | unset | Required unless `PublicClient` is `true`, and refused alongside it; must resolve at startup | reload; material per token request |
 | `…:OAuth:RefreshToken` | secret block | unset | Required by `refresh_token`; absent for `client_credentials` | reload; material per token request |
 
 ### Transport security — `…:TransportSecurity`
