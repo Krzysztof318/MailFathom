@@ -1335,6 +1335,63 @@ obligation_index_caps_the_tests_it_lists_for_one_type() {
   assert_json '1' '.notes | length' "$output_file"
 }
 
+# Which issues a pull request closes is its stated contract, and merging closes every one of them.
+# A reviewer given fewer than GitHub acts on can approve a change that finishes one and leaves
+# another closed unread, so which keywords and which spellings count is pinned here rather than left
+# to a grep nobody rereads.
+run_closing_references() {
+  local body="$1" output_file="$2"
+
+  printf '%s\n' "$body" > "$test_directory/closing-body.md"
+
+  bash "$source_repository_root/.github/fathom-review/collect-closing-references.sh" \
+    "$test_directory/closing-body.md" 'Krzysztof318/MailFathom' > "$output_file" 2>&1
+}
+
+closing_references_collect_every_issue_the_body_closes() {
+  local output_file="$test_directory/closing-references-all"
+
+  run_closing_references \
+    $'Closes #265\n\nThis also Fixed #266 and resolves: #270.' \
+    "$output_file"
+
+  assert_file_content $'265\n266\n270' "$output_file"
+}
+
+# GitHub acts on nine spellings, not the three a body usually uses. One this script missed would
+# close its issue on merge with nothing having read what it asked for.
+closing_references_match_every_keyword_github_acts_on() {
+  local output_file="$test_directory/closing-references-keywords"
+
+  run_closing_references \
+    $'close #1\ncloses #2\nclosed #3\nfix #4\nfixes #5\nfixed #6\nresolve #7\nresolves #8\nresolved #9' \
+    "$output_file"
+
+  assert_file_content $'1\n2\n3\n4\n5\n6\n7\n8\n9' "$output_file"
+}
+
+# A bare reference is a mention rather than a contract — GitHub closes nothing on it — and a link to
+# another project's issue is one this reviewer cannot fetch and must not hold the change to.
+closing_references_ignore_a_mention_and_another_repository() {
+  local output_file="$test_directory/closing-references-mentions"
+
+  run_closing_references \
+    $'Depends on #123, as #124 describes.\nFixes https://github.com/SomebodyElse/Other/issues/999\nCloses https://github.com/Krzysztof318/MailFathom/issues/271' \
+    "$output_file"
+
+  assert_file_content '271' "$output_file"
+}
+
+closing_references_report_each_issue_once() {
+  local output_file="$test_directory/closing-references-duplicates"
+
+  run_closing_references \
+    $'Closes #265\n\nAnd again, closes #265.' \
+    "$output_file"
+
+  assert_file_content '265' "$output_file"
+}
+
 # The same index, reached from the working tree instead of from a pull request. `$review-change` runs
 # it while the change is still being corrected, which is the point at which an absent test costs the
 # least to add, and it reaches the pipeline's own script through an adapter rather than through a
@@ -1779,6 +1836,7 @@ workflow_scripts_use_flat_manual_layout() {
   # `Fathom review` invokes this one directly rather than through `bash`, so the mode git records is
   # part of the contract. The tests above run it through `bash` and would pass without it.
   [[ -x "$source_repository_root/.github/fathom-review/index-obligations.sh" ]]
+  [[ -x "$source_repository_root/.github/fathom-review/collect-closing-references.sh" ]]
 }
 
 run_test verify_fast_runs_restore_build_tests_and_formatting
@@ -1818,6 +1876,10 @@ run_test fathom_review_stops_waiting_at_the_ceiling
 run_test fathom_review_reads_the_newest_comment_whatever_the_order
 run_test every_documentation_page_declares_what_it_describes
 run_test every_describes_pattern_matches_something_that_exists
+run_test closing_references_collect_every_issue_the_body_closes
+run_test closing_references_match_every_keyword_github_acts_on
+run_test closing_references_ignore_a_mention_and_another_repository
+run_test closing_references_report_each_issue_once
 run_test obligation_index_reports_a_changed_source_no_test_reaches
 run_test obligation_index_credits_a_test_the_change_adds
 run_test obligation_index_names_a_test_the_change_left_alone

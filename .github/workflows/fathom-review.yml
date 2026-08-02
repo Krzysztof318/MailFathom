@@ -450,6 +450,7 @@ jobs:
           comment_body_limit=2000
           thread_limit=100
           thread_comment_limit=20
+          closing_reference_limit=5
 
           mkdir -p "$REVIEW_DIRECTORY/head" "$(dirname "$FINDINGS_FILE")"
 
@@ -598,21 +599,42 @@ jobs:
                  '[.[-$limit:][] | .body |= .[0:$bytes]]' \
             > "$REVIEW_DIRECTORY/issue-comments.json"
 
-          issue_number="$(
-            jq -r '.body // ""' "$REVIEW_DIRECTORY/pull-request.json" \
-              | grep -oiE '(closes|fixes|resolves) #[0-9]+' \
-              | head -n 1 \
-              | grep -oE '[0-9]+' \
-              || true
-          )"
+          # Every issue the body closes, not the first one. Merging closes all of them, so a review
+          # that read one can approve a change that finishes it and leaves another open with a
+          # closing reference pointing at it. The parsing is a script of its own under `.github/`,
+          # where `Protected paths` covers it and `scripts/test-agent-workflow.sh` can run it
+          # against a body without a `gh` stub: which keywords and which spellings count is a
+          # decision, and matching fewer of them than GitHub acts on is how an issue closes unread.
+          jq -r '.body // ""' "$REVIEW_DIRECTORY/pull-request.json" > "$REVIEW_DIRECTORY/body.txt"
 
-          if [[ -n "$issue_number" ]]; then
-            gh api "repos/${REPOSITORY}/issues/${issue_number}" \
-              --jq '{number, title, body}' > "$REVIEW_DIRECTORY/issue.json" \
-              || echo 'null' > "$REVIEW_DIRECTORY/issue.json"
-          else
-            echo 'null' > "$REVIEW_DIRECTORY/issue.json"
-          fi
+          : > "$REVIEW_DIRECTORY/issues.ndjson"
+
+          collected_issues=0
+
+          while IFS= read -r issue_number; do
+            [[ -n "$issue_number" ]] || continue
+
+            if (( collected_issues >= closing_reference_limit )); then
+              break
+            fi
+
+            # A reference to an issue that cannot be fetched — deleted, or in a repository this
+            # token does not reach — is recorded as the number alone rather than dropped, so the
+            # reviewer can say the contract was unreadable instead of silently reviewing without it.
+            gh api "repos/${REPOSITORY}/issues/${issue_number}" --jq '{number, title, body}' \
+              >> "$REVIEW_DIRECTORY/issues.ndjson" \
+              || jq -nc --argjson number "$issue_number" \
+                   '{number: $number, title: null, body: null}' \
+                   >> "$REVIEW_DIRECTORY/issues.ndjson"
+
+            collected_issues=$(( collected_issues + 1 ))
+          done < <(
+            "${GITHUB_WORKSPACE}/.github/fathom-review/collect-closing-references.sh" \
+              "$REVIEW_DIRECTORY/body.txt" "$REPOSITORY"
+          )
+
+          jq -s . "$REVIEW_DIRECTORY/issues.ndjson" > "$REVIEW_DIRECTORY/issues.json"
+          rm -f "$REVIEW_DIRECTORY/issues.ndjson" "$REVIEW_DIRECTORY/body.txt"
 
           changed_files="$(jq -r '.changed_files' "$REVIEW_DIRECTORY/pull-request.json")"
           collected_files="$(jq -r 'length' "$REVIEW_DIRECTORY/files.json")"
@@ -959,6 +981,13 @@ jobs:
           # since moved cannot make the API reject the whole review. A finding whose anchor does not
           # survive is not discarded; it moves into the body, where it still reaches the author.
           #
+          # A finding that never had an anchor takes the same path deliberately. Some defects are
+          # properties of the change rather than of a line — a body that claims something the diff
+          # does not do, an issue the change closes without finishing — and the reviewer writes those
+          # with a null `path`. Routing them here rather than into the summary is what makes them
+          # count: the verdict is decided by whether `findings` is empty, so a concern that lived
+          # only in the summary would arrive under an `APPROVED` heading.
+          #
           # Every finding is rendered here rather than by the reviewer, from the separate fields it
           # wrote. A thread then always answers the same three questions in the same order — what
           # breaks, what to change, and which rule says so — so an author reading a column of them
@@ -1009,9 +1038,12 @@ jobs:
                   + ["", "**Findings** — \(tally($findings))"]
                   + (if $truncation == "" then [] else ["", $truncation] end)
                   + (if ($dropped | length) == 0 then [] else
-                      ["", "### Findings whose line is no longer in the diff"]
+                      ["", "### Findings with no line to sit on"]
                       + ($dropped
-                         | map(["", "**\(.severity) — \(.title)** — `\(.path)`"] + details(.))
+                         | map(["",
+                                "**\(.severity) — \(.title)**"
+                                + (if (.path // "") == "" then "" else " — `\(.path)`" end)]
+                               + details(.))
                          | add)
                     end)
                   | join("\n")

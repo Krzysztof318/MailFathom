@@ -254,7 +254,7 @@ would rewrite them.
 The change arrives as data. A collection step reads the pull request, its
 changed files with their patches, the resulting content of each changed file,
 the inline threads and issue comments, the reviews already submitted, and the
-governing issue, and writes them under `$RUNNER_TEMP/review` with an explicit
+issues its body closes, and writes them under `$RUNNER_TEMP/review` with an explicit
 ceiling on every one of them. What a ceiling drops is recorded and ends up in the
 review body, because a partial review that looks complete is worse than one that
 says what it did not see.
@@ -445,10 +445,11 @@ skill, and the specifications and ADRs that govern the area the change touches. 
 finding names the rule it rests on in a field of its own, and one that applies
 generic advice where this repository has stated a different rule is itself wrong.
 
-Beyond that contract it works through five rubrics — the repository's rules,
-security and privacy, reliability, performance, and clean code — each stated as
-the specific things reviews have caught here rather than as a category name, and
-each applied only where the change reaches it. The same prompt still rules out
+Beyond that contract it works through six rubrics — the repository's rules,
+security and privacy, reliability, performance, clean code, and what the change
+says about itself — each stated as the specific things reviews have caught here
+rather than as a category name, and each applied only where the change reaches
+it. The same prompt still rules out
 what the build already enforces, anything about backward compatibility or
 migration paths, and a request for tests that names no untested case, so the two
 reviewers do not spend threads on findings this repository has already decided
@@ -471,6 +472,46 @@ it never went back to check is how a review fills with hedged noise. So the cap
 of twenty findings is stated as a ceiling and never a target: a change with two
 defects gets two findings, a change with none gets none, and an entry written to
 lengthen the list is itself a defect in the review.
+
+### What the change says about itself
+
+The pull request body and the issues it closes are the change's own account of
+what it does and what it was for, and both outlive the review: the body becomes
+the merge commit's message and is what a release's changelog is later composed
+from, and merging closes every referenced issue whether or not the change
+finished it. The reviewer therefore judges a claim in either against the diff
+exactly as it judges a line of documentation, and reads the body twice — once
+against the file list before reading any file, once after reading them all,
+because only the second reading can tell whether the claim held.
+
+Four shapes are findings: a body claiming behavior the diff does not have; a body
+claiming verification that did not happen, which is worse because it is what a
+reader uses to decide how closely to look; a diff doing something substantial the
+body does not mention, which is scope nobody agreed to; and a change that does not
+deliver an acceptance item of an issue it closes, which leaves a closed issue
+nobody will look at again. Unrecorded scope growth against an issue is worth one
+line, because `AGENTS.md` asks for it to be recorded rather than for the change to
+be narrowed.
+
+None of that reaches how the body was written. A finding here names a
+contradiction between what the change says and what it does, never a preference
+about clarity, length, or order, and an issue the run could not fetch supports no
+finding at all — the reviewer says so in the summary and judges nothing by it.
+
+Every issue the body closes is collected, not the first one, and every keyword
+GitHub acts on is matched rather than the three a body usually spells:
+`.github/fathom-review/collect-closing-references.sh` owns that parsing, so which
+spellings count is pinned by `scripts/test-agent-workflow.sh` instead of living in
+a grep nobody rereads. Matching fewer than GitHub does is how an issue closes on
+merge with nothing having read what it asked for. A bare `#123` is a mention and
+closes nothing, so it is left out; a link to another project's issue is one this
+reviewer cannot fetch and must not hold the change to.
+
+A defect in what the change says about itself is usually a property of the change
+rather than of a line, so those findings carry a null `path` and the submission
+step renders them in the review body. That is deliberately not the summary: the
+verdict is decided by whether any finding exists, so a concern left in the summary
+would arrive under an `APPROVED` heading.
 
 ### What the change obliges elsewhere
 

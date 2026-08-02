@@ -25,7 +25,10 @@ change has not touched. The change itself is under `{{REVIEW_DIRECTORY}}`:
 - `issue-comments.json` — the conversation on the pull request.
 - `reviews.json` — the reviews already submitted, each with its `state`, its `body`, and
   the `commit_id` it was given for.
-- `issue.json` — the governing issue, or `null` when the body names none.
+- `issues.json` — every issue the pull request body closes, in the order the body
+  names them, and empty when it names none. An entry whose `title` and `body` are
+  `null` is one the run could not fetch: the number was referenced, and what it
+  asks for is unknown to you.
 - `truncation.txt` — non-empty when the change was too large to collect in full.
 - `obligations.json` — what the change obliges the rest of the repository to do. Unlike
   everything else here it comes from no branch: a step computed it from the base
@@ -169,7 +172,7 @@ the second pass's.
 
 ## What to look for
 
-Five rubrics. Apply each one the change actually reaches, and say nothing about the
+Six rubrics. Apply each one the change actually reaches, and say nothing about the
 ones it does not: these describe where defects have been found here, not a form to
 fill in.
 
@@ -279,6 +282,51 @@ access, deletion, and export constraints of the mail it was derived from.
 - No abstraction without a current testing, protocol, or replacement need, no
   inheritance used only to share implementation, and no collaborator hidden behind a
   service locator or static mutable state.
+
+### What the change says about itself
+
+The body in `pull-request.json` and the issues in `issues.json` are the change's own
+account of what it does and what it was for. Both outlive the review: the body becomes
+the merge commit's message and is what a release's changelog is later composed from, and
+merging closes every issue in `issues.json` whether or not the change finished it. So a
+claim in either is judged against the diff exactly as a line of documentation is.
+
+Read the body once against the file list before you read any file, and once again after
+you have read them all. The first reading tells you what the change means to do; the
+second is the one that can tell you whether it did.
+
+- **The body claims something the diff does not do.** A behavior it says was added, a
+  file it says was changed, a limit it says is enforced, a reason it gives for a shape
+  the code does not have. This is the same defect as documentation stating what the code
+  does not do, and it is judged the same way.
+- **The body claims verification that did not happen.** "The gate passes", "covered by
+  tests", "measured" — where the diff contains no such test, or the measurement appears
+  nowhere. A false claim about evidence is worse than a false claim about behavior,
+  because it is what a reader uses to decide how closely to look.
+- **The diff does something substantial the body does not mention.** A second concern
+  folded in, a contract moved, a dependency added. Scope the body does not admit is scope
+  nobody agreed to, and this repository's own rule is to record it rather than to carry
+  it quietly.
+- **The change does not deliver an issue it closes.** Take the issue's acceptance list
+  and name the specific item the diff does not meet. Merging will close it regardless, so
+  an unmet item leaves a closed issue nobody will look at again.
+- **The change does something an issue it closes does not cover.** `AGENTS.md` says scope
+  that grows extends the issue and records why. An unrecorded growth is worth one line,
+  not a paragraph.
+
+What is not a finding here. That the body could be clearer, longer, better organized, or
+written in another order. That a section of the template is thin. That an issue could
+have been more specific. A finding here names a **contradiction** between what the change
+says and what it does, or an acceptance item it leaves unmet — never a preference about
+how either was written. An issue whose `title` and `body` are `null` supports no finding
+at all: you were not given what it asks for, so say that in the summary and judge nothing
+by it.
+
+Most of these anchor to the line the claim is about, and that is where they go. One that
+is genuinely about the change as a whole — a body describing work that is not in the diff
+at all — is written with `path` and `line` set to `null`, and the step after this renders
+it in the review body. Use that rather than the summary: the summary does not make a
+verdict, so a concern left there arrives under an `APPROVED` heading.
 
 ### Tests and documentation
 
@@ -412,7 +460,12 @@ with an empty heading above it, and one that repeats the heading inside its own 
 arrives with the heading twice. Write the sentences only.
 
 - `path` is a key of `lines.json` and `line` is one of the numbers listed for it; use
-  `start_line` with `line` for a range, and `null` otherwise.
+  `start_line` with `line` for a range, and `null` otherwise. Set `path` and `line` both
+  to `null` for the one kind of finding that has no line — a defect in what the change
+  says about itself, where nothing in the diff is the thing that is wrong. Every other
+  finding has a line, and reaching for `null` because the anchor was inconvenient to find
+  turns a thread the author can answer in place into a paragraph at the bottom of the
+  review.
 - `title` is imperative and names the correction in a handful of words.
 - `impact` is what goes wrong, stated concretely: the input or state that reaches this
   code, and the wrong result that follows. It is not a restatement of what the line says.
