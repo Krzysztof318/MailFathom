@@ -26,6 +26,12 @@
         "resolved": "10.0.302",
         "contentHash": "mbJSf5EOYkgnPQ0jO0qo4AByQYDGbBZDs0+23xdkK2ckuvYJGlPT1nPR0WCSnzwXdiVypOTZ4ArcT4H/X/f1mQ=="
       },
+      "Microsoft.Extensions.TimeProvider.Testing": {
+        "type": "Direct",
+        "requested": "[10.8.0, )",
+        "resolved": "10.8.0",
+        "contentHash": "xXcxGfXSO/8o7IfYK36r3eZTl9RMKAl5K6x3x6o/QQBolI0t8vsLIGmhc3HJBTd11u1uPLHz61VnOTSTmY7ZVA=="
+      },
       "Microsoft.VisualStudio.Threading.Analyzers": {
         "type": "Direct",
         "requested": "[17.14.15, )",
@@ -237,6 +243,12 @@
         }
       },
       "MailFathom.Common": {
+        "type": "Project",
+        "dependencies": {
+          "MailFathom.Domain": "[0.2.0, )"
+        }
+      },
+      "MailFathom.Domain": {
         "type": "Project"
       },
       "Microsoft.Extensions.Configuration": {

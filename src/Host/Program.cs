@@ -17,6 +17,7 @@ using MailFathom.Host.Security;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets;
@@ -128,6 +129,7 @@ try
     builder.Services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IMailAccountCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();
+    builder.Services.AddScoped<IMailOAuthSettingsProvider, ConfiguredMailOAuthSettingsProvider>();
     builder.Services.AddScoped(provider =>
     {
         var synchronizationSettings = provider.GetRequiredService<MailSynchronizationOptions>();

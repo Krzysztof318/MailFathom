@@ -12,6 +12,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Resilience;
 using MailKit;
 using MailKit.Net.Imap;
@@ -47,6 +48,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
 
     private readonly Func<IImapClient> clientFactory;
     private readonly IImapAccountSettingsProvider settingsProvider;
+    private readonly IMailAccessTokenSource accessTokenSource;
     private readonly OutboundOperationExecutor operationExecutor;
     private readonly ITransientFailureClassifier transientFailureClassifier;
     private readonly MailAccountId accountId;
@@ -60,6 +62,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// <summary>Initializes a connection that has not been established yet.</summary>
     /// <param name="clientFactory">Creates one IMAP client per establishment attempt.</param>
     /// <param name="settingsProvider">Resolves the endpoint and the credential material of the account, per attempt.</param>
+    /// <param name="accessTokenSource">Supplies the access token when the account's policy authenticates with one.</param>
     /// <param name="operationExecutor">Runs establishment and retrieval under their configured pipelines.</param>
     /// <param name="transientFailureClassifier">Decides whether a failure left the connection worth keeping.</param>
     /// <param name="accountId">The account this connection belongs to, which also isolates its pipeline state.</param>
@@ -69,6 +72,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     internal MailKitImapConnection(
         Func<IImapClient> clientFactory,
         IImapAccountSettingsProvider settingsProvider,
+        IMailAccessTokenSource accessTokenSource,
         OutboundOperationExecutor operationExecutor,
         ITransientFailureClassifier transientFailureClassifier,
         MailAccountId accountId,
@@ -77,12 +81,14 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(clientFactory);
         ArgumentNullException.ThrowIfNull(settingsProvider);
+        ArgumentNullException.ThrowIfNull(accessTokenSource);
         ArgumentNullException.ThrowIfNull(operationExecutor);
         ArgumentNullException.ThrowIfNull(transientFailureClassifier);
         ArgumentNullException.ThrowIfNull(transportSecurityPolicy);
 
         this.clientFactory = clientFactory;
         this.settingsProvider = settingsProvider;
+        this.accessTokenSource = accessTokenSource;
         this.operationExecutor = operationExecutor;
         this.transientFailureClassifier = transientFailureClassifier;
         this.accountId = accountId;
@@ -230,20 +236,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
                     this.transportSecurityPolicy.ConnectionSecurity.ToSecureSocketOptions(),
                     cancellationToken);
 
-                // The advertised set is narrowed before authenticating, because MailKit selects a mechanism from
-                // whatever remains in it. Authentication is then attempted once: retrying with a wider set would let
-                // the server negotiate a mechanism the operator's allow-list refused.
-                MailKitTransportSecurityMapping.RestrictAdvertisedMechanisms(
-                    attemptClient.AuthenticationMechanisms,
-                    this.transportSecurityPolicy.Authentication,
-                    settings.AccountId);
-
-                // MailKit's authentication contract takes a string, so an un-erasable copy of the password is
-                // unavoidable here. It is created at the call itself and never stored, logged, or passed on.
-                await attemptClient.AuthenticateAsync(
-                    settings.UserName,
-                    settings.Material.Password.RevealAsString(),
-                    cancellationToken);
+                await this.AuthenticateAsync(attemptClient, settings, cancellationToken);
 
                 await this.AdoptSelectedFolderAsync(attemptClient, cancellationToken);
 
@@ -258,6 +251,85 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
                 Abandon(attemptClient);
                 throw;
             }
+        }
+    }
+
+    /// <summary>Narrows the advertised mechanisms to the allow-list and authenticates with whichever credential the survivors need.</summary>
+    /// <remarks>
+    /// The advertised set is narrowed first, because MailKit selects a mechanism from whatever remains in it, and
+    /// nothing widens it again: retrying against a wider set would let the server negotiate a mechanism the operator's
+    /// allow-list refused.
+    /// </remarks>
+    private async Task AuthenticateAsync(
+        IImapClient attemptClient,
+        ImapAccountSettings settings,
+        CancellationToken cancellationToken)
+    {
+        MailKitTransportSecurityMapping.RestrictAdvertisedMechanisms(
+            attemptClient.AuthenticationMechanisms,
+            this.transportSecurityPolicy.Authentication,
+            settings.AccountId);
+
+        if (MailKitTransportSecurityMapping.TrySelectAccessTokenMechanism(
+            attemptClient.AuthenticationMechanisms,
+            this.transportSecurityPolicy.Authentication,
+            out var tokenMechanism))
+        {
+            await this.AuthenticateWithAccessTokenAsync(attemptClient, settings, tokenMechanism, cancellationToken);
+
+            return;
+        }
+
+        // Startup validation refuses an account whose policy needs a password and configures none, so this is a
+        // configured shape rather than a value that might be missing.
+        var password = settings.Material.Password
+            ?? throw new InvalidOperationException(
+                $"Account '{settings.AccountId}' authenticates with a password and resolved none.");
+
+        // MailKit's authentication contract takes a string, so an un-erasable copy of the password is unavoidable
+        // here. It is created at the call itself and never stored, logged, or passed on.
+        await attemptClient.AuthenticateAsync(settings.UserName, password.RevealAsString(), cancellationToken);
+    }
+
+    /// <summary>Presents an access token, renewing it once when the server rejects one this process believed was valid.</summary>
+    /// <remarks>
+    /// <para>
+    /// The single retry is what separates an expired token from a rejected credential. A cached token can be refused
+    /// for reasons no expiry instant predicts — it was revoked, the mailbox password changed, an administrator
+    /// withdrew consent — and repeating the same value would spend the establishment budget on an answer that cannot
+    /// change. Renewing once distinguishes the two: a fresh token that is also refused is a decision the authorization
+    /// server and the mail server agree on, and it fails the attempt.
+    /// </para>
+    /// <para>
+    /// This is bounded and non-recursive by construction. There is exactly one renewal per establishment attempt, and
+    /// the token source has its own retry budget under a different dependency class, so no retry layer nests inside
+    /// another.
+    /// </para>
+    /// </remarks>
+    private async Task AuthenticateWithAccessTokenAsync(
+        IImapClient attemptClient,
+        ImapAccountSettings settings,
+        MailAuthenticationMechanism tokenMechanism,
+        CancellationToken cancellationToken)
+    {
+        var accessToken = await this.accessTokenSource.GetAccessTokenAsync(settings.AccountId, cancellationToken);
+
+        try
+        {
+            await attemptClient.AuthenticateAsync(
+                MailKitTransportSecurityMapping.ToSaslMechanism(tokenMechanism, settings.UserName, accessToken.Value),
+                cancellationToken);
+        }
+        catch (global::MailKit.Security.AuthenticationException)
+        {
+            var renewedToken = await this.accessTokenSource.RenewAccessTokenAsync(
+                settings.AccountId,
+                accessToken,
+                cancellationToken);
+
+            await attemptClient.AuthenticateAsync(
+                MailKitTransportSecurityMapping.ToSaslMechanism(tokenMechanism, settings.UserName, renewedToken.Value),
+                cancellationToken);
         }
     }
 

@@ -32,6 +32,11 @@ internal static class CliRootCommand
 
         var version = StampedAssemblyVersion.ReadFrom(typeof(CliRootCommand).Assembly);
 
+        Command mailboxCommand = new("mailbox", "Administer a configured mailbox account.")
+        {
+            AuthorizeMailboxCommand.Create(context),
+        };
+
         return new RootCommand($"MailFathom administration tool ({version.Version}).")
         {
             LoginCommand.Create(context),
@@ -39,6 +44,7 @@ internal static class CliRootCommand
             SwitchCommand.Create(context),
             ProfilesCommand.Create(context),
             StatusCommand.Create(context),
+            mailboxCommand,
         };
     }
 }

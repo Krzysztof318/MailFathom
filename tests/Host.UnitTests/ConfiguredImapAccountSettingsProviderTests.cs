@@ -25,7 +25,7 @@ public sealed class ConfiguredImapAccountSettingsProviderTests
         using (settings.Material)
         {
             Assert.Equal("primary", settings.AccountId);
-            Assert.Equal("dev-password", settings.Material.Password.RevealAsString());
+            Assert.Equal("dev-password", settings.Material.Password!.RevealAsString());
         }
     }
 
@@ -63,7 +63,7 @@ public sealed class ConfiguredImapAccountSettingsProviderTests
         // Assert
         using (inFlight.Material)
         {
-            Assert.Equal("dev-password", inFlight.Material.Password.RevealAsString());
+            Assert.Equal("dev-password", inFlight.Material.Password!.RevealAsString());
         }
     }
 
@@ -84,8 +84,8 @@ public sealed class ConfiguredImapAccountSettingsProviderTests
         using (inFlight.Material)
         using (afterRotation.Material)
         {
-            Assert.Equal("second-password", afterRotation.Material.Password.RevealAsString());
-            Assert.Equal("first-password", inFlight.Material.Password.RevealAsString());
+            Assert.Equal("second-password", afterRotation.Material.Password!.RevealAsString());
+            Assert.Equal("first-password", inFlight.Material.Password!.RevealAsString());
         }
     }
 

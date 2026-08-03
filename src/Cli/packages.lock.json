@@ -51,6 +51,12 @@
         "contentHash": "BKt0SQgq2lq3ESE68jkeLwv95ypANrPDtkTOIFGcnhg2aRUeUUBDrQlkVDZctrg1WenVcvn5P5XZnuYI7q6rFQ=="
       },
       "MailFathom.Common": {
+        "type": "Project",
+        "dependencies": {
+          "MailFathom.Domain": "[0.2.0, )"
+        }
+      },
+      "MailFathom.Domain": {
         "type": "Project"
       }
     }

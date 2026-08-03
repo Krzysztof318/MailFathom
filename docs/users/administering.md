@@ -18,10 +18,15 @@ in [configuration sources](../operations/configuration-sources.md); the command 
 database, and never touches the secret store. Nothing you do with it changes what the service will do on its next
 restart.
 
-> **Today it verifies who you are and nothing more.** The administrative surface publishes one route, and the commands
-> below are the whole of what exists: sign in, keep several deployments straight, and ask one whether your credential
-> still works. Operational commands — inspecting synchronization, triggering work, reading accounts — are not there
-> yet. If you are looking for something to *do* to a running deployment, this is not yet the page that has it.
+> **Today it verifies who you are, and nothing it does changes a running deployment.** The administrative surface
+> publishes one route, and the commands below are the whole of what talks to it: sign in, keep several deployments
+> straight, and ask one whether your credential still works. Operational commands — inspecting synchronization,
+> triggering work, reading accounts — are not there yet. If you are looking for something to *do* to a running
+> deployment, this is not yet the page that has it.
+>
+> One command is not a client of that surface at all. `mfctl mailbox authorize` signs you in to a *mail provider* to
+> produce a mailbox credential, which you then provision on the server yourself; it is described under
+> [authorizing a mailbox](#authorizing-a-mailbox) below.
 
 ## Before it can answer
 
@@ -104,9 +109,30 @@ Every command exits `0` when it did what you asked and `1` when it did not, havi
 first. [The troubleshooting table](../operations/admin-endpoint.md#troubleshooting) reads each message back to you as
 a cause.
 
+## Authorizing a mailbox
+
+A mailbox at a provider that no longer accepts a password — a Google Workspace account, anything on Exchange Online —
+needs a person to sign in once before MailFathom can read it. A headless service cannot arrange that, so the command
+does it:
+
+```console
+$ mfctl mailbox authorize --provider google --client-id <client-id>
+```
+
+This is the one command that talks to something other than your deployment, and it is why running `mfctl` on your own
+computer matters. It listens on a loopback address, opens your browser, and catches the redirect the provider sends
+back — so there is nothing to copy, and the authorization code never crosses a network. On a machine with no browser,
+forward the port over SSH, or use `--mode device` for Microsoft and `--mode manual` for Google.
+
+What it produces is a refresh token printed on standard output. **You provision it on the server yourself**, as a
+secret reference like every other credential; the command writes nothing and the service reads it at startup.
+[Mailbox OAuth](../operations/mailbox-oauth.md) is the whole procedure, including what each provider requires of the
+application you register.
+
 ## Where to go next
 
 - [Administering a deployment](../operations/admin-endpoint.md) — the operator's reference for everything above
+- [Mailbox OAuth](../operations/mailbox-oauth.md) — registering the application, and every mode of the sign-in above
 - [Configuration reference](../operations/configuration-reference.md#adminendpoint) — every `AdminEndpoint` key
 - [Secret provisioning](../operations/secret-provisioning.md) and [rotation](../operations/secret-rotation.md) — how
   the key on the server is supplied and replaced

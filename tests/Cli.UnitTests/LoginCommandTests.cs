@@ -428,7 +428,9 @@ public sealed class LoginCommandTests : IDisposable
     private CliContext Context(CredentialStore store, FakeHttpMessageHandler handler) => new(
         this.console,
         store,
-        endpoint => new HttpClient(handler, disposeHandler: false) { BaseAddress = endpoint });
+        endpoint => new HttpClient(handler, disposeHandler: false) { BaseAddress = endpoint },
+        FakeMailboxRedirect.Silent(),
+        _ => false);
 
     public void Dispose()
     {

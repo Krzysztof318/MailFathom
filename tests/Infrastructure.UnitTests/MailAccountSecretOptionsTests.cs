@@ -52,7 +52,7 @@ public sealed class MailAccountSecretOptionsTests
     public async Task FindConfigurationErrorsAsync_EmptyPasswordSecretReference_ReportsReferenceMissing()
     {
         // Arrange
-        var options = new MailAccountSecretOptions();
+        var options = new MailAccountSecretOptions { Password = new ConfiguredSecret() };
 
         // Act
         var errors = await options.FindConfigurationErrorsAsync(
@@ -62,6 +62,26 @@ public sealed class MailAccountSecretOptionsTests
         // Assert
         var error = Assert.Single(errors);
         Assert.Equal(SecretResolutionFailure.ReferenceMissing, error.Failure);
+    }
+
+    /// <summary>
+    /// An absent block is a token-authenticated account rather than a mistake, and reporting it here would fail
+    /// startup for every such account. Whether the account was entitled to omit it is decided by its permitted
+    /// mechanisms, in the account's own validation.
+    /// </summary>
+    [Fact]
+    public async Task FindConfigurationErrorsAsync_NoPasswordBlockAtAll_ReportsNothing()
+    {
+        // Arrange
+        var options = new MailAccountSecretOptions();
+
+        // Act
+        var errors = await options.FindConfigurationErrorsAsync(
+            new StubSecretReferenceResolver(),
+            CancellationToken.None);
+
+        // Assert
+        Assert.Empty(errors);
     }
 
     [Fact]
@@ -149,7 +169,7 @@ public sealed class MailAccountSecretOptionsTests
         material.Dispose();
 
         // Assert
-        Assert.Throws<ObjectDisposedException>(() => material.Password.RevealAsString());
+        Assert.Throws<ObjectDisposedException>(() => material.Password!.RevealAsString());
     }
 
     /// <summary>Resolves the four shipped schemes without touching the file system or the environment block.</summary>

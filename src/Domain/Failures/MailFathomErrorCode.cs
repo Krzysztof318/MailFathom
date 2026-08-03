@@ -46,6 +46,12 @@ public readonly record struct MailFathomErrorCode
     /// <summary>Gets subcategory 2, configuration sources: the deployment's configuration-source settings name a path that is absent or a setting that does not exist.</summary>
     public static MailFathomErrorCode ProvisionedConfigurationSourceInvalid { get; } = new(12001);
 
+    /// <summary>Gets subcategory 3, mailbox access tokens: an account's authorization server did not issue an access token its OAuth mechanisms require.</summary>
+    public static MailFathomErrorCode MailAccessTokenUnavailable { get; } = new(13001);
+
+    /// <summary>Gets subcategory 3, mailbox access tokens: an operator-driven authorization run did not produce a refresh token to provision.</summary>
+    public static MailFathomErrorCode MailboxAuthorizationFailed { get; } = new(13002);
+
     #endregion
 
     #region Category 2 — Mail protocol
@@ -161,6 +167,8 @@ public readonly record struct MailFathomErrorCode
     [
         MailTransportSecurityPolicyViolated,
         ProvisionedConfigurationSourceInvalid,
+        MailAccessTokenUnavailable,
+        MailboxAuthorizationFailed,
         MailAuthenticationMechanismUnavailable,
         MailboxUnavailable,
         MailboxFolderRecreated,

@@ -15,6 +15,7 @@ using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Secrets;
 
 namespace MailFathom.Host.Configuration;
@@ -317,6 +318,10 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <summary>Gets or sets the account's secret-bearing settings, which carry references rather than credentials.</summary>
     public MailAccountSecretOptions Secrets { get; set; } = new();
 
+    /// <summary>Gets or sets the account's OAuth settings, read only when its policy permits a token-bearing mechanism.</summary>
+    /// <remarks>An account authenticating with a password leaves the block empty, and validation then never reads it.</remarks>
+    public MailAccountOAuthOptions OAuth { get; set; } = new();
+
     /// <summary>Gets or sets the earliest date the mail server may have received an email on for it to be synchronized.</summary>
     /// <remarks>
     /// Omitting it synchronizes every email the server still holds, which is the default. It binds as a plain date such
@@ -416,6 +421,116 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             {
                 yield return result;
             }
+
+            foreach (var result in this.ValidateAuthenticationCredentials())
+            {
+                yield return result;
+            }
+        }
+    }
+
+    /// <summary>Reports a credential shape that does not match the mechanisms the account's policy permits.</summary>
+    /// <remarks>
+    /// <para>
+    /// This is what makes the optional password safe. An account permitting only token-bearing mechanisms needs a
+    /// token endpoint and needs no password; one permitting any password mechanism needs the opposite. Settling it at
+    /// startup means a connection attempt reads a decision instead of discovering halfway through authentication that
+    /// the credential it needs was never configured.
+    /// </para>
+    /// <para>
+    /// A configured OAuth block the policy can never use is refused rather than ignored. Silently unused credentials
+    /// are the shape an operator misreads as working, and this one would leave a client secret provisioned for
+    /// nothing.
+    /// </para>
+    /// </remarks>
+    private IEnumerable<ValidationResult> ValidateAuthenticationCredentials()
+    {
+        MailAuthenticationPolicy authentication;
+        try
+        {
+            authentication = this.CreateTransportSecurityPolicy().Authentication;
+        }
+        catch (MailTransportSecurityPolicyViolationException)
+        {
+            // ValidateTransportSecurity already reported this, and every rule below needs a policy to read.
+            yield break;
+        }
+
+        if (authentication.PermitsAccessTokenAuthentication)
+        {
+            foreach (var result in this.ValidateOAuthBlock())
+            {
+                yield return result;
+            }
+        }
+        else if (this.OAuth.IsConfigured)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}' configures OAuth settings, but its permitted mechanisms include no token-bearing mechanism such as XOAUTH2 or OAUTHBEARER, so the settings could never be used.",
+                [nameof(this.OAuth)]);
+        }
+
+        if (authentication.PermitsPasswordAuthentication && string.IsNullOrWhiteSpace(this.Secrets?.Password?.SecretReference))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}' permits a password mechanism and configures no password secret reference.",
+                [nameof(this.Secrets)]);
+        }
+    }
+
+    private IEnumerable<ValidationResult> ValidateOAuthBlock()
+    {
+        if (!this.OAuth.ParsedGrant.IsSpecified)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the OAuth grant must be one of {string.Join(", ", MailOAuthGrant.All.Select(grant => grant.GrantTypeName))}.",
+                [nameof(this.OAuth)]);
+        }
+
+        // The request body carries the client secret and the refresh token, so an unencrypted endpoint would publish
+        // both to anyone on the path. This is refused rather than warned about, and there is no opt-in for it.
+        if (!Uri.TryCreate(this.OAuth.TokenEndpoint, UriKind.Absolute, out var tokenEndpoint)
+            || !string.Equals(tokenEndpoint.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the OAuth token endpoint must be an absolute HTTPS address.",
+                [nameof(this.OAuth)]);
+        }
+
+        if (string.IsNullOrWhiteSpace(this.OAuth.ClientId))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': an OAuth client identifier is required.",
+                [nameof(this.OAuth)]);
+        }
+
+        // A public client holds no secret by registration, which is what the device grant expects and what
+        // 'mfctl mailbox authorize --public-client' produces. Requiring one regardless would refuse an account
+        // the documented workflow just finished authorizing.
+        var configuresClientSecret = !string.IsNullOrWhiteSpace(this.OAuth.ClientSecret?.SecretReference);
+
+        if (!this.OAuth.PublicClient && !configuresClientSecret)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': an OAuth client secret reference is required unless the application is registered as a public client, which is declared with 'PublicClient: true'.",
+                [nameof(this.OAuth)]);
+        }
+
+        // Both together are a contradiction rather than a harmless extra: one of the two states the operator wrote is
+        // not what the account will do, and silently ignoring the secret would leave a provisioned credential whose
+        // disuse nobody can see.
+        if (this.OAuth.PublicClient && configuresClientSecret)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': a public client sends no client secret, so configuring one alongside 'PublicClient: true' is contradictory.",
+                [nameof(this.OAuth)]);
+        }
+
+        if (this.OAuth.ParsedGrant.RequiresRefreshToken && string.IsNullOrWhiteSpace(this.OAuth.RefreshToken?.SecretReference))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the refresh-token grant requires a refresh token secret reference. Obtain one with 'mfctl mailbox authorize'.",
+                [nameof(this.OAuth)]);
         }
     }
 
@@ -456,15 +571,24 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <returns>The material, which the caller must dispose when its operation ends.</returns>
     /// <exception cref="InvalidOperationException">Thrown when configuration that passed startup validation no longer yields usable material.</exception>
     /// <remarks>
+    /// <para>
     /// An anchor that fails to load fails the connection attempt rather than downgrading it to the system trust store,
     /// and the password resolved first is erased on that path so a failed attempt leaves nothing behind.
+    /// </para>
+    /// <para>
+    /// No password is resolved for an account whose policy permits only token-bearing mechanisms, because such an
+    /// account configures none. Validation settles that at startup, so the branch here reads a decision rather than
+    /// guessing from whether a reference happens to be present.
+    /// </para>
     /// </remarks>
     internal async Task<MailAccountConnectionMaterial> ResolveConnectionMaterialAsync(
         ISecretReferenceResolver resolver,
         TrustAnchorLoader trustAnchorLoader,
         CancellationToken cancellationToken)
     {
-        var password = await this.Secrets.ResolvePasswordAsync(resolver, cancellationToken);
+        var password = this.CreateTransportSecurityPolicy().Authentication.PermitsPasswordAuthentication
+            ? await this.Secrets.ResolvePasswordAsync(resolver, cancellationToken)
+            : null;
 
         try
         {
@@ -476,10 +600,36 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
         }
         catch
         {
-            password.Dispose();
+            password?.Dispose();
 
             throw;
         }
+    }
+
+    /// <summary>Resolves the token endpoint settings and secrets one token request needs.</summary>
+    /// <param name="resolver">The resolver that turns configured references into material.</param>
+    /// <param name="cancellationToken">Cancels the retrieval.</param>
+    /// <returns>The settings, whose material the caller must dispose when its operation ends.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the account configures no usable OAuth block, which startup validation already refuses.</exception>
+    internal async Task<MailOAuthAccountSettings> ResolveOAuthSettingsAsync(
+        ISecretReferenceResolver resolver,
+        CancellationToken cancellationToken)
+    {
+        if (!this.OAuth.ParsedGrant.IsSpecified || !Uri.TryCreate(this.OAuth.TokenEndpoint, UriKind.Absolute, out var tokenEndpoint))
+        {
+            throw new InvalidOperationException(
+                $"Account '{this.AccountId}' authenticates with an access token and configures no usable OAuth block.");
+        }
+
+        var material = await this.OAuth.ResolveClientMaterialAsync(resolver, cancellationToken);
+
+        return new MailOAuthAccountSettings(
+            MailAccountId.Create(this.AccountId).Value,
+            tokenEndpoint,
+            this.OAuth.ClientId.Trim(),
+            this.OAuth.Scope.Trim(),
+            this.OAuth.ParsedGrant,
+            material);
     }
 
     private async Task<X509Certificate2?> LoadTrustedCertificateAuthorityAsync(

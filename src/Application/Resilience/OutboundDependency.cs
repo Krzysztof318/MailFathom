@@ -41,4 +41,14 @@ public enum OutboundDependency
 
     /// <summary>Invoking a chat or embedding provider.</summary>
     AiProviderInvocation = 4,
+
+    /// <summary>Exchanging a configured OAuth grant for a mailbox access token at an authorization server.</summary>
+    /// <remarks>
+    /// It is its own class rather than part of <see cref="MailboxSessionEstablishment" /> because the two disagree
+    /// about repetition. Establishment must never repeat a rejected credential, since doing so can lock the mailbox
+    /// account; a token request carries no mailbox password, and an authorization server answers an overload with an
+    /// ordinary transient HTTP status that is safe to retry. Separating them is also what keeps a token request issued
+    /// during establishment from nesting one retry budget inside another.
+    /// </remarks>
+    MailAuthorizationServerInvocation = 5,
 }

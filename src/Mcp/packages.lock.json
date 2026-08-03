@@ -130,7 +130,7 @@
       "MailFathom.Application": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.Domain": "[1.0.0, )"
+          "MailFathom.Domain": "[0.2.0, )"
         }
       },
       "MailFathom.Domain": {

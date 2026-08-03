@@ -12,6 +12,7 @@ using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Resilience;
 using MailKit;
 using MailKit.Net.Imap;
@@ -23,6 +24,7 @@ namespace MailFathom.Infrastructure.Mail.MailKit;
 internal sealed class MailKitImapMailboxSessionFactory(
     Func<IImapClient> clientFactory,
     IImapAccountSettingsProvider settingsProvider,
+    IMailAccessTokenSource accessTokenSource,
     OutboundOperationExecutor operationExecutor,
     ITransientFailureClassifier transientFailureClassifier,
     TimeProvider timeProvider) : IMailboxSessionFactory
@@ -40,6 +42,7 @@ internal sealed class MailKitImapMailboxSessionFactory(
         var connection = new MailKitImapConnection(
             clientFactory,
             settingsProvider,
+            accessTokenSource,
             operationExecutor,
             transientFailureClassifier,
             accountId,

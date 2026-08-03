@@ -23,6 +23,8 @@ public sealed class MailAuthenticationPolicyTests
             { MailAuthenticationMechanism.ScramSha512, "SCRAM-SHA-512" },
             { MailAuthenticationMechanism.ScramSha512Plus, "SCRAM-SHA-512-PLUS" },
             { MailAuthenticationMechanism.Ntlm, "NTLM" },
+            { MailAuthenticationMechanism.XOAuth2, "XOAUTH2" },
+            { MailAuthenticationMechanism.OAuthBearer, "OAUTHBEARER" },
         };
 
     public static TheoryData<string, MailAuthenticationMechanism> ParsableMechanismNames =>
@@ -132,7 +134,9 @@ public sealed class MailAuthenticationPolicyTests
 
     [Theory]
     [InlineData("GSSAPI")]
-    [InlineData("XOAUTH2")]
+    // The OAuth 1.0a mechanism Google withdrew, which differs from the supported XOAUTH2 by one character and must
+    // never be accepted as a near miss for it.
+    [InlineData("XOAUTH")]
     [InlineData("")]
     [InlineData(null)]
     public void TryParseSaslName_UnsupportedName_ReturnsFalse(string? configuredName)
@@ -178,4 +182,65 @@ public sealed class MailAuthenticationPolicyTests
         Assert.Equal(saslNames.Length, saslNames.Distinct(StringComparer.Ordinal).Count());
         Assert.All(MailAuthenticationMechanism.All, mechanism => Assert.True(mechanism.IsSpecified));
     }
+    [Fact]
+    public void AuthenticatesWithAccessToken_OAuthMechanisms_SeparatesThemFromPasswordMechanisms()
+    {
+        // Arrange, Act, Assert
+        Assert.True(MailAuthenticationMechanism.XOAuth2.AuthenticatesWithAccessToken);
+        Assert.True(MailAuthenticationMechanism.OAuthBearer.AuthenticatesWithAccessToken);
+        Assert.False(MailAuthenticationMechanism.Plain.AuthenticatesWithAccessToken);
+        Assert.False(MailAuthenticationMechanism.ScramSha256.AuthenticatesWithAccessToken);
+    }
+
+    [Fact]
+    public void TransmitsCredentialsInClearText_OAuthMechanisms_IsFalseBecauseNoPasswordTravels()
+    {
+        // Arrange, Act, Assert
+        Assert.False(MailAuthenticationMechanism.XOAuth2.TransmitsCredentialsInClearText);
+        Assert.False(MailAuthenticationMechanism.OAuthBearer.TransmitsCredentialsInClearText);
+    }
+
+    [Fact]
+    public void PermitsAccessTokenAuthentication_TokenOnlyAllowList_NeedsNoPassword()
+    {
+        // Arrange, Act
+        var policy = MailAuthenticationPolicy.Create(
+            [MailAuthenticationMechanism.OAuthBearer, MailAuthenticationMechanism.XOAuth2],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Assert
+        Assert.True(policy.PermitsAccessTokenAuthentication);
+        Assert.False(policy.PermitsPasswordAuthentication);
+        Assert.False(policy.PermitsClearTextCredentials);
+    }
+
+    [Fact]
+    public void PermitsPasswordAuthentication_MixedAllowList_ReportsBothCredentialKinds()
+    {
+        // Arrange, Act
+        var policy = MailAuthenticationPolicy.Create(
+            [MailAuthenticationMechanism.XOAuth2, MailAuthenticationMechanism.Plain],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Assert
+        Assert.True(policy.PermitsAccessTokenAuthentication);
+        Assert.True(policy.PermitsPasswordAuthentication);
+    }
+
+    [Fact]
+    public void PermitsAccessTokenAuthentication_PasswordOnlyAllowList_IsFalse()
+    {
+        // Arrange, Act
+        var policy = MailAuthenticationPolicy.Create(
+            [MailAuthenticationMechanism.ScramSha256],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false);
+
+        // Assert
+        Assert.False(policy.PermitsAccessTokenAuthentication);
+        Assert.True(policy.PermitsPasswordAuthentication);
+    }
+
 }

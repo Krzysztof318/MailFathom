@@ -50,6 +50,17 @@ internal sealed class FakeImapClient
     /// <summary>Gets the mechanism set the server advertises, which the adapter narrows before authenticating.</summary>
     internal ISet<string> AuthenticationMechanisms => this.authenticationMechanisms;
 
+    /// <summary>Gets the SASL mechanism name of every token authentication attempted, in order.</summary>
+    internal List<string> SaslMechanismNames { get; } = [];
+
+    /// <summary>Gets the access token presented by every token authentication attempted, in order.</summary>
+    /// <remarks>Recorded so a test can prove that a second attempt presented the renewed token rather than repeating the refused one.</remarks>
+    internal List<string> PresentedAccessTokens { get; } = [];
+
+    /// <summary>Gets or sets how many of the first token authentications the server refuses.</summary>
+    /// <remarks>Models a token this process still believes is valid being rejected — revoked, or the mailbox password changed — which is the one case no expiry instant predicts.</remarks>
+    internal int RefusedSaslAuthenticationCount { get; set; }
+
     /// <summary>Gets the folders each namespace advertises, so a test can model a server with several of them.</summary>
     internal IDictionary<FolderNamespace, IReadOnlyList<IMailFolder>> FoldersByNamespace => this.foldersByNamespace;
 
@@ -157,6 +168,24 @@ internal sealed class FakeImapClient
                 return this.AuthenticateException is null
                     ? Task.CompletedTask
                     : throw this.AuthenticateException;
+            });
+
+        this.Client
+            .AuthenticateAsync(Arg.Any<SaslMechanism>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var mechanism = call.Arg<SaslMechanism>()
+                    ?? throw new InvalidOperationException("The adapter authenticated with no SASL mechanism.");
+
+                this.AuthenticateCalled = true;
+                this.MechanismsWhenAuthenticated = [.. this.authenticationMechanisms.Order(StringComparer.Ordinal)];
+                this.SaslMechanismNames.Add(mechanism.MechanismName);
+                this.PresentedAccessTokens.Add(mechanism.Credentials?.Password ?? string.Empty);
+
+                // Counted against the attempts already recorded, so "refuse the first one" reads as exactly that.
+                return this.SaslMechanismNames.Count <= this.RefusedSaslAuthenticationCount
+                    ? throw new AuthenticationException("The server refused the access token.")
+                    : Task.CompletedTask;
             });
     }
 

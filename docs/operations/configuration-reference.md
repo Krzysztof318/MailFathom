@@ -96,7 +96,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `…:Host` | string | — | Required when synchronization is enabled | reload |
 | `…:Port` | int | `993` | 1 – 65535 | reload |
 | `…:UserName` | string | — | Required when synchronization is enabled; an identifier, not a secret | reload |
-| `…:Secrets:Password` | secret block | — | Must resolve at startup | reload; material per connection |
+| `…:Secrets:Password` | secret block | unset | Required when the permitted mechanisms include any password mechanism; must resolve at startup | reload; material per connection |
 | `…:EarliestEmailReceivedDate` | date | unset (everything) | Not in the future (compared in UTC) | reload |
 | `…:RemotelyDeletedEmailDisposition` | enum | `RetainTombstone` | `RetainTombstone`, `EraseLocalCopy` | reload; governs disappearances observed from then on |
 | `…:Folders` | list | inbox by role | Aliases unique; each entry below | reload |
@@ -104,6 +104,22 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 A folder entry names `Alias` (required — your stable name for the folder) and **exactly one** of `RemotePath` (the
 server's own path) or `SpecialUse` (a role discovery resolves: `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`,
 `All`, `Flagged`, `Important`). Configuring no folder synchronizes the inbox by role.
+
+### OAuth — `…:OAuth`
+
+Read only when the account's permitted mechanisms include `XOAUTH2` or `OAUTHBEARER`. An account that authenticates
+with a password leaves the whole block unset, and configuring it anyway fails startup rather than provisioning
+credentials nothing can use. [Mailbox OAuth](mailbox-oauth.md) covers where each value comes from.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:OAuth:Grant` | string | — | `refresh_token` or `client_credentials` | reload |
+| `…:OAuth:TokenEndpoint` | string | — | Absolute HTTPS address; no opt-in exists for `http` | reload |
+| `…:OAuth:ClientId` | string | — | Required; an identifier, not a secret | reload |
+| `…:OAuth:Scope` | string | — | Space-delimited, as RFC 6749 defines it | reload |
+| `…:OAuth:PublicClient` | bool | `false` | Set when the application is registered as a public client, which holds no secret | reload |
+| `…:OAuth:ClientSecret` | secret block | unset | Required unless `PublicClient` is `true`, and refused alongside it; must resolve at startup | reload; material per token request |
+| `…:OAuth:RefreshToken` | secret block | unset | Required by `refresh_token`; absent for `client_credentials` | reload; material per token request |
 
 ### Transport security — `…:TransportSecurity`
 
@@ -113,7 +129,7 @@ opt-in, and unsafe combinations fail startup.
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `…:ConnectionSecurity` | enum | `TlsOnConnect` | `Auto`, `TlsOnConnect`, `StartTlsRequired`, `StartTlsWhenAvailable`, `None`; anything but the two guaranteed-TLS modes requires `AllowInsecureConnection` | reload |
-| `…:PermittedAuthenticationMechanisms` | string list | `PLAIN`, `LOGIN` | Supported SASL names; an unordered allow-list, the client picks the strongest that survives | reload |
+| `…:PermittedAuthenticationMechanisms` | string list | `PLAIN`, `LOGIN` | Supported SASL names, including `XOAUTH2` and `OAUTHBEARER`; an unordered allow-list, the client picks the strongest that survives | reload |
 | `…:AllowInsecureConnection` | bool | `false` | Opt-in for modes that can leave the channel unencrypted | reload |
 | `…:AllowClearTextAuthenticationOverUnencryptedConnection` | bool | `false` | Opt-in on top of the above | reload |
 | `…:CertificateTrust` | enum | `SystemTrustStore` | `SystemTrustStore`, `AdditionalTrustedAuthority` | reload |
@@ -354,8 +370,8 @@ The startup, readiness, and liveness probes and the dedicated listener they answ
 ## `Resilience`
 
 Retry, timeout, circuit-breaker, and concurrency budgets for the non-HTTP outbound dependencies, one subsection per
-dependency class: `MailboxSessionEstablishment`, `MailboxDataRetrieval`, `EmailDelivery`, `DatabaseCommandExecution`,
-`AiProviderInvocation`. A subsection naming no class fails startup. Every setting is **restart** by construction, and
+dependency class: `MailboxSessionEstablishment`, `MailboxDataRetrieval`, `MailAuthorizationServerInvocation`,
+`EmailDelivery`, `DatabaseCommandExecution`, `AiProviderInvocation`. A subsection naming no class fails startup. Every setting is **restart** by construction, and
 [outbound resilience](../architecture/outbound-resilience.md#configuration) explains each strategy and the
 per-class reasoning.
 
@@ -377,6 +393,7 @@ Defaults, per class:
 | --- | --- | --- | --- | --- | --- |
 | `MailboxSessionEstablishment` | 3 | 2 s / 30 s | 30 s / 2 min | 0.5 · 5 · 60 s · 30 s | 4 |
 | `MailboxDataRetrieval` | 3 | 1 s / 15 s | 60 s / 3 min | 0.5 · 10 · 30 s · 15 s | 8 |
+| `MailAuthorizationServerInvocation` | 3 | 500 ms / 5 s | 10 s / 30 s | 0.5 · 10 · 60 s · 30 s | 8 |
 | `EmailDelivery` | 2 | 5 s / 60 s | 60 s / 3 min | 0.5 · 5 · 60 s · 60 s | 4 |
 | `DatabaseCommandExecution` | 3 | 200 ms / 2 s | 15 s / 30 s | 0.5 · 20 · 30 s · 5 s | 32 |
 | `AiProviderInvocation` | 3 | 2 s / 30 s | 120 s / 5 min | 0.5 · 5 · 60 s · 30 s | 4 |

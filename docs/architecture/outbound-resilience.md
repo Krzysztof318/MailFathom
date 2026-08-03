@@ -18,11 +18,20 @@ them:
 | `EmailDelivery` | Submitting an email to the SMTP server |
 | `DatabaseCommandExecution` | Commands and queries against the local PostgreSQL database |
 | `AiProviderInvocation` | Chat and embedding provider calls |
+| `MailAuthorizationServerInvocation` | Exchanging a configured OAuth grant for a mailbox access token |
 
 A class exists when its failure modes and its rules for safe repetition differ from every other class. Session
 establishment is separate from retrieval because a rejected credential must never be repeated — against a mail server
 that is how an account gets locked. Delivery is separate because a repeated submission is visible in the recipient's
-inbox, which is why its shipped budget is the smallest of the five.
+inbox, which is why its shipped budget is the smallest of the six.
+
+Token acquisition is separate from session establishment for the same kind of reason read the other way. A token
+request carries no mailbox password, so it cannot lock an account, and an authorization server answering an overload
+with a `503` is inviting the request again — the opposite of what establishment must do with a refusal. Separating them
+is also what keeps the token request a session establishment triggers from nesting one retry budget inside another,
+which the executor refuses outright. Its budget is short on every axis, and its attempt timeout is deliberately well
+inside the establishment timeout enclosing it, so a hung authorization server surfaces as itself rather than as a
+mailbox timeout.
 
 The enumeration is half the pipeline key. A value that is not declared resolves no pipeline and raises
 `KeyNotFoundException`, so a typo cannot silently run an operation with no resilience at all.
