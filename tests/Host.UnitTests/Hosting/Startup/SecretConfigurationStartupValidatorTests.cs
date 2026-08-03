@@ -4,6 +4,7 @@
 
 using System.Buffers.Text;
 using System.Text;
+using MailFathom.Common;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Access;
@@ -15,6 +16,7 @@ using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.Resolution;
@@ -596,6 +598,62 @@ public sealed class SecretConfigurationStartupValidatorTests
         await harness.Validator.StartingAsync(CancellationToken.None);
     }
 
+    [Fact]
+    public async Task StartingAsync_ADataEncryptionKeyOfTheWrongLength_IsRefusedNamingTheMaterial()
+    {
+        // Arrange — material that resolves but is not a key would pass a reference check and then fail every read of a
+        // sealed value, which is the failure this section exists to move to startup. Thirty-three bytes is the mistake
+        // that actually happens: it is what the command beside this one generates for a database password.
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions(),
+            dataEncryptionOptions: RingOf("2026-08", Convert.ToBase64String(new byte[33])));
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("DataEncryption:Keys:0:Material", failure, StringComparison.Ordinal);
+        Assert.Contains(nameof(DataEncryptionKeyMaterialFailure.WrongLength), failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartingAsync_ADataEncryptionKeyThatIsNotBase64_IsRefusedNamingTheMaterial()
+    {
+        // Arrange
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions(),
+            dataEncryptionOptions: RingOf("2026-08", "not-base64-material"));
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("DataEncryption:Keys:0:Material", failure, StringComparison.Ordinal);
+        Assert.Contains(nameof(DataEncryptionKeyMaterialFailure.NotBase64), failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartingAsync_ARingWhoseMaterialIsAKey_PassesTheGate()
+    {
+        // Arrange — the counterpart the two refusals need: without it they would pass against a validator that
+        // rejected every ring it was handed.
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions(),
+            dataEncryptionOptions: RingOf(
+                "2026-08",
+                Convert.ToBase64String(new byte[AesGcmEnvelope.KeySizeInBytes])));
+
+        // Act, Assert
+        await harness.Validator.StartingAsync(CancellationToken.None);
+    }
+
     /// <summary>Every lifecycle stage other than the starting one is deliberately empty, because the check belongs before hosted services start.</summary>
     [Fact]
     public async Task RemainingLifecycleMembers_Always_CompleteWithoutResolvingAnything()
@@ -638,6 +696,18 @@ public sealed class SecretConfigurationStartupValidatorTests
         var payload = Base64Url.EncodeToString(Encoding.UTF8.GetBytes($$"""{"iss":"{{issuer}}","sub":"9f2c"}"""));
 
         return $"header.{payload}.signature";
+    }
+
+    private static DataEncryptionOptions RingOf(string keyId, string material)
+    {
+        var options = new DataEncryptionOptions { ActiveKeyId = keyId };
+        options.Keys.Add(new DataEncryptionKeyOptions
+        {
+            KeyId = keyId,
+            Material = new ConfiguredSecret { Name = "mailfathom-data-key", SecretReference = $"plaintext:{material}" },
+        });
+
+        return options;
     }
 
     private static ValidatorHarness CreateHarness(
