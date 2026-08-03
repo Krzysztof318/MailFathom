@@ -171,18 +171,19 @@ caller cannot tell a folder that holds nothing matching from one whose synchroni
 ## Where the pieces live
 
 - `MailFathom.Application.Emails.SearchEmails` — the use case, its request, and its result.
-- `MailFathom.Application.Emails` — `MailboxEmailSelection`, the validated structural filters both read models share;
-  `EmailSearchQueryText`, `EmailSearchResultLimit`, and `EmailSearchSnippetBounds`; `EmailSearchMatch`; and
-  `IEmailSearchIndexReader`, the port the adapter implements.
-- `MailFathom.Application.Emails.Mailboxes.MailboxScopeResolver` — resolves the accounts a read runs against and refuses one this
-  deployment does not serve, once, for every read model.
-- `MailFathom.Infrastructure.Persistence` — `StoredEmailSearchIndexReader`, which composes the ranking query, and
+- `MailFathom.Application.Emails.Search` — `EmailSearchQueryText`, `EmailSearchResultLimit`, and
+  `EmailSearchSnippetBounds`; `EmailSearchMatch`; and `IEmailSearchIndexReader`, the port the adapter implements.
+- `MailFathom.Application.Emails.Mailboxes` — `MailboxEmailSelection`, the validated structural filters both read models
+  share, and `MailboxScopeResolver`, which resolves the accounts a read runs against and refuses one this deployment does
+  not serve, once, for every read model.
+- `MailFathom.Infrastructure.Persistence.Emails` — `StoredEmailSearchIndexReader`, which composes the ranking query, and
   `StoredEmailSelectionPredicate`, the filter predicate it shares with the listing read model, and
   `StoredEmailSummaryRow`, the projection and mapping it shares with every other read that publishes a summary.
 - `MailFathom.Host.Configuration.Mail.MailboxSearchOptions` — the snippet bounds, bound strictly and validated on start.
-- `MailFathom.Mcp.Tools` — `SearchEmailsTool`, the protocol adapter, with `SearchEmailsToolResult`, `SearchedEmailMatch`,
-  and `EmailRetrievalMode`, the published contract; and `MailboxScopeArguments`, the conversion of caller-supplied text
-  into account identifiers and folder aliases that it shares with the listing tool.
+- `MailFathom.Mcp.Tools` — `SearchEmailsTool`, the protocol adapter, and `MailboxScopeArguments`, the conversion of
+  caller-supplied text into account identifiers and folder aliases that it shares with the listing tool.
+- `MailFathom.Mcp.Tools.Results` — `SearchEmailsToolResult`, `SearchedEmailMatch`, and `EmailRetrievalMode`, the
+  published contract.
 
 ## How the guarantees are verified
 

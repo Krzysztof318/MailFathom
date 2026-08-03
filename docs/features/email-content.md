@@ -1,6 +1,6 @@
 # Email content
 
-<!-- describes: src/Application/EmailContent/**, src/Application/Emails/GetEmailContent/**, src/Infrastructure/Mail/Mime/** -->
+<!-- describes: src/Application/EmailContent/**, src/Application/Emails/GetEmailContent/**, src/Infrastructure/Mail/Mime/**, src/Infrastructure/Persistence/Emails/** -->
 
 MailFathom serves the content of the emails one call names, from its local copy. `EmailContentReader` is the second read
 use case: it takes the stable local identifiers a listing returned and answers for each of them with normalized headers,
@@ -322,12 +322,16 @@ those leaves an email to report an outcome against.
 
 - `MailFathom.Application.Emails.GetEmailContent` — the use case, its request, its per-email outcome and failure, and the
   two refusals a request itself can earn.
-- `MailFathom.Application.EmailContent` — the content store port, the renderer port, the repair-request port, the body
-  representations with their bounds, and the headers.
+- `MailFathom.Application.EmailContent.Storage` — the content store port and what a read of it returns, remote and
+  stored.
+- `MailFathom.Application.EmailContent.Rendering` — the renderer port, the body representations with their bounds, and
+  the headers.
+- `MailFathom.Application.EmailContent.Repair` — the repair-request port, the request it carries, and the defect that
+  raises one.
 - `MailFathom.Infrastructure.Mail.Mime` — `MimeKitEmailContentRenderer` and `EmailHtmlSanitizer`, which own the MIME parser
   and the HTML sanitizer respectively. Neither type escapes that namespace.
-- `MailFathom.Infrastructure.Persistence` — `StoredEmailSummaryReader`, the content store's integrity-bearing read, and
-  `EmailContentRepairRequestStore`.
+- `MailFathom.Infrastructure.Persistence.Emails` — `StoredEmailSummaryReader`, the content store's integrity-bearing read,
+  and `EmailContentRepairRequestStore`.
 
 `MimeMessageHeaderReader` is shared with the extraction that fills the lexical index, so a message is indexed under
 exactly the headers it is displayed under.
