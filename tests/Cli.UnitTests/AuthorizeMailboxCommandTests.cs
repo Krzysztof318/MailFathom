@@ -12,7 +12,7 @@ namespace MailFathom.Cli.UnitTests;
 /// <summary>Covers what the mailbox authorization command decides, with the browser and the socket substituted.</summary>
 public sealed class AuthorizeMailboxCommandTests : IDisposable
 {
-    private readonly RecordingCliConsole console = new();
+    private readonly RecordingCliConsole console = new() { SecretToSupply = "a-client-secret" };
     private readonly string storeDirectory = Path.Combine(
         Path.GetTempPath(),
         $"mailfathom-authorize-{Guid.NewGuid():N}");
@@ -42,7 +42,7 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
         var exitCode = await this.RunAsync(
             handler,
             FakeMailboxRedirect.Silent(),
-            "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--mode", "device", "--public-client");
+            "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--mode", "device");
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
@@ -58,7 +58,7 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
         var redirect = FakeMailboxRedirect.Answering(new MailboxRedirect(Code: null, State: null, Error: "access_denied"));
 
         // Act
-        var exitCode = await this.RunAsync(handler, redirect, "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--public-client");
+        var exitCode = await this.RunAsync(handler, redirect, "mailbox", "authorize", "--provider", "google", "--client-id", "app");
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
@@ -78,7 +78,7 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
         var redirect = FakeMailboxRedirect.Approving("code-from-another-run", "a-state-this-run-never-issued");
 
         // Act
-        var exitCode = await this.RunAsync(handler, redirect, "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--public-client");
+        var exitCode = await this.RunAsync(handler, redirect, "mailbox", "authorize", "--provider", "google", "--client-id", "app");
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
@@ -94,7 +94,7 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
         var redirect = FakeMailboxRedirect.Answering(new MailboxRedirect(Code: null, State: null, Error: null));
 
         // Act
-        var exitCode = await this.RunAsync(handler, redirect, "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--public-client");
+        var exitCode = await this.RunAsync(handler, redirect, "mailbox", "authorize", "--provider", "google", "--client-id", "app");
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
@@ -118,11 +118,34 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
 
                 return redirect(address);
             },
-            "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--public-client",
+            "mailbox", "authorize", "--provider", "google", "--client-id", "app",
             "--redirect-uri", "http://127.0.0.1:9123/");
 
         // Assert
         Assert.Equal(new Uri("http://127.0.0.1:9123/"), listenedOn);
+    }
+
+    /// <summary>
+    /// The preset records that Google rejects an exchange carrying no client secret. Honoring the flag anyway would
+    /// send the request without the field and leave the operator reading the authorization server's own
+    /// <c>invalid_client</c> instead of the reason for it.
+    /// </summary>
+    [Fact]
+    public async Task Authorize_PublicClientAgainstAProviderThatRequiresASecret_IsRefusedBeforeTheExchange()
+    {
+        // Arrange
+        using var handler = TokenEndpointRefusing();
+
+        // Act
+        var exitCode = await this.RunAsync(
+            handler,
+            FakeMailboxRedirect.Silent(),
+            "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--public-client");
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(this.console.Errors, line => line.Contains("--public-client cannot be used with it", StringComparison.Ordinal));
+        Assert.Empty(handler.RecordedRequests);
     }
 
     [Fact]
@@ -135,7 +158,7 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
         var exitCode = await this.RunAsync(
             handler,
             FakeMailboxRedirect.Silent(),
-            "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--public-client",
+            "mailbox", "authorize", "--provider", "google", "--client-id", "app",
             "--redirect-uri", "127.0.0.1:8765");
 
         // Assert

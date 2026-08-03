@@ -134,6 +134,16 @@ internal static class AuthorizeMailboxCommand
                 $"The {preset.PresetName} provider does not issue mail scopes through the device flow. Use --mode manual.");
         }
 
+        // The preset knows whether the provider rejects an exchange carrying no client secret, and Google does. Without
+        // this the flag is honored, the request goes out without the field, and the operator reads the authorization
+        // server's own invalid_client instead of the reason — which is the same trade the device-flow guard above
+        // exists to avoid.
+        if (isPublicClient && preset.RequiresClientSecret)
+        {
+            throw new CliFailure(
+                $"The {preset.PresetName} provider rejects an authorization that carries no client secret, so --public-client cannot be used with it. Register a confidential client and omit the flag.");
+        }
+
         var clientSecret = isPublicClient
             ? null
             : context.Console.ReadSecret("Client secret (leave empty for a public client): ");
