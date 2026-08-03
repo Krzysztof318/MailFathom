@@ -1,0 +1,63 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "findings"],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "What the change does, how much of it was covered, and anything left out. Never a tally by severity and never a restatement of a finding."
+    },
+    "findings": {
+      "type": "array",
+      "description": "Every defect above the bar, and nothing else. Empty when the change has none.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "severity",
+          "path",
+          "start_line",
+          "line",
+          "title",
+          "impact",
+          "correction",
+          "rule"
+        ],
+        "properties": {
+          "severity": {
+            "enum": ["P1", "P2", "P3"],
+            "description": "P1 breaks something, P2 is owed by a rule, P3 is paid for later."
+          },
+          "path": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "description": "A key of lines.json, or null for the one finding that has no line."
+          },
+          "start_line": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "description": "The first line of a range, or null when the finding sits on one line."
+          },
+          "line": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "description": "One of the numbers lines.json lists for path, or null when path is null."
+          },
+          "title": {
+            "type": "string",
+            "description": "Imperative, naming the correction in a handful of words."
+          },
+          "impact": {
+            "type": "string",
+            "description": "The input or state that reaches this code, and the wrong result that follows."
+          },
+          "correction": {
+            "type": "string",
+            "description": "The smallest change that fixes it, and nothing else."
+          },
+          "rule": {
+            "type": "string",
+            "description": "The file and its section, or the specification or ADR, that the finding rests on."
+          }
+        }
+      }
+    }
+  }
+}
