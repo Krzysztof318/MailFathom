@@ -12,7 +12,7 @@ using Xunit;
 namespace MailFathom.Infrastructure.UnitTests;
 
 /// <summary>Covers which presented credentials authenticate, which do not, and what a refusal is allowed to reveal.</summary>
-public sealed class McpApiKeyAuthenticatorTests
+public sealed class ApiKeyAuthenticatorTests
 {
     private const string WorkstationKeyMaterial = "8f2c1d5e-workstation";
 
@@ -99,7 +99,7 @@ public sealed class McpApiKeyAuthenticatorTests
 
         // Assert
         Assert.False(result.Succeeded);
-        Assert.Equal(McpApiKeyRejection.CredentialExpired, result.Rejection);
+        Assert.Equal(ApiKeyRejection.CredentialExpired, result.Rejection);
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public sealed class McpApiKeyAuthenticatorTests
             "Bearer not-a-configured-key");
 
         // Assert
-        Assert.Equal(McpApiKeyRejection.CredentialUnrecognized, result.Rejection);
+        Assert.Equal(ApiKeyRejection.CredentialUnrecognized, result.Rejection);
     }
 
     /// <summary>The presented credential is compared in full, so a prefix of a real key is as unrecognized as anything else.</summary>
@@ -179,7 +179,7 @@ public sealed class McpApiKeyAuthenticatorTests
             $"Bearer {WorkstationKeyMaterial[..8]}");
 
         // Assert
-        Assert.Equal(McpApiKeyRejection.CredentialUnrecognized, result.Rejection);
+        Assert.Equal(ApiKeyRejection.CredentialUnrecognized, result.Rejection);
     }
 
     [Theory]
@@ -195,7 +195,7 @@ public sealed class McpApiKeyAuthenticatorTests
         var result = await harness.AuthenticateAsync([Key("workstation", WorkstationKeyMaterial)], headerValue);
 
         // Assert
-        Assert.Equal(McpApiKeyRejection.CredentialMissing, result.Rejection);
+        Assert.Equal(ApiKeyRejection.CredentialMissing, result.Rejection);
     }
 
     [Theory]
@@ -213,7 +213,7 @@ public sealed class McpApiKeyAuthenticatorTests
         var result = await harness.AuthenticateAsync([Key("workstation", WorkstationKeyMaterial)], headerValue);
 
         // Assert
-        Assert.Equal(McpApiKeyRejection.CredentialMalformed, result.Rejection);
+        Assert.Equal(ApiKeyRejection.CredentialMalformed, result.Rejection);
     }
 
     /// <summary>HTTP matches an authentication scheme without regard to case, and a client that spells it its own way still holds a valid key.</summary>
@@ -370,7 +370,7 @@ public sealed class McpApiKeyAuthenticatorTests
         var result = await harness.AuthenticateAsync([], $"Bearer {WorkstationKeyMaterial}");
 
         // Assert
-        Assert.Equal(McpApiKeyRejection.CredentialUnrecognized, result.Rejection);
+        Assert.Equal(ApiKeyRejection.CredentialUnrecognized, result.Rejection);
     }
 
     private static ConfiguredSecret Key(string name, string material, string? lifetime = null) => new()
@@ -392,10 +392,10 @@ public sealed class McpApiKeyAuthenticatorTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         using var loggerFactory = LoggerFactory.Create(logging => logging.AddProvider(logs));
-        var authenticator = new McpApiKeyAuthenticator(
+        var authenticator = new ApiKeyAuthenticator(
             new NewlineTerminatedResolver(WorkstationKeyMaterial),
             new FakeTimeProvider(RequestedAt),
-            loggerFactory.CreateLogger<McpApiKeyAuthenticator>());
+            loggerFactory.CreateLogger<ApiKeyAuthenticator>());
 
         // Act
         var result = await authenticator.AuthenticateAsync(
@@ -419,23 +419,23 @@ public sealed class McpApiKeyAuthenticatorTests
 
     private sealed class AuthenticatorHarness
     {
-        private readonly McpApiKeyAuthenticator authenticator;
+        private readonly ApiKeyAuthenticator authenticator;
 
         internal AuthenticatorHarness()
         {
             using var loggerFactory = LoggerFactory.Create(logging => logging.AddProvider(this.Logs));
 
-            this.authenticator = new McpApiKeyAuthenticator(
+            this.authenticator = new ApiKeyAuthenticator(
                 this.Resolver,
                 new FakeTimeProvider(RequestedAt),
-                loggerFactory.CreateLogger<McpApiKeyAuthenticator>());
+                loggerFactory.CreateLogger<ApiKeyAuthenticator>());
         }
 
         internal RecordingLoggerProvider Logs { get; } = new();
 
         internal CountingPlaintextResolver Resolver { get; } = new();
 
-        internal Task<McpApiKeyAuthenticationResult> AuthenticateAsync(
+        internal Task<ApiKeyAuthenticationResult> AuthenticateAsync(
             IReadOnlyList<ConfiguredSecret> configuredKeys,
             string? authorizationHeaderValue) => this.authenticator.AuthenticateAsync(
                 configuredKeys,

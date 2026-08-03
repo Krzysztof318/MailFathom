@@ -28,7 +28,7 @@ namespace MailFathom.Infrastructure.Security;
 /// no scopes.
 /// </para>
 /// </remarks>
-public static class McpOAuthIdentity
+public static class OAuthIdentity
 {
     /// <summary>The claim type carrying the stable identity of the person a request was authorized by.</summary>
     /// <remarks>Its value is the issuer and the subject joined by <c>|</c>, a character an <c>https</c> identifier cannot contain unescaped, so the pair cannot be read back ambiguously.</remarks>

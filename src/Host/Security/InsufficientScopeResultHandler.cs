@@ -30,7 +30,7 @@ namespace MailFathom.Host.Security;
 /// an authorization requirement. Everything else still reaches the framework's own handler.
 /// </para>
 /// </remarks>
-internal sealed class McpInsufficientScopeResultHandler : IAuthorizationMiddlewareResultHandler
+internal sealed class InsufficientScopeResultHandler : IAuthorizationMiddlewareResultHandler
 {
     private static readonly AuthorizationMiddlewareResultHandler FrameworkHandler = new();
 
@@ -42,7 +42,7 @@ internal sealed class McpInsufficientScopeResultHandler : IAuthorizationMiddlewa
     /// <param name="requiredScopes">The scopes an access token must carry.</param>
     /// <param name="protectedResourceMetadataAddress">Where the protected resource metadata document is published.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="requiredScopes" /> or <paramref name="protectedResourceMetadataAddress" /> is <see langword="null" />.</exception>
-    internal McpInsufficientScopeResultHandler(
+    internal InsufficientScopeResultHandler(
         IReadOnlyCollection<string> requiredScopes,
         string protectedResourceMetadataAddress)
     {
@@ -68,7 +68,7 @@ internal sealed class McpInsufficientScopeResultHandler : IAuthorizationMiddlewa
         // A caller refused for who they are, rather than for what their token was issued for, receives the framework's
         // plain 403. Naming scopes there would send a client to ask its authorization server for something that would
         // change nothing, and would say that the scopes are all that stands between it and the mailbox.
-        if (!authorizeResult.Forbidden || McpOAuthIdentity.CarriesEveryScope(context.User, this.requiredScopes))
+        if (!authorizeResult.Forbidden || OAuthIdentity.CarriesEveryScope(context.User, this.requiredScopes))
         {
             return FrameworkHandler.HandleAsync(next, context, policy, authorizeResult);
         }

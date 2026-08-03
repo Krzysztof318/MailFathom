@@ -31,24 +31,24 @@ namespace MailFathom.Infrastructure.Security;
 /// unrecognized one — which is exactly the distinction the single generic refusal exists to hide.
 /// </para>
 /// </remarks>
-public sealed partial class McpApiKeyAuthenticator
+public sealed partial class ApiKeyAuthenticator
 {
     private const int DigestLength = 32;
 
     private readonly byte[] comparisonKey = RandomNumberGenerator.GetBytes(DigestLength);
     private readonly ISecretReferenceResolver secretReferenceResolver;
     private readonly TimeProvider timeProvider;
-    private readonly ILogger<McpApiKeyAuthenticator> logger;
+    private readonly ILogger<ApiKeyAuthenticator> logger;
 
     /// <summary>Initializes a new API key authenticator.</summary>
     /// <param name="secretReferenceResolver">The resolver that turns a configured reference into key material.</param>
     /// <param name="timeProvider">The clock a bounded lifetime is judged against.</param>
     /// <param name="logger">The log a refusal and a configuration fault are recorded in.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="secretReferenceResolver" /> or <paramref name="timeProvider" /> is <see langword="null" />.</exception>
-    public McpApiKeyAuthenticator(
+    public ApiKeyAuthenticator(
         ISecretReferenceResolver secretReferenceResolver,
         TimeProvider timeProvider,
-        ILogger<McpApiKeyAuthenticator> logger)
+        ILogger<ApiKeyAuthenticator> logger)
     {
         ArgumentNullException.ThrowIfNull(secretReferenceResolver);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -65,7 +65,7 @@ public sealed partial class McpApiKeyAuthenticator
     /// <returns>The name of the key that matched, or the reason the credential was refused.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuredKeys" /> is <see langword="null" />.</exception>
     /// <remarks>Neither the returned result nor anything logged on the way to it carries the presented credential, a configured reference, or key material.</remarks>
-    public async Task<McpApiKeyAuthenticationResult> AuthenticateAsync(
+    public async Task<ApiKeyAuthenticationResult> AuthenticateAsync(
         IReadOnlyList<ConfiguredSecret> configuredKeys,
         string? authorizationHeaderValue,
         CancellationToken cancellationToken)
@@ -74,9 +74,9 @@ public sealed partial class McpApiKeyAuthenticator
 
         if (!BearerCredentialHeader.TryRead(authorizationHeaderValue, out var presentedCredential))
         {
-            return McpApiKeyAuthenticationResult.Rejected(string.IsNullOrWhiteSpace(authorizationHeaderValue)
-                ? McpApiKeyRejection.CredentialMissing
-                : McpApiKeyRejection.CredentialMalformed);
+            return ApiKeyAuthenticationResult.Rejected(string.IsNullOrWhiteSpace(authorizationHeaderValue)
+                ? ApiKeyRejection.CredentialMissing
+                : ApiKeyRejection.CredentialMalformed);
         }
 
         var presentedDigest = this.DigestOfCharacters(presentedCredential);
@@ -90,17 +90,17 @@ public sealed partial class McpApiKeyAuthenticator
             var match = await this.MatchAsync(configuredKey, presentedDigest, now, cancellationToken);
 
             authenticatedKeyName = match.AuthenticatedKeyName ?? authenticatedKeyName;
-            matchedExpiredKey |= match.Rejection == McpApiKeyRejection.CredentialExpired;
+            matchedExpiredKey |= match.Rejection == ApiKeyRejection.CredentialExpired;
         }
 
         if (authenticatedKeyName is { } keyName)
         {
-            return McpApiKeyAuthenticationResult.Authenticated(keyName);
+            return ApiKeyAuthenticationResult.Authenticated(keyName);
         }
 
-        return McpApiKeyAuthenticationResult.Rejected(matchedExpiredKey
-            ? McpApiKeyRejection.CredentialExpired
-            : McpApiKeyRejection.CredentialUnrecognized);
+        return ApiKeyAuthenticationResult.Rejected(matchedExpiredKey
+            ? ApiKeyRejection.CredentialExpired
+            : ApiKeyRejection.CredentialUnrecognized);
     }
 
     /// <summary>Judges one configured key against the presented digest.</summary>
@@ -109,7 +109,7 @@ public sealed partial class McpApiKeyAuthenticator
     /// resolves and every declaration is well formed, so reaching either fault here means the deployment changed
     /// underneath a running process, which an operator has to see.
     /// </remarks>
-    private async Task<McpApiKeyAuthenticationResult> MatchAsync(
+    private async Task<ApiKeyAuthenticationResult> MatchAsync(
         ConfiguredSecret configuredKey,
         byte[] presentedDigest,
         DateTimeOffset now,
@@ -119,7 +119,7 @@ public sealed partial class McpApiKeyAuthenticator
         {
             this.LogKeyDeclarationUnusable();
 
-            return McpApiKeyAuthenticationResult.Rejected(McpApiKeyRejection.CredentialUnrecognized);
+            return ApiKeyAuthenticationResult.Rejected(ApiKeyRejection.CredentialUnrecognized);
         }
 
         var resolution = await this.secretReferenceResolver.ResolveAsync(
@@ -130,14 +130,14 @@ public sealed partial class McpApiKeyAuthenticator
         {
             this.LogKeyMaterialUnavailable(keyName.Value!, resolution.Failure);
 
-            return McpApiKeyAuthenticationResult.Rejected(McpApiKeyRejection.CredentialUnrecognized);
+            return ApiKeyAuthenticationResult.Rejected(ApiKeyRejection.CredentialUnrecognized);
         }
 
         using (material)
         {
             if (!CryptographicOperations.FixedTimeEquals(this.DigestOfTextView(material), presentedDigest))
             {
-                return McpApiKeyAuthenticationResult.Rejected(McpApiKeyRejection.CredentialUnrecognized);
+                return ApiKeyAuthenticationResult.Rejected(ApiKeyRejection.CredentialUnrecognized);
             }
         }
 
@@ -147,10 +147,10 @@ public sealed partial class McpApiKeyAuthenticator
         {
             this.LogExpiredKeyPresented(keyName.Value!);
 
-            return McpApiKeyAuthenticationResult.Rejected(McpApiKeyRejection.CredentialExpired);
+            return ApiKeyAuthenticationResult.Rejected(ApiKeyRejection.CredentialExpired);
         }
 
-        return McpApiKeyAuthenticationResult.Authenticated(keyName);
+        return ApiKeyAuthenticationResult.Authenticated(keyName);
     }
 
     /// <summary>Reduces configured key material to the digest of its text view.</summary>

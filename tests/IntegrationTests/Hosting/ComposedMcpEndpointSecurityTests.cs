@@ -15,7 +15,7 @@ namespace MailFathom.IntegrationTests.Hosting;
 /// <remarks>
 /// <para>
 /// Which credentials authenticate, how they are compared, and which origins are served are all unit-tested against
-/// <c>McpApiKeyAuthenticator</c> and <c>McpOriginPolicy</c>, and none of that is repeated here. What only a composed
+/// <c>ApiKeyAuthenticator</c> and <c>McpOriginPolicy</c>, and none of that is repeated here. What only a composed
 /// host can establish is the part those tests cannot see: that the checks are wired into the request pipeline ahead of
 /// the endpoint at all, and that a refusal happens before the protocol surface produces anything. Every assertion below
 /// is about that ordering, which is why each one reads the body for a tool name the surface would have listed.

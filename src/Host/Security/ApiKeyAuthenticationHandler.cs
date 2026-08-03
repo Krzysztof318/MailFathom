@@ -5,20 +5,24 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
-using MailFathom.Host.Configuration;
 using MailFathom.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Security;
 
-/// <summary>Authenticates an MCP request against the configured API keys.</summary>
+/// <summary>Authenticates a request against the API keys configured for the surface it arrived on.</summary>
 /// <remarks>
 /// <para>
 /// The handler is the adapter and nothing more: it lifts the credential out of the request, hands it to
-/// <see cref="McpApiKeyAuthenticator" />, and turns the answer into the framework's own vocabulary. Every rule worth
+/// <see cref="ApiKeyAuthenticator" />, and turns the answer into the framework's own vocabulary. Every rule worth
 /// asserting — which keys match, how they are compared, when a lifetime has ended — lives below this boundary, where a
 /// test reaches it without a request pipeline.
+/// </para>
+/// <para>
+/// One handler serves every surface, because which keys are compared is the scheme's own option rather than something
+/// the handler goes and reads. Two surfaces therefore register two schemes over two key lists and share this code, and
+/// a key configured for one authenticates nothing on the other.
 /// </para>
 /// <para>
 /// Every refusal produces one indistinguishable answer: an empty <c>401</c> carrying the same challenge, whether the
@@ -28,26 +32,22 @@ namespace MailFathom.Host.Security;
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The authentication framework materializes this handler for its registered scheme.")]
-internal sealed class McpApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>
+internal sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthenticationSchemeOptions>
 {
-    private readonly McpApiKeyAuthenticator authenticator;
-    private readonly McpEndpointOptions endpointSettings;
+    private readonly ApiKeyAuthenticator authenticator;
 
     /// <summary>Initializes a new API key authentication handler.</summary>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="authenticator" /> or <paramref name="endpointSettings" /> is <see langword="null" />.</exception>
-    public McpApiKeyAuthenticationHandler(
-        IOptionsMonitor<AuthenticationSchemeOptions> schemeOptions,
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="authenticator" /> is <see langword="null" />.</exception>
+    public ApiKeyAuthenticationHandler(
+        IOptionsMonitor<ApiKeyAuthenticationSchemeOptions> schemeOptions,
         ILoggerFactory loggerFactory,
         UrlEncoder urlEncoder,
-        McpApiKeyAuthenticator authenticator,
-        IOptions<McpEndpointOptions> endpointSettings)
+        ApiKeyAuthenticator authenticator)
         : base(schemeOptions, loggerFactory, urlEncoder)
     {
         ArgumentNullException.ThrowIfNull(authenticator);
-        ArgumentNullException.ThrowIfNull(endpointSettings);
 
         this.authenticator = authenticator;
-        this.endpointSettings = endpointSettings.Value;
     }
 
     /// <inheritdoc />
@@ -59,20 +59,20 @@ internal sealed class McpApiKeyAuthenticationHandler : AuthenticationHandler<Aut
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var result = await this.authenticator.AuthenticateAsync(
-            [.. this.endpointSettings.ApiKeys],
+            [.. this.Options.ApiKeys],
             this.Request.Headers.Authorization.ToString(),
             this.Context.RequestAborted);
 
         if (result.AuthenticatedKeyName is not { } keyName)
         {
-            return AuthenticateResult.Fail("The request presented no usable MCP credential.");
+            return AuthenticateResult.Fail("The request presented no usable credential.");
         }
 
         var identity = new ClaimsIdentity(
-            [new Claim(McpApiKeyAuthentication.ApiKeyNameClaimType, keyName.Value!)],
-            McpApiKeyAuthentication.SchemeName,
-            McpApiKeyAuthentication.ApiKeyNameClaimType,
-            McpApiKeyAuthentication.RoleClaimType);
+            [new Claim(ApiKeyAuthentication.ApiKeyNameClaimType, keyName.Value!)],
+            this.Options.Surface.ApiKeySchemeName,
+            ApiKeyAuthentication.ApiKeyNameClaimType,
+            ApiKeyAuthentication.RoleClaimType);
 
         return AuthenticateResult.Success(
             new AuthenticationTicket(new ClaimsPrincipal(identity), this.Scheme.Name));
@@ -84,7 +84,7 @@ internal sealed class McpApiKeyAuthenticationHandler : AuthenticationHandler<Aut
     {
         this.Response.StatusCode = StatusCodes.Status401Unauthorized;
         this.Response.Headers.WWWAuthenticate =
-            $"{McpApiKeyAuthentication.HttpAuthenticationScheme} realm=\"{McpApiKeyAuthentication.Realm}\"";
+            $"{ApiKeyAuthentication.HttpAuthenticationScheme} realm=\"{ApiKeyAuthentication.Realm}\"";
 
         return Task.CompletedTask;
     }

@@ -15,7 +15,7 @@ namespace MailFathom.Host.UnitTests;
 /// is that neither substitutes for the other, that a subject is only meaningful together with the issuer that named it,
 /// and that neither is ever asked of a key that could not carry one.
 /// </remarks>
-public sealed class McpAccessPolicyTests
+public sealed class TransportAccessPolicyTests
 {
     private const string OAuthScheme = "MailFathomOAuth:workforce";
 
@@ -24,7 +24,7 @@ public sealed class McpAccessPolicyTests
     private const string OwnerSubject = "9f2c";
 
     private static readonly HashSet<string> AuthorizedOwner =
-        [McpOAuthIdentity.IdentityOf(Issuer, OwnerSubject)];
+        [OAuthIdentity.IdentityOf(Issuer, OwnerSubject)];
 
     [Fact]
     public void IsAuthorized_AnAnonymousCaller_IsRefused()
@@ -33,7 +33,7 @@ public sealed class McpAccessPolicyTests
         var anonymous = new ClaimsPrincipal(new ClaimsIdentity());
 
         // Act, Assert
-        Assert.False(McpAccessPolicy.IsAuthorized(anonymous, AuthorizedOwner, []));
+        Assert.False(TransportAccessPolicy.IsAuthorized(anonymous, AuthorizedOwner, []));
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public sealed class McpAccessPolicyTests
         var caller = TokenPrincipal();
 
         // Act, Assert
-        Assert.True(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, []));
+        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, []));
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public sealed class McpAccessPolicyTests
         var caller = TokenPrincipal("mailfathom.read", "mailfathom.search");
 
         // Act, Assert
-        Assert.True(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailfathom.read"]));
+        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailfathom.read"]));
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public sealed class McpAccessPolicyTests
         var caller = TokenPrincipal("mailfathom.read");
 
         // Act, Assert
-        Assert.False(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailfathom.search"]));
+        Assert.False(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailfathom.search"]));
     }
 
     /// <summary>
@@ -78,7 +78,7 @@ public sealed class McpAccessPolicyTests
         var colleague = TokenPrincipalFor(Issuer, "4b81", "mailfathom.read");
 
         // Act, Assert
-        Assert.False(McpAccessPolicy.IsAuthorized(colleague, AuthorizedOwner, ["mailfathom.read"]));
+        Assert.False(TransportAccessPolicy.IsAuthorized(colleague, AuthorizedOwner, ["mailfathom.read"]));
     }
 
     /// <summary>A subject is unique only within the server that issued it, so the pair is compared rather than the subject alone.</summary>
@@ -89,7 +89,7 @@ public sealed class McpAccessPolicyTests
         var caller = TokenPrincipalFor("https://sso.other.test/realms/mailfathom", OwnerSubject);
 
         // Act, Assert
-        Assert.False(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, []));
+        Assert.False(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, []));
     }
 
     /// <summary>
@@ -104,7 +104,7 @@ public sealed class McpAccessPolicyTests
         var caller = ApiKeyPrincipal("nightly-digest");
 
         // Act, Assert
-        Assert.True(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailfathom.read"]));
+        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailfathom.read"]));
     }
 
     /// <summary>A key names no subject and is not expected to, so the subject list constrains tokens alone.</summary>
@@ -115,7 +115,7 @@ public sealed class McpAccessPolicyTests
         var caller = ApiKeyPrincipal("nightly-digest");
 
         // Act, Assert
-        Assert.True(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, []));
+        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, []));
     }
 
     /// <summary>The bypass follows what the principal carries rather than which scheme named it, so a token cannot claim it by naming a scheme.</summary>
@@ -124,11 +124,11 @@ public sealed class McpAccessPolicyTests
     {
         // Arrange
         var claims = new[] { new Claim("iss", Issuer), new Claim("sub", OwnerSubject) };
-        var identity = McpOAuthIdentity.FromValidatedToken(claims, "MailFathomApiKey");
+        var identity = OAuthIdentity.FromValidatedToken(claims, "MailFathomApiKey");
         var caller = new ClaimsPrincipal(identity!);
 
         // Act, Assert
-        Assert.False(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailfathom.read"]));
+        Assert.False(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ["mailfathom.read"]));
     }
 
     /// <summary>An authenticated principal carrying no identity at all is refused rather than treated as unrestricted.</summary>
@@ -139,7 +139,7 @@ public sealed class McpAccessPolicyTests
         var caller = new ClaimsPrincipal(new ClaimsIdentity(claims: [], OAuthScheme));
 
         // Act, Assert
-        Assert.False(McpAccessPolicy.IsAuthorized(caller, AuthorizedOwner, []));
+        Assert.False(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, []));
     }
 
     private static ClaimsPrincipal TokenPrincipal(params string[] scopes) =>
@@ -154,13 +154,13 @@ public sealed class McpAccessPolicyTests
             new("scope", string.Join(' ', scopes)),
         ];
 
-        return new ClaimsPrincipal(McpOAuthIdentity.FromValidatedToken(claims, OAuthScheme)!);
+        return new ClaimsPrincipal(OAuthIdentity.FromValidatedToken(claims, OAuthScheme)!);
     }
 
     private static ClaimsPrincipal ApiKeyPrincipal(string keyName) => new(
         new ClaimsIdentity(
-            [new Claim(McpApiKeyAuthentication.ApiKeyNameClaimType, keyName)],
-            McpApiKeyAuthentication.SchemeName,
-            McpApiKeyAuthentication.ApiKeyNameClaimType,
+            [new Claim(ApiKeyAuthentication.ApiKeyNameClaimType, keyName)],
+            TransportSurface.Mcp.ApiKeySchemeName,
+            ApiKeyAuthentication.ApiKeyNameClaimType,
             roleType: string.Empty));
 }

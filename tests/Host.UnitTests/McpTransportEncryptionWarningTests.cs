@@ -48,7 +48,7 @@ public sealed class McpTransportEncryptionWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var settings = Enabled();
-        settings.Authentication = McpTransportAuthenticationMethods.ApiKey;
+        settings.Authentication = TransportAuthenticationMethods.ApiKey;
         settings.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:a-key" });
         var warning = WarningFor(settings, logs);
 
@@ -115,7 +115,7 @@ public sealed class McpTransportEncryptionWarningTests
     private static McpEndpointOptions Enabled() => new()
     {
         Enabled = true,
-        Authentication = McpTransportAuthenticationMethods.None,
+        Authentication = TransportAuthenticationMethods.None,
     };
 
     private static McpTransportEncryptionWarning WarningFor(McpEndpointOptions settings, RecordingLoggerProvider logs)

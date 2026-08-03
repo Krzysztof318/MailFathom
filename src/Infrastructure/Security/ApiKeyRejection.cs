@@ -10,7 +10,7 @@ namespace MailFathom.Infrastructure.Security;
 /// client that learned the difference between an unrecognized key and an expired one would learn that a key it holds
 /// once existed, which is one bit more than a refusal is allowed to say.
 /// </remarks>
-public enum McpApiKeyRejection
+public enum ApiKeyRejection
 {
     /// <summary>The request carried no <c>Authorization</c> header at all.</summary>
     CredentialMissing = 0,

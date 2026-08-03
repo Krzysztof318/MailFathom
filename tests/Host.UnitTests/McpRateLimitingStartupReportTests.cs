@@ -109,7 +109,7 @@ public sealed class McpRateLimitingStartupReportTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var endpointSettings = EnabledEndpoint(new McpRateLimitingOptions());
-        endpointSettings.Authentication = McpTransportAuthenticationMethods.ApiKey;
+        endpointSettings.Authentication = TransportAuthenticationMethods.ApiKey;
         endpointSettings.ApiKeys.Add(new ConfiguredSecret { Name = "desktop-agent" });
         var report = ReportFor(endpointSettings, logs);
 
@@ -140,7 +140,7 @@ public sealed class McpRateLimitingStartupReportTests
     private static McpEndpointOptions EnabledEndpoint(McpRateLimitingOptions rateLimitingSettings) => new()
     {
         Enabled = true,
-        Authentication = McpTransportAuthenticationMethods.None,
+        Authentication = TransportAuthenticationMethods.None,
         RateLimiting = rateLimitingSettings,
     };
 

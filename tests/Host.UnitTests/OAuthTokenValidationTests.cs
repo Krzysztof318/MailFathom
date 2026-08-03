@@ -16,7 +16,7 @@ namespace MailFathom.Host.UnitTests;
 /// presented — a scheme is configured lazily, so a rule the validator rejects outright would otherwise first be noticed
 /// by a request in production.
 /// </remarks>
-public sealed class McpOAuthAuthenticationTests
+public sealed class OAuthTokenValidationTests
 {
     private const string Issuer = "https://sso.example.test/realms/mailfathom";
 
@@ -26,7 +26,7 @@ public sealed class McpOAuthAuthenticationTests
     public void TokenValidationParametersFor_AnAuthorizationServer_BindsTokensToThatIssuerAndThisResource()
     {
         // Act
-        var validationParameters = McpOAuthAuthentication.TokenValidationParametersFor(Issuer, CanonicalResource);
+        var validationParameters = OAuthTokenValidation.TokenValidationParametersFor(Issuer, CanonicalResource);
 
         // Assert
         Assert.True(validationParameters.ValidateIssuer);
@@ -40,7 +40,7 @@ public sealed class McpOAuthAuthenticationTests
     public void TokenValidationParametersFor_AnAuthorizationServer_PermitsOnlyAsymmetricSignatures()
     {
         // Act
-        var validationParameters = McpOAuthAuthentication.TokenValidationParametersFor(Issuer, CanonicalResource);
+        var validationParameters = OAuthTokenValidation.TokenValidationParametersFor(Issuer, CanonicalResource);
 
         // Assert
         Assert.True(validationParameters.RequireSignedTokens);
@@ -55,7 +55,7 @@ public sealed class McpOAuthAuthenticationTests
     public void TokenValidationParametersFor_AnAuthorizationServer_RefusesAnExpiredTokenWithinASkewShorterThanTheFrameworkDefault()
     {
         // Act
-        var validationParameters = McpOAuthAuthentication.TokenValidationParametersFor(Issuer, CanonicalResource);
+        var validationParameters = OAuthTokenValidation.TokenValidationParametersFor(Issuer, CanonicalResource);
 
         // Assert
         Assert.True(validationParameters.ValidateLifetime);
@@ -72,11 +72,11 @@ public sealed class McpOAuthAuthenticationTests
     public void TokenValidationParametersFor_AnAuthorizationServer_ReadsRolesFromAClaimTypeNothingIssues()
     {
         // Act
-        var validationParameters = McpOAuthAuthentication.TokenValidationParametersFor(Issuer, CanonicalResource);
+        var validationParameters = OAuthTokenValidation.TokenValidationParametersFor(Issuer, CanonicalResource);
 
         // Assert
         Assert.False(string.IsNullOrWhiteSpace(validationParameters.RoleClaimType));
         Assert.NotEqual(ClaimsIdentity.DefaultRoleClaimType, validationParameters.RoleClaimType);
-        Assert.Equal(McpOAuthIdentity.RoleClaimType, validationParameters.RoleClaimType);
+        Assert.Equal(OAuthIdentity.RoleClaimType, validationParameters.RoleClaimType);
     }
 }

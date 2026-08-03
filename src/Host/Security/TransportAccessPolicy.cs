@@ -7,13 +7,19 @@ using MailFathom.Infrastructure.Security;
 
 namespace MailFathom.Host.Security;
 
-/// <summary>What an authenticated caller must satisfy before a tool runs.</summary>
+/// <summary>What an authenticated caller must satisfy before a protected surface serves it.</summary>
 /// <remarks>
 /// <para>
-/// Which mailboxes a tool reads is decided by the configured accounts and not by who is asking, so every caller this
-/// policy admits reads the same mail. That is what makes the two questions below the whole of the boundary: a token
+/// What a surface exposes is decided by its configuration and not by who is asking, so every caller one of these
+/// policies admits reaches the same thing. That is what makes the two questions below the whole of the boundary: a token
 /// proves which person an authorization server signed in, and this decides whether that person is one this deployment
 /// serves at all.
+/// </para>
+/// <para>
+/// The rule is the same for every surface, and it is the registration that differs: each surface names its own policy
+/// through <see cref="TransportSurface.AccessPolicyName" /> and hands in its own authorized identities and required
+/// scopes. Sharing the judgement while separating the inputs is what keeps two surfaces from drifting into two
+/// definitions of what an authorized caller is.
 /// </para>
 /// <para>
 /// Neither an authorized subject nor a required scope is ever asked of an API key. A key is a credential the operator
@@ -22,16 +28,13 @@ namespace MailFathom.Host.Security;
 /// Asking either of a key would mean asking a credential for something nothing can ever put in it.
 /// </para>
 /// </remarks>
-internal static class McpAccessPolicy
+internal static class TransportAccessPolicy
 {
-    /// <summary>The name the endpoint's authorization requirement is registered under.</summary>
-    internal const string PolicyName = "MailFathomEndpoint";
-
     /// <summary>Judges an authenticated principal against the people the deployment serves and the scopes it requires.</summary>
     /// <param name="principal">The principal a validated credential produced.</param>
     /// <param name="authorizedIdentities">The issuer and subject pairs a token may name, taken from the configured authorization servers.</param>
     /// <param name="requiredScopes">The scopes an access token must carry, empty when any token from an authorized subject suffices.</param>
-    /// <returns><see langword="true" /> when the caller may reach a tool; otherwise <see langword="false" />.</returns>
+    /// <returns><see langword="true" /> when the caller may reach the surface; otherwise <see langword="false" />.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     /// <remarks>A token has to satisfy both: a subject the deployment serves and every scope it requires. Neither substitutes for the other, because a scope says what a token was issued for and a subject says whose it is.</remarks>
     internal static bool IsAuthorized(
@@ -54,7 +57,7 @@ internal static class McpAccessPolicy
         }
 
         return NamesAnAuthorizedSubject(principal, authorizedIdentities)
-            && McpOAuthIdentity.CarriesEveryScope(principal, requiredScopes);
+            && OAuthIdentity.CarriesEveryScope(principal, requiredScopes);
     }
 
     /// <summary>Reports whether an authenticated token names one of the people this deployment serves.</summary>
@@ -64,9 +67,9 @@ internal static class McpAccessPolicy
     /// all is refused rather than treated as unrestricted.
     /// </remarks>
     private static bool NamesAnAuthorizedSubject(ClaimsPrincipal principal, IReadOnlySet<string> authorizedIdentities) =>
-        McpOAuthIdentity.IdentityCarriedBy(principal) is { } identity && authorizedIdentities.Contains(identity);
+        OAuthIdentity.IdentityCarriedBy(principal) is { } identity && authorizedIdentities.Contains(identity);
 
     /// <summary>Reports whether an API key produced this principal, judged by what the principal carries rather than by which scheme named it.</summary>
     private static bool AuthenticatedWithAnApiKey(ClaimsPrincipal principal) =>
-        principal.HasClaim(claim => claim.Type == McpApiKeyAuthentication.ApiKeyNameClaimType);
+        principal.HasClaim(claim => claim.Type == ApiKeyAuthentication.ApiKeyNameClaimType);
 }

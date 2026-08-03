@@ -28,7 +28,7 @@ namespace MailFathom.Host.Configuration;
 /// </para>
 /// </remarks>
 [Flags]
-internal enum McpTransportAuthenticationMethods
+internal enum TransportAuthenticationMethods
 {
     /// <summary>No transport authentication at all, which is a posture for a local or network-isolated deployment and warns at startup.</summary>
     None = 0,

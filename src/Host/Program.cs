@@ -426,7 +426,8 @@ try
             // none to carry it: the authentication handler publishes it instead of a mapped route. A browser client
             // reads that document before it holds any credential, so without the policy applied to its path the one
             // response that says where to authorize is the one a page cannot read.
-            var protectedResourceMetadataPath = mcpEndpointSettings.OAuth.ProtectedResourceMetadataPath();
+            var protectedResourceMetadataPath = McpProtectedResourceMetadata.PathFor(
+                mcpEndpointSettings.OAuth.CanonicalResource());
 
             app.UseWhen(
                 context => context.Request.Path.Equals(protectedResourceMetadataPath, StringComparison.OrdinalIgnoreCase),
@@ -477,7 +478,7 @@ try
             // answering unauthenticated while everything the MCP route exposes is covered by the one requirement it
             // carries. Under the stateless transport that route is the post alone; a get or a delete is not mapped at
             // all, so there is no second entry into the protocol surface for a requirement to miss.
-            mcpEndpoint.RequireAuthorization(McpAccessPolicy.PolicyName);
+            mcpEndpoint.RequireAuthorization(TransportSurface.Mcp.AccessPolicyName);
         }
     }
 

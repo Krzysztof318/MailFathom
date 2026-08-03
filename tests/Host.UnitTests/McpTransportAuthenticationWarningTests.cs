@@ -68,7 +68,7 @@ public sealed class McpTransportAuthenticationWarningTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var settings = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMethods.ApiKey };
+        var settings = new McpEndpointOptions { Enabled = true, Authentication = TransportAuthenticationMethods.ApiKey };
         settings.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:a-key" });
         var warning = WarningFor(settings, logs);
 
@@ -86,7 +86,7 @@ public sealed class McpTransportAuthenticationWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var warning = WarningFor(
-            new McpEndpointOptions { Authentication = McpTransportAuthenticationMethods.None },
+            new McpEndpointOptions { Authentication = TransportAuthenticationMethods.None },
             logs);
 
         // Act
@@ -128,7 +128,7 @@ public sealed class McpTransportAuthenticationWarningTests
         var settings = new McpEndpointOptions
         {
             Enabled = true,
-            Authentication = McpTransportAuthenticationMethods.OAuth,
+            Authentication = TransportAuthenticationMethods.OAuth,
         };
         var warning = WarningFor(settings, logs);
 
@@ -145,7 +145,7 @@ public sealed class McpTransportAuthenticationWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var warning = WarningFor(
-            new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMethods.None },
+            new McpEndpointOptions { Enabled = true, Authentication = TransportAuthenticationMethods.None },
             logs);
 
         // Act
@@ -178,7 +178,7 @@ public sealed class McpTransportAuthenticationWarningTests
     private static McpEndpointOptions Unauthenticated() => new()
     {
         Enabled = true,
-        Authentication = McpTransportAuthenticationMethods.None,
+        Authentication = TransportAuthenticationMethods.None,
     };
 
     private static McpTransportAuthenticationWarning WarningFor(McpEndpointOptions settings, RecordingLoggerProvider logs)

@@ -27,7 +27,7 @@ namespace MailFathom.Host.Security;
 /// answers with the challenge — which is the same outcome as a refusal, reached without a special case.
 /// </para>
 /// </remarks>
-internal sealed class McpCredentialSchemeSelector
+internal sealed class CredentialSchemeSelector
 {
     private readonly Dictionary<string, string> oauthSchemesByIssuer;
     private readonly string? apiKeySchemeName;
@@ -38,7 +38,7 @@ internal sealed class McpCredentialSchemeSelector
     /// <param name="apiKeySchemeName">The scheme comparing API keys, or <see langword="null" /> when API keys are not accepted.</param>
     /// <param name="unmatchedSchemeName">The scheme a request reaches when no credential it presented selects one.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="oauthSchemesByIssuer" /> or <paramref name="unmatchedSchemeName" /> is <see langword="null" />.</exception>
-    internal McpCredentialSchemeSelector(
+    internal CredentialSchemeSelector(
         IReadOnlyDictionary<string, string> oauthSchemesByIssuer,
         string? apiKeySchemeName,
         string unmatchedSchemeName)

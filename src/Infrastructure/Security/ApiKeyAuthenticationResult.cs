@@ -13,9 +13,9 @@ namespace MailFathom.Infrastructure.Security;
 /// that name is what an audit record and a diagnostic correlate on, and it is the only part of a key that may be
 /// written down.
 /// </remarks>
-public sealed record McpApiKeyAuthenticationResult
+public sealed record ApiKeyAuthenticationResult
 {
-    private McpApiKeyAuthenticationResult(SecretName? authenticatedKeyName, McpApiKeyRejection? rejection)
+    private ApiKeyAuthenticationResult(SecretName? authenticatedKeyName, ApiKeyRejection? rejection)
     {
         this.AuthenticatedKeyName = authenticatedKeyName;
         this.Rejection = rejection;
@@ -29,15 +29,15 @@ public sealed record McpApiKeyAuthenticationResult
 
     /// <summary>Gets why the credential was refused, or <see langword="null" /> when it authenticated.</summary>
     /// <remarks>It reaches the server log only. Every value produces one indistinguishable response.</remarks>
-    public McpApiKeyRejection? Rejection { get; }
+    public ApiKeyRejection? Rejection { get; }
 
     /// <summary>Creates a successful result naming the key that matched.</summary>
     /// <param name="authenticatedKeyName">The name of the matching key.</param>
     /// <returns>The successful result.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="authenticatedKeyName" /> is the unspecified struct default.</exception>
-    public static McpApiKeyAuthenticationResult Authenticated(SecretName authenticatedKeyName) =>
+    public static ApiKeyAuthenticationResult Authenticated(SecretName authenticatedKeyName) =>
         authenticatedKeyName.IsSpecified
-            ? new McpApiKeyAuthenticationResult(authenticatedKeyName, rejection: null)
+            ? new ApiKeyAuthenticationResult(authenticatedKeyName, rejection: null)
             : throw new ArgumentException(
                 "An authenticated result must name the key that matched.",
                 nameof(authenticatedKeyName));
@@ -45,6 +45,6 @@ public sealed record McpApiKeyAuthenticationResult
     /// <summary>Creates a refused result.</summary>
     /// <param name="rejection">Why the credential was refused.</param>
     /// <returns>The refused result.</returns>
-    public static McpApiKeyAuthenticationResult Rejected(McpApiKeyRejection rejection) =>
+    public static ApiKeyAuthenticationResult Rejected(ApiKeyRejection rejection) =>
         new(authenticatedKeyName: null, rejection);
 }

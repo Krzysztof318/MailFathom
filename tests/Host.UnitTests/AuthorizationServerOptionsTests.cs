@@ -9,7 +9,7 @@ using Xunit;
 namespace MailFathom.Host.UnitTests;
 
 /// <summary>Covers one authorization server profile: what it must state, whose tokens it serves, and where it then looks for that server.</summary>
-public sealed class McpAuthorizationServerOptionsTests
+public sealed class AuthorizationServerOptionsTests
 {
     private const string OwnerSubject = "9f2c";
 
@@ -154,7 +154,7 @@ public sealed class McpAuthorizationServerOptionsTests
     public void FindConfigurationErrors_AProfileNamingNoSubject_IsRefused()
     {
         // Arrange
-        var profile = new McpAuthorizationServerOptions
+        var profile = new AuthorizationServerOptions
         {
             Name = "workforce",
             Issuer = "https://sso.example.test/realms/mailfathom",
@@ -211,8 +211,8 @@ public sealed class McpAuthorizationServerOptionsTests
         // Assert
         Assert.Equal(
             [
-                McpOAuthIdentity.IdentityOf("https://sso.example.test/realms/mailfathom", OwnerSubject),
-                McpOAuthIdentity.IdentityOf("https://sso.example.test/realms/mailfathom", "4b81"),
+                OAuthIdentity.IdentityOf("https://sso.example.test/realms/mailfathom", OwnerSubject),
+                OAuthIdentity.IdentityOf("https://sso.example.test/realms/mailfathom", "4b81"),
             ],
             identities);
     }
@@ -221,7 +221,7 @@ public sealed class McpAuthorizationServerOptionsTests
     public void IsConfigured_AnUntouchedProfile_ReportsNothingWasWritten()
     {
         // Arrange, Act
-        var profile = new McpAuthorizationServerOptions();
+        var profile = new AuthorizationServerOptions();
 
         // Assert
         Assert.False(profile.IsConfigured);
@@ -232,7 +232,7 @@ public sealed class McpAuthorizationServerOptionsTests
     public void IsConfigured_AProfileCarryingOnlySubjects_ReportsSomethingWasWritten()
     {
         // Arrange
-        var profile = new McpAuthorizationServerOptions();
+        var profile = new AuthorizationServerOptions();
 
         // Act
         profile.AuthorizedSubjects.Add(OwnerSubject);
@@ -241,6 +241,6 @@ public sealed class McpAuthorizationServerOptionsTests
         Assert.True(profile.IsConfigured);
     }
 
-    private static McpAuthorizationServerOptions Profile(string? name, string? issuer) =>
+    private static AuthorizationServerOptions Profile(string? name, string? issuer) =>
         new() { Name = name, Issuer = issuer, AuthorizedSubjects = { OwnerSubject } };
 }

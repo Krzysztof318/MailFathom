@@ -54,7 +54,7 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         Assert.True(options.Enabled);
-        Assert.Equal(McpTransportAuthenticationMethods.ApiKey, options.Authentication);
+        Assert.Equal(TransportAuthenticationMethods.ApiKey, options.Authentication);
         Assert.Equal(["workstation", "chatgpt-connector"], options.ApiKeys.Select(key => key.Name));
         Assert.Equal(
             [SecretLifetime.NoLimitValue, "2027-01-31T00:00:00Z"],
@@ -139,7 +139,7 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         Assert.False(options.Enabled);
-        Assert.Equal(McpTransportAuthenticationMethods.None, options.Authentication);
+        Assert.Equal(TransportAuthenticationMethods.None, options.Authentication);
         Assert.Empty(options.ApiKeys);
         Assert.True(options.Cors.ServesEveryBrowserOrigin);
     }

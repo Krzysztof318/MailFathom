@@ -23,7 +23,7 @@ namespace MailFathom.Host.Configuration;
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
-internal sealed class McpOAuthOptions
+internal sealed class OAuthValidationOptions
 {
     /// <summary>How long the host waits for a discovery document or a key set, after which the retrieval fails rather than holding a request.</summary>
     /// <remarks>A constant rather than a setting. It bounds an outbound call an operator never sees, and a deployment that needed it longer would be reporting a problem with the authorization server rather than with this value.</remarks>
@@ -58,7 +58,7 @@ internal sealed class McpOAuthOptions
     public IList<string> RequiredScopes { get; } = [];
 
     /// <summary>Gets the external authorization servers whose access tokens are accepted.</summary>
-    public IList<McpAuthorizationServerOptions> AuthorizationServers { get; } = [];
+    public IList<AuthorizationServerOptions> AuthorizationServers { get; } = [];
 
     /// <summary>Gets whether anything at all was configured in this section.</summary>
     public bool IsConfigured =>
@@ -102,37 +102,6 @@ internal sealed class McpOAuthOptions
     /// <exception cref="InvalidOperationException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
     public HashSet<string> AuthorizedIdentities() =>
         [.. this.AuthorizationServers.SelectMany(authorizationServer => authorizationServer.AuthorizedIdentities())];
-
-    /// <summary>Reports where the protected resource metadata document is published.</summary>
-    /// <returns>The absolute address of the RFC 9728 document.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
-    /// <remarks>
-    /// <para>
-    /// RFC 9728 places the document under the resource's own authority, with the resource's path appended to the
-    /// well-known segment, so <c>https://mail.example.test/mcp</c> publishes at
-    /// <c>https://mail.example.test/.well-known/oauth-protected-resource/mcp</c>.
-    /// </para>
-    /// <para>
-    /// It is composed from the configured resource rather than from the request that asks for it. The MCP SDK will
-    /// otherwise derive both this address and the resource it advertises from the incoming request's scheme and
-    /// <c>Host</c> header, which behind a reverse proxy means a client is told to authenticate for whichever name it
-    /// happened to arrive under — including one an attacker chose. Naming it here is what keeps the resource identifier
-    /// a deployment decision.
-    /// </para>
-    /// </remarks>
-    public string ProtectedResourceMetadataAddress()
-    {
-        var resource = new Uri(this.CanonicalResource());
-
-        return $"{resource.GetLeftPart(UriPartial.Authority)}/.well-known/oauth-protected-resource{resource.AbsolutePath.TrimEnd('/')}";
-    }
-
-    /// <summary>Reports the path of the protected resource metadata document, without its authority.</summary>
-    /// <returns>The absolute path the document answers at.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
-    /// <remarks>The SDK publishes the document from an authentication request handler rather than from a mapped route, so composition needs the path on its own to put a middleware in front of it.</remarks>
-    public string ProtectedResourceMetadataPath() =>
-        new Uri(this.ProtectedResourceMetadataAddress()).AbsolutePath;
 
     private IEnumerable<string> FindRequiredScopeErrors()
     {
@@ -178,7 +147,7 @@ internal sealed class McpOAuthOptions
 
             if (!claimedNames.Add(authorizationServer.Name!))
             {
-                yield return $"{settingPath}:{nameof(McpAuthorizationServerOptions.Name)} — '{authorizationServer.Name}' repeats a name another authorization server already carries.";
+                yield return $"{settingPath}:{nameof(AuthorizationServerOptions.Name)} — '{authorizationServer.Name}' repeats a name another authorization server already carries.";
             }
 
             // Two profiles claiming one issuer is the ambiguity the whole selection rule exists to avoid: a token naming
@@ -186,7 +155,7 @@ internal sealed class McpOAuthOptions
             // token is trusted against would depend on configuration order rather than on what the token says.
             if (!claimedIssuers.Add(authorizationServer.ValidatedIssuer()))
             {
-                yield return $"{settingPath}:{nameof(McpAuthorizationServerOptions.Issuer)} — this issuer repeats one another authorization server already carries, which would leave the key set a token is trusted against decided by configuration order.";
+                yield return $"{settingPath}:{nameof(AuthorizationServerOptions.Issuer)} — this issuer repeats one another authorization server already carries, which would leave the key set a token is trusted against decided by configuration order.";
             }
         }
     }

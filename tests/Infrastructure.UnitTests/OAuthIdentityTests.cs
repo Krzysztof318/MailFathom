@@ -13,7 +13,7 @@ namespace MailFathom.Infrastructure.UnitTests;
 /// A claim that survives here is a claim something downstream can eventually be tempted to trust, so the tests that
 /// assert an absence are as load-bearing as the ones asserting a value.
 /// </remarks>
-public sealed class McpOAuthIdentityTests
+public sealed class OAuthIdentityTests
 {
     private const string Scheme = "MailFathomOAuth:workforce";
 
@@ -26,13 +26,13 @@ public sealed class McpOAuthIdentityTests
         var claims = TokenClaims(("iss", Issuer), ("sub", "9f2c"));
 
         // Act
-        var identity = McpOAuthIdentity.FromValidatedToken(claims, Scheme);
+        var identity = OAuthIdentity.FromValidatedToken(claims, Scheme);
 
         // Assert
         Assert.NotNull(identity);
         Assert.Equal(Scheme, identity.AuthenticationType);
-        Assert.Equal($"{Issuer}|9f2c", identity.FindFirst(McpOAuthIdentity.SubjectClaimType)?.Value);
-        Assert.Equal(Issuer, identity.FindFirst(McpOAuthIdentity.IssuerClaimType)?.Value);
+        Assert.Equal($"{Issuer}|9f2c", identity.FindFirst(OAuthIdentity.SubjectClaimType)?.Value);
+        Assert.Equal(Issuer, identity.FindFirst(OAuthIdentity.IssuerClaimType)?.Value);
     }
 
     /// <summary>A subject identifier is unique only within the server that issued it, so two servers naming a subject the same way must not merge into one person.</summary>
@@ -44,13 +44,13 @@ public sealed class McpOAuthIdentityTests
         var fromPartners = TokenClaims(("iss", "https://partners.example.test"), ("sub", "1"));
 
         // Act
-        var workforceIdentity = McpOAuthIdentity.FromValidatedToken(fromWorkforce, Scheme);
-        var partnerIdentity = McpOAuthIdentity.FromValidatedToken(fromPartners, Scheme);
+        var workforceIdentity = OAuthIdentity.FromValidatedToken(fromWorkforce, Scheme);
+        var partnerIdentity = OAuthIdentity.FromValidatedToken(fromPartners, Scheme);
 
         // Assert
         Assert.NotEqual(
-            workforceIdentity?.FindFirst(McpOAuthIdentity.SubjectClaimType)?.Value,
-            partnerIdentity?.FindFirst(McpOAuthIdentity.SubjectClaimType)?.Value);
+            workforceIdentity?.FindFirst(OAuthIdentity.SubjectClaimType)?.Value,
+            partnerIdentity?.FindFirst(OAuthIdentity.SubjectClaimType)?.Value);
     }
 
     /// <summary>Everything an authorization server chose to include beyond the three facts MailFathom acts on is dropped, so nothing downstream can start depending on a claim nobody mapped.</summary>
@@ -67,7 +67,7 @@ public sealed class McpOAuthIdentityTests
             ("tid", "a-tenant"));
 
         // Act
-        var identity = McpOAuthIdentity.FromValidatedToken(claims, Scheme);
+        var identity = OAuthIdentity.FromValidatedToken(claims, Scheme);
 
         // Assert
         Assert.NotNull(identity);
@@ -75,7 +75,7 @@ public sealed class McpOAuthIdentityTests
             identity.Claims,
             claim => Assert.Contains(
                 claim.Type,
-                new[] { McpOAuthIdentity.SubjectClaimType, McpOAuthIdentity.IssuerClaimType, McpOAuthIdentity.ScopeClaimType },
+                new[] { OAuthIdentity.SubjectClaimType, OAuthIdentity.IssuerClaimType, OAuthIdentity.ScopeClaimType },
                 StringComparer.Ordinal));
     }
 
@@ -87,7 +87,7 @@ public sealed class McpOAuthIdentityTests
         var claims = TokenClaims(("iss", Issuer), ("sub", "9f2c"), ("role", "administrator"));
 
         // Act
-        var identity = McpOAuthIdentity.FromValidatedToken(claims, Scheme);
+        var identity = OAuthIdentity.FromValidatedToken(claims, Scheme);
 
         // Assert
         Assert.False(new ClaimsPrincipal(identity!).IsInRole("administrator"));
@@ -104,7 +104,7 @@ public sealed class McpOAuthIdentityTests
             .Where(claim => claim.Type != missingClaimType);
 
         // Act, Assert
-        Assert.Null(McpOAuthIdentity.FromValidatedToken(claims, Scheme));
+        Assert.Null(OAuthIdentity.FromValidatedToken(claims, Scheme));
     }
 
     /// <summary>Picking either of two would let enumeration order decide who the request is.</summary>
@@ -115,7 +115,7 @@ public sealed class McpOAuthIdentityTests
         var claims = TokenClaims(("iss", Issuer), ("sub", "9f2c"), ("sub", "other"));
 
         // Act, Assert
-        Assert.Null(McpOAuthIdentity.FromValidatedToken(claims, Scheme));
+        Assert.Null(OAuthIdentity.FromValidatedToken(claims, Scheme));
     }
 
     /// <summary>Both spellings are in circulation and neither is a provider-specific branch: nothing here asks which server sent the token.</summary>
@@ -128,12 +128,12 @@ public sealed class McpOAuthIdentityTests
         var claims = TokenClaims(("iss", Issuer), ("sub", "9f2c"), (scopeClaimType, "mailfathom.read mailfathom.search"));
 
         // Act
-        var identity = McpOAuthIdentity.FromValidatedToken(claims, Scheme);
+        var identity = OAuthIdentity.FromValidatedToken(claims, Scheme);
 
         // Assert
         Assert.Equal(
             ["mailfathom.read", "mailfathom.search"],
-            identity!.FindAll(McpOAuthIdentity.ScopeClaimType).Select(scope => scope.Value));
+            identity!.FindAll(OAuthIdentity.ScopeClaimType).Select(scope => scope.Value));
     }
 
     [Fact]
@@ -147,12 +147,12 @@ public sealed class McpOAuthIdentityTests
             ("scope", "mailfathom.read mailfathom.search"));
 
         // Act
-        var identity = McpOAuthIdentity.FromValidatedToken(claims, Scheme);
+        var identity = OAuthIdentity.FromValidatedToken(claims, Scheme);
 
         // Assert
         Assert.Equal(
             ["mailfathom.read", "mailfathom.search"],
-            identity!.FindAll(McpOAuthIdentity.ScopeClaimType).Select(scope => scope.Value));
+            identity!.FindAll(OAuthIdentity.ScopeClaimType).Select(scope => scope.Value));
     }
 
     /// <summary>Requiring no scope is the coarser boundary a deployment gets by default, so any authenticated principal satisfies it.</summary>
@@ -163,7 +163,7 @@ public sealed class McpOAuthIdentityTests
         var principal = PrincipalWithScopes();
 
         // Act, Assert
-        Assert.True(McpOAuthIdentity.CarriesEveryScope(principal, []));
+        Assert.True(OAuthIdentity.CarriesEveryScope(principal, []));
     }
 
     [Fact]
@@ -173,7 +173,7 @@ public sealed class McpOAuthIdentityTests
         var principal = PrincipalWithScopes("mailfathom.read", "mailfathom.search");
 
         // Act, Assert
-        Assert.True(McpOAuthIdentity.CarriesEveryScope(principal, ["mailfathom.read"]));
+        Assert.True(OAuthIdentity.CarriesEveryScope(principal, ["mailfathom.read"]));
     }
 
     [Fact]
@@ -183,7 +183,7 @@ public sealed class McpOAuthIdentityTests
         var principal = PrincipalWithScopes("mailfathom.read");
 
         // Act, Assert
-        Assert.False(McpOAuthIdentity.CarriesEveryScope(principal, ["mailfathom.read", "mailfathom.search"]));
+        Assert.False(OAuthIdentity.CarriesEveryScope(principal, ["mailfathom.read", "mailfathom.search"]));
     }
 
     /// <summary>Scopes are compared exactly, because a server issuing 'MailFathom.Read' has issued a different scope from the one configured.</summary>
@@ -194,7 +194,7 @@ public sealed class McpOAuthIdentityTests
         var principal = PrincipalWithScopes("MailFathom.Read");
 
         // Act, Assert
-        Assert.False(McpOAuthIdentity.CarriesEveryScope(principal, ["mailfathom.read"]));
+        Assert.False(OAuthIdentity.CarriesEveryScope(principal, ["mailfathom.read"]));
     }
 
     /// <summary>
@@ -209,7 +209,7 @@ public sealed class McpOAuthIdentityTests
         var claims = TokenClaims([("iss", Issuer), ("sub", "9f2c"), ("roles", "mailbox-administrator")]);
 
         // Act
-        var identity = McpOAuthIdentity.FromValidatedToken(claims, Scheme);
+        var identity = OAuthIdentity.FromValidatedToken(claims, Scheme);
 
         // Assert
         Assert.NotNull(identity);
@@ -224,6 +224,6 @@ public sealed class McpOAuthIdentityTests
     {
         var claims = TokenClaims([("iss", Issuer), ("sub", "9f2c"), ("scope", string.Join(' ', scopes))]);
 
-        return new ClaimsPrincipal(McpOAuthIdentity.FromValidatedToken(claims, Scheme)!);
+        return new ClaimsPrincipal(OAuthIdentity.FromValidatedToken(claims, Scheme)!);
     }
 }

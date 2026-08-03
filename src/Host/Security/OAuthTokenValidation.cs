@@ -7,16 +7,15 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace MailFathom.Host.Security;
 
-/// <summary>The constants the OAuth side of the MCP endpoint is composed from.</summary>
+/// <summary>The rules an access token is judged by, whichever surface it was presented to.</summary>
 /// <remarks>
 /// They are constants rather than settings on purpose. Each one is a security decision with a single defensible answer,
-/// and a deployment that could weaken it would eventually be a deployment that had.
+/// and a deployment that could weaken it would eventually be a deployment that had. They are stated once for the process
+/// rather than once per surface for the same reason: a surface free to accept a weaker signature algorithm than another
+/// would make the whole deployment as weak as its most permissive one.
 /// </remarks>
-internal static class McpOAuthAuthentication
+internal static class OAuthTokenValidation
 {
-    /// <summary>The scheme that decides which credential a request presented and forwards it to the handler that judges it.</summary>
-    internal const string RoutingSchemeName = "MailFathomTransport";
-
     /// <summary>The signature algorithms a token may be signed with.</summary>
     /// <remarks>
     /// <para>
@@ -79,12 +78,6 @@ internal static class McpOAuthAuthentication
     /// </remarks>
     internal static readonly TimeSpan LastKnownGoodMetadataLifetime = TimeSpan.FromHours(1);
 
-    /// <summary>Names the scheme that validates tokens from one configured authorization server.</summary>
-    /// <param name="authorizationServerName">The operator's name for the profile.</param>
-    /// <returns>The scheme name.</returns>
-    internal static string SchemeNameFor(string authorizationServerName) =>
-        $"MailFathomOAuth:{authorizationServerName}";
-
     /// <summary>States what a token from one authorization server must satisfy to be accepted.</summary>
     /// <param name="issuer">The profile's issuer, compared against the token's <c>iss</c>.</param>
     /// <param name="canonicalResource">The resource identifier the token's audience must name.</param>
@@ -121,11 +114,11 @@ internal static class McpOAuthAuthentication
             // answering, rather than refusing every request the moment it becomes unreachable or trusting it forever.
             ValidateWithLKG = true,
 
-            NameClaimType = McpOAuthIdentity.SubjectClaimType,
+            NameClaimType = OAuthIdentity.SubjectClaimType,
 
             // A claim type nothing issues, which is what makes a role check answer no. The validator rejects an empty
             // one, and the framework's default would let a 'role' claim an authorization server chose to include answer
             // a check no configuration ever authorized.
-            RoleClaimType = McpOAuthIdentity.RoleClaimType,
+            RoleClaimType = OAuthIdentity.RoleClaimType,
         };
 }

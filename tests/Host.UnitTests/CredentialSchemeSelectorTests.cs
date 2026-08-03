@@ -15,7 +15,7 @@ namespace MailFathom.Host.UnitTests;
 /// asserts that an attacker writing whatever they like into that field picks which handler refuses them and nothing
 /// more — never a handler that is more permissive, and never no handler at all.
 /// </remarks>
-public sealed class McpCredentialSchemeSelectorTests
+public sealed class CredentialSchemeSelectorTests
 {
     private const string WorkforceIssuer = "https://sso.example.test/realms/mailfathom";
 
@@ -105,7 +105,7 @@ public sealed class McpCredentialSchemeSelectorTests
     public void SchemeFor_AnUnrecognizedCredentialWhereOnlyOAuthIsAccepted_ReachesTheChallenge(string headerValue)
     {
         // Arrange
-        var selector = new McpCredentialSchemeSelector(
+        var selector = new CredentialSchemeSelector(
             new Dictionary<string, string> { [WorkforceIssuer] = WorkforceScheme },
             apiKeySchemeName: null,
             MetadataScheme);
@@ -119,7 +119,7 @@ public sealed class McpCredentialSchemeSelectorTests
     public void SchemeFor_ATokenWhereOnlyApiKeysAreAccepted_ReachesTheApiKeyComparison()
     {
         // Arrange
-        var selector = new McpCredentialSchemeSelector(
+        var selector = new CredentialSchemeSelector(
             new Dictionary<string, string>(StringComparer.Ordinal),
             ApiKeyScheme,
             ApiKeyScheme);
@@ -140,7 +140,7 @@ public sealed class McpCredentialSchemeSelectorTests
         Assert.Equal(selector.SchemeFor(credential), selector.SchemeFor(credential));
     }
 
-    private static McpCredentialSchemeSelector AcceptingBoth() => new(
+    private static CredentialSchemeSelector AcceptingBoth() => new(
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [WorkforceIssuer] = WorkforceScheme,

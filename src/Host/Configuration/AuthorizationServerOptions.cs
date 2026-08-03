@@ -25,7 +25,7 @@ namespace MailFathom.Host.Configuration;
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
-internal sealed class McpAuthorizationServerOptions
+internal sealed class AuthorizationServerOptions
 {
     /// <summary>Gets or sets the operator's own name for this profile, which diagnostics correlate on.</summary>
     /// <remarks>It never reaches a client and is never compared against anything a token carries; it exists so a startup message and a log line can say which profile they mean without printing an issuer URL.</remarks>
@@ -111,7 +111,7 @@ internal sealed class McpAuthorizationServerOptions
     /// <exception cref="InvalidOperationException">Thrown when the profile has not passed <see cref="FindConfigurationErrors" />.</exception>
     /// <remarks>A subject is only unique within the server that issued it, so it is paired with the issuer here rather than compared on its own; two servers may both call someone <c>1</c> without either being wrong.</remarks>
     public IEnumerable<string> AuthorizedIdentities() =>
-        this.AuthorizedSubjects.Select(subject => McpOAuthIdentity.IdentityOf(this.ValidatedIssuer(), subject.Trim()));
+        this.AuthorizedSubjects.Select(subject => OAuthIdentity.IdentityOf(this.ValidatedIssuer(), subject.Trim()));
 
     /// <summary>Reports the issuer every comparison against this profile uses.</summary>
     /// <returns>The configured issuer, trimmed and otherwise unchanged.</returns>
