@@ -110,7 +110,7 @@ which is what makes an edit to it outside this flow visible.
 
 #### The files that name a version in prose
 
-`<VersionPrefix>` is the only place a version is written for the *build*. Four files additionally name one in prose,
+`<VersionPrefix>` is the only place a version is written for the *build*. Five files additionally name one in prose,
 where nothing derives it and nothing checks it, so they are read here by name rather than left to be noticed:
 
 | File | What to bring onto `x.y.z` |
@@ -118,6 +118,7 @@ where nothing derives it and nothing checks it, so they are read here by name ra
 | `README.md` | The **Project status** paragraph — which release is current and what it ships |
 | `docs/users/installation.md` | The image references in the opening paragraph, which quote the version literally |
 | `docs/users/README.md` | The **The state of the release** section — which release is current, and what a page is allowed to describe as already downloadable |
+| `docs/operations/admin-endpoint.md` | The **Getting the command** section, which names the release from which `mfctl` binaries are attached. Drop the threshold entirely once that release has shipped, rather than moving the number |
 | `SECURITY.md` | The **Supported versions** table. `x.y` becomes the supported line and the one it replaces moves down a row, per ADR 0004's rule that only the newest released minor is patched by default |
 
 **They belong in this pull request rather than the bump one, and the reason is what the whole ordering rests on:** this
@@ -151,6 +152,12 @@ git grep -nEi \
 It is written to return a handful of lines rather than a page of them, because a pass that reports ninety hits is a
 pass nobody reads to the end. Widen it when a release turns up a stale sentence it missed, and record what the new
 alternative is for.
+
+One shape is deliberately left to the table above rather than added here: prose naming a version as the threshold a
+capability arrives at — "from `0.2.0` each release attaches". Catching it needs a pattern anchored on a version number,
+and every such pattern also matches the package versions filling `THIRD_PARTY_LICENSES.md` and the specifications,
+which is a page of noise to catch a sentence the table can simply name. A version threshold is a file to list, not a
+phrase to search for.
 
 Read every hit against the tree being tagged and settle it one of three ways:
 
