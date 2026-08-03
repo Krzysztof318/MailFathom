@@ -90,7 +90,13 @@
        mode there fails with NU1004 before a build can start. IntegrationTests has to follow AppHost because it
        references the project and inherits those packages transitively, and a lock file cannot exclude a subtree.
        Nothing is lost that matters: both ship nowhere, and their versions stay pinned centrally like every other
-       project's. -->
+       project's.
+
+       Cli is not among them, and keeping it out of the exclusion is what the trim analyzer had to give way for. Those
+       analyzers put Microsoft.NET.ILLink.Tasks in the ordinary restore graph, and the SDK ships that package in its own
+       library-packs directory, so a lock file recorded here carries the SDK copy's content hash and a restore that
+       fetches the feed copy fails with NU1403. The analyzers run at publish instead, where the trimmer runs anyway and
+       where its warnings are what a release reads. A shipped project keeps its lock file. -->
   <PropertyGroup>
     <RestorePackagesWithLockFile Condition="'$(MSBuildProjectName)' != 'AppHost' And '$(MSBuildProjectName)' != 'IntegrationTests'">true</RestorePackagesWithLockFile>
   </PropertyGroup>

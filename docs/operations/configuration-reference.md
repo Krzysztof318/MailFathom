@@ -253,6 +253,26 @@ anyone wrote a number. [Rate limiting](mcp-endpoint.md#rate-limiting) records wh
 | `…:ReplenishmentPeriod` | TimeSpan | `00:01:00` | 1 s – 1 h | restart |
 | `…:RequestQueueLimit` | int | `0` | 0 – 1000, and below `MaxConcurrentRequests` | restart |
 
+## `AdminEndpoint`
+
+Whether the administrative surface the `mfctl` command reaches is served, and what a client must present. Its own
+listener, its own credentials, and its own authorization servers: a key configured under `McpEndpoint` authenticates
+nothing here, and the reverse holds. The whole section is **restart**, while key and certificate material is read per
+request or per handshake. [Administering a deployment](admin-endpoint.md) is the page.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `AdminEndpoint:Enabled` | bool | `false` | — | restart |
+| `AdminEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; used only when no HTTPS profile is configured | restart |
+| `AdminEndpoint:Port` | int | `8090` | 1–65535, and bound by no other listener in the process; used only when no HTTPS profile is configured | restart |
+| `AdminEndpoint:Authentication` | flag set | `None` | `ApiKey`, `OAuth`, both comma-separated, or `None`; `None` warns at startup | restart |
+| `AdminEndpoint:ApiKeys` | list of secret blocks | empty | Required non-empty when `ApiKey` is named; refused when configured while it is not | restart; material per request |
+| `AdminEndpoint:OAuth` | block | empty | Same shape and rules as `McpEndpoint:OAuth`; refused when configured while `OAuth` is not named | restart |
+| `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`; naming any binds those listeners and no clear-text one | restart; material per handshake |
+
+The routes are served beneath `/api/admin`, which is a constant rather than a setting: a client is configured with a
+host and a port and appends the rest.
+
 ## `HealthEndpoints`
 
 The startup, readiness, and liveness probes and the dedicated listener they answer on.

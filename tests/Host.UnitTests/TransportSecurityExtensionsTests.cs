@@ -131,6 +131,54 @@ public sealed class TransportSecurityExtensionsTests
         Assert.Throws<ArgumentException>(() => AddApiKeyAuthentication(services, default));
     }
 
+    /// <summary>
+    /// Each surface's registration sets the application's one default scheme, so registering two leaves the later one
+    /// holding it. This is the hazard the host pins around: `UseAuthentication` populates `HttpContext.User` with the
+    /// default scheme, and the MCP rate limiter partitions on that user — so a default belonging to the other surface
+    /// would collapse every authenticated MCP client into the shared anonymous bucket without failing anything.
+    /// </summary>
+    [Fact]
+    public void AddTransportAuthentication_TwoSurfaces_LeavesTheLaterRegistrationHoldingTheApplicationDefault()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        AddApiKeyAuthentication(services, TransportSurface.Mcp);
+        AddApiKeyAuthentication(services, TransportSurface.Admin);
+
+        // Assert
+        using var composed = services.BuildServiceProvider();
+
+        Assert.Equal(
+            TransportSurface.Admin.RoutingSchemeName,
+            composed.GetRequiredService<IOptions<AuthenticationOptions>>().Value.DefaultScheme);
+    }
+
+    /// <summary>
+    /// And the correction the host applies: stating the default explicitly wins over whichever registration ran last,
+    /// so enabling the administrative endpoint cannot change which scheme an MCP request is authenticated against.
+    /// </summary>
+    [Fact]
+    public void AddTransportAuthentication_TheDefaultSchemeStatedAfterwards_OverridesTheRegistrationOrder()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        AddApiKeyAuthentication(services, TransportSurface.Mcp);
+        AddApiKeyAuthentication(services, TransportSurface.Admin);
+
+        // Act: what the composition root does once both endpoints have registered.
+        services.Configure<AuthenticationOptions>(
+            authenticationOptions => authenticationOptions.DefaultScheme = TransportSurface.Mcp.RoutingSchemeName);
+
+        // Assert
+        using var composed = services.BuildServiceProvider();
+
+        Assert.Equal(
+            TransportSurface.Mcp.RoutingSchemeName,
+            composed.GetRequiredService<IOptions<AuthenticationOptions>>().Value.DefaultScheme);
+    }
+
     private static void AddApiKeyAuthentication(IServiceCollection services, TransportSurface surface) =>
         services.AddTransportAuthentication(
             surface,

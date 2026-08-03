@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="xunit.v3.mtp-v2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Cli\Cli.csproj" />
+  </ItemGroup>
+
+  <!-- The suite's one HTTP test double, compiled here the way every other consumer compiles it. NSubstitute cannot
+       produce one, because HttpMessageHandler.SendAsync is protected. -->
+  <ItemGroup>
+    <Compile Include="..\shared\FakeHttpMessageHandler.cs" Link="FakeHttpMessageHandler.cs" />
+    <Compile Include="..\shared\RecordedHttpRequest.cs" Link="RecordedHttpRequest.cs" />
+  </ItemGroup>
+</Project>

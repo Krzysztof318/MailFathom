@@ -40,6 +40,10 @@ internal readonly record struct TransportSurface
     /// <summary>Gets the surface serving the MCP protocol.</summary>
     internal static TransportSurface Mcp { get; } = new("Mcp");
 
+    /// <summary>Gets the surface serving the administrative API the <c>mailfathom</c> command reaches.</summary>
+    /// <remarks>Separate from <see cref="Mcp" /> because reading a mailbox and administering the service that reads it are different authorities, and a credential provisioned for one authenticates nothing on the other.</remarks>
+    internal static TransportSurface Admin { get; } = new("Admin");
+
     /// <summary>Gets whether this value names a surface rather than the unusable struct default.</summary>
     internal bool IsSpecified => this.name is not null;
 

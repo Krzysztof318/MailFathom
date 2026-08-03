@@ -162,14 +162,20 @@ rather than automated. Nothing here pushes a tag on the owner's behalf.
 
 ## What a release publishes, and what it needs to
 
-Three artifacts leave one run, in one order, and a failure in any of them leaves the release incomplete rather than
-half-published:
+Four artifacts leave one run, and a failure in the first three leaves the release incomplete rather than half-published:
 
 | Artifact | Where | Depends on |
 | --- | --- | --- |
 | The image | `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` | the schema artifact building |
 | The Helm chart | `ghcr.io/krzysztof318/charts/mailfathom` | the image's digest |
 | `mailfathom-schema-<version>.sql` | the GitHub release's assets | nothing |
+| `mfctl-<version>-<rid>` for `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, plus one `.sha256` covering all of them | the GitHub release's assets | nothing |
+
+The command binaries are the one artifact that gates nothing, and that is deliberate: a release whose image and schema
+are correct is one an operator can deploy, so a build failure in the command is left visible on the run rather than
+holding back the thing they are waiting for. They are self-contained and trimmed, so an operator downloads one file and
+runs it — and they are built for the machine an operator administers *from*, which is why Windows is among them while
+the service itself is Linux-only.
 
 The chart is published **after** the image and **against the digest it produced**, because a chart names the image it
 deploys: before pushing, the run renders the packaged chart against that digest and refuses to publish one that would

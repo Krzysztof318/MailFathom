@@ -161,6 +161,24 @@ jobs:
       ref: ${{ needs.decide.outputs.revision }}
       version: ${{ needs.decide.outputs.version }}
 
+  # The administration command, on the same terms as the schema script above and left on the run for the same reason: a
+  # nightly is not a release and has nothing to attach to. Somebody trying a nightly image downloads the binary from the
+  # run that produced it, which is the only place the two are known to have been built from one revision.
+  #
+  # It gates nothing either. A nightly whose image published and whose command did not is legible from the run — the
+  # image is out and its command is not — and the release channel is where a failure here has to stop the world.
+  cli-binaries:
+    name: CLI binaries
+    needs:
+      - decide
+    if: needs.decide.outputs.publish == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-cli-binaries.yml
+    with:
+      ref: ${{ needs.decide.outputs.revision }}
+      version: ${{ needs.decide.outputs.version }}
+
   publish:
     name: Publish
     needs:

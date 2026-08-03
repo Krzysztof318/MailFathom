@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- The published binary is what an operator invokes, and it is named after the command rather than after the
+         boundary the assembly name encodes. Short because it is typed: an administrative tool is used interactively and
+         repeatedly, and the product name already appears in the help text, the version line, and every message. The
+         project, its directory, its root namespace, and the boundary it belongs to are all still Cli.
+         CliRootCommand.CommandName is the same name where the code has to print it. -->
+    <AssemblyName>mfctl</AssemblyName>
+    <RootNamespace>MailFathom.Cli</RootNamespace>
+
+    <!-- The command ships as one self-contained, trimmed file per platform, so an operator administering a Linux
+         deployment from a Windows workstation downloads a binary and runs it. Every property that says so is passed by
+         the release workflow rather than stated here, for two reasons: a project marked self-contained cannot be
+         referenced by a test host, and turning the trim analyzers on at build time puts Microsoft.NET.ILLink.Tasks in
+         the ordinary restore graph — a package the SDK ships in its own library-packs directory, whose content hash
+         differs from the feed copy, which makes this project's lock file fail everywhere it was not written. The
+         trimmer still runs at publish and its warnings are still read there, which is where a release acts on them. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+  </ItemGroup>
+
+  <!-- The only project reference, and a deliberate limit rather than the first of several. The command is an HTTP
+       client of the administrative endpoint and holds no other capability: it never opens the database, never reads the
+       service's configuration, and never touches its secret store. A reference to Infrastructure would put all three in
+       the published artifact and would make trimming it impossible. Common depends on nothing but the base class
+       library, so it costs the artifact what it uses and no more. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Common\Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\shared\StampedAssemblyVersion.cs" Link="StampedAssemblyVersion.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MailFathom.Cli.UnitTests" />
+  </ItemGroup>
+</Project>
