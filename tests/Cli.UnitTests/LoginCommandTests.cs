@@ -148,6 +148,27 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Contains(this.console.Errors, line => line.Contains("could not be reached", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A deployment that accepts the connection and never answers is a different problem from one nothing is listening
+    /// at, and the message says which: the address and the port are right, so the operator looks at the deployment.
+    /// </summary>
+    [Fact]
+    public async Task Login_ADeploymentThatNeverAnswers_ReportsTheTimeoutRatherThanCrashing()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        using var handler = FakeAdminEndpoint.Silent();
+        this.console.SecretToSupply = "not-a-real-key";
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "login", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(1, exitCode);
+        Assert.Empty(store.Read().Profiles);
+        Assert.Contains(this.console.Errors, line => line.Contains("did not answer in time", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Login_NoCredentialSupplied_FailsWithoutReachingTheDeployment()
     {
