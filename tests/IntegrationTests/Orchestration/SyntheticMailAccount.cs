@@ -5,13 +5,14 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.AppHost;
 using MailFathom.Application.Mail;
-using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
 using MailFathom.Infrastructure.Mail;
-using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets.Resolution;
 
 namespace MailFathom.IntegrationTests.Orchestration;
 

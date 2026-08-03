@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Infrastructure.Secrets.Resolution;
+
 namespace MailFathom.Infrastructure.Mail.OAuth;
 
 /// <summary>One account's OAuth 2.0 access token together with the instant it stops being usable.</summary>
@@ -9,7 +11,7 @@ namespace MailFathom.Infrastructure.Mail.OAuth;
 /// <param name="ExpiresAt">The instant the authorization server said the token stops being accepted.</param>
 /// <remarks>
 /// <para>
-/// The token is a credential and this type is deliberately not a <see cref="Secrets.ResolvedSecret" />. That type owns
+/// The token is a credential and this type is deliberately not a <see cref="ResolvedSecret" />. That type owns
 /// a pinned buffer it erases on disposal, which is the right shape for material read from a file or an environment
 /// variable and used once. An access token instead arrives as text inside a JSON response, is cached across
 /// connection attempts by design, and is handed to MailKit as a <see cref="string" />, so the .NET string it was parsed

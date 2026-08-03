@@ -1,6 +1,6 @@
 # Mailbox queries
 
-<!-- describes: src/Application/Emails/ListEmails/**, src/Application/Folders/** -->
+<!-- describes: src/Application/Emails/ListEmails/**, src/Application/Emails/Mailboxes/**, src/Application/Emails/Summaries/**, src/Application/Folders/**, src/Application/Synchronization/Checkpoints/**, src/Infrastructure/Persistence/Emails/**, src/Infrastructure/Persistence/Synchronization/** -->
 
 MailFathom answers a mailbox listing from its local copy. `ListEmails` is the first read use case: it takes structured
 filters, returns a bounded page of email summaries, issues the cursor that continues the walk, and reports how current
@@ -208,20 +208,23 @@ configuration bounds.
 ## Where the pieces live
 
 - `MailFathom.Application.Emails.ListEmails` — the use case, its request, and its result.
-- `MailFathom.Application.Emails` — `MailboxEmailSelection` and the timeline filter that wraps it, the cursor, the page
-  size, the summary, and the query failures shared with the other read models.
-- `MailFathom.Application.Emails.MailboxScopeResolver` — resolves the accounts a read runs against and refuses one this
-  deployment does not serve. It is a collaborator rather than a step inside the use case because the refusal is an access
-  decision every read model has to make identically.
+- `MailFathom.Application.Emails.Mailboxes` — `MailboxEmailSelection` and the timeline filter that wraps it, the cursor,
+  the page size, and the query failures shared with the other read models. `MailboxScopeResolver` is here too: it
+  resolves the accounts a read runs against and refuses one this deployment does not serve, and it is a collaborator
+  rather than a step inside the use case because the refusal is an access decision every read model has to make
+  identically.
+- `MailFathom.Application.Emails.Summaries` — the summary a read model publishes and the two reader ports that produce
+  it.
 - `MailFathom.Application.Accounts` — `IMailAccountCatalog`, the port that names which accounts this deployment serves. One
   member answers both questions asked of it: whether the account a request named is accepted, and which accounts an
   unscoped request is narrowed to. `MailSynchronizationOptions` implements it, so the answer comes from the configuration
   that defines the accounts.
-- `MailFathom.Application.Synchronization` — the freshness port and its read model, kept separate from the readers that
-  return mail because every read model attaches freshness.
-- `MailFathom.Infrastructure.Persistence` — `StoredEmailTimelineReader` and `SynchronizationFreshnessReader`, which evaluate
-  every filter, the keyset boundary, the ordering, and the row limit in PostgreSQL and track no entities.
-  `StoredEmailSelectionPredicate` is the filter predicate, shared with search, and `StoredEmailSummaryRow` carries the
-  column list and the mapping, shared with search and with the single-email lookup. Both are written once because each
-  is a control that decides what a mailbox read can return at all: a second copy would have to be found and read before
-  anyone could say what that is.
+- `MailFathom.Application.Synchronization.Checkpoints` — the freshness port and its read model, kept separate from the
+  readers that return mail because every read model attaches freshness.
+- `MailFathom.Infrastructure.Persistence.Emails` — `StoredEmailTimelineReader`, which evaluates every filter, the keyset
+  boundary, the ordering, and the row limit in PostgreSQL and tracks no entities. `StoredEmailSelectionPredicate` is the
+  filter predicate, shared with search, and `StoredEmailSummaryRow` carries the column list and the mapping, shared with
+  search and with the single-email lookup. Both are written once because each is a control that decides what a mailbox
+  read can return at all: a second copy would have to be found and read before anyone could say what that is.
+- `MailFathom.Infrastructure.Persistence.Synchronization` — `SynchronizationFreshnessReader`, which answers the freshness
+  the timeline attaches from the same database and under the same no-tracking rule.

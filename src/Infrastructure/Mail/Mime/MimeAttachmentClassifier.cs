@@ -3,7 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.RegularExpressions;
-using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Emails;
 using MimeKit;
 using MimeKit.Text;

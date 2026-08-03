@@ -2,11 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.EmailContent;
-using MailFathom.Application.Emails;
+using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Application.Synchronization.Reconciliation;
+using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;

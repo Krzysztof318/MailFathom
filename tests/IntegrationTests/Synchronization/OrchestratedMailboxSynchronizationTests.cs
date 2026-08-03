@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Folders;
 using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Infrastructure.Persistence;

@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json.Serialization;
+using MailFathom.Cli.Administration;
+using MailFathom.Cli.Credentials;
 
 namespace MailFathom.Cli;
 

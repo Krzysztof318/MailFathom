@@ -2,15 +2,23 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.EmailContent;
-using MailFathom.Application.Emails;
+using MailFathom.Application.EmailContent.Rendering;
+using MailFathom.Application.EmailContent.Repair;
+using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.ListEmails;
+using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Application.Synchronization.Reconciliation;
+using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Folders;
@@ -19,9 +27,15 @@ using MailFathom.Infrastructure.Mail.MailKit;
 using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Persistence.Emails;
+using MailFathom.Infrastructure.Persistence.Sessions;
+using MailFathom.Infrastructure.Persistence.Synchronization;
 using MailFathom.Infrastructure.Resilience;
-using MailFathom.Infrastructure.Secrets;
-using MailFathom.Infrastructure.Security;
+using MailFathom.Infrastructure.Secrets.References;
+using MailFathom.Infrastructure.Secrets.Resolution;
+using MailFathom.Infrastructure.Secrets.Sources;
+using MailFathom.Infrastructure.Security.OAuth;
 using MailKit.Net.Imap;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

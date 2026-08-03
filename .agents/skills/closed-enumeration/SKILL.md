@@ -78,4 +78,4 @@ The type's `<remarks>` states why it is not an enum, what the identity is, and t
 
 Cover, in the boundary's own unit-test project: uniqueness of the identities, the structure of the identity when it has one, `TryParse` for a declared and an undeclared input, the default reporting itself as unspecified and rejecting whatever it must reject, `ToString`, and a JSON round trip as both a value and a property name including the rejection cases.
 
-`tests/Domain.UnitTests/MailFathomErrorCodeTests.cs` is the worked example, and it asserts against `All` rather than reflecting over the type.
+`tests/Domain.UnitTests/Failures/MailFathomErrorCodeTests.cs` is the worked example, and it asserts against `All` rather than reflecting over the type.

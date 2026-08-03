@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Runtime.InteropServices;
+using MailFathom.Cli.Credentials;
 using Xunit;
 
 namespace MailFathom.Cli.UnitTests;

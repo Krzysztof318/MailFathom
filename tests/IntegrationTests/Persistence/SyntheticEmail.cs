@@ -5,7 +5,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using MailFathom.AppHost;
-using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;

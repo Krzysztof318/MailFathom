@@ -3,7 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
-using MailFathom.Application.Synchronization;
+using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Synchronization.Checkpoints;
 
 namespace MailFathom.Application.Emails.SearchEmails;
 

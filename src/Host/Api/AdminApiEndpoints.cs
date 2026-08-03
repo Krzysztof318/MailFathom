@@ -3,8 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Security.Claims;
-using MailFathom.Host.Configuration;
-using MailFathom.Host.Security;
+using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Versioning;
 
 namespace MailFathom.Host.Api;

@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
-using MailFathom.Application.EmailContent;
+using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 

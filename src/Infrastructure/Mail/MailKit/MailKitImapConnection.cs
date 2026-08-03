@@ -5,9 +5,9 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography.X509Certificates;
-using MailFathom.Application.EmailContent;
+using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Resilience;
-using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;

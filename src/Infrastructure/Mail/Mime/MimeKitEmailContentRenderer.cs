@@ -4,8 +4,9 @@
 
 using System.Text;
 using System.Text.RegularExpressions;
-using MailFathom.Application.EmailContent;
-using MailFathom.Application.Emails;
+using MailFathom.Application.EmailContent.Rendering;
+using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Domain.Emails;
 using MimeKit;
 
