@@ -106,6 +106,78 @@ public sealed class MailOAuthAccessTokenSourceTests
             () => context.Source.GetAccessTokenAsync(Account, CancellationToken.None));
     }
 
+    /// <summary>The stored token is the newer of the two, because it exists only where the server replaced what was configured.</summary>
+    [Fact]
+    public async Task GetAccessTokenAsync_AnAccountWithAStoredToken_SpendsItRatherThanTheConfiguredReference()
+    {
+        // Arrange
+        using var context = TokenEndpointAnswering(
+            SuccessfulTokenResponse("an-access-token", expiresInSeconds: 3600),
+            storedRefreshToken: "a-stored-refresh-token");
+
+        // Act
+        await context.Source.GetAccessTokenAsync(Account, CancellationToken.None);
+
+        // Assert
+        Assert.Equal("a-stored-refresh-token", ReadForm(context.Handler)["refresh_token"]);
+    }
+
+    /// <summary>
+    /// Following the rotation is what this store exists for: Microsoft Entra invalidates the token it replaces, so a
+    /// deployment that discarded the new one would stop being able to authenticate once the old one expired.
+    /// </summary>
+    [Fact]
+    public async Task GetAccessTokenAsync_AServerRotatingTheRefreshToken_StoresTheIssuedOneForTheAccount()
+    {
+        // Arrange
+        using var context = TokenEndpointAnswering(
+            """{"access_token":"an-access-token","expires_in":3600,"refresh_token":"a-rotated-refresh-token"}""");
+
+        // Act
+        await context.Source.GetAccessTokenAsync(Account, CancellationToken.None);
+
+        // Assert
+        Assert.Equal([Account], context.RefreshTokenStore.StoredAccountIds);
+        Assert.Equal("a-rotated-refresh-token", context.RefreshTokenStore.LastStoredToken);
+    }
+
+    /// <summary>An app-only grant sends no refresh token, so one in its response is a credential nothing would ever spend.</summary>
+    [Fact]
+    public async Task GetAccessTokenAsync_ClientCredentialsAnswerCarryingARefreshToken_StoresNothing()
+    {
+        // Arrange
+        using var context = TokenEndpointAnswering(
+            """{"access_token":"an-access-token","expires_in":3600,"refresh_token":"an-unsolicited-refresh-token"}""",
+            grant: MailOAuthGrant.ClientCredentials);
+
+        // Act
+        await context.Source.GetAccessTokenAsync(Account, CancellationToken.None);
+
+        // Assert
+        Assert.Empty(context.RefreshTokenStore.StoredAccountIds);
+    }
+
+    /// <summary>
+    /// The access token has already been issued and the refresh token that bought it is already spent, so failing here
+    /// would retry the exchange with a token the server has just invalidated — a lost rotation turned into an account
+    /// that cannot authenticate at all.
+    /// </summary>
+    [Fact]
+    public async Task GetAccessTokenAsync_AStoreThatCannotWrite_StillIssuesTheAccessTokenItAlreadyObtained()
+    {
+        // Arrange
+        using var context = TokenEndpointAnswering(
+            """{"access_token":"an-access-token","expires_in":3600,"refresh_token":"a-rotated-refresh-token"}""");
+        context.RefreshTokenStore.SaveFailure = new InvalidOperationException("the database is unreachable");
+
+        // Act
+        var token = await context.Source.GetAccessTokenAsync(Account, CancellationToken.None);
+
+        // Assert
+        Assert.Equal("an-access-token", token.Value);
+        Assert.Single(context.Handler.RecordedRequests);
+    }
+
     private static string SuccessfulTokenResponse(string accessToken, int expiresInSeconds) =>
         $$"""{"access_token":"{{accessToken}}","expires_in":{{expiresInSeconds}}}""";
 
@@ -127,7 +199,9 @@ public sealed class MailOAuthAccessTokenSourceTests
     private static TokenEndpointContext TokenEndpointAnswering(
         string body,
         HttpStatusCode status = HttpStatusCode.OK,
-        string? clientSecret = null)
+        string? clientSecret = null,
+        string? storedRefreshToken = null,
+        MailOAuthGrant? grant = null)
     {
         var handler = FakeHttpMessageHandler.AlwaysResponding(() => new HttpResponseMessage(status)
         {
@@ -137,16 +211,18 @@ public sealed class MailOAuthAccessTokenSourceTests
         var host = OutboundResilienceTestHost.WithConfiguredSettings();
         var httpClient = new HttpClient(handler, disposeHandler: false);
         var cache = new MailAccessTokenCache(host.TimeProvider);
+        var refreshTokenStore = new FakeMailboxRefreshTokenStore(storedRefreshToken);
 
         var source = new MailOAuthAccessTokenSource(
             httpClient,
-            new FakeMailOAuthSettingsProvider(clientSecret),
+            new FakeMailOAuthSettingsProvider(clientSecret, grant ?? MailOAuthGrant.RefreshToken),
+            refreshTokenStore,
             cache,
             host.Executor,
             host.TimeProvider,
             host.Services.GetRequiredService<ILogger<MailOAuthAccessTokenSource>>());
 
-        return new TokenEndpointContext(host, handler, httpClient, cache, source);
+        return new TokenEndpointContext(host, handler, httpClient, cache, refreshTokenStore, source);
     }
 
     private sealed record TokenEndpointContext(
@@ -154,6 +230,7 @@ public sealed class MailOAuthAccessTokenSourceTests
         FakeHttpMessageHandler Handler,
         HttpClient HttpClient,
         MailAccessTokenCache Cache,
+        FakeMailboxRefreshTokenStore RefreshTokenStore,
         MailOAuthAccessTokenSource Source) : IDisposable
     {
         public void Dispose()
@@ -171,21 +248,22 @@ public sealed class MailOAuthAccessTokenSourceTests
     /// settings owns it and releases it when the request ends, which is what keeps a live client secret from outliving
     /// one token request, and a fake that disposed it would be testing a different contract.
     /// </remarks>
-    private sealed class FakeMailOAuthSettingsProvider(string? clientSecret) : IMailOAuthSettingsProvider
+    private sealed class FakeMailOAuthSettingsProvider(string? clientSecret, MailOAuthGrant grant)
+        : IMailOAuthSettingsProvider
     {
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The material is handed to the caller, which owns it and disposes it when the token request ends; that transfer is the port's stated contract.")]
         public Task<MailOAuthAccountSettings> GetSettingsAsync(string accountId, CancellationToken cancellationToken)
         {
             var material = new MailOAuthClientMaterial(
                 clientSecret is null ? null : ResolvedSecret.FromText(clientSecret),
-                ResolvedSecret.FromText("a-refresh-token"));
+                grant.RequiresRefreshToken ? ResolvedSecret.FromText("a-refresh-token") : null);
 
             return Task.FromResult(new MailOAuthAccountSettings(
                 accountId,
                 new Uri("https://oauth2.example.test/token"),
                 "a-client-id",
                 "https://mail.example.test/",
-                MailOAuthGrant.RefreshToken,
+                grant,
                 material));
         }
     }

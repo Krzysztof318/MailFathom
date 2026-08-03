@@ -199,7 +199,7 @@ A Secrets Store CSI driver — Vault, Azure Key Vault, AWS Secrets Manager — n
 
 ## The data-encryption key
 
-MailFathom seals values it stores under a key the deployment provisions, and the key arrives as an ordinary secret reference like every other credential. What differs is the material behind it: it is **base64 that decodes to exactly 32 bytes**, and startup refuses anything else naming the setting rather than accepting a weaker key.
+MailFathom seals values it stores under a key the deployment provisions, and the key arrives as an ordinary secret reference like every other credential. One value is sealed under it today — the OAuth refresh token an account's authorization server rotates, which [mailbox OAuth](mailbox-oauth.md#rotation) describes — so a deployment whose mailboxes all authenticate with a password needs no key at all and starts without one. What differs is the material behind it: it is **base64 that decodes to exactly 32 bytes**, and startup refuses anything else naming the setting rather than accepting a weaker key.
 
 Generate one with:
 

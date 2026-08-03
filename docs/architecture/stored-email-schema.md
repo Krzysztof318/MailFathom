@@ -114,6 +114,8 @@ One reviewed migration, `Initial`, creates all of it. There is no bootstrap that
 
 Locally the AppHost's `mailfathom-migrations` resource applies it before the host starts. Elsewhere applying it is an explicit deployment step. [Local development](../operations/local-development.md) documents both. Every migration is permanent: a model change appends one and never regenerates this baseline, and the `add-migration` skill is that workflow.
 
+Not everything in this database is mail. `mailbox_refresh_tokens` holds one sealed OAuth refresh token per account, added by the `AddMailboxRefreshTokens` migration, and it is documented where the credential it holds is — [mailbox OAuth](../operations/mailbox-oauth.md#rotation). It is named here so a reader of a schema dump knows which page owns it, and because it is the one table nothing on this page cascades from: it carries no foreign key onto `mailbox_accounts`, since a token has to be able to exist for an account that has never synchronized.
+
 `uid_validity` and `uid` are modelled as CLR `uint` because that is the IMAP wire type, and PostgreSQL has no native unsigned 32-bit integer. The generated migration maps both to `bigint`, which represents the whole unsigned 32-bit range exactly, so the unique index on `(mail_folder_id, uid_validity, uid)` and the checkpoint comparisons order the same way the IMAP values do.
 
 Table names are the snake_case ones above. Column names are not: the model renames tables and leaves columns as it names the properties, so the physical columns are `"UidValidity"`, `"ReceivedAt"`, and so on, and hand-written SQL against them has to quote that casing. The names in this page are the schema's concepts rather than a transcription of the DDL; the migration is the transcription.

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
@@ -27,6 +28,7 @@ using MailFathom.Infrastructure.Mail.MailKit;
 using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Persistence.Accounts;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Sessions;
@@ -174,6 +176,9 @@ public static class ServiceCollectionExtensions
         // The one write a read path performs. It joins no session for the reason its port states, so it is registered
         // beside the readers rather than with the repositories that take one.
         services.AddScoped<IEmailContentRepairRequestStore, EmailContentRepairRequestStore>();
+        // Registered here rather than beside the OAuth client it serves, because what it is is a table: the token
+        // source asks for a credential and this is what knows the credential lives in PostgreSQL, sealed.
+        services.AddScoped<IMailboxRefreshTokenStore, MailboxRefreshTokenStore>();
         // MimeKit arrives with MailKit, so message parsing needs no dependency of its own; the adapter keeps its types
         // out of Application the same way the IMAP adapter keeps MailKit's out.
         services.AddScoped<IEmailMimeReader>(provider => new MimeKitEmailMimeReader(
@@ -227,6 +232,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMailAccessTokenSource>(provider => new MailOAuthAccessTokenSource(
             provider.GetRequiredKeyedService<HttpClient>(MailOAuthTokenTransportKey),
             provider.GetRequiredService<IMailOAuthSettingsProvider>(),
+            provider.GetRequiredService<IMailboxRefreshTokenStore>(),
             provider.GetRequiredService<MailAccessTokenCache>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<TimeProvider>(),

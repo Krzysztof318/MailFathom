@@ -56,6 +56,20 @@ lists all three before the install command.
   there. The Compose deployment brings its own (`pgvector/pgvector`, PostgreSQL 17); the other shapes expect yours.
 - **An IMAP account to synchronize** and its password or app password, provisioned as a
   [secret reference](../operations/secret-provisioning.md) rather than written into configuration.
+- **A data-encryption key, if any mailbox authenticates with OAuth.** MailFathom seals the refresh tokens it stores
+  under one key the whole deployment shares, so generate it once before the first start and provision it like any other
+  secret:
+
+  ```bash
+  openssl rand -base64 32
+  ```
+
+  It is `-base64 32`, not the `-base64 33` beside it for the database passwords: the value has to decode to exactly 32
+  bytes and a longer one is refused at startup. **Back it up with the database and never regenerate it** — the key is
+  not in the database, and losing it means re-authorizing every mailbox.
+  [Secret provisioning](../operations/secret-provisioning.md#the-data-encryption-key) covers where it goes in each
+  shape, and [the configuration reference](../operations/configuration-reference.md#dataencryption) the section that
+  points at it. A deployment whose mailboxes all authenticate with a password needs none, and starts without one.
 - **OpenSSL 3.0 or later**, because MailFathom connects to the mail server over TLS and .NET hands every handshake to
   the system library. **1.1.1 is the floor below which nothing runs at all**: .NET 10 requires it on Unix and
   [fails to start](https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/10.0/openssl-version-requirement)

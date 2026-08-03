@@ -9,7 +9,7 @@ informed:
 
 # Seal data at rest under one deployment-wide symmetric key ring, provisioned as a secret reference the operator creates
 
-<!-- describes: src/Host/Configuration/DataEncryption/**, src/Infrastructure/DataEncryption/**, src/Common/AesGcmEnvelope.cs, src/AppHost/Program.cs -->
+<!-- describes: src/Host/Configuration/DataEncryption/**, src/Infrastructure/DataEncryption/**, src/Common/AesGcmEnvelope.cs, src/AppHost/Program.cs, src/AppHost/OrchestrationContract.cs -->
 
 ## Context and Problem Statement
 
@@ -95,11 +95,11 @@ The generating command is therefore `openssl rand -base64 32`, and it is documen
 
 **The chart must never generate the key, and neither must a Compose hook.** A Helm-generated value regenerates on every `helm upgrade` unless it is guarded with `lookup`, and `lookup` returns nothing during `helm template`, during a dry run, and under Argo CD. For a password that is a reset an operator notices and repairs. For a data-encryption key it is every sealed row becoming permanently unopenable, discovered at the first read after the upgrade rather than at the upgrade.
 
-**Local development is the one place where the operator's step is the wrong answer, and how it is answered is deliberately left open.** A developer running the Aspire app host is not provisioning a deployment, and a key they have to generate by hand before the first `dotnet run` is ceremony bought for nothing: the local database holds synthetic mail and the machine is not a deployment.
+**Local development is the one place where the operator's step is the wrong answer, and the answer is a fixed development constant.** A developer running the Aspire app host is not provisioning a deployment, and a key they have to generate by hand before the first `dotnet run` is ceremony bought for nothing: the local database holds synthetic mail and the machine is not a deployment.
 
-What that exception must not be is generation into a store that can outlive, or be outlived by, the data it protects. `src/AppHost/Program.cs` states the PostgreSQL password as the fixed constant `postgres` rather than generating one for exactly that reason — a generated password persisted per run diverges from a data volume that survives it, because PostgreSQL applies a password when it initializes an empty data directory and never again. A key is worse under the same failure: a diverged password reports an authentication error, and a diverged key leaves every locally sealed row unopenable.
+What that exception must not be is generation into a store that can outlive, or be outlived by, the data it protects. `src/AppHost/Program.cs` states the PostgreSQL password as the fixed constant `postgres` rather than generating one for exactly that reason — a generated password persisted per run diverges from a data volume that survives it, because PostgreSQL applies a password when it initializes an empty data directory and never again. A key is worse under the same failure: a diverged password reports an authentication error, and a diverged key leaves every locally sealed row unopenable, reported as nothing but a failed authentication tag.
 
-So the two candidates are a fixed development constant, which cannot diverge from itself and matches what the password already does, or generation into user secrets, which is what the password deliberately does not do. **Neither is implemented.** Nothing in the repository generates or persists a data-encryption key today, and until one exists a developer configures the section themselves or runs without it. Issue 329 carries the mechanism, and this record is `proposed`, so the choice belongs to the review of that change rather than to this text.
+So the app model states the key the way it states the password. `OrchestrationContract.DataEncryptionKeyMaterial` is base64 of the ASCII text `mailfathom-development-only-key!`, handed to the host as a `plaintext:` reference under the key identifier `development`, and it cannot diverge from itself. Resetting the local database is what re-seals it, which is the same act that already recreates the schema. Generation into user secrets was the other candidate and is refused: it is precisely what the password deliberately does not do, and it would reintroduce the divergence this constant exists to remove. A value published in a public repository is not a secret and is not treated as one — it protects one developer's synthetic mail on a container published on the loopback address alone, and a deployment resolves its key from a provisioned reference that this app model builds no part of.
 
 ### Consequences
 
@@ -111,11 +111,12 @@ So the two candidates are a fixed development constant, which cannot diverge fro
 - Neutral, because MailFathom joins the set of systems whose backup is incomplete without a second artifact. That is true of every encrypted store and it is a documentation obligation rather than a design flaw.
 - Bad, because losing the key loses the sealed data. Today that means re-authorizing every mailbox; once a second column is sealed it will mean more, and the cost of the mistake grows without the mechanism changing.
 - Bad, because the operator has one more step at install. It is one line between two identical lines they already run, and it is the price of the two `Good` entries above.
-- Bad, because local development is left without an answer for now: until the mechanism above is chosen and built, a developer either configures the section themselves or runs without it, which is the ceremony this decision says they should not need.
+- Bad, because local development seals under a key this repository publishes, so a developer's local database is protected against nothing. That is the intended trade — it holds synthetic mail on a loopback-published container — and it is a trade only because the constant is unmistakably a development one rather than a weak secret somebody might reuse.
 
 ## Validation
 
-- Startup validation refuses, naming the setting: an `ActiveKeyId` that names no configured key, material that does not decode to exactly 32 bytes, a duplicate `KeyId`, and an empty ring where a sealed column exists. Unit tests cover each refusal.
+- Startup validation refuses, naming the setting: an `ActiveKeyId` that names no configured key, material that does not decode to exactly 32 bytes, a duplicate `KeyId`, and a key identifier the database could not hold. Unit tests cover each refusal.
+- An empty ring is not one of those refusals, and cannot be: whether a sealed value exists is a question about the data rather than about the configuration, and startup validation reads no rows. A deployment that stored a token and then lost its ring fails at the next token request, naming the key the stored value asks for — which is the same failure a retired key produces and is reported the same way.
 - Unit tests cover the associated-data binding by proving a value sealed for one subject or one purpose does not open as another, and cover active-key selection and re-sealing.
 - The integration suite covers the EF mapping, the migration, and the round trip through PostgreSQL.
 - `helm lint` and `helm template` against `deploy/helm/mailfathom/ci/*-values.yaml` prove the chart creates no `Secret` of its own; a template that did would be a review failure against this record.

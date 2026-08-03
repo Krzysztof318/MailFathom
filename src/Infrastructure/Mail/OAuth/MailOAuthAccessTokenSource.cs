@@ -3,8 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net.Http.Json;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Resilience;
 using MailFathom.Common.MailboxOAuth;
+using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Resilience;
 using Microsoft.Extensions.Logging;
 
@@ -29,14 +31,16 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
 {
     private readonly HttpClient httpClient;
     private readonly IMailOAuthSettingsProvider settingsProvider;
+    private readonly IMailboxRefreshTokenStore refreshTokenStore;
     private readonly MailAccessTokenCache tokenCache;
     private readonly OutboundOperationExecutor operationExecutor;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<MailOAuthAccessTokenSource> logger;
 
-    /// <summary>Initializes a token source over a transport, the account settings, the shared cache, and the resilience budget.</summary>
+    /// <summary>Initializes a token source over a transport, the account settings, the stored grant, the shared cache, and the resilience budget.</summary>
     /// <param name="httpClient">The transport used for token requests.</param>
     /// <param name="settingsProvider">Resolves one account's endpoint and secrets per request.</param>
+    /// <param name="refreshTokenStore">Holds the refresh token MailFathom stores, and receives the one a rotation issues.</param>
     /// <param name="tokenCache">Holds the issued tokens across scopes and serializes the requests that replace them.</param>
     /// <param name="operationExecutor">Applies the authorization-server resilience budget.</param>
     /// <param name="timeProvider">Supplies the instant an expiry is measured from.</param>
@@ -45,6 +49,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     public MailOAuthAccessTokenSource(
         HttpClient httpClient,
         IMailOAuthSettingsProvider settingsProvider,
+        IMailboxRefreshTokenStore refreshTokenStore,
         MailAccessTokenCache tokenCache,
         OutboundOperationExecutor operationExecutor,
         TimeProvider timeProvider,
@@ -52,6 +57,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(settingsProvider);
+        ArgumentNullException.ThrowIfNull(refreshTokenStore);
         ArgumentNullException.ThrowIfNull(tokenCache);
         ArgumentNullException.ThrowIfNull(operationExecutor);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -59,6 +65,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
 
         this.httpClient = httpClient;
         this.settingsProvider = settingsProvider;
+        this.refreshTokenStore = refreshTokenStore;
         this.tokenCache = tokenCache;
         this.operationExecutor = operationExecutor;
         this.timeProvider = timeProvider;
@@ -91,7 +98,13 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         // the client secret exists for one request rather than for the lifetime of the process.
         using (settings.Material)
         {
-            var form = BuildTokenRequestForm(settings);
+            using var storedRefreshToken = settings.Grant.RequiresRefreshToken
+                ? await this.refreshTokenStore.FindTokenAsync(
+                    MailAccountId.Create(settings.AccountId),
+                    cancellationToken)
+                : null;
+
+            var form = BuildTokenRequestForm(settings, storedRefreshToken);
 
             // Keyed per account, like the two mailbox classes are. Accounts do not share an authorization server —
             // one is at Google and the next at Entra — so a process-wide key would let one provider's outage open the
@@ -106,7 +119,16 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         }
     }
 
-    private static Dictionary<string, string> BuildTokenRequestForm(MailOAuthAccountSettings settings)
+    /// <summary>Builds the token request, preferring the stored refresh token over the configured reference.</summary>
+    /// <remarks>
+    /// The stored token wins because it is the newer of the two by construction: it exists only because the
+    /// authorization server issued it in place of what was configured. The reference is the seed, so an account whose
+    /// grant has never been stored — every deployment that predates this store, and every account authorized out of
+    /// band — is served from it exactly as before, and stops being read from once the first rotation is stored.
+    /// </remarks>
+    private static Dictionary<string, string> BuildTokenRequestForm(
+        MailOAuthAccountSettings settings,
+        MailboxRefreshToken? storedRefreshToken)
     {
         var form = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -123,9 +145,10 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
 
         if (settings.Grant.RequiresRefreshToken)
         {
-            // Startup validation already proved the account configures one, so its absence here would be a defect
-            // rather than a configuration error to report.
-            form["refresh_token"] = settings.Material.RefreshToken!.RevealAsString();
+            // Startup validation already proved the account configures one, so the absence of both here would be a
+            // defect rather than a configuration error to report.
+            form["refresh_token"] = storedRefreshToken?.RevealAsString()
+                ?? settings.Material.RefreshToken!.RevealAsString();
         }
 
         if (settings.Scope is { Length: > 0 })
@@ -173,7 +196,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
             throw new MailAccessTokenUnavailableException(settings.AccountId, "no_access_token_issued");
         }
 
-        this.WarnWhenRefreshTokenRotated(settings, payload);
+        await this.StoreRotatedRefreshTokenAsync(settings, payload, cancellationToken);
 
         // RFC 6749 leaves `expires_in` optional. An hour is what both supported providers issue, and treating an
         // unstated lifetime as very long would be the dangerous default: the token would be presented well past its
@@ -183,20 +206,47 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         return new MailAccessToken(accessToken, this.timeProvider.GetUtcNow() + lifetime);
     }
 
-    /// <summary>Records that the authorization server rotated the refresh token, which this deployment cannot follow.</summary>
+    /// <summary>Stores the refresh token the authorization server issued in place of the one this request spent.</summary>
     /// <remarks>
-    /// Microsoft Entra issues a new refresh token on every refresh. MailFathom reads its refresh token from a secret
-    /// reference it has no write access to — deliberately, because a process that could rewrite its own credentials
-    /// could also destroy them — so the configured token keeps being used until an operator replaces it. That works
-    /// while the previous token stays valid, and it is the operator who has to know the clock is running, which is
-    /// why this is a warning rather than a silent discard.
+    /// <para>
+    /// Microsoft Entra issues a new refresh token on every refresh and invalidates the one it replaces, so following the
+    /// rotation is what keeps an account working past the first refresh. A response carrying one under the
+    /// client-credentials grant is ignored rather than stored: that grant sends no refresh token and a value it never
+    /// asked for would be a credential nothing would ever spend.
+    /// </para>
+    /// <para>
+    /// A failure to store is recorded and does not fail the request, which is deliberate and not merely lenient. The
+    /// access token has already been issued, and this runs inside the resilience pipeline, so throwing would retry the
+    /// whole exchange with the refresh token the server has just invalidated — turning a lost rotation into an account
+    /// that cannot authenticate at all. The same window exists if the process stops between the response and the write:
+    /// the rotation is lost and the account needs re-authorizing, which is the residual the store cannot close without
+    /// the authorization server offering a two-phase acknowledgement it does not.
+    /// </para>
     /// </remarks>
-    private void WarnWhenRefreshTokenRotated(MailOAuthAccountSettings settings, MailOAuthTokenResponse payload)
+    private async Task StoreRotatedRefreshTokenAsync(
+        MailOAuthAccountSettings settings,
+        MailOAuthTokenResponse payload,
+        CancellationToken cancellationToken)
     {
-        if (payload.RefreshToken is { Length: > 0 })
+        if (!settings.Grant.RequiresRefreshToken || payload.RefreshToken is not { Length: > 0 } rotatedToken)
         {
-            this.logger.LogWarning(
-                "The authorization server issued a rotated refresh token for account {AccountId}, which the configured secret reference cannot receive. Re-run the authorization before the configured token stops being accepted.",
+            return;
+        }
+
+        using var refreshToken = MailboxRefreshToken.FromText(rotatedToken);
+
+        try
+        {
+            await this.refreshTokenStore.SaveTokenAsync(
+                MailAccountId.Create(settings.AccountId),
+                refreshToken,
+                cancellationToken);
+        }
+        catch (Exception failure) when (failure is not OperationCanceledException)
+        {
+            this.logger.LogError(
+                failure,
+                "The rotated refresh token the authorization server issued for account {AccountId} could not be stored. The account keeps working until the token it replaced stops being accepted, after which the authorization has to be run again.",
                 settings.AccountId);
         }
     }
