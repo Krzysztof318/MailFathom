@@ -92,15 +92,13 @@
        Nothing is lost that matters: both ship nowhere, and their versions stay pinned centrally like every other
        project's.
 
-       Cli is excluded for the same reason in a different disguise. It publishes trimmed, so the SDK brings in
-       Microsoft.NET.ILLink.Tasks, and that package's content is whatever the SDK on the restoring machine carries — a
-       hash recorded here fails elsewhere with NU1403, which is the same "part of the graph belongs to the machine"
-       problem the Aspire projects have. Unlike them this project does ship, so what covers it instead is that its only
-       package reference is System.CommandLine, pinned centrally and registered in THIRD_PARTY_LICENSES.md, and that it
-       references no other project in the solution — the closure a lock file would record is one line long and visible
-       in the project file. -->
+       Cli is not among them, and keeping it out of the exclusion is what the trim analyzer had to give way for. Those
+       analyzers put Microsoft.NET.ILLink.Tasks in the ordinary restore graph, and the SDK ships that package in its own
+       library-packs directory, so a lock file recorded here carries the SDK copy's content hash and a restore that
+       fetches the feed copy fails with NU1403. The analyzers run at publish instead, where the trimmer runs anyway and
+       where its warnings are what a release reads. A shipped project keeps its lock file. -->
   <PropertyGroup>
-    <RestorePackagesWithLockFile Condition="'$(MSBuildProjectName)' != 'AppHost' And '$(MSBuildProjectName)' != 'IntegrationTests' And '$(MSBuildProjectName)' != 'Cli'">true</RestorePackagesWithLockFile>
+    <RestorePackagesWithLockFile Condition="'$(MSBuildProjectName)' != 'AppHost' And '$(MSBuildProjectName)' != 'IntegrationTests'">true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <!-- This file is the repository root, so it locates itself rather than searching for a marker file above it. The

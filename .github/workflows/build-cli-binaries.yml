@@ -46,8 +46,7 @@ jobs:
           global-json-file: global.json
 
       - name: Restore
-        # No --locked-mode: this project carries no lock file, for the reason Directory.Build.props states.
-        run: dotnet restore src/Cli/Cli.csproj
+        run: dotnet restore src/Cli/Cli.csproj --locked-mode
 
       # The publish-time shape lives here rather than in the project file, because a project marked self-contained
       # cannot be referenced by the test host. Trimming is safe because src/Cli references no other project in the
