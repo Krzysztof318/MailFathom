@@ -87,6 +87,9 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `MailSynchronization:MaxMimePartCount` | int | `1000` | 1 – 100000 | reload |
 | `MailSynchronization:MaxMimeNestingDepth` | int | `30` | 1 – 1000 | reload |
 | `MailSynchronization:MaxExtractedTextCharacters` | int | `100000` | 1000 – 200000; the ceiling keeps the search vector inside PostgreSQL's limit | reload |
+| `MailSynchronization:PushRenewalInterval` | TimeSpan | `00:20:00` | 1 min – 29 min; the ceiling is what RFC 2177 mandates | reload |
+| `MailSynchronization:MaxConsecutivePushFailures` | int | `3` | 1 – 100 | reload |
+| `MailSynchronization:PushDegradationPeriod` | TimeSpan | `00:15:00` | 10 s – 1 day | reload |
 
 ### One account — `MailSynchronization:Accounts:<n>`
 
@@ -97,6 +100,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `…:Port` | int | `993` | 1 – 65535 | reload |
 | `…:UserName` | string | — | Required when synchronization is enabled; an identifier, not a secret | reload |
 | `…:Secrets:Password` | secret block | unset | Required when the permitted mechanisms include any password mechanism; must resolve at startup | reload; material per connection |
+| `…:Mode` | enum | `Polling` | `Polling`, `Push`; push holds one connection open per folder | reload; the next run adopts it |
 | `…:EarliestEmailReceivedDate` | date | unset (everything) | Not in the future (compared in UTC) | reload |
 | `…:RemotelyDeletedEmailDisposition` | enum | `RetainTombstone` | `RetainTombstone`, `EraseLocalCopy` | reload; governs disappearances observed from then on |
 | `…:Folders` | list | inbox by role | Aliases unique; each entry below | reload |

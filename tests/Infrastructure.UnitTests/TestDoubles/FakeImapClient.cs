@@ -41,6 +41,7 @@ internal sealed class FakeImapClient
         this.ScriptAuthenticate();
         this.ScriptFolderAccess();
         this.ScriptNamespaces();
+        this.ScriptIdle();
         this.ScriptDisconnectAndDispose();
     }
 
@@ -108,6 +109,22 @@ internal sealed class FakeImapClient
     internal Exception? DisposeException { get; set; }
 
     internal Exception? GetFoldersException { get; set; }
+
+    /// <summary>Gets or sets the capabilities the server advertises once the connection is established.</summary>
+    /// <remarks>Defaults to none, so a test that wants push has to say so and one that does not is modelling the ordinary server this adapter still has to work against.</remarks>
+    internal ImapCapabilities Capabilities { get; set; } = ImapCapabilities.None;
+
+    /// <summary>Gets how many IDLE commands the adapter has issued, which is how a renewal is counted.</summary>
+    internal int IdleCount { get; private set; }
+
+    /// <summary>Gets a signal that completes once the adapter is inside an IDLE command, so a test can act while it waits.</summary>
+    internal TaskCompletionSource IdleEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>Gets or sets what the server does while the client is idling, such as reporting that the folder changed.</summary>
+    internal Func<CancellationToken, Task>? IdleBehavior { get; set; }
+
+    /// <summary>Gets or sets the failure an IDLE command ends with, which models a connection lost while nothing was being asked of it.</summary>
+    internal Exception? IdleException { get; set; }
 
     /// <summary>Models the server closing the connection while the current command is in flight.</summary>
     internal Exception DropConnection(Exception failure)
@@ -227,6 +244,51 @@ internal sealed class FakeImapClient
 
                 return Task.FromResult(folders);
             });
+    }
+
+    /// <summary>Models the IDLE command: it holds until the done token ends the idle state, exactly as MailKit's does.</summary>
+    /// <remarks>
+    /// Returning normally on the done token is the whole contract the adapter is written against — cancelling it is how
+    /// a client leaves IDLE, not how it fails — so a fake that threw there would let the adapter pass a test it could
+    /// never pass against the library.
+    /// </remarks>
+    private void ScriptIdle()
+    {
+        this.Client.Capabilities.Returns(_ => this.Capabilities);
+        this.Client
+            .IdleAsync(Arg.Any<CancellationToken>(), Arg.Any<CancellationToken>())
+            .Returns(call => this.IdleAsync(call.ArgAt<CancellationToken>(0)));
+    }
+
+    private async Task IdleAsync(CancellationToken doneToken)
+    {
+        this.IdleCount++;
+        this.IdleEntered.TrySetResult();
+
+        if (this.IdleException is not null)
+        {
+            throw this.DropConnection(this.IdleException);
+        }
+
+        if (this.IdleBehavior is not null)
+        {
+            await this.IdleBehavior(doneToken);
+        }
+
+        await WaitUntilIdleStateEndsAsync(doneToken);
+    }
+
+    private static async Task WaitUntilIdleStateEndsAsync(CancellationToken doneToken)
+    {
+        if (doneToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        var idleStateEnded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var registration = doneToken.Register(() => idleStateEnded.TrySetResult());
+
+        await idleStateEnded.Task;
     }
 
     private void ScriptDisconnectAndDispose()

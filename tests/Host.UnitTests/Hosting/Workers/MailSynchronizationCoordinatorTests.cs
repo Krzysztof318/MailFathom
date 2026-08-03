@@ -162,10 +162,15 @@ public sealed class MailSynchronizationCoordinatorTests
             DeadlockGuard);
 
         // Assert
+        // Drained first, because the awaited signal is raised from inside the supervisor and the coordinator writes
+        // this line after starting it. A supervisor that reaches its mail server before its first suspension therefore
+        // raises the signal ahead of the line being logged, and asserting on the collection at that moment reads a
+        // scheduling race as a missing log.
+        await harness.StopAndDrainAsync();
+
         Assert.Contains(
             harness.LoggedMessages,
             message => message.Contains("Account added is now supervised", StringComparison.Ordinal));
-        await harness.StopAndDrainAsync();
     }
 
     /// <summary>A work unit is not torn down where it happens to be; shutdown stops scheduling and lets it finish.</summary>

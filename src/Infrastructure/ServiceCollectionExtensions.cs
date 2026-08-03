@@ -238,6 +238,13 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<ITransientFailureClassifier>(),
             provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<IMailboxNotificationSessionFactory>(provider => new MailKitImapNotificationSessionFactory(
+            static () => new ImapClient(),
+            provider.GetRequiredService<IImapAccountSettingsProvider>(),
+            provider.GetRequiredService<IMailAccessTokenSource>(),
+            provider.GetRequiredService<OutboundOperationExecutor>(),
+            provider.GetRequiredService<ITransientFailureClassifier>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IRemoteFolderCatalog>(provider => new MailKitRemoteFolderCatalog(
             static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),

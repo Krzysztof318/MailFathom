@@ -2,7 +2,7 @@
 
 <!-- describes: src/Application/Synchronization/**, src/Domain/Synchronization/**, src/Infrastructure/Mail/** -->
 
-MailFathom now includes the first vertical slice for read-only IMAP synchronization. The implemented slice is intentionally limited to periodic reconciliation so the persistence model, authenticated IMAP adapter seam, application ports, and safety invariants can be reviewed before adding long-lived IDLE or NOTIFY workers.
+MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for an account that asks for it — the moment the mail server says something changed. Both mechanisms run the same synchronization pass over the same read-only session; what differs is only what starts one. NOTIFY, which would let one connection cover several folders, is not implemented.
 
 ## Implemented behavior
 
@@ -33,6 +33,7 @@ MailFathom now includes the first vertical slice for read-only IMAP synchronizat
 - Each run ends with a bounded backward pass over mail that is already stored, so a message deleted on the server stops being served locally and a flag changed elsewhere stops being stale. It reuses the run's own read-only session, asks for flags and the UID and nothing that could set `\Seen`, and treats a UID the server declines to answer for as a message that left the folder. What becomes of that message locally is the account's choice between a tombstone every query excludes and erasing the local copy outright; a UIDVALIDITY change selects no window at all and can therefore never delete anything. [Reconciling against the server](#reconciling-against-the-server) describes the window, the ordering that advances it without a cursor, the two dispositions, and the audit lines.
 - A bounded background backfill re-reads the raw MIME of messages stored before extraction existed, writes the classification markers and the text it finds, and records the position it reached so an interrupted run resumes rather than restarts. It reaches no mail server, and it ends itself once no stored message awaits extraction.
 - `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, secret resolution and trust anchor loading before any hosted service starts, a validated snapshot every consumer reads instead of the raw bound one, and one supervised synchronization schedule per configured account that isolates failures per account and per folder work unit. [Per-account supervision](#per-account-supervision) describes the coordinator, the two concurrency bounds, the backoff layering, and the shutdown drain. A second worker, configured under `MailExtractionBackfill`, runs the extraction backfill on the same scoped-work-unit terms.
+- An account configured for push keeps an IMAP `IDLE` session open per folder and starts its next pass as soon as the server reports a change, instead of waiting out the interval. The mode is chosen per folder against what the server advertises, degrades to polling when push keeps failing, and is reported whenever it changes. [Push synchronization](#push-synchronization) describes mode selection, renewal, degradation, the rotation boundary a long-lived connection creates, and what an operator can observe.
 
 ## Per-account supervision
 
@@ -72,6 +73,9 @@ The folder default of one is deliberate. A single IMAP connection per account is
 choice, and every folder of an account already shares that account's session-establishment budget and its circuit
 breaker, so raising the bound spends one account's resilience budget faster rather than buying independent capacity.
 A deployment with a fast server and many folders raises it; nothing in the current design needs more than one.
+
+Both bounds count folders that are *synchronizing*. An account in push mode additionally holds one waiting connection
+per folder, which neither bound covers and [Push synchronization](#push-synchronization) explains.
 
 ### Backoff is layered, and the layers never wrap each other
 
@@ -124,6 +128,109 @@ readable; removing the account does both.
 Supervisor logs and run records carry the account identifier, the folder alias, counts, the run duration, the
 consecutive failure count, and the current backoff, and never message-level data. They are structured log records;
 first-party metering instruments for the same values are still [pending](#pending-work).
+
+## Push synchronization
+
+An account whose `Mode` is `Push` keeps a session open on each of its folders and starts its next synchronization pass
+the moment the mail server reports a change. Everything else about the account is unchanged: the same supervisor, the
+same interval, the same backoff, the same folder concurrency.
+
+**Push changes what ends the wait between runs, and nothing about what a run does.** The pass a notification starts is
+the ordinary one — it opens its own read-only session, walks the same bounded batches, advances the same checkpoint, and
+runs the same backward pass. There is deliberately no second retrieval path: a fetch driven from the watching session
+would be a second implementation of the correctness-critical work, and the one place the read-only `\Seen` invariant
+could hold in one path and lapse in the other. The watching session issues `IDLE` and nothing else, and a test asserts
+that it requests no body, no envelope, no flags, and no read-write reselection.
+
+It also changes nothing about the *guaranteed* cadence. The wait a supervisor computes — the interval, or the backoff a
+failing account is under — is still the longest a folder waits; a notification only ends that wait early. A quiet
+mailbox therefore still reconciles on its interval, which is what keeps the backward pass working through a large
+folder's window whether or not any mail is arriving.
+
+### Choosing the mode, per folder
+
+The operator configures push per **account**, and the mode is settled per **folder**, because only the server can answer
+whether it will serve one:
+
+| Configured | Server advertises `IDLE` | Effective mode |
+| --- | --- | --- |
+| `Polling` | either | `Polling` — no session is opened at all |
+| `Push` | yes | `Push` |
+| `Push` | no | `Polling`, and the reason is logged |
+
+The capability is read from the connection the session was just established on, not from anything cached, so a server
+that gains or loses the mechanism across a restart or behind a load balancer is followed rather than remembered. A
+folder the server declines is polled and retried after `PushDegradationPeriod`; leaving the connection open for a folder
+that is going to be polled anyway would spend one of the account's connection slots on nothing.
+
+The folders come from the run rather than from configuration, because an alias names a remote folder only after
+discovery has matched it. That is also what keeps the two in step: an alias repointed to a different remote folder is
+synchronized under its new binding and watched under it too, instead of leaving a connection idling on a folder nothing
+reads any more. An alias that resolves to nothing is watched by nothing.
+
+**Push is opt-in and defaults to off.** It holds a connection open per folder for the lifetime of the process, which is
+a real cost against a mail server's connection limit — an account with four folders holds four idle connections — and
+that is a choice to make rather than to inherit.
+
+Those connections sit **outside** `MaxConcurrentFoldersPerAccount`, which bounds how many folders may be *synchronizing*
+at once and says nothing about how many may be waiting. That is deliberate rather than an oversight: a folder cannot be
+watched by a connection another folder is holding, so bounding the watches would mean choosing which folders get push
+and leaving the rest silently on polling. Nothing caps the count instead, because the failure it would prevent is
+already handled — a server that refuses the connections answers with failures, and the degradation below turns that into
+polling folder by folder rather than into a stuck account. An account with many folders on a server with a tight
+connection limit is therefore a configuration to reconsider, and the log says which folders lost push.
+
+### Renewal
+
+RFC 2177 requires a client to leave and re-enter `IDLE` at least every 29 minutes, and several servers drop a connection
+that stays in it longer. A wait longer than `PushRenewalInterval` is therefore served by a sequence of `IDLE` commands
+over the same connection rather than by one long one, and the default of twenty minutes keeps nine minutes below the
+mandate as margin for a slow round trip. Renewal reconnects nothing; a change reported during any command in the
+sequence ends the whole wait at once.
+
+### Degradation, and why it expires
+
+A push session fails for the same reasons any mailbox session does, and the [session resilience](#session-resilience)
+pipelines have already spent their budget by the time a failure is counted here. What is counted is how long MailFathom
+keeps asking a server for a mechanism it is not serving: after `MaxConsecutivePushFailures` consecutive failures the
+folder is **degraded to polling**, which is logged at warning level with the account, the alias, the count, and how long
+push stays off. The session is closed on every failure, so a retry always starts from a connection it established
+itself rather than from one that may or may not still be carrying a protocol conversation.
+
+The degradation expires after `PushDegradationPeriod` and push is attempted again. That is deliberate: a server stops
+serving `IDLE` for reasons that end — a restart, a connection limit, a mailbox moving — and a folder left on polling
+until the next process restart would leave the operator's configured mode wrong for as long as the process runs. The
+folder synchronizes on its ordinary interval throughout, so the only thing the period delays is the retry.
+
+### A long-lived connection is a rotation boundary
+
+[Secret rotation](../operations/secret-rotation.md) works because every operation re-resolves its secrets: for polling
+that is the next run's connect. A watching session has no next connect, so a rotated password, a replaced trust anchor,
+or a withdrawn token would stay in use for the lifetime of the process — and a revoked credential would keep working,
+which is the opposite of what rotation is for.
+
+**The connection is therefore the operation boundary here.** Each watching session is opened inside a scope pinned to
+the settings snapshot the run used, exactly as a folder work unit is, so the endpoint, the policy, and the credential it
+holds all come from one reload. When a newer snapshot is published the session is closed and reopened between runs — at
+a point where nothing is in flight — and the reconnection resolves the secrets again. A reload is not distinguishable
+from a rotation within it, so every republished snapshot recycles the session rather than being reasoned about;
+reconnecting costs one handshake, and the alternative is a revoked credential outliving the reload that replaced it. The
+recycle is logged.
+
+### What an operator can see
+
+| Line | Level | When |
+| --- | --- | --- |
+| `Folder <account>/<alias> is now synchronized in <mode> mode` | Information | The **effective** mode changed — only on a change, so it is not repeated every interval |
+| `Mail server reported a change in <account>/<alias>` | Information | A notification ended the wait and started a pass |
+| `…advertises no IDLE capability` | Warning | Configured push, server declined; states when push is retried |
+| `Push session … failed N times in a row, so the folder is synchronized by polling` | Warning | The degradation itself |
+| `Push session … was recycled…` | Information | A newly published snapshot superseded the one the session connected under |
+
+The effective-mode line is what answers "which mechanism is this folder actually using", which configuration alone
+cannot: an account configured for push may be polling because the server declined or because its recent attempts kept
+failing, and those two have different remedies. Like every other line here, all five carry the account identifier and
+the folder alias and nothing derived from a message.
 
 ## Folder aliases and discovery
 
@@ -550,12 +657,16 @@ Synchronization is disabled by default:
     "MaxMimePartCount": 1000,
     "MaxMimeNestingDepth": 30,
     "MaxExtractedTextCharacters": 100000,
+    "PushRenewalInterval": "00:20:00",
+    "MaxConsecutivePushFailures": 3,
+    "PushDegradationPeriod": "00:15:00",
     "Accounts": [
       {
         "AccountId": "primary",
         "Host": "imap.example.test",
         "Port": 993,
         "UserName": "mailfathom@example.test",
+        "Mode": "Push",
         "EarliestEmailReceivedDate": "2024-01-01",
         "RemotelyDeletedEmailDisposition": "RetainTombstone",
         "Secrets": {
@@ -680,6 +791,19 @@ Account identifiers and folder aliases must be unique after domain normalization
 must not be shorter than `Interval` — a shorter ceiling would ask backoff to run a failing account more often than a
 healthy one, so it fails startup naming both values. A deployment that wants no backoff at all sets it equal to the
 interval, which leaves every wait exactly one interval long.
+
+### Push settings
+
+`Mode` is per account and defaults to `Polling`; [Push synchronization](#push-synchronization) states what each value
+costs and why the default is the one that opens no connection. It binds as one of the two names and a value that is
+neither **fails startup** rather than falling back — an operator who asked for push and mistyped it would otherwise get
+polling with nothing reporting the difference, for the same reason the disposition above is checked explicitly.
+
+The three deployment-wide settings shape how a watched folder behaves and apply to every account that asked for push.
+`PushRenewalInterval` accepts one to twenty-nine minutes, the ceiling being what RFC 2177 mandates, and defaults to
+twenty. `MaxConsecutivePushFailures` accepts 1 to 100 and defaults to three, and `PushDegradationPeriod` accepts ten
+seconds to a day and defaults to fifteen minutes; together they decide when a folder stops retrying push and when it
+starts again.
 
 `ShutdownDrainTimeout` is how long shutdown waits for the work units already under way after it has stopped scheduling
 new ones. It accepts anything from zero to two minutes and defaults to ten seconds. The host's shutdown budget is
@@ -806,12 +930,12 @@ A rejected reload is logged with the configuration path and the failure identity
   and the current backoff are recorded as structured log properties today. Publishing them through a first-party
   `Meter` is a separate change, because MailFathom declares no meter of its own yet and the one the service defaults
   export is Polly's.
-- Long-lived push connections. IDLE and NOTIFY are hosted by the per-account supervisor when they land; the supervisor
-  exists so they have somewhere to live that is already isolated per account.
+- NOTIFY. `IDLE` selects one folder, so an account watching four of them holds four connections; NOTIFY would let one
+  connection carry all of them, and would also cover a folder the account does not currently synchronize. It needs its
+  own capability negotiation and its own event model, so it is a separate change on top of the push mode above.
 - A durable audit store for mapping changes. The log-backed sink cannot join the transaction that commits a binding,
   so a sink failure loses the record of a change that already happened.
 - Adapters for external managed secret stores. Kubernetes and container deployments need none, because their secrets are files.
-- IMAP IDLE and NOTIFY support.
 - Explicit EF Core migrations after schema review.
 - A retention grace period for a message the server no longer holds, and the bounded garbage collection that would act
   on it. Erasing a local copy happens as the disappearance is observed, and a tombstone keeps its content

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
@@ -157,7 +158,7 @@ public sealed class AccountSynchronizationSupervisorTests
             });
         var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true);
         options.Accounts[0].Folders = [new MailFolderMappingOptions { Alias = "archive", SpecialUse = "Archive" }];
-        using var harness = CreateHarness(options, Substitute.For<IMailboxSessionFactory>(), catalog);
+        using var harness = CreateHarness(options, Substitute.For<IMailboxSessionFactory>(), remoteFolderCatalog: catalog);
 
         // Act
         await harness.SuperviseUntilAsync(listingRequested.Task);
@@ -293,7 +294,7 @@ public sealed class AccountSynchronizationSupervisorTests
 
                 return Task.FromResult<IReadOnlyList<RemoteFolder>>([]);
             });
-        using var harness = CreateHarness(options, Substitute.For<IMailboxSessionFactory>(), catalog);
+        using var harness = CreateHarness(options, Substitute.For<IMailboxSessionFactory>(), remoteFolderCatalog: catalog);
 
         // Act
         await harness.SuperviseUntilAsync(runFinished.Task);
@@ -420,6 +421,57 @@ public sealed class AccountSynchronizationSupervisorTests
             message => message.Contains("Account primary is no longer configured", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The acceptance criterion of push, asserted where it is observable: a change the server reports produces another
+    /// pass through the ordinary synchronizer, over an ordinary read-only session, without the account's interval
+    /// having elapsed. Nothing about the pass differs from the one polling would have run.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_WatchedFolderChanges_RunsAnotherPassBeforeTheIntervalElapses()
+    {
+        // Arrange
+        var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX");
+        options.Accounts[0].Mode = MailSynchronizationMode.Push;
+        var passes = 0;
+        var secondPassStarted = new TaskCompletionSource();
+        await using var emptyMailbox = CreateEmptyMailbox();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref passes) == 2)
+                {
+                    secondPassStarted.TrySetResult();
+                }
+
+                return Task.FromResult(emptyMailbox);
+            });
+        var clock = new FakeTimeProvider();
+        var notificationSessions = new FakeMailboxNotificationSessionFactory(clock);
+        using var harness = CreateHarness(options, sessionFactory, notificationSessions);
+        var supervision = harness.StartSupervision();
+
+        // Act
+        await notificationSessions.SessionOpened.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        var watchedInbox = notificationSessions.SessionWatching("INBOX")!;
+        await watchedInbox.WaitStarted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        watchedInbox.ReportFolderChange();
+        await secondPassStarted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await harness.StopSchedulingAsync();
+        await supervision;
+
+        // Assert
+        Assert.Equal(TimeSpan.Zero, harness.Clock.GetUtcNow() - harness.Clock.Start);
+        Assert.Contains(
+            harness.PushLogger.Messages,
+            message => message.Contains("Mail server reported a change in primary/INBOX", StringComparison.Ordinal));
+    }
+
     private static IMailboxSessionFactory CreateFailingSessionFactory(
         List<string> attemptedFolders,
         TaskCompletionSource runReached,
@@ -478,6 +530,7 @@ public sealed class AccountSynchronizationSupervisorTests
     private static SupervisorHarness CreateHarness(
         MailSynchronizationOptions options,
         IMailboxSessionFactory sessionFactory,
+        FakeMailboxNotificationSessionFactory? notificationSessionFactory = null,
         IRemoteFolderCatalog? remoteFolderCatalog = null,
         params string[] unadvertisedAliases)
     {
@@ -488,6 +541,7 @@ public sealed class AccountSynchronizationSupervisorTests
             settings,
             sessionFactory,
             clock,
+            notificationSessionFactory,
             remoteFolderCatalog,
             unadvertisedAliases);
 
@@ -507,6 +561,7 @@ public sealed class AccountSynchronizationSupervisorTests
         private readonly CancellationTokenSource workUnits = new();
         private readonly AccountSynchronizationSupervisor supervisor;
 
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the watch passes to the supervisor, which disposes it when its own supervision ends.")]
         internal SupervisorHarness(
             ServiceProvider services,
             StubSettingsSnapshot<MailSynchronizationOptions> settings,
@@ -517,11 +572,17 @@ public sealed class AccountSynchronizationSupervisorTests
             this.Settings = settings;
             this.Clock = clock;
             this.Logger = new RecordingLogger<AccountSynchronizationSupervisor>();
+            this.PushLogger = new RecordingLogger<AccountPushNotificationWatch>();
             this.supervisor = new AccountSynchronizationSupervisor(
                 accountId,
                 services.GetRequiredService<IServiceScopeFactory>(),
                 settings,
                 this.accountRunSlots,
+                new AccountPushNotificationWatch(
+                    accountId,
+                    services.GetRequiredService<IServiceScopeFactory>(),
+                    this.PushLogger,
+                    clock),
                 this.Logger,
                 clock);
         }
@@ -531,6 +592,8 @@ public sealed class AccountSynchronizationSupervisorTests
         internal FakeTimeProvider Clock { get; }
 
         internal RecordingLogger<AccountSynchronizationSupervisor> Logger { get; }
+
+        internal RecordingLogger<AccountPushNotificationWatch> PushLogger { get; }
 
         internal Task StartSupervision() => this.supervisor.RunAsync(this.scheduling.Token, this.workUnits.Token);
 

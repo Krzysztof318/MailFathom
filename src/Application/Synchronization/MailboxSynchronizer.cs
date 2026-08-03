@@ -211,6 +211,7 @@ public sealed class MailboxSynchronizer
             cancellationToken);
 
         return MailboxSynchronizationResult.Synchronized(
+            folder,
             storedCount,
             skippedOversizedCount,
             unreadableMimeCount,
@@ -337,14 +338,22 @@ public enum MailboxSynchronizationOutcome
 
 /// <summary>Summarizes one mailbox synchronization run.</summary>
 /// <param name="Outcome">Whether the run reached a folder.</param>
+/// <param name="Folder">The binding the run worked under, which is present exactly when <paramref name="Outcome" /> is <see cref="MailboxSynchronizationOutcome.Synchronized" />.</param>
 /// <param name="StoredEmailCount">How many occurrences were stored with their content.</param>
 /// <param name="SkippedOversizedEmailCount">How many occurrences were stored as metadata only.</param>
 /// <param name="UnreadableMimeEmailCount">How many stored occurrences carried MIME that enrichment could not read.</param>
 /// <param name="HasMoreEmails">Whether the folder still held unprocessed emails when the run's batch budget ran out.</param>
 /// <param name="Checkpoint">The progress the run ended on, which is present exactly when <paramref name="Outcome" /> is <see cref="MailboxSynchronizationOutcome.Synchronized" />.</param>
 /// <param name="Reconciliation">What the run's backward pass found among the emails already stored for this folder.</param>
+/// <remarks>
+/// The binding is reported because resolution happens inside the run and a caller that wants to keep watching the
+/// folder afterwards must watch the remote folder the alias actually resolved to. Re-resolving it outside the run would
+/// cost a second listing and could answer differently, which is how an alias ends up watched in one place and
+/// synchronized in another.
+/// </remarks>
 public sealed record MailboxSynchronizationResult(
     MailboxSynchronizationOutcome Outcome,
+    MailFolderResolution? Folder,
     int StoredEmailCount,
     int SkippedOversizedEmailCount,
     int UnreadableMimeEmailCount,
@@ -353,6 +362,7 @@ public sealed record MailboxSynchronizationResult(
     MailboxReconciliationResult Reconciliation)
 {
     /// <summary>Reports a run that reached its folder.</summary>
+    /// <param name="folder">The binding the run worked under.</param>
     /// <param name="storedEmailCount">How many occurrences were stored with their content.</param>
     /// <param name="skippedOversizedEmailCount">How many occurrences were stored as metadata only.</param>
     /// <param name="unreadableMimeEmailCount">How many stored occurrences carried unreadable MIME.</param>
@@ -360,21 +370,28 @@ public sealed record MailboxSynchronizationResult(
     /// <param name="checkpoint">The progress the run ended on.</param>
     /// <param name="reconciliation">What the run's backward pass found.</param>
     /// <returns>A synchronized result.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="folder" /> is <see langword="null" />.</exception>
     public static MailboxSynchronizationResult Synchronized(
+        MailFolderResolution folder,
         int storedEmailCount,
         int skippedOversizedEmailCount,
         int unreadableMimeEmailCount,
         bool hasMoreEmails,
         SynchronizationCheckpoint checkpoint,
-        MailboxReconciliationResult reconciliation) =>
-        new(
+        MailboxReconciliationResult reconciliation)
+    {
+        ArgumentNullException.ThrowIfNull(folder);
+
+        return new MailboxSynchronizationResult(
             MailboxSynchronizationOutcome.Synchronized,
+            folder,
             storedEmailCount,
             skippedOversizedEmailCount,
             unreadableMimeEmailCount,
             hasMoreEmails,
             checkpoint,
             reconciliation);
+    }
 
     /// <summary>Reports a configured alias that named no single advertised folder.</summary>
     /// <param name="resolutionOutcome">Why resolution produced no binding.</param>
@@ -398,6 +415,7 @@ public sealed record MailboxSynchronizationResult(
 
         return new MailboxSynchronizationResult(
             outcome,
+            Folder: null,
             0,
             0,
             0,

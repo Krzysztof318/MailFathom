@@ -110,6 +110,36 @@ internal static class MailKitImapSessionTestContext
         return CreateFactory(resilience, () => client.Client, CreateSettingsProvider());
     }
 
+    /// <summary>Opens a push session over one scripted connection, whichever way that server answered the capability.</summary>
+    internal static Task<MailboxNotificationSessionResult> OpenNotificationSessionAsync(
+        OutboundResilienceTestHost resilience,
+        FakeImapClient client,
+        IMailFolder folder,
+        FakeTimeProvider clock)
+    {
+        client.Folder = folder;
+        client.AuthenticationMechanisms.Add("PLAIN");
+
+        return CreateNotificationSessionFactory(resilience, () => client.Client, clock).OpenAsync(
+            PrimaryAccount,
+            InboxFolder,
+            TlsOnConnectWithPlainPolicy,
+            CancellationToken.None);
+    }
+
+    /// <summary>Builds a push session factory over a scripted connection sequence, so a reconnection can be asserted.</summary>
+    internal static MailKitImapNotificationSessionFactory CreateNotificationSessionFactory(
+        OutboundResilienceTestHost resilience,
+        Func<IImapClient> clientFactory,
+        FakeTimeProvider clock) =>
+        new(
+            clientFactory,
+            CreateSettingsProvider(),
+            new UnusedMailAccessTokenSource(),
+            resilience.Executor,
+            resilience.TransientFailureClassifier,
+            clock);
+
     /// <summary>Builds a factory over a scripted connection sequence and the real classifier the adapter consults.</summary>
     internal static MailKitImapMailboxSessionFactory CreateFactory(
         OutboundResilienceTestHost resilience,

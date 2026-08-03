@@ -87,6 +87,42 @@ internal sealed class MailSynchronizationOptions
     [Range(typeof(TimeSpan), "00:00:00", "00:02:00")]
     public TimeSpan ShutdownDrainTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
+    /// <summary>Gets or sets how long a push-mode folder waits on one IDLE command before re-issuing it.</summary>
+    /// <remarks>
+    /// <para>
+    /// RFC 2177 requires a client to leave and re-enter IDLE at least every 29 minutes, because a server is entitled to
+    /// drop a connection that has been idle longer and several do. The ceiling is that mandate and the default keeps
+    /// nine minutes below it, which is margin for a slow round trip rather than a tuned value.
+    /// </para>
+    /// <para>
+    /// It bounds one command and not the wait: a folder waiting for the account's whole <see cref="Interval" /> simply
+    /// re-issues IDLE as often as this says, and a change reported at any point during any of those commands starts a
+    /// pass at once. Lowering it therefore buys nothing but chatter, and raising it past the mandate is refused.
+    /// </para>
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:01:00", "00:29:00")]
+    public TimeSpan PushRenewalInterval { get; set; } = TimeSpan.FromMinutes(20);
+
+    /// <summary>Gets or sets how many times opening or holding a push session may fail in a row before the folder is degraded to polling.</summary>
+    /// <remarks>
+    /// A push session fails for the same reasons any mailbox session does, and the resilience pipelines have already
+    /// spent their budget by the time a failure is counted here. What this bounds is how long MailFathom keeps asking a
+    /// server for a mechanism it is not serving: past it the folder is polled, which always works, and push is retried
+    /// once <see cref="PushDegradationPeriod" /> has passed.
+    /// </remarks>
+    [Range(1, 100)]
+    public int MaxConsecutivePushFailures { get; set; } = 3;
+
+    /// <summary>Gets or sets how long a degraded folder stays on polling before push is attempted again.</summary>
+    /// <remarks>
+    /// The degradation is deliberately temporary. A server that stopped serving IDLE has usually stopped for a reason
+    /// that ends — a restart, a connection limit, a load balancer moving the mailbox — and a folder left on polling
+    /// until the next process restart would keep an operator's configured mode wrong for as long as the process runs.
+    /// The folder synchronizes on its ordinary interval throughout, so the only thing this delays is the retry.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:10", "1.00:00:00")]
+    public TimeSpan PushDegradationPeriod { get; set; } = TimeSpan.FromMinutes(15);
+
     /// <summary>Gets or sets the maximum number of messages requested from one IMAP metadata batch.</summary>
     [Range(1, 1000)]
     public int MaxMetadataBatchSize { get; set; } = 100;
@@ -352,6 +388,21 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     public RemotelyDeletedEmailDisposition RemotelyDeletedEmailDisposition { get; set; } =
         RemotelyDeletedEmailDisposition.RetainTombstone;
 
+    /// <summary>Gets or sets what starts this account's next synchronization pass.</summary>
+    /// <remarks>
+    /// <para>
+    /// It binds as one of the two names <see cref="MailSynchronizationMode" /> declares and defaults to
+    /// <see cref="MailSynchronizationMode.Polling" />, so an account that says nothing keeps the schedule it already
+    /// had. Push is opt-in because it holds a connection open per folder for the lifetime of the process, which is a
+    /// cost against the server's connection limit that an operator should choose rather than inherit.
+    /// </para>
+    /// <para>
+    /// The setting states what the operator asked for. What a folder actually gets is decided per folder against what
+    /// the server advertises and how its recent push attempts went, and is reported separately for that reason.
+    /// </para>
+    /// </remarks>
+    public MailSynchronizationMode Mode { get; set; } = MailSynchronizationMode.Polling;
+
     /// <summary>Gets or sets the configured folder aliases. When omitted, the worker synchronizes the inbox only.</summary>
     public List<MailFolderMappingOptions> Folders { get; set; } = [];
 
@@ -379,6 +430,16 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return new ValidationResult(
                 $"Account '{this.AccountId}': the remotely deleted email disposition must be one of {string.Join(", ", Enum.GetNames<RemotelyDeletedEmailDisposition>())}.",
                 [nameof(this.RemotelyDeletedEmailDisposition)]);
+        }
+
+        // Checked for the same reason as the disposition above: a bare number binds onto an enum whether or not a
+        // member carries it, and an undefined value here would be read as "not Push" — an operator who asked for push
+        // and mistyped it would silently get polling with nothing reporting the difference.
+        if (!Enum.IsDefined(this.Mode))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the synchronization mode must be one of {string.Join(", ", Enum.GetNames<MailSynchronizationMode>())}.",
+                [nameof(this.Mode)]);
         }
 
         if (this.Folders is null)
