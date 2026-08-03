@@ -236,9 +236,29 @@ internal sealed class AdminEndpointOptions
             yield break;
         }
 
-        foreach (var error in this.OAuth.FindConfigurationErrors())
+        var oauthErrors = this.OAuth.FindConfigurationErrors();
+
+        foreach (var error in oauthErrors)
         {
             yield return $"{SectionName}:{nameof(this.OAuth)}:{error}";
         }
+
+        if (oauthErrors.Count == 0 && !this.ResourceNamesTheRoutePrefix())
+        {
+            yield return $"{SectionName}:{nameof(this.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
+        }
     }
+
+    /// <summary>Reports whether the configured resource identifies the surface these routes are served at.</summary>
+    /// <remarks>
+    /// A resource identifier is a name rather than an address to fetch, so nothing about OAuth requires it to match a
+    /// route. What requires it here is discovery: <c>mfctl</c> is handed a host and a port and has to find the protected
+    /// resource metadata document before it has read anything at all, which it can only do by appending the prefix it is
+    /// about to call. That composition reaches the document's RFC 9728 location exactly when the resource names the same
+    /// prefix, so a deployment whose resource says something else would publish a document nothing could find. Refused at
+    /// startup rather than discovered by an operator whose sign-in reports that a deployment serves no metadata.
+    /// </remarks>
+    private bool ResourceNamesTheRoutePrefix() =>
+        Uri.TryCreate(this.OAuth.CanonicalResource(), UriKind.Absolute, out var resource)
+        && string.Equals(resource.AbsolutePath.TrimEnd('/'), RoutePrefix, StringComparison.Ordinal);
 }

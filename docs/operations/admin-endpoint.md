@@ -46,6 +46,13 @@ policy, and a policy consults only its own schemes.
 comma, or `None` — and the section that configures them is separate all the way down. A misspelled key fails startup
 rather than binding a default.
 
+**With `OAuth` turned on, `AdminEndpoint:OAuth:Resource` must end in `/api/admin`** — the path these routes answer
+beneath. Startup refuses anything else, naming the setting. The reason is discovery rather than OAuth: `mfctl` is handed
+a host and a port and finds the metadata document by appending that prefix, which reaches the document's RFC 9728
+location exactly when the resource names the same one. A deployment whose resource said something else would publish a
+document nothing could find, and OAuth sign-in would be unreachable for a reason no refusal would explain. Behind a
+reverse proxy, write the public URL and keep the path: `https://mail.example.test/api/admin`.
+
 > **Every authenticated caller may perform every administrative operation.** There is no permission model yet. The
 > credential is what bounds access, so provision one per client and rotate it like any other secret.
 
@@ -82,6 +89,17 @@ Nothing needs installing beside it: the .NET runtime is inside the file.
 
 ## Signing in
 
+`--mode` chooses how the credential is produced, and it is stated rather than guessed — guessing would put a machine
+with no browser on a redirect that can never arrive.
+
+| Mode | What it does | When |
+| --- | --- | --- |
+| `key` (default) | Reads one credential from standard input | An API key, or an access token you obtained elsewhere |
+| `interactive` | Opens a browser here and catches the redirect | You are at the machine you are administering from |
+| `device` | Prints a code to enter on another device | A jump host, or anything without a browser |
+
+### With an API key
+
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443 --name production
 Administrative credential (an API key, or an access token from the configured authorization server):
@@ -95,7 +113,49 @@ history, the process list, and any log of either. A script pipes it in instead:
 $ printf '%s' "$MAILFATHOM_KEY" | mfctl login --endpoint https://mail.example.test:8443
 ```
 
-**It is verified before it is stored.** A deployment that refuses the credential, an address serving no administrative
+### With OAuth
+
+```console
+$ mfctl login --endpoint https://mail.example.test:8443 --name production --mode interactive --client-id mfctl
+
+A browser has been opened for you. If it did not appear, open this address yourself:
+
+  https://sso.example.test/realms/mailfathom/protocol/openid-connect/auth?client_id=mfctl&response_type=code&...
+
+Waiting for the sign-in to come back to http://127.0.0.1:8765/...
+Signed in to https://mail.example.test:8443 as 'kasia' (MailFathom 0.2.0), saved as profile 'production' and selected.
+The access token is renewed for you until the refresh token expires or is revoked, and the sign-in ends when it does.
+```
+
+**Only `--client-id` is configured.** Which authorization server to use, the resource the token must be issued for, and
+the scopes to ask for all come from the deployment: it publishes an [RFC 9728](https://www.rfc-editor.org/rfc/rfc9728)
+metadata document at `/.well-known/oauth-protected-resource/api/admin`, and the server it names publishes where to
+authorize. Nothing is transcribed, so nothing is transcribed wrongly.
+
+Register the command as a **public client** with an authorization-code grant, PKCE required, and the redirect address
+`http://127.0.0.1:8765/`. It ships as a binary anyone can download, so it holds no client secret and presents none.
+Pass `--redirect-uri` if you registered a different loopback port, and `--issuer` if the deployment accepts tokens from
+more than one authorization server — with several configured, the command asks rather than picking one, because they
+are separate populations of people.
+
+`--mode device` needs none of that redirect machinery:
+
+```console
+$ mfctl login --endpoint https://mail.example.test:8443 --mode device --client-id mfctl
+
+Open this address on any device with a browser:
+  https://sso.example.test/device
+
+and enter the code: WDJB-MJHT
+The code expires at 2026-08-03 12:10:00Z. Waiting for the sign-in to complete...
+```
+
+It requires the authorization server to publish a device authorization endpoint; one that does not is reported as that
+rather than left polling.
+
+### What happens either way
+
+**The credential is verified before it is stored.** A deployment that refuses it, an address serving no administrative
 endpoint, and a host that answers with something that is not MailFathom all fail here rather than at some later command.
 
 `--name` is what the deployment is remembered as; without it the profile takes the host name. Signing in also selects
@@ -103,6 +163,37 @@ the profile, because it is the deployment you just chose to work with.
 
 When a deployment issues a new credential, sign in again by profile name rather than by address — `mfctl login
 --endpoint production` — and the address it already holds is reused.
+
+## How long an OAuth sign-in lasts
+
+An access token is typically minted for an hour, and you should never notice. Every command checks the stored token
+before it sends anything and exchanges the refresh token for a new one when it is within a minute of expiring, which is
+what keeps that hour from being an hourly interruption.
+
+**The refresh token itself is never renewed, and a rotated one is not adopted.** When the authorization server answers a
+renewal with a new refresh token, the command keeps the one issued at sign-in and discards the new one. That is
+deliberate: adopting it would make your session last as long as you kept using it, and revoking your access at the
+authorization server would then take effect only whenever you happened to stop.
+
+The service does the opposite with *its* OAuth credentials, and the difference is the point rather than an
+inconsistency. A synchronizing account is a headless process that must keep reading a mailbox indefinitely with nobody
+there to sign it in, so it [follows a rotated refresh token](mailbox-oauth.md) and stores it. A `mfctl` session belongs
+to a person who is present, can sign in again in seconds, and whose access someone may need to revoke — so it ends.
+
+The cost is worth stating plainly, because it depends on a setting that is not MailFathom's. **On an authorization
+server that invalidates the old refresh token when it rotates one — Keycloak and Entra ID do this by default — the
+session ends at the second renewal rather than at the refresh token's own expiry.** It ends cleanly, naming what
+happened:
+
+```console
+$ mfctl status
+The sign-in has ended: the authorization server no longer accepts the stored refresh token ('invalid_grant').
+Run 'mfctl login --endpoint <address>' to sign in again.
+```
+
+If that is too short for how you work, turn refresh-token rotation off for this client at the authorization server. The
+session then runs to the refresh token's configured lifetime, which is the length your identity platform already
+governs — and which is the only place that decision belongs, since MailFathom issues no tokens at all.
 
 ## Working with more than one deployment
 
@@ -157,6 +248,14 @@ moment in between.
 store as `credentials.key`; on Windows that key file's contents are additionally wrapped with DPAPI under the current
 user. Each token is bound to its own endpoint, so a value moved between entries does not decrypt.
 
+An OAuth profile holds a refresh token as well, sealed the same way and bound to the same endpoint — it is the
+longer-lived of the two secrets, so anything weaker would be a regression in the value most worth protecting. Beside it
+sit the values a renewal needs and that are not secrets: the token endpoint, the issuer, the client identifier, the
+resource, the scopes, and when the access token expires. They are recorded rather than rediscovered because a renewal
+happens on a command somebody is waiting on, and re-reading two discovery documents to spend a refresh token would put
+two more round trips in front of every expired session. A deployment that moves one of them is answered by signing in
+again.
+
 Be clear about what that buys. A credentials file that leaves the machine — in a backup, a synced folder, a support
 bundle, a screenshot of a directory listing — discloses nothing on its own. Someone already able to read your files on
 your machine can read the key too, and on Linux nothing prevents that; the file mode is what answers that case, and the
@@ -178,6 +277,11 @@ encryption answers the copy. Holding the credential in the platform's own secret
 | `did not answer in time` | The connection was accepted and no answer arrived within 30 seconds, so the address and the port are right and the deployment is what to look at — an overloaded host, a stalled process, or a firewall that drops rather than refuses. |
 | `The stored credential could not be read.` | The credentials file and the key that opens it no longer match, which is what a store copied from another machine or another user looks like. Sign in again to replace it. |
 | `No deployment was named.` | `login` needs an address the first time. Pass `--endpoint`, or set `MAILFATHOM_ENDPOINT`. |
+| `The sign-in has ended` | The refresh token expired, was revoked, or was invalidated by a server that rotates them. Run `login` again. |
+| `publishes no OAuth metadata` | The endpoint accepts API keys only. Sign in with one, or ask the operator to add `OAuth` to `AdminEndpoint:Authentication`. |
+| `accepts tokens from several authorization servers` | More than one is configured and only you know which population you belong to. Name it with `--issuer`. |
+| `issued no refresh token` | The client was not granted offline access, so the session would end within the hour. Grant it at the authorization server. |
+| `no device authorization endpoint` | That authorization server offers no device grant. Sign in from a machine with a browser. |
 
 ## Related
 

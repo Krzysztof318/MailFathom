@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Common.MailboxOAuth;
+namespace MailFathom.Common.OAuth;
 
 /// <summary>Reduces an authorization server's <c>error</c> value to a form that is safe to put in a message.</summary>
 /// <remarks>

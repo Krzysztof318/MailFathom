@@ -178,7 +178,68 @@ public sealed class AdminEndpointOptionsTests
         Assert.Empty(adminNames.Intersect(mcpNames, StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// The resource is a name rather than an address to fetch, so nothing about OAuth ties it to a route. Discovery does:
+    /// <c>mfctl</c> finds the metadata document by appending the route prefix to the address it was handed, and that
+    /// composition reaches the document's RFC 9728 location only when the resource names the same prefix.
+    /// </summary>
+    [Theory]
+    [InlineData("https://mail.example.test:8090")]
+    [InlineData("https://mail.example.test:8090/admin")]
+    [InlineData("https://mail.example.test:8090/api/admin/session")]
+    public void FindConfigurationErrors_AResourceThatDoesNotNameTheRoutePrefix_IsRefused(string resource)
+    {
+        // Arrange
+        var settings = OAuthEndpoint(resource);
+
+        // Act & Assert
+        Assert.Contains(
+            settings.FindConfigurationErrors([]),
+            error => error.Contains($"must be '{AdminEndpointOptions.RoutePrefix}'", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("https://mail.example.test:8090/api/admin")]
+    [InlineData("https://mail.example.test:8090/api/admin/")]
+    public void FindConfigurationErrors_AResourceNamingTheRoutePrefix_IsAccepted(string resource) =>
+        Assert.Empty(OAuthEndpoint(resource).FindConfigurationErrors([]));
+
+    /// <summary>A resource that is not an identifier at all is reported as that, rather than as one naming the wrong path.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AResourceThatIsNotAnIdentifier_ReportsOnlyThat()
+    {
+        // Arrange
+        var settings = OAuthEndpoint("not-a-url");
+
+        // Act
+        var errors = settings.FindConfigurationErrors([]);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("not a canonical resource URL", StringComparison.Ordinal));
+        Assert.DoesNotContain(errors, error => error.Contains("must be '/api/admin'", StringComparison.Ordinal));
+    }
+
     private static AdminEndpointOptions EnabledEndpoint() => new() { Enabled = true };
+
+    private static AdminEndpointOptions OAuthEndpoint(string resource)
+    {
+        AdminEndpointOptions settings = new()
+        {
+            Enabled = true,
+            Authentication = TransportAuthenticationMethods.OAuth,
+            OAuth = new OAuthValidationOptions { Resource = resource },
+        };
+
+        settings.OAuth.AuthorizationServers.Add(new AuthorizationServerOptions
+        {
+            Name = "workforce",
+            Issuer = "https://sso.example.test/realms/mailfathom",
+        });
+
+        settings.OAuth.AuthorizationServers[0].AuthorizedSubjects.Add("11111111-2222-3333-4444-555555555555");
+
+        return settings;
+    }
 
     private static IConfiguration Configuration(Dictionary<string, string?> values) =>
         new ConfigurationBuilder().AddInMemoryCollection(values).Build();

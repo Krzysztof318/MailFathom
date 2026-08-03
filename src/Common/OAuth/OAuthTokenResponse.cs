@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
-namespace MailFathom.Common.MailboxOAuth;
+namespace MailFathom.Common.OAuth;
 
 /// <summary>The subset of an RFC 6749 token endpoint response MailFathom reads.</summary>
 /// <param name="AccessToken">The issued bearer token.</param>
@@ -24,7 +24,7 @@ namespace MailFathom.Common.MailboxOAuth;
 /// field nobody controls.
 /// </para>
 /// </remarks>
-public sealed record MailOAuthTokenResponse(
+public sealed record OAuthTokenResponse(
     [property: JsonPropertyName("access_token")] string? AccessToken,
     [property: JsonPropertyName("expires_in")] int? ExpiresInSeconds,
     [property: JsonPropertyName("error")] string? Error,
@@ -45,7 +45,7 @@ public sealed record MailOAuthTokenResponse(
 /// <param name="Error">The error code from a rejected request, absent from a successful one.</param>
 [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings", Justification = "The value is a JSON field read verbatim from an authorization server this process does not own. Binding it as a Uri would move a malformed value's failure inside deserialization, where it arrives as a format exception rather than as the sanitized authorization failure the caller reports.")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings", Justification = "The value is a JSON field read verbatim from an authorization server this process does not own. Binding it as a Uri would move a malformed value's failure inside deserialization, where it arrives as a format exception rather than as the sanitized authorization failure the caller reports.")]
-public sealed record MailOAuthDeviceAuthorizationResponse(
+public sealed record OAuthDeviceAuthorizationResponse(
     [property: JsonPropertyName("device_code")] string? DeviceCode,
     [property: JsonPropertyName("user_code")] string? UserCode,
     [property: JsonPropertyName("verification_uri")] string? VerificationUri,
@@ -60,7 +60,7 @@ public sealed record MailOAuthDeviceAuthorizationResponse(
 }
 
 /// <summary>Serializes the OAuth endpoint responses without reflection.</summary>
-[JsonSerializable(typeof(MailOAuthTokenResponse))]
-[JsonSerializable(typeof(MailOAuthDeviceAuthorizationResponse))]
+[JsonSerializable(typeof(OAuthTokenResponse))]
+[JsonSerializable(typeof(OAuthDeviceAuthorizationResponse))]
 [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
-public sealed partial class MailOAuthJsonContext : JsonSerializerContext;
+public sealed partial class OAuthJsonContext : JsonSerializerContext;

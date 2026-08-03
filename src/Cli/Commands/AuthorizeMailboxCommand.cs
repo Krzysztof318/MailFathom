@@ -4,6 +4,7 @@
 
 using System.CommandLine;
 using MailFathom.Common.MailboxOAuth;
+using MailFathom.Common.OAuth;
 
 namespace MailFathom.Cli.Commands;
 

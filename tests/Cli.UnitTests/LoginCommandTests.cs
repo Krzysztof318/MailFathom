@@ -5,6 +5,7 @@
 using System.Net;
 using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Cli.UnitTests;
@@ -24,6 +25,8 @@ public sealed class LoginCommandTests : IDisposable
         Path.Combine(Path.GetTempPath(), $"mailfathom-cli-tests-{Guid.NewGuid():N}");
 
     private readonly RecordingCliConsole console = new();
+
+    private readonly FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 3, 12, 0, 0, TimeSpan.Zero));
 
     [Fact]
     public async Task Login_ADeploymentThatAcceptsTheCredential_StoresItAndReportsWhoTheCallerIs()
@@ -431,7 +434,8 @@ public sealed class LoginCommandTests : IDisposable
         store,
         endpoint => new HttpClient(handler, disposeHandler: false) { BaseAddress = endpoint },
         FakeMailboxRedirect.Silent(),
-        _ => false);
+        _ => false,
+        this.clock);
 
     public void Dispose()
     {

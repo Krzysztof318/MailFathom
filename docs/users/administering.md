@@ -83,7 +83,19 @@ history and the process list. It is checked against the deployment before anythi
 port, and a host that is not MailFathom all fail here rather than at some later command that leaves you guessing which
 of the three it was.
 
-What is stored afterwards is one small file per user, with the token encrypted and the key beside it;
+If the deployment is configured for OAuth, sign in with a browser instead and let it do the authenticating:
+
+```console
+$ mfctl login --endpoint https://mail.example.test:8443 --mode interactive --client-id mfctl
+```
+
+`--mode device` is the same thing on a machine with no browser: it prints a short code to enter on your phone. Either
+way the only thing you supply is the client identifier — the command asks the deployment where to authorize. Your access
+token is then renewed for you until the sign-in genuinely ends, and how long that is depends on your identity platform;
+[how long an OAuth sign-in lasts](../operations/admin-endpoint.md#how-long-an-oauth-sign-in-lasts) states the rule and
+the one setting that shortens it.
+
+What is stored afterwards is one small file per user, with the tokens encrypted and the key beside it;
 [where the credential is kept](../operations/admin-endpoint.md#where-the-credential-is-kept) states the paths, what
 the encryption does protect, and what it does not.
 

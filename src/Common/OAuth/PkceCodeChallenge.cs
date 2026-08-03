@@ -5,7 +5,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace MailFathom.Common.MailboxOAuth;
+namespace MailFathom.Common.OAuth;
 
 /// <summary>One RFC 7636 proof-key pair binding an authorization request to the token request that redeems it.</summary>
 /// <param name="Verifier">The high-entropy secret sent only with the token request.</param>
@@ -16,7 +16,7 @@ namespace MailFathom.Common.MailboxOAuth;
 /// bind that port or read the code out of a browser history; the verifier is what makes an intercepted code useless
 /// without it. Google requires PKCE for installed applications, and Microsoft requires it for public clients.
 /// </remarks>
-internal sealed record PkceCodeChallenge(string Verifier, string Challenge)
+public sealed record PkceCodeChallenge(string Verifier, string Challenge)
 {
     /// <summary>The verifier length in bytes before encoding, which produces 43 characters — the RFC 7636 minimum, at full entropy.</summary>
     private const int VerifierEntropyByteCount = 32;

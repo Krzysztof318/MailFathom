@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Security.Transport;
 
 namespace MailFathom.Host.Hosting.Startup;
 
@@ -27,6 +28,10 @@ namespace MailFathom.Host.Hosting.Startup;
 /// </remarks>
 internal static class AdminEndpointIsolation
 {
+    /// <summary>The one administrative path that does not sit beneath the route prefix, because RFC 9728 places it at the root.</summary>
+    private static readonly PathString ProtectedResourceMetadataPath =
+        new(ProtectedResourceMetadataAddress.BeneathRoutePrefix(AdminEndpointOptions.RoutePrefix));
+
     /// <summary>Reports whether the listener a request arrived on is the one that serves its path.</summary>
     /// <param name="localPort">The port the connection was accepted on.</param>
     /// <param name="path">The request path.</param>
@@ -42,10 +47,21 @@ internal static class AdminEndpointIsolation
 
     /// <summary>Reports whether a request path is one the administrative surface answers.</summary>
     /// <param name="path">The request path.</param>
-    /// <returns><see langword="true" /> when the path is beneath the administrative route prefix, otherwise <see langword="false" />.</returns>
-    /// <remarks>Matched by segment rather than by prefix string, so a path such as <c>/apiary</c> is not mistaken for one of these.</remarks>
+    /// <returns><see langword="true" /> when the path is the administrative surface's, otherwise <see langword="false" />.</returns>
+    /// <remarks>
+    /// Matched by segment rather than by prefix string, so a path such as <c>/apiary</c> is not mistaken for one of
+    /// these.
+    /// <para>
+    /// The protected resource metadata document counts as one of these even though it sits outside the route prefix.
+    /// RFC 9728 places it under a well-known segment at the root, so a rule reading the prefix alone would refuse it on
+    /// the administrative listener — where its only reader arrives — and serve it on whichever listener answers the
+    /// root, which is the MCP endpoint's. Both halves of that are wrong, and the second is a document about the
+    /// administrative surface answering on a port that does not serve it.
+    /// </para>
+    /// </remarks>
     internal static bool IsAdminPath(PathString path) =>
-        path.StartsWithSegments(AdminEndpointOptions.RoutePrefix, StringComparison.OrdinalIgnoreCase);
+        path.StartsWithSegments(AdminEndpointOptions.RoutePrefix, StringComparison.OrdinalIgnoreCase)
+        || path.Equals(ProtectedResourceMetadataPath, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Refuses any request that reached a listener not serving its path.</summary>
     /// <param name="app">The application pipeline.</param>

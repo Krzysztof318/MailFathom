@@ -5,6 +5,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Common.MailboxOAuth;
+using MailFathom.Common.OAuth;
 using Xunit;
 
 namespace MailFathom.Common.UnitTests;
@@ -20,7 +21,7 @@ public sealed class MailboxOAuthContractTests
     public void ToString_ATokenResponse_RedactsTheCredentialsItCarries()
     {
         // Arrange
-        var response = new MailOAuthTokenResponse(
+        var response = new OAuthTokenResponse(
             "an-access-token",
             ExpiresInSeconds: 3600,
             Error: null,

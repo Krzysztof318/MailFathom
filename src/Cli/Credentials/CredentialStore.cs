@@ -110,7 +110,8 @@ internal sealed class CredentialStore
             name,
             new Uri(credential.Endpoint, UriKind.Absolute),
             this.protector.Unprotect(credential.Token, credential.Endpoint),
-            credential.Credential);
+            credential.Credential,
+            this.OpenSession(credential));
     }
 
     /// <summary>Settles which profile a command acts on, without opening its token.</summary>
@@ -150,10 +151,11 @@ internal sealed class CredentialStore
     /// <param name="endpoint">The address it is served at.</param>
     /// <param name="token">The bearer credential, which is sealed before it is written.</param>
     /// <param name="credentialName">The name the deployment reported for the credential.</param>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <param name="session">What an OAuth sign-in left behind, whose refresh token is sealed alongside the access token, or <see langword="null" /> for a presented credential.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="session" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the store cannot be written.</exception>
     /// <remarks>Signing in makes the new profile the default, because it is the deployment the operator just chose to work with; <c>switch</c> is how that is changed without signing in again.</remarks>
-    internal void Save(string name, Uri endpoint, string token, string credentialName)
+    internal void Save(string name, Uri endpoint, string token, string credentialName, OAuthSession? session = null)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(endpoint);
@@ -163,9 +165,46 @@ internal sealed class CredentialStore
         var stored = this.Read();
         var address = AddressOf(endpoint);
 
-        stored.Profiles[name] = new StoredCredential(address, this.protector.Protect(token, address), credentialName);
+        stored.Profiles[name] = new StoredCredential(
+            address,
+            this.protector.Protect(token, address),
+            credentialName,
+            this.Seal(session, address));
 
         this.Write(stored with { Default = name });
+    }
+
+    /// <summary>Replaces one profile's access token with the one a silent renewal produced.</summary>
+    /// <param name="name">The profile's stored name.</param>
+    /// <param name="accessToken">The freshly issued access token.</param>
+    /// <param name="accessTokenExpiresAt">When the new token stops being accepted.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="name" /> or <paramref name="accessToken" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the store cannot be written.</exception>
+    /// <remarks>
+    /// The refresh token, the endpoint, and which profile is the default are all left exactly as they were. A renewal is
+    /// not a sign-in: it produces one new value and must not quietly move the session's end, adopt a rotated refresh
+    /// token, or change which deployment later commands act on. A profile that has been forgotten in between is left
+    /// forgotten rather than recreated by the renewal that was already in flight.
+    /// </remarks>
+    internal void RenewAccessToken(string name, string accessToken, DateTimeOffset accessTokenExpiresAt)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(accessToken);
+
+        var stored = this.Read();
+
+        if (!stored.Profiles.TryGetValue(name, out var credential) || credential.Session is not { } session)
+        {
+            return;
+        }
+
+        stored.Profiles[name] = credential with
+        {
+            Token = this.protector.Protect(accessToken, credential.Endpoint),
+            Session = session with { AccessTokenExpiresAt = accessTokenExpiresAt },
+        };
+
+        this.Write(stored);
     }
 
     /// <summary>Forgets one profile.</summary>
@@ -252,6 +291,38 @@ internal sealed class CredentialStore
     /// <summary>Reduces an endpoint to what identifies the deployment.</summary>
     /// <remarks>The authority without a trailing slash, lowercased by the URI parser, so two spellings of one address are one profile rather than two — and so the value bound into the sealed token is stable across them.</remarks>
     private static string AddressOf(Uri endpoint) => endpoint.GetLeftPart(UriPartial.Authority);
+
+    /// <summary>Seals an OAuth session's refresh token under the same binding the access token uses.</summary>
+    private StoredOAuthSession? Seal(OAuthSession? session, string address) => session is null
+        ? null
+        : new StoredOAuthSession(
+            this.protector.Protect(session.RefreshToken, address),
+            session.AccessTokenExpiresAt,
+            session.TokenEndpoint.ToString(),
+            session.Issuer,
+            session.ClientId,
+            session.Resource,
+            session.Scope);
+
+    /// <summary>Opens a stored OAuth session, or reports none where the profile holds an API key.</summary>
+    /// <remarks>
+    /// A session whose token endpoint is no longer an absolute address is read as no session at all, so the profile
+    /// still authenticates with the access token it holds until that expires. The alternative would be failing every
+    /// command against a store an older or hand-edited file left in that state, which is a worse answer than one
+    /// sign-in.
+    /// </remarks>
+    private OAuthSession? OpenSession(StoredCredential credential) =>
+        credential.Session is { } session
+        && Uri.TryCreate(session.TokenEndpoint, UriKind.Absolute, out var tokenEndpoint)
+            ? new OAuthSession(
+                this.protector.Unprotect(session.RefreshToken, credential.Endpoint),
+                session.AccessTokenExpiresAt,
+                tokenEndpoint,
+                session.Issuer,
+                session.ClientId,
+                session.Resource,
+                session.Scope)
+            : null;
 
     private static string DefaultDirectory() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify),

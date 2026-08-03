@@ -4,7 +4,9 @@
 
 using System.Text.Json.Serialization;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Authorization;
 using MailFathom.Cli.Credentials;
+using MailFathom.Common.OAuth;
 
 namespace MailFathom.Cli;
 
@@ -19,4 +21,8 @@ namespace MailFathom.Cli;
     WriteIndented = true)]
 [JsonSerializable(typeof(AdminSession))]
 [JsonSerializable(typeof(StoredCredentials))]
+[JsonSerializable(typeof(ProtectedResourceMetadata))]
+[JsonSerializable(typeof(AuthorizationServerMetadata))]
+[JsonSerializable(typeof(OAuthTokenResponse))]
+[JsonSerializable(typeof(OAuthDeviceAuthorizationResponse))]
 internal sealed partial class CliJsonContext : JsonSerializerContext;

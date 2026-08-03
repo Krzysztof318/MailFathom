@@ -43,7 +43,7 @@ internal static class StatusCommand
         string? requestedDeployment,
         CancellationToken cancellationToken)
     {
-        var profile = context.Store.Resolve(requestedDeployment);
+        var profile = await context.Deployment().ReachAsync(requestedDeployment, cancellationToken);
 
         using var transport = context.OpenTransport(profile.Endpoint);
         var session = await new AdminApiClient(transport).ReadSessionAsync(profile.Token, cancellationToken);

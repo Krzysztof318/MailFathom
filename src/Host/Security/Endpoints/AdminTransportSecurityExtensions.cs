@@ -14,9 +14,15 @@ namespace MailFathom.Host.Security.Endpoints;
 /// administrative surface and that surface's own settings. Nothing about API-key comparison or token validation is
 /// restated, so a change to either reaches both endpoints.
 /// <para>
-/// Unlike the MCP endpoint there is no CORS policy, no origin check, and no protected resource metadata document. The
-/// clients are command-line tools configured with an address and a credential, so there is no browser to negotiate with
-/// and no client arriving holding nothing that would need to discover where to authorize.
+/// Unlike the MCP endpoint there is no CORS policy and no origin check. The clients are command-line tools rather than
+/// pages, so there is no browser to negotiate with and no ambient credential a page could be talked into attaching.
+/// </para>
+/// <para>
+/// A protected resource metadata document *is* published, by
+/// <see cref="Api.AdminProtectedResourceMetadataEndpoint" /> rather than from here, because <c>mfctl login</c> is
+/// exactly the client this surface once had none of: one that arrives holding nothing and has to find out where to
+/// authorize. It is mapped as a route instead of registered here because it belongs to no authentication scheme —
+/// its whole purpose is to answer a caller that has not authenticated.
 /// </para>
 /// </remarks>
 internal static class AdminTransportSecurityExtensions
@@ -52,8 +58,10 @@ internal static class AdminTransportSecurityExtensions
     /// <remarks>
     /// <para>
     /// It has to be a scheme this surface actually registered, or the challenge forwards to nothing. The API key scheme
-    /// is the natural answer and produces the bare bearer challenge, which is all this endpoint has to say: a client
-    /// here was configured with a credential rather than sent to discover one, so no metadata document needs carrying.
+    /// is the natural answer and produces the bare bearer challenge, which is all this endpoint has to say. RFC 9728
+    /// lets a challenge point at the metadata document, and this one does not need to: a client here reaches the
+    /// document by appending the route prefix it is already calling, which is what the resource identifier is validated
+    /// against at startup, so nothing about authorizing depends on the wording of a refusal.
     /// </para>
     /// <para>
     /// With API keys turned off that scheme does not exist, so the first authorization server's validator answers
