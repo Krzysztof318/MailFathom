@@ -66,6 +66,7 @@ internal static class SynchronizationTestHost
     /// <param name="publishedSettings">The snapshot holder a scope falls back to when no run handed one down.</param>
     /// <param name="sessionFactory">Stands in for the mail server.</param>
     /// <param name="timeProvider">The clock the scoped graph shares with the code under test.</param>
+    /// <param name="notificationSessionFactory">Stands in for the server's push mechanism; a server that advertises none is the default.</param>
     /// <param name="remoteFolderCatalog">Replaces the catalog that advertises exactly the configured folders.</param>
     /// <param name="unadvertisedAliases">Aliases the modelled server does not advertise.</param>
     /// <returns>A provider whose scopes resolve a synchronizer over substituted infrastructure.</returns>
@@ -74,11 +75,14 @@ internal static class SynchronizationTestHost
         ISettingsSnapshot<MailSynchronizationOptions> publishedSettings,
         IMailboxSessionFactory sessionFactory,
         TimeProvider timeProvider,
+        IMailboxNotificationSessionFactory? notificationSessionFactory = null,
         IRemoteFolderCatalog? remoteFolderCatalog = null,
         params string[] unadvertisedAliases)
     {
         var services = new ServiceCollection();
         services.AddSingleton(sessionFactory);
+        services.AddSingleton(
+            notificationSessionFactory ?? new FakeMailboxNotificationSessionFactory(timeProvider) { AdvertisesPush = false });
         services.AddSingleton(Substitute.For<ISynchronizationCheckpointStore>());
         services.AddSingleton(Substitute.For<IPersistenceSessionFactory>());
         services.AddSingleton(Substitute.For<IEmailMetadataRepository>());

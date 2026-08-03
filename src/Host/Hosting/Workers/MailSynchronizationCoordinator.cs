@@ -129,11 +129,20 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         CancellationToken schedulingToken,
         CancellationToken workUnitToken)
     {
+        // The watch is built here and owned by the supervisor, so a supervisor that ends releases the connections it was
+        // holding and the replacement starts with none.
+        var pushNotifications = new AccountPushNotificationWatch(
+            accountId,
+            this.scopeFactory,
+            this.loggerFactory.CreateLogger<AccountPushNotificationWatch>(),
+            this.timeProvider);
+
         var supervisor = new AccountSynchronizationSupervisor(
             accountId,
             this.scopeFactory,
             this.settings,
             accountRunSlots,
+            pushNotifications,
             this.loggerFactory.CreateLogger<AccountSynchronizationSupervisor>(),
             this.timeProvider);
 

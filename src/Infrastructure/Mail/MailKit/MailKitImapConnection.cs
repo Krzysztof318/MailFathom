@@ -178,6 +178,56 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
             cancellationToken);
     }
 
+    /// <summary>Runs one operation against the selected folder exactly once, under no retry of its own.</summary>
+    /// <typeparam name="TResult">The result the operation produces.</typeparam>
+    /// <param name="operation">The operation, which must never change remote state and is never repeated.</param>
+    /// <param name="cancellationToken">Cancels establishing the session and the operation itself.</param>
+    /// <returns>The result of the single attempt.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="operation" /> is <see langword="null" />.</exception>
+    /// <exception cref="MailboxUnavailableException">Thrown when establishment stopped at a configured limit, or when the operation failed on something transient.</exception>
+    /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
+    /// <remarks>
+    /// <para>
+    /// This exists for the one operation the retrieval pipeline cannot cover: a long wait for the server to say
+    /// something. That pipeline's per-attempt timeout is measured in seconds because a read that stops answering is
+    /// broken, while a wait that answers nothing for twenty minutes is a wait behaving exactly as designed — running it
+    /// there would abandon it at every attempt boundary and spend the whole budget in under a minute.
+    /// </para>
+    /// <para>
+    /// Establishment still runs under its own pipeline, so a dropped connection is rebuilt before the operation begins
+    /// and a rejected credential is still never repeated. What is given up is only the repetition of the operation
+    /// itself, which its caller owns instead: a transient failure is reported as an unavailable mailbox and the
+    /// connection is discarded, so the next call starts from a session it established itself.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Every failure is inspected for whether it left the connection usable and is then rethrown, translated only where a mail-library type would otherwise cross an application port.")]
+    internal async Task<TResult> ExecuteUnrepeatedFolderOperationAsync<TResult>(
+        Func<IImapClient, IMailFolder, CancellationToken, Task<TResult>> operation,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        var authenticatedClient = await this.EnsureAuthenticatedClientAsync(cancellationToken);
+        var openFolder = await this.EnsureOpenFolderAsync(cancellationToken);
+
+        try
+        {
+            return await operation(authenticatedClient, openFolder, cancellationToken);
+        }
+        catch (Exception failure) when (this.IsRepeatableFailure(OutboundDependency.MailboxDataRetrieval, failure))
+        {
+            this.DiscardUnusableConnection();
+
+            throw this.MailboxDidNotServeTheOperation(failure);
+        }
+        catch (Exception failure)
+        {
+            this.DiscardConnectionUnlessItSurvived(failure);
+
+            throw;
+        }
+    }
+
     /// <summary>Closes and releases the connection, reporting the first cleanup failure.</summary>
     public async ValueTask DisposeAsync()
     {

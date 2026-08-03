@@ -490,6 +490,79 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Contains("EraseLocalCopy", result.ErrorMessage, StringComparison.Ordinal);
     }
 
+    /// <summary>Push holds a connection open per folder, so an account that says nothing keeps the schedule it already had.</summary>
+    [Fact]
+    public void Mode_AccountConfiguringNone_Polls()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions { Accounts = [CreateAccount("primary")] };
+
+        // Act
+        var mode = Assert.Single(options.Accounts).Mode;
+
+        // Assert
+        Assert.Equal(MailSynchronizationMode.Polling, mode);
+    }
+
+    [Fact]
+    public void Bind_Mode_ReadsItByName()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:Mode"] = "Push",
+            })
+            .Build();
+
+        // Act
+        var options = configuration.GetSection("MailSynchronization").Get<MailSynchronizationOptions>()!;
+
+        // Assert
+        Assert.Equal(MailSynchronizationMode.Push, Assert.Single(options.Accounts).Mode);
+    }
+
+    /// <summary>
+    /// A bare number binds onto an enum whether or not a member carries it. Left unvalidated, an undefined value would
+    /// be read as "not Push", so an operator who asked for push and mistyped it would silently get polling with nothing
+    /// reporting the difference.
+    /// </summary>
+    [Fact]
+    public void ValidateForSynchronization_ModeNumberNoMemberCarries_IsRejected()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:Mode"] = "3",
+            })
+            .Build();
+        var options = configuration.GetSection("MailSynchronization").Get<MailSynchronizationOptions>()!;
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains("Polling", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("Push", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>RFC 2177 requires IDLE to be re-issued at least every 29 minutes, so the defaults have to sit under it.</summary>
+    [Fact]
+    public void PushDefaults_NothingIsConfigured_RenewWellInsideTheProtocolMandate()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions();
+
+        // Act, Assert
+        Assert.True(options.PushRenewalInterval < TimeSpan.FromMinutes(29));
+        Assert.Equal(3, options.MaxConsecutivePushFailures);
+        Assert.Equal(TimeSpan.FromMinutes(15), options.PushDegradationPeriod);
+    }
+
     [Fact]
     public void FindSynchronizationWindowErrors_DateLaterThanToday_ReportsTheAccountAndTheProperty()
     {

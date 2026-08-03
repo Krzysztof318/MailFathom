@@ -23,7 +23,7 @@ Material is applied at operation boundaries, never mid-operation:
 | Database credential | The next **physical** connection the pool opens. Connections already open finish with the credential they authenticated with, and a pooled logical connection reusing an open physical one keeps it too. |
 | MCP API key | The next MCP request. Every configured key is read again on each one, so a rotated file takes effect immediately. |
 
-A long-lived authenticated session has no next connect to pick up a rotation, so its operation boundary is the *connection*: a session whose secrets have rotated is recycled at the next safe point rather than left running for the process lifetime. No such session exists yet — IMAP IDLE is later work — but that is the rule it will be built to.
+A long-lived authenticated session has no next connect to pick up a rotation, so its operation boundary is the *connection*: a session whose secrets have rotated is recycled at the next safe point rather than left running for the process lifetime. The IMAP `IDLE` session an account in push mode holds is that case. It is closed and reopened between synchronization runs — never mid-wait — as soon as a newly published configuration snapshot supersedes the one it connected under, and the reconnection resolves every secret again. A reload is not distinguishable from a rotation inside it, so every republished snapshot recycles the session; [push synchronization](../features/imap-synchronization.md#a-long-lived-connection-is-a-rotation-boundary) records why that is the safe direction to err in.
 
 ## Lifetimes and what they do
 

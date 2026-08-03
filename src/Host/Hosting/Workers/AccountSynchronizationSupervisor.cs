@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
@@ -9,6 +10,7 @@ using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
 
@@ -32,6 +34,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     private readonly IServiceScopeFactory scopeFactory;
     private readonly ISettingsSnapshot<MailSynchronizationOptions> settings;
     private readonly SemaphoreSlim accountRunSlots;
+    private readonly AccountPushNotificationWatch pushNotifications;
     private readonly ILogger<AccountSynchronizationSupervisor> logger;
     private readonly TimeProvider timeProvider;
 
@@ -40,6 +43,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <param name="scopeFactory">Creates the scope each folder work unit runs in.</param>
     /// <param name="settings">Supplies the snapshot every run is scheduled from.</param>
     /// <param name="accountRunSlots">Bounds how many accounts run at once; owned by the coordinator and never released beyond what this supervisor took.</param>
+    /// <param name="pushNotifications">Ends the wait between runs early when a watched folder changes; owned by this supervisor and disposed with it.</param>
     /// <param name="logger">Records run outcomes, which carry account and folder aliases and no message-level data.</param>
     /// <param name="timeProvider">Measures run duration and the wait between runs.</param>
     public AccountSynchronizationSupervisor(
@@ -47,6 +51,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         IServiceScopeFactory scopeFactory,
         ISettingsSnapshot<MailSynchronizationOptions> settings,
         SemaphoreSlim accountRunSlots,
+        AccountPushNotificationWatch pushNotifications,
         ILogger<AccountSynchronizationSupervisor> logger,
         TimeProvider timeProvider)
     {
@@ -54,6 +59,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         this.scopeFactory = scopeFactory;
         this.settings = settings;
         this.accountRunSlots = accountRunSlots;
+        this.pushNotifications = pushNotifications;
         this.logger = logger;
         this.timeProvider = timeProvider;
     }
@@ -89,6 +95,13 @@ internal sealed partial class AccountSynchronizationSupervisor
         {
             this.LogSupervisionFailed(exception, this.accountId.Value);
         }
+        finally
+        {
+            // The push sessions are this supervisor's, not the account's: the coordinator answers a supervisor that
+            // ended by starting a new one, and a connection left open by the previous one would be a connection nothing
+            // is left to close.
+            await this.pushNotifications.DisposeAsync();
+        }
     }
 
     /// <summary>Runs the account, waits, and runs it again until scheduling stops.</summary>
@@ -113,9 +126,9 @@ internal sealed partial class AccountSynchronizationSupervisor
                 return;
             }
 
-            var runFailed = await this.RunOnceAsync(runSettings, account, schedulingToken, workUnitToken);
+            var run = await this.RunOnceAsync(runSettings, account, schedulingToken, workUnitToken);
 
-            consecutiveFailureCount = runFailed ? consecutiveFailureCount + 1 : 0;
+            consecutiveFailureCount = run.Failed ? consecutiveFailureCount + 1 : 0;
 
             var delayBeforeNextRun = SynchronizationRunBackoff.DelayBeforeNextRun(
                 runSettings.Interval,
@@ -127,12 +140,21 @@ internal sealed partial class AccountSynchronizationSupervisor
                 this.LogNextRunBackedOff(this.accountId.Value, consecutiveFailureCount, delayBeforeNextRun);
             }
 
-            await Task.Delay(delayBeforeNextRun, this.timeProvider, schedulingToken);
+            // Push changes what ends the wait and nothing about how long it would otherwise be, so backoff is computed
+            // first and then handed over. An account that is backing off a failing server keeps that whole delay unless
+            // the server itself reports a change, which is the one event that proves it is answering again.
+            await this.pushNotifications.WatchResolvedFoldersAsync(
+                runSettings,
+                account,
+                run.ResolvedFolders,
+                schedulingToken);
+
+            await this.pushNotifications.WaitForNextPassAsync(runSettings, delayBeforeNextRun, schedulingToken);
         }
     }
 
     /// <summary>Runs every configured folder of the account once, bounded by the configured folder concurrency.</summary>
-    /// <returns><see langword="true" /> when at least one folder failed, which is what puts the account into backoff.</returns>
+    /// <returns>Whether the run failed, and the bindings its folders resolved to.</returns>
     /// <remarks>
     /// <para>
     /// An alias that matched no advertised folder, or several, is not counted as a failure. It is a configuration
@@ -147,13 +169,14 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// the work-unit token is what a folder already running is eventually cancelled by.
     /// </para>
     /// </remarks>
-    private async Task<bool> RunOnceAsync(
+    private async Task<AccountRunOutcome> RunOnceAsync(
         MailSynchronizationOptions runSettings,
         MailSynchronizationAccountOptions account,
         CancellationToken schedulingToken,
         CancellationToken workUnitToken)
     {
         var scheduledFolders = account.EffectiveFolders;
+        var resolvedFolders = new ConcurrentBag<MailFolderResolution>();
         var failedFolderCount = 0;
 
         await this.accountRunSlots.WaitAsync(schedulingToken);
@@ -176,11 +199,18 @@ internal sealed partial class AccountSynchronizationSupervisor
                         return;
                     }
 
-                    if (!await this.SynchronizeFolderAsync(
+                    var folderRun = await this.SynchronizeFolderAsync(
                         runSettings,
                         account.RemotelyDeletedEmailDisposition,
                         configuredFolder,
-                        folderToken))
+                        folderToken);
+
+                    if (folderRun.ResolvedFolder is { } resolvedFolder)
+                    {
+                        resolvedFolders.Add(resolvedFolder);
+                    }
+
+                    if (!folderRun.Succeeded)
                     {
                         Interlocked.Increment(ref failedFolderCount);
                     }
@@ -199,16 +229,16 @@ internal sealed partial class AccountSynchronizationSupervisor
             failedFolderCount,
             runDuration);
 
-        return failedFolderCount > 0;
+        return new AccountRunOutcome(failedFolderCount > 0, [.. resolvedFolders]);
     }
 
-    /// <summary>Synchronizes one folder in a scope of its own and reports whether it completed.</summary>
+    /// <summary>Synchronizes one folder in a scope of its own and reports whether it completed and what it resolved to.</summary>
     /// <remarks>
     /// The configured folder is turned into a mapping inside the guarded body rather than while the run is scheduled,
     /// so a folder whose configuration reached the supervisor unusable fails that folder and not the account.
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The supervisor isolates an unexpected per-folder failure so the account's remaining folders and its later runs can continue.")]
-    private async Task<bool> SynchronizeFolderAsync(
+    private async Task<FolderRunOutcome> SynchronizeFolderAsync(
         MailSynchronizationOptions runSettings,
         RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition,
         MailFolderMappingOptions configuredFolder,
@@ -233,7 +263,7 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             this.ReportFolderOutcome(folderAlias, remotelyDeletedEmailDisposition, result);
 
-            return true;
+            return new FolderRunOutcome(Succeeded: true, result.Folder);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -243,19 +273,19 @@ internal sealed partial class AccountSynchronizationSupervisor
         {
             this.LogFolderSynchronizationDeferredAfterConcurrencyConflict(exception, this.accountId.Value, folderAlias);
 
-            return false;
+            return FolderRunOutcome.Failed;
         }
         catch (MailboxUnavailableException exception)
         {
             this.LogFolderSynchronizationDeferredAfterMailServerUnavailable(exception, this.accountId.Value, folderAlias);
 
-            return false;
+            return FolderRunOutcome.Failed;
         }
         catch (Exception exception)
         {
             this.LogFolderSynchronizationFailed(exception, this.accountId.Value, folderAlias);
 
-            return false;
+            return FolderRunOutcome.Failed;
         }
     }
 
@@ -433,4 +463,21 @@ internal sealed partial class AccountSynchronizationSupervisor
         Exception exception,
         string accountId,
         string folderAlias);
+
+    /// <summary>States what one account run produced for the two decisions that follow it.</summary>
+    /// <param name="Failed">Whether at least one folder failed, which is what puts the account into backoff.</param>
+    /// <param name="ResolvedFolders">
+    /// The bindings the run's folders resolved to, which are the remote folders a push session may watch until the next
+    /// run resolves them again.
+    /// </param>
+    private readonly record struct AccountRunOutcome(bool Failed, IReadOnlyList<MailFolderResolution> ResolvedFolders);
+
+    /// <summary>States what one folder's turn through a run produced.</summary>
+    /// <param name="Succeeded">Whether the folder completed, which excludes a deferral and an unexpected failure alike.</param>
+    /// <param name="ResolvedFolder">The binding the folder ran under, or <see langword="null" /> when the alias resolved to none.</param>
+    private readonly record struct FolderRunOutcome(bool Succeeded, MailFolderResolution? ResolvedFolder)
+    {
+        /// <summary>Gets the outcome of a folder that neither completed nor left a binding worth watching.</summary>
+        internal static FolderRunOutcome Failed => new(Succeeded: false, ResolvedFolder: null);
+    }
 }
