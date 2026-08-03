@@ -1,3 +1,7 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
 # The values the repository's own verification renders the chart with, standing in for a deployment on the supported
 # release channel. Nothing here names a real image or a real database, deliberately: the point of this file is to give
 # `helm lint` and `helm template` a values document that satisfies the schema, so the templates themselves are what

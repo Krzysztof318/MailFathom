@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
 set -euo pipefail
 
 if [[ "$(basename "$0")" == 'dotnet' ]]; then
@@ -2608,6 +2612,107 @@ workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/.github/fathom-review/collect-closing-references.sh" ]]
 }
 
+# The per-file licensing mark, everywhere the analyzer that applies it cannot reach. IDE0073 reads
+# C# and rewrites a `.cs` header to match `file_header_template`, so the source files stay consistent
+# without anyone typing one; the workflows, the scripts, the chart, and the skills get no such
+# repair, and a file added to any of them would travel out of this repository stating neither who
+# owns it nor what terms it arrives under. These three cases are that missing analyzer.
+#
+# The expected text is read from `.editorconfig` rather than restated here, which is what keeps the
+# three forms one header: an edit to the template that leaves these files behind fails as a
+# disagreement instead of quietly splitting the mark in two.
+#
+# They read `git ls-files` against the real repository rather than the filesystem, so the fixture
+# checkouts this suite builds under `$test_directory` neither fail them nor satisfy them.
+license_header_lines() {
+  sed -n 's/^file_header_template = //p' "$source_repository_root/.editorconfig" | sed 's/\\n/\n/g'
+}
+
+comment_license_header() {
+  license_header_lines | sed 's/^/# /'
+}
+
+# A `#` line in a Helm template is emitted into the rendered manifest, which would put the header
+# into every Kubernetes object the chart applies in somebody else's cluster. The template comment
+# states the same three lines about the source file and renders to nothing.
+template_license_header() {
+  printf '{{- /*\n%s\n*/ -}}\n' "$(license_header_lines)"
+}
+
+every_yaml_file_carries_the_license_header() {
+  local file expected actual failures=0
+
+  while IFS= read -r file; do
+    if [[ "$file" == deploy/helm/mailfathom/templates/* ]]; then
+      expected="$(template_license_header)"
+      actual="$(head -n 5 "$source_repository_root/$file")"
+    else
+      expected="$(comment_license_header)"
+      actual="$(head -n 3 "$source_repository_root/$file")"
+    fi
+
+    if [[ "$actual" != "$expected" ]]; then
+      printf '%s does not open with the license header\n' "$file" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done < <(git -C "$source_repository_root" ls-files -- \
+    '*.yml' '*.yaml' 'deploy/helm/mailfathom/templates/*.tpl')
+
+  (( failures == 0 ))
+}
+
+# The shebang has to be the first line for the kernel to read it, so a script is the one place the
+# header is second rather than first.
+every_shell_script_carries_the_license_header() {
+  local file expected actual failures=0
+  expected="$(comment_license_header)"
+
+  while IFS= read -r file; do
+    if [[ "$(head -n 1 "$source_repository_root/$file")" != '#!'* ]]; then
+      printf '%s has no shebang, so where its header belongs is undefined\n' "$file" >&2
+      failures=$(( failures + 1 ))
+      continue
+    fi
+
+    actual="$(sed -n '2,4p' "$source_repository_root/$file")"
+
+    if [[ "$actual" != "$expected" ]]; then
+      printf '%s does not carry the license header under its shebang\n' "$file" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done < <(git -C "$source_repository_root" ls-files -- '*.sh')
+
+  (( failures == 0 ))
+}
+
+# A skill states the same three facts as frontmatter, because the Agent Skills specification already
+# defines where a skill declares its license and leaves `metadata` open for the rest. A comment above
+# the frontmatter would be read as content by every client that parses one. No version key joins
+# them: `<VersionPrefix>` in `Directory.Build.props` is the only version number in this repository.
+every_skill_declares_its_license() {
+  local file frontmatter holder repository failures=0
+
+  holder="$(license_header_lines | sed -n '1s/^Copyright © [0-9]\{4\} //p')"
+  repository="$(license_header_lines | sed -n '3s/^Project repository: //p')"
+
+  while IFS= read -r file; do
+    frontmatter="$(awk 'NR == 1 { next } /^---$/ { exit } { print }' "$source_repository_root/$file")"
+
+    if ! grep -qxF 'license: Apache-2.0' <<< "$frontmatter"; then
+      printf '%s declares no license in its frontmatter\n' "$file" >&2
+      failures=$(( failures + 1 ))
+    fi
+
+    if ! grep -qxF "  author: $holder" <<< "$frontmatter" \
+      || ! grep -qxF "  repository: $repository" <<< "$frontmatter"; then
+      printf '%s does not name the author and the repository in its metadata\n' "$file" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done < <(git -C "$source_repository_root" ls-files -- '.agents/skills/*/SKILL.md')
+
+  (( failures == 0 ))
+}
+
 run_test verify_fast_runs_restore_build_tests_and_formatting
 run_test verify_full_runs_tests_once_through_coverage
 run_test verify_full_runs_workflow_contracts
@@ -2704,6 +2809,9 @@ run_test the_release_restores_the_annotated_tag_before_asserting_it
 run_test only_the_reviewer_workflow_uses_pull_request_target
 run_test a_comment_never_cancels_a_review_in_flight
 run_test workflow_scripts_use_flat_manual_layout
+run_test every_yaml_file_carries_the_license_header
+run_test every_shell_script_carries_the_license_header
+run_test every_skill_declares_its_license
 
 printf '%s passed, %s failed\n' "$passed_count" "$failed_count"
 

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
 set -euo pipefail
 
 # Appends one EF Core migration for the current model. It preserves every migration already in the repository: the

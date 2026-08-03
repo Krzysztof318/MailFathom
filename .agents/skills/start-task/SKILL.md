@@ -1,6 +1,10 @@
 ---
 name: start-task
 description: Use when beginning repository work that may edit files, change dependencies, or require roadmap, documentation, or ADR context.
+license: Apache-2.0
+metadata:
+  author: Krzysztof Kasprowicz
+  repository: https://github.com/Krzysztof318/MailFathom
 ---
 
 # Start Task

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
 # Print the issue numbers a pull request body closes, one per line, each number once.
 #
 # The issues a change closes are its stated contract, and merging it marks every one of them done —

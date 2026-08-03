@@ -1,6 +1,6 @@
 # Agent workflow
 
-<!-- describes: scripts/**, .agents/skills/**, .github/workflows/**, .github/fathom-review/** -->
+<!-- describes: scripts/**, .agents/skills/**, .github/workflows/**, .github/fathom-review/**, **/.editorconfig -->
 
 Codex and Claude Code share one repository-owned workflow. Deterministic Git and
 .NET operations live in scripts, while repository-specific judgment lives in
@@ -100,6 +100,24 @@ writes `FETCH_HEAD`, so a repository with a missing or remapped
 `remote.<remote>.fetch` would keep a stale remote-tracking ref and satisfy the
 base check against it. An unreachable remote is a failure and never degrades
 into verifying against the stale ref.
+
+Three cases in the contract suite that gate runs assert the licensing header
+rather than a script's behaviour. IDE0073 applies `.editorconfig`'s
+`file_header_template` to C# and reaches nothing else, so the workflows, the
+shell scripts, the chart, and the skills would each carry the mark only for as
+long as somebody remembered to type it, and nothing would say when one stopped.
+The cases read `git ls-files` against the real repository, which is what keeps
+the fixture checkouts the suite builds from either failing or satisfying them.
+Each surface states the same three lines in the form its own readers parse: a
+`.yml` or `.yaml` file opens with them as `#` comments, a `.sh` file carries them
+under the shebang that has to stay first, a file under
+`deploy/helm/mailfathom/templates/` carries them as a `{{- /* ... */ -}}` comment
+so the rendered manifest is unchanged, and a `SKILL.md` declares `license` and a
+`metadata` block instead, which is where the Agent Skills format puts them. All
+four are compared against the text parsed out of `.editorconfig`, so the header
+stays one decision written in one place: an edit to the template that leaves the
+other files behind fails as a disagreement rather than quietly splitting the mark
+in two.
 
 ## Which remote is the base
 

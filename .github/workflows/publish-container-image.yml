@@ -1,3 +1,7 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
 name: Publish container image
 
 # The one place an image is built and pushed. Both channels call it — `Release` on an annotated tag, `Nightly` on a

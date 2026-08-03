@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
 # Index the obligations a pull request triggers in the rest of the repository.
 #
 # `Fathom review` reads a change as a diff, and a whole class of defect here is invisible in one: a

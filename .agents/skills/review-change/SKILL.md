@@ -1,6 +1,10 @@
 ---
 name: review-change
 description: Use when reviewing a working-tree diff, pull-request patch, or completed implementation before final verification.
+license: Apache-2.0
+metadata:
+  author: Krzysztof Kasprowicz
+  repository: https://github.com/Krzysztof318/MailFathom
 ---
 
 # Review Change
