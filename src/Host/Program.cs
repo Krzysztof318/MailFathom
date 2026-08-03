@@ -14,6 +14,7 @@ using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Host;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Persistence;
@@ -28,6 +29,7 @@ using MailFathom.Host.Security.Mcp;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Persistence.Connections;
@@ -113,6 +115,15 @@ try
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
+    // A configuration root of its own rather than a section of Persistence: the database is the first thing sealed
+    // under the ring and there is no reason it is the last, and a root is also what gives the key material its own
+    // secret-name uniqueness scope. ADR 0005 records the whole decision.
+    builder.Services.AddOptions<DataEncryptionOptions>()
+        .Bind(
+            builder.Configuration.GetSection("DataEncryption"),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
     // The published snapshot, not the bound one, is what every consumer reads: a reload whose secret references do not
     // resolve is rejected and leaves the previous configuration active for new operations.
     builder.Services.AddSingleton<DatabaseConnectionSettingsMapper>();
@@ -129,8 +140,19 @@ try
             .FindPersistenceConfigurationErrorsAsync(candidate, cancellationToken),
         "Persistence",
         provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<PersistenceOptions>>>()));
+    builder.Services.AddSingleton(provider => new ValidatedSettingsSnapshot<DataEncryptionOptions>(
+        provider.GetRequiredService<IOptionsMonitor<DataEncryptionOptions>>(),
+        (candidate, cancellationToken) => provider.GetRequiredService<SecretConfigurationValidator>()
+            .FindDataEncryptionConfigurationErrorsAsync(candidate, cancellationToken),
+        "DataEncryption",
+        provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<DataEncryptionOptions>>>()));
     builder.Services.AddSingleton<ISettingsSnapshot<MailSynchronizationOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>());
     builder.Services.AddSingleton<ISettingsSnapshot<PersistenceOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<PersistenceOptions>>());
+    builder.Services.AddSingleton<ISettingsSnapshot<DataEncryptionOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<DataEncryptionOptions>>());
+    // The key ring reads the published snapshot on every operation, so a key an operator adds reaches the next seal or
+    // open without a restart — which is the half of a rotation that must not need one.
+    builder.Services.AddDataEncryption(provider => DataEncryptionKeyRingMapper.Map(
+        provider.GetRequiredService<ISettingsSnapshot<DataEncryptionOptions>>().Current));
     // One work unit runs against one snapshot: the enclosing run hands its own down, and a scope with no enclosing run
     // falls back to the published one. That is what keeps the transport security policy a work unit validates against,
     // the material it connects with, and the account list it was scheduled from all from the same reload.
@@ -208,6 +230,7 @@ try
     // Registered after the startup gate so the first snapshot is proven before either begins accepting reloaded ones.
     builder.Services.AddHostedService(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>());
     builder.Services.AddHostedService(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<PersistenceOptions>>());
+    builder.Services.AddHostedService(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<DataEncryptionOptions>>());
     // The secret blocks come from the published snapshot on every read, so a reference an operator repoints reaches the
     // next physical connection instead of waiting for a restart.
     // The text search configuration is taken once, from configuration directly, because the EF Core model has to be

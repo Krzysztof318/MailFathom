@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Persistence;
@@ -33,6 +34,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
 {
     private readonly ISettingsSnapshot<MailSynchronizationOptions> mailSynchronizationSettings;
     private readonly ISettingsSnapshot<PersistenceOptions> persistenceSettings;
+    private readonly ISettingsSnapshot<DataEncryptionOptions> dataEncryptionSettings;
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly SecretConfigurationValidator validator;
     private readonly SecretResolutionOptions resolutionOptions;
@@ -45,6 +47,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
     public SecretConfigurationStartupValidator(
         ISettingsSnapshot<MailSynchronizationOptions> mailSynchronizationSettings,
         ISettingsSnapshot<PersistenceOptions> persistenceSettings,
+        ISettingsSnapshot<DataEncryptionOptions> dataEncryptionSettings,
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         SecretConfigurationValidator validator,
         SecretResolutionOptions resolutionOptions,
@@ -56,6 +59,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
 
         this.mailSynchronizationSettings = mailSynchronizationSettings;
         this.persistenceSettings = persistenceSettings;
+        this.dataEncryptionSettings = dataEncryptionSettings;
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.validator = validator;
         this.resolutionOptions = resolutionOptions;
@@ -77,6 +81,11 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         failures.AddRange(
             await this.validator.FindPersistenceConfigurationErrorsAsync(
                 this.persistenceSettings.Current,
+                cancellationToken));
+
+        failures.AddRange(
+            await this.validator.FindDataEncryptionConfigurationErrorsAsync(
+                this.dataEncryptionSettings.Current,
                 cancellationToken));
 
         failures.AddRange(

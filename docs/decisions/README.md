@@ -25,3 +25,4 @@ For background on ADRs, see <https://adr.github.io/>.
 - [0002: Use an application-owned configuration access layer for reading, mapping, and reloadable business settings](0002-configuration-reading-mapping-and-reload-boundary.md)
 - [0003: Give every first-party failure one base type and a five-digit stable error code](0003-first-party-exception-hierarchy-and-stable-error-codes.md)
 - [0004: Version the four public surfaces with SemVer, stamp builds from one declared prefix, and cut a release with a Git tag](0004-versioning-and-release-policy.md)
+- [0005: Seal data at rest under one deployment-wide symmetric key ring, provisioned as a secret reference the operator creates](0005-data-encryption-key-ring-and-provisioning.md)

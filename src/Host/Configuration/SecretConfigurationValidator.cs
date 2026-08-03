@@ -3,10 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Host.Configuration.Access;
+using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets;
@@ -37,6 +39,8 @@ internal sealed partial class SecretConfigurationValidator
     private const string MailSynchronizationConfigurationPath = "MailSynchronization";
 
     private const string PersistenceConfigurationPath = "Persistence";
+
+    private const string DataEncryptionConfigurationPath = "DataEncryption";
 
     private readonly TimeProvider timeProvider;
 
@@ -102,6 +106,76 @@ internal sealed partial class SecretConfigurationValidator
             cancellationToken);
 
         errors.AddRange(connectionFailures.Select(DescribeConnectionFailure));
+
+        return errors;
+    }
+
+    /// <summary>Finds everything an operator must fix before a data-encryption key ring can be used.</summary>
+    /// <param name="candidate">The bound snapshot, which may be the startup one or a reloaded one.</param>
+    /// <param name="cancellationToken">Cancels the resolution.</param>
+    /// <returns>One message per unusable setting, empty when the ring is usable.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Resolving the references is not enough, for the reason a trust anchor is loaded rather than merely resolved:
+    /// material that resolves but is not a key would pass a reference check and then fail every read of a sealed value,
+    /// which is exactly the failure this section exists to move to startup. The structural rules — a duplicate
+    /// identifier, an active key naming nothing — are answered by the options type itself, because they need no
+    /// resolution and reporting them here would leave a malformed ring judged twice.
+    /// </remarks>
+    internal async Task<IReadOnlyList<string>> FindDataEncryptionConfigurationErrorsAsync(
+        DataEncryptionOptions candidate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        var errors = new List<string>(
+            await this.FindSecretReferenceErrorsAsync(DataEncryptionConfigurationPath, candidate, cancellationToken));
+
+        errors.AddRange(await this.FindKeyMaterialErrorsAsync(candidate, cancellationToken));
+
+        return errors;
+    }
+
+    /// <summary>Decodes every configured key and reports the material that is not one, discarding each key once it has proven usable.</summary>
+    /// <remarks>
+    /// Neither the material nor its length reaches the report. A message naming the length of a rejected key would tell
+    /// anyone reading the log how much of it to guess, which is why the failure vocabulary is closed and the remedy is
+    /// stated instead.
+    /// </remarks>
+    private async Task<IReadOnlyList<string>> FindKeyMaterialErrorsAsync(
+        DataEncryptionOptions candidate,
+        CancellationToken cancellationToken)
+    {
+        var errors = new List<string>();
+
+        // The loop stays because each step awaits a resolution, and the position is part of the reported path.
+        foreach (var (position, configuredKey) in candidate.Keys.Index())
+        {
+            // A key configuring no material at all is reported by the options type, which needs no resolution to see it.
+            if (configuredKey.Material is not { } material)
+            {
+                continue;
+            }
+
+            var resolution = await this.secretReferenceResolver.ResolveAsync(material.SecretReference, cancellationToken);
+
+            // A reference that does not resolve is already reported by the reference check every section runs.
+            if (resolution.Secret is not { } resolvedMaterial)
+            {
+                continue;
+            }
+
+            using (resolvedMaterial)
+            {
+                using var key = DataEncryptionKey.Decode(configuredKey.KeyId, resolvedMaterial, out var failure);
+
+                if (key is null)
+                {
+                    errors.Add(
+                        $"{DataEncryptionConfigurationPath}:{nameof(DataEncryptionOptions.Keys)}:{position}:{nameof(DataEncryptionKeyOptions.Material)} — the material is not an AES-256 key [{failure}]. Generate one with 'openssl rand -base64 32'.");
+                }
+            }
+        }
 
         return errors;
     }

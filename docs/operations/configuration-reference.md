@@ -159,6 +159,29 @@ Repointing a reference or editing the connection string reloads; changing *which
 moving a password out of the connection string into `Persistence:Password`, or back — is refused on reload and needs a
 restart, because the connection pool attaches its password provider once.
 
+## `DataEncryption`
+
+The key ring every value MailFathom seals at rest is sealed under. A configuration root of its own rather than a
+section of `Persistence`, because the database is the first thing sealed under it and there is no reason it is the
+last. [ADR 0005](../decisions/0005-data-encryption-key-ring-and-provisioning.md) records the whole decision, and
+[secret provisioning](secret-provisioning.md) states how the material is generated and referenced.
+
+An absent section is a valid deployment that seals nothing. Configuring the section makes every rule below apply.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `DataEncryption:ActiveKeyId` | string | unset | Must name one of `Keys`; required once any key is configured, and refused when none is | reload |
+| `DataEncryption:Keys:<n>:KeyId` | string | — | Up to 64 letters, digits, dots, dashes, and underscores, beginning with a letter or a digit; unique within the ring | reload |
+| `DataEncryption:Keys:<n>:Material` | secret block | — | Base64 decoding to exactly 32 bytes, generated with `openssl rand -base64 32` | reload; material per operation |
+
+`KeyId` is stored beside every value the key seals, so it is chosen once and never edited — renaming it orphans every
+value already carrying the previous spelling. The operator's own label for a key is its material's `Name`, which every
+secret block requires; there is no second name on the entry.
+
+The ring holds several keys so that rotation needs no downtime: move `ActiveKeyId` to the new key, leave the previous
+key configured, and every value still carrying it keeps opening under it. Removing a key the database still references
+makes those values unopenable, and the failure appears at the next read rather than at the edit.
+
 ## `MailboxSearch`
 
 The deployment-wide privacy bound on what a search result may quote. [Lexical email
