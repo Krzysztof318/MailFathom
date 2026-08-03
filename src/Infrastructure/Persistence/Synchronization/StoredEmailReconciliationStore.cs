@@ -86,6 +86,18 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
             }
         }
 
+        // A confirmed email keeps its stored flags and moves only its place in the queue, because the server's answer
+        // was that nothing about it has changed. Writing the flag columns from the stored values instead would be the
+        // same row with a fresher-looking observation and one more chance to get the copy wrong.
+        foreach (var confirmed in outcome.ConfirmedUnchanged)
+        {
+            if (rowsById.TryGetValue(confirmed.Value, out var row)
+                && !HasNewerObservationThan(row, outcome.ObservedAt))
+            {
+                row.RemoteFlagsObservedAt = outcome.ObservedAt;
+            }
+        }
+
         var disappeared = outcome.Disappeared
             .Select(storedEmailId => rowsById.GetValueOrDefault(storedEmailId.Value))
             .OfType<StoredEmailEntity>()
@@ -144,6 +156,7 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
     {
         var windowIds = outcome.StillPresent
             .Select(static observed => observed.StoredEmailId.Value)
+            .Concat(outcome.ConfirmedUnchanged.Select(static storedEmailId => storedEmailId.Value))
             .Concat(outcome.Disappeared.Select(static storedEmailId => storedEmailId.Value))
             .ToArray();
 

@@ -69,6 +69,10 @@ public sealed class MailboxReconciler
     /// <param name="accountId">The account being reconciled.</param>
     /// <param name="folder">The alias binding being reconciled.</param>
     /// <param name="uidValidity">The UIDVALIDITY the session reports for the open folder.</param>
+    /// <param name="reconciledThroughModSeq">
+    /// The modification sequence a previous pass covered the whole folder through, or <see langword="null" /> when
+    /// there is none to reconcile from.
+    /// </param>
     /// <param name="cancellationToken">Cancels the pass between the remote read and the local write.</param>
     /// <returns>What this window found, and whether occurrences remain to be reconciled in a later run.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="mailboxSession" /> or <paramref name="folder" /> is <see langword="null" />.</exception>
@@ -79,15 +83,23 @@ public sealed class MailboxReconciler
     /// then committed, and the next run selects the same occurrences because none of them was observed.
     /// </exception>
     /// <remarks>
+    /// <para>
     /// A folder whose UIDVALIDITY has changed reconciles nothing rather than deleting anything. The window is selected
     /// under the UIDVALIDITY the session reports, so occurrences stored under the previous one are simply not in it:
     /// the renumbering is left to the existing invalidation rule, and no mass local deletion can follow from it.
+    /// </para>
+    /// <para>
+    /// A modification sequence is reported back only when this window emptied the folder's queue. Until then the pass
+    /// is partway through the folder, and a sequence recorded now would assert that everything older than it has been
+    /// accounted for — including the occurrences this window never reached, which would then never be asked about.
+    /// </para>
     /// </remarks>
     public async Task<MailboxReconciliationResult> ReconcileAsync(
         IMailboxSession mailboxSession,
         MailAccountId accountId,
         MailFolderResolution folder,
         ImapUidValidity uidValidity,
+        ulong? reconciledThroughModSeq,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(mailboxSession);
@@ -105,13 +117,14 @@ public sealed class MailboxReconciler
             return MailboxReconciliationResult.NothingToReconcile;
         }
 
-        var observations = await mailboxSession.GetRemoteFlagsWithoutSettingSeenAsync(
+        var observation = await mailboxSession.ObserveWindowWithoutSettingSeenAsync(
             [.. window.Select(candidate => candidate.Uid)],
+            reconciledThroughModSeq,
             cancellationToken);
 
         var outcome = ClassifyWindow(
             window,
-            observations,
+            observation,
             this.dispositionReader.GetDisposition(accountId),
             this.timeProvider.GetUtcNow());
 
@@ -123,66 +136,91 @@ public sealed class MailboxReconciler
                     attemptCancellationToken),
             cancellationToken);
 
+        var emailsRemain = window.Count == this.options.MaxReconciledEmailsPerRun;
+
         return new MailboxReconciliationResult(
-            outcome.StillPresent.Count,
+            outcome.StillPresent.Count + outcome.ConfirmedUnchanged.Count,
             outcome.Disappeared.Count,
-            EmailsRemain: window.Count == this.options.MaxReconciledEmailsPerRun);
+            emailsRemain,
+            emailsRemain ? null : observation.FolderHighestModSeq);
     }
 
-    /// <summary>Sorts the window into the occurrences the server answered for and the ones it said nothing about.</summary>
+    /// <summary>Sorts the window into the occurrences the server described, the ones it confirmed, and the ones it accounted for in neither.</summary>
     /// <remarks>
     /// <para>
-    /// Silence is the finding. An occurrence the server did not report is one the folder no longer holds, so the split
-    /// is made against what came back rather than against any flag inside it — the <c>\Deleted</c> flag marks a message
-    /// still present in the folder and is a different statement entirely.
+    /// Silence is the finding. An occurrence the server neither described nor confirmed is one the folder no longer
+    /// holds, so the split is made against what came back rather than against any flag inside it — the <c>\Deleted</c>
+    /// flag marks a message still present in the folder and is a different statement entirely.
     /// </para>
     /// <para>
-    /// A UID the answer names twice keeps its first observation rather than failing the run. Nothing in the protocol
-    /// promises one entry per UID, and a server that repeats one has said the message exists, which is the only thing
-    /// this classification reads out of it.
+    /// A confirmation and a description are the same statement about existence and differ only in what is written: a
+    /// described occurrence gets the flags the server reported, a confirmed one keeps the flags already stored because
+    /// the server said they have not moved. Both then leave the queue, which is what lets the next window reach further
+    /// into the folder.
+    /// </para>
+    /// <para>
+    /// A UID the answer names twice keeps its first observation rather than failing the run, and one named as both
+    /// described and confirmed is taken as described. Nothing in the protocol promises one entry per UID, and a server
+    /// that repeats one has said the message exists, which is the only thing this classification reads out of it.
     /// </para>
     /// </remarks>
     private static ReconciledFolderOutcome ClassifyWindow(
         IReadOnlyList<StoredEmailAwaitingReconciliation> window,
-        IReadOnlyList<RemoteEmailFlagObservation> observations,
+        RemoteFolderWindowObservation observation,
         RemotelyDeletedEmailDisposition disposition,
         DateTimeOffset observedAt)
     {
-        var snapshotsByUid = observations
-            .DistinctBy(static observation => observation.Uid)
+        var snapshotsByUid = observation.Observations
+            .DistinctBy(static describedOccurrence => describedOccurrence.Uid)
             .ToDictionary(
-                static observation => observation.Uid,
-                static observation => observation.Snapshot);
+                static describedOccurrence => describedOccurrence.Uid,
+                static describedOccurrence => describedOccurrence.Snapshot);
+        var unchangedUids = observation.UnchangedUids.ToHashSet();
 
         var stillPresent = window
             .Where(candidate => snapshotsByUid.ContainsKey(candidate.Uid))
             .Select(candidate => new ObservedEmailFlags(candidate.StoredEmailId, snapshotsByUid[candidate.Uid]))
             .ToArray();
+        var confirmedUnchanged = window
+            .Where(candidate => !snapshotsByUid.ContainsKey(candidate.Uid) && unchangedUids.Contains(candidate.Uid))
+            .Select(static candidate => candidate.StoredEmailId)
+            .ToArray();
         var disappeared = window
-            .Where(candidate => !snapshotsByUid.ContainsKey(candidate.Uid))
+            .Where(candidate => !snapshotsByUid.ContainsKey(candidate.Uid) && !unchangedUids.Contains(candidate.Uid))
             .Select(static candidate => candidate.StoredEmailId)
             .ToArray();
 
-        return new ReconciledFolderOutcome(stillPresent, disappeared, disposition, observedAt);
+        return new ReconciledFolderOutcome(stillPresent, confirmedUnchanged, disappeared, disposition, observedAt);
     }
 }
 
 /// <summary>Summarizes one bounded reconciliation window.</summary>
-/// <param name="ObservedEmailCount">How many stored occurrences the server still holds and had their flag snapshot refreshed.</param>
+/// <param name="ObservedEmailCount">How many stored occurrences the server still holds, whether it described them or only confirmed them.</param>
 /// <param name="RemotelyDeletedEmailCount">How many stored occurrences the folder no longer holds.</param>
 /// <param name="EmailsRemain">Whether occurrences still await reconciliation after this window.</param>
+/// <param name="ReconciledThroughModSeq">
+/// The folder modification sequence this pass covered the whole folder through, or <see langword="null" /> when the
+/// pass was partial or the server reports no sequence. A caller records it on the folder's checkpoint.
+/// </param>
 /// <remarks>
-/// Every field is a count. Nothing derived from a message belongs in a result a worker logs, which is what makes the
-/// audit line this becomes safe to emit for a mailbox nobody may read.
+/// Every field is a count or a sequence number. Nothing derived from a message belongs in a result a worker logs, which
+/// is what makes the audit line this becomes safe to emit for a mailbox nobody may read.
 /// </remarks>
 public sealed record MailboxReconciliationResult(
     int ObservedEmailCount,
     int RemotelyDeletedEmailCount,
-    bool EmailsRemain)
+    bool EmailsRemain,
+    ulong? ReconciledThroughModSeq)
 {
     /// <summary>Gets the result of a run whose folder had nothing awaiting reconciliation.</summary>
+    /// <remarks>
+    /// It carries no modification sequence even though an empty queue is a folder with nothing left to reconcile. The
+    /// window was never read, so no sequence was observed to record, and inventing one from a later read would claim
+    /// coverage of changes nobody looked at.
+    /// </remarks>
     public static MailboxReconciliationResult NothingToReconcile { get; } = new(
         ObservedEmailCount: 0,
         RemotelyDeletedEmailCount: 0,
-        EmailsRemain: false);
+        EmailsRemain: false,
+        ReconciledThroughModSeq: null);
 }

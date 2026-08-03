@@ -28,6 +28,7 @@ internal sealed class FakeImapClient
 {
     private readonly HashSet<string> authenticationMechanisms = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<FolderNamespace, IReadOnlyList<IMailFolder>> foldersByNamespace = [];
+    private readonly Dictionary<string, IMailFolder> foldersByPath = new(StringComparer.Ordinal);
 
     private bool isConnected;
     private RemoteCertificateValidationCallback? serverCertificateValidationCallback;
@@ -42,6 +43,7 @@ internal sealed class FakeImapClient
         this.ScriptFolderAccess();
         this.ScriptNamespaces();
         this.ScriptIdle();
+        this.ScriptSynchronizationExtensions();
         this.ScriptDisconnectAndDispose();
     }
 
@@ -73,6 +75,22 @@ internal sealed class FakeImapClient
 
     /// <summary>Gets or sets the folder the server answers a selection with.</summary>
     internal IMailFolder? Folder { get; set; }
+
+    /// <summary>Gets the folders this server advertises at each remote path, for a test that watches more than one.</summary>
+    /// <remarks>A path this does not name is answered with <see cref="Folder" />, so a test about one folder configures nothing here.</remarks>
+    internal IDictionary<string, IMailFolder> FoldersByPath => this.foldersByPath;
+
+    /// <summary>Gets how many times quick resynchronization was enabled on this connection.</summary>
+    internal int EnableQuickResyncCount { get; private set; }
+
+    /// <summary>Gets whether quick resynchronization was enabled before any folder had been selected, which the protocol requires.</summary>
+    internal bool QuickResyncEnabledBeforeFolderSelection { get; private set; }
+
+    /// <summary>Gets or sets the failure enabling quick resynchronization ends with.</summary>
+    internal Exception? EnableQuickResyncException { get; set; }
+
+    /// <summary>Gets how many change subscriptions were requested on this connection, which is how a re-issued one is counted.</summary>
+    internal int NotifyCount { get; private set; }
 
     /// <summary>Gets or sets the folder the server answers as its inbox.</summary>
     internal IMailFolder? InboxFolder { get; set; }
@@ -214,11 +232,44 @@ internal sealed class FakeImapClient
             .GetFolderAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
+                var requestedPath = call.Arg<string>()!;
                 this.GetFolderAsyncCount++;
-                this.RequestedFolderPaths.Add(call.Arg<string>()!);
+                this.RequestedFolderPaths.Add(requestedPath);
+
+                if (this.foldersByPath.TryGetValue(requestedPath, out var folderAtPath))
+                {
+                    return Task.FromResult(folderAtPath);
+                }
 
                 return Task.FromResult(
                     this.Folder ?? throw new InvalidOperationException("No test folder configured."));
+            });
+    }
+
+    /// <summary>Scripts the two commands a server's synchronization extensions are reached through.</summary>
+    /// <remarks>
+    /// Both are recorded rather than answered with anything, because what a test asserts about them is that they were
+    /// issued, in what order relative to the folder selection, and with which folders — not what they returned.
+    /// </remarks>
+    private void ScriptSynchronizationExtensions()
+    {
+        this.Client.EnableQuickResyncAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            this.QuickResyncEnabledBeforeFolderSelection = this.GetFolderAsyncCount == 0;
+            this.EnableQuickResyncCount++;
+
+            return this.EnableQuickResyncException is null
+                ? Task.CompletedTask
+                : throw this.EnableQuickResyncException;
+        });
+
+        this.Client
+            .NotifyAsync(Arg.Any<bool>(), Arg.Any<IList<ImapEventGroup>>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                this.NotifyCount++;
+
+                return Task.CompletedTask;
             });
     }
 

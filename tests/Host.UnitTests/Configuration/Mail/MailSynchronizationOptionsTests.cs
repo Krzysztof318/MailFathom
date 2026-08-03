@@ -561,6 +561,10 @@ public sealed class MailSynchronizationOptionsTests
         Assert.True(options.PushRenewalInterval < TimeSpan.FromMinutes(29));
         Assert.Equal(3, options.MaxConsecutivePushFailures);
         Assert.Equal(TimeSpan.FromMinutes(15), options.PushDegradationPeriod);
+
+        // A subscription names folders explicitly and a server may refuse an oversized one as a whole, so the default
+        // has to be a list an ordinary server accepts rather than however many folders an account happens to configure.
+        Assert.Equal(20, options.MaxSubscribedFolders);
     }
 
     [Fact]

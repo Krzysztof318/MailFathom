@@ -208,6 +208,15 @@ public sealed class MailboxSynchronizer
             accountId,
             folder,
             uidValidity,
+            checkpoint.ReconciledThroughModSeq,
+            cancellationToken);
+
+        checkpoint = await this.RecordReconciledModSeqAsync(
+            accountId,
+            folder,
+            persistedCheckpoint,
+            checkpoint,
+            reconciliation.ReconciledThroughModSeq,
             cancellationToken);
 
         return MailboxSynchronizationResult.Synchronized(
@@ -218,6 +227,42 @@ public sealed class MailboxSynchronizer
             hasMore,
             checkpoint,
             reconciliation);
+    }
+
+    /// <summary>Commits the modification sequence a completed backward pass reached, and leaves the checkpoint alone otherwise.</summary>
+    /// <remarks>
+    /// It is a separate commit from the forward pass's because the two record different things: the forward advance
+    /// says which mail has been retrieved, and this says how much of the folder's history the backward pass no longer
+    /// has to re-inspect. It is committed under the same compare, so a competing writer ends this run exactly as it
+    /// ends a forward advance; what the next run loses by starting without the sequence is one full window scan.
+    /// </remarks>
+    private async Task<SynchronizationCheckpoint> RecordReconciledModSeqAsync(
+        MailAccountId accountId,
+        MailFolderResolution folder,
+        SynchronizationCheckpoint? persistedCheckpoint,
+        SynchronizationCheckpoint checkpoint,
+        ulong? reconciledThroughModSeq,
+        CancellationToken cancellationToken)
+    {
+        if (reconciledThroughModSeq is not { } modSeq)
+        {
+            return checkpoint;
+        }
+
+        var reconciledCheckpoint = checkpoint.ReconciledThrough(modSeq);
+        if (ReferenceEquals(reconciledCheckpoint, checkpoint))
+        {
+            return checkpoint;
+        }
+
+        await this.CommitCheckpointAsync(
+            accountId,
+            folder,
+            persistedCheckpoint,
+            reconciledCheckpoint,
+            cancellationToken);
+
+        return reconciledCheckpoint;
     }
 
     private async Task<OccurrenceSynchronizationOutcome> StoreOccurrenceAsync(

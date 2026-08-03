@@ -134,11 +134,18 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="read" /> is <see langword="null" />.</exception>
     /// <exception cref="MailboxUnavailableException">Thrown when the retrieval pipeline stopped the read at a configured limit.</exception>
     /// <remarks>
+    /// <para>
     /// Every attempt starts by making sure a folder is selected, and an attempt that failed on something worth
     /// repeating hands the next one a connection to rebuild rather than the one it was just failing on.
+    /// </para>
+    /// <para>
+    /// The read receives the client as well as the folder because a capability belongs to the connection an attempt is
+    /// actually running on. A read that chose its protocol from a capability captured when the session opened would
+    /// keep using it after a recovered connection landed on a server advertising something else.
+    /// </para>
     /// </remarks>
     internal Task<TResult> ExecuteFolderReadAsync<TResult>(
-        Func<IMailFolder, CancellationToken, Task<TResult>> read,
+        Func<IImapClient, IMailFolder, CancellationToken, Task<TResult>> read,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(read);
@@ -147,9 +154,10 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
             OutboundDependency.MailboxDataRetrieval,
             async attemptToken =>
             {
+                var attemptClient = await this.EnsureAuthenticatedClientAsync(attemptToken);
                 var openFolder = await this.EnsureOpenFolderAsync(attemptToken);
 
-                return await this.AttemptRepeatableReadAsync(() => read(openFolder, attemptToken));
+                return await this.AttemptRepeatableReadAsync(() => read(attemptClient, openFolder, attemptToken));
             },
             cancellationToken);
     }
@@ -288,6 +296,8 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
 
                 await this.AuthenticateAsync(attemptClient, settings, cancellationToken);
 
+                await EnableQuickResyncWhenAdvertisedAsync(attemptClient, cancellationToken);
+
                 await this.AdoptSelectedFolderAsync(attemptClient, cancellationToken);
 
                 this.client = attemptClient;
@@ -302,6 +312,32 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
                 throw;
             }
         }
+    }
+
+    /// <summary>Turns on quick resynchronization where the server offers it, before any folder has been selected.</summary>
+    /// <remarks>
+    /// <para>
+    /// RFC 7162 makes <c>ENABLE QRESYNC</c> a per-connection decision that has to be taken before the first selection,
+    /// which is why it sits here rather than in whichever read first wants a vanished report. A connection that missed
+    /// this point cannot enable it later without being rebuilt.
+    /// </para>
+    /// <para>
+    /// It changes what every folder on this connection reports about a removed message: MailKit raises
+    /// <c>MessagesVanished</c> in place of <c>MessageExpunged</c> once the feature is on. Anything on this connection
+    /// that watches for a removal therefore has to watch both, and a watcher listening only for the older event would
+    /// silently stop noticing deletions the moment a server started advertising the capability.
+    /// </para>
+    /// </remarks>
+    private static async Task EnableQuickResyncWhenAdvertisedAsync(
+        IImapClient attemptClient,
+        CancellationToken cancellationToken)
+    {
+        if (!attemptClient.Capabilities.HasFlag(ImapCapabilities.QuickResync))
+        {
+            return;
+        }
+
+        await attemptClient.EnableQuickResyncAsync(cancellationToken);
     }
 
     /// <summary>Narrows the advertised mechanisms to the allow-list and authenticates with whichever credential the survivors need.</summary>

@@ -2,7 +2,7 @@
 
 <!-- describes: src/Application/Synchronization/**, src/Domain/Synchronization/**, src/Infrastructure/Mail/** -->
 
-MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for an account that asks for it — the moment the mail server says something changed. Both mechanisms run the same synchronization pass over the same read-only session; what differs is only what starts one. NOTIFY, which would let one connection cover several folders, is not implemented.
+MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for an account that asks for it — the moment the mail server says something changed. Both mechanisms run the same synchronization pass over the same read-only session; what differs is only what starts one.
 
 ## Implemented behavior
 
@@ -33,7 +33,8 @@ MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for 
 - Each run ends with a bounded backward pass over mail that is already stored, so a message deleted on the server stops being served locally and a flag changed elsewhere stops being stale. It reuses the run's own read-only session, asks for flags and the UID and nothing that could set `\Seen`, and treats a UID the server declines to answer for as a message that left the folder. What becomes of that message locally is the account's choice between a tombstone every query excludes and erasing the local copy outright; a UIDVALIDITY change selects no window at all and can therefore never delete anything. [Reconciling against the server](#reconciling-against-the-server) describes the window, the ordering that advances it without a cursor, the two dispositions, and the audit lines.
 - A bounded background backfill re-reads the raw MIME of messages stored before extraction existed, writes the classification markers and the text it finds, and records the position it reached so an interrupted run resumes rather than restarts. It reaches no mail server, and it ends itself once no stored message awaits extraction.
 - `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, secret resolution and trust anchor loading before any hosted service starts, a validated snapshot every consumer reads instead of the raw bound one, and one supervised synchronization schedule per configured account that isolates failures per account and per folder work unit. [Per-account supervision](#per-account-supervision) describes the coordinator, the two concurrency bounds, the backoff layering, and the shutdown drain. A second worker, configured under `MailExtractionBackfill`, runs the extraction backfill on the same scoped-work-unit terms.
-- An account configured for push keeps an IMAP `IDLE` session open per folder and starts its next pass as soon as the server reports a change, instead of waiting out the interval. The mode is chosen per folder against what the server advertises, degrades to polling when push keeps failing, and is reported whenever it changes. [Push synchronization](#push-synchronization) describes mode selection, renewal, degradation, the rotation boundary a long-lived connection creates, and what an operator can observe.
+- An account configured for push keeps its folders watched and starts its next pass as soon as the server reports a change, instead of waiting out the interval. How they are watched is the server's answer: one `NOTIFY` subscription covering the account's folders where the server supports it, one `IDLE` session per folder where it supports only that, and polling where it supports neither. The mode is chosen per folder against what the server advertises, degrades to polling when push keeps failing, and is reported whenever it changes. [Push synchronization](#push-synchronization) describes the fallback matrix, mode selection, renewal, degradation, the rotation boundary a long-lived connection creates, and what an operator can observe.
+- The backward pass asks a capable server only about what changed. Where the server reports modification sequences, the folder's checkpoint records the sequence a completed pass covered it through, and the next pass narrows its flag fetch to what changed since — establishing what still exists from the vanished report `QRESYNC` carries or, without it, from a UID search that returns identifiers and no message data. Every path reaches the same end state; a checkpoint written before sequences were tracked carries none and simply asks about its whole window. [Asking only about what changed](#asking-only-about-what-changed) states the matrix and why a partial pass records nothing.
 
 ## Per-account supervision
 
@@ -131,16 +132,57 @@ first-party metering instruments for the same values are still [pending](#pendin
 
 ## Push synchronization
 
-An account whose `Mode` is `Push` keeps a session open on each of its folders and starts its next synchronization pass
-the moment the mail server reports a change. Everything else about the account is unchanged: the same supervisor, the
-same interval, the same backoff, the same folder concurrency.
+An account whose `Mode` is `Push` keeps its folders watched and starts its next synchronization pass the moment the mail
+server reports a change. Everything else about the account is unchanged: the same supervisor, the same interval, the
+same backoff, the same folder concurrency.
 
 **Push changes what ends the wait between runs, and nothing about what a run does.** The pass a notification starts is
 the ordinary one — it opens its own read-only session, walks the same bounded batches, advances the same checkpoint, and
 runs the same backward pass. There is deliberately no second retrieval path: a fetch driven from the watching session
 would be a second implementation of the correctness-critical work, and the one place the read-only `\Seen` invariant
-could hold in one path and lapse in the other. The watching session issues `IDLE` and nothing else, and a test asserts
-that it requests no body, no envelope, no flags, and no read-write reselection.
+could hold in one path and lapse in the other. A watching session issues `NOTIFY` and `IDLE` and nothing else, its
+subscription asks the server for no message data, and a test asserts that it requests no body, no envelope, no flags,
+and no read-write reselection.
+
+### One connection, or one per folder
+
+How the watching is done is the server's answer rather than a setting. Two IMAP extensions are involved and they are
+asked for in order:
+
+| Server advertises | How folders are watched | Cost against the connection limit |
+| --- | --- | --- |
+| `NOTIFY` and `IDLE` | One subscription per **account** names every folder up to `MaxSubscribedFolders`; the server reports which one changed | One connection per account |
+| `IDLE` only | One session per **folder** | One connection per watched folder |
+| neither | Nothing is watched; every folder synchronizes on the account's interval | None |
+
+`NOTIFY` (RFC 5465) is what lets one connection be told about a folder it has not selected. The connection selects the
+first folder of the set so that `IDLE` has a mailbox to run against, and the subscription covers the rest; a server
+reports a change to a folder it has not selected as an unsolicited status response, which arrives as a moved message
+count, a moved next UID, a moved unread count, or a moved modification sequence. None of those numbers is read. The only
+thing carried out of a report is *which folder changed*, and the pass that follows re-reads the folder the way every
+other pass does.
+
+Both capabilities are required together, because they answer different halves of one question: `NOTIFY` is what makes a
+report about another folder possible, and `IDLE` is what keeps the connection in a state where an unsolicited report can
+reach it. A server offering one without the other is treated as offering neither, and the account falls back to the row
+below it.
+
+**Folders past `MaxSubscribedFolders` are synchronized on the account's interval**, in the order the run resolved them,
+which is the order they are configured in. They are not given a connection each: a subscription is bounded because a
+server is entitled to refuse one naming more mailboxes than it will track — as a whole, rather than mailbox by mailbox —
+and answering that refusal with one connection per overflow folder would spend exactly what the subscription exists to
+save. Which folders get push is therefore the operator's choice through configuration order, and the effective mode of
+every folder is logged.
+
+The capability is re-read rather than remembered, but not on every run: reading it costs a connection and an
+authentication, so a server that has declined a subscription is asked again after `PushDegradationPeriod` while its
+folders are watched one at a time in the meantime. That is a working push mode rather than a degradation, and it is
+logged at information level.
+
+A subscription that keeps **failing** — as opposed to being declined — leaves the whole account on its interval once
+`MaxConsecutivePushFailures` is spent, and does not fall back to one connection per folder. Asking a server for several
+more connections in the same moment it refused one is not a fallback; the account keeps synchronizing on its interval
+and the subscription is attempted again after `PushDegradationPeriod`.
 
 ### A folder in push mode still keeps the account's interval
 
@@ -165,11 +207,11 @@ mailbox that had nothing to report, which is exactly what an account not in push
 The operator configures push per **account**, and the mode is settled per **folder**, because only the server can answer
 whether it will serve one:
 
-| Configured | Server advertises `IDLE` | Effective mode |
+| Configured | Server watches the folder | Effective mode |
 | --- | --- | --- |
 | `Polling` | either | `Polling` — no session is opened at all |
-| `Push` | yes | `Push` |
-| `Push` | no | `Polling`, and the reason is logged |
+| `Push` | yes, through a subscription or a session of its own | `Push` |
+| `Push` | no, or the folder is past `MaxSubscribedFolders` | `Polling`, and the reason is logged |
 
 The capability is read from the connection the session was just established on, not from anything cached, so a server
 that gains or loses the mechanism across a restart or behind a load balancer is followed rather than remembered. A
@@ -181,17 +223,17 @@ discovery has matched it. That is also what keeps the two in step: an alias repo
 synchronized under its new binding and watched under it too, instead of leaving a connection idling on a folder nothing
 reads any more. An alias that resolves to nothing is watched by nothing.
 
-**Push is opt-in and defaults to off.** It holds a connection open per folder for the lifetime of the process, which is
-a real cost against a mail server's connection limit — an account with four folders holds four idle connections — and
-that is a choice to make rather than to inherit.
+**Push is opt-in and defaults to off.** It holds a connection open for the lifetime of the process — one for the whole
+account on a server that supports subscriptions, one per watched folder on a server that does not — which is a real cost
+against a mail server's connection limit, and that is a choice to make rather than to inherit.
 
 Those connections sit **outside** `MaxConcurrentFoldersPerAccount`, which bounds how many folders may be *synchronizing*
-at once and says nothing about how many may be waiting. That is deliberate rather than an oversight: a folder cannot be
-watched by a connection another folder is holding, so bounding the watches would mean choosing which folders get push
-and leaving the rest silently on polling. Nothing caps the count instead, because the failure it would prevent is
-already handled — a server that refuses the connections answers with failures, and the degradation below turns that into
-polling folder by folder rather than into a stuck account. An account with many folders on a server with a tight
-connection limit is therefore a configuration to reconsider, and the log says which folders lost push.
+at once and says nothing about how many may be waiting. That is deliberate rather than an oversight: on a server without
+subscriptions a folder cannot be watched by a connection another folder is holding, so bounding the watches there would
+mean choosing which folders get push and leaving the rest silently on polling. What is bounded instead is the
+subscription, by `MaxSubscribedFolders`, because that bound belongs to a command a server accepts or refuses as a whole.
+An account with many folders on a server that offers `IDLE` alone and a tight connection limit is therefore a
+configuration to reconsider, and the log says which folders lost push.
 
 ### Renewal
 
@@ -219,6 +261,12 @@ folder is **degraded to polling**, which is logged at warning level with the acc
 push stays off. The session is closed on every failure, so a retry always starts from a connection it established
 itself rather than from one that may or may not still be carrying a protocol conversation.
 
+**What clears the count is a wait that returned, not a connection that opened.** A server can accept the connection and
+then serve nothing, and treating the successful connect as evidence would reset the count on every attempt: the account
+would reconnect and fail a wait as fast as the server could answer, for as long as the process ran. A session proves
+itself by holding a wait to its renewal or by reporting a change, and only then are the failures counted against it
+forgotten.
+
 The degradation expires after `PushDegradationPeriod` and push is attempted again. That is deliberate: a server stops
 serving `IDLE` for reasons that end — a restart, a connection limit, a mailbox moving — and a folder left on polling
 until the next process restart would leave the operator's configured mode wrong for as long as the process runs. The
@@ -245,14 +293,19 @@ recycle is logged.
 | --- | --- | --- |
 | `Folder <account>/<alias> is now synchronized in <mode> mode` | Information | The **effective** mode changed — only on a change, so it is not repeated every interval |
 | `Mail server reported a change in <account>/<alias>` | Information | A notification ended the wait and started a pass |
+| `Account <account> watches N folders through one push subscription` | Information | A subscription was established, and how many folders it covers |
+| `…advertises no NOTIFY capability` | Information | The server watches one folder per connection instead; states when a subscription is attempted again |
 | `…advertises no IDLE capability` | Warning | Configured push, server declined; states when push is retried |
-| `Push session … failed N times in a row, so the folder is synchronized by polling` | Warning | The degradation itself |
-| `Push session … was recycled…` | Information | A newly published snapshot superseded the one the session connected under |
+| `Push session … failed N times in a row, so the folder is synchronized by polling` | Warning | One folder's degradation |
+| `Push subscription … failed N times in a row, so its folders are synchronized by polling` | Warning | The whole account's degradation |
+| `Push session … was recycled…` / `Push subscription … was recycled…` | Information | A newly published snapshot superseded the one the session was opened under |
 
 The effective-mode line is what answers "which mechanism is this folder actually using", which configuration alone
-cannot: an account configured for push may be polling because the server declined or because its recent attempts kept
-failing, and those two have different remedies. Like every other line here, all five carry the account identifier and
-the folder alias and nothing derived from a message.
+cannot: an account configured for push may be polling because the server declined, because its recent attempts kept
+failing, or because the folder is past the subscription's bound, and those have different remedies. The subscription
+line answers the question beside it — whether the account is spending one connection or one per folder. Like every other
+line here, all of them carry the account identifier and, where it applies, the folder alias, and nothing derived from a
+message.
 
 ## Folder aliases and discovery
 
@@ -607,6 +660,37 @@ folder no longer holds rather than to fail the command, so the answer describes 
 and **silence is the finding**. A UID the server answered for has its stored flag snapshot refreshed; a UID it said
 nothing about is a message that left the folder.
 
+### Asking only about what changed
+
+A server that supports modification sequences can be asked a narrower question, and the checkpoint records what it needs
+to be asked. Which question it gets depends on what the connection advertises:
+
+| Server advertises | What the pass issues | What establishes existence |
+| --- | --- | --- |
+| neither | `UID FETCH <window> (FLAGS UID)` | The fetch itself: silence is a deletion |
+| `CONDSTORE` and `QRESYNC` | `UID FETCH <window> (FLAGS UID) (CHANGEDSINCE <modseq> VANISHED)` | The vanished report the same command carries |
+| `CONDSTORE` only | `UID SEARCH UID <window>`, then the same narrowed fetch | The search, which returns identifiers and no message data |
+
+**The three reach the same end state and differ only in the work.** A narrowed fetch alone cannot tell an unchanged
+message from a deleted one — both are silence — so something else always has to say which of the rest still exist. That
+is why `CONDSTORE` on its own buys a cheap identifier search rather than nothing, and why the two extensions together
+answer both halves in one command. A message the server confirms without describing keeps the flags already stored and
+only moves to the back of the reconciliation queue.
+
+The sequence the pass narrows by is recorded on the folder's checkpoint, and **only a pass that emptied the folder's
+queue records one**. Recording it after a partial pass would assert that everything older than it is accounted for,
+including the occurrences that window never reached, which would then never be asked about again. It also belongs to one
+UIDVALIDITY scope: a renumbered folder is a different UID space, so the sequence is dropped with the rest of the
+progress rather than carried across.
+
+A checkpoint written before MailFathom tracked sequences carries none, which reads as exactly what it means — a folder
+nobody has reconciled by sequence — so the first pass after an upgrade asks about its whole window and records a
+sequence at the end of it. Nothing is resynchronized and no mail is fetched twice.
+
+Quick resynchronization is enabled on a connection immediately after authentication, before any folder is selected,
+because RFC 7162 allows it nowhere else. It also changes how a server reports a removal — as a vanished report rather
+than as an expunge — which is why every session that watches a folder for changes watches both events.
+
 The `\Deleted` flag is deliberately not that signal. It marks a message the folder still holds and still serves, so it
 is recorded as a flag and nothing more. Only disappearance from the folder is a deletion here.
 
@@ -682,6 +766,7 @@ Synchronization is disabled by default:
     "PushRenewalInterval": "00:20:00",
     "MaxConsecutivePushFailures": 3,
     "PushDegradationPeriod": "00:15:00",
+    "MaxSubscribedFolders": 20,
     "Accounts": [
       {
         "AccountId": "primary",
@@ -821,12 +906,18 @@ costs and why the default is the one that opens no connection. It binds as one o
 neither **fails startup** rather than falling back — an operator who asked for push and mistyped it would otherwise get
 polling with nothing reporting the difference, for the same reason the disposition above is checked explicitly.
 
-The three deployment-wide settings shape how a watched folder behaves and apply to every account that asked for push.
+The four deployment-wide settings shape how a watched folder behaves and apply to every account that asked for push.
 `PushRenewalInterval` accepts one to twenty-nine minutes, the ceiling being what RFC 2177 mandates, and defaults to
 twenty; it is the lifetime of one `IDLE` command rather than a cycle, which [Renewal](#renewal) states in full because
 the name reads the other way. `MaxConsecutivePushFailures` accepts 1 to 100 and defaults to three, and
 `PushDegradationPeriod` accepts ten seconds to a day and defaults to fifteen minutes; together they decide when a folder
 stops retrying push and when it starts again.
+
+`MaxSubscribedFolders` accepts 1 to 100 and defaults to twenty. It bounds how many folders one subscription may name on
+a server that supports them, and it exists because such a server refuses an oversized subscription as a whole rather
+than mailbox by mailbox. Folders past it synchronize on the account's interval, in configuration order, and the setting
+does nothing at all on a server that watches one folder per connection; [One connection, or one per
+folder](#one-connection-or-one-per-folder) states the whole matrix.
 
 **How often a push folder synchronizes is still `Interval`.** Push adds no schedule of its own: it ends that wait early
 when the server reports a change, and [A folder in push mode still keeps the account's
@@ -957,9 +1048,8 @@ A rejected reload is logged with the configuration path and the failure identity
   and the current backoff are recorded as structured log properties today. Publishing them through a first-party
   `Meter` is a separate change, because MailFathom declares no meter of its own yet and the one the service defaults
   export is Polly's.
-- NOTIFY. `IDLE` selects one folder, so an account watching four of them holds four connections; NOTIFY would let one
-  connection carry all of them, and would also cover a folder the account does not currently synchronize. It needs its
-  own capability negotiation and its own event model, so it is a separate change on top of the push mode above.
+- Watching a folder the account does not synchronize. A subscription names the folders a run resolved, so a change in a
+  folder nothing is configured for is not reported and would not start a pass if it were.
 - A durable audit store for mapping changes. The log-backed sink cannot join the transaction that commits a binding,
   so a sink failure loses the record of a change that already happened.
 - Adapters for external managed secret stores. Kubernetes and container deployments need none, because their secrets are files.

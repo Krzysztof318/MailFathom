@@ -103,6 +103,25 @@ internal sealed class MailSynchronizationOptions
     [Range(typeof(TimeSpan), "00:01:00", "00:29:00")]
     public TimeSpan PushRenewalInterval { get; set; } = TimeSpan.FromMinutes(20);
 
+    /// <summary>Gets or sets how many of an account's folders one push subscription may name.</summary>
+    /// <remarks>
+    /// <para>
+    /// A server that supports the <c>NOTIFY</c> extension reports changes to several folders over one connection, which
+    /// is what keeps an account with many folders from holding one authenticated connection per folder. The
+    /// subscription names those folders explicitly, and a server is entitled to refuse one that names more mailboxes
+    /// than it will track — as a whole, not folder by folder — so the list is bounded here rather than left to grow
+    /// with the account's configuration.
+    /// </para>
+    /// <para>
+    /// Folders past the bound are synchronized on the account's interval, exactly as they are on a server that offers
+    /// no subscription at all. The order is the order the run resolved its folders, which is the order they are
+    /// configured in, so which folders get push is the operator's choice rather than an accident of discovery. Raise it
+    /// for a server known to accept a longer list; lowering it moves folders onto the interval and nothing else.
+    /// </para>
+    /// </remarks>
+    [Range(1, 100)]
+    public int MaxSubscribedFolders { get; set; } = 20;
+
     /// <summary>Gets or sets how many times opening or holding a push session may fail in a row before the folder is degraded to polling.</summary>
     /// <remarks>
     /// A push session fails for the same reasons any mailbox session does, and the resilience pipelines have already

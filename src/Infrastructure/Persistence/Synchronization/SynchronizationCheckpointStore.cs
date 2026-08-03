@@ -40,15 +40,7 @@ internal sealed class SynchronizationCheckpointStore(MailFathomDbContext readCon
                     && checkpoint.MailFolder.ResolutionGeneration == generation,
                 cancellationToken);
 
-        if (entity is null)
-        {
-            return null;
-        }
-
-        return new SynchronizationCheckpoint(
-            ImapUidValidity.Create(entity.UidValidity),
-            entity.LastSeenUid is { } uid ? ImapUid.Create(uid) : null,
-            entity.SynchronizedAt);
+        return entity is null ? null : CheckpointOf(entity);
     }
 
     /// <inheritdoc />
@@ -84,15 +76,13 @@ internal sealed class SynchronizationCheckpointStore(MailFathomDbContext readCon
                 UidValidity = checkpoint.UidValidity.Value,
                 LastSeenUid = checkpoint.LastSeenUid?.Value,
                 SynchronizedAt = checkpoint.SynchronizedAt,
+                ReconciledThroughModSeq = StoredModSeqOf(checkpoint.ReconciledThroughModSeq),
             });
 
             return;
         }
 
-        var currentCheckpoint = new SynchronizationCheckpoint(
-            ImapUidValidity.Create(entity.UidValidity),
-            entity.LastSeenUid is { } uid ? ImapUid.Create(uid) : null,
-            entity.SynchronizedAt);
+        var currentCheckpoint = CheckpointOf(entity);
         if (!currentCheckpoint.RepresentsSameProgressAs(expectedCheckpoint))
         {
             throw new PersistenceConcurrencyConflictException(
@@ -102,7 +92,30 @@ internal sealed class SynchronizationCheckpointStore(MailFathomDbContext readCon
         entity.UidValidity = checkpoint.UidValidity.Value;
         entity.LastSeenUid = checkpoint.LastSeenUid?.Value;
         entity.SynchronizedAt = LaterOf(entity.SynchronizedAt, checkpoint.SynchronizedAt);
+        entity.ReconciledThroughModSeq = StoredModSeqOf(checkpoint.ReconciledThroughModSeq);
     }
+
+    /// <summary>Reads one stored row as the progress it records, including a row written before sequences were tracked.</summary>
+    /// <remarks>
+    /// A row from before this column existed reads with the sequence absent and every other value intact, which is what
+    /// lets an upgraded installation keep its progress instead of resynchronizing its folders.
+    /// </remarks>
+    private static SynchronizationCheckpoint CheckpointOf(SynchronizationCheckpointEntity entity) =>
+        new(
+            ImapUidValidity.Create(entity.UidValidity),
+            entity.LastSeenUid is { } uid ? ImapUid.Create(uid) : null,
+            entity.SynchronizedAt)
+        {
+            ReconciledThroughModSeq = entity.ReconciledThroughModSeq is { } modSeq ? (ulong)modSeq : null,
+        };
+
+    /// <summary>Narrows a modification sequence onto the signed column that holds it.</summary>
+    /// <remarks>
+    /// The conversion is checked because RFC 7162 bounds the value to 63 bits and the adapter that reads it from the
+    /// server enforces the same bound. A value that overflowed here would mean one of those two statements is wrong,
+    /// and storing a negative ordering key would make every later comparison answer backwards.
+    /// </remarks>
+    private static long? StoredModSeqOf(ulong? modSeq) => modSeq is { } value ? checked((long)value) : null;
 
     private static DateTimeOffset? LaterOf(DateTimeOffset? current, DateTimeOffset? proposed) =>
         current is not null && (proposed is null || current > proposed)

@@ -13,6 +13,10 @@ public sealed record ObservedEmailFlags(StoredEmailId StoredEmailId, RemoteEmail
 
 /// <summary>Everything one reconciliation window learned, as one thing to apply.</summary>
 /// <param name="StillPresent">The emails the folder still holds, with the flags to write onto them.</param>
+/// <param name="ConfirmedUnchanged">
+/// The emails the folder still holds and reported no change to, so the stored flags already describe them and only the
+/// record of when they were last asked about moves.
+/// </param>
 /// <param name="Disappeared">The emails the folder no longer holds.</param>
 /// <param name="Disposition">What becomes of the local copy of each disappeared email.</param>
 /// <param name="ObservedAt">When this window was read, which orders it against what other writers have recorded.</param>
@@ -27,9 +31,16 @@ public sealed record ObservedEmailFlags(StoredEmailId StoredEmailId, RemoteEmail
 /// window replayed after a commit conflict cannot overwrite an observation that is newer than itself. Every snapshot in
 /// <paramref name="StillPresent" /> carries its own reading of the same moment, taken where the server answered.
 /// </para>
+/// <para>
+/// <paramref name="ConfirmedUnchanged" /> is applied like the rest and is not an optimization an implementation may
+/// skip. The observation timestamp is what moves an email to the back of the reconciliation queue, so an email the
+/// server confirmed and this window left untouched would be selected again on every run and the window would never
+/// reach anything else.
+/// </para>
 /// </remarks>
 public sealed record ReconciledFolderOutcome(
     IReadOnlyList<ObservedEmailFlags> StillPresent,
+    IReadOnlyList<StoredEmailId> ConfirmedUnchanged,
     IReadOnlyList<StoredEmailId> Disappeared,
     RemotelyDeletedEmailDisposition Disposition,
     DateTimeOffset ObservedAt);
