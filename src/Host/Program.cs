@@ -14,6 +14,7 @@ using MailFathom.Host.Hosting;
 using MailFathom.Host.Observability;
 using MailFathom.Host.Security;
 using MailFathom.Infrastructure;
+using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Resilience;
@@ -291,7 +292,12 @@ try
 
     // Registered whether or not any profile is configured, because the store is what the certificates are loaded into
     // and disposed from, and an unconfigured deployment simply loads none.
-    builder.Services.AddSingleton<McpServerCertificateStore>();
+    builder.Services.AddSingleton(provider => new TransportServerCertificateStore(
+        mcpEndpointSettings.Https,
+        $"{McpEndpointOptions.SectionName}:{nameof(McpEndpointOptions.Https)}",
+        provider.GetRequiredService<TlsServerCertificateLoader>(),
+        provider.GetRequiredService<TimeProvider>(),
+        provider.GetRequiredService<ILogger<TransportServerCertificateStore>>()));
 
     if (mcpEndpointSettings.Enabled && mcpEndpointSettings.Https.TerminatesTls)
     {
@@ -299,10 +305,10 @@ try
         // clear-text listener from staying open behind an endpoint an operator configured HTTPS for. The callback runs
         // when the server is constructed, after the container exists, so the store it reads is the one the composition
         // root has already loaded.
-        builder.WebHost.ConfigureKestrel(kestrelOptions => McpHttpsEndpointBinder.Bind(
+        builder.WebHost.ConfigureKestrel(kestrelOptions => TransportHttpsEndpointBinder.Bind(
             kestrelOptions,
             mcpEndpointSettings.Https,
-            kestrelOptions.ApplicationServices.GetRequiredService<McpServerCertificateStore>(),
+            kestrelOptions.ApplicationServices.GetRequiredService<TransportServerCertificateStore>(),
             mcpEndpointSettings.ClientCertificateProfiles.Count > 0));
     }
 
@@ -377,7 +383,7 @@ try
     // material is missing, expired, or issued for another domain therefore fails startup with nothing listening.
     if (mcpEndpointSettings.Enabled && mcpEndpointSettings.Https.TerminatesTls)
     {
-        await app.Services.GetRequiredService<McpServerCertificateStore>()
+        await app.Services.GetRequiredService<TransportServerCertificateStore>()
             .LoadAsync(app.Lifetime.ApplicationStopping);
     }
 
@@ -426,7 +432,8 @@ try
             // none to carry it: the authentication handler publishes it instead of a mapped route. A browser client
             // reads that document before it holds any credential, so without the policy applied to its path the one
             // response that says where to authorize is the one a page cannot read.
-            var protectedResourceMetadataPath = mcpEndpointSettings.OAuth.ProtectedResourceMetadataPath();
+            var protectedResourceMetadataPath = McpProtectedResourceMetadata.PathFor(
+                mcpEndpointSettings.OAuth.CanonicalResource());
 
             app.UseWhen(
                 context => context.Request.Path.Equals(protectedResourceMetadataPath, StringComparison.OrdinalIgnoreCase),
@@ -477,7 +484,7 @@ try
             // answering unauthenticated while everything the MCP route exposes is covered by the one requirement it
             // carries. Under the stateless transport that route is the post alone; a get or a delete is not mapped at
             // all, so there is no second entry into the protocol surface for a requirement to miss.
-            mcpEndpoint.RequireAuthorization(McpAccessPolicy.PolicyName);
+            mcpEndpoint.RequireAuthorization(TransportSurface.Mcp.AccessPolicyName);
         }
     }
 

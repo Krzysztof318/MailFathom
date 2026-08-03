@@ -2,17 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Diagnostics.CodeAnalysis;
-using System.Security.Claims;
 using MailFathom.Host.Configuration;
 using MailFathom.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
-using Microsoft.IdentityModel.Protocols;
-using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.Net.Http.Headers;
 using ModelContextProtocol.AspNetCore.Authentication;
 using ModelContextProtocol.Authentication;
@@ -28,10 +23,11 @@ namespace MailFathom.Host.Security;
 /// for another, and a deployment can be narrow on one while wide on the next.
 /// </para>
 /// <para>
-/// Authentication itself is composed of as many schemes as the deployment turned on, sitting behind one scheme that
-/// routes to them. That shape is what lets an API key and an access token be accepted at once without either check
-/// weakening: each credential reaches the handler that understands it, and a handler never sees a credential of the
-/// other kind.
+/// Only what is MCP's own is here. Which credentials are accepted, and what makes a caller authorized, are questions
+/// every protected surface asks, so they are registered through <see cref="TransportSecurityExtensions" /> with the MCP
+/// surface handed in. What stays is the part that exists because this endpoint speaks a protocol to browsers and to MCP
+/// clients: the CORS policy, the client-certificate handshake, the discovery document the MCP authorization
+/// specification defines, and the refusal a client reads when its token lacks a scope.
 /// </para>
 /// </remarks>
 internal static class McpTransportSecurityExtensions
@@ -76,8 +72,26 @@ internal static class McpTransportSecurityExtensions
             return services;
         }
 
-        AddAuthenticationSchemes(services, endpointSettings);
-        AddAuthorizationPolicy(services, endpointSettings);
+        // A challenge is answered by one scheme whichever credential was presented, because a request that has nothing
+        // to authenticate with has told us nothing about which kind of credential it was going to use. With OAuth turned
+        // on that is the MCP scheme, whose challenge carries the metadata document a client needs to begin authorizing;
+        // otherwise it is the API key scheme's bare bearer challenge.
+        var challengeSchemeName = endpointSettings.AllowsOAuth
+            ? McpAuthenticationDefaults.AuthenticationScheme
+            : TransportSurface.Mcp.ApiKeySchemeName;
+
+        var authentication = services.AddTransportAuthentication(
+            TransportSurface.Mcp,
+            endpointSettings.Authentication,
+            [.. endpointSettings.ApiKeys],
+            endpointSettings.OAuth,
+            challengeSchemeName);
+
+        if (endpointSettings.AllowsOAuth)
+        {
+            AddProtectedResourceMetadataScheme(authentication, endpointSettings.OAuth);
+            AddInsufficientScopeRefusal(services, endpointSettings.OAuth);
+        }
 
         return services;
     }
@@ -112,245 +126,43 @@ internal static class McpTransportSecurityExtensions
         }));
     }
 
-    /// <summary>Registers the routing scheme and one scheme per credential the deployment accepts.</summary>
-    /// <remarks>
-    /// The routing scheme is the default, so every part of the pipeline that asks for "the" scheme — the authorization
-    /// middleware challenging an anonymous request, the endpoint requiring an authenticated user — reaches the one place
-    /// that knows how many schemes there are. Nothing downstream names an individual scheme.
-    /// </remarks>
-    private static void AddAuthenticationSchemes(IServiceCollection services, McpEndpointOptions endpointSettings)
-    {
-        var authentication = services.AddAuthentication(McpOAuthAuthentication.RoutingSchemeName);
-
-        var apiKeySchemeName = endpointSettings.AllowsApiKey ? McpApiKeyAuthentication.SchemeName : null;
-        var unmatchedSchemeName = endpointSettings.AllowsOAuth
-            ? McpAuthenticationDefaults.AuthenticationScheme
-            : McpApiKeyAuthentication.SchemeName;
-
-        var oauthSchemesByIssuer = endpointSettings.AllowsOAuth
-            ? endpointSettings.OAuth.AuthorizationServers.ToDictionary(
-                authorizationServer => authorizationServer.ValidatedIssuer(),
-                authorizationServer => McpOAuthAuthentication.SchemeNameFor(authorizationServer.Name!),
-                StringComparer.Ordinal)
-            : [];
-
-        var schemeSelector = new McpCredentialSchemeSelector(
-            oauthSchemesByIssuer,
-            apiKeySchemeName,
-            unmatchedSchemeName);
-
-        authentication.AddPolicyScheme(
-            McpOAuthAuthentication.RoutingSchemeName,
-            displayName: null,
-            policyOptions =>
+    /// <summary>Registers the scheme publishing the RFC 9728 document an MCP client discovers its authorization server through.</summary>
+    private static void AddProtectedResourceMetadataScheme(
+        AuthenticationBuilder authentication,
+        OAuthValidationOptions oauthSettings) =>
+        authentication.AddMcp(mcpOptions =>
+        {
+            // Absolute and configured, never derived from the request. Left unset, the SDK composes both this address
+            // and the resource it advertises from the request's scheme and Host header, so a deployment behind a proxy
+            // would tell each client to authenticate for whichever name that client arrived under.
+            mcpOptions.ResourceMetadataUri = new Uri(
+                McpProtectedResourceMetadata.AddressFor(oauthSettings.CanonicalResource()));
+            mcpOptions.ResourceMetadata = new ProtectedResourceMetadata
             {
-                policyOptions.ForwardDefaultSelector = context =>
-                    schemeSelector.SchemeFor(context.Request.Headers.Authorization.ToString());
+                Resource = oauthSettings.CanonicalResource(),
+                AuthorizationServers = [.. oauthSettings.AuthorizationServers.Select(server => server.ValidatedIssuer())],
+                ScopesSupported = [.. oauthSettings.RequiredScopes],
+                BearerMethodsSupported = ["header"],
+                ResourceName = "MailFathom",
+            };
+        });
 
-                // A challenge is answered by one scheme whichever credential was presented, because a request that has
-                // nothing to authenticate with has told us nothing about which kind of credential it was going to use.
-                // With OAuth turned on that is the MCP scheme, whose challenge carries the metadata document a client
-                // needs to begin authorizing; otherwise it is the API key scheme's bare bearer challenge.
-                policyOptions.ForwardChallenge = unmatchedSchemeName;
-            });
-
-        if (endpointSettings.AllowsApiKey)
-        {
-            services.AddSingleton<McpApiKeyAuthenticator>();
-            authentication.AddScheme<AuthenticationSchemeOptions, McpApiKeyAuthenticationHandler>(
-                McpApiKeyAuthentication.SchemeName,
-                configureOptions: null);
-        }
-
-        if (endpointSettings.AllowsOAuth)
-        {
-            AddOAuthSchemes(authentication, endpointSettings.OAuth);
-        }
-    }
-
-    /// <summary>Registers the metadata scheme and one token validator per configured authorization server.</summary>
-    private static void AddOAuthSchemes(AuthenticationBuilder authentication, McpOAuthOptions oauthSettings)
-    {
-        authentication.AddMcp(
-            mcpOptions =>
-            {
-                // Absolute and configured, never derived from the request. Left unset, the SDK composes both this
-                // address and the resource it advertises from the request's scheme and Host header, so a deployment
-                // behind a proxy would tell each client to authenticate for whichever name that client arrived under.
-                mcpOptions.ResourceMetadataUri = new Uri(oauthSettings.ProtectedResourceMetadataAddress());
-                mcpOptions.ResourceMetadata = new ProtectedResourceMetadata
-                {
-                    Resource = oauthSettings.CanonicalResource(),
-                    AuthorizationServers = [.. oauthSettings.AuthorizationServers.Select(server => server.ValidatedIssuer())],
-                    ScopesSupported = [.. oauthSettings.RequiredScopes],
-                    BearerMethodsSupported = ["header"],
-                    ResourceName = "MailFathom",
-                };
-            });
-
-        foreach (var authorizationServer in oauthSettings.AuthorizationServers)
-        {
-            authentication.AddJwtBearer(
-                McpOAuthAuthentication.SchemeNameFor(authorizationServer.Name!),
-                jwtOptions => ConfigureAuthorizationServer(jwtOptions, authorizationServer, oauthSettings));
-        }
-    }
-
-    /// <summary>Configures one authorization server's token validator, its metadata retrieval, and its key set.</summary>
+    /// <summary>Registers the refusal that names the scope an authenticated token was missing.</summary>
     /// <remarks>
-    /// <para>
-    /// Every profile gets its own configuration manager, which is what keeps two authorization servers isolated. A key
-    /// set is reachable only from the scheme whose issuer published it, so a signing key that two servers happen to
-    /// identify the same way never validates a token claiming the other's issuer.
-    /// </para>
-    /// <para>
-    /// Nothing about the server's own endpoints is assembled here. The key set address comes out of the discovery
-    /// document, which is itself found at the addresses the MCP authorization specification names, so a server that
-    /// moves an endpoint keeps working and one that publishes no document fails to configure rather than being reached
-    /// at a guessed path.
-    /// </para>
+    /// Only a required scope can turn an authenticated caller away, so this is registered only where one exists. Without
+    /// it the endpoint answers every failure with a challenge, and there would be nothing for this to say.
     /// </remarks>
-    private static void ConfigureAuthorizationServer(
-        JwtBearerOptions jwtOptions,
-        McpAuthorizationServerOptions authorizationServer,
-        McpOAuthOptions oauthSettings)
+    private static void AddInsufficientScopeRefusal(IServiceCollection services, OAuthValidationOptions oauthSettings)
     {
-        var issuer = authorizationServer.ValidatedIssuer();
-        var metadataAddresses = authorizationServer.MetadataAddresses();
-
-        jwtOptions.MetadataAddress = metadataAddresses[0];
-        jwtOptions.RequireHttpsMetadata = true;
-
-        // The claims stay under the names the token used, because the identity mapping below reads 'iss' and 'sub'. The
-        // framework's default renames them to long-form SOAP claim types, which would leave that mapping reading claims
-        // that no longer exist and quietly producing no identity.
-        jwtOptions.MapInboundClaims = false;
-
-        // No error description reaches the client. The framework's default reports why a token was refused, which tells
-        // an unauthenticated caller whether an issuer is configured, whether an audience matched, and whether a token
-        // merely expired. The server log keeps all of it.
-        jwtOptions.IncludeErrorDetails = false;
-
-        jwtOptions.Backchannel = MetadataBackchannel();
-        jwtOptions.ConfigurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
-            metadataAddresses[0],
-            new OAuthAuthorizationServerMetadataRetriever(authorizationServer.Name!, issuer, metadataAddresses),
-            new HttpDocumentRetriever(jwtOptions.Backchannel) { RequireHttps = true })
+        if (oauthSettings.RequiredScopes.Count == 0)
         {
-            AutomaticRefreshInterval = McpOAuthAuthentication.MetadataRefreshInterval,
-            RefreshInterval = McpOAuthAuthentication.MetadataRefreshThrottle,
-            LastKnownGoodLifetime = McpOAuthAuthentication.LastKnownGoodMetadataLifetime,
-        };
-
-        jwtOptions.TokenValidationParameters = McpOAuthAuthentication.TokenValidationParametersFor(
-            issuer,
-            oauthSettings.CanonicalResource());
-
-        jwtOptions.Events = new JwtBearerEvents
-        {
-            OnMessageReceived = RefuseATokenThatArrivedWithoutTransportEncryption,
-            OnTokenValidated = ReplacePrincipalWithMinimalIdentity,
-        };
-    }
-
-    /// <summary>Refuses a bearer token presented over a connection that was not encrypted.</summary>
-    /// <remarks>
-    /// <para>
-    /// An access token is a reusable credential, so a request carrying one over plain HTTP hands it to anybody watching
-    /// the network — and unlike a password nothing about presenting it a second time looks unusual. The resource
-    /// identifier being HTTPS and metadata retrieval requiring HTTPS protect what this deployment publishes and what it
-    /// fetches; neither says anything about the transport an incoming request arrived on.
-    /// </para>
-    /// <para>
-    /// Nothing that worked before is refused by this. A deployment reached over plain HTTP cannot complete OAuth
-    /// discovery anyway, because the SDK serves the protected resource metadata document only to a request whose own
-    /// scheme and host match the configured resource. What this closes is a host listening on both an encrypted and a
-    /// plaintext endpoint, where discovery succeeds over the first and the token is then presented over the second.
-    /// </para>
-    /// <para>
-    /// The refusal is silent — no result rather than a failure — so the caller receives the same challenge an
-    /// unauthenticated request receives, and the token is never read, validated, or recorded.
-    /// </para>
-    /// </remarks>
-    internal static Task RefuseATokenThatArrivedWithoutTransportEncryption(MessageReceivedContext context)
-    {
-        if (!context.Request.IsHttps)
-        {
-            context.NoResult();
+            return;
         }
 
-        return Task.CompletedTask;
-    }
-
-    /// <summary>Reduces a validated token to the identity MailFathom keeps of it.</summary>
-    /// <remarks>
-    /// The validated principal carries every claim the authorization server chose to include, which routinely means a
-    /// name, an address, and a set of groups. Replacing it here means nothing downstream can read one, so a later change
-    /// cannot start depending on a claim the operator never mapped.
-    /// </remarks>
-    private static Task ReplacePrincipalWithMinimalIdentity(TokenValidatedContext context)
-    {
-        var identity = context.Principal is { } validatedPrincipal
-            ? McpOAuthIdentity.FromValidatedToken(validatedPrincipal.Claims, context.Scheme.Name)
-            : null;
-
-        if (identity is null)
-        {
-            context.Fail("The validated token names no subject.");
-
-            return Task.CompletedTask;
-        }
-
-        context.Principal = new ClaimsPrincipal(identity);
-
-        return Task.CompletedTask;
-    }
-
-    /// <summary>Builds the client the discovery document and key set are retrieved through.</summary>
-    /// <remarks>
-    /// It follows no redirect and reads no more than the stated limit, so an authorization server cannot send a key
-    /// refresh somewhere the configuration never named or answer it with an unbounded body. The timeout bounds how long
-    /// a refresh can hold the request that provoked it.
-    /// </remarks>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The client and its handlers are owned by the JwtBearerOptions this is assigned to and live for the process lifetime; disposing them here would leave every key refresh without a transport.")]
-    private static HttpClient MetadataBackchannel()
-    {
-        var transport = new HttpClientHandler { AllowAutoRedirect = false };
-
-        return new HttpClient(new BoundedMetadataHttpMessageHandler(transport, McpOAuthOptions.MetadataSizeLimitInBytes))
-        {
-            Timeout = McpOAuthOptions.MetadataRetrievalTimeout,
-        };
-    }
-
-    /// <summary>Registers the requirement the MCP endpoint carries, and the refusal an insufficient token receives.</summary>
-    private static void AddAuthorizationPolicy(IServiceCollection services, McpEndpointOptions endpointSettings)
-    {
-        var requiredScopes = endpointSettings.AllowsOAuth
-            ? endpointSettings.OAuth.RequiredScopes.ToArray()
-            : [];
-
-        var authorizedIdentities = endpointSettings.AllowsOAuth
-            ? endpointSettings.OAuth.AuthorizedIdentities()
-            : new HashSet<string>(StringComparer.Ordinal);
-
-        services.AddAuthorization(authorizationOptions => authorizationOptions.AddPolicy(
-            McpAccessPolicy.PolicyName,
-            policy => policy
-                .AddAuthenticationSchemes(McpOAuthAuthentication.RoutingSchemeName)
-                .RequireAssertion(context =>
-                    McpAccessPolicy.IsAuthorized(context.User, authorizedIdentities, requiredScopes))));
-
-        // Only a required scope can turn an authenticated caller away, so the refusal that explains which scope is
-        // missing is registered only where one exists. Without it the endpoint answers every failure with a challenge,
-        // and there is nothing for this to say.
-        if (requiredScopes.Length > 0)
-        {
-            services.AddSingleton<IAuthorizationMiddlewareResultHandler>(
-                new McpInsufficientScopeResultHandler(
-                    requiredScopes,
-                    endpointSettings.OAuth.ProtectedResourceMetadataAddress()));
-        }
+        services.AddSingleton<IAuthorizationMiddlewareResultHandler>(
+            new InsufficientScopeResultHandler(
+                [.. oauthSettings.RequiredScopes],
+                McpProtectedResourceMetadata.AddressFor(oauthSettings.CanonicalResource())));
     }
 
     /// <summary>Builds the CORS policy from the configured origins.</summary>

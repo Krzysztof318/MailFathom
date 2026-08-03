@@ -47,7 +47,7 @@ public sealed class McpEndpointOptionsTests
         var options = new McpEndpointOptions();
 
         // Assert
-        Assert.Equal(McpTransportAuthenticationMethods.None, options.Authentication);
+        Assert.Equal(TransportAuthenticationMethods.None, options.Authentication);
         Assert.False(options.RequiresAuthentication);
     }
 
@@ -70,7 +70,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_ApiKeyAuthenticationWithAtLeastOneKey_IsAccepted()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.ApiKey);
+        var options = EnabledWith(TransportAuthenticationMethods.ApiKey);
         options.ApiKeys.Add(Key("workstation"));
 
         // Act, Assert
@@ -81,7 +81,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_ApiKeyAuthenticationWithNoKey_IsRefusedBecauseNoClientCouldAuthenticate()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.ApiKey);
+        var options = EnabledWith(TransportAuthenticationMethods.ApiKey);
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
@@ -100,7 +100,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnAuthenticationValueNoMemberDeclares_IsRefusedRatherThanTreatedAsNeither()
     {
         // Arrange
-        var options = EnabledWith((McpTransportAuthenticationMethods)4);
+        var options = EnabledWith((TransportAuthenticationMethods)4);
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
@@ -114,7 +114,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnUnknownMethodBesideAKnownOne_IsRefused()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.ApiKey | (McpTransportAuthenticationMethods)8);
+        var options = EnabledWith(TransportAuthenticationMethods.ApiKey | (TransportAuthenticationMethods)8);
         options.ApiKeys.Add(Key("workstation"));
 
         // Act
@@ -129,7 +129,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_ApiKeyAndOAuthTogether_IsAccepted()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.ApiKey | McpTransportAuthenticationMethods.OAuth);
+        var options = EnabledWith(TransportAuthenticationMethods.ApiKey | TransportAuthenticationMethods.OAuth);
         options.ApiKeys.Add(Key("nightly-digest"));
         options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
 
@@ -144,7 +144,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AuthorizationServersConfiguredWhileOAuthIsNotAMethod_IsRefused()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.None);
+        var options = EnabledWith(TransportAuthenticationMethods.None);
         options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
 
         // Act
@@ -158,8 +158,8 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_OAuthWithNoAuthorizationServer_IsRefusedBecauseNoTokenCouldBeValidated()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.OAuth);
-        options.OAuth = new McpOAuthOptions { Resource = "https://mail.example.test/mcp" };
+        var options = EnabledWith(TransportAuthenticationMethods.OAuth);
+        options.OAuth = new OAuthValidationOptions { Resource = "https://mail.example.test/mcp" };
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
@@ -179,7 +179,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AResourceThatIsNotACanonicalUrl_IsRefused(string? resource)
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.OAuth);
+        var options = EnabledWith(TransportAuthenticationMethods.OAuth);
         options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
         options.OAuth.Resource = resource;
 
@@ -195,7 +195,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_TwoAuthorizationServersSharingAnIssuer_IsRefused()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.OAuth);
+        var options = EnabledWith(TransportAuthenticationMethods.OAuth);
         options.OAuth = OAuthWith(
             AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"),
             AuthorizationServer("partners", "https://sso.example.test/realms/mailfathom"));
@@ -216,7 +216,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AScopeThatCouldRewriteTheChallenge_IsRefused(string scope)
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.OAuth);
+        var options = EnabledWith(TransportAuthenticationMethods.OAuth);
         options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
         options.OAuth.RequiredScopes.Add(scope);
 
@@ -232,7 +232,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_OAuthWithNoRequiredScope_IsAccepted()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.OAuth);
+        var options = EnabledWith(TransportAuthenticationMethods.OAuth);
         options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
 
         // Act, Assert
@@ -249,7 +249,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_ExplicitlyUnauthenticated_IsAccepted()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.None);
+        var options = EnabledWith(TransportAuthenticationMethods.None);
 
         // Act, Assert
         Assert.Empty(options.FindConfigurationErrors());
@@ -260,7 +260,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_KeysConfiguredWhileApiKeyIsNotAMethod_IsRefused()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.None);
+        var options = EnabledWith(TransportAuthenticationMethods.None);
         options.ApiKeys.Add(Key("workstation"));
 
         // Act
@@ -274,7 +274,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnUnusableCorsPolicy_IsReportedUnderTheSectionThatCarriesIt()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.None);
+        var options = EnabledWith(TransportAuthenticationMethods.None);
         options.Cors.ServeEveryBrowserOrigin();
         options.Cors.AllowedOrigins.Add("https://client.example.test");
 
@@ -289,7 +289,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnUnusableRateLimit_IsReportedUnderTheSectionThatCarriesIt()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.None);
+        var options = EnabledWith(TransportAuthenticationMethods.None);
         options.RateLimiting.MaxConcurrentRequests = 0;
 
         // Act
@@ -307,7 +307,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnEndpointConfiguringNoLimits_ReportsNothing()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.None);
+        var options = EnabledWith(TransportAuthenticationMethods.None);
 
         // Act
         var errors = options.FindConfigurationErrors();
@@ -321,7 +321,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_SeveralFaults_ReportsThemAllAtOnce()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.ApiKey);
+        var options = EnabledWith(TransportAuthenticationMethods.ApiKey);
         options.Cors.AllowedOrigins.Add("not-an-origin");
 
         // Act
@@ -346,7 +346,7 @@ public sealed class McpEndpointOptionsTests
     public void ClientCertificateProfiles_UnconfiguredDeployment_IsEmptyRatherThanNull()
     {
         // Arrange, Act
-        var options = EnabledWith(McpTransportAuthenticationMethods.None);
+        var options = EnabledWith(TransportAuthenticationMethods.None);
 
         // Assert
         Assert.Empty(options.ClientCertificateProfiles);
@@ -358,7 +358,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnUnusableClientCertificateProfile_IsReportedUnderItsPosition()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.None);
+        var options = EnabledWith(TransportAuthenticationMethods.None);
         var profile = ConnectorProfile();
         profile.TrustAnchors.Clear();
         options.ClientCertificateProfiles.Add(profile);
@@ -375,7 +375,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_TwoProfilesSharingAName_IsRefused()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.None);
+        var options = EnabledWith(TransportAuthenticationMethods.None);
         options.ClientCertificateProfiles.Add(ConnectorProfile());
         options.ClientCertificateProfiles.Add(ConnectorProfile());
 
@@ -390,7 +390,7 @@ public sealed class McpEndpointOptionsTests
     public void ToClientCertificateTrustProfiles_SeveralProfiles_MapsThemInConfigurationOrder()
     {
         // Arrange
-        var options = EnabledWith(McpTransportAuthenticationMethods.None);
+        var options = EnabledWith(TransportAuthenticationMethods.None);
         options.ClientCertificateProfiles.Add(ConnectorProfile());
         var reportingProfile = ConnectorProfile();
         reportingProfile.Name = "reporting-service";
@@ -405,12 +405,12 @@ public sealed class McpEndpointOptionsTests
             trustProfiles.Select(profile => profile.Name));
     }
 
-    private static McpEndpointOptions EnabledWith(McpTransportAuthenticationMethods authentication) =>
+    private static McpEndpointOptions EnabledWith(TransportAuthenticationMethods authentication) =>
         new() { Enabled = true, Authentication = authentication };
 
-    private static McpOAuthOptions OAuthWith(params McpAuthorizationServerOptions[] authorizationServers)
+    private static OAuthValidationOptions OAuthWith(params AuthorizationServerOptions[] authorizationServers)
     {
-        var oauth = new McpOAuthOptions { Resource = "https://mail.example.test/mcp" };
+        var oauth = new OAuthValidationOptions { Resource = "https://mail.example.test/mcp" };
 
         // A loop rather than a projection, because adding to a getter-only collection is a side effect and a pipeline
         // must never be the place one happens.
@@ -422,7 +422,7 @@ public sealed class McpEndpointOptionsTests
         return oauth;
     }
 
-    private static McpAuthorizationServerOptions AuthorizationServer(string name, string issuer) =>
+    private static AuthorizationServerOptions AuthorizationServer(string name, string issuer) =>
         new() { Name = name, Issuer = issuer, AuthorizedSubjects = { "9f2c" } };
 
     private static McpClientCertificateProfileOptions ConnectorProfile()

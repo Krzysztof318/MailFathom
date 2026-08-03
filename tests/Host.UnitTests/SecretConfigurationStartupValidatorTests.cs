@@ -463,7 +463,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_AnMcpApiKeyThatCannotBeResolved_FailsStartupNamingItsPosition()
     {
         // Arrange
-        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMethods.ApiKey };
+        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = TransportAuthenticationMethods.ApiKey };
         endpoint.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "file:/run/secrets/absent" });
         var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
 
@@ -481,7 +481,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_TwoMcpApiKeysSharingAName_FailsStartupBecauseNeitherCouldBeRotatedByName()
     {
         // Arrange
-        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMethods.ApiKey };
+        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = TransportAuthenticationMethods.ApiKey };
         endpoint.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:one" });
         endpoint.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:two" });
         var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
@@ -547,7 +547,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_AClientCertificateTrustAnchorThatIsNotACertificate_FailsStartupNamingItsPosition()
     {
         // Arrange
-        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = McpTransportAuthenticationMethods.None };
+        var endpoint = new McpEndpointOptions { Enabled = true, Authentication = TransportAuthenticationMethods.None };
         var profile = new McpClientCertificateProfileOptions
         {
             Name = "chatgpt-connector",
@@ -610,14 +610,14 @@ public sealed class SecretConfigurationStartupValidatorTests
 
     private static McpEndpointOptions EndpointAcceptingBothCredentials()
     {
-        var authorizationServer = new McpAuthorizationServerOptions { Name = "workforce", Issuer = WorkforceIssuer };
+        var authorizationServer = new AuthorizationServerOptions { Name = "workforce", Issuer = WorkforceIssuer };
         authorizationServer.AuthorizedSubjects.Add("9f2c");
 
         var endpoint = new McpEndpointOptions
         {
             Enabled = true,
-            Authentication = McpTransportAuthenticationMethods.ApiKey | McpTransportAuthenticationMethods.OAuth,
-            OAuth = new McpOAuthOptions { Resource = "https://mail.example.test/mcp" },
+            Authentication = TransportAuthenticationMethods.ApiKey | TransportAuthenticationMethods.OAuth,
+            OAuth = new OAuthValidationOptions { Resource = "https://mail.example.test/mcp" },
         };
 
         endpoint.OAuth.AuthorizationServers.Add(authorizationServer);
