@@ -64,9 +64,12 @@ listeners and no clear-text one stays open behind them.
 
 ## Getting the command
 
-Each release attaches a self-contained binary per platform, plus one checksum file covering all of them. Download the
-one for the machine you administer *from* — the command talks to a deployment over HTTP, so it does not have to run
-where the service runs.
+From **0.2.0** each release attaches a self-contained binary per platform, plus one checksum file covering all of them.
+`0.1.0` predates this endpoint and attaches the schema artifact alone, so until 0.2.0 is cut the command is published
+by `dotnet publish src/Cli/Cli.csproj --configuration Release` from a checkout.
+
+Download the one for the machine you administer *from* — the command talks to a deployment over HTTP, so it does not
+have to run where the service runs.
 
 | Platform | Asset |
 | --- | --- |

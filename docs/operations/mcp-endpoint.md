@@ -39,7 +39,14 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
 | `Cors.AllowedOrigins` | `["*"]` | The browser origins served: `*` for every one, a list for exactly those, an empty list for none |
 | `ClientCertificateProfiles` | empty | The client applications whose certificates are accepted, each with its own authorities and expected names |
 | `RateLimiting` | bounded — see [Rate limiting](#rate-limiting) | How much traffic the endpoint accepts, per process and per client |
-| `Https.Endpoints` | empty | The domains MailFathom terminates TLS for; empty serves the endpoint over the host's ordinary listener |
+| `Https.Endpoints` | empty | The domains MailFathom terminates TLS for; empty serves the endpoint over the application listener |
+
+Nothing in this section says *where* the endpoint is served. Enabling it maps `/mcp` on
+[the application listener](configuration-reference.md#the-application-listener) — the socket `ASPNETCORE_URLS`,
+`ASPNETCORE_HTTP_PORTS`, or `Kestrel:Endpoints` names, and `http://localhost:5000` when a deployment names none. That
+listener is clear text unless something in front of it terminates TLS or one of those addresses is an `https://` one,
+which is what [`Https.Endpoints`](#https-and-your-own-domain) is the alternative to: it moves the endpoint onto
+listeners of its own rather than adding TLS to that one.
 
 The endpoint always answers on **`/mcp`**, which is a constant rather than a setting. An MCP client is configured with a
 server URL, so a deployment could only move the path in step with every client pointed at it — the configurability would

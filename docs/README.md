@@ -6,8 +6,9 @@ This documentation set explains the durable design and operating model for MailF
 
 [The user guide](users/README.md) is the guided path for people who install, configure, and use MailFathom rather
 than develop it: [choosing an installation](users/installation.md), [getting started](users/getting-started.md) from
-first mailbox to first tool call, and [using the tools](users/usage.md). It links into the sections below for depth
-instead of duplicating them.
+first mailbox to first tool call, [using the tools](users/usage.md), and
+[administering a running deployment](users/administering.md) with the `mfctl` command. It links into the sections
+below for depth instead of duplicating them.
 
 ## Sections
 
@@ -22,6 +23,7 @@ instead of duplicating them.
 - [Secret provisioning](operations/secret-provisioning.md) covers secret references, the systemd and container provisioning paths, and in-memory exposure.
 - [Host startup telemetry](operations/host-startup-telemetry.md) describes the bootstrap logging pipeline that reports process start, startup failure, and shutdown.
 - [MCP endpoint](operations/mcp-endpoint.md) covers enabling the protocol surface, the API keys and explicit unauthenticated mode that guard it, the origins it answers, and the domains and certificates it terminates TLS for.
+- [The administrative endpoint](operations/admin-endpoint.md) covers the surface the `mfctl` command reaches, why it is a listener and a credential separate from the MCP endpoint's, how a sign-in is stored on the operator's machine, and what each failure message means.
 - [Health endpoints](operations/health-endpoints.md) covers the startup, readiness, and liveness probes, the dedicated listener they are served on, the transports it supports, and why the surface carries no credential and no rate limit.
 - [The container image](operations/container-image.md) documents the image `deploy/docker/Dockerfile` produces, how the service runs, its health endpoints, and why it carries no schema tool.
 - [Deploying with Docker Compose](operations/deployment-compose.md) is the supported single-machine deployment, including secret and configuration provisioning, the explicit schema step, backup, and what survives removal.

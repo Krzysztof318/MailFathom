@@ -21,10 +21,10 @@ Two properties hold everywhere and are worth knowing before anything is installe
 
 ## The state of the release
 
-MailFathom has not had a first release yet. No versioned artifact exists, so every installation starts from a checkout
-of this repository — including the schema file you apply, which a release will attach and which a checkout generates
-with `scripts/build-schema-artifact.sh`. These pages say so where it matters instead of describing a release that does
-not exist. The first release is milestone `0.1.0`.
+`0.1.0` is the current release. The container image is published to both registries, the Helm chart is published, and
+the schema file you apply is attached to the GitHub release — so an installation starts from a versioned artifact
+rather than from a checkout. Where a page describes something that arrives later than `0.1.0`, it says so and names
+the release, rather than describing it as though you could already download it.
 
 ## The path
 
@@ -34,7 +34,9 @@ not exist. The first release is milestone `0.1.0`.
    successful tool call, including secrets, the schema step, health verification, and connecting an MCP client.
 3. **[Using the tools](usage.md)** — what `list_emails`, `search_emails`, and `get_email_content` do, what they
    deliberately bound, and how to read a failure.
-4. **[Configuration reference](../operations/configuration-reference.md)** — every user-settable option in one place,
+4. **[Administering your deployment](administering.md)** — the `mfctl` command: what it is for, signing in to a
+   deployment from your own machine, and what it cannot do yet.
+5. **[Configuration reference](../operations/configuration-reference.md)** — every user-settable option in one place,
    with its type, default, constraints, and whether changing it needs a restart.
 
 ## Once it is running
@@ -42,6 +44,8 @@ not exist. The first release is milestone `0.1.0`.
 | Question | Page |
 | --- | --- |
 | Is it healthy, and how do I probe it? | [Health endpoints](../operations/health-endpoints.md) |
+| Which port does it serve `/mcp` on, and is it HTTP or HTTPS? | [The application listener](../operations/configuration-reference.md#the-application-listener) |
+| How do I reach a running deployment from my own machine? | [Administering your deployment](administering.md), [the administrative endpoint](../operations/admin-endpoint.md) |
 | How do I provision and rotate credentials? | [Secret provisioning](../operations/secret-provisioning.md), [secret rotation](../operations/secret-rotation.md) |
 | How do I protect the MCP endpoint — keys, OAuth, TLS, client certificates, rate limits? | [The MCP endpoint](../operations/mcp-endpoint.md) |
 | How do I upgrade, back up, restore, or remove it? | [Docker Compose](../operations/deployment-compose.md), [Kubernetes](../operations/deployment-kubernetes.md) |

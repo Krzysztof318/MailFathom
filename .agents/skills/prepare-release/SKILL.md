@@ -100,7 +100,8 @@ On a branch off the release branch, and touching nothing else:
   version still runs, and whether the release deploys over the previous release's data at all;
 - update the link references at the foot of the file so the new section resolves;
 - leave `VersionPrefix` alone. It already reads `x.y.z`, which is what makes the tagged tree self-consistent;
-- **bring the three files that name a version in prose onto `x.y.z`**, per the list below.
+- **bring the files that name a version in prose onto `x.y.z`**, per the list below;
+- **sweep the tree for prose that describes the release state**, per the pass after it.
 
 Nothing else belongs in this diff. **This is the pull request whose merge commit is tagged and published**, so it is
 both the last point at which the release's contents are read as a whole and the thing the published artifact is built
@@ -109,13 +110,14 @@ which is what makes an edit to it outside this flow visible.
 
 #### The files that name a version in prose
 
-`<VersionPrefix>` is the only place a version is written for the *build*. Three files additionally name one in prose,
+`<VersionPrefix>` is the only place a version is written for the *build*. Four files additionally name one in prose,
 where nothing derives it and nothing checks it, so they are read here by name rather than left to be noticed:
 
 | File | What to bring onto `x.y.z` |
 | --- | --- |
 | `README.md` | The **Project status** paragraph — which release is current and what it ships |
 | `docs/users/installation.md` | The image references in the opening paragraph, which quote the version literally |
+| `docs/users/README.md` | The **The state of the release** section — which release is current, and what a page is allowed to describe as already downloadable |
 | `SECURITY.md` | The **Supported versions** table. `x.y` becomes the supported line and the one it replaces moves down a row, per ADR 0004's rule that only the newest released minor is patched by default |
 
 **They belong in this pull request rather than the bump one, and the reason is what the whole ordering rests on:** this
@@ -126,6 +128,51 @@ often than `docs/` on `main`. The bump pull request cannot carry them for the sa
 Nothing gates this, deliberately: no check can tell prose describing the release from prose quoting a version as an
 example, and one that tried would be satisfied by a search-and-replace through `docs/`. The list above is short and
 fixed instead, and a file joining it is an edit to this table.
+
+#### The release-state sweep
+
+The list above catches a file that writes the version *number*. It cannot catch the other half, which is prose
+asserting where the project stands relative to a release without naming one — "no versioned artifact exists yet", "a
+release will attach it", "the first release is milestone `0.1.0`". A sentence like that is invisible to any search for
+`x.y.z`, goes stale at the moment of the tag rather than gradually, and is read by exactly the people a release is
+for. So it is swept for here rather than added to a list, because the sentences that will be wrong next time are not
+the ones that were wrong last time.
+
+The sweep is one reading pass over what the search below turns up. It is not a search-and-replace and its output is
+not a list of edits:
+
+```bash
+git grep -nEi \
+  'not (yet )?(been )?(released|published|distributed)|no (versioned |published |binary )?(artifact|release|image|chart) (exists|yet)|first release is|has not had|until (the )?(first )?release|is (still )?pre-?release|unreleased|no release (has|yet)|a release will' \
+  -- ':(glob)**/*.md' ':(glob)**/*.yaml' ':(glob)**/*.yml' \
+     ':(exclude)CHANGELOG.md' ':(exclude)docs/decisions/**' ':(exclude).agents/skills/prepare-release/**'
+```
+
+It is written to return a handful of lines rather than a page of them, because a pass that reports ninety hits is a
+pass nobody reads to the end. Widen it when a release turns up a stale sentence it missed, and record what the new
+alternative is for.
+
+Read every hit against the tree being tagged and settle it one of three ways:
+
+- **Stale.** The sentence describes a state this release ends. Correct it in this pull request.
+- **Still true, and about a *later* release.** A page saying a capability arrives with the next version is accurate and
+  stays. Confirm the version it names is still the right one — a feature deferred out of this release has to name where
+  it went.
+- **Not about the release at all.** The pattern is deliberately wide, so it matches specification prose, an ADR's
+  reasoning, and an example. Leave it.
+
+The exclusions are deliberate. `CHANGELOG.md` is the one file whose historical entries *should* read as claims about
+past releases, and rewriting one would be falsifying a record. `docs/decisions/` is excluded because an accepted ADR is
+closed: it records what was true when the decision was taken, and is replaced rather than brought up to date. This
+skill excludes itself because the patterns above are quoted in it.
+
+Three files reach further than `docs/` and are worth reading with the release in mind whether or not the search names
+them: `THIRD_PARTY_LICENSES.md` states whether redistribution obligations are outstanding, which the *first* release of
+a line changes; `CONTRIBUTING.md` and the root `README.md` both characterize the project's maturity to somebody
+deciding whether to depend on it.
+
+Report the count and the disposition — swept, corrected, left — in the pull request body, so a reviewer can see the
+pass happened without re-running it. A release that corrects nothing is an ordinary outcome and is stated as one.
 
 ### 4. Open the version-bump pull request
 

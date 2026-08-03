@@ -68,6 +68,12 @@ listeners keeps the promise that no clear-text listener stays open behind them.
 The consequence worth knowing is in the log. A host that opens the probe listener writes Kestrel's
 `Overriding address(es)` warning once at startup and then binds every address the warning named, plus the probe port.
 
+Restating is also what keeps a deployment that configures no address at all on `http://localhost:5000` alone: the
+clear-text half of Kestrel's own fallback is restated and its `https://localhost:5001` half deliberately is not, so no
+listener is ever served out of an ASP.NET Core development certificate. Turning the probes off restates nothing and
+hands that decision back to Kestrel. [The application listener](configuration-reference.md#the-application-listener)
+records where its address comes from.
+
 ## The three probes
 
 | Probe | Path | Consults | A failure means |
