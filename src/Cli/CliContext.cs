@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Cli.Authorization;
+using MailFathom.Cli.Credentials;
 
 namespace MailFathom.Cli;
 

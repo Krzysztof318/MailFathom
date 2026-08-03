@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.Extraction;
 using MimeKit;
 
 namespace MailFathom.Infrastructure.Mail.Mime;

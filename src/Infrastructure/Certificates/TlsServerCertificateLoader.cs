@@ -6,7 +6,10 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Infrastructure.Secrets.References;
+using MailFathom.Infrastructure.Secrets.Resolution;
+using MailFathom.Infrastructure.Secrets.Sources;
 
 namespace MailFathom.Infrastructure.Certificates;
 

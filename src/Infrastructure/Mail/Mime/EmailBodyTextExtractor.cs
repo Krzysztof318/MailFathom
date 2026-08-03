@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
-using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Domain.Emails;
 using MimeKit;
 

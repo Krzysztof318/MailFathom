@@ -4,9 +4,11 @@
 
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Domain.Failures;
+using MailFathom.Mcp.Tools.Results;
 using ModelContextProtocol.Server;
 
 namespace MailFathom.Mcp.Tools;

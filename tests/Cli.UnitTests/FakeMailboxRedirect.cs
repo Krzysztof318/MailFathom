@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Cli.Authorization;
+
 namespace MailFathom.Cli.UnitTests;
 
 /// <summary>The authorization redirect a command meets, without a socket to bind or a browser to drive.</summary>

@@ -334,7 +334,7 @@ nothing checks are a deployment believing it is protected — which is worse tha
 Whenever an enabled endpoint requires no credential, startup logs one warning:
 
 ```text
-warn: MailFathom.Host.Hosting.McpTransportAuthenticationWarning
+warn: MailFathom.Host.Hosting.Warnings.McpTransportAuthenticationWarning
       The MCP endpoint is enabled on /mcp with no authentication method turned on, so anything that can reach this
       address can read the synchronized mailboxes. Set McpEndpoint:Authentication to ApiKey, to OAuth, or to both unless
       the address is reachable only from this machine or from a network you control. Neither an origin policy nor a
@@ -347,7 +347,7 @@ work behind a reverse proxy or on a trusted network without further configuratio
 startup failure:
 
 ```text
-warn: MailFathom.Host.Hosting.McpTransportAuthenticationWarning
+warn: MailFathom.Host.Hosting.Warnings.McpTransportAuthenticationWarning
       Every browser origin is served while no credential is required, so a web page the user never visited can reach this
       endpoint through DNS rebinding and read what it returns. This is the right posture only where the address is
       unreachable from a browser that could be aimed at it, such as an intranet or a reverse proxy that authenticates.
@@ -469,7 +469,7 @@ Neither of those is something MailFathom can detect, so the clear-text posture i
 enabled endpoint terminates no TLS, startup logs one warning:
 
 ```text
-warn: MailFathom.Host.Hosting.McpTransportEncryptionWarning
+warn: MailFathom.Host.Hosting.Warnings.McpTransportEncryptionWarning
       The MCP endpoint is enabled on /mcp and no HTTPS profile is configured, so it is served over whichever listener
       this host was started with — clear text unless that listener or something in front of this process supplies
       HTTPS. On a clear-text hop anything on the network path can read the API key a client presents and every message
@@ -700,7 +700,7 @@ PKCS#12 bundle may not, because it is binary and has no faithful representation 
 Startup records what each profile presents and when it stops working:
 
 ```text
-info: MailFathom.Host.Security.TransportServerCertificateStore
+info: MailFathom.Host.Security.Transport.TransportServerCertificateStore
       The MCP HTTPS profile public presents a server certificate valid until 2027-01-31 00:00:00Z.
 ```
 
@@ -901,7 +901,7 @@ Whatever is in force is stated once at startup, so a deployment running on defau
 rather than having to know these numbers:
 
 ```text
-info: MailFathom.Host.Hosting.McpRateLimitingStartupReport
+info: MailFathom.Host.Hosting.Warnings.McpRateLimitingStartupReport
       The MCP endpoint on /mcp serves at most 20 requests at once across every client, queueing 0 beyond that, and
       allows each client a burst of 60 requests restored at 60 every 00:01:00, queueing 0 of its requests beyond that.
 ```
@@ -996,7 +996,7 @@ job for whatever fronts the process.
 Turning the limits off is an explicit value and costs one startup warning:
 
 ```text
-warn: MailFathom.Host.Hosting.McpRateLimitingStartupReport
+warn: MailFathom.Host.Hosting.Warnings.McpRateLimitingStartupReport
       The MCP endpoint is enabled on /mcp with rate limiting turned off, so one client can hold every database
       connection, response stream, and thread the process has until something runs out. This is the right setting only
       where something in front of this process already bounds the traffic reaching it. Remove

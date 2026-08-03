@@ -3,15 +3,17 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent;
-using MailFathom.Application.Emails;
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.Mail;
-using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Resilience;
-using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets.Resolution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 

@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Mail;
-using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;

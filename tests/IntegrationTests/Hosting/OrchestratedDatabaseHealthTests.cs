@@ -3,8 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Infrastructure;
-using MailFathom.Infrastructure.Persistence;
-using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;

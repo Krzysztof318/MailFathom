@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
+using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
 using Xunit;
 

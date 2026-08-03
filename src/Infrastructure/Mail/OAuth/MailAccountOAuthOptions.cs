@@ -2,7 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Infrastructure.Secrets.References;
+using MailFathom.Infrastructure.Secrets.Resolution;
 
 namespace MailFathom.Infrastructure.Mail.OAuth;
 

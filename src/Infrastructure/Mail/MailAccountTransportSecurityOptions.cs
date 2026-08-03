@@ -4,7 +4,8 @@
 
 using MailFathom.Domain.Transport;
 using MailFathom.Infrastructure.Certificates;
-using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Infrastructure.Secrets.References;
 
 namespace MailFathom.Infrastructure.Mail;
 

@@ -2,11 +2,19 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Host.Configuration.Access;
+using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Mail;
-using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets;
-using MailFathom.Infrastructure.Security;
+using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Infrastructure.Secrets.References;
+using MailFathom.Infrastructure.Secrets.Resolution;
+using MailFathom.Infrastructure.Secrets.Sources;
+using MailFathom.Infrastructure.Security.OAuth;
 
 namespace MailFathom.Host.Configuration;
 

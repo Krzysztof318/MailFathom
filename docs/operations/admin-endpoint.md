@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: src/Host/Configuration/AdminEndpointOptions.cs, src/Host/Api/**, src/Host/Hosting/AdminEndpointIsolation.cs, src/Host/Hosting/AdminTransportSecurityWarning.cs, src/Host/Security/Admin*, src/Cli/** -->
+<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/**, src/Host/Hosting/Startup/AdminEndpointIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Security/Endpoints/Admin*, src/Cli/** -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.

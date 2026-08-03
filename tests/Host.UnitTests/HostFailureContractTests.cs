@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Failures;
-using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.Persistence;
 using MailFathom.TestSupport;
 using Xunit;
 

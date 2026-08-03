@@ -1,0 +1,16 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+namespace MailFathom.Infrastructure.Persistence.Connections;
+
+/// <summary>The bound on a single database command that startup configured the EF Core context with.</summary>
+/// <remarks>
+/// This exists as a registered value rather than as a setting to be read again for the same reason
+/// <see cref="PostgresTextSearchConfiguration" /> does: it is captured once, during composition, and a later reload
+/// cannot reach the context options it was written into. Publishing it is what lets a reloaded candidate be compared
+/// against what the process is actually using instead of against configuration that describes an intent nothing
+/// applied.
+/// </remarks>
+/// <param name="Value">How long a single database command may run before it is cancelled.</param>
+public sealed record DatabaseCommandTimeout(TimeSpan Value);

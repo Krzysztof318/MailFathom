@@ -459,7 +459,7 @@ delivered, and prose alongside it reaches nobody.
   "findings": [
     {
       "severity": "P1",
-      "path": "src/Infrastructure/Security/McpClientCertificateAuthenticator.cs",
+      "path": "src/Infrastructure/Security/ClientCertificates/McpClientCertificateAuthenticator.cs",
       "start_line": null,
       "line": 87,
       "title": "Refuse when a matching profile loses all anchors",

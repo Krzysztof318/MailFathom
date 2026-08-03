@@ -1,6 +1,6 @@
 # Mailbox queries
 
-<!-- describes: src/Application/Emails/ListEmails/**, src/Application/Folders/** -->
+<!-- describes: src/Application/Emails/ListEmails/**, src/Application/Emails/Mailboxes/**, src/Application/Emails/Summaries/**, src/Application/Folders/** -->
 
 MailFathom answers a mailbox listing from its local copy. `ListEmails` is the first read use case: it takes structured
 filters, returns a bounded page of email summaries, issues the cursor that continues the walk, and reports how current
@@ -210,7 +210,7 @@ configuration bounds.
 - `MailFathom.Application.Emails.ListEmails` — the use case, its request, and its result.
 - `MailFathom.Application.Emails` — `MailboxEmailSelection` and the timeline filter that wraps it, the cursor, the page
   size, the summary, and the query failures shared with the other read models.
-- `MailFathom.Application.Emails.MailboxScopeResolver` — resolves the accounts a read runs against and refuses one this
+- `MailFathom.Application.Emails.Mailboxes.MailboxScopeResolver` — resolves the accounts a read runs against and refuses one this
   deployment does not serve. It is a collaborator rather than a step inside the use case because the refusal is an access
   decision every read model has to make identically.
 - `MailFathom.Application.Accounts` — `IMailAccountCatalog`, the port that names which accounts this deployment serves. One

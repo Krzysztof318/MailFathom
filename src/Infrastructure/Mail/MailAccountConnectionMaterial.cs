@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Security.Cryptography.X509Certificates;
-using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets.Resolution;
 
 namespace MailFathom.Infrastructure.Mail;
 

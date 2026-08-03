@@ -27,7 +27,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.BackfillPositionEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.BackfillPositionEntity", b =>
                 {
                     b.Property<string>("Name")
                         .HasMaxLength(64)
@@ -44,7 +44,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("backfill_positions", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.EmailContentRepairRequestEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailContentRepairRequestEntity", b =>
                 {
                     b.Property<Guid>("StoredEmailId")
                         .HasColumnType("uuid");
@@ -68,7 +68,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("email_content_repair_requests", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.EmailMessageContentEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailMessageContentEntity", b =>
                 {
                     b.Property<Guid>("StoredEmailId")
                         .HasColumnType("uuid");
@@ -92,7 +92,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("email_message_contents", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.EmailSearchDocumentEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailSearchDocumentEntity", b =>
                 {
                     b.Property<Guid>("StoredEmailId")
                         .HasColumnType("uuid");
@@ -135,7 +135,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("email_search_documents", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.MailFolderEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -174,7 +174,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("mail_folders", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.MailboxAccountEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", b =>
                 {
                     b.Property<string>("Id")
                         .HasMaxLength(128)
@@ -186,7 +186,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("mailbox_accounts", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.StoredEmailEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
@@ -345,7 +345,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("stored_emails", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.SynchronizationCheckpointEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.SynchronizationCheckpointEntity", b =>
                 {
                     b.Property<long>("MailFolderId")
                         .HasColumnType("bigint");
@@ -371,42 +371,42 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("synchronization_checkpoints", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.EmailContentRepairRequestEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailContentRepairRequestEntity", b =>
                 {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.StoredEmailEntity", "StoredEmail")
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", "StoredEmail")
                         .WithOne("ContentRepairRequest")
-                        .HasForeignKey("MailFathom.Infrastructure.Persistence.EmailContentRepairRequestEntity", "StoredEmailId")
+                        .HasForeignKey("MailFathom.Infrastructure.Persistence.Entities.EmailContentRepairRequestEntity", "StoredEmailId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("StoredEmail");
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.EmailMessageContentEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailMessageContentEntity", b =>
                 {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.StoredEmailEntity", "StoredEmail")
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", "StoredEmail")
                         .WithOne("Content")
-                        .HasForeignKey("MailFathom.Infrastructure.Persistence.EmailMessageContentEntity", "StoredEmailId")
+                        .HasForeignKey("MailFathom.Infrastructure.Persistence.Entities.EmailMessageContentEntity", "StoredEmailId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("StoredEmail");
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.EmailSearchDocumentEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailSearchDocumentEntity", b =>
                 {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.StoredEmailEntity", "StoredEmail")
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", "StoredEmail")
                         .WithOne("SearchDocument")
-                        .HasForeignKey("MailFathom.Infrastructure.Persistence.EmailSearchDocumentEntity", "StoredEmailId")
+                        .HasForeignKey("MailFathom.Infrastructure.Persistence.Entities.EmailSearchDocumentEntity", "StoredEmailId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("StoredEmail");
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.MailFolderEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", b =>
                 {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.MailboxAccountEntity", "MailboxAccount")
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", "MailboxAccount")
                         .WithMany("MailFolders")
                         .HasForeignKey("MailboxAccountId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -415,9 +415,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("MailboxAccount");
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.StoredEmailEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", b =>
                 {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.MailFolderEntity", "MailFolder")
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", "MailFolder")
                         .WithMany("StoredEmails")
                         .HasForeignKey("MailFolderId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -426,30 +426,30 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("MailFolder");
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.SynchronizationCheckpointEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.SynchronizationCheckpointEntity", b =>
                 {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.MailFolderEntity", "MailFolder")
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", "MailFolder")
                         .WithOne("SynchronizationCheckpoint")
-                        .HasForeignKey("MailFathom.Infrastructure.Persistence.SynchronizationCheckpointEntity", "MailFolderId")
+                        .HasForeignKey("MailFathom.Infrastructure.Persistence.Entities.SynchronizationCheckpointEntity", "MailFolderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("MailFolder");
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.MailFolderEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", b =>
                 {
                     b.Navigation("StoredEmails");
 
                     b.Navigation("SynchronizationCheckpoint");
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.MailboxAccountEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", b =>
                 {
                     b.Navigation("MailFolders");
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.StoredEmailEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", b =>
                 {
                     b.Navigation("Content");
 

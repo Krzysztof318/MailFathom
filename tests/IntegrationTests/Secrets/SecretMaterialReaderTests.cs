@@ -3,7 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
-using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets.Resolution;
+using MailFathom.Infrastructure.Secrets.Sources;
 using Xunit;
 
 namespace MailFathom.IntegrationTests.Secrets;

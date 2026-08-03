@@ -3,10 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
-using MailFathom.Application.EmailContent;
-using MailFathom.Application.Emails;
+using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;

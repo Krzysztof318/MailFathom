@@ -6,7 +6,8 @@ using System.Collections;
 using System.Reflection;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Accounts;
-using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Infrastructure.Secrets.References;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests;

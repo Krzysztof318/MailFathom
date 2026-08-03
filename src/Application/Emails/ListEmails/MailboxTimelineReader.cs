@@ -3,7 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
-using MailFathom.Application.Synchronization;
+using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.ListEmails;
