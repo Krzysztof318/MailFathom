@@ -63,7 +63,7 @@ The remaining labels are flags, applied only when they are true: `blocked` when 
 
 ## Milestones
 
-A milestone answers which release an issue ships in, and nothing else. Its name is a version number, so a milestone is never opened for a feature, a theme, or a date, and a body of work that spans releases is a parent issue rather than a milestone of its own. An issue with no milestone is deliberately outside the current release rather than merely unsorted, which is what makes the absence of one meaningful.
+A milestone answers which release an issue ships in, and nothing else. Its name is a version number, so a milestone is never opened for a feature, a theme, or a date, and a body of work that spans releases is a parent issue rather than a milestone of its own. An issue with no milestone is deliberately outside the current release rather than merely unsorted, which is what makes the absence of one meaningful. The parent issue below is the one exception, and it carries a label so that it reads as one.
 
 `0.2.0 — second release` is the open milestone, and it declares no scope in advance: what ships in it is whatever is placed in it. That is the opposite of how `0.1.0 — first public release`, now closed, was written, and the difference decides how a new issue is placed. A milestone that describes its own contents can be tested against — an issue either is or is not something that release cannot ship without — and one that accumulates cannot, because the description is the placement rather than a rule for it.
 
