@@ -373,12 +373,12 @@ files or comments; the line list derived from the files would inherit that shape
 and the submission step would then validate every anchor against the first page
 alone and push every other finding into the review body.
 
-Claude then runs with `Read`, `Grep`, `Glob`, and `Write` and nothing else: no
-shell, no editor, no network tool, no MCP tool, and no read access to `.git`,
+Claude then runs with `Read`, `Grep`, and `Glob` and nothing else: no shell, no
+editor, no writer, no network tool, no MCP tool, and no read access to `.git`,
 where the action leaves a token for its own use. It holds no credential it could
-use and posts nothing. It writes findings to one file, and the step after it
-validates them and submits a single review: `event: COMMENT` when the file holds
-findings, `event: APPROVE` when it holds none.
+use and posts nothing. Its findings are the run's own answer, and the step after
+it validates them and submits a single review: `event: COMMENT` when the answer
+holds findings, `event: APPROVE` when it holds none.
 
 The model is named exactly rather than by alias: `claude-sonnet-5` at
 `--effort high`. An alias re-points at whatever ships next, and findings are only
@@ -418,6 +418,38 @@ every trigger included, which stops the pipeline rather than degrading it. The
 expressions stay here, where they are six short lines; the prose sits where no
 length limit reaches it. The template is read from the workspace, which holds the
 base commit, so a pull request cannot supply the prompt that reviews it.
+
+### The verdict is the run's answer, not a file it might not write
+
+`--json-schema` in `claude_args` is what makes it one. Under that flag the
+reviewer's final message is validated against
+`.github/fathom-review/findings-schema.json` and published as the step's
+`structured_output`, so a run either answers in the shape the submission step
+reads or fails naming that as its cause.
+
+The contract it replaces was an instruction to write the findings to a file with
+the `Write` tool, and nothing enforced it. Both reviews of #306 on 2026-08-02
+ended without the call: the reviewer read the whole change, spent four minutes
+and 34 turns on it, and ended cleanly with no permission denial — and the verdict
+it reached went nowhere, leaving a red job whose message named a missing file
+rather than a cause anybody could act on. The same failure had been measured once
+in roughly twenty runs the day before and treated as a flake worth re-running,
+which two failures out of two on one pull request is not.
+
+The schema is a committed file rather than a literal in the workflow, because it
+is a contract somebody reads; the step that composes the prompt compacts it onto
+one line, because `--json-schema` takes the schema itself and not a path to one.
+That step also refuses a schema containing an apostrophe — the flag is
+single-quoted in `claude_args`, which the action parses with shell-quoting rules,
+so an apostrophe would end the quoting and hand the CLI a fragment. Both files
+are read from the workspace, so a pull request can supply neither the prompt that
+reviews it nor the shape of the verdict.
+
+Removing the write removed the reviewer's last reason to hold a tool that writes.
+`Write` is denied in the session settings as well as absent from `--allowedTools`,
+so the session stays read-only whichever of the two a later change touches, and
+the collected inputs the submission step trusts cannot be rewritten by the
+session that reads them.
 
 ### Waiting for the conversation before collecting it
 
@@ -494,17 +526,17 @@ reaches one at all; `pull_request` would give the run neither the secrets it nee
 to publish under the App nor a trigger a maintainer can aim. What makes that safe
 is structural rather than procedural: the workspace holds `base.sha` and never the
 branch, nothing from the contribution is executed, and the reviewer runs with
-`Read`, `Grep`, `Glob`, and `Write` and no shell, network tool, or MCP tool. The
+`Read`, `Grep`, and `Glob` and no shell, writer, network tool, or MCP tool. The
 purpose of the prohibition — untrusted code never runs with a credential — is met
 without avoiding the trigger.
 
 The exception is scoped to this workflow and to that shape. It is revoked by any
 change that checks out, builds, restores, or executes the branch under review,
-that grants the reviewer a shell or a network tool, that adds `workflow_dispatch`
-— a dispatch takes a ref, which would let the branch supply the job that receives
-the Claude credential — or that lets a trigger other than a maintainer's label or
-comment reach a fork. A second workflow wanting the trigger does not inherit this
-reasoning; it argues its own case or uses `pull_request`.
+that grants the reviewer a shell, a writer, or a network tool, that adds
+`workflow_dispatch` — a dispatch takes a ref, which would let the branch supply
+the job that receives the Claude credential — or that lets a trigger other than a
+maintainer's label or comment reach a fork. A second workflow wanting the trigger
+does not inherit this reasoning; it argues its own case or uses `pull_request`.
 
 ### What bounds the cost
 
@@ -701,17 +733,23 @@ edit to discharge it and the only kind of line a review comment can reach.
 `claude-code-action` hides everything the reviewer produced, and rightly so: that output
 is model text derived from an untrusted diff. It hides the run's own error string with
 it, which is the one place a failure says what happened — an expired credential, an
-exhausted subscription, a model the plan cannot use. The action does save every message
-to `$RUNNER_TEMP/claude-execution-output.json`, so a step after it reads the last result
-message's error text and prints that and nothing else, flattened to one line, truncated
+exhausted subscription, a model the plan cannot use, or a reviewer that answered without
+conforming to the schema, where the last result message holds what it said instead. The
+action does save every message to `$RUNNER_TEMP/claude-execution-output.json`, and it
+does so before it refuses a non-conforming answer, so a step after it reads the last
+result message's text and prints that and nothing else, flattened to one line, truncated
 to 500 characters, and withheld if it matches a credential shape or either credential the
 workflow holds. The alternative the action offers is `show_full_output`, which would
 print the entire review into the log to recover one sentence.
 
 The submission step then distinguishes two silences. A reviewer that never answered has
-already failed and said why, so a missing findings file is reported as a notice and the
-run keeps the reviewer's own error as its only cause. A reviewer that answered and still
-produced no valid file is this workflow's defect and fails there.
+already failed and said why, so an empty `structured_output` from a step that failed is
+reported as a notice and the run keeps the reviewer's own error as its only cause. An empty
+one from a step that *succeeded* is unreachable while the action keeps failing on a missing
+structured answer, and it fails there anyway: that branch is what stops the workflow
+depending on a promise it does not own, because a later action version that renamed the
+output or stopped failing on it would otherwise leave every review posting nothing under a
+green job — a pipeline that has silently stopped reviewing.
 
 Both steps refuse to compare against an unset `CLAUDE_CODE_OAUTH_TOKEN` and report the
 missing secret instead, because `grep -F ''` matches every file and an empty pattern
@@ -727,7 +765,7 @@ ranged comment, submits with an explicit `POST`, and refuses to post at all if
 the findings contain any credential this workflow holds or anything shaped like
 one.
 
-It also lays each finding out. The reviewer writes one as separate fields —
+It also lays each finding out. The reviewer answers with separate fields —
 `impact`, what breaks; `correction`, the smallest change that fixes it; `rule`,
 what the finding rests on — and this step renders them under fixed headings, so
 every thread answers the same three questions in the same order. An author
@@ -752,14 +790,13 @@ The alternatives are both worse — `event: COMMENT` with an empty comment list
 records that a review happened without saying what it concluded, and an ordinary
 issue comment says it somewhere nothing reads as a verdict at all.
 
-That branch is the one place the reviewer's own exit status is consulted a second
-time. An empty findings array means two different things: from a run that
-finished it means nothing was found, and from one that died after writing the
-file — an exhausted subscription, a transport error, a model that stopped — it
-means the search never completed. Findings from such a run are still posted,
-because a defect it did name is real. An approval is not, because it asserts the
-absence of what the run stopped looking for, so an unfinished run that found
-nothing reports a notice and publishes no verdict.
+That branch consults the reviewer's own exit status a second time. An empty
+findings array means two different things: from a run that finished it means
+nothing was found, and from one that answered and then failed anyway it means the
+search never completed. Findings from such a run are still posted, because a
+defect it did name is real. An approval is not, because it asserts the absence of
+what the run stopped looking for, so an unfinished run that found nothing reports
+a notice and publishes no verdict.
 
 `commit_id` ties the approval to the head the reviewer actually saw, and the
 `main` ruleset sets `dismiss_stale_reviews_on_push`, so the next push dismisses

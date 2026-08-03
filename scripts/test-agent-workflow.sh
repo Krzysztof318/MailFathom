@@ -30,6 +30,7 @@ protected_paths_bin_directory="$test_directory/protected-paths-bin"
 typo_check_bin_directory="$test_directory/typo-check-bin"
 fathom_review_bin_directory="$test_directory/fathom-review-bin"
 settle_bin_directory="$test_directory/fathom-review-settle-bin"
+submit_bin_directory="$test_directory/fathom-review-submit-bin"
 invocation_log="$test_directory/dotnet-invocations.log"
 workflow_invocation_log="$test_directory/workflow-invocations.log"
 fixture_branch='agent/workflow-fixture'
@@ -1357,6 +1358,167 @@ fathom_review_reads_the_newest_comment_whatever_the_order() {
   assert_seconds_elapsed_at_least 4 "$started_at"
 }
 
+# The submission step is where the reviewer's answer becomes a review, and it is the one step whose
+# input is model text. What it decides — which findings can be anchored, which verdict the body
+# carries, whether anything is posted at all — is decided from that text alone, so these contracts
+# hand it an answer and read the payload it would have posted. The fake `gh` below stands in for the
+# one call it makes: it copies the `--input` file rather than sending it, which is what lets a
+# contract assert on a payload that never leaves the machine.
+mkdir -p "$submit_bin_directory"
+cat > "$submit_bin_directory/gh" <<'FAKE_GH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${FAKE_REVIEW_PAYLOAD:?FAKE_REVIEW_PAYLOAD must identify where the payload is recorded}"
+
+while (($# > 0)); do
+  if [[ "$1" == '--input' ]]; then
+    cp "$2" "$FAKE_REVIEW_PAYLOAD"
+    exit 0
+  fi
+  shift
+done
+
+echo 'The submission step called gh without an --input payload.' >&2
+exit 1
+FAKE_GH
+chmod +x "$submit_bin_directory/gh"
+
+# The collected inputs the step reads: the anchors every finding is validated against, and whatever
+# a ceiling dropped. Both are written by the collection step in the real job, which these contracts
+# do not run — what they exercise is everything the submission step does with them.
+write_fathom_review_collection() {
+  local review_directory="$1"
+
+  mkdir -p "$review_directory"
+  printf '[{"filename":"src/Sample.cs","lines":[12,13,14]}]\n' > "$review_directory/lines.json"
+  : > "$review_directory/truncation.txt"
+}
+
+run_fathom_review_submit() {
+  local findings="$1"
+  local output_file="$2"
+  local payload_file="$3"
+  # A reviewer that finished is the ordinary case; the contract about a run that did not names it.
+  local review_outcome="${4:-success}"
+  local step_script="$test_directory/fathom-review-submit.sh"
+  local review_directory="$test_directory/fathom-review-submit-review"
+
+  extract_fathom_review_step 'submit' "$step_script"
+  write_fathom_review_collection "$review_directory"
+  rm -f "$payload_file"
+
+  set +e
+  (
+    export PATH="$submit_bin_directory:$PATH"
+    export GH_TOKEN='ghs_reviewerapptokenthatisnotreal'
+    export REPOSITORY='Krzysztof318/MailFathom'
+    export PULL_REQUEST_NUMBER='1'
+    export HEAD_SHA='0123456789abcdef0123456789abcdef01234567'
+    export WORKFLOW_TOKEN='ghs_workflowtokenthatisnotreal'
+    export REVIEWER_TOKEN='ghs_reviewerapptokenthatisnotreal'
+    export CLAUDE_CREDENTIAL='sk-ant-oat01-credentialthatisnotreal'
+    export REVIEW_OUTCOME="$review_outcome"
+    export FINDINGS="$findings"
+    export REVIEW_DIRECTORY="$review_directory"
+    export FAKE_REVIEW_PAYLOAD="$payload_file"
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+  submit_status=$?
+  set -e
+}
+
+fathom_review_anchors_a_finding_to_its_line() {
+  local output_file="$test_directory/fathom-review-submit-anchored-output"
+  local payload_file="$test_directory/fathom-review-submit-anchored-payload"
+
+  run_fathom_review_submit \
+    '{"summary":"Read the whole change.","findings":[{"severity":"P1","path":"src/Sample.cs","start_line":null,"line":12,"title":"Refuse the empty case","impact":"An empty list reaches the loop and the guard passes.","correction":"Return early when the list is empty.","rule":"`AGENTS.md`, \"Reliability, security, and performance\""}]}' \
+    "$output_file" "$payload_file"
+
+  ((submit_status == 0))
+  assert_json '"COMMENT"' '.event' "$payload_file"
+  assert_json '["src/Sample.cs"]' '[.comments[].path]' "$payload_file"
+  assert_json '[12]' '[.comments[].line]' "$payload_file"
+  assert_json '["RIGHT"]' '[.comments[].side]' "$payload_file"
+  assert_contains '# NEEDS CHANGES' "$payload_file"
+  assert_contains '**Findings** — P1: 1' "$payload_file"
+}
+
+fathom_review_moves_a_finding_with_no_line_into_the_body() {
+  local output_file="$test_directory/fathom-review-submit-unanchored-output"
+  local payload_file="$test_directory/fathom-review-submit-unanchored-payload"
+
+  # A line the diff does not carry and a finding that never had one: both reach the author through
+  # the body rather than being dropped, which is the property the anchor validation exists for.
+  run_fathom_review_submit \
+    '{"summary":"Read the whole change.","findings":[{"severity":"P2","path":"src/Sample.cs","start_line":null,"line":99,"title":"Name the moved line","impact":"The anchor is not on the diff.","correction":"Anchor it where the change is.","rule":"`AGENTS.md`"},{"severity":"P3","path":null,"start_line":null,"line":null,"title":"Say what the body claims","impact":"The body promises a rename the diff does not make.","correction":"Correct the body.","rule":"`docs/operations/issue-tracking.md`"}]}' \
+    "$output_file" "$payload_file"
+
+  ((submit_status == 0))
+  assert_json '[]' '.comments' "$payload_file"
+  assert_contains '### Findings with no line to sit on' "$payload_file"
+  assert_contains '**P2 — Name the moved line** — `src/Sample.cs`' "$payload_file"
+  assert_contains '**P3 — Say what the body claims**' "$payload_file"
+  assert_contains '**Findings** — P2: 1, P3: 1' "$payload_file"
+}
+
+fathom_review_approves_when_it_finds_nothing() {
+  local output_file="$test_directory/fathom-review-submit-approved-output"
+  local payload_file="$test_directory/fathom-review-submit-approved-payload"
+
+  run_fathom_review_submit \
+    '{"summary":"Read every changed file and found nothing above the bar.","findings":[]}' \
+    "$output_file" "$payload_file"
+
+  ((submit_status == 0))
+  assert_json '"APPROVE"' '.event' "$payload_file"
+  assert_contains '# APPROVED' "$payload_file"
+  assert_contains 'nothing above the bar' "$payload_file"
+}
+
+fathom_review_publishes_nothing_when_the_reviewer_returned_no_answer() {
+  local output_file="$test_directory/fathom-review-submit-silent-output"
+  local payload_file="$test_directory/fathom-review-submit-silent-payload"
+
+  # The action fails its own step when the reviewer returns no structured answer, so this is what
+  # the submission step sees afterwards: an empty output and a step that did not succeed. The cause
+  # was reported there, so this reports a notice and posts nothing rather than failing again.
+  run_fathom_review_submit '' "$output_file" "$payload_file" 'failure'
+
+  ((submit_status == 0))
+  [[ ! -e "$payload_file" ]]
+  assert_contains 'no findings to submit' "$output_file"
+}
+
+fathom_review_fails_when_a_finished_reviewer_returned_no_answer() {
+  local output_file="$test_directory/fathom-review-submit-empty-output"
+  local payload_file="$test_directory/fathom-review-submit-empty-payload"
+
+  # Unreachable while the action fails its own step on a missing structured answer, which is the
+  # point: this is what stops the workflow depending on that promise. A later version that renamed
+  # the output or stopped failing would otherwise leave every review posting nothing under a green
+  # job, so the contract fixes the loud half here rather than trusting the action to stay as it is.
+  run_fathom_review_submit '' "$output_file" "$payload_file" 'success'
+
+  ((submit_status == 1))
+  [[ ! -e "$payload_file" ]]
+  assert_contains 'returned no valid findings' "$output_file"
+}
+
+fathom_review_refuses_findings_that_carry_a_credential() {
+  local output_file="$test_directory/fathom-review-submit-credential-output"
+  local payload_file="$test_directory/fathom-review-submit-credential-payload"
+
+  run_fathom_review_submit \
+    '{"summary":"Read the whole change.","findings":[{"severity":"P1","path":"src/Sample.cs","start_line":null,"line":12,"title":"Quote the token","impact":"The token sk-ant-oat01-credentialthatisnotreal is echoed here.","correction":"Do not.","rule":"`AGENTS.md`"}]}' \
+    "$output_file" "$payload_file"
+
+  ((submit_status == 1))
+  [[ ! -e "$payload_file" ]]
+  assert_contains 'shaped like a credential' "$output_file"
+}
+
 # The `describes:` marker is what tells a reviewer which pages a change to the code obliges, and it is
 # the half of that mapping nothing derives: a page is written about configuration keys and behavior
 # rather than about type names, so no name match finds the edge. The two contracts below are what
@@ -2493,6 +2655,12 @@ run_test fathom_review_collects_at_once_when_nobody_has_commented
 run_test fathom_review_waits_before_freezing_a_quiet_conversation
 run_test fathom_review_stops_waiting_at_the_ceiling
 run_test fathom_review_reads_the_newest_comment_whatever_the_order
+run_test fathom_review_anchors_a_finding_to_its_line
+run_test fathom_review_moves_a_finding_with_no_line_into_the_body
+run_test fathom_review_approves_when_it_finds_nothing
+run_test fathom_review_publishes_nothing_when_the_reviewer_returned_no_answer
+run_test fathom_review_fails_when_a_finished_reviewer_returned_no_answer
+run_test fathom_review_refuses_findings_that_carry_a_credential
 run_test every_documentation_page_declares_what_it_describes
 run_test every_describes_pattern_matches_something_that_exists
 run_test closing_references_collect_every_issue_the_body_closes

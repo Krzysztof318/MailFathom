@@ -12,10 +12,10 @@ name: Fathom review
 # The branch under review is never checked out and nothing from it is executed. The workspace holds
 # the base commit, which is code that already merged; the change itself arrives as data through the
 # GitHub API and is written to files the reviewer only reads. Claude runs with no shell, no editor,
-# and no network tool, and it posts nothing: it writes findings to a file, and the deterministic step
-# after it validates every anchor against the frozen diff and submits one review. That split is what
-# keeps a prompt injection in the diff, in a comment, or in the linked issue from reaching an
-# authenticated API call.
+# no writer, and no network tool, and it posts nothing: its findings are the run's own answer, held
+# to a schema, and the deterministic step after it validates every anchor against the frozen diff
+# and submits one review. That split is what keeps a prompt injection in the diff, in a comment, or
+# in the linked issue from reaching an authenticated API call.
 #
 # What that step posts, it posts as the `Fathom reviewer` GitHub App rather than as `github-actions`.
 # The App is the owner's, so the review carries an identity that says what produced it, and the
@@ -465,14 +465,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
-          # What the reviewer is given, and what it produces, are separate directories on purpose.
-          # The collected inputs are made read-only once they are complete, so the only writable
-          # path the reviewer has is its own output and it cannot rewrite the anchor list that
-          # validates it. Both paths are declared per step rather than once for the job, because
-          # `runner` is not one of the contexts a job-level `env` block may read and a workflow that
-          # names it there fails validation before a job exists.
+          # The collected inputs are made read-only once they are complete, and the reviewer holds
+          # no tool that writes: its findings are the run's own answer rather than a file it
+          # produces, so it cannot rewrite the anchor list that validates them. The path is
+          # declared per step rather than once for the job, because `runner` is not one of the
+          # contexts a job-level `env` block may read and a workflow that names it there fails
+          # validation before a job exists.
           REVIEW_DIRECTORY: ${{ runner.temp }}/review
-          FINDINGS_FILE: ${{ runner.temp }}/findings/findings.json
         run: |
           set -euo pipefail
 
@@ -489,7 +488,7 @@ jobs:
           thread_comment_limit=20
           closing_reference_limit=5
 
-          mkdir -p "$REVIEW_DIRECTORY/head" "$(dirname "$FINDINGS_FILE")"
+          mkdir -p "$REVIEW_DIRECTORY/head"
 
           # Every ceiling in this step appends what it dropped here, so it is created empty before
           # the first one can run rather than written once at the end by whichever ceiling happens
@@ -732,10 +731,15 @@ jobs:
       # expressions in this file, where they are a handful of short lines, and leaves the
       # instructions as prose that no length limit reaches.
       #
-      # The template is read from the workspace, which holds the base commit, so a pull request
-      # cannot supply the prompt that reviews it — the same reason the workflow itself runs from
-      # the base rather than from the branch.
-      - name: Compose the reviewer prompt
+      # The answer's schema lives beside them, in `findings-schema.json`, and is emitted here as a
+      # single line because `--json-schema` takes the schema itself rather than a path to one.
+      # Keeping it a committed file is what makes it readable and reviewable; compacting it here is
+      # what makes it passable.
+      #
+      # Both are read from the workspace, which holds the base commit, so a pull request can supply
+      # neither the prompt that reviews it nor the shape of the verdict — the same reason the
+      # workflow itself runs from the base rather than from the branch.
+      - name: Compose the reviewer prompt and the answer schema
         id: prompt
         shell: bash
         env:
@@ -744,8 +748,8 @@ jobs:
           HEAD_SHA: ${{ steps.collect.outputs.head_sha }}
           SNAPSHOT_TAKEN: ${{ steps.collect.outputs.snapshot_taken }}
           REVIEW_DIRECTORY: ${{ runner.temp }}/review
-          FINDINGS_FILE: ${{ runner.temp }}/findings/findings.json
           TEMPLATE_FILE: ${{ github.workspace }}/.github/fathom-review/reviewer-prompt.md
+          SCHEMA_FILE: ${{ github.workspace }}/.github/fathom-review/findings-schema.json
           PROMPT_FILE: ${{ runner.temp }}/reviewer-prompt.md
         run: |
           set -euo pipefail
@@ -756,7 +760,6 @@ jobs:
             -e "s|{{HEAD_SHA}}|${HEAD_SHA}|g" \
             -e "s|{{SNAPSHOT_TAKEN}}|${SNAPSHOT_TAKEN}|g" \
             -e "s|{{REVIEW_DIRECTORY}}|${REVIEW_DIRECTORY}|g" \
-            -e "s|{{FINDINGS_FILE}}|${FINDINGS_FILE}|g" \
             "$TEMPLATE_FILE" > "$PROMPT_FILE"
 
           # A placeholder that survived substitution reaches the model as literal text, which is a
@@ -766,10 +769,23 @@ jobs:
             exit 1
           fi
 
+          # The schema is quoted with `'` in `claude_args` below, because the action parses that
+          # input with shell-quoting rules and the schema is full of `"`. A `'` inside the schema
+          # would therefore end the quoting and hand the CLI a fragment, so it is refused here
+          # rather than at the far end as an unparseable flag. Nothing else about the schema is
+          # checked by hand: `jq` reads it, so a schema that is not JSON fails on the line above.
+          schema="$(jq -c . "$SCHEMA_FILE")"
+
+          if [[ "$schema" == *"'"* ]]; then
+            echo 'The findings schema contains an apostrophe, which the reviewer flag cannot quote.' >&2
+            exit 1
+          fi
+
           {
             echo 'prompt<<FATHOM_REVIEW_PROMPT'
             cat "$PROMPT_FILE"
             echo 'FATHOM_REVIEW_PROMPT'
+            echo "schema=${schema}"
           } >> "$GITHUB_OUTPUT"
       - name: Review the change
         id: review
@@ -786,9 +802,11 @@ jobs:
           # The buffered inline comments this step would post are the mechanism this workflow
           # replaces with a validated submission of its own.
           classify_inline_comments: 'false'
-          # The reviewer reads and writes one file. It has no shell, no editor, no network tool, and
-          # no MCP tool, so no path exists from the untrusted text it reads to an authenticated call
-          # or to the runner. The deny rules cover the places a credential still sits despite that:
+          # The reviewer only reads. It has no shell, no editor, no writer, no network tool, and no
+          # MCP tool, so no path exists from the untrusted text it reads to an authenticated call,
+          # to the runner, or to the collected inputs the submission step trusts. `Write` is denied
+          # here as well as absent from `--allowedTools` below, so the property survives a later
+          # change to either one. The remaining deny rules cover the places a credential still sits:
           # the workspace git configuration, where the action writes the workflow token for its own
           # use; `/proc`, where a process can read its own environment as a file; and `.claude`,
           # where the CLI keeps its own configuration. This input is written to the user settings
@@ -799,6 +817,7 @@ jobs:
                 "deny": [
                   "Bash",
                   "Edit",
+                  "Write",
                   "WebFetch",
                   "WebSearch",
                   "mcp__*",
@@ -829,22 +848,34 @@ jobs:
           # the extra depth `xhigh` buys has not been measured against that cost here. Raise it if a
           # missed finding ever justifies the measurement.
           #
-          # `--model` and `--effort` are not inputs the action declares. It forwards a flag it does
-          # not recognize to the CLI unchanged, which is the documented way to reach a CLI option
-          # from here.
+          # `--json-schema` is what makes the verdict the run's own answer rather than a side effect
+          # of the session. Under it the model's final message is validated against the schema and
+          # published as this step's `structured_output`, and a run that ends without one fails here
+          # naming that as the cause. The alternative this replaces was an instruction to call
+          # `Write`, which nothing enforced: on #306 the reviewer twice read the whole change, spent
+          # four minutes and 34 turns on it, ended cleanly, and never made the call — a verdict that
+          # existed and reached nobody. The schema takes JSON rather than a path, which is why the
+          # step above compacts the committed file into one line.
+          #
+          # `--model`, `--effort`, and `--json-schema` are not inputs the action declares. It
+          # forwards a flag it does not recognize to the CLI unchanged, which is the documented way
+          # to reach a CLI option from here.
           claude_args: |
             --model ${{ needs.decide.outputs.model }}
             --effort high
-            --allowedTools "Read,Grep,Glob,Write"
+            --allowedTools "Read,Grep,Glob"
             --setting-sources user
+            --json-schema '${{ steps.prompt.outputs.schema }}'
 
       # The action hides everything the reviewer produced, which is right: that output is model
       # text derived from an untrusted diff. It hides the run's own error string with it, and that
       # string is the only place the cause of a failure is written — an expired credential, an
-      # exhausted subscription, a model the plan cannot use. Without it a failed run is a red job
-      # with nothing to act on, and the only alternative the action offers is `show_full_output`,
-      # which would print the whole review into the log to recover one sentence. The saved
-      # execution log holds that sentence, so this reads it and prints nothing else.
+      # exhausted subscription, a model the plan cannot use, or a reviewer that answered without
+      # conforming to the schema, where the last result message holds what it said instead. Without
+      # it a failed run is a red job with nothing to act on, and the only alternative the action
+      # offers is `show_full_output`, which would print the whole review into the log to recover one
+      # sentence. The saved execution log holds that sentence — the action writes it before it
+      # refuses a non-conforming answer — so this reads it and prints nothing else.
       - name: Report why the reviewer stopped
         if: failure() && steps.review.outcome == 'failure'
         shell: bash
@@ -895,12 +926,13 @@ jobs:
           printf '::error::The reviewer stopped: %s\n' "$reason"
 
       # `!cancelled()` rather than `always()`, which GitHub documents as running a step even when the
-      # run was cancelled. This step must still run after a reviewer that failed, because a run that
-      # died holding findings has something worth posting — but a cancelled run has the opposite
-      # property: it was cancelled because the head was superseded or the pull request closed, and
-      # `always()` would let it publish the very verdict the cancellation was meant to prevent. The
-      # `${{ }}` is required, because a YAML scalar may not begin with `!`.
+      # run was cancelled. This step must still run after a reviewer that failed, so that the reason
+      # is reported as a notice rather than as a second red step — but a cancelled run has the
+      # opposite property: it was cancelled because the head was superseded or the pull request
+      # closed, and `always()` would let it publish the very verdict the cancellation was meant to
+      # prevent. The `${{ }}` is required, because a YAML scalar may not begin with `!`.
       - name: Submit the review
+        id: submit
         if: ${{ !cancelled() && steps.collect.outcome == 'success' }}
         shell: bash
         env:
@@ -917,27 +949,42 @@ jobs:
           # credential the reviewer was never able to read still cannot be published if it somehow
           # reaches the findings.
           CLAUDE_CREDENTIAL: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Whether the reviewer got as far as an answer, which decides whether a missing findings
-          # file is this step's failure to report or the previous step's, already reported.
+          # Whether the reviewer got as far as an answer. Two branches consult it: an empty answer
+          # is a failure already reported when the step failed and this workflow's own defect when
+          # it did not, and an empty findings array means one thing from a run that finished and
+          # the opposite from one that died after answering.
           REVIEW_OUTCOME: ${{ steps.review.outcome }}
-          # The two paths the collection step wrote, restated here for the reason given there.
+          # The reviewer's answer, validated against the schema by the action and published as this
+          # output. It is model text derived from an untrusted diff, so it arrives through the
+          # environment rather than through an expression in the script below, and every check this
+          # step makes runs against it before anything is posted.
+          FINDINGS: ${{ steps.review.outputs.structured_output }}
+          # The path the collection step wrote, restated here for the reason given there.
           REVIEW_DIRECTORY: ${{ runner.temp }}/review
-          FINDINGS_FILE: ${{ runner.temp }}/findings/findings.json
         run: |
           set -euo pipefail
 
           payload_file="$(mktemp)"
+          findings_file="$(mktemp)"
 
-          if [[ ! -s "$FINDINGS_FILE" ]] || ! jq -e '.' "$FINDINGS_FILE" > /dev/null 2>&1; then
+          printf '%s' "$FINDINGS" > "$findings_file"
+
+          if [[ ! -s "$findings_file" ]] || ! jq -e '.' "$findings_file" > /dev/null 2>&1; then
             # A reviewer that never answered has already failed and said why, and repeating the
-            # consequence as a second error buries the cause. A reviewer that answered and still
-            # produced nothing valid is this workflow's own defect, and fails here.
+            # consequence as a second error buries the cause. That is the path this takes today for
+            # every empty answer, because the action fails its own step when no structured answer
+            # comes back.
             if [[ "$REVIEW_OUTCOME" != 'success' ]]; then
               echo '::notice::The reviewer did not finish, so there are no findings to submit.'
               exit 0
             fi
 
-            echo "::error::The reviewer finished but produced no valid ${FINDINGS_FILE}, so there is nothing to submit."
+            # A reviewer that finished and still produced nothing is unreachable while the action
+            # keeps that promise, and this is what makes the workflow stop depending on it. If a
+            # later version renames the output or stops failing on a missing one, every review would
+            # otherwise post nothing under a green job — a pipeline that has silently stopped
+            # reviewing, which is the failure this whole change exists to remove.
+            echo '::error::The reviewer finished but returned no valid findings, so there is nothing to submit.'
             exit 1
           fi
 
@@ -962,10 +1009,10 @@ jobs:
           # The App's own token is compared literally as well as by shape. Its `ghs_` prefix already
           # matches the pattern below, but this is the credential the step is about to authenticate
           # with, and a literal comparison does not depend on the pattern continuing to describe it.
-          if grep -qE 'gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{16,}' "$FINDINGS_FILE" \
-            || grep -qF "$WORKFLOW_TOKEN" "$FINDINGS_FILE" \
-            || grep -qF "$REVIEWER_TOKEN" "$FINDINGS_FILE" \
-            || grep -qF "$CLAUDE_CREDENTIAL" "$FINDINGS_FILE"; then
+          if grep -qE 'gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{16,}' "$findings_file" \
+            || grep -qF "$WORKFLOW_TOKEN" "$findings_file" \
+            || grep -qF "$REVIEWER_TOKEN" "$findings_file" \
+            || grep -qF "$CLAUDE_CREDENTIAL" "$findings_file"; then
             echo '::error::The findings contain something shaped like a credential and were not posted.'
             exit 1
           fi
@@ -984,19 +1031,19 @@ jobs:
           # code owner, and a GitHub App cannot be one. `REQUEST_CHANGES` is never used in either
           # branch — a reviewer that gates nothing must not be able to block a merge either.
           # An empty findings array means two different things depending on how the reviewer ended.
-          # From a run that finished, it means nothing was found. From one that died after its
-          # `Write` call — an exhausted subscription, a transport error, a model that stopped — it
-          # means the search never completed, and the file is a snapshot rather than a verdict.
-          # Findings from such a run are still worth posting, because a defect it did name is real;
-          # an approval is not, because it asserts the absence of what the run stopped looking for.
-          # So the affirmative branch is the one gated on the reviewer having succeeded.
-          if [[ "$(jq '(.findings // []) | length' "$FINDINGS_FILE")" == '0' ]] \
+          # From a run that finished, it means nothing was found. From one that answered and then
+          # failed anyway, it means the search never completed and the answer is a snapshot rather
+          # than a verdict. Findings from such a run are still worth posting, because a defect it
+          # did name is real; an approval is not, because it asserts the absence of what the run
+          # stopped looking for. So the affirmative branch is the one gated on the reviewer having
+          # succeeded.
+          if [[ "$(jq '(.findings // []) | length' "$findings_file")" == '0' ]] \
             && [[ "$REVIEW_OUTCOME" != 'success' ]]; then
             echo '::notice::The reviewer did not finish and found nothing before stopping, so no approval was posted.'
             exit 0
           fi
 
-          if [[ "$(jq '(.findings // []) | length' "$FINDINGS_FILE")" == '0' ]]; then
+          if [[ "$(jq '(.findings // []) | length' "$findings_file")" == '0' ]]; then
             jq --arg commit "$HEAD_SHA" \
                --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" '
               {
@@ -1008,7 +1055,7 @@ jobs:
                   + (if $truncation == "" then [] else ["", $truncation] end)
                   | join("\n")
                 )
-              }' "$FINDINGS_FILE" > "$payload_file"
+              }' "$findings_file" > "$payload_file"
 
             gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews" \
               --method POST --input "$payload_file" --silent
@@ -1097,7 +1144,7 @@ jobs:
                   }
                   + (if .start_line == null then {} else {start_line, start_side: "RIGHT"} end)
                 ))
-              }' "$FINDINGS_FILE" > "$payload_file"
+              }' "$findings_file" > "$payload_file"
 
           gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews" \
             --method POST --input "$payload_file" --silent

@@ -446,12 +446,12 @@ writing because you have only a few.
   exists because the code is wrong, never because a category went unmentioned.
 - Anything that would quote a credential, a token, message content, or raw MIME.
 
-## What to write
+## What to answer
 
-Write your findings to `{{FINDINGS_FILE}}` with the `Write` tool,
-and write nothing else anywhere. The step after you validates this file and submits the
-review; a finding that is not in this file is not delivered, and prose in your final
-message reaches nobody.
+Your findings are your answer. Return this object and nothing else — it is validated
+against a schema, and the step after you renders it into the review. There is no file to
+write and no tool that could write one: a finding that is not in the object is not
+delivered, and prose alongside it reaches nobody.
 
 ```json
 {
@@ -498,8 +498,8 @@ you can say — what you covered, and what you could not. Anything `truncation.t
 the `notes` of `obligations.json` records was not collected belongs there, because a
 section that was cut short still looks complete to everybody but you.
 
-When nothing survives the second pass, write the file with an empty `findings` array and
-a summary that says plainly what you covered and that you found nothing above the bar.
+When nothing survives the second pass, answer with an empty `findings` array and a
+summary that says plainly what you covered and that you found nothing above the bar.
 That is a finished review rather than a failed one, and the step after you turns it into
 an approval whose body is the verdict `APPROVED` followed by your summary. Two or three
 lines under that heading: what you covered, and the state you found it in. Do not write
