@@ -256,6 +256,36 @@ public sealed class OAuthSignInTests : IDisposable
         Assert.Contains(this.console.Errors, line => line.Contains("no refresh token", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// An operator signing in for the first time has no stored refresh token, so a refusal naming one describes a
+    /// state they were never in and sends them looking for something that does not exist.
+    /// </summary>
+    [Theory]
+    [InlineData("invalid_grant")]
+    [InlineData("expired_token")]
+    public async Task Login_AnInteractiveSignInTheServerRefuses_BlamesTheCodeRatherThanAStoredRefreshToken(
+        string errorCode)
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.AnswerTokenRequest = _ => FakeOAuthDeployment.Refusing(errorCode);
+
+        using var handler = deployment.Handler();
+        var store = this.CreateStore();
+
+        // Act
+        var exitCode = await this.RunInteractiveAsync(store, handler);
+
+        // Assert
+        Assert.Equal(1, exitCode);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("did not accept the code", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            this.console.Errors,
+            line => line.Contains("stored refresh token", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Login_ADeviceSignIn_PrintsTheCodeAndStoresTheIssuedSession()
     {
@@ -310,6 +340,76 @@ public sealed class OAuthSignInTests : IDisposable
         Assert.Contains(
             this.console.Errors,
             line => line.Contains("no device authorization endpoint", StringComparison.Ordinal));
+    }
+
+    /// <summary>A device code that outlived the person's attention is its own end, and naming a stored refresh token for it describes something a first sign-in never had.</summary>
+    [Fact]
+    public async Task Login_ADeviceSignInTheServerRefuses_BlamesTheDeviceCodeRatherThanAStoredRefreshToken()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.AnswerTokenRequest = _ => FakeOAuthDeployment.Refusing("expired_token");
+
+        using var handler = deployment.Handler();
+
+        var signIn = RunAsync(
+            this.Context(this.CreateStore(), handler, FakeMailboxRedirect.Silent()),
+            "login",
+            "--endpoint",
+            FakeOAuthDeployment.DeploymentAddress,
+            "--mode",
+            "device",
+            "--client-id",
+            ClientId);
+
+        // Act
+        await this.AdvanceUntilCompleteAsync(signIn);
+
+        // Assert
+        Assert.Equal(1, await signIn);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("device code is no longer valid", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            this.console.Errors,
+            line => line.Contains("stored refresh token", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The verification address is read verbatim out of a response this process does not own. Constructing a
+    /// <see cref="Uri" /> from a malformed one throws where nothing translates it, so the operator would meet a stack
+    /// trace where every other malformed answer reaches them as a sentence.
+    /// </summary>
+    [Theory]
+    [InlineData("not a url at all")]
+    [InlineData("/device")]
+    [InlineData("javascript:alert(1)")]
+    public async Task Login_ADeviceSignInWhoseVerificationAddressIsUnusable_ReportsItRatherThanCrashing(string published)
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.VerificationUri = published;
+
+        using var handler = deployment.Handler();
+
+        var signIn = RunAsync(
+            this.Context(this.CreateStore(), handler, FakeMailboxRedirect.Silent()),
+            "login",
+            "--endpoint",
+            FakeOAuthDeployment.DeploymentAddress,
+            "--mode",
+            "device",
+            "--client-id",
+            ClientId);
+
+        // Act
+        await this.AdvanceUntilCompleteAsync(signIn);
+
+        // Assert
+        Assert.Equal(1, await signIn);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("not a usable web address", StringComparison.Ordinal));
     }
 
     /// <summary>The one-hour access-token lifetime must not be something the operator experiences.</summary>

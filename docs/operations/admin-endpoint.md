@@ -277,7 +277,10 @@ encryption answers the copy. Holding the credential in the platform's own secret
 | `did not answer in time` | The connection was accepted and no answer arrived within 30 seconds, so the address and the port are right and the deployment is what to look at — an overloaded host, a stalled process, or a firewall that drops rather than refuses. |
 | `The stored credential could not be read.` | The credentials file and the key that opens it no longer match, which is what a store copied from another machine or another user looks like. Sign in again to replace it. |
 | `No deployment was named.` | `login` needs an address the first time. Pass `--endpoint`, or set `MAILFATHOM_ENDPOINT`. |
-| `The sign-in has ended` | The refresh token expired, was revoked, or was invalidated by a server that rotates them. Run `login` again. |
+| `The sign-in has ended` | The refresh token expired, was revoked, or was invalidated by a server that rotates them. Run `login` again. This names the *stored* token, so it only ever appears on a command that had a session; a `login` that fails names what it presented instead. |
+| `did not accept the code the redirect carried` | The authorization code was already redeemed or had expired by the time it was exchanged, which is what a redirect answered twice or approved long after it was opened looks like. Run `login` again. |
+| `The device code is no longer valid` | Nobody finished at the verification address before the code expired, or the authorization server withdrew it. Run `login --mode device` again. |
+| `not a usable web address` | The authorization server published a `verification_uri` that is not an absolute `http` or `https` address, so there is nothing to put in front of the person signing in. This is a fault at the authorization server rather than in its configuration here. |
 | `publishes no OAuth metadata` | The endpoint accepts API keys only. Sign in with one, or ask the operator to add `OAuth` to `AdminEndpoint:Authentication`. |
 | `accepts tokens from several authorization servers` | More than one is configured and only you know which population you belong to. Name it with `--issuer`. |
 | `issued no refresh token` | The client was not granted offline access, so the session would end within the hour. Grant it at the authorization server. |

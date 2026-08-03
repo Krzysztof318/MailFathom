@@ -55,6 +55,10 @@ internal sealed class FakeOAuthDeployment
     /// <summary>Gets or sets whether the authorization server publishes a device authorization endpoint.</summary>
     internal bool OffersDeviceGrant { get; set; } = true;
 
+    /// <summary>Gets or sets the address the device authorization response tells a person to open.</summary>
+    /// <remarks>Settable so a test can answer with something that is not a usable web address, which is what a misconfigured or misbehaving provider produces and what the command has to refuse rather than construct.</remarks>
+    internal string VerificationUri { get; set; } = "https://sso.example.test/device";
+
     /// <summary>Gets or sets whether the authorization server publishes at the OAuth 2.0 address at all.</summary>
     /// <remarks>Turning it off leaves only the OpenID Connect address, which is what an OpenID provider predating RFC 8414 serves and what the candidate order exists to reach.</remarks>
     internal bool PublishesOAuthMetadataAddress { get; set; } = true;
@@ -111,7 +115,7 @@ internal sealed class FakeOAuthDeployment
                 await this.AnswerTokenEndpointAsync(request, cancellationToken),
             "/realms/mailfathom/protocol/openid-connect/auth/device" => Json(
                 HttpStatusCode.OK,
-                """{"device_code":"a-device-code","user_code":"WDJB-MJHT","verification_uri":"https://sso.example.test/device","expires_in":600,"interval":1}"""),
+                $$"""{"device_code":"a-device-code","user_code":"WDJB-MJHT","verification_uri":"{{this.VerificationUri}}","expires_in":600,"interval":1}"""),
             "/api/admin/session" => Json(
                 HttpStatusCode.OK,
                 """{"service":"MailFathom","version":"0.2.0","credential":"kasia"}"""),

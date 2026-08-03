@@ -150,6 +150,7 @@ internal sealed class DeploymentAuthorizer
                 ["redirect_uri"] = redirectUri.ToString(),
                 ["resource"] = authorization.Resource,
             },
+            GrantAttempt.AuthorizationCode,
             cancellationToken);
     }
 
@@ -236,8 +237,8 @@ internal sealed class DeploymentAuthorizer
                 ["resource"] = authorization.Resource,
                 ["scope"] = authorization.Scope,
             },
-            cancellationToken,
-            requireRefreshToken: false);
+            GrantAttempt.StoredRefreshToken,
+            cancellationToken);
 
         return renewed with { RefreshToken = refreshToken };
     }
@@ -264,28 +265,63 @@ internal sealed class DeploymentAuthorizer
         DateTimeOffset asOf) =>
         new(
             deviceAuthorization.UserCode!,
-            new Uri(deviceAuthorization.VerificationUri!),
-            deviceAuthorization.VerificationUriComplete is { } completeUri ? new Uri(completeUri) : null,
+            ReadVerificationAddress(deviceAuthorization.VerificationUri!),
+            deviceAuthorization.VerificationUriComplete is { } completeUri
+                ? ReadVerificationAddress(completeUri)
+                : null,
             asOf + LifetimeOf(deviceAuthorization.ExpiresInSeconds, DefaultDeviceCodeLifetime));
+
+    /// <summary>Reads an address the authorization server published for a person to open.</summary>
+    /// <remarks>
+    /// Parsed rather than constructed, because the value is JSON from a machine this process does not own and
+    /// <see cref="Uri(string)" /> answers a malformed one with an exception nothing here translates — which reaches the
+    /// operator as a stack trace where every other malformed answer reaches them as a sentence. The scheme is checked
+    /// as well: this address is printed for a person to open, so one that is not web-addressable is not something to
+    /// put in front of them, however well formed it parses.
+    /// </remarks>
+    private static Uri ReadVerificationAddress(string published) =>
+        Uri.TryCreate(published, UriKind.Absolute, out var address)
+        && (address.Scheme == Uri.UriSchemeHttps || address.Scheme == Uri.UriSchemeHttp)
+            ? address
+            : throw new CliFailure(
+                "The authorization server answered a device sign-in with a verification address that is not a usable web address.");
 
     private static TimeSpan LifetimeOf(int? statedSeconds, TimeSpan whenUnstated) =>
         statedSeconds is { } seconds and > 0 ? TimeSpan.FromSeconds(seconds) : whenUnstated;
 
     /// <summary>Turns an authorization server's own error code into a message that says what to do about it.</summary>
     /// <remarks>
+    /// <para>
     /// The code is sanitized before it is read, because it is text from a machine this process does not own and a raw
-    /// one could carry line breaks that forge a second line of output. <c>invalid_grant</c> is separated out because it
-    /// is the ordinary end of a session rather than a fault: a refresh token that expired, was revoked, or was
-    /// invalidated by a server that rotates them.
+    /// one could carry line breaks that forge a second line of output.
+    /// </para>
+    /// <para>
+    /// <c>invalid_grant</c> and <c>expired_token</c> are separated out because they are the ordinary end of something
+    /// rather than a fault — but which thing ended depends on what was presented, which is why the attempt is a
+    /// parameter. The same code means a replayed or expired authorization code during a sign-in, a device code that
+    /// outlived the person's attention, and a refresh token that expired or was revoked; naming the refresh token in
+    /// all three would tell an operator signing in for the first time that a token they have never had is no longer
+    /// accepted.
+    /// </para>
     /// </remarks>
-    private static CliFailure DescribeRefusal(string errorCode)
+    private static CliFailure DescribeRefusal(string errorCode, GrantAttempt attempt)
     {
         var code = AuthorizationServerErrorText.Sanitize(errorCode);
 
-        return code is "invalid_grant" or "expired_token"
-            ? new CliFailure(
-                $"The sign-in has ended: the authorization server no longer accepts the stored refresh token ('{code}'). Run '{CliRootCommand.CommandName} login --endpoint <address>' to sign in again.")
-            : new CliFailure($"The authorization server refused the request ('{code}').");
+        if (code is not ("invalid_grant" or "expired_token"))
+        {
+            return new CliFailure($"The authorization server refused the request ('{code}').");
+        }
+
+        return attempt switch
+        {
+            GrantAttempt.AuthorizationCode => new CliFailure(
+                $"The authorization server did not accept the code the redirect carried ('{code}'). Run the command again to start a new sign-in."),
+            GrantAttempt.DeviceCode => new CliFailure(
+                $"The device code is no longer valid ('{code}'). Run the command again to start a new sign-in."),
+            _ => new CliFailure(
+                $"The sign-in has ended: the authorization server no longer accepts the stored refresh token ('{code}'). Run '{CliRootCommand.CommandName} login --endpoint <address>' to sign in again."),
+        };
     }
 
     private async Task<OAuthDeviceAuthorizationResponse> RequestDeviceAuthorizationAsync(
@@ -307,7 +343,7 @@ internal sealed class DeploymentAuthorizer
 
         if (response.Error is { } error)
         {
-            throw DescribeRefusal(error);
+            throw DescribeRefusal(error, GrantAttempt.DeviceCode);
         }
 
         return response.DeviceCode is null || response.UserCode is null || response.VerificationUri is null
@@ -346,7 +382,7 @@ internal sealed class DeploymentAuthorizer
             switch (response.Error)
             {
                 case null:
-                    return this.ToGrant(response, requireRefreshToken: true);
+                    return this.ToGrant(response, GrantAttempt.DeviceCode);
 
                 // The person has not finished signing in. This is the expected answer for most of the wait.
                 case "authorization_pending":
@@ -359,7 +395,7 @@ internal sealed class DeploymentAuthorizer
                     continue;
 
                 default:
-                    throw DescribeRefusal(response.Error);
+                    throw DescribeRefusal(response.Error, GrantAttempt.DeviceCode);
             }
         }
 
@@ -369,8 +405,8 @@ internal sealed class DeploymentAuthorizer
     private async Task<DeploymentGrant> ExchangeAsync(
         DeploymentAuthorization authorization,
         Dictionary<string, string> form,
-        CancellationToken cancellationToken,
-        bool requireRefreshToken = true)
+        GrantAttempt attempt,
+        CancellationToken cancellationToken)
     {
         var response = await this.PostFormAsync(
             authorization.TokenEndpoint,
@@ -378,14 +414,16 @@ internal sealed class DeploymentAuthorizer
             CliJsonContext.Default.OAuthTokenResponse,
             cancellationToken);
 
-        return this.ToGrant(response, requireRefreshToken);
+        return this.ToGrant(response, attempt);
     }
 
-    private DeploymentGrant ToGrant(OAuthTokenResponse response, bool requireRefreshToken)
+    /// <summary>Reads an issued grant, or turns what the server said instead into a failure naming what was presented.</summary>
+    /// <remarks>Whether a refresh token is required follows from the attempt rather than being stated beside it: a sign-in that produces none leaves a session ending within the hour, while a renewal is the one exchange that is not expected to return one.</remarks>
+    private DeploymentGrant ToGrant(OAuthTokenResponse response, GrantAttempt attempt)
     {
         if (response.Error is { } error)
         {
-            throw DescribeRefusal(error);
+            throw DescribeRefusal(error, attempt);
         }
 
         if (response.AccessToken is not { Length: > 0 } accessToken)
@@ -396,7 +434,7 @@ internal sealed class DeploymentAuthorizer
         // A session with no refresh token is one that ends when the first access token does, which the operator would
         // meet as a command failing an hour after signing in. Refused where it is issued rather than stored and
         // discovered then; a server withholds one when offline access was not granted.
-        if (requireRefreshToken && response.RefreshToken is not { Length: > 0 })
+        if (attempt is not GrantAttempt.StoredRefreshToken && response.RefreshToken is not { Length: > 0 })
         {
             throw new CliFailure(
                 "The authorization server issued no refresh token, so the sign-in would end within the hour. Grant the client offline access, or sign in with an API key instead.");
@@ -454,5 +492,18 @@ internal sealed class DeploymentAuthorizer
                 $"The authorization server at {endpoint.GetLeftPart(UriPartial.Authority)} could not be reached: {failure.Message}",
                 failure);
         }
+    }
+
+    /// <summary>What was presented to the token endpoint, which is what an <c>invalid_grant</c> is about.</summary>
+    private enum GrantAttempt
+    {
+        /// <summary>The code a redirect carried, redeemed once at the end of an interactive sign-in.</summary>
+        AuthorizationCode = 0,
+
+        /// <summary>The device code, polled until the person finishes at the verification address.</summary>
+        DeviceCode = 1,
+
+        /// <summary>The stored refresh token, presented to renew an access token that is about to expire.</summary>
+        StoredRefreshToken = 2,
     }
 }
