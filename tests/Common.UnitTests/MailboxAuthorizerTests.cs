@@ -5,12 +5,12 @@
 using System.Net;
 using System.Text;
 using System.Web;
-using MailFathom.Infrastructure.Mail.OAuth.Authorization;
+using MailFathom.Common.MailboxOAuth;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
-namespace MailFathom.Infrastructure.UnitTests;
+namespace MailFathom.Common.UnitTests;
 
 public sealed class MailboxAuthorizerTests
 {

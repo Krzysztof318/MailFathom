@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Infrastructure.Mail.OAuth.Authorization;
+namespace MailFathom.Common.MailboxOAuth;
 
 /// <summary>Everything one interactive authorization run needs to obtain a refresh token for a mailbox.</summary>
 /// <param name="AuthorizationEndpoint">The authorization server's endpoint a person signs in at, unused by the device-code grant.</param>

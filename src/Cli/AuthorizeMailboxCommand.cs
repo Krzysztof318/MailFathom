@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.CommandLine;
-using MailFathom.Infrastructure.Mail.OAuth.Authorization;
+using MailFathom.Common.MailboxOAuth;
 
 namespace MailFathom.Cli;
 

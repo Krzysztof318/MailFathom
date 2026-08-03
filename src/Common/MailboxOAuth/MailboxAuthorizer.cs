@@ -8,7 +8,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Web;
 
-namespace MailFathom.Infrastructure.Mail.OAuth.Authorization;
+namespace MailFathom.Common.MailboxOAuth;
 
 /// <summary>Runs the one-time, operator-driven exchange that produces a mailbox refresh token.</summary>
 /// <remarks>

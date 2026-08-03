@@ -4,6 +4,7 @@
 
 using System.Net.Http.Json;
 using MailFathom.Application.Resilience;
+using MailFathom.Common.MailboxOAuth;
 using MailFathom.Infrastructure.Resilience;
 using Microsoft.Extensions.Logging;
 

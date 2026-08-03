@@ -4,7 +4,7 @@
 
 using MailFathom.Domain.Failures;
 
-namespace MailFathom.Infrastructure.Mail.OAuth.Authorization;
+namespace MailFathom.Common.MailboxOAuth;
 
 /// <summary>Indicates that an operator-driven authorization run did not produce a refresh token to provision.</summary>
 /// <remarks>

@@ -18,11 +18,12 @@ MailFathom uses a clean-architecture modular monolith. Dependencies point inward
   calls none of them, and would make trimming it impossible. Its assembly is named `mfctl` rather than after its
   boundary, because the published file is something an operator types repeatedly; the project, its directory, and its
   namespace stay `Cli`.
-- `Common` is cross-cutting code that belongs to no boundary and depends on nothing but the base class library. It is
-  not a layer and has no place in the dependency ordering above: `Cli` and, in time, `Infrastructure` reach it, and it
-  reaches nothing. Admission is narrow on purpose — code arrives when a second boundary genuinely needs it, and lives
-  with its one consumer until then — because a project defined by what it is not becomes the drawer everything ends up
-  in.
+- `Common` is cross-cutting code that belongs to no boundary and depends on nothing but the base class library and
+  `Domain`. It is not a layer and has no place in the dependency ordering above: `Cli` and `Infrastructure` reach it,
+  and it reaches only the innermost project, so that a failure it raises derives from `MailFathomException` like every
+  other. Admission is narrow on purpose — code arrives when a second boundary genuinely needs it, and lives with its one
+  consumer until then — because a project defined by what it is not becomes the drawer everything ends up in. Two things
+  have earned it: the AES-GCM envelope, and the mailbox OAuth exchange under `MailboxOAuth/`.
 - `AppHost` is the Aspire local-development orchestration host.
 
 `Cli` also authorizes a mailbox, because one thing a headless service structurally cannot do is ask a person to sign
@@ -30,6 +31,13 @@ in, and a mailbox at a provider that has withdrawn password authentication needs
 operator's command is what lets the host serve no consent page, own no redirect endpoint, and hold no
 authorization-server credential it has no run-time use for; [mailbox OAuth](../operations/mailbox-oauth.md) describes
 the exchange it performs.
+
+That exchange is the worked example of what `Common` is for. The command performs it and the run-time adapter refreshes
+the grant it produced, so both speak to the same authorization server about the same account and have to agree on the
+token response, the sanitizing of what that server returns, and the endpoints each provider publishes. Putting it in
+`Infrastructure` would oblige the command to reference EF Core, Npgsql, and MailKit to reach it; duplicating it would
+let the two halves of one conversation drift apart. `Cli` stays a composition root either way — it holds the commands
+and their prompts, and no protocol of its own.
 
 ## What the published artifact carries
 

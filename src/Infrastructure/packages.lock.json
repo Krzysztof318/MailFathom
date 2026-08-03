@@ -594,6 +594,12 @@
           "MailFathom.Domain": "[0.2.0, )"
         }
       },
+      "MailFathom.Common": {
+        "type": "Project",
+        "dependencies": {
+          "MailFathom.Domain": "[0.2.0, )"
+        }
+      },
       "MailFathom.Domain": {
         "type": "Project"
       },

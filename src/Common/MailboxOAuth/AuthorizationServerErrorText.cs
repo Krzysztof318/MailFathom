@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Infrastructure.Mail.OAuth;
+namespace MailFathom.Common.MailboxOAuth;
 
 /// <summary>Reduces an authorization server's <c>error</c> value to a form that is safe to put in a message.</summary>
 /// <remarks>
@@ -18,7 +18,7 @@ namespace MailFathom.Infrastructure.Mail.OAuth;
 /// that survives none of it reads as <c>unspecified</c>, which is accurate — the server said nothing usable.
 /// </para>
 /// </remarks>
-internal static class AuthorizationServerErrorText
+public static class AuthorizationServerErrorText
 {
     /// <summary>What a value that carried no usable characters is reported as.</summary>
     private const string Unspecified = "unspecified";

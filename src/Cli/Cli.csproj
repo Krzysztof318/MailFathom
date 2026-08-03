@@ -24,14 +24,14 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
   </ItemGroup>
 
-  <!-- A deliberately short list rather than whatever compiles. The command is an HTTP client of the administrative
-       endpoint and of the mail providers' authorization servers, and holds no other capability: it never opens the
-       database, never reads the service's configuration, and never touches its secret store. A reference to
-       Infrastructure is what carries the authorization protocol today, which is the one thing here that costs the
-       artifact more than it uses. Common depends on nothing but the base class library. -->
+  <!-- The only project reference, and a deliberate limit rather than the first of several. The command is an HTTP
+       client of the administrative endpoint and of a provider's authorization server, and holds no other capability: it
+       never opens the database, never reads the service's configuration, and never touches its secret store. A
+       reference to Infrastructure would put all three in the published artifact and would make trimming it impossible,
+       which is why the mailbox authorization protocol lives in Common instead — reachable from here and from the
+       run-time adapter it has to stay consistent with, and costing the artifact what it uses and no more. -->
   <ItemGroup>
     <ProjectReference Include="..\Common\Common.csproj" />
-    <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

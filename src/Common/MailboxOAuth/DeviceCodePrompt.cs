@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Infrastructure.Mail.OAuth.Authorization;
+namespace MailFathom.Common.MailboxOAuth;
 
 /// <summary>What a person has to be shown to complete a device-code authorization on another device.</summary>
 /// <param name="UserCode">The short code the person types at the verification address.</param>

@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Infrastructure.Mail.OAuth.Authorization;
+namespace MailFathom.Common.MailboxOAuth;
 
 /// <summary>What an interactive authorization run produced for the operator to provision.</summary>
 /// <param name="RefreshToken">The long-lived token MailFathom exchanges for access tokens at run time.</param>

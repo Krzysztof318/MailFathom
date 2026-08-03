@@ -5,7 +5,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace MailFathom.Infrastructure.Mail.OAuth.Authorization;
+namespace MailFathom.Common.MailboxOAuth;
 
 /// <summary>One RFC 7636 proof-key pair binding an authorization request to the token request that redeems it.</summary>
 /// <param name="Verifier">The high-entropy secret sent only with the token request.</param>
