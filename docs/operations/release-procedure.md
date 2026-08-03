@@ -1,6 +1,6 @@
 # The release procedure
 
-<!-- describes: Directory.Build.props, .github/workflows/release.yml, .github/workflows/publish-helm-chart.yml, scripts/assert-release-tag.sh, scripts/read-declared-version.sh -->
+<!-- describes: Directory.Build.props, .github/workflows/release.yml, .github/workflows/publish-helm-chart.yml, scripts/assert-release-tag.sh, scripts/read-declared-version.sh, .agents/skills/prepare-release/SKILL.md -->
 
 MailFathom's version number is a compatibility promise over four public surfaces, and it is written in one place. This
 page records how a build acquires that number, where it is observable, and the sequence that turns a commit on a
