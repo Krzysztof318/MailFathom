@@ -255,7 +255,7 @@ anyone wrote a number. [Rate limiting](mcp-endpoint.md#rate-limiting) records wh
 
 ## `AdminEndpoint`
 
-Whether the administrative surface the `mailfathom` command reaches is served, and what a client must present. Its own
+Whether the administrative surface the `mfctl` command reaches is served, and what a client must present. Its own
 listener, its own credentials, and its own authorization servers: a key configured under `McpEndpoint` authenticates
 nothing here, and the reverse holds. The whole section is **restart**, while key and certificate material is read per
 request or per handshake. [Administering a deployment](admin-endpoint.md) is the page.

@@ -253,8 +253,8 @@ jobs:
 
             printf '\n## The administration command\n\n'
             printf 'Download the binary for the machine you administer from, not for the machine the service runs on: '
-            printf '`mailfathom` reaches a deployment over HTTP and runs on Linux and Windows alike. Verify it against '
-            printf '`mailfathom-%s.sha256`, make it executable, and run `mailfathom login --endpoint https://host:port`. ' "$VERSION"
+            printf '`mfctl` reaches a deployment over HTTP and runs on Linux and Windows alike. Verify it against '
+            printf '`mfctl-%s.sha256`, make it executable, and run `mfctl login --endpoint https://host:port`. ' "$VERSION"
             printf '[Administering a deployment](https://github.com/%s/blob/%s/docs/operations/admin-endpoint.md)' \\
               "$REPOSITORY" "$RELEASE_TAG"
             printf ' states what the service has to have enabled before it will answer.\n'

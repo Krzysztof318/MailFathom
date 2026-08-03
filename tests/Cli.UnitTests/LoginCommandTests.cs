@@ -36,7 +36,7 @@ public sealed class LoginCommandTests : IDisposable
 
         // Assert
         Assert.Equal(0, exitCode);
-        Assert.Equal("not-a-real-key", store.Find(EndpointAddress)!.Token);
+        Assert.Equal("not-a-real-key", store.Resolve(requestedDeployment: null).Token);
         Assert.Contains(this.console.Lines, line => line.Contains("workstation", StringComparison.Ordinal));
     }
 
@@ -70,7 +70,7 @@ public sealed class LoginCommandTests : IDisposable
 
         // Assert
         Assert.Equal(1, exitCode);
-        Assert.Null(store.Find(EndpointAddress));
+        Assert.Empty(store.Read().Profiles);
         Assert.Contains(this.console.Errors, line => line.Contains("refused the credential", StringComparison.Ordinal));
     }
 
@@ -91,7 +91,7 @@ public sealed class LoginCommandTests : IDisposable
 
         // Assert
         Assert.Equal(1, exitCode);
-        Assert.Null(store.Find(EndpointAddress));
+        Assert.Empty(store.Read().Profiles);
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public sealed class LoginCommandTests : IDisposable
 
         // Assert
         Assert.Equal(1, exitCode);
-        Assert.Null(store.Find(EndpointAddress));
+        Assert.Empty(store.Read().Profiles);
         Assert.Contains(
             this.console.Errors,
             line => line.Contains("serves no administrative endpoint", StringComparison.Ordinal));
@@ -144,7 +144,7 @@ public sealed class LoginCommandTests : IDisposable
 
         // Assert
         Assert.Equal(1, exitCode);
-        Assert.Null(store.Find(EndpointAddress));
+        Assert.Empty(store.Read().Profiles);
         Assert.Contains(this.console.Errors, line => line.Contains("could not be reached", StringComparison.Ordinal));
     }
 
@@ -163,12 +163,100 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Equal(0, handler.RequestCount);
     }
 
+    /// <summary>The profile is named after the host unless the operator says otherwise, so one address needs no second argument.</summary>
     [Fact]
-    public async Task Logout_ACredentialThatWasStored_IsForgotten()
+    public async Task Login_NoNameGiven_RemembersTheDeploymentUnderItsHostName()
     {
         // Arrange
         var store = this.CreateStore();
-        store.Save(EndpointAddress, new StoredCredential("not-a-real-key", "workstation"));
+        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        this.console.SecretToSupply = "not-a-real-key";
+
+        // Act
+        await RunAsync(this.Context(store, handler), "login", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal("mail.example.test", Assert.Single(store.Read().Profiles).Key);
+    }
+
+    [Fact]
+    public async Task Login_ANameGiven_RemembersTheDeploymentUnderItAndSelectsIt()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        this.console.SecretToSupply = "not-a-real-key";
+
+        // Act
+        var exitCode = await RunAsync(
+            this.Context(store, handler), "login", "--endpoint", Endpoint, "--name", "production");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Equal("production", store.Resolve(requestedDeployment: null).Name);
+    }
+
+    /// <summary>Replacing a rotated credential should not mean retyping the address it belongs to.</summary>
+    [Fact]
+    public async Task Login_AnExistingProfileByName_SignsInAgainAtTheAddressItAlreadyHolds()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "the-old-key", "workstation");
+        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        this.console.SecretToSupply = "the-new-key";
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "login", "--endpoint", "production");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Equal("the-new-key", store.Resolve("production").Token);
+        Assert.Single(store.Read().Profiles);
+    }
+
+    /// <summary>A name that is neither a stored profile nor an address is a typo, and saying which it was is the fix.</summary>
+    [Fact]
+    public async Task Login_AnUnknownNameThatIsNotAnAddress_SaysToPassAnAddressInstead()
+    {
+        // Arrange
+        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        this.console.SecretToSupply = "not-a-real-key";
+
+        // Act
+        var exitCode = await RunAsync(this.Context(this.CreateStore(), handler), "login", "--endpoint", "produciton");
+
+        // Assert
+        Assert.Equal(1, exitCode);
+        Assert.Equal(0, handler.RequestCount);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("neither a stored profile nor an endpoint address", StringComparison.Ordinal));
+    }
+
+    /// <summary>--endpoint reads an absolute address as an address, so a profile named like one could never be selected.</summary>
+    [Fact]
+    public async Task Login_ANameThatIsAnAddress_IsRefused()
+    {
+        // Arrange
+        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        this.console.SecretToSupply = "not-a-real-key";
+
+        // Act
+        var exitCode = await RunAsync(
+            this.Context(this.CreateStore(), handler), "login", "--endpoint", Endpoint, "--name", "https://elsewhere");
+
+        // Assert
+        Assert.Equal(1, exitCode);
+        Assert.Equal(0, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task Logout_AProfileThatWasStored_IsForgotten()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
 
         // Act
         using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
@@ -177,14 +265,142 @@ public sealed class LoginCommandTests : IDisposable
 
         // Assert
         Assert.Equal(0, exitCode);
-        Assert.Null(store.Find(EndpointAddress));
+        Assert.Empty(store.Read().Profiles);
+    }
+
+    /// <summary>
+    /// The behavior every command owes an operator who has not signed in: a sentence naming what to run, rather than a
+    /// transport failure from a request that was never going to carry a credential.
+    /// </summary>
+    [Theory]
+    [InlineData("status")]
+    [InlineData("logout")]
+    public async Task ACommandNeedingACredential_WhenNotSignedIn_SaysHowToSignIn(string commandName)
+    {
+        // Arrange
+        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(this.CreateStore(), handler), commandName);
+
+        // Assert
+        Assert.Equal(1, exitCode);
+        Assert.Equal(0, handler.RequestCount);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("Not signed in", StringComparison.Ordinal)
+                && line.Contains("mfctl login", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Status_ADeploymentThatAcceptsTheStoredCredential_PresentsItAndReportsWhatItSaid()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
+        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "status");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Equal("not-a-real-key", handler.LastAuthorization?.Parameter);
+        Assert.Contains(this.console.Lines, line => line.Contains("production", StringComparison.Ordinal));
+    }
+
+    /// <summary>The whole point of the override: one invocation goes elsewhere without changing what the next one does.</summary>
+    [Fact]
+    public async Task Status_WithAnEndpointOverride_ReachesThatProfileAndLeavesTheSelectionAlone()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("staging", new Uri("https://staging.example.test:8443"), "staging-key", "workstation");
+        store.Save("production", EndpointAddress, "production-key", "workstation");
+        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "status", "--endpoint", "staging");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Equal("staging-key", handler.LastAuthorization?.Parameter);
+        Assert.Equal("production", store.Resolve(requestedDeployment: null).Name);
+    }
+
+    [Fact]
+    public async Task Switch_AStoredProfile_ChangesWhichOneLaterCommandsUse()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("staging", new Uri("https://staging.example.test:8443"), "staging-key", "workstation");
+        store.Save("production", EndpointAddress, "production-key", "workstation");
+        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "switch", "staging");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Equal(0, handler.RequestCount);
+        Assert.Equal("staging", store.Resolve(requestedDeployment: null).Name);
+    }
+
+    [Fact]
+    public async Task Switch_AnUnknownProfile_FailsAndLeavesTheSelectionAlone()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "production-key", "workstation");
+        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "switch", "qa");
+
+        // Assert
+        Assert.Equal(1, exitCode);
+        Assert.Equal("production", store.Resolve(requestedDeployment: null).Name);
+    }
+
+    [Fact]
+    public async Task Profiles_SomeStored_ListsThemAndMarksTheOneInUse()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "production-key", "workstation");
+        store.Save("staging", new Uri("https://staging.example.test:8443"), "staging-key", "workstation");
+        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "profiles");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Equal(0, handler.RequestCount);
+        Assert.Contains(this.console.Lines, line => line.StartsWith("  production", StringComparison.Ordinal));
+        Assert.Contains(this.console.Lines, line => line.StartsWith("* staging", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Profiles_NoneStored_SaysSoRatherThanFailing()
+    {
+        // Arrange
+        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(this.CreateStore(), handler), "profiles");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Contains(this.console.Lines, line => line.Contains("mfctl login", StringComparison.Ordinal));
     }
 
     private static Task<int> RunAsync(CliContext context, params string[] args) =>
         CliRunner.RunAsync(context, args);
 
-    private CredentialStore CreateStore() =>
-        new(Path.Combine(this.storeDirectory, "credentials.json"));
+    private CredentialStore CreateStore() => new(
+        Path.Combine(this.storeDirectory, "credentials.json"),
+        new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")));
 
     /// <summary>Builds the context a command runs under, with the terminal, the store, and the network all substituted.</summary>
     private CliContext Context(CredentialStore store, FakeAdminEndpoint handler) => new(

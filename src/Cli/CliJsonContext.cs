@@ -16,5 +16,5 @@ namespace MailFathom.Cli;
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     WriteIndented = true)]
 [JsonSerializable(typeof(AdminSession))]
-[JsonSerializable(typeof(Dictionary<string, StoredCredential>))]
+[JsonSerializable(typeof(StoredCredentials))]
 internal sealed partial class CliJsonContext : JsonSerializerContext;

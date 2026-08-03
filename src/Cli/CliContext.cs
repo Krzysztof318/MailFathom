@@ -14,7 +14,7 @@ namespace MailFathom.Cli;
 /// of steps could be asserted.
 /// </remarks>
 /// <param name="Console">The terminal the command reads from and writes to.</param>
-/// <param name="Store">Where the command remembers a credential.</param>
+/// <param name="Store">Where the command remembers the deployments signed in to.</param>
 /// <param name="OpenTransport">Opens a transport aimed at one deployment; the caller disposes it.</param>
 internal sealed record CliContext(
     ICliConsole Console,
@@ -33,7 +33,7 @@ internal sealed record CliContext(
     /// <returns>The context.</returns>
     internal static CliContext ForTerminal() => new(
         new SystemCliConsole(),
-        new CredentialStore(CredentialStore.DefaultPath()),
+        new CredentialStore(CredentialStore.DefaultPath(), new TokenProtector(CredentialStore.DefaultKeyPath())),
         OpenSystemTransport);
 
     /// <summary>Opens a transport aimed at one deployment.</summary>

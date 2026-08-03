@@ -169,7 +169,7 @@ Four artifacts leave one run, and a failure in the first three leaves the releas
 | The image | `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` | the schema artifact building |
 | The Helm chart | `ghcr.io/krzysztof318/charts/mailfathom` | the image's digest |
 | `mailfathom-schema-<version>.sql` | the GitHub release's assets | nothing |
-| `mailfathom-<version>-<rid>` for `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, plus one `.sha256` covering all of them | the GitHub release's assets | nothing |
+| `mfctl-<version>-<rid>` for `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, plus one `.sha256` covering all of them | the GitHub release's assets | nothing |
 
 The command binaries are the one artifact that gates nothing, and that is deliberate: a release whose image and schema
 are correct is one an operator can deploy, so a build failure in the command is left visible on the run rather than

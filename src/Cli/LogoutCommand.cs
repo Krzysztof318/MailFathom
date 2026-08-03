@@ -6,7 +6,7 @@ using System.CommandLine;
 
 namespace MailFathom.Cli;
 
-/// <summary>Forgets the credential stored for one deployment.</summary>
+/// <summary>Forgets one stored profile.</summary>
 /// <remarks>
 /// It removes the local copy and nothing else. A credential the deployment issued stays valid until the deployment
 /// stops accepting it, so signing out of a workstation is not the same as revoking a key — and the message says so
@@ -24,19 +24,23 @@ internal static class LogoutCommand
 
         var endpointOption = CliOptions.Endpoint();
 
-        Command command = new("logout", "Forget the credential stored for a deployment.")
+        Command command = new("logout", "Forget a stored profile.")
         {
             endpointOption,
         };
 
         command.SetAction(result =>
         {
-            var endpoint = CliOptions.ResolveEndpoint(result.GetValue(endpointOption));
-            var authority = endpoint.GetLeftPart(UriPartial.Authority);
+            // Resolved rather than removed by the typed spelling, so that logging out of the profile in use takes no
+            // argument, and so that naming an address removes the profile serving it rather than reporting that no
+            // profile carries that name.
+            var (name, credential) = context.Store.Locate(
+                CliOptions.RequestedDeployment(result.GetValue(endpointOption)));
 
-            context.Console.WriteLine(context.Store.Remove(endpoint)
-                ? $"Forgot the credential stored for {authority}. It stays valid until the deployment stops accepting it."
-                : $"No credential was stored for {authority}.");
+            context.Store.Remove(name);
+
+            context.Console.WriteLine(
+                $"Forgot profile '{name}' ({credential.Endpoint}). The credential stays valid until the deployment stops accepting it.");
 
             return CliExitCode.Success;
         });

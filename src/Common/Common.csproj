@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Cross-cutting code that belongs to no boundary and depends on nothing but the base class library. It is
+       deliberately not a layer: nothing here knows about mail, storage, or transport, which is what lets the trimmed
+       single-file command and the service both consume it without either dragging in the other's world.
+
+       A project rather than a linked source file under src/shared/, because docs/architecture/solution-structure.md
+       limits that directory to markers that carry no behavior and sends anything with executable logic here.
+
+       Admission is narrow on purpose, so this does not become the drawer everything ends up in: code arrives here when
+       a second boundary genuinely needs it, and until then it lives with its one consumer. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="MailFathom.Common.UnitTests" />
+  </ItemGroup>
+</Project>

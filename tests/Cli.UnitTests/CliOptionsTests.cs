@@ -8,52 +8,68 @@ namespace MailFathom.Cli.UnitTests;
 
 /// <summary>Covers how the command settles which deployment it is about to send a credential to.</summary>
 /// <remarks>
-/// This decides where a bearer credential is sent, so guessing is not an option anywhere in it. Every input that does
-/// not name an address unambiguously is refused with something the operator can act on.
+/// This decides where a bearer credential is sent, so guessing is not an option anywhere in it. A value that does not
+/// name an address unambiguously is read as a profile name rather than repaired into an address.
 /// </remarks>
 public sealed class CliOptionsTests
 {
     [Fact]
-    public void ResolveEndpoint_AnAddressOnTheCommandLine_IsWhatTheCommandReaches()
+    public void RequestedDeployment_AValueOnTheCommandLine_IsWhatTheCommandActsOn()
     {
-        // Act
-        var endpoint = CliOptions.ResolveEndpoint("https://mail.example.test:8443");
-
-        // Assert
-        Assert.Equal("https://mail.example.test:8443/", endpoint.ToString());
+        // Act, Assert
+        Assert.Equal("production", CliOptions.RequestedDeployment("production"));
     }
 
     [Fact]
-    public void ResolveEndpoint_NothingAnywhere_SaysBothWaysToSupplyIt()
+    public void RequestedDeployment_SurroundingWhitespace_IsNotPartOfTheName()
     {
-        // Act
-        var failure = Assert.Throws<CliFailure>(() => CliOptions.ResolveEndpoint(configuredEndpoint: null));
+        // Act, Assert: a value pasted from a terminal or a script arrives with whatever was around it.
+        Assert.Equal("production", CliOptions.RequestedDeployment("  production  "));
+    }
 
-        // Assert
-        Assert.Contains("--endpoint", failure.Message, StringComparison.Ordinal);
-        Assert.Contains(CliOptions.EndpointVariable, failure.Message, StringComparison.Ordinal);
+    /// <summary>Nothing named means the profile the operator last switched to, which the store settles rather than this.</summary>
+    [Fact]
+    public void RequestedDeployment_NothingAnywhere_NamesNoDeployment()
+    {
+        // Act, Assert
+        Assert.Null(CliOptions.RequestedDeployment(configuredEndpoint: null));
+    }
+
+    [Theory]
+    [InlineData("https://mail.example.test:8443")]
+    [InlineData("http://localhost:8090")]
+    public void TryReadAddress_AnAbsoluteHttpAddress_IsReadAsOne(string candidate)
+    {
+        // Act, Assert: plain HTTP is accepted, because refusing it would leave a loopback deployment and a reverse
+        // proxy unreachable, and the endpoint warns about clear text on its own side where it knows what is in front
+        // of it.
+        Assert.True(CliOptions.TryReadAddress(candidate, out _));
     }
 
     /// <summary>
-    /// A bare host name is refused rather than completed with a scheme. Choosing one would decide between a protected
-    /// and an unprotected transport for a request that carries a credential, which is not a default to pick for someone.
+    /// A bare host name is not completed with a scheme. Choosing one would decide between a protected and an
+    /// unprotected transport for a request that carries a credential, which is not a default to pick for someone — so
+    /// it is read as a profile name, and the store says whether one exists.
     /// </summary>
     [Theory]
     [InlineData("mail.example.test:8443")]
-    [InlineData("ftp://mail.example.test")]
+    [InlineData("production")]
     [InlineData("/api")]
     [InlineData("   ")]
-    public void ResolveEndpoint_SomethingThatIsNotAnHttpAddress_IsRefused(string candidate)
+    [InlineData(null)]
+    public void TryReadAddress_SomethingThatIsNotAnHttpAddress_IsNotReadAsOne(string? candidate)
     {
         // Act, Assert
-        Assert.Throws<CliFailure>(() => CliOptions.ResolveEndpoint(candidate));
+        Assert.False(CliOptions.TryReadAddress(candidate, out _));
     }
 
-    [Fact]
-    public void ResolveEndpoint_APlainHttpAddress_IsAccepted()
+    /// <summary>A scheme this command cannot speak is not an address it should try, whatever the URI parser makes of it.</summary>
+    [Theory]
+    [InlineData("ftp://mail.example.test")]
+    [InlineData("file:///etc/passwd")]
+    public void TryReadAddress_AnAbsoluteUriInAnotherScheme_IsNotReadAsAnAddress(string candidate)
     {
-        // Act, Assert: refusing it would leave a loopback deployment and a reverse proxy unreachable, and the endpoint
-        // warns about clear text on its own side where it knows whether anything is in front of it.
-        Assert.Equal("http", CliOptions.ResolveEndpoint("http://localhost:8090").Scheme);
+        // Act, Assert
+        Assert.False(CliOptions.TryReadAddress(candidate, out _));
     }
 }

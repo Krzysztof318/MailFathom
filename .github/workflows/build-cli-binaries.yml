@@ -1,6 +1,6 @@
 name: Build the CLI binaries
 
-# The one place the `mailfathom` command is published as a downloadable binary. A release calls it and attaches the
+# The one place the `mfctl` command is published as a downloadable binary. A release calls it and attaches the
 # result; nothing else does yet, and this workflow gates nothing and publishes nothing itself, for the reason
 # `Build the schema artifact` does not either.
 #
@@ -73,8 +73,8 @@ jobs:
               -p:DebugType=none
 
             case "$rid" in
-              win-*) binary="mailfathom.exe"; name="mailfathom-${VERSION}-${rid}.exe" ;;
-              *)     binary="mailfathom";     name="mailfathom-${VERSION}-${rid}" ;;
+              win-*) binary="mfctl.exe"; name="mfctl-${VERSION}-${rid}.exe" ;;
+              *)     binary="mfctl";     name="mfctl-${VERSION}-${rid}" ;;
             esac
 
             cp "publish/$rid/$binary" "artifacts/cli/$name"
@@ -82,7 +82,7 @@ jobs:
 
           # One checksum file covering every binary, so an operator verifies whichever they downloaded with one command
           # from the directory they downloaded into.
-          ( cd artifacts/cli && sha256sum ./* > "mailfathom-${VERSION}.sha256" )
+          ( cd artifacts/cli && sha256sum ./* > "mfctl-${VERSION}.sha256" )
 
           echo "artifact=cli-binaries" >> "$GITHUB_OUTPUT"
 

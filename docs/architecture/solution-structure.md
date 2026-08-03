@@ -12,10 +12,17 @@ MailFathom uses a clean-architecture modular monolith. Dependencies point inward
 - `AI` owns chunking, embeddings, retrieval, and agent-framework composition.
 - `Mcp` maps MCP protocol requests and responses to application use cases.
 - `Host` is the ASP.NET Core composition root.
-- `Cli` is the `mailfathom` administration command, and it is the one project under `src/` that references no other. It
-  reaches a deployment over HTTP through the administrative endpoint and holds no other capability, which is what lets
-  it publish as a trimmed self-contained binary per platform: a reference to `Infrastructure` would put EF Core, Npgsql,
-  and MailKit into an artifact that calls none of them, and would make trimming it impossible.
+- `Cli` is the administration command, and it references `Common` alone. It reaches a deployment over HTTP through the
+  administrative endpoint and holds no other capability, which is what lets it publish as a trimmed self-contained
+  binary per platform: a reference to `Infrastructure` would put EF Core, Npgsql, and MailKit into an artifact that
+  calls none of them, and would make trimming it impossible. Its assembly is named `mfctl` rather than after its
+  boundary, because the published file is something an operator types repeatedly; the project, its directory, and its
+  namespace stay `Cli`.
+- `Common` is cross-cutting code that belongs to no boundary and depends on nothing but the base class library. It is
+  not a layer and has no place in the dependency ordering above: `Cli` and, in time, `Infrastructure` reach it, and it
+  reaches nothing. Admission is narrow on purpose — code arrives when a second boundary genuinely needs it, and lives
+  with its one consumer until then — because a project defined by what it is not becomes the drawer everything ends up
+  in.
 - `AppHost` is the Aspire local-development orchestration host.
 
 ## What the published artifact carries
@@ -32,7 +39,7 @@ That linked-source arrangement also cost visibility, because the `CI` workflow d
 
 If a second executable service ever needs these defaults, the answer is a project that both reference, not a source file linked into each.
 
-`src/shared/` is the one deliberate exception in production code, and it holds one file: `RequiresIntegrationCoverageAttribute.cs`, linked into `Infrastructure` with a `Compile Include` item. The coverage collector recognizes the marker by attribute name, not by declaring assembly, so a shared project would buy nothing a shared file does not already give and would put a build-tooling reference into every boundary that marks a class — including `Domain`, whose reference set is the point of the architecture. The file sits under `src/**`, so the change filters that made the Aspire scaffold a problem still cover it, and the exception stays limited to markers that carry no behavior: anything with executable logic gets a project.
+`src/shared/` is the one deliberate exception in production code. `RequiresIntegrationCoverageAttribute.cs` is why it exists: the coverage collector recognizes the marker by attribute name, not by declaring assembly, so a shared project would buy nothing a shared file does not already give and would put a build-tooling reference into every boundary that marks a class — including `Domain`, whose reference set is the point of the architecture. `StampedAssemblyVersion.cs` sits beside it and reads the version attributes an SDK stamps into whichever assembly it is handed, which every consumer needs about itself. Both sit under `src/**`, so the change filters that made the Aspire scaffold a problem still cover them, and the exception stays narrow: anything with executable logic that a caller reaches for as a capability gets a project, which is what `Common` is.
 
 `tests/shared/` is the same exception on the test side, and holds `RecordingLoggerProvider.cs` together with `FakeHttpMessageHandler.cs` and the `RecordedHttpRequest` snapshot it records into. A test that asserts what a component logged — and what it kept out of the log — needs the same recorder whichever boundary it exercises, and the same holds for the handler that answers an HTTP call without a network. A test-only helper project would be a build artifact whose only consumers are test projects that already compile source together, and it would carry a second cost here: its assembly name would not end in `.UnitTests`, so the coverage filters would pull test-only code into the measured denominator, and the exclusion needed to keep it out would be indistinguishable from one added to reach the threshold. Linking leaves every consumer's assembly already excluded. The files sit under `tests/**`, so the change filters cover them, and the same limit applies: a helper is shared as source, anything with production behavior gets a project. Everything here uses the assembly-neutral `MailFathom.TestSupport` namespace.
 
