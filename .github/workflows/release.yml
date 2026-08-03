@@ -99,6 +99,19 @@ jobs:
       ref: ${{ needs.assert.outputs.revision }}
       version: ${{ needs.assert.outputs.version }}
 
+  # The command an operator administers this release with, built from the same commit. It blocks nothing: a release
+  # whose binaries failed is still a release whose image is correct, and the failure is visible on the run.
+  cli-binaries:
+    name: CLI binaries
+    needs:
+      - assert
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-cli-binaries.yml
+    with:
+      ref: ${{ needs.assert.outputs.sha }}
+      version: ${{ needs.assert.outputs.version }}
+
   publish:
     name: Publish
     needs:
@@ -149,6 +162,7 @@ jobs:
     needs:
       - assert
       - schema-artifact
+      - cli-binaries
       - publish
       - publish-chart
     runs-on: ubuntu-latest
@@ -165,6 +179,12 @@ jobs:
         with:
           name: schema-artifact
           path: artifacts/schema
+
+      - name: Download the CLI binaries
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.cli-binaries.outputs.artifact }}
+          path: artifacts/cli
 
       # The notes are the changelog section, not a list of pull-request titles: no arrangement of titles can state that
       # a release cannot be deployed over the previous release's data, which is the most important sentence a MailFathom
@@ -226,6 +246,14 @@ jobs:
             printf 'what it is missing. [Applying the database schema](https://github.com/%s/blob/%s/docs/operations/database-schema.md)' \
               "$REPOSITORY" "$RELEASE_TAG"
             printf ' states the privileges it needs, the locks it takes, and what each startup failure means.\n'
+
+            printf '\n## The administration command\n\n'
+            printf 'Download the binary for the machine you administer from, not for the machine the service runs on: '
+            printf '`mailfathom` reaches a deployment over HTTP and runs on Linux and Windows alike. Verify it against '
+            printf '`mailfathom-%s.sha256`, make it executable, and run `mailfathom login --endpoint https://host:port`. ' "$VERSION"
+            printf '[Administering a deployment](https://github.com/%s/blob/%s/docs/operations/admin-endpoint.md)' \\
+              "$REPOSITORY" "$RELEASE_TAG"
+            printf ' states what the service has to have enabled before it will answer.\n'
           } > "$notes_file"
 
           # Idempotent, because a re-run of a release must not fail on the release it already created.
@@ -241,3 +269,6 @@ jobs:
             "artifacts/schema/${schema_artifact_name}" \
             "artifacts/schema/${schema_artifact_name}.sha256" \
             --clobber
+
+          # Every published platform of the command, plus the one checksum file covering all of them.
+          gh release upload "$RELEASE_TAG" artifacts/cli/* --clobber

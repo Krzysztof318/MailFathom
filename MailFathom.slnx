@@ -3,6 +3,7 @@
     <Project Path="src/AI/AI.csproj" />
     <Project Path="src/AppHost/AppHost.csproj" />
     <Project Path="src/Application/Application.csproj" />
+    <Project Path="src/Cli/Cli.csproj" />
     <Project Path="src/Domain/Domain.csproj" />
     <Project Path="src/Host/Host.csproj" />
     <Project Path="src/Infrastructure/Infrastructure.csproj" />
@@ -12,6 +13,7 @@
     <Project Path="tests/AI.UnitTests/AI.UnitTests.csproj" />
     <Project Path="tests/AppHost.UnitTests/AppHost.UnitTests.csproj" />
     <Project Path="tests/Application.UnitTests/Application.UnitTests.csproj" />
+    <Project Path="tests/Cli.UnitTests/Cli.UnitTests.csproj" />
     <Project Path="tests/Domain.UnitTests/Domain.UnitTests.csproj" />
     <Project Path="tests/Host.UnitTests/Host.UnitTests.csproj" />
     <Project Path="tests/Infrastructure.UnitTests/Infrastructure.UnitTests.csproj" />

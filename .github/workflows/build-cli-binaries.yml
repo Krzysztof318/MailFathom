@@ -1,0 +1,94 @@
+name: Build the CLI binaries
+
+# The one place the `mailfathom` command is published as a downloadable binary. A release calls it and attaches the
+# result; nothing else does yet, and this workflow gates nothing and publishes nothing itself, for the reason
+# `Build the schema artifact` does not either.
+#
+# One runner builds every platform. These are self-contained trimmed single files rather than native-AOT images, so the
+# build is ordinary IL publishing with a runtime identifier and needs no cross-compiler and no Windows runner. That is
+# the reason for the shape: a matrix across runners would buy nothing here and would make the checksum file harder to
+# produce as one artifact.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'The commit SHA to build. Resolved by the caller, so what is published is never re-resolved from a moving ref.'
+        required: true
+        type: string
+      version:
+        description: 'The full stamped version the binaries are named after, for example `0.2.0`.'
+        required: true
+        type: string
+    outputs:
+      artifact:
+        description: 'The name of the uploaded artifact holding every binary and the checksum file.'
+        value: ${{ jobs.build.outputs.artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    outputs:
+      artifact: ${{ steps.publish.outputs.artifact }}
+    steps:
+      - name: Check out the commit being released
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up the .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore src/Cli/Cli.csproj --locked-mode
+
+      # The publish-time shape lives here rather than in the project file, because a project marked self-contained
+      # cannot be referenced by the test host. Trimming is safe because src/Cli references no other project in the
+      # solution: there is no EF Core model and no MailKit to keep reflection alive, and serialization goes through a
+      # source-generated context.
+      - name: Publish every platform
+        id: publish
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p artifacts/cli
+
+          for rid in linux-x64 linux-arm64 win-x64 win-arm64; do
+            dotnet publish src/Cli/Cli.csproj \
+              --configuration Release \
+              --runtime "$rid" \
+              --self-contained true \
+              --output "publish/$rid" \
+              -p:PublishSingleFile=true \
+              -p:PublishTrimmed=true \
+              -p:TrimMode=full \
+              -p:DebugType=none
+
+            case "$rid" in
+              win-*) binary="mailfathom.exe"; name="mailfathom-${VERSION}-${rid}.exe" ;;
+              *)     binary="mailfathom";     name="mailfathom-${VERSION}-${rid}" ;;
+            esac
+
+            cp "publish/$rid/$binary" "artifacts/cli/$name"
+          done
+
+          # One checksum file covering every binary, so an operator verifies whichever they downloaded with one command
+          # from the directory they downloaded into.
+          ( cd artifacts/cli && sha256sum ./* > "mailfathom-${VERSION}.sha256" )
+
+          echo "artifact=cli-binaries" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-binaries
+          path: artifacts/cli
+          if-no-files-found: error

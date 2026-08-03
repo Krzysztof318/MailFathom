@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- The published binary is what an operator invokes, and it is named after the command rather than after the
+         boundary the assembly name encodes. -->
+    <AssemblyName>mailfathom</AssemblyName>
+    <RootNamespace>MailFathom.Cli</RootNamespace>
+
+    <!-- The command ships as one self-contained, trimmed file per platform, so an operator administering a Linux
+         deployment from a Windows workstation downloads a binary and runs it. Those are publish-time properties passed
+         by the release workflow rather than stated here, because a project marked self-contained cannot be referenced
+         by a test host. What stays is the analysis: the trimmer's warnings are worth reading on every build, not only
+         when a release is cut. -->
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <!-- Deliberately no ProjectReference. The command is an HTTP client of the administrative endpoint and holds no other
+       capability: it never opens the database, never reads the service's configuration, and never touches its secret
+       store. A reference to Infrastructure would put all three in the published artifact, and would make trimming it
+       impossible. -->
+
+  <ItemGroup>
+    <Compile Include="..\shared\StampedAssemblyVersion.cs" Link="StampedAssemblyVersion.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MailFathom.Cli.UnitTests" />
+  </ItemGroup>
+</Project>

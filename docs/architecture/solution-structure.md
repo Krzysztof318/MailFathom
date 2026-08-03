@@ -12,6 +12,10 @@ MailFathom uses a clean-architecture modular monolith. Dependencies point inward
 - `AI` owns chunking, embeddings, retrieval, and agent-framework composition.
 - `Mcp` maps MCP protocol requests and responses to application use cases.
 - `Host` is the ASP.NET Core composition root.
+- `Cli` is the `mailfathom` administration command, and it is the one project under `src/` that references no other. It
+  reaches a deployment over HTTP through the administrative endpoint and holds no other capability, which is what lets
+  it publish as a trimmed self-contained binary per platform: a reference to `Infrastructure` would put EF Core, Npgsql,
+  and MailKit into an artifact that calls none of them, and would make trimming it impossible.
 - `AppHost` is the Aspire local-development orchestration host.
 
 ## What the published artifact carries

@@ -9,6 +9,7 @@ using MailFathom.Application.Mail;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Host;
+using MailFathom.Host.Api;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Observability;
@@ -317,6 +318,17 @@ try
         builder.Services.AddMcpRateLimiting(mcpRateLimits);
     }
 
+    // Read once, like the MCP section and for the same reason. Administering this service and reading a mailbox
+    // through it are different authorities, so the section is separate all the way down: its own listener, its own
+    // credentials, and its own authorization servers. Bound strictly, so a misspelled key cannot leave a deployment
+    // serving an administrative surface nobody meant to enable.
+    var adminEndpointSettings = AdminEndpointOptions.ReadFrom(builder.Configuration);
+    builder.Services.AddSingleton(Options.Create(adminEndpointSettings));
+
+    // Registered whether or not the endpoint is enabled, because it is the warning that decides whether it has
+    // anything to say — the same reason the MCP warnings above are registered unconditionally.
+    builder.Services.AddHostedService<AdminTransportSecurityWarning>();
+
     // Read once, like the MCP section and for the same reason: it decides which sockets are opened and which routes
     // exist, both of which are settled while the application is being built. Bound strictly, so a misspelled key cannot
     // leave a deployment serving a posture nobody selected.
@@ -338,6 +350,41 @@ try
         (false, true) => ConfiguredKestrelEndpoints.ListenerPorts(builder.Configuration),
         _ => ConfiguredApplicationListeners.ListenerPorts(applicationListenerUrls),
     };
+
+    // Against the application listener and the probe listener both, because a port is claimed by whichever binds
+    // first and the loser fails with an address-in-use error naming a socket rather than the section that asked for it.
+    var adminEndpointConfigurationErrors = adminEndpointSettings.FindConfigurationErrors(
+        [.. applicationListenerPorts, .. healthEndpointSettings.ListenerPorts]);
+
+    if (adminEndpointConfigurationErrors.Count > 0)
+    {
+        throw new OptionsValidationException(
+            AdminEndpointOptions.SectionName,
+            typeof(AdminEndpointOptions),
+            adminEndpointConfigurationErrors);
+    }
+
+    const string adminCertificateStoreKey = "mailfathom.admin";
+
+    if (adminEndpointSettings.Enabled)
+    {
+        builder.Services.AddAdminTransportSecurity(adminEndpointSettings);
+        // Keyed, because two endpoints each own a store and the container has to tell them apart. Each store loads
+        // and disposes only its own endpoint's material, which is what keeps one endpoint's certificates out of the
+        // other's handshake lookup.
+        builder.Services.AddKeyedSingleton(adminCertificateStoreKey, (provider, _) => new TransportServerCertificateStore(
+            adminEndpointSettings.Https,
+            $"{AdminEndpointOptions.SectionName}:{nameof(AdminEndpointOptions.Https)}",
+            provider.GetRequiredService<TlsServerCertificateLoader>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILogger<TransportServerCertificateStore>>()));
+
+        builder.WebHost.ConfigureKestrel(kestrelOptions => AdminEndpointListenerBinder.Bind(
+            kestrelOptions,
+            adminEndpointSettings,
+            kestrelOptions.ApplicationServices.GetRequiredKeyedService<TransportServerCertificateStore>(
+                adminCertificateStoreKey)));
+    }
 
     var healthEndpointConfigurationErrors = healthEndpointSettings.FindConfigurationErrors(applicationListenerPorts);
 
@@ -387,10 +434,20 @@ try
             .LoadAsync(app.Lifetime.ApplicationStopping);
     }
 
+    if (adminEndpointSettings.Enabled && adminEndpointSettings.Https.TerminatesTls)
+    {
+        await app.Services.GetRequiredKeyedService<TransportServerCertificateStore>(adminCertificateStoreKey)
+            .LoadAsync(app.Lifetime.ApplicationStopping);
+    }
+
     // For the same reason, and with the same outcome: a TLS transport whose material is unusable fails startup with
     // nothing listening rather than downgrading the probe port to clear text.
     await app.Services.GetRequiredService<HealthEndpointCertificate>()
         .LoadAsync(app.Lifetime.ApplicationStopping);
+
+    // One authorization middleware serves every endpoint that requires it, and either endpoint may be the one that
+    // adds it. Adding it twice would run every policy twice.
+    var authorizationMiddlewareAdded = false;
 
     app.UseExceptionHandler();
 
@@ -415,6 +472,14 @@ try
         // on the application port is refused before it can report dependency state to whoever can reach it.
         app.UseHealthEndpointIsolation(healthEndpointSettings.ListenerPorts);
         app.MapHealthProbes();
+    }
+
+    if (adminEndpointSettings.Enabled)
+    {
+        // Ahead of everything either endpoint adds, so an administrative request that arrived on the MCP port is
+        // refused before it reaches any credential check, and an MCP request that arrived on the administrative port is
+        // refused before it reaches the protocol surface.
+        app.UseAdminEndpointIsolation(adminEndpointSettings.ListenerPorts);
     }
 
     app.MapGet("/", () => Results.Ok(new { service = "MailFathom", status = "ready" }));
@@ -459,7 +524,15 @@ try
             // Authentication also serves the protected resource metadata document, which the MCP authentication scheme
             // publishes as a request handler rather than as a route, so the middleware runs whether or not the request
             // that follows carries a credential.
-            app.UseAuthentication();
+            //
+            // Scoped away from the administrative routes rather than added globally. This middleware authenticates with
+            // the application's default scheme, which is the MCP surface's, so an administrative request reaching it
+            // would have its credential compared against the MCP endpoint's keys before the administrative policy ever
+            // ran. Nothing would be disclosed by that — the comparison is constant-time and the result is discarded —
+            // but a credential provisioned for one surface must not be offered to the other's handlers at all.
+            app.UseWhen(
+                context => !context.Request.Path.StartsWithSegments(AdminEndpointOptions.RoutePrefix),
+                mcpBranch => mcpBranch.UseAuthentication());
         }
 
         if (mcpRateLimits is not null)
@@ -479,12 +552,32 @@ try
         if (mcpEndpointSettings.RequiresAuthentication)
         {
             app.UseAuthorization();
+            authorizationMiddlewareAdded = true;
 
             // On the endpoint rather than as a fallback policy, so the readiness response and the health endpoints keep
             // answering unauthenticated while everything the MCP route exposes is covered by the one requirement it
             // carries. Under the stateless transport that route is the post alone; a get or a delete is not mapped at
             // all, so there is no second entry into the protocol surface for a requirement to miss.
             mcpEndpoint.RequireAuthorization(TransportSurface.Mcp.AccessPolicyName);
+        }
+    }
+
+    if (adminEndpointSettings.Enabled)
+    {
+        // The administrative routes carry no authentication middleware of their own. That middleware authenticates with
+        // the application's default scheme, which belongs to the MCP surface; the authorization middleware instead
+        // authenticates with the schemes the policy names, which are this surface's. So requiring the policy is both
+        // what admits a caller and what establishes who they are.
+        if (adminEndpointSettings.RequiresAuthentication && !authorizationMiddlewareAdded)
+        {
+            app.UseAuthorization();
+        }
+
+        var adminApi = app.MapAdminApi();
+
+        if (adminEndpointSettings.RequiresAuthentication)
+        {
+            adminApi.RequireAuthorization(TransportSurface.Admin.AccessPolicyName);
         }
     }
 
