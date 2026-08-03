@@ -101,7 +101,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `…:Port` | int | `993` | 1 – 65535 | reload |
 | `…:UserName` | string | — | Required when synchronization is enabled; an identifier, not a secret | reload |
 | `…:Secrets:Password` | secret block | unset | Required when the permitted mechanisms include any password mechanism; must resolve at startup | reload; material per connection |
-| `…:Mode` | enum | `Polling` | `Polling`, `Push`; push holds one connection open per folder | reload; the next run adopts it |
+| `…:Mode` | enum | `Polling` | `Polling`, `Push`; push holds one connection open per account on a server supporting `NOTIFY`, and one per folder on a server offering only `IDLE` | reload; the next run adopts it |
 | `…:EarliestEmailReceivedDate` | date | unset (everything) | Not in the future (compared in UTC) | reload |
 | `…:RemotelyDeletedEmailDisposition` | enum | `RetainTombstone` | `RetainTombstone`, `EraseLocalCopy` | reload; governs disappearances observed from then on |
 | `…:Folders` | list | inbox by role | Aliases unique; each entry below | reload |

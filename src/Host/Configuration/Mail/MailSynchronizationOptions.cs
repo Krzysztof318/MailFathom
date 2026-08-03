@@ -412,8 +412,10 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <para>
     /// It binds as one of the two names <see cref="MailSynchronizationMode" /> declares and defaults to
     /// <see cref="MailSynchronizationMode.Polling" />, so an account that says nothing keeps the schedule it already
-    /// had. Push is opt-in because it holds a connection open per folder for the lifetime of the process, which is a
-    /// cost against the server's connection limit that an operator should choose rather than inherit.
+    /// had. Push is opt-in because it holds a connection open for the lifetime of the process — one for the whole
+    /// account on a server that supports subscriptions, as <see cref="MailSynchronizationOptions.MaxSubscribedFolders" />
+    /// describes, and otherwise one per folder — which is a cost against the server's connection limit that an operator
+    /// should choose rather than inherit.
     /// </para>
     /// <para>
     /// The setting states what the operator asked for. What a folder actually gets is decided per folder against what

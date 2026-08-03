@@ -330,14 +330,11 @@ internal sealed partial class AccountPushNotificationWatch : IAsyncDisposable
     {
         await this.CloseSubscriptionAsync();
 
-        this.subscription.ConsecutiveFailureCount++;
+        var failureCount = this.subscription.AttemptFailed();
 
-        if (this.subscription.ConsecutiveFailureCount < runSettings.MaxConsecutivePushFailures)
+        if (failureCount < runSettings.MaxConsecutivePushFailures)
         {
-            this.LogSubscriptionAttemptFailed(
-                failure,
-                this.accountId.Value,
-                this.subscription.ConsecutiveFailureCount);
+            this.LogSubscriptionAttemptFailed(failure, this.accountId.Value, failureCount);
 
             return;
         }
@@ -821,6 +818,21 @@ internal sealed partial class AccountPushNotificationWatch : IAsyncDisposable
             this.RetryAfter = null;
             this.NotAdvertised = false;
             this.subscribedAliases = [.. folders.Select(folder => folder.Alias.Value)];
+        }
+
+        /// <summary>Counts one attempt that failed rather than being declined.</summary>
+        /// <returns>How many attempts have now failed in a row.</returns>
+        /// <remarks>
+        /// The capability answer is cleared with it. Reaching here means the server was asked and something else went
+        /// wrong, so whatever an earlier attempt concluded about the mechanism is no longer what this one observed, and
+        /// a decline left standing would send the account down the per-folder fallback that a failing subscription must
+        /// not take.
+        /// </remarks>
+        internal int AttemptFailed()
+        {
+            this.NotAdvertised = false;
+
+            return ++this.ConsecutiveFailureCount;
         }
 
         /// <summary>Records a server that advertises no mechanism for watching several folders over one connection.</summary>

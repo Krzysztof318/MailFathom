@@ -321,6 +321,87 @@ public sealed class AccountPushNotificationWatchTests
     }
 
     /// <summary>
+    /// The bound counts failures since the last thing that worked, so a wait that returned has to clear the ones before
+    /// it. A folder that failed its way to the edge of the bound, served one wait, and then failed once more has
+    /// produced a single failure since that wait, and degrading it there would degrade a server that recovered.
+    /// </summary>
+    [Fact]
+    public async Task WaitForNextPassAsync_AWaitReturnsBetweenFailures_ClearsTheFailuresCountedBeforeIt()
+    {
+        // Arrange
+        using var harness = CreateHarness(MailSynchronizationMode.Push);
+        harness.Options.MaxConsecutivePushFailures = 3;
+
+        for (var attempt = 0; attempt < harness.Options.MaxConsecutivePushFailures - 1; attempt++)
+        {
+            await harness.WatchInboxAsync();
+            harness.NotificationSessions.SessionWatching("INBOX")!.WaitFailure =
+                new IOException("The server closed the connection.");
+
+            await harness.Watch.WaitForNextPassAsync(
+                harness.Options,
+                harness.Options.Interval,
+                TestContext.Current.CancellationToken);
+        }
+
+        // Act
+        await harness.WatchInboxAsync();
+        var servingSession = harness.NotificationSessions.SessionWatching("INBOX")!;
+        var servedWait = harness.Watch.WaitForNextPassAsync(
+            harness.Options,
+            harness.Options.Interval,
+            TestContext.Current.CancellationToken);
+        await SynchronizationTestHost.AdvanceUntilAsync(
+            harness.Clock,
+            servedWait,
+            harness.Options.Interval,
+            DeadlockGuard);
+
+        servingSession.WaitFailure = new IOException("The server closed the connection.");
+        await harness.Watch.WaitForNextPassAsync(
+            harness.Options,
+            harness.Options.Interval,
+            TestContext.Current.CancellationToken);
+        await harness.WatchInboxAsync();
+
+        // Assert
+        Assert.DoesNotContain(
+            harness.Logger.Messages,
+            message => message.Contains("so the folder is synchronized by polling", StringComparison.Ordinal));
+
+        // The fourth connection is the evidence: a folder that had reached the bound would not be reconnected at all.
+        Assert.Equal(4, harness.NotificationSessions.OpenedFolderAliases.Count);
+    }
+
+    /// <summary>
+    /// A decline says the server serves no subscription, and a later attempt that failed for another reason says
+    /// nothing about the capability at all. Leaving the older answer standing would send the account down the
+    /// per-folder fallback that belongs to a decline, on the strength of an attempt that never got an answer.
+    /// </summary>
+    [Fact]
+    public async Task WatchResolvedFoldersAsync_SubscriptionFailsAfterAnEarlierDecline_DoesNotFallBackPerFolder()
+    {
+        // Arrange
+        using var harness = CreateHarness(MailSynchronizationMode.Push);
+        await harness.WatchAsync([InboxBinding, ArchiveBinding]);
+        var inboxSession = harness.NotificationSessions.SessionWatching("INBOX")!;
+
+        harness.Clock.Advance(harness.Options.PushDegradationPeriod + TimeSpan.FromMinutes(1));
+        harness.NotificationSessions.SubscriptionOpenFailure = new IOException("The server closed the connection.");
+
+        // Act
+        await harness.WatchAsync([InboxBinding, ArchiveBinding]);
+
+        // Assert
+        Assert.True(
+            inboxSession.IsDisposed,
+            "A subscription that failed leaves the account on its interval, so the per-folder sessions a decline had opened are released.");
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains("Folder primary/INBOX is now synchronized in Polling mode", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// One connection covering every folder is the whole point of asking for a subscription, so a server that serves
     /// one must leave the account holding no per-folder session at all.
     /// </summary>
