@@ -193,4 +193,5 @@ result matter more than the emails on the first day:
   deliberately bounded — at most 100 summaries per page — so an agent reads pages, not mailboxes.
 
 From here, [using the tools](usage.md) describes the day-to-day surface: what each tool answers, what it bounds, and
-what its errors mean.
+what its errors mean, and [administering your deployment](administering.md) covers reaching the running service from
+your own machine with the `mfctl` command.

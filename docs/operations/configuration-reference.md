@@ -167,10 +167,73 @@ The worker that extracts text for messages stored before extraction existed or b
 | `MailExtractionBackfill:BatchSize` | int | `50` | 1 – 500 | restart |
 | `MailExtractionBackfill:MaxBatchesPerRun` | int | `10` | 1 – 1000 | restart |
 
+## The application listener
+
+The socket that serves `/` and the MCP endpoint at `/mcp`. It is the one listener MailFathom configures nothing of its
+own for: `McpEndpoint` decides whether the protocol surface is served and what guards it, never where it is served, so
+a deployment that enables the endpoint and configures no address serves it here. The administrative and probe
+listeners are the opposite — each binds a socket of its own from its own section, and neither answers the other's
+paths.
+
+**It is clear-text HTTP unless a deployment says otherwise.** Three things change that: a TLS-terminating reverse
+proxy in front of the process, an `https://` address configured below, or
+[`McpEndpoint:Https:Endpoints`](#tls-termination--mcpendpointhttpsendpointsn), which replaces this listener rather than
+adding to it.
+
+### Where its address comes from
+
+| Source | Value | Wins over |
+| --- | --- | --- |
+| `Kestrel:Endpoints:<name>:Url` | An address per named endpoint | Everything below; naming any endpoint makes Kestrel ignore the two rows under it |
+| `ASPNETCORE_URLS` | `;`-separated addresses | `ASPNETCORE_HTTP_PORTS` |
+| `ASPNETCORE_HTTP_PORTS` / `ASPNETCORE_HTTPS_PORTS` | `;`-separated ports, each expanded to every interface | Nothing |
+| Nothing configured | `http://localhost:5000` | — |
+
+The default binds loopback alone, so a process installed natively and started without an address is reachable from its
+own machine and nowhere else. The container image and the Helm chart both set `ASPNETCORE_HTTP_PORTS=8080` instead, so
+this default is the native-process path's.
+
+Kestrel's own fallback would add `https://localhost:5001` whenever an ASP.NET Core development certificate happens to
+be installed. MailFathom restates only the clear-text half, so what the process listens on is decided by what was
+configured rather than by what is installed on the machine — it never serves a listener out of a development
+certificate. That restatement happens while the [probe listener](health-endpoints.md#the-application-listener-is-preserved)
+is being opened, which is the default; a deployment that sets `HealthEndpoints:Enabled` to `false` restates nothing and
+is left with Kestrel's own defaults, development certificate included.
+
+### `Kestrel:Endpoints:<name>`
+
+Kestrel's own section, bound by the framework rather than by MailFathom, and the way to give this listener TLS without
+moving the MCP endpoint onto profiles of its own. `<name>` is any name; it appears in the "Now listening on" line and
+in nothing else. The full contract is
+[Kestrel endpoint configuration](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel/endpoints?view=aspnetcore-10.0);
+the keys are listed here because two MailFathom rules depend on this section existing.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:Url` | string | — | Required; an endpoint carrying no `Url` binds nothing. This is the key MailFathom itself reads, for the port collision checks and the two rules below | restart |
+| `…:Protocols` | string | `Http1AndHttp2` | `Http1`, `Http2`, `Http3`, `Http1AndHttp2`, `Http1AndHttp2AndHttp3` | restart |
+| `…:SslProtocols` | string list | the platform's | The `SslProtocols` names, per the linked contract; MailFathom's own sections take `Tls12` and `Tls13` alone, and this one does not | restart |
+| `…:ClientCertificateMode` | string | `NoCertificate` | `NoCertificate`, `AllowCertificate`, `RequireCertificate` | restart |
+| `…:Certificate` | object | — | Kestrel's own certificate block — a file through `Path`, or a store through `Subject` — which is **not** the [secret block](secret-provisioning.md#the-secret-block) the MailFathom sections take, so material for it is provisioned as Kestrel documents rather than through a `SecretReference` | restart |
+| `…:Sni` | object | — | Kestrel's server-name mapping | restart |
+
+Two rules are MailFathom's rather than Kestrel's:
+
+- **An endpoint here beside `McpEndpoint:Https` fails startup**, naming both sides. Kestrel binds configured endpoints
+  alongside the ones bound in code rather than replacing them, so the configured listener would stay open and serve the
+  same MCP route without the TLS the profiles were configured to add. Only an operator can decide which of the two the
+  deployment meant. [Configuring a profile takes over the host's listeners](mcp-endpoint.md#configuring-a-profile-takes-over-the-hosts-listeners)
+  has the message.
+- **A port this listener binds is refused to the administrative and probe listeners**, checked against whichever source
+  is the one actually binding — the MCP HTTPS profiles when they have replaced this listener, the endpoints named here
+  when they exist, and the URL-shaped addresses otherwise. A collision is reported against the section that asked for
+  it rather than left to fail later as an address-in-use error naming a socket.
+
 ## `McpEndpoint`
 
 Whether the protocol surface is served and what a client must present. The whole section is **restart** — it decides
-routing and listeners — while key and certificate material is read per request or per handshake.
+routing and listeners — while key and certificate material is read per request or per handshake. Where it is served is
+[the application listener](#the-application-listener) unless `Https:Endpoints` moves it.
 [The MCP endpoint](mcp-endpoint.md) is the page, section by section.
 
 | Key | Type | Default | Constraint | Change |
@@ -206,8 +269,8 @@ protect.
 
 ### TLS termination — `McpEndpoint:Https:Endpoints:<n>`
 
-Empty by default, which serves the endpoint over the host's ordinary listener. Configuring any profile **takes over
-the host's listeners**: only the profiles' sockets are opened.
+Empty by default, which serves the endpoint over [the application listener](#the-application-listener). Configuring any
+profile **takes over the host's listeners**: only the profiles' sockets are opened.
 [HTTPS and your own domain](mcp-endpoint.md#https-and-your-own-domain) is the page.
 
 | Key | Type | Default | Constraint | Change |
@@ -332,7 +395,7 @@ belong to the platform rather than to MailFathom:
 | Variable | What it does |
 | --- | --- |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Attaches the OTLP exporter for logs, metrics, and traces — startup records included. Unset exports nothing. [Telemetry](telemetry.md) is the page, including the sibling `OTEL_*` variables the exporter reads itself |
-| `ASPNETCORE_URLS` / `ASPNETCORE_HTTP_PORTS` | The application listener's addresses, unless MCP HTTPS profiles or explicit Kestrel endpoints replace them |
+| `ASPNETCORE_URLS` / `ASPNETCORE_HTTP_PORTS` | [The application listener's](#the-application-listener) addresses, unless MCP HTTPS profiles or explicit Kestrel endpoints replace them |
 | `DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT` | The environment name; `Development` is what admits user secrets and `appsettings.Development.json` |
 | `DOTNET_USE_POLLING_FILE_WATCHER` | Set to `1` where reload must observe a mounted volume's atomic update — Kubernetes ConfigMaps in particular |
 | `OPENSSL_CONF` | The OpenSSL configuration file every TLS connection in the process is handshaked under. Unset is the platform's own policy; setting it is how a mail server the platform refuses is reached at all, and the host warns at startup that it is in force. [The platform TLS policy](platform-tls-policy.md) is the page |

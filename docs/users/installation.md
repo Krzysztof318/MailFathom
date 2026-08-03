@@ -95,9 +95,11 @@ Build with the SDK pinned in `global.json`. The process is then an ordinary ASP.
 - Credentials arrive as systemd credentials: `LoadCredential=` in the unit, `systemd-credential:` references in the
   configuration. [Secret provisioning](../operations/secret-provisioning.md#native-systemd-service) shows the unit
   fragment, including the encrypted-at-rest variant and the core-dump limit worth setting alongside it.
-- The application listener binds the address `ASPNETCORE_URLS` or your Kestrel configuration names; the health probes
-  answer on their own port, `8081` by default. [Health endpoints](../operations/health-endpoints.md) records how to
-  move or disable that listener.
+- [The application listener](../operations/configuration-reference.md#the-application-listener) binds the address
+  `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`, or your Kestrel configuration names, and `http://localhost:5000` when you
+  name none — loopback, so a service you never gave an address to is not reachable from another machine. It is clear
+  text unless you configure otherwise. The health probes answer on their own port, `8081` by default;
+  [health endpoints](../operations/health-endpoints.md) records how to move or disable that listener.
 - PostgreSQL, the `vector` extension, and the schema step are yours, exactly as they are under Kubernetes.
 - A mail server whose TLS parameters the machine's own OpenSSL refuses is reached by naming an OpenSSL configuration
   file in the service's environment, which is a pre-start concern no MailFathom setting can replace.

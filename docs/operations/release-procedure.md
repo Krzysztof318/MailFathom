@@ -1,6 +1,6 @@
 # The release procedure
 
-<!-- describes: Directory.Build.props, .github/workflows/release.yml, .github/workflows/publish-helm-chart.yml, scripts/assert-release-tag.sh, scripts/read-declared-version.sh -->
+<!-- describes: Directory.Build.props, .github/workflows/release.yml, .github/workflows/publish-helm-chart.yml, scripts/assert-release-tag.sh, scripts/read-declared-version.sh, .agents/skills/prepare-release/SKILL.md -->
 
 MailFathom's version number is a compatibility promise over four public surfaces, and it is written in one place. This
 page records how a build acquires that number, where it is observable, and the sequence that turns a commit on a
@@ -126,14 +126,20 @@ version becomes real is a decision rather than a consequence of work looking fin
 whole procedure, and it is recorded here so it survives the skill being unavailable:
 
 1. **Merge the changelog pull request.** It adds `## [x.y.z] - YYYY-MM-DD` with the release's entries, composed from
-   what merged since the previous tag, and it brings the three files that name a version in prose onto that version:
-   the **Project status** paragraph in `README.md`, the image references opening `docs/users/installation.md`, and the
-   **Supported versions** table in `SECURITY.md`. It touches nothing else. It merges first because **its merge commit
-   is what gets tagged and published**, so the tagged tree contains the released changelog — and the three files
-   describing the release they ship inside — rather than describing them afterwards.
+   what merged since the previous tag, and it brings the five files that name a version in prose onto that version:
+   the **Project status** paragraph in `README.md`, the image references opening `docs/users/installation.md`, the
+   **state of the release** section in `docs/users/README.md`, the **Getting the command** section in
+   `docs/operations/admin-endpoint.md`, and the **Supported versions** table in `SECURITY.md`. It touches nothing else.
+   It merges first because **its merge commit is what gets tagged and published**, so the tagged tree contains the
+   released changelog — and the five files describing the release they ship inside — rather than describing them
+   afterwards.
 
-   Those three are the whole of what `<VersionPrefix>` does not reach. Everything a build stamps derives from that one
-   declaration; prose does not, and nothing checks it, which is why the list is stated rather than searched for.
+   Those five are the whole of what `<VersionPrefix>` does not reach *by name*. Everything a build stamps derives from
+   that one declaration; prose does not, and nothing checks it, which is why the list is stated rather than searched
+   for. The skill additionally sweeps the tree for prose that describes the release *state* without naming a version —
+   "no versioned artifact exists yet", "a release will attach it" — because that kind of sentence goes stale at the
+   moment of the tag and no search for the version number would ever find it. Each hit is read and either corrected in
+   this same pull request or left alone; the sweep reports and never gates.
 2. **Push the annotated tag `v<x.y.z>` on that merge commit.** This is what makes the release real and what triggers
    the release workflow. Before publishing anything the workflow asserts the tag against the tagged commit's
    `VersionPrefix`, against the highest existing tag on the same `major.minor` line, and against the changelog section
