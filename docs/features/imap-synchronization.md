@@ -142,10 +142,23 @@ would be a second implementation of the correctness-critical work, and the one p
 could hold in one path and lapse in the other. The watching session issues `IDLE` and nothing else, and a test asserts
 that it requests no body, no envelope, no flags, and no read-write reselection.
 
-It also changes nothing about the *guaranteed* cadence. The wait a supervisor computes — the interval, or the backoff a
-failing account is under — is still the longest a folder waits; a notification only ends that wait early. A quiet
-mailbox therefore still reconciles on its interval, which is what keeps the backward pass working through a large
-folder's window whether or not any mail is arriving.
+### A folder in push mode still keeps the account's interval
+
+This is a decision rather than a leftover, and it is the one most likely to surprise: **`Interval` is not replaced by
+push, it becomes the ceiling on the wait that a notification cuts short.** The wait a supervisor computes — the
+interval, or the backoff a failing account is under — is still the longest a folder waits; a notification only ends it
+early.
+
+The reason is the backward pass. Reconciliation walks a window bounded by `MaxReconciledEmailsPerRun`, oldest
+observation first, so a folder holding more mail than that window notices a remote deletion or a flag change over
+several runs rather than in one. Those runs have to keep happening while **nothing is arriving**, because a message
+deleted on the server produces no new mail to be notified about — and a folder whose backlog is a hundred thousand
+messages needs two hundred passes at the default window to work through it once. A push mode that removed the interval
+would tie the whole backward pass to inbound traffic: a quiet mailbox would stop reconciling entirely, and the longer it
+stayed quiet the further behind it would fall, silently.
+
+So push buys latency on new mail and gives up nothing. The cost of keeping the interval is one pass per interval on a
+mailbox that had nothing to report, which is exactly what an account not in push mode already pays.
 
 ### Choosing the mode, per folder
 
@@ -182,11 +195,20 @@ connection limit is therefore a configuration to reconsider, and the log says wh
 
 ### Renewal
 
+**`PushRenewalInterval` is not a polling interval, despite its name.** It bounds the lifetime of a *single* `IDLE`
+command, and it schedules nothing whatsoever: it does not decide when a pass runs, it does not shorten or lengthen the
+wait, and lowering it makes MailFathom check nothing more often. Read it as *how long one command may sit before it has
+to be re-issued*.
+
 RFC 2177 requires a client to leave and re-enter `IDLE` at least every 29 minutes, and several servers drop a connection
-that stays in it longer. A wait longer than `PushRenewalInterval` is therefore served by a sequence of `IDLE` commands
-over the same connection rather than by one long one, and the default of twenty minutes keeps nine minutes below the
-mandate as margin for a slow round trip. Renewal reconnects nothing; a change reported during any command in the
-sequence ends the whole wait at once.
+that stays in it longer. A wait longer than this setting is therefore served by a sequence of `IDLE` commands over the
+same connection rather than by one long one, and the default of twenty minutes keeps nine minutes below the mandate as
+margin for a slow round trip. Renewal reconnects nothing and re-authenticates nothing; a change reported during any
+command in the sequence ends the whole wait at once, whichever command of the sequence is in flight.
+
+Lowering it therefore buys nothing but chatter, and raising it past the mandate is refused at startup. The setting an
+operator changes to make a folder synchronize more often is `Interval`, which is the ceiling
+[the section above](#a-folder-in-push-mode-still-keeps-the-accounts-interval) describes.
 
 ### Degradation, and why it expires
 
@@ -801,9 +823,14 @@ polling with nothing reporting the difference, for the same reason the dispositi
 
 The three deployment-wide settings shape how a watched folder behaves and apply to every account that asked for push.
 `PushRenewalInterval` accepts one to twenty-nine minutes, the ceiling being what RFC 2177 mandates, and defaults to
-twenty. `MaxConsecutivePushFailures` accepts 1 to 100 and defaults to three, and `PushDegradationPeriod` accepts ten
-seconds to a day and defaults to fifteen minutes; together they decide when a folder stops retrying push and when it
-starts again.
+twenty; it is the lifetime of one `IDLE` command rather than a cycle, which [Renewal](#renewal) states in full because
+the name reads the other way. `MaxConsecutivePushFailures` accepts 1 to 100 and defaults to three, and
+`PushDegradationPeriod` accepts ten seconds to a day and defaults to fifteen minutes; together they decide when a folder
+stops retrying push and when it starts again.
+
+**How often a push folder synchronizes is still `Interval`.** Push adds no schedule of its own: it ends that wait early
+when the server reports a change, and [A folder in push mode still keeps the account's
+interval](#a-folder-in-push-mode-still-keeps-the-accounts-interval) records why the interval stays.
 
 `ShutdownDrainTimeout` is how long shutdown waits for the work units already under way after it has stopped scheduling
 new ones. It accepts anything from zero to two minutes and defaults to ten seconds. The host's shutdown budget is

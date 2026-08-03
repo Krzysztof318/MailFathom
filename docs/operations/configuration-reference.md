@@ -87,7 +87,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `MailSynchronization:MaxMimePartCount` | int | `1000` | 1 – 100000 | reload |
 | `MailSynchronization:MaxMimeNestingDepth` | int | `30` | 1 – 1000 | reload |
 | `MailSynchronization:MaxExtractedTextCharacters` | int | `100000` | 1000 – 200000; the ceiling keeps the search vector inside PostgreSQL's limit | reload |
-| `MailSynchronization:PushRenewalInterval` | TimeSpan | `00:20:00` | 1 min – 29 min; the ceiling is what RFC 2177 mandates | reload |
+| `MailSynchronization:PushRenewalInterval` | TimeSpan | `00:20:00` | 1 min – 29 min; the lifetime of one `IDLE` command, **not** a polling cycle — the ceiling is what RFC 2177 mandates | reload |
 | `MailSynchronization:MaxConsecutivePushFailures` | int | `3` | 1 – 100 | reload |
 | `MailSynchronization:PushDegradationPeriod` | TimeSpan | `00:15:00` | 10 s – 1 day | reload |
 
