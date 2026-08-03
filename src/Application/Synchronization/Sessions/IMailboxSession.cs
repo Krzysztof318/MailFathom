@@ -45,16 +45,27 @@ public interface IMailboxSession : IAsyncDisposable
 
     /// <summary>Reports which of the supplied occurrences the folder still holds, with the flags the server shows for them.</summary>
     /// <param name="uids">The UIDs to ask about, which must belong to this session's folder and UIDVALIDITY.</param>
+    /// <param name="reconciledThroughModSeq">
+    /// The modification sequence the whole folder was last reconciled through, or <see langword="null" /> to ask about
+    /// every supplied UID without regard to what has changed since.
+    /// </param>
     /// <param name="cancellationToken">Cancels the read and every remaining attempt.</param>
-    /// <returns>One observation per UID the server answered about, in no guaranteed order and never more than <paramref name="uids" /> asked for.</returns>
+    /// <returns>What the folder still holds out of <paramref name="uids" />, described or merely confirmed, and the folder's modification sequence where it reports one.</returns>
     /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the read within its configured resilience budget.</exception>
     /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
     /// <exception cref="MailboxAnswerIncompleteException">Thrown when the server answered for an email without the flags this operation requested.</exception>
     /// <remarks>
     /// <para>
-    /// A UID the answer omits is one the folder no longer holds. That is the whole detection mechanism for a message
-    /// deleted on the server, so an implementation must never invent an entry for a UID the server said nothing about,
-    /// and must never omit one it did answer for.
+    /// A UID the answer accounts for in neither list is one the folder no longer holds. That is the whole detection
+    /// mechanism for a message deleted on the server, so an implementation must never invent an entry for a UID the
+    /// server said nothing about, and must never omit one it did answer for.
+    /// </para>
+    /// <para>
+    /// The supplied sequence is a permission rather than an instruction. An implementation may use it to ask the server
+    /// only about what changed since — which is the point of accepting it — but only where the server also tells it
+    /// which of the remaining UIDs still exist, because a sequence-limited answer alone cannot tell an unchanged
+    /// message from a deleted one. Where the server offers no such mechanism, the implementation asks about the whole
+    /// window and reports nothing as unchanged; the end state is identical either way, and only the work differs.
     /// </para>
     /// <para>
     /// An answer that names a UID without its flags is refused rather than dropped, because dropping it would turn a
@@ -67,8 +78,9 @@ public interface IMailboxSession : IAsyncDisposable
     /// mail somebody has already stored, and a careless fetch here would mark a whole mailbox as read.
     /// </para>
     /// </remarks>
-    Task<IReadOnlyList<RemoteEmailFlagObservation>> GetRemoteFlagsWithoutSettingSeenAsync(
+    Task<RemoteFolderWindowObservation> ObserveWindowWithoutSettingSeenAsync(
         IReadOnlyList<ImapUid> uids,
+        ulong? reconciledThroughModSeq,
         CancellationToken cancellationToken);
 
     /// <summary>Fetches raw MIME content with a BODY.PEEK-style operation that preserves the remote Seen flag.</summary>

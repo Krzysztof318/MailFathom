@@ -1379,8 +1379,8 @@ public sealed class MailboxSynchronizerTests
             .GetEmailBatchAfterAsync(null, Arg.Any<int>(), MailSynchronizationWindow.Unbounded, CancellationToken.None)
             .Returns(new RemoteEmailMetadataBatch([], InspectedThroughUid: null, HasMore: false));
         session
-            .GetRemoteFlagsWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<RemoteEmailFlagObservation>>([]));
+            .ObserveWindowWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<ulong?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(RemoteFolderWindowObservation.FromDescribedOccurrences([], folderHighestModSeq: null)));
         var synchronizer = CreateSynchronizer(
             sessionFactory,
             checkpointStore,
@@ -1408,6 +1408,159 @@ public sealed class MailboxSynchronizerTests
             Arg.Any<MailTransportSecurityPolicy>(),
             CancellationToken.None);
     }
+
+    /// <summary>
+    /// A pass that covered the whole folder records how far it reached, and that record is what lets the next run ask
+    /// the server about what changed instead of the whole window.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_BackwardPassCoveredTheWholeFolder_CommitsTheSequenceOnTheCheckpoint()
+    {
+        // Arrange
+        var context = CreateReconciliationContext(storedCheckpoint: SynchronizationCheckpoint.None(ImapUidValidity.Create(5)));
+        context.Session
+            .ObserveWindowWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<ulong?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(RemoteFolderWindowObservation.FromDescribedOccurrences([], folderHighestModSeq: 91UL)));
+
+        // Act
+        await context.Synchronizer.SynchronizeAsync(MailAccountId.Create("primary"), InboxMapping, CancellationToken.None);
+
+        // Assert
+        await context.CheckpointStore.Received(1).SaveCheckpointAsync(
+            context.PersistenceSession,
+            Arg.Any<MailAccountId>(),
+            InboxFolder.Id,
+            Arg.Any<SynchronizationCheckpoint?>(),
+            Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.ReconciledThroughModSeq == 91UL),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A checkpoint stored before sequences were tracked carries none, which is exactly what a folder nobody has
+    /// reconciled by sequence means: the whole window is asked about and nothing forces a resynchronization.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_CheckpointCarriesNoSequence_AsksAboutTheWholeWindow()
+    {
+        // Arrange
+        var context = CreateReconciliationContext(storedCheckpoint: new SynchronizationCheckpoint(
+            ImapUidValidity.Create(5),
+            ImapUid.Create(10),
+            new DateTimeOffset(2026, 7, 30, 12, 0, 0, TimeSpan.Zero)));
+
+        // Act
+        await context.Synchronizer.SynchronizeAsync(MailAccountId.Create("primary"), InboxMapping, CancellationToken.None);
+
+        // Assert
+        await context.Session.Received(1).ObserveWindowWithoutSettingSeenAsync(
+            Arg.Any<IReadOnlyList<ImapUid>>(),
+            null,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A renumbered folder is a different UID space, so the sequence recorded under the previous one describes messages
+    /// the current one says nothing about and must not narrow anything.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_FolderReportsADifferentUidValidity_DropsTheStoredSequence()
+    {
+        // Arrange
+        var context = CreateReconciliationContext(storedCheckpoint: new SynchronizationCheckpoint(
+            ImapUidValidity.Create(4),
+            ImapUid.Create(10),
+            new DateTimeOffset(2026, 7, 30, 12, 0, 0, TimeSpan.Zero))
+        {
+            ReconciledThroughModSeq = 40UL,
+        });
+
+        // Act
+        await context.Synchronizer.SynchronizeAsync(MailAccountId.Create("primary"), InboxMapping, CancellationToken.None);
+
+        // Assert
+        await context.Session.Received(1).ObserveWindowWithoutSettingSeenAsync(
+            Arg.Any<IReadOnlyList<ImapUid>>(),
+            null,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A stored sequence is handed to the backward pass so the server can narrow by it, which is the whole point of
+    /// having recorded it.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_CheckpointCarriesASequenceForTheSameUidValidity_ReconcilesFromIt()
+    {
+        // Arrange
+        var context = CreateReconciliationContext(storedCheckpoint: new SynchronizationCheckpoint(
+            ImapUidValidity.Create(5),
+            ImapUid.Create(10),
+            new DateTimeOffset(2026, 7, 30, 12, 0, 0, TimeSpan.Zero))
+        {
+            ReconciledThroughModSeq = 40UL,
+        });
+
+        // Act
+        await context.Synchronizer.SynchronizeAsync(MailAccountId.Create("primary"), InboxMapping, CancellationToken.None);
+
+        // Assert
+        await context.Session.Received(1).ObserveWindowWithoutSettingSeenAsync(
+            Arg.Any<IReadOnlyList<ImapUid>>(),
+            40UL,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Composes a run over a folder that holds one occurrence awaiting reconciliation and no new mail.</summary>
+    private static ReconciliationContext CreateReconciliationContext(SynchronizationCheckpoint storedCheckpoint)
+    {
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
+        var persistenceSessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        persistenceSessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(persistenceSession);
+        persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
+
+        var session = Substitute.For<IMailboxSession>();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var reconciliationStore = Substitute.For<IStoredEmailReconciliationStore>();
+        IReadOnlyList<StoredEmailAwaitingReconciliation> window =
+            [new StoredEmailAwaitingReconciliation(StoredEmailId.Create(Guid.CreateVersion7()), ImapUid.Create(10))];
+        reconciliationStore
+            .GetReconciliationWindowAsync(accountId, InboxFolder.Id, uidValidity, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(window));
+
+        checkpointStore.GetCheckpointAsync(accountId, InboxFolder.Id, CancellationToken.None).Returns(storedCheckpoint);
+        sessionFactory
+            .OpenReadOnlyAsync(accountId, InboxFolder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None)
+            .Returns(session);
+        session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        session
+            .GetEmailBatchAfterAsync(Arg.Any<ImapUid?>(), Arg.Any<int>(), MailSynchronizationWindow.Unbounded, CancellationToken.None)
+            .Returns(new RemoteEmailMetadataBatch([], InspectedThroughUid: null, HasMore: false));
+        session
+            .ObserveWindowWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<ulong?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(RemoteFolderWindowObservation.FromDescribedOccurrences([], folderHighestModSeq: null)));
+
+        var synchronizer = CreateSynchronizer(
+            sessionFactory,
+            checkpointStore,
+            persistenceSessionFactory,
+            metadataRepository: Substitute.For<IEmailMetadataRepository>(),
+            contentStore: Substitute.For<IEmailContentStore>(),
+            new FakeTimeProvider(new DateTimeOffset(2026, 7, 31, 12, 0, 0, TimeSpan.Zero)),
+            new MailboxSynchronizationOptions(),
+            reconciliationStore: reconciliationStore);
+
+        return new ReconciliationContext(synchronizer, session, checkpointStore, persistenceSession);
+    }
+
+    /// <summary>The parts of a composed run that a test about the backward pass arranges and then asserts against.</summary>
+    private sealed record ReconciliationContext(
+        MailboxSynchronizer Synchronizer,
+        IMailboxSession Session,
+        ISynchronizationCheckpointStore CheckpointStore,
+        IPersistenceSession PersistenceSession);
 
     private static IMailTransportSecurityPolicyReader CreateTransportSecurityPolicyReader(MailTransportSecurityPolicy policy)
     {

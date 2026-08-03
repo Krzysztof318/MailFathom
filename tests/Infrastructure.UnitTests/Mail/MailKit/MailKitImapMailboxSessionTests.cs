@@ -14,6 +14,7 @@ using MailFathom.Infrastructure.Mail.MailKit;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using MailKit;
+using MailKit.Net.Imap;
 using MailKit.Search;
 using MailKit.Security;
 using NSubstitute;
@@ -49,6 +50,40 @@ public sealed class MailKitImapMailboxSessionTests
 
         // Assert
         Assert.Equal(expectedSocketOptions, client.ConnectSocketOptions);
+    }
+
+    /// <summary>
+    /// Quick resynchronization is a per-connection decision RFC 7162 allows only before the first selection, so a
+    /// connection that enabled it afterwards would have to be rebuilt to get a vanished report at all.
+    /// </summary>
+    [Fact]
+    public async Task OpenReadOnlyAsync_ServerAdvertisesQuickResync_EnablesItBeforeSelectingTheFolder()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.QuickResync };
+
+        // Act
+        await using var session = await OpenSessionAsync(resilience, client, CreateSelectedFolder());
+
+        // Assert
+        Assert.Equal(1, client.EnableQuickResyncCount);
+        Assert.True(client.QuickResyncEnabledBeforeFolderSelection);
+    }
+
+    /// <summary>A server that does not offer it is not asked for it, so an ordinary mailbox pays for no extra command.</summary>
+    [Fact]
+    public async Task OpenReadOnlyAsync_ServerAdvertisesNoQuickResync_LeavesTheConnectionWithoutIt()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.None };
+
+        // Act
+        await using var session = await OpenSessionAsync(resilience, client, CreateSelectedFolder());
+
+        // Assert
+        Assert.Equal(0, client.EnableQuickResyncCount);
     }
 
     [Fact]
@@ -596,7 +631,7 @@ public sealed class MailKitImapMailboxSessionTests
             .Select(call => (SearchQuery)call.GetArguments()[0]!));
 
     [Fact]
-    public async Task GetRemoteFlagsWithoutSettingSeenAsync_ServerAnswersForSomeUids_ReportsOnlyThoseAndRequestsNoSeenSettingItem()
+    public async Task ObserveWindowWithoutSettingSeenAsync_ServerAnswersForSomeUids_ReportsOnlyThoseAndRequestsNoSeenSettingItem()
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
@@ -613,17 +648,19 @@ public sealed class MailKitImapMailboxSessionTests
         await using var session = await OpenSessionAsync(resilience, client, folder);
 
         // Act
-        var observations = await session.GetRemoteFlagsWithoutSettingSeenAsync(
+        var observation = await session.ObserveWindowWithoutSettingSeenAsync(
             [ImapUid.Create(10), ImapUid.Create(11)],
+            reconciledThroughModSeq: null,
             CancellationToken.None);
 
         // Assert
-        var observation = Assert.Single(observations);
-        Assert.Equal(10U, observation.Uid.Value);
-        Assert.Equal(ObservedAt, observation.Snapshot.ObservedAt);
-        Assert.True(observation.Snapshot.IsSeen);
-        Assert.True(observation.Snapshot.IsAnswered);
-        Assert.False(observation.Snapshot.IsDeleted);
+        var describedOccurrence = Assert.Single(observation.Observations);
+        Assert.Empty(observation.UnchangedUids);
+        Assert.Equal(10U, describedOccurrence.Uid.Value);
+        Assert.Equal(ObservedAt, describedOccurrence.Snapshot.ObservedAt);
+        Assert.True(describedOccurrence.Snapshot.IsSeen);
+        Assert.True(describedOccurrence.Snapshot.IsAnswered);
+        Assert.False(describedOccurrence.Snapshot.IsDeleted);
 
         // The UID the server said nothing about is what a deleted message looks like, so it must be absent rather than
         // reported with every flag unset. The requested items are asserted for the reason the content fetch asserts its
@@ -637,7 +674,7 @@ public sealed class MailKitImapMailboxSessionTests
     }
 
     [Fact]
-    public async Task GetRemoteFlagsWithoutSettingSeenAsync_NoUids_AnswersWithoutReachingTheServer()
+    public async Task ObserveWindowWithoutSettingSeenAsync_NoUids_AnswersWithoutReachingTheServer()
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
@@ -646,10 +683,14 @@ public sealed class MailKitImapMailboxSessionTests
         await using var session = await OpenSessionAsync(resilience, client, folder);
 
         // Act
-        var observations = await session.GetRemoteFlagsWithoutSettingSeenAsync([], CancellationToken.None);
+        var observation = await session.ObserveWindowWithoutSettingSeenAsync(
+            [],
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
 
         // Assert
-        Assert.Empty(observations);
+        Assert.Empty(observation.Observations);
+        Assert.Empty(observation.UnchangedUids);
         await folder.DidNotReceive().FetchAsync(
             Arg.Any<IList<UniqueId>>(),
             Arg.Any<IFetchRequest>(),
@@ -661,7 +702,7 @@ public sealed class MailKitImapMailboxSessionTests
     /// UID indistinguishable from one the server never mentioned, which reconciliation reads as a deleted message.
     /// </summary>
     [Fact]
-    public async Task GetRemoteFlagsWithoutSettingSeenAsync_ServerAnswersWithoutFlags_FailsRatherThanReportingTheEmailAsAbsent()
+    public async Task ObserveWindowWithoutSettingSeenAsync_ServerAnswersWithoutFlags_FailsRatherThanReportingTheEmailAsAbsent()
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
@@ -677,7 +718,10 @@ public sealed class MailKitImapMailboxSessionTests
 
         // Act
         var exception = await Assert.ThrowsAsync<MailboxAnswerIncompleteException>(() =>
-            session.GetRemoteFlagsWithoutSettingSeenAsync([ImapUid.Create(10)], CancellationToken.None));
+            session.ObserveWindowWithoutSettingSeenAsync(
+                [ImapUid.Create(10)],
+                reconciledThroughModSeq: null,
+                CancellationToken.None));
 
         // Assert
         Assert.Equal("FLAGS", exception.MissingDataItem);

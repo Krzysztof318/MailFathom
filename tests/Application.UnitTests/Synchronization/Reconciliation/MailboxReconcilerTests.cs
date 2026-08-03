@@ -42,6 +42,7 @@ public sealed class MailboxReconcilerTests
             Account,
             InboxFolder,
             SelectedUidValidity,
+            reconciledThroughModSeq: null,
             CancellationToken.None);
 
         // Assert
@@ -67,6 +68,7 @@ public sealed class MailboxReconcilerTests
             Account,
             InboxFolder,
             SelectedUidValidity,
+            reconciledThroughModSeq: null,
             CancellationToken.None);
 
         // Assert
@@ -95,8 +97,8 @@ public sealed class MailboxReconcilerTests
                     IsDeleted: true)),
         ];
         mailboxSession
-            .GetRemoteFlagsWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(observations));
+            .ObserveWindowWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<ulong?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(RemoteFolderWindowObservation.FromDescribedOccurrences(observations, folderHighestModSeq: null)));
         var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.RetainTombstone);
 
         // Act
@@ -105,6 +107,7 @@ public sealed class MailboxReconcilerTests
             Account,
             InboxFolder,
             SelectedUidValidity,
+            reconciledThroughModSeq: null,
             CancellationToken.None);
 
         // Assert
@@ -134,6 +137,7 @@ public sealed class MailboxReconcilerTests
             Account,
             InboxFolder,
             SelectedUidValidity,
+            reconciledThroughModSeq: null,
             CancellationToken.None);
 
         // Assert
@@ -156,12 +160,12 @@ public sealed class MailboxReconcilerTests
             RemotelyDeletedEmailDisposition.RetainTombstone,
             maxReconciledEmailsPerRun: 3,
             timeProvider: timeProvider);
-        await reconciler.ReconcileAsync(mailboxSession, Account, InboxFolder, SelectedUidValidity, CancellationToken.None);
+        await reconciler.ReconcileAsync(mailboxSession, Account, InboxFolder, SelectedUidValidity, reconciledThroughModSeq: null, CancellationToken.None);
         store.AskedAboutUids.Clear();
         timeProvider.Advance(TimeSpan.FromMinutes(5));
 
         // Act
-        await reconciler.ReconcileAsync(mailboxSession, Account, InboxFolder, SelectedUidValidity, CancellationToken.None);
+        await reconciler.ReconcileAsync(mailboxSession, Account, InboxFolder, SelectedUidValidity, reconciledThroughModSeq: null, CancellationToken.None);
 
         // Assert
         // The window moves on to mail nobody has asked about, and spends its reserved part on the email observed
@@ -187,7 +191,7 @@ public sealed class MailboxReconcilerTests
             timeProvider: timeProvider);
         await using (var firstSession = CreateSessionHolding(storedUids))
         {
-            await reconciler.ReconcileAsync(firstSession, Account, InboxFolder, SelectedUidValidity, CancellationToken.None);
+            await reconciler.ReconcileAsync(firstSession, Account, InboxFolder, SelectedUidValidity, reconciledThroughModSeq: null, CancellationToken.None);
         }
 
         // The mail observed by the first run then disappears from the server, while the forward pass keeps the window
@@ -197,7 +201,7 @@ public sealed class MailboxReconcilerTests
         await using var mailboxSession = CreateSessionHolding(12, 13);
 
         // Act
-        await reconciler.ReconcileAsync(mailboxSession, Account, InboxFolder, SelectedUidValidity, CancellationToken.None);
+        await reconciler.ReconcileAsync(mailboxSession, Account, InboxFolder, SelectedUidValidity, reconciledThroughModSeq: null, CancellationToken.None);
 
         // Assert
         Assert.Contains(10U, store.AskedAboutUids);
@@ -219,14 +223,16 @@ public sealed class MailboxReconcilerTests
             Account,
             InboxFolder,
             ImapUidValidity.Create(8),
+            reconciledThroughModSeq: null,
             CancellationToken.None);
 
         // Assert
         Assert.Equal(0, result.RemotelyDeletedEmailCount);
         Assert.Empty(store.RemovedUids);
         Assert.Empty(store.TombstonedUids);
-        await mailboxSession.DidNotReceive().GetRemoteFlagsWithoutSettingSeenAsync(
+        await mailboxSession.DidNotReceive().ObserveWindowWithoutSettingSeenAsync(
             Arg.Any<IReadOnlyList<ImapUid>>(),
+            Arg.Any<ulong?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -242,7 +248,7 @@ public sealed class MailboxReconcilerTests
             store,
             RemotelyDeletedEmailDisposition.RetainTombstone,
             timeProvider: timeProvider);
-        await reconciler.ReconcileAsync(mailboxSession, Account, InboxFolder, SelectedUidValidity, CancellationToken.None);
+        await reconciler.ReconcileAsync(mailboxSession, Account, InboxFolder, SelectedUidValidity, reconciledThroughModSeq: null, CancellationToken.None);
         timeProvider.Advance(TimeSpan.FromHours(1));
 
         // Act
@@ -251,6 +257,7 @@ public sealed class MailboxReconcilerTests
             Account,
             InboxFolder,
             SelectedUidValidity,
+            reconciledThroughModSeq: null,
             CancellationToken.None);
 
         // Assert
@@ -277,11 +284,13 @@ public sealed class MailboxReconcilerTests
             Account,
             InboxFolder,
             SelectedUidValidity,
+            reconciledThroughModSeq: null,
             CancellationToken.None);
 
         // Assert
-        await mailboxSession.Received(1).GetRemoteFlagsWithoutSettingSeenAsync(
+        await mailboxSession.Received(1).ObserveWindowWithoutSettingSeenAsync(
             Arg.Any<IReadOnlyList<ImapUid>>(),
+            Arg.Any<ulong?>(),
             Arg.Any<CancellationToken>());
         await mailboxSession.DidNotReceive().FetchEmailContentWithoutSettingSeenAsync(
             Arg.Any<EmailOccurrenceId>(),
@@ -304,13 +313,15 @@ public sealed class MailboxReconcilerTests
             Account,
             InboxFolder,
             SelectedUidValidity,
+            reconciledThroughModSeq: null,
             CancellationToken.None);
 
         // Assert
         Assert.Equal(0, result.ObservedEmailCount);
         Assert.False(result.EmailsRemain);
-        await mailboxSession.DidNotReceive().GetRemoteFlagsWithoutSettingSeenAsync(
+        await mailboxSession.DidNotReceive().ObserveWindowWithoutSettingSeenAsync(
             Arg.Any<IReadOnlyList<ImapUid>>(),
+            Arg.Any<ulong?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -330,6 +341,7 @@ public sealed class MailboxReconcilerTests
             Account,
             InboxFolder,
             SelectedUidValidity,
+            reconciledThroughModSeq: null,
             cancellation.Token));
         Assert.Empty(store.TombstonedUids);
     }
@@ -353,6 +365,7 @@ public sealed class MailboxReconcilerTests
             Account,
             InboxFolder,
             SelectedUidValidity,
+            reconciledThroughModSeq: null,
             CancellationToken.None);
 
         // Assert
@@ -360,8 +373,189 @@ public sealed class MailboxReconcilerTests
         Assert.Empty(store.TombstonedUids);
     }
 
+
+    /// <summary>
+    /// A server that says only what changed leaves the rest of the window confirmed rather than described, and both
+    /// count as observed: the confirmed ones keep their stored flags and still leave the queue, which is what lets the
+    /// next window reach further into the folder.
+    /// </summary>
+    [Fact]
+    public async Task ReconcileAsync_ServerConfirmsOccurrencesWithoutDescribingThem_CountsThemObservedAndMovesThemDownTheQueue()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10, 11, 12));
+        await using var mailboxSession = CreateSessionReporting(
+            describedUids: [10],
+            confirmedUids: [11]);
+        var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.RetainTombstone);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: 40UL,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, result.ObservedEmailCount);
+        Assert.Equal(1, result.RemotelyDeletedEmailCount);
+        Assert.Equal([12U], store.TombstonedUids);
+
+        // The confirmed occurrence keeps the flags nobody said had changed, and its place in the queue moves.
+        Assert.Null(store.RowOf(11).Snapshot);
+        Assert.Equal(RunInstant, store.RowOf(11).ObservedAt);
+    }
+
+    /// <summary>
+    /// The claim the optimization rests on: a narrowed answer and a full scan leave the same emails stored and the same
+    /// ones gone. Only the work differs.
+    /// </summary>
+    [Fact]
+    public async Task ReconcileAsync_NarrowedAnswerAndFullScan_ReachTheSameEndState()
+    {
+        // Arrange
+        var fullScanStore = new FakeReconciliationStore(StoredOccurrences(10, 11, 12));
+        await using var fullScanSession = CreateSessionHolding(10, 11);
+        var fullScanReconciler = CreateReconciler(fullScanStore, RemotelyDeletedEmailDisposition.RetainTombstone);
+
+        var narrowedStore = new FakeReconciliationStore(StoredOccurrences(10, 11, 12));
+        await using var narrowedSession = CreateSessionReporting(describedUids: [10], confirmedUids: [11]);
+        var narrowedReconciler = CreateReconciler(narrowedStore, RemotelyDeletedEmailDisposition.RetainTombstone);
+
+        // Act
+        var fullScan = await fullScanReconciler.ReconcileAsync(
+            fullScanSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+        var narrowed = await narrowedReconciler.ReconcileAsync(
+            narrowedSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: 40UL,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(fullScan.ObservedEmailCount, narrowed.ObservedEmailCount);
+        Assert.Equal(fullScan.RemotelyDeletedEmailCount, narrowed.RemotelyDeletedEmailCount);
+        Assert.Equal(fullScanStore.TombstonedUids, narrowedStore.TombstonedUids);
+    }
+
+    /// <summary>The sequence the caller holds is what the server is asked to narrow by, and it has to arrive unchanged.</summary>
+    [Fact]
+    public async Task ReconcileAsync_CheckpointCarriesASequence_AsksTheServerToNarrowByIt()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10));
+        await using var mailboxSession = CreateSessionHolding(10);
+        var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.RetainTombstone);
+
+        // Act
+        await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: 40UL,
+            CancellationToken.None);
+
+        // Assert
+        await mailboxSession.Received(1).ObserveWindowWithoutSettingSeenAsync(
+            Arg.Any<IReadOnlyList<ImapUid>>(),
+            40UL,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A pass that emptied the folder's queue may record how far it covered; that is what a later run narrows by.</summary>
+    [Fact]
+    public async Task ReconcileAsync_WindowCoveredTheWholeFolder_ReportsTheSequenceItWasReadUnder()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10, 11));
+        await using var mailboxSession = CreateSessionHolding(folderHighestModSeq: 91UL, presentUids: [10, 11]);
+        var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.RetainTombstone);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.False(result.EmailsRemain);
+        Assert.Equal(91UL, result.ReconciledThroughModSeq);
+    }
+
+    /// <summary>
+    /// A partial pass may not record a sequence. Doing so would assert that everything older than it is accounted for,
+    /// including the occurrences this window never reached, which would then never be asked about again.
+    /// </summary>
+    [Fact]
+    public async Task ReconcileAsync_WindowLeftEmailsBehind_ReportsNoSequenceToNarrowByLater()
+    {
+        // Arrange
+        var storedUids = Enumerable.Range(10, 6).Select(uid => (uint)uid).ToArray();
+        var store = new FakeReconciliationStore(StoredOccurrences(storedUids));
+        await using var mailboxSession = CreateSessionHolding(folderHighestModSeq: 91UL, presentUids: storedUids);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            maxReconciledEmailsPerRun: 3);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.True(result.EmailsRemain);
+        Assert.Null(result.ReconciledThroughModSeq);
+    }
+
+    /// <summary>Builds a session that describes some of the window, confirms some of it, and says nothing about the rest.</summary>
+    private static IMailboxSession CreateSessionReporting(uint[] describedUids, uint[] confirmedUids)
+    {
+        var mailboxSession = Substitute.For<IMailboxSession>();
+        var observation = new RemoteFolderWindowObservation(
+            [
+                .. describedUids.Select(uid => new RemoteEmailFlagObservation(
+                    ImapUid.Create(uid),
+                    new RemoteEmailFlagSnapshot(
+                        RunInstant,
+                        IsSeen: true,
+                        IsAnswered: false,
+                        IsFlagged: false,
+                        IsDraft: false,
+                        IsDeleted: false))),
+            ],
+            [.. confirmedUids.Select(ImapUid.Create)],
+            FolderHighestModSeq: 91UL);
+
+        mailboxSession
+            .ObserveWindowWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<ulong?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(observation));
+
+        return mailboxSession;
+    }
+
     /// <summary>Builds a session whose folder still holds exactly the named UIDs, and says nothing about the rest.</summary>
-    private static IMailboxSession CreateSessionHolding(params uint[] presentUids)
+    private static IMailboxSession CreateSessionHolding(params uint[] presentUids) =>
+        CreateSessionHolding(folderHighestModSeq: null, presentUids);
+
+    /// <summary>Builds the same session, for a folder whose server reports a modification sequence.</summary>
+    private static IMailboxSession CreateSessionHolding(ulong? folderHighestModSeq, params uint[] presentUids)
     {
         var mailboxSession = Substitute.For<IMailboxSession>();
         IReadOnlyList<RemoteEmailFlagObservation> observations =
@@ -378,12 +572,13 @@ public sealed class MailboxReconcilerTests
         ];
 
         mailboxSession
-            .GetRemoteFlagsWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<CancellationToken>())
-            .Returns(call => Task.FromResult<IReadOnlyList<RemoteEmailFlagObservation>>(
-            [
-                .. observations.Where(observation =>
-                    call.Arg<IReadOnlyList<ImapUid>>()!.Contains(observation.Uid)),
-            ]));
+            .ObserveWindowWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<ulong?>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(RemoteFolderWindowObservation.FromDescribedOccurrences(
+                [
+                    .. observations.Where(observation =>
+                        call.Arg<IReadOnlyList<ImapUid>>()!.Contains(observation.Uid)),
+                ],
+                folderHighestModSeq)));
 
         return mailboxSession;
     }
@@ -512,6 +707,15 @@ public sealed class MailboxReconcilerTests
 
                 observedRow.ObservedAt = observed.Snapshot.ObservedAt;
                 observedRow.Snapshot = observed.Snapshot;
+            }
+
+            foreach (var storedEmailId in outcome.ConfirmedUnchanged)
+            {
+                if (this.rowsById.TryGetValue(storedEmailId, out var confirmedRow)
+                    && !HasNewerObservationThan(confirmedRow, outcome.ObservedAt))
+                {
+                    confirmedRow.ObservedAt = outcome.ObservedAt;
+                }
             }
 
             foreach (var storedEmailId in outcome.Disappeared)

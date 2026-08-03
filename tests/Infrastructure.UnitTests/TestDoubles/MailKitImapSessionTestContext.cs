@@ -54,11 +54,15 @@ internal static class MailKitImapSessionTestContext
             trustedCertificateAuthorityReference: null);
 
     /// <summary>Builds the folder a server answers a successful read-only selection with.</summary>
-    internal static IMailFolder CreateSelectedFolder(uint uidValidity = 7U)
+    /// <param name="uidValidity">The UIDVALIDITY the folder reports.</param>
+    /// <param name="highestModSeq">The modification sequence the folder reports, where zero is the absence of one.</param>
+    /// <returns>The selected folder.</returns>
+    internal static IMailFolder CreateSelectedFolder(uint uidValidity = 7U, ulong highestModSeq = 0UL)
     {
         var folder = Substitute.For<IMailFolder>();
         folder.IsOpen.Returns(true);
         folder.UidValidity.Returns(uidValidity);
+        folder.HighestModSeq.Returns(highestModSeq);
 
         return folder;
     }
@@ -131,13 +135,15 @@ internal static class MailKitImapSessionTestContext
     internal static MailKitImapNotificationSessionFactory CreateNotificationSessionFactory(
         OutboundResilienceTestHost resilience,
         Func<IImapClient> clientFactory,
-        FakeTimeProvider clock) =>
+        FakeTimeProvider clock,
+        ImapChangeSubscriptionCommand? requestFolderNotifications = null) =>
         new(
             clientFactory,
             CreateSettingsProvider(),
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            requestFolderNotifications ?? ((_, _, _) => Task.CompletedTask),
             clock);
 
     /// <summary>Builds a factory over a scripted connection sequence and the real classifier the adapter consults.</summary>

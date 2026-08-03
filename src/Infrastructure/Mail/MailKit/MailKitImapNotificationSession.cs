@@ -22,6 +22,7 @@ internal sealed class MailKitImapNotificationSessionFactory(
     IMailAccessTokenSource accessTokenSource,
     OutboundOperationExecutor operationExecutor,
     ITransientFailureClassifier transientFailureClassifier,
+    ImapChangeSubscriptionCommand requestFolderNotifications,
     TimeProvider timeProvider) : IMailboxNotificationSessionFactory
 {
     /// <inheritdoc />
@@ -70,6 +71,71 @@ internal sealed class MailKitImapNotificationSessionFactory(
 
         return MailboxNotificationSessionResult.Watching(
             new MailKitImapNotificationSession(connection, timeProvider));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Both capabilities are required, because they answer different halves of one question: <c>NOTIFY</c> is what
+    /// lets a server report a folder this connection has not selected, and <c>IDLE</c> is what keeps the connection in
+    /// a state where an unsolicited report can reach it at all. A server offering one without the other cannot serve
+    /// this session, and saying so here is what lets the caller fall back to watching folders one at a time.
+    /// </para>
+    /// <para>
+    /// The connection selects the first folder of the set. It has to select something for <c>IDLE</c> to run against,
+    /// and selecting one of the watched folders means the mailbox the server reports on by default is one the caller
+    /// asked to watch rather than an arbitrary one.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the connection passes to the returned session; every other path disposes it here.")]
+    public async Task<MailboxFolderSetNotificationSessionResult> OpenForFoldersAsync(
+        MailAccountId accountId,
+        IReadOnlyList<MailFolderResolution> folders,
+        MailTransportSecurityPolicy transportSecurityPolicy,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(folders);
+
+        if (folders.Count == 0)
+        {
+            throw new ArgumentException("A subscription watches at least one folder.", nameof(folders));
+        }
+
+        var connection = new MailKitImapConnection(
+            clientFactory,
+            settingsProvider,
+            accessTokenSource,
+            operationExecutor,
+            transientFailureClassifier,
+            accountId,
+            folders[0],
+            transportSecurityPolicy);
+
+        try
+        {
+            var client = await connection.EnsureAuthenticatedClientAsync(cancellationToken);
+            await connection.EnsureOpenFolderAsync(cancellationToken);
+
+            if (!client.Capabilities.HasFlag(ImapCapabilities.Notify) || !client.Capabilities.HasFlag(ImapCapabilities.Idle))
+            {
+                await connection.DisposeAsync();
+
+                return MailboxFolderSetNotificationSessionResult.SubscriptionNotAdvertised();
+            }
+        }
+        catch
+        {
+            await connection.DisposeAsync();
+
+            throw;
+        }
+
+        return MailboxFolderSetNotificationSessionResult.Watching(
+            new MailKitImapFolderSetNotificationSession(
+                connection,
+                folders,
+                requestFolderNotifications,
+                timeProvider));
     }
 }
 
@@ -125,9 +191,15 @@ internal sealed class MailKitImapNotificationSession(
     /// letting the command return is what makes a host shutdown leave a session that can still be disposed politely.
     /// </para>
     /// <para>
-    /// Three events are watched because three different things are a reason to synchronize: mail arrived, mail was
-    /// expunged, and a flag changed elsewhere. Watching arrival alone would leave a deletion or a flag change waiting
-    /// for the account's interval, which is the half of reconciliation a push mode would otherwise silently opt out of.
+    /// Three things are a reason to synchronize and all three are watched: mail arrived, mail was removed, and a flag
+    /// changed elsewhere. Watching arrival alone would leave a deletion or a flag change waiting for the account's
+    /// interval, which is the half of reconciliation a push mode would otherwise silently opt out of.
+    /// </para>
+    /// <para>
+    /// Removal is watched through both of the events that can carry it. A connection with quick resynchronization
+    /// enabled reports an expunge as <c>MessagesVanished</c> and never as <c>MessageExpunged</c>, so a session
+    /// subscribed to one of them would stop noticing deletions on exactly the servers that support the most
+    /// synchronization machinery — a silent regression with no failure to point at.
     /// </para>
     /// </remarks>
     private async Task<MailboxNotificationOutcome> IdleUntilFolderChangesAsync(
@@ -153,6 +225,7 @@ internal sealed class MailKitImapNotificationSession(
 
         openFolder.CountChanged += EndIdleState;
         openFolder.MessageExpunged += EndIdleState;
+        openFolder.MessagesVanished += EndIdleState;
         openFolder.MessageFlagsChanged += EndIdleState;
 
         try
@@ -163,6 +236,7 @@ internal sealed class MailKitImapNotificationSession(
         {
             openFolder.CountChanged -= EndIdleState;
             openFolder.MessageExpunged -= EndIdleState;
+            openFolder.MessagesVanished -= EndIdleState;
             openFolder.MessageFlagsChanged -= EndIdleState;
         }
 

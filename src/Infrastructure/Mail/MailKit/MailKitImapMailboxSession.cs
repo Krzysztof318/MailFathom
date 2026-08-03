@@ -114,7 +114,7 @@ internal sealed class MailKitImapMailboxSession(
         }
 
         return connection.ExecuteFolderReadAsync(
-            (openFolder, attemptToken) => this.SearchAndFetchBatchAsync(
+            (_, openFolder, attemptToken) => this.SearchAndFetchBatchAsync(
                 openFolder,
                 lastSeenUid,
                 maxEmailCount,
@@ -124,19 +124,25 @@ internal sealed class MailKitImapMailboxSession(
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<RemoteEmailFlagObservation>> GetRemoteFlagsWithoutSettingSeenAsync(
+    public Task<RemoteFolderWindowObservation> ObserveWindowWithoutSettingSeenAsync(
         IReadOnlyList<ImapUid> uids,
+        ulong? reconciledThroughModSeq,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(uids);
 
         if (uids.Count == 0)
         {
-            return Task.FromResult<IReadOnlyList<RemoteEmailFlagObservation>>([]);
+            return Task.FromResult(RemoteFolderWindowObservation.FromDescribedOccurrences([], null));
         }
 
         return connection.ExecuteFolderReadAsync(
-            (openFolder, attemptToken) => this.FetchFlagsAsync(openFolder, uids, attemptToken),
+            (client, openFolder, attemptToken) => this.ObserveWindowAsync(
+                client,
+                openFolder,
+                uids,
+                reconciledThroughModSeq,
+                attemptToken),
             cancellationToken);
     }
 
@@ -149,7 +155,7 @@ internal sealed class MailKitImapMailboxSession(
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxRawMimeBytes);
 
         return connection.ExecuteFolderReadAsync(
-            (openFolder, attemptToken) => this.FetchRawMimeWithPeekAsync(openFolder, occurrenceId, maxRawMimeBytes, attemptToken),
+            (_, openFolder, attemptToken) => this.FetchRawMimeWithPeekAsync(openFolder, occurrenceId, maxRawMimeBytes, attemptToken),
             cancellationToken);
     }
 
@@ -200,42 +206,192 @@ internal sealed class MailKitImapMailboxSession(
         return new RemoteEmailMetadataBatch(messages, ImapUid.Create(inspectedThroughUid), hasMore);
     }
 
-    /// <summary>Asks the folder for the flags of the supplied UIDs and reports one observation per UID it answered for.</summary>
+    /// <summary>Chooses how much of the window the server has to describe, from what this connection advertises.</summary>
+    /// <remarks>
+    /// <para>
+    /// The three paths reach the same end state and differ only in what the server is asked to send. Without
+    /// <c>CONDSTORE</c> there is nothing to narrow by and the whole window is described. With it, the fetch is narrowed
+    /// to what changed — but a narrowed fetch alone cannot tell an unchanged message from a deleted one, because both
+    /// are silence, so something else has to establish which of the rest still exist: the <c>VANISHED</c> report where
+    /// <c>QRESYNC</c> is on, and a UID search that returns identifiers and no message data where it is not.
+    /// </para>
+    /// <para>
+    /// The capabilities are read from the connection this attempt is running on rather than from the session's opening,
+    /// so a recovered connection to a server advertising something else is followed rather than remembered.
+    /// </para>
+    /// </remarks>
+    private async Task<RemoteFolderWindowObservation> ObserveWindowAsync(
+        IImapClient client,
+        IMailFolder openFolder,
+        IReadOnlyList<ImapUid> uids,
+        ulong? reconciledThroughModSeq,
+        CancellationToken cancellationToken)
+    {
+        var requestedUids = uids.Select(uid => new UniqueId(uid.Value)).ToArray();
+        var folderModSeq = ReportedModSeqOf(openFolder);
+
+        if (reconciledThroughModSeq is not { } changedSince || !client.Capabilities.HasFlag(ImapCapabilities.CondStore))
+        {
+            var described = await this.FetchFlagsAsync(
+                openFolder,
+                requestedUids,
+                new FetchRequest(ReconciliationSummaryItems),
+                cancellationToken);
+
+            return RemoteFolderWindowObservation.FromDescribedOccurrences(described, folderModSeq);
+        }
+
+        return client.Capabilities.HasFlag(ImapCapabilities.QuickResync)
+            ? await this.ObserveThroughVanishedReportAsync(openFolder, requestedUids, changedSince, folderModSeq, cancellationToken)
+            : await this.ObserveThroughSurvivingUidSearchAsync(openFolder, requestedUids, changedSince, folderModSeq, cancellationToken);
+    }
+
+    /// <summary>Fetches what changed and lets the server's vanished report account for the rest.</summary>
+    /// <remarks>
+    /// With quick resynchronization enabled, a modification-sequence-limited fetch also reports the messages expunged
+    /// since that sequence, so one command answers both halves of the question: the summaries name what changed, the
+    /// vanished report names what is gone, and every other requested UID is a message the folder still holds unchanged.
+    /// The subscription is removed in a <c>finally</c> because the folder outlives this read, and a handler left behind
+    /// would record a later window's vanished messages into a set nobody is reading.
+    /// </remarks>
+    private async Task<RemoteFolderWindowObservation> ObserveThroughVanishedReportAsync(
+        IMailFolder openFolder,
+        UniqueId[] requestedUids,
+        ulong changedSince,
+        ulong? folderModSeq,
+        CancellationToken cancellationToken)
+    {
+        var windowUids = requestedUids.Select(static uid => uid.Id).ToHashSet();
+        var vanishedUids = new HashSet<uint>();
+
+        void RecordVanishedMessages(object? sender, MessagesVanishedEventArgs eventArgs)
+        {
+            // A report is the server's own input and is kept only where it answers the question this read asked. A UID
+            // outside the window says nothing about an occurrence this pass selected, and recording every one of them
+            // would let a server decide how much this read allocates.
+            foreach (var vanishedUid in eventArgs.UniqueIds.Where(vanished => windowUids.Contains(vanished.Id)))
+            {
+                vanishedUids.Add(vanishedUid.Id);
+            }
+        }
+
+        openFolder.MessagesVanished += RecordVanishedMessages;
+
+        IReadOnlyList<RemoteEmailFlagObservation> described;
+        try
+        {
+            described = await this.FetchFlagsAsync(
+                openFolder,
+                requestedUids,
+                new FetchRequest(ReconciliationSummaryItems) { ChangedSince = changedSince },
+                cancellationToken);
+        }
+        finally
+        {
+            openFolder.MessagesVanished -= RecordVanishedMessages;
+        }
+
+        var describedUids = described.Select(static observation => observation.Uid.Value).ToHashSet();
+
+        return new RemoteFolderWindowObservation(
+            described,
+            [
+                .. requestedUids
+                    .Where(uid => !describedUids.Contains(uid.Id) && !vanishedUids.Contains(uid.Id))
+                    .Select(static uid => ImapUid.Create(uid.Id)),
+            ],
+            folderModSeq);
+    }
+
+    /// <summary>Asks which of the window's UIDs the folder still holds, then fetches flags only for the ones that changed.</summary>
+    /// <remarks>
+    /// A <c>UID SEARCH</c> over the window returns identifiers and nothing else, so establishing existence costs no
+    /// message data and cannot set a flag. It is issued before the fetch on purpose: a message expunged between the two
+    /// commands is then reported as still present and reconciled on a later window, which is the harmless way for that
+    /// race to end. The other order would let a message the server proved exists fall out of both answers and be
+    /// treated as deleted.
+    /// </remarks>
+    private async Task<RemoteFolderWindowObservation> ObserveThroughSurvivingUidSearchAsync(
+        IMailFolder openFolder,
+        UniqueId[] requestedUids,
+        ulong changedSince,
+        ulong? folderModSeq,
+        CancellationToken cancellationToken)
+    {
+        var survivingUids = await openFolder.SearchAsync(SearchQuery.Uids(requestedUids), cancellationToken);
+        var stillPresentUids = survivingUids.Select(static uid => uid.Id).ToHashSet();
+
+        var described = await this.FetchFlagsAsync(
+            openFolder,
+            requestedUids,
+            new FetchRequest(ReconciliationSummaryItems) { ChangedSince = changedSince },
+            cancellationToken);
+        var describedUids = described.Select(static observation => observation.Uid.Value).ToHashSet();
+
+        return new RemoteFolderWindowObservation(
+            described,
+            [
+                .. requestedUids
+                    .Where(uid => stillPresentUids.Contains(uid.Id) && !describedUids.Contains(uid.Id))
+                    .Select(static uid => ImapUid.Create(uid.Id)),
+            ],
+            folderModSeq);
+    }
+
+    /// <summary>Asks the folder to describe the supplied UIDs and reports one observation per UID it answered for.</summary>
     /// <remarks>
     /// <para>
     /// IMAP requires a server to ignore a UID a <c>UID FETCH</c> names that the folder no longer holds, rather than to
-    /// fail the command, so the answer describes exactly the messages that still exist. That silence is the detection
-    /// mechanism for a message deleted on the server, which is why nothing here fills a missing UID in with a default.
+    /// fail the command, so an unnarrowed answer describes exactly the messages that still exist. That silence is the
+    /// detection mechanism for a message deleted on the server, which is why nothing here fills a missing UID in with a
+    /// default.
     /// </para>
     /// <para>
-    /// A summary that answers for a UID without the flags the command requested is refused rather than dropped, and that
-    /// is the whole reason this method can throw. Dropping it would turn a message the server just proved exists into
-    /// the same silence a deleted message produces, and an account configured to erase local copies would then destroy
-    /// mail on the strength of an answer the server never gave.
+    /// A summary for a UID the command did not name is dropped. RFC 7162 lets a server volunteer information about
+    /// messages another client has touched, and this read answers a question about one window: an occurrence outside it
+    /// has not been selected for reconciliation and carries no local identity here to write against.
+    /// </para>
+    /// <para>
+    /// A summary that answers for a requested UID without the flags the command asked for is refused rather than
+    /// dropped, and that is the whole reason this method can throw. Dropping it would turn a message the server just
+    /// proved exists into the same silence a deleted message produces, and an account configured to erase local copies
+    /// would then destroy mail on the strength of an answer the server never gave.
     /// </para>
     /// </remarks>
     /// <exception cref="MailboxAnswerIncompleteException">Thrown when the server answered for an email without its flags.</exception>
     private async Task<IReadOnlyList<RemoteEmailFlagObservation>> FetchFlagsAsync(
         IMailFolder openFolder,
-        IReadOnlyList<ImapUid> uids,
+        UniqueId[] requestedUids,
+        IFetchRequest fetchRequest,
         CancellationToken cancellationToken)
     {
-        var requestedUids = uids.Select(uid => new UniqueId(uid.Value)).ToArray();
-        var summaries = await openFolder.FetchAsync(requestedUids, ReconciliationSummaryItems, cancellationToken);
+        var summaries = await openFolder.FetchAsync(requestedUids, fetchRequest, cancellationToken);
         var observedAt = timeProvider.GetUtcNow();
+        var windowUids = requestedUids.Select(static uid => uid.Id).ToHashSet();
+        var answered = summaries.Where(summary => windowUids.Contains(summary.UniqueId.Id)).ToArray();
 
-        if (summaries.Any(static summary => summary.Flags is null))
+        if (answered.Any(static summary => summary.Flags is null))
         {
             throw new MailboxAnswerIncompleteException(accountId, folder.Alias, "FLAGS");
         }
 
         return
         [
-            .. summaries.Select(summary => new RemoteEmailFlagObservation(
+            .. answered.Select(summary => new RemoteEmailFlagObservation(
                 ImapUid.Create(summary.UniqueId.Id),
                 SnapshotOf(summary.Flags!.Value, observedAt))),
         ];
     }
+
+    /// <summary>Reads the folder's modification sequence, and reports none where the value cannot be one.</summary>
+    /// <remarks>
+    /// MailKit reports zero for a folder whose server sent no <c>HIGHESTMODSEQ</c>, which is the absence rather than a
+    /// sequence. RFC 7162 bounds the value to 63 bits, so anything above that is a server contradicting the
+    /// specification and is treated as no sequence at all rather than stored as an ordering key nothing else can
+    /// compare against.
+    /// </remarks>
+    private static ulong? ReportedModSeqOf(IMailFolder openFolder) =>
+        openFolder.HighestModSeq is > 0UL and <= (ulong)long.MaxValue ? openFolder.HighestModSeq : null;
 
     /// <summary>Reads the five flags the stored snapshot keeps out of what the server reported.</summary>
     /// <remarks>

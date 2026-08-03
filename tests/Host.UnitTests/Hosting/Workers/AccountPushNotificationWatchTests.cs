@@ -28,6 +28,10 @@ public sealed class AccountPushNotificationWatchTests
         MailFolderAlias.Create("INBOX"),
         RemoteFolderPath.Create("INBOX", '/'));
 
+    private static readonly MailFolderResolution ArchiveBinding = MailFolderResolution.FirstBindingOf(
+        MailFolderAlias.Create("archive"),
+        RemoteFolderPath.Create("Archive", '/'));
+
     /// <summary>An operator who asked for push and got it needs the confirmation as much as the contradiction.</summary>
     [Fact]
     public async Task WatchResolvedFoldersAsync_ServerAdvertisesPush_WatchesTheFolderAndReportsPush()
@@ -140,7 +144,16 @@ public sealed class AccountPushNotificationWatchTests
             harness.Options,
             TimeSpan.FromMinutes(60),
             TestContext.Current.CancellationToken);
-        await SynchronizationTestHost.AdvanceUntilAsync(harness.Clock, waiting, TimeSpan.FromMinutes(5), DeadlockGuard);
+
+        // The clock moves once per wait the session has actually entered. Advancing on a schedule of its own would
+        // outrun the session between two commands and collapse the renewals this test exists to observe.
+        for (var renewal = 0; renewal < 3; renewal++)
+        {
+            await session.WaitsEntered.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+            harness.Clock.Advance(harness.Options.PushRenewalInterval);
+        }
+
+        await waiting.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(session.WaitCount >= 3, $"A 60-minute delay renewed every 20 minutes should issue at least three waits, not {session.WaitCount}.");
@@ -269,6 +282,280 @@ public sealed class AccountPushNotificationWatchTests
 
         // Assert
         Assert.True(session.IsDisposed);
+    }
+
+    /// <summary>
+    /// A session that connects and then serves nothing must still reach the bound. Counting a successful connection as
+    /// evidence would reset the count on every attempt, and the account would reconnect and fail a wait as fast as the
+    /// server could answer, for as long as the process ran.
+    /// </summary>
+    [Fact]
+    public async Task WaitForNextPassAsync_SessionOpensAndEveryWaitFails_StillDegradesToPolling()
+    {
+        // Arrange
+        using var harness = CreateHarness(MailSynchronizationMode.Push);
+        harness.Options.MaxConsecutivePushFailures = 3;
+
+        // Act
+        for (var attempt = 0; attempt < harness.Options.MaxConsecutivePushFailures; attempt++)
+        {
+            await harness.WatchInboxAsync();
+            harness.NotificationSessions.SessionWatching("INBOX")!.WaitFailure =
+                new IOException("The server closed the connection.");
+
+            await harness.Watch.WaitForNextPassAsync(
+                harness.Options,
+                harness.Options.Interval,
+                TestContext.Current.CancellationToken);
+        }
+
+        await harness.WatchInboxAsync();
+
+        // Assert
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains("failed 3 times in a row, so the folder is synchronized by polling", StringComparison.Ordinal));
+
+        // The degraded folder is not reconnected on the run that follows, which is what the bound is for.
+        Assert.Equal(3, harness.NotificationSessions.OpenedFolderAliases.Count);
+    }
+
+    /// <summary>
+    /// The bound counts failures since the last thing that worked, so a wait that returned has to clear the ones before
+    /// it. A folder that failed its way to the edge of the bound, served one wait, and then failed once more has
+    /// produced a single failure since that wait, and degrading it there would degrade a server that recovered.
+    /// </summary>
+    [Fact]
+    public async Task WaitForNextPassAsync_AWaitReturnsBetweenFailures_ClearsTheFailuresCountedBeforeIt()
+    {
+        // Arrange
+        using var harness = CreateHarness(MailSynchronizationMode.Push);
+        harness.Options.MaxConsecutivePushFailures = 3;
+
+        for (var attempt = 0; attempt < harness.Options.MaxConsecutivePushFailures - 1; attempt++)
+        {
+            await harness.WatchInboxAsync();
+            harness.NotificationSessions.SessionWatching("INBOX")!.WaitFailure =
+                new IOException("The server closed the connection.");
+
+            await harness.Watch.WaitForNextPassAsync(
+                harness.Options,
+                harness.Options.Interval,
+                TestContext.Current.CancellationToken);
+        }
+
+        // Act
+        await harness.WatchInboxAsync();
+        var servingSession = harness.NotificationSessions.SessionWatching("INBOX")!;
+        var servedWait = harness.Watch.WaitForNextPassAsync(
+            harness.Options,
+            harness.Options.Interval,
+            TestContext.Current.CancellationToken);
+        await SynchronizationTestHost.AdvanceUntilAsync(
+            harness.Clock,
+            servedWait,
+            harness.Options.Interval,
+            DeadlockGuard);
+
+        servingSession.WaitFailure = new IOException("The server closed the connection.");
+        await harness.Watch.WaitForNextPassAsync(
+            harness.Options,
+            harness.Options.Interval,
+            TestContext.Current.CancellationToken);
+        await harness.WatchInboxAsync();
+
+        // Assert
+        Assert.DoesNotContain(
+            harness.Logger.Messages,
+            message => message.Contains("so the folder is synchronized by polling", StringComparison.Ordinal));
+
+        // The fourth connection is the evidence: a folder that had reached the bound would not be reconnected at all.
+        Assert.Equal(4, harness.NotificationSessions.OpenedFolderAliases.Count);
+    }
+
+    /// <summary>
+    /// A decline says the server serves no subscription, and a later attempt that failed for another reason says
+    /// nothing about the capability at all. Leaving the older answer standing would send the account down the
+    /// per-folder fallback that belongs to a decline, on the strength of an attempt that never got an answer.
+    /// </summary>
+    [Fact]
+    public async Task WatchResolvedFoldersAsync_SubscriptionFailsAfterAnEarlierDecline_DoesNotFallBackPerFolder()
+    {
+        // Arrange
+        using var harness = CreateHarness(MailSynchronizationMode.Push);
+        await harness.WatchAsync([InboxBinding, ArchiveBinding]);
+        var inboxSession = harness.NotificationSessions.SessionWatching("INBOX")!;
+
+        harness.Clock.Advance(harness.Options.PushDegradationPeriod + TimeSpan.FromMinutes(1));
+        harness.NotificationSessions.SubscriptionOpenFailure = new IOException("The server closed the connection.");
+
+        // Act
+        await harness.WatchAsync([InboxBinding, ArchiveBinding]);
+
+        // Assert
+        Assert.True(
+            inboxSession.IsDisposed,
+            "A subscription that failed leaves the account on its interval, so the per-folder sessions a decline had opened are released.");
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains("Folder primary/INBOX is now synchronized in Polling mode", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// One connection covering every folder is the whole point of asking for a subscription, so a server that serves
+    /// one must leave the account holding no per-folder session at all.
+    /// </summary>
+    [Fact]
+    public async Task WatchResolvedFoldersAsync_ServerServesASubscription_WatchesEveryFolderOverOneConnection()
+    {
+        // Arrange
+        using var harness = CreateHarness(MailSynchronizationMode.Push);
+        harness.NotificationSessions.AdvertisesSubscription = true;
+
+        // Act
+        await harness.WatchAsync([InboxBinding, ArchiveBinding]);
+
+        // Assert
+        Assert.Equal(["INBOX", "ARCHIVE"], harness.NotificationSessions.Subscription!.WatchedFolderAliases);
+        Assert.Empty(harness.NotificationSessions.OpenedFolderAliases);
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains("watches 2 folders through one push subscription", StringComparison.Ordinal));
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains("Folder primary/ARCHIVE is now synchronized in Push mode", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A server is entitled to refuse a subscription naming more mailboxes than it will track, so the list is bounded
+    /// and the folders past the bound are synchronized on the account's interval rather than dropped.
+    /// </summary>
+    [Fact]
+    public async Task WatchResolvedFoldersAsync_MoreFoldersThanTheSubscriptionMayName_LeavesTheRestOnTheInterval()
+    {
+        // Arrange
+        using var harness = CreateHarness(MailSynchronizationMode.Push);
+        harness.NotificationSessions.AdvertisesSubscription = true;
+        harness.Options.MaxSubscribedFolders = 1;
+
+        // Act
+        await harness.WatchAsync([InboxBinding, ArchiveBinding]);
+
+        // Assert
+        Assert.Equal(["INBOX"], harness.NotificationSessions.Subscription!.WatchedFolderAliases);
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains("Folder primary/ARCHIVE is now synchronized in Polling mode", StringComparison.Ordinal));
+
+        // The overflow folder is polled rather than given a connection of its own, which is what the bound is for.
+        Assert.Empty(harness.NotificationSessions.OpenedFolderAliases);
+    }
+
+    /// <summary>A server without the capability leaves the account exactly where it was before subscriptions existed.</summary>
+    [Fact]
+    public async Task WatchResolvedFoldersAsync_ServerServesNoSubscription_WatchesEachFolderOverItsOwnConnection()
+    {
+        // Arrange
+        using var harness = CreateHarness(MailSynchronizationMode.Push);
+
+        // Act
+        await harness.WatchAsync([InboxBinding, ArchiveBinding]);
+
+        // Assert
+        Assert.Equal(["INBOX", "ARCHIVE"], harness.NotificationSessions.OpenedFolderAliases);
+        Assert.Null(harness.NotificationSessions.Subscription);
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains("advertises no NOTIFY capability", StringComparison.Ordinal));
+    }
+
+    /// <summary>Reading a capability costs a connection, so a server that has declined once is not asked again every run.</summary>
+    [Fact]
+    public async Task WatchResolvedFoldersAsync_SubscriptionAlreadyDeclined_DoesNotAskAgainUntilTheRetryPeriodPasses()
+    {
+        // Arrange
+        using var harness = CreateHarness(MailSynchronizationMode.Push);
+        await harness.WatchInboxAsync();
+
+        // Act
+        await harness.WatchInboxAsync();
+        harness.Clock.Advance(harness.Options.PushDegradationPeriod);
+        await harness.WatchInboxAsync();
+
+        // Assert
+        Assert.Equal(2, harness.NotificationSessions.SubscriptionAttempts.Count);
+    }
+
+    /// <summary>The account's next pass starts on the server's word, and the line names the folder the server reported.</summary>
+    [Fact]
+    public async Task WaitForNextPassAsync_SubscriptionReportsAFolder_ReturnsAndNamesThatFolder()
+    {
+        // Arrange
+        using var harness = CreateHarness(MailSynchronizationMode.Push);
+        harness.NotificationSessions.AdvertisesSubscription = true;
+        await harness.WatchAsync([InboxBinding, ArchiveBinding]);
+        var subscription = harness.NotificationSessions.Subscription!;
+
+        // Act
+        var waiting = harness.Watch.WaitForNextPassAsync(
+            harness.Options,
+            harness.Options.Interval,
+            TestContext.Current.CancellationToken);
+        await subscription.WaitStarted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        subscription.ReportFolderChange(ArchiveBinding.Alias);
+        await waiting.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains("Mail server reported a change in primary/ARCHIVE", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A subscription that keeps failing leaves the whole account on its interval rather than being answered with one
+    /// connection per folder at a server that has just refused one.
+    /// </summary>
+    [Fact]
+    public async Task WatchResolvedFoldersAsync_SubscriptionKeepsFailing_LeavesTheAccountPolledWithoutOpeningPerFolderSessions()
+    {
+        // Arrange
+        using var harness = CreateHarness(MailSynchronizationMode.Push);
+        harness.NotificationSessions.AdvertisesSubscription = true;
+        harness.NotificationSessions.SubscriptionOpenFailure = new InvalidOperationException("The server refused the connection.");
+
+        // Act
+        for (var attempt = 0; attempt < harness.Options.MaxConsecutivePushFailures; attempt++)
+        {
+            await harness.WatchAsync([InboxBinding, ArchiveBinding]);
+        }
+
+        // Assert
+        Assert.Empty(harness.NotificationSessions.OpenedFolderAliases);
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains("so its folders are synchronized by polling", StringComparison.Ordinal));
+    }
+
+    /// <summary>A long-lived connection is where a rotated credential would otherwise stay in use, subscription or not.</summary>
+    [Fact]
+    public async Task WatchResolvedFoldersAsync_NewSnapshotPublished_RecyclesTheSubscription()
+    {
+        // Arrange
+        using var harness = CreateHarness(MailSynchronizationMode.Push);
+        harness.NotificationSessions.AdvertisesSubscription = true;
+        await harness.WatchInboxAsync();
+        var subscription = harness.NotificationSessions.Subscription!;
+        harness.PublishReloadedSnapshot();
+
+        // Act
+        await harness.WatchInboxAsync();
+
+        // Assert
+        Assert.True(subscription.IsDisposed);
+        Assert.NotSame(subscription, harness.NotificationSessions.Subscription);
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains("Push subscription for primary was recycled", StringComparison.Ordinal));
     }
 
     private static WatchHarness CreateHarness(MailSynchronizationMode mode)

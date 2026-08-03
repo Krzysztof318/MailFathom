@@ -90,6 +90,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `MailSynchronization:PushRenewalInterval` | TimeSpan | `00:20:00` | 1 min – 29 min; the lifetime of one `IDLE` command, **not** a polling cycle — the ceiling is what RFC 2177 mandates | reload |
 | `MailSynchronization:MaxConsecutivePushFailures` | int | `3` | 1 – 100 | reload |
 | `MailSynchronization:PushDegradationPeriod` | TimeSpan | `00:15:00` | 10 s – 1 day | reload |
+| `MailSynchronization:MaxSubscribedFolders` | int | `20` | 1 – 100; how many folders one push subscription may name on a server supporting `NOTIFY`, the rest synchronizing on the account's interval | reload |
 
 ### One account — `MailSynchronization:Accounts:<n>`
 
@@ -100,7 +101,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `…:Port` | int | `993` | 1 – 65535 | reload |
 | `…:UserName` | string | — | Required when synchronization is enabled; an identifier, not a secret | reload |
 | `…:Secrets:Password` | secret block | unset | Required when the permitted mechanisms include any password mechanism; must resolve at startup | reload; material per connection |
-| `…:Mode` | enum | `Polling` | `Polling`, `Push`; push holds one connection open per folder | reload; the next run adopts it |
+| `…:Mode` | enum | `Polling` | `Polling`, `Push`; push holds one connection open per account on a server supporting `NOTIFY`, and one per folder on a server offering only `IDLE` | reload; the next run adopts it |
 | `…:EarliestEmailReceivedDate` | date | unset (everything) | Not in the future (compared in UTC) | reload |
 | `…:RemotelyDeletedEmailDisposition` | enum | `RetainTombstone` | `RetainTombstone`, `EraseLocalCopy` | reload; governs disappearances observed from then on |
 | `…:Folders` | list | inbox by role | Aliases unique; each entry below | reload |

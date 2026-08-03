@@ -141,9 +141,15 @@ public sealed class MailKitImapNotificationSessionTests
         Assert.Equal(MailboxNotificationOutcome.FolderChanged, outcome);
     }
 
-    /// <summary>An expunge and a flag change are reasons to synchronize too; watching arrival alone would defer both to the interval.</summary>
+    /// <summary>
+    /// An expunge and a flag change are reasons to synchronize too; watching arrival alone would defer both to the
+    /// interval. A removal is watched through both of the events that can carry it, because a connection with quick
+    /// resynchronization enabled reports one and never the other — a session subscribed to a single one of them would
+    /// stop noticing deletions on exactly the servers that support the most synchronization machinery.
+    /// </summary>
     [Theory]
     [InlineData("MessageExpunged")]
+    [InlineData("MessagesVanished")]
     [InlineData("MessageFlagsChanged")]
     public async Task WaitForFolderChangeAsync_ServerReportsAnExpungeOrAFlagChange_ReportsTheFolderChanged(string reportedEvent)
     {
@@ -308,6 +314,15 @@ public sealed class MailKitImapNotificationSessionTests
         if (reportedEvent == "MessageExpunged")
         {
             folder.MessageExpunged += Raise.Event<EventHandler<MessageEventArgs>>(folder, new MessageEventArgs(0));
+
+            return;
+        }
+
+        if (reportedEvent == "MessagesVanished")
+        {
+            folder.MessagesVanished += Raise.Event<EventHandler<MessagesVanishedEventArgs>>(
+                folder,
+                new MessagesVanishedEventArgs([new UniqueId(10)], earlier: false));
 
             return;
         }
