@@ -82,7 +82,7 @@ Full verification: <command and result>
 Diff review: <scope and exclusions>
 Commit: <hash and subject>
 Push: <remote and branch>
-Draft PR: <URL, and the base repository it targets>
+Pull request: <URL, and the base repository it targets>
 Issue link: <Closes #N confirmed in the published body>
 Queue: <Next confirmed on the board after the pull request existed, or not applicable (fork)>
 Placement: <type label, Track, Size, milestone or none — or left to triage in the fork role>
