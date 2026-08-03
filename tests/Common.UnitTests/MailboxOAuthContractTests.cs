@@ -12,6 +12,29 @@ namespace MailFathom.Common.UnitTests;
 /// <summary>Covers the parts of the mailbox authorization exchange that are decided without a server.</summary>
 public sealed class MailboxOAuthContractTests
 {
+    /// <summary>
+    /// The token response carries a bearer token and, on an interactive authorization, the refresh token the whole
+    /// exchange exists to produce. A default record rendering would put both into any log line that interpolated it.
+    /// </summary>
+    [Fact]
+    public void ToString_ATokenResponse_RedactsTheCredentialsItCarries()
+    {
+        // Arrange
+        var response = new MailOAuthTokenResponse(
+            "an-access-token",
+            ExpiresInSeconds: 3600,
+            Error: null,
+            RefreshToken: "a-refresh-token");
+
+        // Act
+        var rendered = response.ToString();
+
+        // Assert
+        Assert.Equal("***", rendered);
+        Assert.DoesNotContain("an-access-token", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("a-refresh-token", rendered, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Create_ProofKey_ProducesAnRfc7636VerifierAndItsSha256Challenge()
     {
