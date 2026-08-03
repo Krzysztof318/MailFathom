@@ -29,16 +29,40 @@ internal sealed class FakeMailboxRedirect : IMailboxRedirectAwaiter
     internal static Func<Uri, IMailboxRedirectAwaiter> Approving(string code, string state) =>
         Answering(new MailboxRedirect(code, state, Error: null));
 
+    /// <summary>Builds a factory answering with an approval whose anti-forgery value is read when the wait begins.</summary>
+    /// <param name="code">The authorization code the redirect carries.</param>
+    /// <param name="readState">Reads the value the command generated, which only exists once the address has been shown.</param>
+    /// <returns>The factory a context is built with.</returns>
+    /// <remarks>
+    /// The anti-forgery value is generated inside the authorizer and reaches the outside world only in the address the
+    /// command prints, so a test that wants an approval accepted has to read it the way a browser does — from that
+    /// address, after it is shown and before the redirect is answered.
+    /// </remarks>
+    internal static Func<Uri, IMailboxRedirectAwaiter> ApprovingWhenAsked(string code, Func<string> readState) =>
+        Reacting(_ => Task.FromResult(new MailboxRedirect(code, readState(), Error: null)));
+
     /// <summary>Builds a factory answering with whatever the authorization server put in the redirect.</summary>
     /// <param name="redirect">What the redirect carries.</param>
     /// <returns>The factory a context is built with.</returns>
     internal static Func<Uri, IMailboxRedirectAwaiter> Answering(MailboxRedirect redirect) =>
         Reacting(_ => Task.FromResult(redirect));
 
-    /// <summary>Builds a factory whose wait never completes, so a cancelled command can be observed.</summary>
+    /// <summary>Builds a factory whose wait never completes until it is cancelled.</summary>
     /// <returns>The factory a context is built with.</returns>
+    /// <remarks>
+    /// A redirect that never arrives, which is what a person who abandons the sign-in looks like. It has to be a task
+    /// that stays pending rather than one that is already cancelled: <see cref="Task.FromCanceled{TResult}" /> demands
+    /// a token that is cancelled already, so building it from a live token throws where the wait was supposed to hang.
+    /// </remarks>
     internal static Func<Uri, IMailboxRedirectAwaiter> Silent() =>
-        Reacting(cancellationToken => Task.FromCanceled<MailboxRedirect>(cancellationToken));
+        Reacting(cancellationToken =>
+        {
+            TaskCompletionSource<MailboxRedirect> nothingArrives = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            cancellationToken.Register(() => nothingArrives.TrySetCanceled(cancellationToken));
+
+            return nothingArrives.Task;
+        });
 
     /// <inheritdoc />
     public Task<MailboxRedirect> WaitForRedirectAsync(CancellationToken cancellationToken) =>

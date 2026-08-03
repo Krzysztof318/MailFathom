@@ -93,8 +93,14 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         {
             var form = BuildTokenRequestForm(settings);
 
+            // Keyed per account, like the two mailbox classes are. Accounts do not share an authorization server —
+            // one is at Google and the next at Entra — so a process-wide key would let one provider's outage open the
+            // circuit for every other account's token requests, and would spend one concurrency budget across all of
+            // them. The account identifier is MailFathom's own configured name, so it carries no personal data into
+            // resilience telemetry.
             return await this.operationExecutor.ExecuteAsync(
-                OutboundDependency.MailAuthorizationServerInvocation,
+                new OutboundPipelineKey(OutboundDependency.MailAuthorizationServerInvocation, settings.AccountId),
+                operationKey: null,
                 attemptToken => this.ExchangeGrantAsync(settings, form, attemptToken),
                 cancellationToken);
         }

@@ -4,6 +4,7 @@
 
 using System.Net;
 using System.Text;
+using System.Web;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -166,6 +167,36 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
         Assert.Contains(this.console.Errors, line => line.Contains("is not an address", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The command's core security contract: the refresh token is the only thing on standard output, so redirecting it
+    /// captures the secret alone and every instruction around it reaches the person instead. A regression that put
+    /// guidance on the wrong stream would be invisible to every other test here, because all of them refuse the
+    /// exchange and never reach a grant.
+    /// </summary>
+    [Fact]
+    public async Task Authorize_ASuccessfulExchange_PutsTheRefreshTokenOnStandardOutputAndNothingElse()
+    {
+        // Arrange
+        using var handler = FakeHttpMessageHandler.AlwaysResponding(() => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """{"access_token":"an-access-token","refresh_token":"a-refresh-token","expires_in":3600}""",
+                Encoding.UTF8,
+                "application/json"),
+        });
+
+        // Act
+        var exitCode = await this.RunAsync(
+            handler,
+            FakeMailboxRedirect.ApprovingWhenAsked("an-authorization-code", this.StateTheCommandGenerated),
+            "mailbox", "authorize", "--provider", "google", "--client-id", "app");
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Equal(["a-refresh-token"], this.console.Lines);
+        Assert.DoesNotContain(this.console.Errors, line => line.Contains("a-refresh-token", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("code=abc&state=xyz", "abc", "xyz", null)]
     [InlineData("?code=abc&state=xyz", "abc", "xyz", null)]
@@ -220,6 +251,16 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
         {
             Directory.Delete(this.storeDirectory, recursive: true);
         }
+    }
+
+    /// <summary>Reads the anti-forgery value out of the authorization address the command printed, the way a browser would.</summary>
+    private string StateTheCommandGenerated()
+    {
+        var address = this.console.Errors.LastOrDefault(line => line.Contains("state=", StringComparison.Ordinal))
+            ?? throw new InvalidOperationException("The command printed no authorization address to read the state from.");
+
+        return HttpUtility.ParseQueryString(new Uri(address.Trim()).Query)["state"]
+            ?? throw new InvalidOperationException("The printed authorization address carried no state.");
     }
 
     /// <summary>A token endpoint that refuses everything, so a test reaching it fails loudly rather than passing quietly.</summary>

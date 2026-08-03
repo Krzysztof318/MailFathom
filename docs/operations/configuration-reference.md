@@ -370,8 +370,8 @@ The startup, readiness, and liveness probes and the dedicated listener they answ
 ## `Resilience`
 
 Retry, timeout, circuit-breaker, and concurrency budgets for the non-HTTP outbound dependencies, one subsection per
-dependency class: `MailboxSessionEstablishment`, `MailboxDataRetrieval`, `EmailDelivery`, `DatabaseCommandExecution`,
-`AiProviderInvocation`. A subsection naming no class fails startup. Every setting is **restart** by construction, and
+dependency class: `MailboxSessionEstablishment`, `MailboxDataRetrieval`, `MailAuthorizationServerInvocation`,
+`EmailDelivery`, `DatabaseCommandExecution`, `AiProviderInvocation`. A subsection naming no class fails startup. Every setting is **restart** by construction, and
 [outbound resilience](../architecture/outbound-resilience.md#configuration) explains each strategy and the
 per-class reasoning.
 
@@ -393,6 +393,7 @@ Defaults, per class:
 | --- | --- | --- | --- | --- | --- |
 | `MailboxSessionEstablishment` | 3 | 2 s / 30 s | 30 s / 2 min | 0.5 · 5 · 60 s · 30 s | 4 |
 | `MailboxDataRetrieval` | 3 | 1 s / 15 s | 60 s / 3 min | 0.5 · 10 · 30 s · 15 s | 8 |
+| `MailAuthorizationServerInvocation` | 3 | 500 ms / 5 s | 10 s / 30 s | 0.5 · 10 · 60 s · 30 s | 8 |
 | `EmailDelivery` | 2 | 5 s / 60 s | 60 s / 3 min | 0.5 · 5 · 60 s · 60 s | 4 |
 | `DatabaseCommandExecution` | 3 | 200 ms / 2 s | 15 s / 30 s | 0.5 · 20 · 30 s · 5 s | 32 |
 | `AiProviderInvocation` | 3 | 2 s / 30 s | 120 s / 5 min | 0.5 · 5 · 60 s · 30 s | 4 |
