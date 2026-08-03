@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
 set -euo pipefail
 
 ### Produces the schema artifact a released installation applies, and the checksum that identifies it.

@@ -1,3 +1,7 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
 # The metadata Artifact Hub reads to confirm that whoever registered `oci://ghcr.io/krzysztof318/charts/mailfathom`
 # controls the repository it points at. The release run pushes this file into that same repository under the reserved
 # `artifacthub.io` tag, which is where Artifact Hub looks for it; publishing it from the pipeline rather than by hand is

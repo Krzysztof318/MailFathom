@@ -1,3 +1,8 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
 {{/*
 Shared naming, labels, and the two derivations that would otherwise be written differently in each template: the image
 reference and the connection string. Everything here is namespaced under `mailfathom.` so a subchart added later cannot

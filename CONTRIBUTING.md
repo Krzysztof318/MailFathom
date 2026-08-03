@@ -138,7 +138,7 @@ Adding a dependency, a service, a container image, or an externally sourced code
 
 ### The file header
 
-Every C# file in this repository carries the same three-line header, and a new file is no exception:
+Every file in this repository carries the same three lines, and a new file is no exception:
 
 ```csharp
 // Copyright © 2026 Krzysztof Kasprowicz
@@ -146,9 +146,20 @@ Every C# file in this repository carries the same three-line header, and a new f
 // Project repository: https://github.com/Krzysztof318/MailFathom
 ```
 
-You never type it. `IDE0073` fails the build on a file that is missing it, and `scripts/verify-fast.sh` inserts it for you — which is one more reason to run the fast loop after adding a file rather than before pushing.
+**In a C# file you never type it.** `IDE0073` fails the build on a file that is missing it, and `scripts/verify-fast.sh` inserts it for you — which is one more reason to run the fast loop after adding a file rather than before pushing.
 
-**Do not modify it, and do not add anything of your own beside it.** No second copyright line, no `@author` tag, no "modified by", no name, initials, handle, or contact detail in a comment, a file, or a header anywhere in the tree. A pull request that adds one is asked to remove it before review continues.
+**Everywhere else you do type it**, because that analyzer reads C# and nothing else. The wording never changes; only the comment syntax does, and each form is the one that file's own readers already parse:
+
+| Where | Form |
+|---|---|
+| `.yml` and `.yaml` | Three `#` comment lines, first in the file, then a blank line |
+| `.sh` | The same three `#` lines, directly under the shebang, which has to stay first |
+| `deploy/helm/mailfathom/templates/` | A `{{- /* ... */ -}}` comment, so the header stays in the template instead of being rendered into every Kubernetes object the chart applies |
+| A skill's `SKILL.md` | `license: Apache-2.0` and a `metadata` block naming the author and the repository, which is where the [Agent Skills](https://agentskills.io/specification) format puts them |
+
+`scripts/test-agent-workflow.sh` fails when one of those is missing, so a forgotten header is a red check rather than a review comment. It reads the expected text out of `.editorconfig`, which means the header is one decision written in one place no matter how many forms it takes.
+
+**Do not modify it, and do not add anything of your own beside it.** No second copyright line, no `@author` tag, no "modified by", no name, initials, handle, or contact detail in a comment, a file, or a header anywhere in the tree. A pull request that adds one is asked to remove it before review continues. The one `author` a skill's `metadata` block names is the copyright holder the header already states, spelled the way that format expects it; it is the same single record, not a second one, and it stays that name whoever edits the skill.
 
 This is a consistency rule, not a claim about who wrote which line. The header states one project, one copyright holder of record, one license, and one place the project lives, so that a reader of any file — and a tool scanning the tree — gets the same answer everywhere, including from a file that has travelled far from this repository. It transfers nothing: **you keep the copyright in what you write**, exactly as the section above and the root [`NOTICE`](NOTICE) say, and the `NOTICE` is explicit that it claims nothing about contributions by other copyright holders. Authorship is recorded where it is actually durable and verifiable — in the commit history and in the pull request — rather than in a comment that the next refactor moves to a different file.
 

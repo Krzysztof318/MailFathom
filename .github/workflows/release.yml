@@ -1,3 +1,7 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
 name: Release
 
 # What turns a commit into a release: an annotated `v<major>.<minor>.<patch>` tag, and nothing else. A merge to `main`

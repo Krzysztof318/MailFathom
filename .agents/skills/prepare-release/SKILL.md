@@ -2,6 +2,10 @@
 name: prepare-release
 description: Manual only. Invoked by the owner to cut a MailFathom release — composes the changelog, raises the declared version, and states the order the two pull requests and the tag have to land in.
 disable-model-invocation: true
+license: Apache-2.0
+metadata:
+  author: Krzysztof Kasprowicz
+  repository: https://github.com/Krzysztof318/MailFathom
 ---
 
 # Prepare Release
