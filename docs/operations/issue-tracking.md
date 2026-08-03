@@ -67,7 +67,11 @@ A milestone answers which release an issue ships in, and nothing else. An issue 
 
 `0.2.0 — second release` is the open milestone, and it declares no scope in advance: what ships in it is whatever is placed in it. That is the opposite of how `0.1.0 — first public release`, now closed, was written, and the difference decides how a new issue is placed. A milestone that describes its own contents can be tested against — an issue either is or is not something that release cannot ship without — and one that accumulates cannot, because the description is the placement rather than a rule for it.
 
-So a new issue takes no milestone, and that stays a decision rather than an omission: the absence means deliberately outside the release, exactly as it does everywhere else on this page. Placing an issue in `0.2.0` is what defines the release, so it is the owner's call and is raised rather than inferred. Do not open a further milestone beside the open one; the next is created when that one closes.
+So a new issue takes no milestone by default, and that stays a decision rather than an omission: the absence means deliberately outside the release, exactly as it does everywhere else on this page. Placing an issue in `0.2.0` is what defines the release, so it is the owner's call.
+
+**The owner's call can be standing rather than per issue.** They may decide that new work of some kind — code and documentation, say — goes into the open milestone until they say otherwise, and an agent then assigns it without asking, because the decision has already been taken and asking again re-litigates it. What an agent must never do is infer such a decision from the shape of the work, from what a neighbouring issue carries, or from the milestone being open. Absent a standing decision the default above holds and the milestone stays empty.
+
+Do not open a further milestone beside the open one; the next is created when that one closes.
 
 ## Board fields
 
