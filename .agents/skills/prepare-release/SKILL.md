@@ -198,11 +198,11 @@ would leave an operator mapping two numbers onto one artifact.
 pull request merges after the tag — so a `README.md` corrected here is a `README.md` that was wrong in the tagged tree.
 Step 3 owns them.
 
-### 5. Draft both, and cross-reference them
+### 5. Open both, and cross-reference them
 
-Both open as drafts, per the repository rule, and each body names the other by number, so neither is merged alone by
-accident. The changelog pull request carries `Closes #<issue>` for the issue that tracks this release; the version-bump
-one closes nothing, because bumping is what follows a release rather than what the release was for.
+Each body names the other by number, so neither is merged alone by accident. The changelog pull request carries
+`Closes #<issue>` for the issue that tracks this release; the version-bump one closes nothing, because bumping is what
+follows a release rather than what the release was for.
 
 ### 6. Print the ordering, and stop
 

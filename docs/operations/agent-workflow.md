@@ -184,7 +184,7 @@ What differs is narrow and is listed in both skills at the step it applies to:
 the branch name and the linked worktree, the issue's label, milestone, and board
 fields, the `Queue: Next` write when the pull request opens, and which repository
 is pushed to. What does not differ is everything else, including both
-verification scripts, every gate, the draft pull request, and the
+verification scripts, every gate, the pull request, and the
 `Closes #<issue>` reference.
 
 The board write is the one that has to be reported carefully. In the fork role it
@@ -211,7 +211,7 @@ The canonical skills are:
   gate;
 - `finish-change` stages only the task files, requires that gate, runs full
   verification, checks the final diff, creates a focused commit, pushes the
-  branch, opens a draft pull request that references its issue with
+  branch, opens a pull request that references its issue with
   `Closes #<issue>`, and then moves that issue to `Queue: Next` so the board
   shows the work as in flight;
 - `prepare-release` opens the two pull requests a release consists of and prints
@@ -1093,8 +1093,7 @@ while sitting in a tree a reader takes as fact.
 A change is not complete until `check-docs-licenses` returns `pass` or `n/a` for
 all three categories, `verify-full.sh` succeeds from a fresh run, the complete diff
 has been inspected for secrets, generated files, unrelated edits, and boundary
-violations, and the published pull request body references its issue. Pull
-requests are created as drafts and contain no co-author trailers.
+violations, and the published pull request body references its issue.
 
 `gh pr edit` fails against this repository with a Projects-classic GraphQL error
 and silently drops the edit, so correct a missing issue reference through

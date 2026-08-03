@@ -133,10 +133,9 @@ jobs:
   # `docs/`, over the whole tree at once. Narrowing it to the changed files would report green on contracts
   # it never evaluated, which is worse than not running it.
   #
-  # No draft condition either, unlike `verify` above. Every pull request here opens as a draft and stays
-  # one until the owner asks for review, so a draft-exempt contract check would not run over the interval
-  # during which the change is actually being written — which is the whole interval in which a broken
-  # contract is cheap to fix. The job costs about twenty seconds, so there is nothing to save by
+  # No draft condition either, unlike `verify` above. A draft-exempt contract check would not run over the
+  # interval during which the change is actually being written — which is the whole interval in which a
+  # broken contract is cheap to fix. The job costs about twenty seconds, so there is nothing to save by
   # deferring it.
   workflow-contracts:
     name: Workflow contracts

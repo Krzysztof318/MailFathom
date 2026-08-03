@@ -4,5 +4,5 @@
 
 interface:
   display_name: "Finish change"
-  short_description: "Verify and publish a focused draft pull request"
-  default_prompt: "Use $finish-change to run final gates, commit focused changes, and open a draft pull request."
+  short_description: "Verify and publish a focused pull request"
+  default_prompt: "Use $finish-change to run final gates, commit focused changes, and open a pull request."
