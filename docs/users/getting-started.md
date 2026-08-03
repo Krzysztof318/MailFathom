@@ -86,7 +86,8 @@ Points worth knowing before you adapt it:
 - **New mail arrives on the next run unless you ask for push.** The default reconciles each account every five minutes.
   Setting an account's `"Mode": "Push"` makes MailFathom hold an IMAP `IDLE` session open per folder and synchronize the
   moment the server reports a change, at the cost of one open connection per folder; a server that does not support it
-  is polled instead and says so in the log.
+  is polled instead and says so in the log. Push **adds** to the schedule rather than replacing it — the account still
+  runs on its `Interval`, and a notification only starts the next run sooner.
   [Push synchronization](../features/imap-synchronization.md#push-synchronization) records the whole model.
 
 The Compose deployment reads this from `config/10-mailfathom.json`; Kubernetes mounts it as a ConfigMap key; a native
