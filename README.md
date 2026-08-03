@@ -2,6 +2,8 @@
 
 # MailFathom
 
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE) [![Release](https://github.com/Krzysztof318/MailFathom/actions/workflows/release.yml/badge.svg)](https://github.com/Krzysztof318/MailFathom/actions/workflows/release.yml) [![Version](https://img.shields.io/github/v/release/Krzysztof318/MailFathom?sort=semver&label=version)](https://github.com/Krzysztof318/MailFathom/releases/latest) [![Nightly](https://github.com/Krzysztof318/MailFathom/actions/workflows/nightly.yml/badge.svg)](https://github.com/Krzysztof318/MailFathom/actions/workflows/nightly.yml)
+
 **A brain for your mail — self-hosted, AI-native, and yours alone.**
 
 A mailbox is the largest archive most people own and the least usable one. Contracts, decisions, invoices, threads that ended without a conclusion, attachments nobody will ever find again: all of it is in there, and none of it is reachable except by scrolling. Mail clients are built to show you the newest of it, one message at a time. After twenty years of accumulation, that is the wrong shape entirely.
