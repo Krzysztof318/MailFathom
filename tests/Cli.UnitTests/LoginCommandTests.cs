@@ -236,7 +236,7 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Single(store.Read().Profiles);
     }
 
-    /// <summary>A name that is neither a stored profile nor an address is a typo, and saying which it was is the fix.</summary>
+    /// <summary>A name that is neither a stored profile nor an address is a mistake, and saying which it was is the fix.</summary>
     [Fact]
     public async Task Login_AnUnknownNameThatIsNotAnAddress_SaysToPassAnAddressInstead()
     {
@@ -245,7 +245,7 @@ public sealed class LoginCommandTests : IDisposable
         this.console.SecretToSupply = "not-a-real-key";
 
         // Act
-        var exitCode = await RunAsync(this.Context(this.CreateStore(), handler), "login", "--endpoint", "produciton");
+        var exitCode = await RunAsync(this.Context(this.CreateStore(), handler), "login", "--endpoint", "qa");
 
         // Assert
         Assert.Equal(1, exitCode);
