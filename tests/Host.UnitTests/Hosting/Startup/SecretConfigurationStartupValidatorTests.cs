@@ -7,6 +7,7 @@ using System.Text;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Access;
+using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Persistence;
@@ -645,7 +646,8 @@ public sealed class SecretConfigurationStartupValidatorTests
         SecretValueInterpretation interpretation = SecretValueInterpretation.ReferenceOnly,
         SecretMaterialSource source = SecretMaterialSource.SchemeAdapter,
         IDatabaseConnectionSettingsValidator? databaseConnectionSettings = null,
-        McpEndpointOptions? mcpEndpointOptions = null)
+        McpEndpointOptions? mcpEndpointOptions = null,
+        DataEncryptionOptions? dataEncryptionOptions = null)
     {
         var resolver = new PlaintextOnlySecretReferenceResolver { Source = source };
         var connectionSettingsValidator = databaseConnectionSettings ?? new StubDatabaseConnectionSettingsValidator();
@@ -656,6 +658,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         var validator = new SecretConfigurationStartupValidator(
             new StubSettingsSnapshot<MailSynchronizationOptions>(synchronizationOptions),
             new StubSettingsSnapshot<PersistenceOptions>(persistenceOptions),
+            new StubSettingsSnapshot<DataEncryptionOptions>(dataEncryptionOptions ?? new DataEncryptionOptions()),
             Options.Create(mcpEndpointOptions ?? new McpEndpointOptions()),
             new SecretConfigurationValidator(
                 resolver,

@@ -197,6 +197,22 @@ A Secrets Store CSI driver — Vault, Azure Key Vault, AWS Secrets Manager — n
 
 `LoadCredential=`, Compose secrets, and Kubernetes Secret files routinely end with a newline, and an untrimmed byte presents as a wrong password. MailFathom therefore strips **one** trailing newline when it decodes material as text. Binary material is never modified: a PKCS#12 bundle or a DER-encoded certificate survives resolution byte for byte.
 
+## The data-encryption key
+
+MailFathom seals values it stores under a key the deployment provisions, and the key arrives as an ordinary secret reference like every other credential. What differs is the material behind it: it is **base64 that decodes to exactly 32 bytes**, and startup refuses anything else naming the setting rather than accepting a weaker key.
+
+Generate one with:
+
+```console
+openssl rand -base64 32
+```
+
+**This is not the command beside it.** The two database passwords in a Compose deployment are generated with `openssl rand -base64 33`, which is right for a password and wrong for a key, so copying the neighbouring line produces material startup rejects. Thirty-two is what AES-256 takes.
+
+The key is generated once and never regenerated. Losing it makes every value sealed under it unopenable, and the failure appears at the next read rather than at the moment of loss, so **back it up with the database rather than beside it** — a database restored without its key restores nothing that was sealed. Nothing in MailFathom generates the key for you, in any deployment channel, for the same reason: a mechanism that can create a key can create a second one. [ADR 0005](../decisions/0005-data-encryption-key-ring-and-provisioning.md) records that decision and what each alternative costs.
+
+`DataEncryption:ActiveKeyId` selects which configured key new values are sealed under, and the ring keeps every key a stored value may still name. Rotating is therefore two steps and no downtime: add the new key, move `ActiveKeyId` to it, and leave the previous key configured until nothing references it. [Configuration reference](configuration-reference.md#dataencryption) states every key of the section.
+
 ## Certificate material
 
 A trust anchor is provisioned like any other secret, but the bytes behind it are loaded as a certificate rather than used as a credential. PEM, DER, and PKCS#12 all load, recognized from the material itself so a mistyped encoding hint cannot exist. Only PEM can be supplied inline, because the other two are binary; an inline block carrying them fails startup naming the encoding. A bundle's password, when it has one, goes in the nested `Password` block.
