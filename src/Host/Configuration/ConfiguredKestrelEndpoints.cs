@@ -13,7 +13,7 @@ namespace MailFathom.Host.Configuration;
 /// its socket whatever else the composition root binds.
 /// </para>
 /// <para>
-/// That is exactly the state <see cref="McpHttpsOptions" /> promises cannot exist: a clear-text listener serving the
+/// That is exactly the state <see cref="TransportHttpsOptions" /> promises cannot exist: a clear-text listener serving the
 /// same MCP route behind an endpoint an operator configured HTTPS for. Since the two cannot be reconciled — removing
 /// the configured endpoint is a decision only an operator can take — the conflict fails startup and names both sides.
 /// </para>
@@ -73,7 +73,7 @@ internal static class ConfiguredKestrelEndpoints
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     internal static IReadOnlyList<string> FindHttpsProfileConflicts(
         IConfiguration configuration,
-        McpHttpsOptions httpsSettings)
+        TransportHttpsOptions httpsSettings)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(httpsSettings);

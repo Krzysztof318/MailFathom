@@ -16,7 +16,7 @@ namespace MailFathom.Host.Security;
 /// chain construction that has no reason to happen per handshake. The authentication options handed to the platform are
 /// built per connection from it, since the platform is free to mutate what it is given.
 /// </remarks>
-internal sealed record McpTlsEndpointIdentity(
+internal sealed record TransportTlsEndpointIdentity(
     string ProfileName,
     SslStreamCertificateContext CertificateContext,
     SslProtocols EnabledSslProtocols);

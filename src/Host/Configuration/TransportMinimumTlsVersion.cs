@@ -17,7 +17,7 @@ namespace MailFathom.Host.Configuration;
 /// so the setting decides what is refused rather than what is preferred.
 /// </para>
 /// </remarks>
-internal enum McpMinimumTlsVersion
+internal enum TransportMinimumTlsVersion
 {
     /// <summary>Accept TLS 1.2 and TLS 1.3, which is what interoperates with every current client.</summary>
     Tls12 = 0,

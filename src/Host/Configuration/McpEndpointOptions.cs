@@ -68,7 +68,7 @@ internal sealed class McpEndpointOptions
     /// front supplies TLS. It is what makes <see cref="ClientCertificateProfiles" /> reachable without a reverse proxy,
     /// because a client certificate is presented during a handshake this process has to be the one terminating.
     /// </remarks>
-    public McpHttpsOptions Https { get; set; } = new();
+    public TransportHttpsOptions Https { get; set; } = new();
 
     /// <summary>Gets the client applications whose certificates the endpoint accepts, empty when mutual TLS is off.</summary>
     /// <remarks>

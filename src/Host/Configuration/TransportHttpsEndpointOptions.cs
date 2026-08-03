@@ -22,7 +22,7 @@ namespace MailFathom.Host.Configuration;
 /// refuses is a name that could not be a DNS name at all.
 /// </para>
 /// </remarks>
-internal sealed class McpHttpsEndpointOptions
+internal sealed class TransportHttpsEndpointOptions
 {
     /// <summary>Gets or sets the operator-chosen identity of this profile, unique across the configured profiles.</summary>
     /// <remarks>It is what every diagnostic names, so a rejected certificate is reported against a profile an operator recognizes rather than against an array position that renumbers on the next edit.</remarks>
@@ -45,7 +45,7 @@ internal sealed class McpHttpsEndpointOptions
     public int Port { get; set; } = 8443;
 
     /// <summary>Gets or sets the oldest TLS version this profile completes a handshake with.</summary>
-    public McpMinimumTlsVersion MinimumTlsVersion { get; set; } = McpMinimumTlsVersion.Tls12;
+    public TransportMinimumTlsVersion MinimumTlsVersion { get; set; } = TransportMinimumTlsVersion.Tls12;
 
     /// <summary>Gets or sets the HTTP versions this profile serves, or <see langword="null" /> to serve the default HTTP/1.1 and HTTP/2.</summary>
     /// <remarks>
@@ -54,19 +54,19 @@ internal sealed class McpHttpsEndpointOptions
     /// alone serving all three. Absent therefore means the default and an explicitly empty list is a configuration
     /// error, which are two different mistakes and are reported as such.
     /// </remarks>
-    public IList<McpHttpProtocol>? HttpProtocols { get; set; }
+    public IList<TransportHttpProtocol>? HttpProtocols { get; set; }
 
     /// <summary>Gets or sets where the certificate and private key this profile presents come from.</summary>
     public TlsServerCertificateOptions ServerCertificate { get; set; } = new();
 
     /// <summary>Gets the HTTP versions this profile serves, with the default applied.</summary>
-    internal IReadOnlyList<McpHttpProtocol> ServedHttpProtocols => this.HttpProtocols is { Count: > 0 } configured
+    internal IReadOnlyList<TransportHttpProtocol> ServedHttpProtocols => this.HttpProtocols is { Count: > 0 } configured
         ? [.. configured.Distinct()]
-        : [McpHttpProtocol.Http1, McpHttpProtocol.Http2];
+        : [TransportHttpProtocol.Http1, TransportHttpProtocol.Http2];
 
     /// <summary>Gets the address and port this profile binds, which profiles sharing one listener have in common.</summary>
     /// <exception cref="FormatException">Thrown when <see cref="BindAddress" /> is not an IP address, which validation reports before anything reads this.</exception>
-    internal McpHttpsListenerAddress ListenerAddress => new(IPAddress.Parse(this.BindAddress.Trim()), this.Port);
+    internal TransportHttpsListenerAddress ListenerAddress => new(IPAddress.Parse(this.BindAddress.Trim()), this.Port);
 
     /// <summary>Finds everything an operator must fix before this profile can be served.</summary>
     /// <param name="configurationPath">The configuration path of this profile, which prefixes every reported error.</param>
@@ -99,7 +99,7 @@ internal sealed class McpHttpsEndpointOptions
 
         if (!Enum.IsDefined(this.MinimumTlsVersion))
         {
-            yield return $"{configurationPath}:{nameof(this.MinimumTlsVersion)} — '{(int)this.MinimumTlsVersion}' names no TLS version; state '{nameof(McpMinimumTlsVersion.Tls12)}' or '{nameof(McpMinimumTlsVersion.Tls13)}'.";
+            yield return $"{configurationPath}:{nameof(this.MinimumTlsVersion)} — '{(int)this.MinimumTlsVersion}' names no TLS version; state '{nameof(TransportMinimumTlsVersion.Tls12)}' or '{nameof(TransportMinimumTlsVersion.Tls13)}'.";
         }
 
         foreach (var error in this.FindHttpProtocolErrors(configurationPath, http3Supported))
@@ -143,7 +143,7 @@ internal sealed class McpHttpsEndpointOptions
 
         if (configured.Count == 0)
         {
-            yield return $"{settingPath} — the list is empty, so the profile would serve no HTTP version at all; remove it to serve the default '{nameof(McpHttpProtocol.Http1)}' and '{nameof(McpHttpProtocol.Http2)}', or name the versions to serve.";
+            yield return $"{settingPath} — the list is empty, so the profile would serve no HTTP version at all; remove it to serve the default '{nameof(TransportHttpProtocol.Http1)}' and '{nameof(TransportHttpProtocol.Http2)}', or name the versions to serve.";
 
             yield break;
         }
@@ -152,7 +152,7 @@ internal sealed class McpHttpsEndpointOptions
 
         foreach (var protocol in undefined)
         {
-            yield return $"{settingPath} — '{(int)protocol}' names no HTTP version; state '{nameof(McpHttpProtocol.Http1)}', '{nameof(McpHttpProtocol.Http2)}', or '{nameof(McpHttpProtocol.Http3)}'.";
+            yield return $"{settingPath} — '{(int)protocol}' names no HTTP version; state '{nameof(TransportHttpProtocol.Http1)}', '{nameof(TransportHttpProtocol.Http2)}', or '{nameof(TransportHttpProtocol.Http3)}'.";
         }
 
         if (configured.Distinct().Count() != configured.Count)
@@ -162,9 +162,9 @@ internal sealed class McpHttpsEndpointOptions
 
         // Reported rather than silently dropped: an operator who asked for HTTP/3 and got HTTP/2 would read a working
         // endpoint and never learn that the version they configured is not the one being served.
-        if (!http3Supported && undefined.Length == 0 && configured.Contains(McpHttpProtocol.Http3))
+        if (!http3Supported && undefined.Length == 0 && configured.Contains(TransportHttpProtocol.Http3))
         {
-            yield return $"{settingPath} — '{nameof(McpHttpProtocol.Http3)}' is configured and this host cannot provide the QUIC transport it needs; install the platform's QUIC support or remove the version rather than have it quietly fall back.";
+            yield return $"{settingPath} — '{nameof(TransportHttpProtocol.Http3)}' is configured and this host cannot provide the QUIC transport it needs; install the platform's QUIC support or remove the version rather than have it quietly fall back.";
         }
     }
 }

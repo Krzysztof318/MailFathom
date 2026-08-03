@@ -307,9 +307,9 @@ public sealed class McpEndpointOptionsBindingTests
         // Assert
         Assert.True(options.Https.TerminatesTls);
         Assert.Equal(["public", "connector"], options.Https.Endpoints.Select(endpoint => endpoint.Name));
-        Assert.Equal(McpMinimumTlsVersion.Tls13, options.Https.Endpoints[0].MinimumTlsVersion);
+        Assert.Equal(TransportMinimumTlsVersion.Tls13, options.Https.Endpoints[0].MinimumTlsVersion);
         Assert.Equal(
-            [McpHttpProtocol.Http1, McpHttpProtocol.Http2],
+            [TransportHttpProtocol.Http1, TransportHttpProtocol.Http2],
             options.Https.Endpoints[0].ServedHttpProtocols);
         Assert.Equal(
             "file:/etc/mailfathom/tls/privkey.pem",
@@ -340,7 +340,7 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         Assert.Null(profile.HttpProtocols);
-        Assert.Equal([McpHttpProtocol.Http1, McpHttpProtocol.Http2], profile.ServedHttpProtocols);
+        Assert.Equal([TransportHttpProtocol.Http1, TransportHttpProtocol.Http2], profile.ServedHttpProtocols);
     }
 
     private static IConfiguration ConfigurationFrom(Dictionary<string, string?> values) =>

@@ -35,7 +35,7 @@ namespace MailFathom.Host.Security;
 /// name is known. Profiles sharing an address are therefore required to agree on it, which the section validates.
 /// </para>
 /// </remarks>
-internal static class McpHttpsEndpointBinder
+internal static class TransportHttpsEndpointBinder
 {
     /// <summary>Binds one Kestrel listener per address the configured profiles name.</summary>
     /// <param name="kestrelOptions">The server options being composed.</param>
@@ -45,8 +45,8 @@ internal static class McpHttpsEndpointBinder
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     internal static void Bind(
         KestrelServerOptions kestrelOptions,
-        McpHttpsOptions httpsSettings,
-        McpServerCertificateStore certificateStore,
+        TransportHttpsOptions httpsSettings,
+        TransportServerCertificateStore certificateStore,
         bool requestClientCertificates)
     {
         ArgumentNullException.ThrowIfNull(kestrelOptions);
@@ -83,9 +83,9 @@ internal static class McpHttpsEndpointBinder
     /// </remarks>
     [SuppressMessage("Security", "CA5359:Do not disable certificate validation", Justification = "CA5359 reads this callback as a client deciding to trust the server it dialled, where accepting everything defeats TLS. This is the server side of the handshake and the certificate is the client's: refusing here would end the connection for the private authority a trust profile names, and accepting here grants nothing, because whether the certificate identifies a client this deployment serves is decided afterwards by McpClientCertificateValidation against that profile's own anchors, expected names, and required usage. It is set only when a profile exists to make that decision, and it is the same posture HttpsConnectionAdapterOptions.ClientCertificateValidation states for a listener built from a URL.")]
     private static ValueTask<SslServerAuthenticationOptions> SelectIdentity(
-        McpServerCertificateStore certificateStore,
-        McpHttpsListenerAddress listener,
-        IReadOnlyList<McpHttpProtocol> servedProtocols,
+        TransportServerCertificateStore certificateStore,
+        TransportHttpsListenerAddress listener,
+        IReadOnlyList<TransportHttpProtocol> servedProtocols,
         bool requestClientCertificates,
         TlsHandshakeCallbackContext context)
     {
@@ -129,14 +129,14 @@ internal static class McpHttpsEndpointBinder
     }
 
     /// <summary>Maps the configured versions onto the flags a Kestrel listener is bound with.</summary>
-    private static HttpProtocols MapProtocols(IReadOnlyList<McpHttpProtocol> servedProtocols) =>
+    private static HttpProtocols MapProtocols(IReadOnlyList<TransportHttpProtocol> servedProtocols) =>
         servedProtocols.Aggregate(
             HttpProtocols.None,
             static (mapped, protocol) => mapped | protocol switch
             {
-                McpHttpProtocol.Http1 => HttpProtocols.Http1,
-                McpHttpProtocol.Http2 => HttpProtocols.Http2,
-                McpHttpProtocol.Http3 => HttpProtocols.Http3,
+                TransportHttpProtocol.Http1 => HttpProtocols.Http1,
+                TransportHttpProtocol.Http2 => HttpProtocols.Http2,
+                TransportHttpProtocol.Http3 => HttpProtocols.Http3,
                 _ => HttpProtocols.None,
             });
 
@@ -146,16 +146,16 @@ internal static class McpHttpsEndpointBinder
     /// clients through an alternative-service header, so offering it here would name a version this connection cannot
     /// switch to.
     /// </remarks>
-    private static List<SslApplicationProtocol> NegotiableProtocols(IReadOnlyList<McpHttpProtocol> servedProtocols)
+    private static List<SslApplicationProtocol> NegotiableProtocols(IReadOnlyList<TransportHttpProtocol> servedProtocols)
     {
         var negotiable = new List<SslApplicationProtocol>(capacity: 2);
 
-        if (servedProtocols.Contains(McpHttpProtocol.Http2))
+        if (servedProtocols.Contains(TransportHttpProtocol.Http2))
         {
             negotiable.Add(SslApplicationProtocol.Http2);
         }
 
-        if (servedProtocols.Contains(McpHttpProtocol.Http1))
+        if (servedProtocols.Contains(TransportHttpProtocol.Http1))
         {
             negotiable.Add(SslApplicationProtocol.Http11);
         }

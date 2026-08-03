@@ -61,7 +61,7 @@ public sealed class ConfiguredKestrelEndpointsTests
         var configuration = ConfigurationWith(("Kestrel:Endpoints:Http:Url", "http://0.0.0.0:8080"));
 
         // Act, Assert
-        Assert.Empty(ConfiguredKestrelEndpoints.FindHttpsProfileConflicts(configuration, new McpHttpsOptions()));
+        Assert.Empty(ConfiguredKestrelEndpoints.FindHttpsProfileConflicts(configuration, new TransportHttpsOptions()));
     }
 
     [Fact]
@@ -156,11 +156,11 @@ public sealed class ConfiguredKestrelEndpointsTests
                 new KeyValuePair<string, string?>(setting.Key, setting.Value)))
             .Build();
 
-    private static McpHttpsOptions HttpsProfiles()
+    private static TransportHttpsOptions HttpsProfiles()
     {
-        var options = new McpHttpsOptions();
+        var options = new TransportHttpsOptions();
 
-        options.Endpoints.Add(new McpHttpsEndpointOptions
+        options.Endpoints.Add(new TransportHttpsEndpointOptions
         {
             Name = "public",
             Domain = "mail.example.test",

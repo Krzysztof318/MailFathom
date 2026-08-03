@@ -17,7 +17,7 @@ namespace MailFathom.Host.Configuration;
 /// uses TLS 1.3 whatever floor the endpoint configures.
 /// </para>
 /// </remarks>
-internal enum McpHttpProtocol
+internal enum TransportHttpProtocol
 {
     /// <summary>HTTP/1.1, which every MCP client speaks.</summary>
     Http1 = 0,

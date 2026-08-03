@@ -65,7 +65,7 @@ public sealed class McpTransportEncryptionWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var settings = Enabled();
-        settings.Https.Endpoints.Add(new McpHttpsEndpointOptions
+        settings.Https.Endpoints.Add(new TransportHttpsEndpointOptions
         {
             Name = "public",
             Domain = "mail.example.test",

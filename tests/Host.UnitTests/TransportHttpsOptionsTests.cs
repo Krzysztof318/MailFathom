@@ -16,7 +16,7 @@ namespace MailFathom.Host.UnitTests;
 /// to their other endpoint. The QUIC capability is a parameter rather than a machine property so both answers are
 /// stated here rather than depending on the host the suite happens to run on.
 /// </remarks>
-public sealed class McpHttpsOptionsTests
+public sealed class TransportHttpsOptionsTests
 {
     private const string SectionPath = "McpEndpoint:Https";
 
@@ -24,7 +24,7 @@ public sealed class McpHttpsOptionsTests
     public void TerminatesTls_NoProfiles_IsTheClearTextPosture()
     {
         // Arrange, Act
-        var options = new McpHttpsOptions();
+        var options = new TransportHttpsOptions();
 
         // Assert
         Assert.False(options.TerminatesTls);
@@ -172,7 +172,7 @@ public sealed class McpHttpsOptionsTests
         var served = Profile().ServedHttpProtocols;
 
         // Assert
-        Assert.Equal([McpHttpProtocol.Http1, McpHttpProtocol.Http2], served);
+        Assert.Equal([TransportHttpProtocol.Http1, TransportHttpProtocol.Http2], served);
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public sealed class McpHttpsOptionsTests
     {
         // Arrange
         var profile = Profile();
-        profile.HttpProtocols = [McpHttpProtocol.Http1, McpHttpProtocol.Http1];
+        profile.HttpProtocols = [TransportHttpProtocol.Http1, TransportHttpProtocol.Http1];
 
         // Act
         var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
@@ -195,7 +195,7 @@ public sealed class McpHttpsOptionsTests
     {
         // Arrange
         var profile = Profile();
-        profile.HttpProtocols = [McpHttpProtocol.Http1, McpHttpProtocol.Http2, McpHttpProtocol.Http3];
+        profile.HttpProtocols = [TransportHttpProtocol.Http1, TransportHttpProtocol.Http2, TransportHttpProtocol.Http3];
 
         // Act
         var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: false));
@@ -209,7 +209,7 @@ public sealed class McpHttpsOptionsTests
     {
         // Arrange
         var profile = Profile();
-        profile.HttpProtocols = [McpHttpProtocol.Http3];
+        profile.HttpProtocols = [TransportHttpProtocol.Http3];
 
         // Act, Assert
         Assert.Empty(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
@@ -221,7 +221,7 @@ public sealed class McpHttpsOptionsTests
     {
         // Arrange
         var profile = Profile();
-        profile.MinimumTlsVersion = (McpMinimumTlsVersion)7;
+        profile.MinimumTlsVersion = (TransportMinimumTlsVersion)7;
 
         // Act
         var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
@@ -325,7 +325,7 @@ public sealed class McpHttpsOptionsTests
         // Arrange
         var first = Profile(name: "first", domain: "one.example.test");
         var second = Profile(name: "second", domain: "two.example.test");
-        second.HttpProtocols = [McpHttpProtocol.Http1];
+        second.HttpProtocols = [TransportHttpProtocol.Http1];
 
         // Act
         var error = Assert.Single(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true));
@@ -341,7 +341,7 @@ public sealed class McpHttpsOptionsTests
         // Arrange
         var first = Profile(name: "first", domain: "one.example.test");
         var second = Profile(name: "second", domain: "two.example.test");
-        second.MinimumTlsVersion = McpMinimumTlsVersion.Tls13;
+        second.MinimumTlsVersion = TransportMinimumTlsVersion.Tls13;
 
         // Act, Assert
         Assert.Empty(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true));
@@ -354,7 +354,7 @@ public sealed class McpHttpsOptionsTests
         var first = Profile(name: "first", domain: "one.example.test");
         var second = Profile(name: "second", domain: "two.example.test");
         second.Port = 9443;
-        second.HttpProtocols = [McpHttpProtocol.Http1];
+        second.HttpProtocols = [TransportHttpProtocol.Http1];
 
         // Act, Assert
         Assert.Empty(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true));
@@ -435,9 +435,9 @@ public sealed class McpHttpsOptionsTests
         Assert.Empty(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true));
     }
 
-    private static McpHttpsOptions With(params McpHttpsEndpointOptions[] profiles)
+    private static TransportHttpsOptions With(params TransportHttpsEndpointOptions[] profiles)
     {
-        var options = new McpHttpsOptions();
+        var options = new TransportHttpsOptions();
 
         foreach (var profile in profiles)
         {
@@ -447,7 +447,7 @@ public sealed class McpHttpsOptionsTests
         return options;
     }
 
-    private static McpHttpsEndpointOptions Profile(string name = "public", string domain = "mail.example.test") => new()
+    private static TransportHttpsEndpointOptions Profile(string name = "public", string domain = "mail.example.test") => new()
     {
         Name = name,
         Domain = domain,

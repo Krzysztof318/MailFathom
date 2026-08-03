@@ -24,10 +24,10 @@ namespace MailFathom.Host.Configuration;
 /// without the protection the profile was configured to add.
 /// </para>
 /// </remarks>
-internal sealed class McpHttpsOptions
+internal sealed class TransportHttpsOptions
 {
     /// <summary>Gets the HTTPS profiles served, empty when Kestrel terminates no TLS of its own.</summary>
-    public IList<McpHttpsEndpointOptions> Endpoints { get; } = [];
+    public IList<TransportHttpsEndpointOptions> Endpoints { get; } = [];
 
     /// <summary>Gets whether any profile is configured, which is what decides between the two postures.</summary>
     internal bool TerminatesTls => this.Endpoints.Count > 0;

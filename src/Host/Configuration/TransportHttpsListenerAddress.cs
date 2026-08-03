@@ -15,4 +15,4 @@ namespace MailFathom.Host.Configuration;
 /// everything a listener owns rather than a connection — the socket and the set of HTTP versions — is therefore common
 /// to all of them.
 /// </remarks>
-internal readonly record struct McpHttpsListenerAddress(IPAddress Address, int Port);
+internal readonly record struct TransportHttpsListenerAddress(IPAddress Address, int Port);

@@ -32,39 +32,49 @@ namespace MailFathom.Host.Security;
 /// The store owns every certificate it loaded and releases them on disposal, which the container performs at shutdown.
 /// </para>
 /// </remarks>
-internal sealed partial class McpServerCertificateStore : IDisposable
+internal sealed partial class TransportServerCertificateStore : IDisposable
 {
-    private readonly McpHttpsOptions httpsSettings;
+    private readonly TransportHttpsOptions httpsSettings;
+    private readonly string configurationSectionPath;
     private readonly TlsServerCertificateLoader certificateLoader;
     private readonly TimeProvider timeProvider;
-    private readonly ILogger<McpServerCertificateStore> logger;
+    private readonly ILogger<TransportServerCertificateStore> logger;
     private readonly List<TlsServerCertificate> ownedCertificates = [];
 
     // Frozen because it is built once at startup and then read on every handshake, which is exactly the shape the
     // frozen collections are for. Empty until loading has published, so a handshake that somehow arrives first is
     // refused rather than served by a half-filled lookup.
-    private FrozenDictionary<McpHttpsListenerAddress, FrozenDictionary<string, McpTlsEndpointIdentity>> identities =
-        FrozenDictionary<McpHttpsListenerAddress, FrozenDictionary<string, McpTlsEndpointIdentity>>.Empty;
+    private FrozenDictionary<TransportHttpsListenerAddress, FrozenDictionary<string, TransportTlsEndpointIdentity>> identities =
+        FrozenDictionary<TransportHttpsListenerAddress, FrozenDictionary<string, TransportTlsEndpointIdentity>>.Empty;
 
     private bool disposed;
 
-    /// <summary>Initializes a new certificate store over the configured HTTPS profiles.</summary>
-    /// <param name="endpointSettings">The endpoint settings composition read.</param>
+    /// <summary>Initializes a new certificate store over one surface's configured HTTPS profiles.</summary>
+    /// <param name="httpsSettings">The HTTPS profiles this store loads, which belong to one endpoint.</param>
+    /// <param name="configurationSectionPath">The configuration path those profiles were bound from, which prefixes every reported error.</param>
     /// <param name="certificateLoader">The loader that turns configured material into a validated identity.</param>
     /// <param name="timeProvider">The clock expiry notices are measured against.</param>
     /// <param name="logger">The startup logger.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    public McpServerCertificateStore(
-        IOptions<McpEndpointOptions> endpointSettings,
+    /// <remarks>
+    /// The profiles arrive as an argument rather than being read from an endpoint's settings, so an endpoint added later
+    /// gets a store of its own instead of this one growing a second section to look in. Each store owns and disposes the
+    /// certificates it loaded, which is what keeps one endpoint's material out of another's lookup.
+    /// </remarks>
+    public TransportServerCertificateStore(
+        TransportHttpsOptions httpsSettings,
+        string configurationSectionPath,
         TlsServerCertificateLoader certificateLoader,
         TimeProvider timeProvider,
-        ILogger<McpServerCertificateStore> logger)
+        ILogger<TransportServerCertificateStore> logger)
     {
-        ArgumentNullException.ThrowIfNull(endpointSettings);
+        ArgumentNullException.ThrowIfNull(httpsSettings);
+        ArgumentNullException.ThrowIfNull(configurationSectionPath);
         ArgumentNullException.ThrowIfNull(certificateLoader);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        this.httpsSettings = endpointSettings.Value.Https;
+        this.httpsSettings = httpsSettings;
+        this.configurationSectionPath = configurationSectionPath;
         this.certificateLoader = certificateLoader;
         this.timeProvider = timeProvider;
         this.logger = logger;
@@ -83,13 +93,13 @@ internal sealed partial class McpServerCertificateStore : IDisposable
     internal async Task LoadAsync(CancellationToken cancellationToken)
     {
         var errors = new List<string>();
-        var loaded = new Dictionary<McpHttpsListenerAddress, Dictionary<string, McpTlsEndpointIdentity>>();
+        var loaded = new Dictionary<TransportHttpsListenerAddress, Dictionary<string, TransportTlsEndpointIdentity>>();
 
         // The loop stays a loop rather than becoming a projection: each step awaits a retrieval, and each successful
         // step takes ownership of a certificate that has to be released even when a later step fails.
         foreach (var (index, endpoint) in this.httpsSettings.Endpoints.Index())
         {
-            var configurationPath = $"{McpEndpointOptions.SectionName}:{nameof(McpEndpointOptions.Https)}:{nameof(McpHttpsOptions.Endpoints)}:{index}";
+            var configurationPath = $"{this.configurationSectionPath}:{nameof(TransportHttpsOptions.Endpoints)}:{index}";
             var domain = endpoint.Domain.Trim();
 
             var result = await this.certificateLoader.LoadAsync(
@@ -107,14 +117,14 @@ internal sealed partial class McpServerCertificateStore : IDisposable
             this.ownedCertificates.Add(certificate);
             this.ReportLoaded(endpoint.Name, certificate.Leaf);
 
-            var identity = new McpTlsEndpointIdentity(
+            var identity = new TransportTlsEndpointIdentity(
                 endpoint.Name,
                 SslStreamCertificateContext.Create(certificate.Leaf, [.. certificate.Intermediates]),
                 EnabledProtocolsFor(endpoint.MinimumTlsVersion));
 
             if (!loaded.TryGetValue(endpoint.ListenerAddress, out var perListener))
             {
-                perListener = new Dictionary<string, McpTlsEndpointIdentity>(StringComparer.OrdinalIgnoreCase);
+                perListener = new Dictionary<string, TransportTlsEndpointIdentity>(StringComparer.OrdinalIgnoreCase);
                 loaded.Add(endpoint.ListenerAddress, perListener);
             }
 
@@ -124,8 +134,8 @@ internal sealed partial class McpServerCertificateStore : IDisposable
         if (errors.Count > 0)
         {
             throw new OptionsValidationException(
-                McpEndpointOptions.SectionName,
-                typeof(McpEndpointOptions),
+                this.configurationSectionPath,
+                typeof(TransportHttpsOptions),
                 errors);
         }
 
@@ -143,7 +153,7 @@ internal sealed partial class McpServerCertificateStore : IDisposable
     /// publishes an exact domain, so a connection that names none is one this deployment has no identity for — and
     /// picking one anyway would hand a certificate to a client that never asked whether it was the right one.
     /// </remarks>
-    internal McpTlsEndpointIdentity? Find(McpHttpsListenerAddress listener, string? serverName)
+    internal TransportTlsEndpointIdentity? Find(TransportHttpsListenerAddress listener, string? serverName)
     {
         if (string.IsNullOrEmpty(serverName))
         {
@@ -161,9 +171,9 @@ internal sealed partial class McpServerCertificateStore : IDisposable
     /// A floor rather than a selection, so 1.2 still admits 1.3. Nothing below 1.2 appears in either branch, which is
     /// what makes a deprecated version unreachable by configuration rather than merely undocumented.
     /// </remarks>
-    [SuppressMessage("Security", "CA5398:Avoid hardcoded SslProtocols values", Justification = "Naming the versions is the feature. CA5398 asks for SslProtocols.None so the operating system chooses, which is the opposite of what this setting exists to do: it hands the floor back to machine policy, where a deployment that must refuse TLS 1.2 cannot state so and a policy change can silently lower what the endpoint accepts. Both values named here are current, nothing below TLS 1.2 is reachable through the configuration that reaches this method, and a future version is added by extending McpMinimumTlsVersion rather than by inheriting whatever the machine allows.")]
-    private static SslProtocols EnabledProtocolsFor(McpMinimumTlsVersion minimumVersion) =>
-        minimumVersion == McpMinimumTlsVersion.Tls13
+    [SuppressMessage("Security", "CA5398:Avoid hardcoded SslProtocols values", Justification = "Naming the versions is the feature. CA5398 asks for SslProtocols.None so the operating system chooses, which is the opposite of what this setting exists to do: it hands the floor back to machine policy, where a deployment that must refuse TLS 1.2 cannot state so and a policy change can silently lower what the endpoint accepts. Both values named here are current, nothing below TLS 1.2 is reachable through the configuration that reaches this method, and a future version is added by extending TransportMinimumTlsVersion rather than by inheriting whatever the machine allows.")]
+    private static SslProtocols EnabledProtocolsFor(TransportMinimumTlsVersion minimumVersion) =>
+        minimumVersion == TransportMinimumTlsVersion.Tls13
             ? SslProtocols.Tls13
             : SslProtocols.Tls12 | SslProtocols.Tls13;
 

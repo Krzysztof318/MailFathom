@@ -693,7 +693,7 @@ PKCS#12 bundle may not, because it is binary and has no faithful representation 
 Startup records what each profile presents and when it stops working:
 
 ```text
-info: MailFathom.Host.Security.McpServerCertificateStore
+info: MailFathom.Host.Security.TransportServerCertificateStore
       The MCP HTTPS profile public presents a server certificate valid until 2027-01-31 00:00:00Z.
 ```
 
