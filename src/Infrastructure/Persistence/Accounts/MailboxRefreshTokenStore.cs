@@ -76,10 +76,19 @@ internal sealed class MailboxRefreshTokenStore(
     {
         ArgumentNullException.ThrowIfNull(refreshToken);
 
-        var sealedToken = await fieldEncryptor.SealAsync(
-            BindingFor(accountId),
-            refreshToken.RevealBytes().ToArray(),
-            cancellationToken);
+        // The encryptor takes the plaintext across an async boundary, so it cannot be a span and has to be a copy the
+        // token does not own. That copy is this method's to erase: leaving it for the collector would put the credential
+        // back on the managed heap for an unbounded time, which is the whole thing the domain type refuses to do.
+        var plaintext = refreshToken.RevealBytes().ToArray();
+        SealedValue sealedToken;
+        try
+        {
+            sealedToken = await fieldEncryptor.SealAsync(BindingFor(accountId), plaintext, cancellationToken);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(plaintext);
+        }
 
         var storedAccountId = accountId.Value;
         var ciphertext = sealedToken.Ciphertext.ToArray();

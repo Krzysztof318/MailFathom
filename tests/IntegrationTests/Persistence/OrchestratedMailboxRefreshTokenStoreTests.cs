@@ -14,17 +14,19 @@ using Xunit;
 
 namespace MailFathom.IntegrationTests.Persistence;
 
-/// <summary>Proves a refresh token survives its sealed <c>bytea</c> column, and refuses to open for anyone else.</summary>
+/// <summary>Proves a refresh token survives its sealed <c>bytea</c> column, that a stale write cannot replace it, and that it refuses to open for anyone else.</summary>
 /// <remarks>
-/// Neither claim is reachable from a unit test. What is stored has to cross a real provider and a real column before the
-/// row can be inspected for the plaintext it must not carry, and the account binding only means something once a row can
-/// actually be moved between accounts with an <c>UPDATE</c> — which is exactly what a database copy, a restore, or a
-/// mistaken repair would do.
+/// None of the three is reachable from a unit test. What is stored has to cross a real provider and a real column before
+/// the row can be inspected for the plaintext it must not carry; the conflict guard is a <c>WHERE</c> clause only
+/// PostgreSQL evaluates; and the account binding only means something once a row can actually be moved between accounts
+/// with an <c>UPDATE</c> — which is exactly what a database copy, a restore, or a mistaken repair would do.
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestrationFixture orchestration)
 {
     private const string RoundTrippedAccount = "refresh-token-round-trip";
+
+    private const string StragglerWriteAccount = "refresh-token-straggler";
 
     private const string MovedRowAccount = "refresh-token-binding";
 
@@ -59,6 +61,44 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         // for the bytes is what a disclosure of the database would amount to, so it is what the assertion does.
         Assert.DoesNotContain(Encoding.UTF8.GetBytes("the-rotated-refresh-token"), storedRow.SealedToken);
         Assert.DoesNotContain(Encoding.UTF8.GetBytes("the-seeded-refresh-token"), storedRow.SealedToken);
+    }
+
+    /// <summary>A write that started before the row it would replace is refused rather than winning by arriving last.</summary>
+    /// <remarks>
+    /// The guard is a <c>WHERE</c> clause on the conflict update, so only the database can decide it, and the test above
+    /// cannot reach it: two sequential saves carry naturally increasing timestamps and take the accepting branch every
+    /// time. Moving the stored row's own timestamp forward is what a fresher writer leaves behind, and it is the only
+    /// way to make the next real save arrive stale without a clock this suite does not control.
+    /// </remarks>
+    [Fact]
+    public async Task SaveTokenAsync_AWriteOlderThanTheStoredRow_LeavesTheNewerTokenInPlace()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var accountId = MailAccountId.Create(StragglerWriteAccount);
+        await SaveAsync(services, accountId, "the-current-refresh-token", cancellationToken);
+
+        await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailFathomDbContext>().Database.ExecuteSqlAsync(
+                $"""
+                 UPDATE mailbox_refresh_tokens
+                 SET "UpdatedAt" = "UpdatedAt" + INTERVAL '1 hour'
+                 WHERE "MailboxAccountId" = {StragglerWriteAccount}
+                 """,
+                token),
+            cancellationToken);
+
+        // Act — a delayed or retried write carrying a token the authorization server has already replaced.
+        await SaveAsync(services, accountId, "the-already-invalidated-token", cancellationToken);
+
+        // Assert
+        using var readBack = await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IMailboxRefreshTokenStore>().FindTokenAsync(accountId, token),
+            cancellationToken);
+
+        Assert.NotNull(readBack);
+        Assert.Equal("the-current-refresh-token", readBack.RevealAsString());
     }
 
     /// <summary>A row moved between accounts fails to open rather than opening as the wrong owner's credential.</summary>

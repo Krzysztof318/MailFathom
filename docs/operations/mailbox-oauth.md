@@ -228,21 +228,34 @@ already had.
 
 A refresh token is still a long-lived credential you can rotate deliberately, through
 [secret rotation](secret-rotation.md). Repointing the reference is picked up by the next token request with no restart
-— unless a token has already been stored for that account, in which case the stored one wins and the way to replace it
-is to re-run the authorization.
+— **but only while no token has been stored for that account.** Once one has, the stored token wins on every request and
+the reference is never read again.
+
+**Nothing operator-facing replaces a stored token today.** `mfctl mailbox authorize` obtains a refresh token and prints
+it for you to provision; it writes nothing to the deployment, so re-running it does not change what a stored account
+sends. Writing a grant straight to a deployment through the administrative endpoint is [#331](https://github.com/Krzysztof318/MailFathom/issues/331)
+and does not exist yet. Until it does, the only way to make an account fall back to its configured reference is to
+delete its row with any PostgreSQL client:
+
+```sql
+DELETE FROM mailbox_refresh_tokens WHERE "MailboxAccountId" = 'workspace';
+```
+
+The next token request then reads the reference again, and stores whatever the authorization server rotates to next.
 
 Two failures are worth knowing about, because neither is silent and both end the same way. If MailFathom cannot write
 the rotated token — the database is unreachable, the key ring is gone — the token request still succeeds and the
 failure is logged as an error naming the account; the account keeps working until the token it replaced stops being
 accepted. If the process stops between receiving a rotated token and storing it, that rotation is lost. In both cases
-the account eventually answers `invalid_grant`, and the repair is to run `mfctl mailbox authorize` again.
+the account eventually answers `invalid_grant`, and the repair is the two steps above: delete the stored row, then
+provision a token from a fresh `mfctl mailbox authorize` at the configured reference.
 
 ## Troubleshooting
 
 | What you see | What it means |
 | --- | --- |
 | `no_refresh_token_issued` | The grant returned an access token only. For Google, consent was not re-prompted; the command already forces it, so check that the client is a Desktop app. For Microsoft, `offline_access` is missing from the scope. |
-| `invalid_grant` at startup or in a run | The refresh token is revoked, expired, or belongs to a different client. Re-run the authorization. A rotation MailFathom could not store reaches you this way as well; the error logged when the store failed says so. |
+| `invalid_grant` at startup or in a run | The refresh token is revoked, expired, or belongs to a different client. Re-run the authorization and provision the result at the configured reference — and if a token has already been stored for that account, delete its row first, because otherwise the reference is not read. [Rotation](#rotation) has the statement. A rotation MailFathom could not store reaches you this way too; the error logged when the store failed says so. |
 | `The rotated refresh token … could not be stored` | The database was unreachable, or the key ring the value seals under is not configured. The account keeps working until the previous token stops being accepted, so fix the cause and it recovers on the next rotation. |
 | `The data-encryption key ring configures no key` | A stored token names a key the ring no longer holds. Restore that key entry; a stored value cannot be opened without it. |
 | `invalid_client` | The client ID or client secret does not match the registration, or a confidential client was authorized as a public one. |
