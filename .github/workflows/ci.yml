@@ -150,9 +150,12 @@ jobs:
         with:
           persist-credentials: false
 
-      # Under twenty seconds, and nothing else is provisioned for it: the suite fakes `dotnet` with a symlink
-      # to itself, so no SDK, no restore, and no NuGet cache, and it reaches no network. `jq` is the one
-      # tool it needs beyond git and bash, and the runner image carries it.
+      # Fifteen seconds on a GitHub-hosted runner, and nothing else is provisioned for it: the suite fakes
+      # `dotnet` with a symlink to itself, so no SDK, no restore, and no NuGet cache, and it reaches no
+      # network. `jq` is the one tool it needs beyond git and bash, and the runner image carries it. The
+      # suite takes rather longer than this on a developer machine, where it is one step of the full gate
+      # and competes with everything else running there; the figure above is what the job costs a pull
+      # request, which is the only cost this file is about.
       - name: Run the workflow contracts
         run: bash scripts/test-agent-workflow.sh
 
