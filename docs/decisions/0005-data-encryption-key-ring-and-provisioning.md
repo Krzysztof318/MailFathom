@@ -95,7 +95,11 @@ The generating command is therefore `openssl rand -base64 32`, and it is documen
 
 **The chart must never generate the key, and neither must a Compose hook.** A Helm-generated value regenerates on every `helm upgrade` unless it is guarded with `lookup`, and `lookup` returns nothing during `helm template`, during a dry run, and under Argo CD. For a password that is a reset an operator notices and repairs. For a data-encryption key it is every sealed row becoming permanently unopenable, discovered at the first read after the upgrade rather than at the upgrade.
 
-**Local development is the one exception, and it is an exception because the conditions that make generation unsafe do not hold there.** The Aspire AppHost generates 32 bytes on first start and stores them in .NET user secrets, the way it already keeps the PostgreSQL password stable across runs. There is one writer, the store persists across runs, it lives on the developer's machine rather than in the deployment, and it never reaches a published artifact. A developer therefore runs nothing by hand and still gets a key that survives a restart, which is what makes the local database's sealed rows keep opening.
+**Local development is the one place where the operator's step is the wrong answer, and how it is answered is deliberately left open.** A developer running the Aspire app host is not provisioning a deployment, and a key they have to generate by hand before the first `dotnet run` is ceremony bought for nothing: the local database holds synthetic mail and the machine is not a deployment.
+
+What that exception must not be is generation into a store that can outlive, or be outlived by, the data it protects. `src/AppHost/Program.cs` states the PostgreSQL password as the fixed constant `postgres` rather than generating one for exactly that reason — a generated password persisted per run diverges from a data volume that survives it, because PostgreSQL applies a password when it initializes an empty data directory and never again. A key is worse under the same failure: a diverged password reports an authentication error, and a diverged key leaves every locally sealed row unopenable.
+
+So the two candidates are a fixed development constant, which cannot diverge from itself and matches what the password already does, or generation into user secrets, which is what the password deliberately does not do. **Neither is implemented.** Nothing in the repository generates or persists a data-encryption key today, and until one exists a developer configures the section themselves or runs without it. Issue 329 carries the mechanism, and this record is `proposed`, so the choice belongs to the review of that change rather than to this text.
 
 ### Consequences
 
@@ -107,7 +111,7 @@ The generating command is therefore `openssl rand -base64 32`, and it is documen
 - Neutral, because MailFathom joins the set of systems whose backup is incomplete without a second artifact. That is true of every encrypted store and it is a documentation obligation rather than a design flaw.
 - Bad, because losing the key loses the sealed data. Today that means re-authorizing every mailbox; once a second column is sealed it will mean more, and the cost of the mistake grows without the mechanism changing.
 - Bad, because the operator has one more step at install. It is one line between two identical lines they already run, and it is the price of the two `Good` entries above.
-- Bad, because a developer's local key lives in user secrets in the clear. That is the same protection the local database password already has, on a machine that is not a deployment, and raising it would mean giving a developer the operator's ceremony back.
+- Bad, because local development is left without an answer for now: until the mechanism above is chosen and built, a developer either configures the section themselves or runs without it, which is the ceremony this decision says they should not need.
 
 ## Validation
 

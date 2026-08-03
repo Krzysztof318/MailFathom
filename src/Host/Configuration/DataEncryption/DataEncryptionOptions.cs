@@ -131,6 +131,6 @@ internal sealed partial class DataEncryptionOptions : IValidatableObject
     /// configuration file decide how a log line parses. It is additionally persisted beside every value it seals, which
     /// is why the set is narrow rather than merely careful.
     /// </remarks>
-    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z", RegexOptions.CultureInvariant)]
     private static partial Regex AcceptedKeyId();
 }

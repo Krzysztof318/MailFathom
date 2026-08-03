@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Buffers;
 using System.Security.Cryptography;
 using MailFathom.Common;
 using MailFathom.Infrastructure.Secrets.Resolution;
@@ -68,14 +67,17 @@ public sealed class DataEncryptionKey : IDisposable
 
         failure = null;
 
-        var encoded = ArrayPool<char>.Shared.Rent(material.TextLength);
-        var decoded = new byte[AesGcmEnvelope.KeySizeInBytes + 1];
+        // Both buffers hold the key, so both are pinned: an unpinned buffer can be relocated by the collector while it
+        // holds live material, which leaves a copy behind that the erasure below never reaches. This is the same
+        // allocation ResolvedSecret and every other reader of revealed material in this system uses, for that reason.
+        var encoded = GC.AllocateArray<char>(material.TextLength, pinned: true);
+        var decoded = GC.AllocateArray<byte>(AesGcmEnvelope.KeySizeInBytes + 1, pinned: true);
 
         try
         {
-            material.RevealTextInto(encoded.AsSpan(0, material.TextLength));
+            material.RevealTextInto(encoded);
 
-            if (!Convert.TryFromBase64Chars(encoded.AsSpan(0, material.TextLength), decoded, out var decodedLength))
+            if (!Convert.TryFromBase64Chars(encoded, decoded, out var decodedLength))
             {
                 failure = DataEncryptionKeyMaterialFailure.NotBase64;
 
@@ -93,11 +95,8 @@ public sealed class DataEncryptionKey : IDisposable
         }
         finally
         {
-            // Both buffers held the key. The pooled one is erased before it is returned, because a pooled buffer handed
-            // back uncleared gives the material to the next unrelated caller.
             CryptographicOperations.ZeroMemory(decoded);
             encoded.AsSpan().Clear();
-            ArrayPool<char>.Shared.Return(encoded);
         }
     }
 

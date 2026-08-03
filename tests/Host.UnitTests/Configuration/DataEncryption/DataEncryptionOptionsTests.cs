@@ -131,10 +131,14 @@ public sealed class DataEncryptionOptionsTests
     [InlineData("2026 08")]
     [InlineData("2026/08")]
     [InlineData("key\nid")]
+    [InlineData("2026-08\n")]
+    [InlineData("2026-08\r\n")]
     public void Validate_AnUnacceptableKeyIdentifier_IsRefused(string keyId)
     {
         // Arrange — the identifier is written into log lines and metric labels without escaping and is persisted beside
-        // every value it seals, so the accepted set is narrow rather than merely careful.
+        // every value it seals, so the accepted set is narrow rather than merely careful. The trailing-newline cases are
+        // why the pattern anchors on \z: `$` also matches immediately before one trailing newline, so it would admit
+        // exactly the character the set exists to keep out.
         var options = RingOf((keyId, "systemd-credential:mailfathom-data-key"));
         options.ActiveKeyId = keyId;
 
