@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Cli.UnitTests;
@@ -51,9 +52,9 @@ public sealed class LoginCommandTests : IDisposable
         await RunAsync(this.Context(this.CreateStore(), handler), "login", "--endpoint", Endpoint);
 
         // Assert
-        Assert.Equal("Bearer", handler.LastAuthorization?.Scheme);
-        Assert.Equal("not-a-real-key", handler.LastAuthorization?.Parameter);
-        Assert.Equal("/api/admin/session", handler.LastPath);
+        Assert.Equal("Bearer", handler.LastAuthorization()?.Scheme);
+        Assert.Equal("not-a-real-key", handler.LastAuthorization()?.Parameter);
+        Assert.Equal("/api/admin/session", handler.LastPath());
     }
 
     /// <summary>A refused credential must not reach the store, or the next command would present one the deployment already rejected.</summary>
@@ -181,7 +182,7 @@ public sealed class LoginCommandTests : IDisposable
 
         // Assert
         Assert.Equal(1, exitCode);
-        Assert.Equal(0, handler.RequestCount);
+        Assert.Empty(handler.RecordedRequests);
     }
 
     /// <summary>The profile is named after the host unless the operator says otherwise, so one address needs no second argument.</summary>
@@ -249,7 +250,7 @@ public sealed class LoginCommandTests : IDisposable
 
         // Assert
         Assert.Equal(1, exitCode);
-        Assert.Equal(0, handler.RequestCount);
+        Assert.Empty(handler.RecordedRequests);
         Assert.Contains(
             this.console.Errors,
             line => line.Contains("neither a stored profile nor an endpoint address", StringComparison.Ordinal));
@@ -269,7 +270,7 @@ public sealed class LoginCommandTests : IDisposable
 
         // Assert
         Assert.Equal(1, exitCode);
-        Assert.Equal(0, handler.RequestCount);
+        Assert.Empty(handler.RecordedRequests);
     }
 
     [Fact]
@@ -306,7 +307,7 @@ public sealed class LoginCommandTests : IDisposable
 
         // Assert
         Assert.Equal(1, exitCode);
-        Assert.Equal(0, handler.RequestCount);
+        Assert.Empty(handler.RecordedRequests);
         Assert.Contains(
             this.console.Errors,
             line => line.Contains("Not signed in", StringComparison.Ordinal)
@@ -326,7 +327,7 @@ public sealed class LoginCommandTests : IDisposable
 
         // Assert
         Assert.Equal(0, exitCode);
-        Assert.Equal("not-a-real-key", handler.LastAuthorization?.Parameter);
+        Assert.Equal("not-a-real-key", handler.LastAuthorization()?.Parameter);
         Assert.Contains(this.console.Lines, line => line.Contains("production", StringComparison.Ordinal));
     }
 
@@ -345,7 +346,7 @@ public sealed class LoginCommandTests : IDisposable
 
         // Assert
         Assert.Equal(0, exitCode);
-        Assert.Equal("staging-key", handler.LastAuthorization?.Parameter);
+        Assert.Equal("staging-key", handler.LastAuthorization()?.Parameter);
         Assert.Equal("production", store.Resolve(requestedDeployment: null).Name);
     }
 
@@ -363,7 +364,7 @@ public sealed class LoginCommandTests : IDisposable
 
         // Assert
         Assert.Equal(0, exitCode);
-        Assert.Equal(0, handler.RequestCount);
+        Assert.Empty(handler.RecordedRequests);
         Assert.Equal("staging", store.Resolve(requestedDeployment: null).Name);
     }
 
@@ -397,7 +398,7 @@ public sealed class LoginCommandTests : IDisposable
 
         // Assert
         Assert.Equal(0, exitCode);
-        Assert.Equal(0, handler.RequestCount);
+        Assert.Empty(handler.RecordedRequests);
         Assert.Contains(this.console.Lines, line => line.StartsWith("  production", StringComparison.Ordinal));
         Assert.Contains(this.console.Lines, line => line.StartsWith("* staging", StringComparison.Ordinal));
     }
@@ -424,7 +425,7 @@ public sealed class LoginCommandTests : IDisposable
         new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")));
 
     /// <summary>Builds the context a command runs under, with the terminal, the store, and the network all substituted.</summary>
-    private CliContext Context(CredentialStore store, FakeAdminEndpoint handler) => new(
+    private CliContext Context(CredentialStore store, FakeHttpMessageHandler handler) => new(
         this.console,
         store,
         endpoint => new HttpClient(handler, disposeHandler: false) { BaseAddress = endpoint });
