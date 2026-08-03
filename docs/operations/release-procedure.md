@@ -121,7 +121,7 @@ to. The file is a protected path, so an edit arriving through ordinary work is v
 ## Cutting a release
 
 The owner invokes `$prepare-release`, which reads the version, refuses the states that must not be released, opens both
-pull requests as drafts, and prints the ordering. It is manual-invocation only — no agent can reach it — because when a
+pull requests, and prints the ordering. It is manual-invocation only — no agent can reach it — because when a
 version becomes real is a decision rather than a consequence of work looking finished. The sequence it prints is the
 whole procedure, and it is recorded here so it survives the skill being unavailable:
 

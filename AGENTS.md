@@ -32,9 +32,7 @@ This file is loaded into every agent session, so it holds what has to be true be
 
 ## Critical repository rules
 
-- Never add `Co-authored-by:` or any other co-author trailer to commits or pull requests.
 - Never commit directly on `main` or `master`. Branch before committing; in the owner's checkout that branch is named `agent/<short-description>`.
-- Always create pull requests as drafts. Mark a pull request as ready for review only when the owner explicitly requests it.
 - Preserve unrelated user changes. Stage only files that belong to the current task.
 - Make architectural decisions before implementation. Keep changes small, reviewable, and aligned with the architecture draft in `specs/`.
 - Treat ADRs under `docs/decisions/` as required architectural context for AI agents. Before changing architecture, boundaries, configuration, persistence, provider integration, governance, security-sensitive behavior, or cross-cutting infrastructure, read the relevant ADRs and keep the change consistent with their current status and rationale.
@@ -121,7 +119,7 @@ Everything else is one contract. The architecture boundaries, the conventions, t
 
 `docs/operations/agent-workflow.md` describes every script and skill named here at length, including what each one asserts and why. These are the entry points and the rules that hold before one is reached.
 
-- For file-changing tasks, start with `$start-task`. Before final verification, use `$review-change`. To finish, use `$finish-change`; it requires `$check-docs-licenses`, full verification, focused staging, and a draft pull request.
+- For file-changing tasks, start with `$start-task`. Before final verification, use `$review-change`. To finish, use `$finish-change`; it requires `$check-docs-licenses`, full verification, focused staging, and a pull request.
 - Use `scripts/inspect-workspace.sh` for a read-only workspace preflight, `scripts/verify-fast.sh` during implementation, and `scripts/verify-full.sh` before committing. Stage the task files first: the full gate rejects remaining untracked files, so a newly added file cannot bypass diff validation.
 - Both verification scripts refuse to run on `main` or `master`. Check out the branch that carries the change instead of working around the refusal.
 - The full gate fetches the base branch and rejects a branch that does not contain it. Rebase when that check fails, and treat an unreachable remote as a blocked gate: verification against a stale base proves nothing about the branch that will actually merge.

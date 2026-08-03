@@ -12,7 +12,7 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 **You are encouraged to work the same way.** Point an agent at your checkout — Claude Code, Codex, and anything else that reads `AGENTS.md` pick the rules up on their own — give it the issue, and let it produce the change, the tests, and the documentation in one pass. A hand-written patch is equally welcome and is judged identically; the point is that the conventions here are dense enough that an agent which has actually read them will satisfy them faster than a person skimming them.
 
-**The skills run in your fork too.** `.agents/skills/` holds the seven workflow skills the maintainer's agents use, and Claude Code finds them through the `.claude/skills` symlink in any clone. `start-task` works out from your remotes that it is running in a fork and adjusts three things: your branch keeps the name you gave it, the base it verifies against is `upstream/main` rather than `origin/main`, and it opens an issue without trying to label it or place it on a board. `review-change`, `check-docs-licenses`, `add-migration`, and `closed-enumeration` need nothing from this repository and run unchanged. `finish-change` runs the same gates and opens the same draft pull request against `main` here, and reports the one step it does not take — the maintainer's planning board is private, so there is nothing for it to write and nothing missing when it does not.
+**The skills run in your fork too.** `.agents/skills/` holds the seven workflow skills the maintainer's agents use, and Claude Code finds them through the `.claude/skills` symlink in any clone. `start-task` works out from your remotes that it is running in a fork and adjusts three things: your branch keeps the name you gave it, the base it verifies against is `upstream/main` rather than `origin/main`, and it opens an issue without trying to label it or place it on a board. `review-change`, `check-docs-licenses`, `add-migration`, and `closed-enumeration` need nothing from this repository and run unchanged. `finish-change` runs the same gates and opens the same pull request against `main` here, and reports the one step it does not take — the maintainer's planning board is private, so there is nothing for it to write and nothing missing when it does not.
 
 **What your agent should not spend a session on.** The protected paths below are refused from anyone but the maintainer, so a change to one cannot merge however good it is. `start-task` checks the task against them before the work rather than leaving the check to find out; if your idea needs one, open an issue and say so.
 
@@ -97,9 +97,7 @@ Fix it in the commit rather than on top of it. A secret that reached a commit is
 
 ## Opening the pull request
 
-- **Open it as a draft.** Mark it ready for review when it is complete and the full gate passes. A draft skips the expensive checks, so you are not burning runner minutes on work in progress.
 - **Put `Closes #<issue>` in the body.** It closes the issue on merge, which is also how the maintainer's own planning view learns the work is done. That view is a private project board you neither see nor need; the issue is where the conversation lives.
-- **No co-author trailers.** Do not put `Co-authored-by:` or any other co-author trailer on a commit. No check enforces this; a pull request carrying one is asked to remove it, which means rewriting the commits.
 - **One change per pull request.** Split out anything the reviewer would have to judge separately.
 
 Two checks gate the merge and both always report:

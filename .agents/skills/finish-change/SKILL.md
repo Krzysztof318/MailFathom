@@ -11,7 +11,7 @@ metadata:
 
 `$start-task` resolved whether this is the **owner's checkout** or the **fork role**, and the steps
 below split on it in two places: the branch name, and the board. Everything else — the gates, the
-verification, the diff review, the draft pull request, and `Closes #<issue>` — is identical, because
+verification, the diff review, the pull request, and `Closes #<issue>` — is identical, because
 a contribution is judged by what it does rather than by where it came from.
 
 ## Required Gates
@@ -40,14 +40,13 @@ Do not proceed while a gate fails.
 ## Publish
 
 1. Confirm the staged diff still contains exactly the task files.
-2. Commit with a focused message and no co-author trailers.
+2. Commit with a focused message.
 3. Fetch the base remote and confirm the branch remains safely based on its current `main`. Integrate
    remote movement without discarding work, then repeat affected gates.
 4. Push the branch. In the owner's checkout that is `origin`; in the fork role it is the fork's own
    `origin`, and nothing is ever pushed to `Krzysztof318/MailFathom`.
-5. Create a draft pull request whose body contains `Closes #<issue>` for the issue the change
+5. Create a pull request whose body contains `Closes #<issue>` for the issue the change
    completes. In the fork role it targets `main` on `Krzysztof318/MailFathom` from the fork's branch.
-   Never mark it ready unless the owner explicitly asks.
 6. Confirm the reference is present in the published body. `gh pr edit` fails against this repository
    with a Projects-classic GraphQL error and silently drops the edit, so correct a missing reference
    through `gh api repos/<owner>/<repo>/pulls/<number> -X PATCH -f body=...`. That endpoint names the
