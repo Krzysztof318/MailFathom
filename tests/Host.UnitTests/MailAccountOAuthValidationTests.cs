@@ -100,7 +100,7 @@ public sealed class MailAccountOAuthValidationTests
         var results = Validate(CreateOptions(account));
 
         // Assert
-        Assert.Contains(results, result => result.ErrorMessage!.Contains("mailfathom mailbox authorize", StringComparison.Ordinal));
+        Assert.Contains(results, result => result.ErrorMessage!.Contains("mfctl mailbox authorize", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public sealed class MailAccountOAuthValidationTests
 
     /// <summary>
     /// The device grant Microsoft Entra offers expects a public-client registration, and
-    /// 'mailfathom mailbox authorize --public-client' produces exactly that. Refusing it at startup would leave an
+    /// 'mfctl mailbox authorize --public-client' produces exactly that. Refusing it at startup would leave an
     /// operator holding a refresh token the documented workflow just issued and the service will not accept.
     /// </summary>
     [Fact]

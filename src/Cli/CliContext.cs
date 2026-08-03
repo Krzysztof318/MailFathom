@@ -16,10 +16,14 @@ namespace MailFathom.Cli;
 /// <param name="Console">The terminal the command reads from and writes to.</param>
 /// <param name="Store">Where the command remembers the deployments signed in to.</param>
 /// <param name="OpenTransport">Opens a transport aimed at one deployment; the caller disposes it.</param>
+/// <param name="AwaitRedirect">Binds the loopback address an authorization redirect arrives at; the caller disposes it.</param>
+/// <param name="OpenBrowser">Opens an address in this machine's browser, reporting whether the attempt was made.</param>
 internal sealed record CliContext(
     ICliConsole Console,
     CredentialStore Store,
-    Func<Uri, HttpClient> OpenTransport)
+    Func<Uri, HttpClient> OpenTransport,
+    Func<Uri, IMailboxRedirectAwaiter> AwaitRedirect,
+    Func<Uri, bool> OpenBrowser)
 {
     /// <summary>How long any single request to a deployment may take.</summary>
     /// <remarks>
@@ -34,7 +38,9 @@ internal sealed record CliContext(
     internal static CliContext ForTerminal() => new(
         new SystemCliConsole(),
         new CredentialStore(CredentialStore.DefaultPath(), new TokenProtector(CredentialStore.DefaultKeyPath())),
-        OpenSystemTransport);
+        OpenSystemTransport,
+        redirectUri => new LoopbackRedirectAwaiter(redirectUri),
+        WebBrowserLauncher.TryOpen);
 
     /// <summary>Opens a transport aimed at one deployment.</summary>
     /// <remarks>

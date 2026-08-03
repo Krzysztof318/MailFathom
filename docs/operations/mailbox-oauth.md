@@ -1,14 +1,19 @@
 # Mailbox OAuth
 
-<!-- describes: src/Infrastructure/Mail/OAuth/**, src/Cli/** -->
+<!-- describes: src/Infrastructure/Mail/OAuth/**, src/Common/MailboxOAuth/**, src/Cli/** -->
 
 How a mailbox that no longer accepts a password is authenticated, and what each provider requires before it will
 issue the credential MailFathom runs on.
 
 MailFathom never obtains a refresh token while it is serving. It is a headless service, it ships in a container, and
 it serves no consent page and owns no redirect endpoint — so the sign-in that produces a refresh token is an
-administration act you perform once, with the `mailfathom` command, and the result is provisioned as a secret like
+administration act you perform once, with the `mfctl` command, and the result is provisioned as a secret like
 every other credential. The running service only ever exchanges that token for short-lived access tokens.
+
+**Run the command on your own computer.** It administers a deployment over HTTP and needs nothing from the machine the
+service runs on, which is what makes the ordinary browser sign-in available: the command listens on a loopback address,
+your browser delivers the authorization code to it, and there is nothing to copy. The two other modes below exist for
+the machines where that is not possible.
 
 ## Do you need this at all
 
@@ -35,7 +40,7 @@ Google project, that obligation is yours.
 | Where it applies | Google, and Microsoft delegated access | Exchange Online app-only access |
 
 The authorization-code and device-code grants appear nowhere in the service's configuration. They are how the
-`mailfathom` command produces a refresh token, not how the service authenticates.
+`mfctl` command produces a refresh token, not how the service authenticates.
 
 ## Registering the application
 
@@ -54,20 +59,59 @@ The authorization-code and device-code grants appear nowhere in the service's co
 2. Configure the OAuth consent screen and add the `https://mail.google.com/` scope. This is the restricted scope whose
    assessment is described above.
 3. Create an OAuth client of type **Desktop app**, and note the client ID and client secret.
-4. Register `http://localhost:8765/` as an authorized redirect URI, or whichever address you will pass to
-   `--redirect-uri`. Nothing listens there; see below for why that is the point.
+4. Register `http://127.0.0.1:8765/` as an authorized redirect URI, or whichever address you will pass to
+   `--redirect-uri`. The literal address rather than `localhost`, because a name resolving to both an IPv4 and an
+   IPv6 address gives the browser two places to deliver the code and the command one to listen on.
 
 ## Obtaining the refresh token
 
 The command is in the published container image and in the release archive. It writes nothing: the refresh token goes
 to standard output and everything else to standard error, so redirecting output captures the token alone.
 
+Three modes, and the first is the one to reach for:
+
+| Mode | When | What you do |
+| --- | --- | --- |
+| `interactive` (default) | The command runs where a browser can reach `127.0.0.1` | Approve in the browser. Nothing to copy. |
+| `device` | Microsoft, on a machine with no browser at all | Type a short code on your phone. |
+| `manual` | Google, on a machine with no browser | Open a printed address elsewhere, paste two values back. |
+
+### The interactive sign-in
+
+```console
+$ mfctl mailbox authorize --provider google --client-id <client-id>
+Client secret (leave empty for a public client):
+
+A browser has been opened for you. If it did not appear, open this address yourself:
+
+  https://accounts.google.com/o/oauth2/v2/auth?client_id=…&code_challenge=…
+
+Waiting for the sign-in to come back to http://127.0.0.1:8765/...
+```
+
+The command binds `http://127.0.0.1:8765/` before it shows the address, so approving quickly cannot outrun it. The
+authorization server redirects your browser there, the code arrives without crossing a network, the browser is answered
+with a page telling you to return to the terminal, and the listener stops. Register that address as a redirect URI with
+the provider, or pass a different one with `--redirect-uri`; it must be a loopback address, and a routable one is
+refused rather than bound.
+
+**Running the command on a headless server is your problem to solve, and it is one command.** Forward the port from the
+machine that has the browser:
+
+```console
+$ ssh -L 8765:127.0.0.1:8765 operator@mail.example.test
+```
+
+Then run the command over that session. The address it prints opens in the browser on your own machine, and the
+redirect travels back down the forwarded port to the listener on the server. Nothing about MailFathom knows the
+difference. If you would rather not forward a port, use `--mode device` for Microsoft or `--mode manual` for Google.
+
 ### Microsoft — the device grant
 
 Nothing on the machine running the command needs a browser.
 
 ```console
-$ mailfathom mailbox authorize --provider microsoft --client-id <client-id> --mode device --public-client
+$ mfctl mailbox authorize --provider microsoft --client-id <client-id> --mode device --public-client
 
 Open this address on any device with a browser:
   https://microsoft.com/devicelogin
@@ -81,11 +125,11 @@ Sign in on your own computer or phone, and the command completes on its own.
 ### Google — the manual grant
 
 **Google's device flow cannot be used here.** Google operates one, but its allowed-scope list covers only OpenID
-Connect, Drive, and YouTube scopes — no mail scope is obtainable through it. So the authorization-code grant is used,
-with the redirect landing on a loopback address:
+Connect, Drive, and YouTube scopes — no mail scope is obtainable through it. So Google always uses the
+authorization-code grant, and `--mode manual` is what runs it without a listener:
 
 ```console
-$ mailfathom mailbox authorize --provider google --client-id <client-id>
+$ mfctl mailbox authorize --provider google --client-id <client-id> --mode manual
 Client secret (leave empty for a public client):
 
 Open this address in a browser, on any computer:
@@ -102,12 +146,11 @@ Authorization code:
 ```
 
 The failed redirect is the mechanism rather than a defect. The authorization server hands the code to *your* browser,
-which tries to deliver it to `http://localhost:8765/` on *your* machine, where nothing is listening — so the code
+which tries to deliver it to `http://127.0.0.1:8765/` on *your* machine, where nothing is listening — so the code
 stays in the address bar and reaches the server only when you paste it. The request is bound by PKCE and by the
 `state` value the command checks, so a code from a different authorization cannot be redeemed.
 
-Run the command on a machine that does have a browser and both steps happen on one screen; the paste is what makes a
-headless server workable, not what makes it awkward.
+This is the last resort. The default mode does listen at that address, which removes both pastes.
 
 ## Configuring the account
 
@@ -185,9 +228,13 @@ warning as the signal to re-run the authorization before the configured token st
 | `no_refresh_token_issued` | The grant returned an access token only. For Google, consent was not re-prompted; the command already forces it, so check that the client is a Desktop app. For Microsoft, `offline_access` is missing from the scope. |
 | `invalid_grant` at startup or in a run | The refresh token is revoked, expired, or belongs to a different client. Re-run the authorization. |
 | `invalid_client` | The client ID or client secret does not match the registration, or a confidential client was authorized as a public one. |
-| `state_mismatch` | The pasted values came from a different authorization run. Start the command again and use one browser tab. |
+| `state_mismatch` | The redirect came from a different authorization run. Start the command again and use one browser tab. |
+| `access_denied` | The sign-in was refused at the consent screen, or the account is not permitted to grant the scope. |
+| `no_authorization_code` | The redirect carried neither a code nor an error, which is what a stray request to the listener looks like. Start the command again. |
+| `is not a loopback address` | `--redirect-uri` named an address this machine cannot receive a redirect on. Use `http://127.0.0.1:<port>/`, or `--mode manual`. |
+| `Nothing can listen at http://127.0.0.1:…` | Another program holds the port. Pass a different `--redirect-uri` and register it with the provider. |
 | `expired_token` during the device grant | Nobody completed the sign-in before the code expired. Run the command again. |
-| Startup refuses the account naming `mailfathom mailbox authorize` | The account uses the `refresh_token` grant and configures no refresh token reference. |
+| Startup refuses the account naming `mfctl mailbox authorize` | The account uses the `refresh_token` grant and configures no refresh token reference. |
 | Startup refuses the account asking for a client secret | The application is registered as a public client but the account does not say so. Add `"PublicClient": true`. |
 
 ## Related

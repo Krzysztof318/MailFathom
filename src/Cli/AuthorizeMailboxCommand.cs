@@ -15,11 +15,18 @@ namespace MailFathom.Cli;
 /// MailFathom credential arrives by, and the service reads it from there.
 /// </para>
 /// <para>
-/// Two modes exist because the providers differ rather than because an operator has a preference.
-/// <see cref="AuthorizationMode.Device" /> is RFC 8628 and needs no browser on this machine at all, which is what
-/// makes it right for a container; Microsoft supports it for the IMAP scopes. Google does not — its device flow
-/// admits no mail scope — so <see cref="AuthorizationMode.Manual" /> exists: the operator opens a printed address on
-/// whichever computer has a browser, and pastes back the code the redirect leaves in the address bar.
+/// Three modes exist because the providers and the machines differ, rather than because an operator has a preference.
+/// <see cref="AuthorizationMode.Interactive" /> is the default and the one to reach for: the command listens on the
+/// loopback address the redirect is registered against, so approving in the browser completes the exchange with
+/// nothing to copy. It is what running the command on the operator's own workstation buys, which is the ordinary case
+/// now that the command administers a deployment over HTTP rather than living beside it.
+/// </para>
+/// <para>
+/// <see cref="AuthorizationMode.Device" /> is RFC 8628 and needs no browser on this machine at all; Microsoft supports
+/// it for the IMAP scopes and Google does not, because Google's device flow admits no mail scope.
+/// <see cref="AuthorizationMode.Manual" /> is the last resort for a machine where neither holds: the operator opens a
+/// printed address on whichever computer has a browser, and pastes back the code the failed redirect leaves in the
+/// address bar.
 /// </para>
 /// </remarks>
 internal static class AuthorizeMailboxCommand
@@ -32,6 +39,9 @@ internal static class AuthorizeMailboxCommand
 
         /// <summary>The authorization server issues a short code the person enters on another device.</summary>
         Device = 1,
+
+        /// <summary>The redirect comes back to a loopback address this command is listening on.</summary>
+        Interactive = 2,
     }
 
     /// <summary>Builds the <c>authorize</c> command under a <c>mailbox</c> group.</summary>
@@ -56,8 +66,8 @@ internal static class AuthorizeMailboxCommand
 
         Option<AuthorizationMode> modeOption = new("--mode")
         {
-            Description = "How the person completes the sign-in. Device needs no browser here; manual prints an address to open elsewhere.",
-            DefaultValueFactory = _ => AuthorizationMode.Manual,
+            Description = "How the person completes the sign-in. Interactive catches the redirect here; device needs no browser at all; manual prints an address to open elsewhere and asks for the code back.",
+            DefaultValueFactory = _ => AuthorizationMode.Interactive,
         };
 
         Option<string> scopeOption = new("--scope")
@@ -65,10 +75,12 @@ internal static class AuthorizeMailboxCommand
             Description = "Overrides the preset's scope. Rarely needed, and a wrong value produces a token the mail server rejects.",
         };
 
-        Option<Uri> redirectUriOption = new("--redirect-uri")
+        // A string rather than an Option<Uri>: System.CommandLine has no built-in conversion to Uri, so declaring one
+        // makes every value on the command line fail to parse and leaves only the default reachable. Reading it here is
+        // also what turns a mistyped address into one line an operator can act on rather than a parser's exception.
+        Option<string> redirectUriOption = new("--redirect-uri")
         {
-            Description = "The redirect address registered with the provider, used by the manual mode.",
-            DefaultValueFactory = _ => new Uri("http://localhost:8765/"),
+            Description = "The loopback address registered with the provider, which the interactive and manual modes redirect to. Defaults to http://127.0.0.1:8765/.",
         };
 
         Option<bool> publicClientOption = new("--public-client")
@@ -92,7 +104,7 @@ internal static class AuthorizeMailboxCommand
             parseResult.GetValue(clientIdOption)!,
             parseResult.GetValue(modeOption),
             parseResult.GetValue(scopeOption),
-            parseResult.GetValue(redirectUriOption)!,
+            parseResult.GetValue(redirectUriOption),
             parseResult.GetValue(publicClientOption),
             cancellationToken));
 
@@ -105,10 +117,12 @@ internal static class AuthorizeMailboxCommand
         string clientId,
         AuthorizationMode mode,
         string? scopeOverride,
-        Uri redirectUri,
+        string? redirectAddress,
         bool isPublicClient,
         CancellationToken cancellationToken)
     {
+        var redirectUri = ReadRedirectAddress(redirectAddress);
+
         if (!MailProviderPreset.TryParsePresetName(providerName, out var preset))
         {
             throw new CliFailure($"'{providerName}' is not a known provider preset.");
@@ -140,9 +154,12 @@ internal static class AuthorizeMailboxCommand
 
         try
         {
-            var grant = mode == AuthorizationMode.Device
-                ? await AuthorizeWithDeviceAsync(context, authorizer, request, cancellationToken)
-                : await AuthorizeManuallyAsync(context, authorizer, request, cancellationToken);
+            var grant = mode switch
+            {
+                AuthorizationMode.Device => await AuthorizeWithDeviceAsync(context, authorizer, request, cancellationToken),
+                AuthorizationMode.Manual => await AuthorizeManuallyAsync(context, authorizer, request, cancellationToken),
+                _ => await AuthorizeInteractivelyAsync(context, authorizer, request, cancellationToken),
+            };
 
             ReportGrant(context, grant);
 
@@ -177,6 +194,76 @@ internal static class AuthorizeMailboxCommand
         });
 
         return authorizer.AuthorizeWithDeviceCodeAsync(request, reportPrompt, cancellationToken);
+    }
+
+    /// <summary>Reads the address the authorization code comes back to.</summary>
+    /// <remarks>
+    /// The default is written as <c>127.0.0.1</c> rather than <c>localhost</c>, because a name resolving to both an IPv4
+    /// and an IPv6 address gives the browser two places to deliver the code and the listener one to wait on. Both
+    /// providers accept a literal loopback address in a desktop-client registration, and RFC 8252 recommends it for
+    /// exactly this reason.
+    /// </remarks>
+    private static Uri ReadRedirectAddress(string? redirectAddress)
+    {
+        if (string.IsNullOrWhiteSpace(redirectAddress))
+        {
+            return new Uri("http://127.0.0.1:8765/");
+        }
+
+        return CliOptions.TryReadAddress(redirectAddress, out var parsed)
+            ? parsed
+            : throw new CliFailure($"'{redirectAddress}' is not an address. Pass a redirect address such as http://127.0.0.1:8765/.");
+    }
+
+    /// <summary>Runs the authorization with the redirect landing back on this machine.</summary>
+    /// <remarks>
+    /// The whole exchange happens on one screen: the address opens in the person's browser, the authorization server
+    /// redirects to a loopback address this process is listening on, and the code arrives without being read off an
+    /// address bar. The listener is bound <em>before</em> the address is shown, because a person who approves quickly
+    /// would otherwise be redirected to a closed port.
+    /// </remarks>
+    private static async Task<MailboxAuthorizationGrant> AuthorizeInteractivelyAsync(
+        CliContext context,
+        MailboxAuthorizer authorizer,
+        MailboxAuthorizationRequest request,
+        CancellationToken cancellationToken)
+    {
+        // Guarded rather than asserted: the request carries no redirect address for the device grant, and this mode is
+        // the one that cannot proceed without one.
+        var redirectUri = request.RedirectUri
+            ?? throw new CliFailure("No redirect address was given, so the sign-in has nowhere to come back to. Pass --redirect-uri, or use --mode device.");
+
+        using var awaiter = context.AwaitRedirect(redirectUri);
+
+        var pending = authorizer.BuildAuthorization(request);
+
+        context.Console.WriteError(string.Empty);
+        context.Console.WriteError(context.OpenBrowser(pending.AuthorizationUrl)
+            ? "A browser has been opened for you. If it did not appear, open this address yourself:"
+            : "Open this address in a browser on this machine:");
+        context.Console.WriteError(string.Empty);
+        context.Console.WriteError($"  {pending.AuthorizationUrl}");
+        context.Console.WriteError(string.Empty);
+        context.Console.WriteError($"Waiting for the sign-in to come back to {redirectUri}...");
+
+        var redirect = await awaiter.WaitForRedirectAsync(cancellationToken);
+
+        if (redirect.Error is not null)
+        {
+            throw new MailboxAuthorizationFailedException(redirect.Error);
+        }
+
+        if (!pending.MatchesReturnedState(redirect.State))
+        {
+            throw new MailboxAuthorizationFailedException("state_mismatch");
+        }
+
+        if (redirect.Code is null)
+        {
+            throw new MailboxAuthorizationFailedException("no_authorization_code");
+        }
+
+        return await authorizer.RedeemAuthorizationCodeAsync(request, pending, redirect.Code, cancellationToken);
     }
 
     private static async Task<MailboxAuthorizationGrant> AuthorizeManuallyAsync(

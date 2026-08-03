@@ -505,7 +505,7 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
         }
 
         // A public client holds no secret by registration, which is what the device grant expects and what
-        // 'mailfathom mailbox authorize --public-client' produces. Requiring one regardless would refuse an account
+        // 'mfctl mailbox authorize --public-client' produces. Requiring one regardless would refuse an account
         // the documented workflow just finished authorizing.
         var configuresClientSecret = !string.IsNullOrWhiteSpace(this.OAuth.ClientSecret?.SecretReference);
 
@@ -529,7 +529,7 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
         if (this.OAuth.ParsedGrant.RequiresRefreshToken && string.IsNullOrWhiteSpace(this.OAuth.RefreshToken?.SecretReference))
         {
             yield return new ValidationResult(
-                $"Account '{this.AccountId}': the refresh-token grant requires a refresh token secret reference. Obtain one with 'mailfathom mailbox authorize'.",
+                $"Account '{this.AccountId}': the refresh-token grant requires a refresh token secret reference. Obtain one with 'mfctl mailbox authorize'.",
                 [nameof(this.OAuth)]);
         }
     }

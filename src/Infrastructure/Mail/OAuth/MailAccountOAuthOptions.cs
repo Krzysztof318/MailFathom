@@ -48,7 +48,7 @@ public sealed class MailAccountOAuthOptions
     /// <summary>Gets or sets whether the application is registered as a public client, which holds no secret.</summary>
     /// <remarks>
     /// A public client authenticates by proving possession of the grant alone, which is the registration Microsoft
-    /// Entra expects for the device flow and the one <c>mailfathom mailbox authorize --public-client</c> produces. It
+    /// Entra expects for the device flow and the one <c>mfctl mailbox authorize --public-client</c> produces. It
     /// is an explicit setting rather than an inference from a missing reference, because "no secret configured" and
     /// "no secret exists" are the same shape and only one of them is safe to accept: inferring it would turn a
     /// forgotten reference on a confidential client into a silently unauthenticated token request.
