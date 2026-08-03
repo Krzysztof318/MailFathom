@@ -136,6 +136,100 @@ public sealed class OAuthSignInTests : IDisposable
         Assert.DoesNotContain("authorization_code", deployment.LastTokenRequest.Values);
     }
 
+    /// <summary>
+    /// The same token response reaches this process through two serialization contexts, and the mailbox one has always
+    /// read it without regard to case. A server whose casing differs from the specification's must not sign in through
+    /// one command and fail through the other.
+    /// </summary>
+    [Fact]
+    public async Task Login_AServerVaryingTheCaseOfTheTokenResponse_SignsInTheSameWayMailboxAuthorizationDoes()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.AnswerTokenRequest = _ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """{"Access_Token":"an-access-token","token_type":"Bearer","Expires_In":3600,"Refresh_Token":"a-refresh-token"}""",
+                System.Text.Encoding.UTF8,
+                "application/json"),
+        };
+
+        using var handler = deployment.Handler();
+        var store = this.CreateStore();
+
+        // Act
+        var exitCode = await this.RunInteractiveAsync(store, handler);
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(Assert.Single(store.Read().Profiles).Value.Session);
+    }
+
+    /// <summary>A person who declines at the authorization server is told what happened, rather than left watching a listener that has already been answered.</summary>
+    [Fact]
+    public async Task Login_ARedirectCarryingTheServersRefusal_ReportsItAndStoresNothing()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        using var handler = deployment.Handler();
+        var store = this.CreateStore();
+
+        // Act
+        var exitCode = await RunAsync(
+            this.Context(
+                store,
+                handler,
+                FakeMailboxRedirect.Answering(new MailboxRedirect(Code: null, State: null, Error: "access_denied"))),
+            "login",
+            "--endpoint",
+            FakeOAuthDeployment.DeploymentAddress,
+            "--mode",
+            "interactive",
+            "--client-id",
+            ClientId);
+
+        // Assert: the refusal is reported before the anti-forgery check, which a refused redirect carries nothing for.
+        Assert.Equal(1, exitCode);
+        Assert.Empty(store.Read().Profiles);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("refused the sign-in", StringComparison.Ordinal)
+                && line.Contains("access_denied", StringComparison.Ordinal));
+        Assert.Empty(deployment.LastTokenRequest);
+    }
+
+    /// <summary>A redirect carrying neither a code nor an error has nothing to redeem, and saying so beats posting an empty grant.</summary>
+    [Fact]
+    public async Task Login_ARedirectCarryingNoCodeAndNoError_ReportsItAndStoresNothing()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        using var handler = deployment.Handler();
+        var store = this.CreateStore();
+
+        // Act
+        var exitCode = await RunAsync(
+            this.Context(
+                store,
+                handler,
+                FakeMailboxRedirect.EchoingStateWithoutACode(this.StateTheCommandGenerated)),
+            "login",
+            "--endpoint",
+            FakeOAuthDeployment.DeploymentAddress,
+            "--mode",
+            "interactive",
+            "--client-id",
+            ClientId);
+
+        // Assert
+        Assert.Equal(1, exitCode);
+        Assert.Empty(store.Read().Profiles);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("no authorization code", StringComparison.Ordinal));
+        Assert.Empty(deployment.LastTokenRequest);
+    }
+
     /// <summary>A session with no refresh token ends within the hour, which the operator would meet as a command failing rather than as a sign-in that never worked.</summary>
     [Fact]
     public async Task Login_AServerThatIssuesNoRefreshToken_FailsRatherThanStoringASessionThatEndsWithinTheHour()

@@ -328,19 +328,48 @@ internal sealed class CredentialStore
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify),
         "MailFathom");
 
+    /// <summary>Replaces the store with a new one, in a way an interrupted process cannot leave half written.</summary>
+    /// <remarks>
+    /// Written beside the store and renamed over it, because the rename is the only step that changes what a later
+    /// command reads and a rename either happened or did not. Serializing over the file itself would truncate it first,
+    /// so a process that stopped in between would leave every profile in it unreadable — and the write is reached by
+    /// <see cref="RenewAccessToken" /> from what an operator ran as a status check, which is not a command anybody
+    /// would think to run twice. The renamed file carries the mode it was created with, so the store stays readable by
+    /// its owner alone without a second call to widen and re-tighten it.
+    /// </remarks>
     private void Write(StoredCredentials credentials)
     {
+        var pending = this.storePath + ".pending";
+
         try
         {
             OwnerOnlyStorage.CreateDirectoryFor(this.storePath);
 
-            using var contents = OwnerOnlyStorage.OpenForWriting(this.storePath);
+            using (var contents = OwnerOnlyStorage.OpenForWriting(pending))
+            {
+                JsonSerializer.Serialize(contents, credentials, CliJsonContext.Default.StoredCredentials);
+            }
 
-            JsonSerializer.Serialize(contents, credentials, CliJsonContext.Default.StoredCredentials);
+            File.Move(pending, this.storePath, overwrite: true);
         }
         catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
         {
+            Discard(pending);
+
             throw new CliFailure($"The credential store at {this.storePath} could not be written.", failure);
+        }
+    }
+
+    /// <summary>Removes a half-written store, leaving the failure that produced it to be reported.</summary>
+    /// <remarks>The write has already failed and the previous file is intact, so a residue that cannot be removed is not a second failure worth raising over the first.</remarks>
+    private static void Discard(string pending)
+    {
+        try
+        {
+            File.Delete(pending);
+        }
+        catch (Exception residue) when (residue is IOException or UnauthorizedAccessException)
+        {
         }
     }
 }
