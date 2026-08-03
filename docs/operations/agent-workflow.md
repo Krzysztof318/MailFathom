@@ -128,8 +128,8 @@ a build, a formatting verdict, or the EF Core model. A fork's pull request has n
 local gate behind it at all, and it is a fork's contributor who is most likely to
 change a workflow or a script without knowing what asserts it. What the full gate
 above keeps is the earlier verdict — a contract broken here is answered before the
-push rather than a minute after it — and the job is the same command against the
-same tree, so the two cannot disagree.
+push rather than after it — and the job is the same command against the same tree,
+so the two cannot disagree.
 
 ## Which remote is the base
 

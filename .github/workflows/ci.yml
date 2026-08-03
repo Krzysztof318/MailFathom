@@ -136,7 +136,8 @@ jobs:
   # No draft condition either, unlike `verify` above. Every pull request here opens as a draft and stays
   # one until the owner asks for review, so a draft-exempt contract check would not run over the interval
   # during which the change is actually being written — which is the whole interval in which a broken
-  # contract is cheap to fix. The job costs about a minute, so there is nothing to save by deferring it.
+  # contract is cheap to fix. The job costs about twenty seconds, so there is nothing to save by
+  # deferring it.
   workflow-contracts:
     name: Workflow contracts
     runs-on: ubuntu-latest
@@ -149,7 +150,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # Around 40 seconds, and nothing else is provisioned for it: the suite fakes `dotnet` with a symlink
+      # Under twenty seconds, and nothing else is provisioned for it: the suite fakes `dotnet` with a symlink
       # to itself, so no SDK, no restore, and no NuGet cache, and it reaches no network. `jq` is the one
       # tool it needs beyond git and bash, and the runner image carries it.
       - name: Run the workflow contracts
