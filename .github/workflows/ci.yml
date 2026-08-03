@@ -121,11 +121,50 @@ jobs:
       run-format: ${{ needs.detect-changes.outputs.format == 'true' }}
       run-model: ${{ needs.detect-changes.outputs.model == 'true' }}
 
+  # The one job here that reads the half of the repository the build, formatting, and model jobs cannot
+  # see, and the only one that reports on a draft besides the two that cost seconds. `Detect changes`
+  # routes `.github/**`, `docs/**`, `scripts/**`, and `.agents/**` to nothing, because none of them can
+  # move a build, a formatting verdict, or the EF Core model. Without this job a pull request touching
+  # only those would clear `Required CI` having verified nothing about them, and the contract suite would
+  # run only where somebody remembered `scripts/verify-full.sh`.
+  #
+  # No path filter, and that is the point rather than an omission: the suite asserts the licensing header
+  # in every `.yml`, `.sh`, Helm template, and `SKILL.md`, and the `describes:` marker on every page under
+  # `docs/`, over the whole tree at once. Narrowing it to the changed files would report green on contracts
+  # it never evaluated, which is worse than not running it.
+  #
+  # No draft condition either, unlike `verify` above. Every pull request here opens as a draft and stays
+  # one until the owner asks for review, so a draft-exempt contract check would not run over the interval
+  # during which the change is actually being written — which is the whole interval in which a broken
+  # contract is cheap to fix. The job costs about twenty seconds, so there is nothing to save by
+  # deferring it.
+  workflow-contracts:
+    name: Workflow contracts
+    runs-on: ubuntu-latest
+    steps:
+      # The default shallow fetch is enough. Every contract that reads this repository rather than a
+      # fixture reads its index through `git ls-files` or the file mode git recorded, never its history;
+      # the suite builds the repositories whose history it tests under a temporary directory of its own.
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Fifteen seconds on a GitHub-hosted runner, and nothing else is provisioned for it: the suite fakes
+      # `dotnet` with a symlink to itself, so no SDK, no restore, and no NuGet cache, and it reaches no
+      # network. `jq` is the one tool it needs beyond git and bash, and the runner image carries it. The
+      # suite takes rather longer than this on a developer machine, where it is one step of the full gate
+      # and competes with everything else running there; the figure above is what the job costs a pull
+      # request, which is the only cost this file is about.
+      - name: Run the workflow contracts
+        run: bash scripts/test-agent-workflow.sh
+
   required-ci:
     name: Required CI
     needs:
       - detect-changes
       - verify
+      - workflow-contracts
     # `always()` rather than `success() || failure()`, because this job has to report on a run that was
     # cancelled as well as on one whose dependencies were skipped. Anything weaker leaves the required
     # check itself skipped, which is the state this whole arrangement exists to avoid.
@@ -139,6 +178,7 @@ jobs:
         env:
           DETECT_CHANGES_RESULT: ${{ needs.detect-changes.result }}
           VERIFY_RESULT: ${{ needs.verify.result }}
+          WORKFLOW_CONTRACTS_RESULT: ${{ needs.workflow-contracts.result }}
         run: |
           set -euo pipefail
 
@@ -171,6 +211,9 @@ jobs:
 
           require_success 'Detect changes' "$DETECT_CHANGES_RESULT"
           require_success_or_skipped 'Verify' "$VERIFY_RESULT"
+          # Not `require_success_or_skipped`: the contract job has no `if` and no path filter, so it has
+          # no way to skip that is not a job that failed to start.
+          require_success 'Workflow contracts' "$WORKFLOW_CONTRACTS_RESULT"
 
           if [[ "$verdict" -eq 0 ]]; then
             echo "All pull-request checks completed or were not applicable to this change."
