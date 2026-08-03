@@ -108,6 +108,46 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Equal(1, exitCode);
     }
 
+    /// <summary>
+    /// The address answered, but on a listener serving something else. This is the message the troubleshooting table
+    /// documents, and the one that sends an operator to look at the port rather than at their key.
+    /// </summary>
+    [Fact]
+    public async Task Login_AnAddressServingNoAdministrativeEndpoint_SaysToCheckThePort()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        using var handler = FakeAdminEndpoint.Answering(HttpStatusCode.NotFound);
+        this.console.SecretToSupply = "not-a-real-key";
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "login", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(1, exitCode);
+        Assert.Null(store.Find(EndpointAddress));
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("serves no administrative endpoint", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Login_ADeploymentThatCannotBeReached_ReportsTheTransportFailureRatherThanCrashing()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        using var handler = FakeAdminEndpoint.Unreachable();
+        this.console.SecretToSupply = "not-a-real-key";
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "login", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(1, exitCode);
+        Assert.Null(store.Find(EndpointAddress));
+        Assert.Contains(this.console.Errors, line => line.Contains("could not be reached", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Login_NoCredentialSupplied_FailsWithoutReachingTheDeployment()
     {

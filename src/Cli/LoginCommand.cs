@@ -15,8 +15,8 @@ namespace MailFathom.Cli;
 /// </para>
 /// <para>
 /// The credential is read from standard input rather than taken as an argument, because an argument reaches the shell
-/// history, the process list, and any log of either. <c>--token-stdin</c> is therefore how it always arrives; a
-/// terminal prompts for it and a script pipes it in.
+/// history, the process list, and any log of either. Reading it from there is unconditional: a terminal prompts for
+/// it without echoing, and a script pipes it in.
 /// </para>
 /// </remarks>
 internal static class LoginCommand

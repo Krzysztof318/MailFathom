@@ -109,7 +109,7 @@ jobs:
       contents: read
     uses: ./.github/workflows/build-cli-binaries.yml
     with:
-      ref: ${{ needs.assert.outputs.sha }}
+      ref: ${{ needs.assert.outputs.revision }}
       version: ${{ needs.assert.outputs.version }}
 
   publish:
@@ -162,7 +162,6 @@ jobs:
     needs:
       - assert
       - schema-artifact
-      - cli-binaries
       - publish
       - publish-chart
     runs-on: ubuntu-latest
@@ -180,10 +179,15 @@ jobs:
           name: schema-artifact
           path: artifacts/schema
 
+      # Not among this job's needs, deliberately: a job is skipped when one of its needs fails, so requiring the
+      # binaries here would let a failed command build withhold the release itself — the image, the chart, and the
+      # schema script an operator is actually waiting for. The steps that handle them are conditional instead, so a
+      # failure is a red job beside a published release rather than no release at all.
       - name: Download the CLI binaries
+        if: needs.cli-binaries.result == 'success'
         uses: actions/download-artifact@v8
         with:
-          name: ${{ needs.cli-binaries.outputs.artifact }}
+          name: cli-binaries
           path: artifacts/cli
 
       # The notes are the changelog section, not a list of pull-request titles: no arrangement of titles can state that
@@ -270,5 +274,8 @@ jobs:
             "artifacts/schema/${schema_artifact_name}.sha256" \
             --clobber
 
-          # Every published platform of the command, plus the one checksum file covering all of them.
-          gh release upload "$RELEASE_TAG" artifacts/cli/* --clobber
+          # Every published platform of the command, plus the one checksum file covering all of them. Guarded rather
+          # than assumed, because this job runs whether or not the command built.
+          if [ -d artifacts/cli ]; then
+            gh release upload "$RELEASE_TAG" artifacts/cli/* --clobber
+          fi

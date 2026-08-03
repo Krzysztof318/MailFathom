@@ -90,9 +90,17 @@
        mode there fails with NU1004 before a build can start. IntegrationTests has to follow AppHost because it
        references the project and inherits those packages transitively, and a lock file cannot exclude a subtree.
        Nothing is lost that matters: both ship nowhere, and their versions stay pinned centrally like every other
-       project's. -->
+       project's.
+
+       Cli is excluded for the same reason in a different disguise. It publishes trimmed, so the SDK brings in
+       Microsoft.NET.ILLink.Tasks, and that package's content is whatever the SDK on the restoring machine carries — a
+       hash recorded here fails elsewhere with NU1403, which is the same "part of the graph belongs to the machine"
+       problem the Aspire projects have. Unlike them this project does ship, so what covers it instead is that its only
+       package reference is System.CommandLine, pinned centrally and registered in THIRD_PARTY_LICENSES.md, and that it
+       references no other project in the solution — the closure a lock file would record is one line long and visible
+       in the project file. -->
   <PropertyGroup>
-    <RestorePackagesWithLockFile Condition="'$(MSBuildProjectName)' != 'AppHost' And '$(MSBuildProjectName)' != 'IntegrationTests'">true</RestorePackagesWithLockFile>
+    <RestorePackagesWithLockFile Condition="'$(MSBuildProjectName)' != 'AppHost' And '$(MSBuildProjectName)' != 'IntegrationTests' And '$(MSBuildProjectName)' != 'Cli'">true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <!-- This file is the repository root, so it locates itself rather than searching for a marker file above it. The

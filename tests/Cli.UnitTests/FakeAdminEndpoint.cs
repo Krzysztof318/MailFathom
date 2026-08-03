@@ -27,6 +27,9 @@ internal sealed class FakeAdminEndpoint : HttpMessageHandler
     /// <summary>Gets how many requests the command sent.</summary>
     internal int RequestCount { get; private set; }
 
+    /// <summary>Gets whether a connection to this endpoint succeeds at all.</summary>
+    private bool Reachable { get; init; } = true;
+
     /// <summary>Gets the path of the last request, or <see langword="null" /> when none was sent.</summary>
     internal string? LastPath { get; private set; }
 
@@ -46,6 +49,11 @@ internal sealed class FakeAdminEndpoint : HttpMessageHandler
     /// <returns>The endpoint.</returns>
     internal static FakeAdminEndpoint Answering(HttpStatusCode status) => new(status, string.Empty);
 
+    /// <summary>Builds an endpoint nothing is listening at.</summary>
+    /// <returns>The endpoint.</returns>
+    /// <remarks>What a wrong port, a stopped service, or a firewall looks like from the command's side.</remarks>
+    internal static FakeAdminEndpoint Unreachable() => new(HttpStatusCode.OK, string.Empty) { Reachable = false };
+
     /// <summary>Builds an endpoint that answers with a status and a body of the caller's choosing.</summary>
     /// <param name="status">The status it answers with.</param>
     /// <param name="body">The body it answers with.</param>
@@ -62,6 +70,11 @@ internal sealed class FakeAdminEndpoint : HttpMessageHandler
         this.RequestCount++;
         this.LastPath = request.RequestUri?.AbsolutePath;
         this.LastAuthorization = request.Headers.Authorization;
+
+        if (!this.Reachable)
+        {
+            throw new HttpRequestException("Connection refused.");
+        }
 
         return Task.FromResult(new HttpResponseMessage(this.status)
         {
