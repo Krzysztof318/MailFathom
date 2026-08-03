@@ -10,9 +10,11 @@ using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Infrastructure;
+using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Resilience;
+using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -36,6 +38,13 @@ namespace MailFathom.IntegrationTests.Orchestration;
 /// </remarks>
 internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
 {
+    /// <summary>The identifier every value this suite seals is written under.</summary>
+    internal const string DataEncryptionKeyId = "integration-tests";
+
+    /// <summary>The key this suite seals with, base64 of the ASCII text <c>mailfathom-integrationtests-key!</c>.</summary>
+    /// <remarks>A literal under the same restriction as the orchestrated mailbox's password: it protects synthetic data in a database created and destroyed by one run, and it unlocks nothing anything else holds.</remarks>
+    internal const string DataEncryptionKeyMaterial = "bWFpbGZhdGhvbS1pbnRlZ3JhdGlvbnRlc3RzLWtleSE=";
+
     private readonly IHost host;
 
     private OrchestratedMailFathomServices(IHost host) => this.host = host;
@@ -75,6 +84,21 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),
             PostgresTextSearchConfiguration.Default);
+
+        // The ring a composition root would build from the DataEncryption section. It is supplied here for the reason
+        // every other bound setting above is: the suite does not start the host resource, so nothing else binds it, and
+        // a store that seals would otherwise fail to resolve its encryptor rather than fail to seal.
+        builder.Services.AddDataEncryption(_ => new DataEncryptionKeyRingSettings(
+            DataEncryptionKeyId,
+            [
+                new DataEncryptionKeyReference(
+                    DataEncryptionKeyId,
+                    new ConfiguredSecret
+                    {
+                        Name = "integration-tests-data-key",
+                        SecretReference = $"plaintext:{DataEncryptionKeyMaterial}",
+                    }),
+            ]));
 
         var host = builder.Build();
         await host.StartAsync(cancellationToken);

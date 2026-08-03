@@ -46,6 +46,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal const string EmailSearchDocumentVectorIndexName = "ix_email_search_documents_search_vector";
 
+    internal const string MailboxRefreshTokenKeyIndexName = "ix_mailbox_refresh_tokens_data_encryption_key";
+
     private readonly PostgresTextSearchConfiguration textSearchConfiguration;
 
     /// <summary>Initializes a new MailFathom EF Core context.</summary>
@@ -83,6 +85,8 @@ internal sealed class MailFathomDbContext : DbContext
     internal DbSet<BackfillPositionEntity> BackfillPositions => this.Set<BackfillPositionEntity>();
 
     internal DbSet<SynchronizationCheckpointEntity> SynchronizationCheckpoints => this.Set<SynchronizationCheckpointEntity>();
+
+    internal DbSet<MailboxRefreshTokenEntity> MailboxRefreshTokens => this.Set<MailboxRefreshTokenEntity>();
 
     /// <inheritdoc />
     /// <remarks>
@@ -221,6 +225,26 @@ internal sealed class MailFathomDbContext : DbContext
                 .WithOne(folder => folder.SynchronizationCheckpoint)
                 .HasForeignKey<SynchronizationCheckpointEntity>(checkpoint => checkpoint.MailFolderId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // No foreign key onto the mailbox account, which is the one relationship a reader would expect here. That row
+        // is written by whichever synchronization run first binds a folder, so requiring it would mean a token could
+        // only be stored for an account that has already synchronized — the opposite of the order an operator works in.
+        // What follows is that removing an account has to remove this row deliberately rather than by cascade, which is
+        // the erasure seam's job rather than the schema's.
+        modelBuilder.Entity<MailboxRefreshTokenEntity>(entity =>
+        {
+            entity.ToTable("mailbox_refresh_tokens");
+            entity.HasKey(token => token.MailboxAccountId);
+            entity.Property(token => token.MailboxAccountId).HasMaxLength(128).ValueGeneratedNever();
+            entity.Property(token => token.SealedRefreshToken).HasColumnType("bytea").IsRequired();
+            entity.Property(token => token.DataEncryptionKeyId)
+                .HasMaxLength(MailboxRefreshTokenEntity.MaximumKeyIdLength)
+                .IsRequired();
+
+            // What a key retirement is planned against: the pass that re-seals under a new key reads the accounts still
+            // holding a value under the old one, and without this it would read every row to answer that.
+            entity.HasIndex(token => token.DataEncryptionKeyId).HasDatabaseName(MailboxRefreshTokenKeyIndexName);
         });
     }
 

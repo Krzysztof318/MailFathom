@@ -1,6 +1,6 @@
 # Mailbox OAuth
 
-<!-- describes: src/Infrastructure/Mail/OAuth/**, src/Common/MailboxOAuth/**, src/Cli/** -->
+<!-- describes: src/Infrastructure/Mail/OAuth/**, src/Common/MailboxOAuth/**, src/Cli/**, src/Application/Accounts/**, src/Infrastructure/Persistence/Accounts/** -->
 
 How a mailbox that no longer accepts a password is authenticated, and what each provider requires before it will
 issue the credential MailFathom runs on.
@@ -205,28 +205,59 @@ endpoint that is not absolute HTTPS, and a `refresh_token` grant with no refresh
 - **A rejected token is retried once, with a new one.** A token the mail server refuses despite being unexpired — it
   was revoked, or the mailbox password changed — triggers one renewal and one re-authentication. A fresh token that is
   also refused fails the attempt rather than looping.
+- **The stored refresh token is preferred over the configured one.** An account whose token has been rotated at least
+  once spends what MailFathom stored; one whose token never has is served from its configured reference. Both are
+  handled the same way from there.
 - **A refused grant is not retried.** An authorization server answering `invalid_grant` or `invalid_client` has
   decided, and repeating the request only spends the account's rate limit. An unreachable server is retried, bounded
   and jittered, under the `MailAuthorizationServerInvocation` resilience budget.
 
 ## Rotation
 
-A refresh token is a long-lived credential; rotate it like any other, through
-[secret rotation](secret-rotation.md). Repointing the reference is picked up by the next token request with no
-restart.
+**The refresh token an authorization server issues is followed.** Microsoft Entra replaces the refresh token on every
+refresh and invalidates the one it replaces; MailFathom stores the new one and spends it on the next request, so the
+account keeps working without anybody re-running the authorization. The configured reference is the seed: it is read
+while no token has been stored, and stops being read once one has.
 
-**Microsoft Entra rotates the refresh token on every refresh, and MailFathom cannot follow it.** The service reads its
-refresh token from a secret reference it has no write access to — deliberately, since a process that could rewrite its
-own credentials could also destroy them — so it keeps using the token you provisioned. That works while the previous
-token remains valid, and a rotated token arriving in a response is logged as a warning naming the account. Treat the
-warning as the signal to re-run the authorization before the configured token stops being accepted.
+The stored token is held in the database, sealed under the deployment's data-encryption key — see
+[secret provisioning](secret-provisioning.md) for the key and
+[the configuration reference](configuration-reference.md#dataencryption) for its section. An account whose deployment
+configures no key ring can still authenticate from its configured reference; it is the moment a rotation arrives that
+needs the key, and without one the rotation is logged as an error and the account keeps running on the token it
+already had.
+
+A refresh token is still a long-lived credential you can rotate deliberately, through
+[secret rotation](secret-rotation.md). Repointing the reference is picked up by the next token request with no restart
+— **but only while no token has been stored for that account.** Once one has, the stored token wins on every request and
+the reference is never read again.
+
+**Nothing operator-facing replaces a stored token today.** `mfctl mailbox authorize` obtains a refresh token and prints
+it for you to provision; it writes nothing to the deployment, so re-running it does not change what a stored account
+sends. Writing a grant straight to a deployment through the administrative endpoint is [#331](https://github.com/Krzysztof318/MailFathom/issues/331)
+and does not exist yet. Until it does, the only way to make an account fall back to its configured reference is to
+delete its row with any PostgreSQL client:
+
+```sql
+DELETE FROM mailbox_refresh_tokens WHERE "MailboxAccountId" = 'workspace';
+```
+
+The next token request then reads the reference again, and stores whatever the authorization server rotates to next.
+
+Two failures are worth knowing about, because neither is silent and both end the same way. If MailFathom cannot write
+the rotated token — the database is unreachable, the key ring is gone — the token request still succeeds and the
+failure is logged as an error naming the account; the account keeps working until the token it replaced stops being
+accepted. If the process stops between receiving a rotated token and storing it, that rotation is lost. In both cases
+the account eventually answers `invalid_grant`, and the repair is the two steps above: delete the stored row, then
+provision a token from a fresh `mfctl mailbox authorize` at the configured reference.
 
 ## Troubleshooting
 
 | What you see | What it means |
 | --- | --- |
 | `no_refresh_token_issued` | The grant returned an access token only. For Google, consent was not re-prompted; the command already forces it, so check that the client is a Desktop app. For Microsoft, `offline_access` is missing from the scope. |
-| `invalid_grant` at startup or in a run | The refresh token is revoked, expired, or belongs to a different client. Re-run the authorization. |
+| `invalid_grant` at startup or in a run | The refresh token is revoked, expired, or belongs to a different client. Re-run the authorization and provision the result at the configured reference — and if a token has already been stored for that account, delete its row first, because otherwise the reference is not read. [Rotation](#rotation) has the statement. A rotation MailFathom could not store reaches you this way too; the error logged when the store failed says so. |
+| `The rotated refresh token … could not be stored` | The database was unreachable, or the key ring the value seals under is not configured. The account keeps working until the previous token stops being accepted, so fix the cause and it recovers on the next rotation. |
+| `The data-encryption key ring configures no key` | A stored token names a key the ring no longer holds. Restore that key entry; a stored value cannot be opened without it. |
 | `invalid_client` | The client ID or client secret does not match the registration, or a confidential client was authorized as a public one. |
 | `state_mismatch` | The redirect came from a different authorization run. Start the command again and use one browser tab. |
 | `access_denied` | The sign-in was refused at the consent screen, or the account is not permitted to grant the scope. |

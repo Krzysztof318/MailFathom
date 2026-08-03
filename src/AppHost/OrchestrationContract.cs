@@ -45,6 +45,33 @@ public static class OrchestrationContract
     /// <summary>The database the connection string is issued for.</summary>
     public const string DatabaseResourceName = "mailfathom";
 
+    /// <summary>The identifier the development key ring seals local values under.</summary>
+    /// <remarks>The identifier is written into every sealed row, so it names the ring rather than a date: a local database is re-sealed by being reset, never by a rotation.</remarks>
+    public const string DataEncryptionKeyId = "development";
+
+    /// <summary>The operator-facing label of the development key, which a validation failure would name.</summary>
+    public const string DataEncryptionKeyName = "mailfathom-development-data-key";
+
+    /// <summary>The development data-encryption key, base64 of exactly 32 bytes.</summary>
+    /// <remarks>
+    /// <para>
+    /// Stated rather than generated, for the reason <see cref="PostgresPassword" /> is and with more at stake. A
+    /// generated key is kept stable only by persisting it, and the data volume it protects outlives whatever store that
+    /// would be — a diverged password reports an authentication error, while a diverged key leaves every locally sealed
+    /// row unopenable with nothing to report but a failed authentication tag. A value that never changes cannot diverge
+    /// from one, and resetting the local database is what re-seals it.
+    /// </para>
+    /// <para>
+    /// It decodes to the ASCII text <c>mailfathom-development-only-key!</c>, so anyone who meets these bytes in a local
+    /// database or a log finds out what they are by decoding them. It protects one developer's synthetic mail on a
+    /// container published on the loopback address alone and unlocks nothing a deployment holds: a deployed MailFathom
+    /// resolves its key from a secret reference an operator provisioned, which
+    /// <see href="../../docs/decisions/0005-data-encryption-key-ring-and-provisioning.md">ADR 0005</see> records and
+    /// which this app model builds no part of.
+    /// </para>
+    /// </remarks>
+    public const string DataEncryptionKeyMaterial = "bWFpbGZhdGhvbS1kZXZlbG9wbWVudC1vbmx5LWtleSE=";
+
     /// <summary>The MailFathom host project resource.</summary>
     public const string HostResourceName = "mailfathom-host";
 

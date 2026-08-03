@@ -6,15 +6,23 @@ using Xunit;
 
 namespace MailFathom.AppHost.UnitTests;
 
-/// <summary>Covers the name every ephemeral container and volume an integration run creates is built from.</summary>
+/// <summary>Covers the two values the app model states rather than derives: the ephemeral resource name, and the development data-encryption key.</summary>
 /// <remarks>
-/// What these assert is what the removal at the end of a run depends on. A prefix that did not start with the shared
-/// part would leave a run's resources outside every filter that finds them, and an identifier a container runtime
-/// refuses would fail the run at a point that says nothing about why.
+/// What the naming assertions establish is what the removal at the end of a run depends on. A prefix that did not start
+/// with the shared part would leave a run's resources outside every filter that finds them, and an identifier a
+/// container runtime refuses would fail the run at a point that says nothing about why.
+/// <para>
+/// The key assertion establishes something the compiler cannot: the constant is written into a <c>plaintext:</c> secret
+/// reference, so a mistyped character or a change to the text behind it would first be reported by a developer's own
+/// orchestration failing its startup validation, long after the edit.
+/// </para>
 /// </remarks>
 public sealed class OrchestrationContractTests
 {
     private const string GeneratedIdentifierSeparator = "-";
+
+    /// <summary>The key length AES-256 takes, stated here because this project compiles one source file and reaches no shared constant.</summary>
+    private const int DataEncryptionKeySizeInBytes = 32;
 
     /// <summary>A run that states no identifier still names its resources apart from every other run's.</summary>
     [Theory]
@@ -96,6 +104,31 @@ public sealed class OrchestrationContractTests
 
         // Assert
         Assert.Contains(OrchestrationContract.EphemeralRunIdentifierVariable, failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The development key has to be what the host's own startup validation accepts, or no local run seals anything.</summary>
+    [Fact]
+    public void DataEncryptionKeyMaterial_TheStatedDevelopmentKey_IsBase64OfExactlyTheAcceptedKeyLength()
+    {
+        // Act
+        var decoded = Convert.FromBase64String(OrchestrationContract.DataEncryptionKeyMaterial);
+
+        // Assert
+        Assert.Equal(DataEncryptionKeySizeInBytes, decoded.Length);
+    }
+
+    /// <summary>The ring's active identifier has to name a key the ring configures, which locally means the one key there is.</summary>
+    /// <remarks>
+    /// The app model writes this constant into both <c>DataEncryption__ActiveKeyId</c> and
+    /// <c>DataEncryption__Keys__0__KeyId</c>, so the two agreeing is what stops a local run from being refused for
+    /// naming an active key nothing configures.
+    /// </remarks>
+    [Fact]
+    public void DataEncryptionKeyId_TheStatedIdentifier_IsOneTheConfigurationValidatorAccepts()
+    {
+        // Assert — the accepted shape is an alphanumeric first character followed by up to 63 more of the same plus
+        // `.`, `_`, and `-`. It is restated rather than shared because this project compiles one source file.
+        Assert.Matches("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", OrchestrationContract.DataEncryptionKeyId);
     }
 
     private static string IdentifierOf(string prefix) =>
