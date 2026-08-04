@@ -4,7 +4,10 @@
 
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Security.Transport;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Primitives;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Hosting.Startup;
@@ -120,6 +123,78 @@ public sealed class ClearTextRedirectToHttpsTests
                 "/api/admin/session",
                 QueryString.Empty));
 
+    [Fact]
+    public async Task UseClearTextRedirectToHttps_ARequestOnARedirectListener_IsAnsweredWithoutReachingTheRestOfThePipeline()
+    {
+        // Arrange
+        var context = RequestOn(RedirectListenerPort, "mail.example.test", "/mcp", "?cursor=abc");
+        var reachedTheRestOfThePipeline = false;
+
+        // Act
+        await RedirectMiddleware(() => reachedTheRestOfThePipeline = true)(context);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status308PermanentRedirect, context.Response.StatusCode);
+        Assert.Equal("https://mail.example.test:8443/mcp?cursor=abc", context.Response.Headers.Location);
+        Assert.False(reachedTheRestOfThePipeline);
+    }
+
+    /// <summary>
+    /// The whole safety property of this listener: nothing behind it runs. Were the refusal to fall through, the request
+    /// would go on to reach routing, authentication, and the rate limiter over a clear-text hop.
+    /// </summary>
+    [Fact]
+    public async Task UseClearTextRedirectToHttps_AnUnrecognizedHostOnARedirectListener_IsRefusedWithoutReachingTheRestOfThePipeline()
+    {
+        // Arrange
+        var context = RequestOn(RedirectListenerPort, "someone-elses-domain.test", "/mcp");
+        var reachedTheRestOfThePipeline = false;
+
+        // Act
+        await RedirectMiddleware(() => reachedTheRestOfThePipeline = true)(context);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, context.Response.StatusCode);
+        Assert.True(StringValues.IsNullOrEmpty(context.Response.Headers.Location));
+        Assert.False(reachedTheRestOfThePipeline);
+    }
+
+    /// <summary>
+    /// The direction that matters as much: this middleware is registered ahead of every route in the process, so a listener
+    /// it claimed by mistake would take the whole surface down rather than redirect it.
+    /// </summary>
+    [Fact]
+    public async Task UseClearTextRedirectToHttps_ARequestOnAListenerThatServesRoutes_ReachesTheRestOfThePipelineUntouched()
+    {
+        // Arrange
+        var context = RequestOn(8443, "mail.example.test", "/mcp");
+        var reachedTheRestOfThePipeline = false;
+
+        // Act
+        await RedirectMiddleware(() => reachedTheRestOfThePipeline = true)(context);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        Assert.True(StringValues.IsNullOrEmpty(context.Response.Headers.Location));
+        Assert.True(reachedTheRestOfThePipeline);
+    }
+
+    /// <summary>A deployment where no surface redirects leaves every listener alone, which is why the registration can be unconditional.</summary>
+    [Fact]
+    public async Task UseClearTextRedirectToHttps_NoSurfaceRedirecting_LeavesEveryRequestAlone()
+    {
+        // Arrange
+        var context = RequestOn(RedirectListenerPort, "mail.example.test", "/mcp");
+        var reachedTheRestOfThePipeline = false;
+
+        // Act
+        await RedirectMiddleware(() => reachedTheRestOfThePipeline = true, new ClearTextRedirectTargets([]))(context);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        Assert.True(reachedTheRestOfThePipeline);
+    }
+
     private static string? ResolveFor(string host, string path, string query = "") =>
         ClearTextRedirectToHttps.ResolveLocation(
             Targets,
@@ -127,4 +202,30 @@ public sealed class ClearTextRedirectToHttpsTests
             new HostString(host),
             new PathString(path),
             new QueryString(query));
+
+    private static RequestDelegate RedirectMiddleware(Action onReached, ClearTextRedirectTargets? targets = null)
+    {
+        var pipeline = new ApplicationBuilder(new ServiceCollection().BuildServiceProvider());
+
+        pipeline.UseClearTextRedirectToHttps(targets ?? Targets);
+        pipeline.Run(_ =>
+        {
+            onReached();
+
+            return Task.CompletedTask;
+        });
+
+        return pipeline.Build();
+    }
+
+    private static DefaultHttpContext RequestOn(int port, string host, string path, string query = "")
+    {
+        var context = new DefaultHttpContext();
+        context.Connection.LocalPort = port;
+        context.Request.Host = new HostString(host);
+        context.Request.Path = new PathString(path);
+        context.Request.QueryString = new QueryString(query);
+
+        return context;
+    }
 }
