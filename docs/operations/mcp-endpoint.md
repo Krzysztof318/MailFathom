@@ -619,6 +619,13 @@ The [health endpoints](health-endpoints.md) are untouched by this. They keep the
 `HealthEndpoints:Transport`, and no probe is ever asked on this port — which is deliberate, because a probe follows no
 redirect and would read a `308` as a failure.
 
+**If you also run a proxy, point it at a profile's port and never at this one.** The two postures rarely meet — a
+deployment [behind a TLS-terminating proxy](#behind-a-tls-terminating-reverse-proxy) normally configures no profile here,
+and then `8080` is the ordinary application listener rather than a redirect. Where a deployment does both, a proxy
+forwarding to the redirect port would have every request answered with a `308` to the profile it should have been sent to
+in the first place. With [a trusted proxy named](#behind-a-tls-terminating-reverse-proxy) the redirect uses the forwarded
+public host, so the `Location` carries the name your clients use rather than the internal one the proxy dialled.
+
 Four properties are worth knowing:
 
 - **`308`, not `301` or `302`.** The MCP transport is a `POST`; the older codes permit a client to re-send it as a `GET`,
