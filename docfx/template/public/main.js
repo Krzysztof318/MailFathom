@@ -44,11 +44,16 @@ export default {
 // depth of the page this runs on never has to be guessed.
 function resolveSiteLayout() {
   const relativeRoot = document.querySelector('meta[name="docfx:rel"]')?.getAttribute('content')
-  if (!relativeRoot) {
+
+  // A page *at* that root carries the empty string, which is the correct answer rather than a missing
+  // one — and is why the two pages served from a version's own directory, the landing page and the
+  // changelog, are exactly the ones a falsy test would drop. Only an absent tag means the layout
+  // cannot be resolved; an empty one resolves to the directory the page is in.
+  if (relativeRoot === null || relativeRoot === undefined) {
     return null
   }
 
-  const versionUrl = new URL(relativeRoot, window.location.href)
+  const versionUrl = new URL(relativeRoot || './', window.location.href)
   const siteUrl = new URL('../', versionUrl)
   const segments = versionUrl.pathname.split('/').filter(segment => segment.length > 0)
 

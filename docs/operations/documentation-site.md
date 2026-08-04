@@ -115,8 +115,14 @@ above it.
 what is added is behavior the pages need. The one appearance rule is the header logo, which `modern` does not size at
 all: its own logo is an SVG whose intrinsic size already fits a header, so a raster file arrives at whatever size it
 was saved at. Nothing in the build can see that — docfx renders a page without laying it out, so a logo that fits and
-one that covers the page produce the same output — which makes the site's appearance the one part of it that is
-verified by looking at it.
+one that covers the page produce the same output.
+
+That is the general shape of what this template can get wrong. Everything it adds happens in the browser, after the
+build has finished and against files the build never reads, so a page that renders the selector and one that silently
+does not are the same output as far as every gate here is concerned. **The site's appearance and its run-time
+behaviour are the parts of it verified by looking at the deployed site**, and both defects found that way so far — a
+logo at its natural size, and a selector missing from the two pages served from a version's own directory — were
+invisible to a green build.
 
 What the template adds beyond that:
 
