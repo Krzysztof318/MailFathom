@@ -149,10 +149,11 @@ default port differs, so enabling TLS on both surfaces opens two clear-text port
 
 ## Behind a TLS-terminating reverse proxy
 
-If a proxy holds your certificate, `ReverseProxy:TrustedProxies` is what makes the request state the public name it
-arrived under, which is what lets `AdminEndpoint:OAuth` discovery complete over a proxied address.
-[Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) documents the mode in
-full; three things are worth stating from this endpoint's side.
+If a proxy holds your certificate, the request states the public name it arrived under, which is what lets
+`AdminEndpoint:OAuth` discovery complete over a proxied address. `ReverseProxy:TrustedProxies` is what limits who may
+state it; left empty it is anybody.
+[Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) documents that in
+full, including what the unnamed default gives up; three things are worth stating from this endpoint's side.
 
 - **It is one process-wide setting, not one per endpoint.** This surface is a separate listener over the same request
   pipeline, so naming your proxy once covers it along with the MCP and probe listeners. There is no

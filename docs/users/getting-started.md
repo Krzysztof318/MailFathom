@@ -178,8 +178,9 @@ origins, serving your own domain over TLS, client certificates, and the rate lim
 
 MailFathom itself serves plain HTTP unless its own TLS termination is configured, so keep the application port on
 loopback or behind a TLS-terminating proxy — the Compose deployment's default — and give the proxy the certificate. If
-you put a proxy in front, name it in `ReverseProxy:TrustedProxies` as well, so the public scheme and host survive the
-hop: [behind a TLS-terminating reverse proxy](../operations/mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy).
+you put a proxy in front, name it in `ReverseProxy:TrustedProxies` as well. The public scheme and host survive the hop
+either way; naming the proxy is what stops anything else that can reach the port from claiming them:
+[behind a TLS-terminating reverse proxy](../operations/mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy).
 
 ## 7. Connect an MCP client
 

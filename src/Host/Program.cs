@@ -274,9 +274,9 @@ try
     builder.Services.AddHostedService(provider => OpenSslConfigurationWarning.FromEnvironment(
         provider.GetRequiredService<ILogger<OpenSslConfigurationWarning>>()));
 
-    // Read before the surfaces, because it is the one posture they all sit behind: which proxy, if any, this process
-    // accepts a public scheme and host from. Read once for the same reason every section below is — it decides which
-    // middleware the pipeline carries, and the encryption warning states the posture this settles.
+    // Read before the surfaces, because it is the one posture they all sit behind: which peers this process accepts a
+    // public scheme and host from. Read once for the same reason every section below is — the pipeline's
+    // forwarded-header policy is composed from it, and the encryption warning states the posture this settles.
     var reverseProxySettings = ReverseProxyOptions.ReadFrom(builder.Configuration);
     builder.Services.AddSingleton(Options.Create(reverseProxySettings));
 
@@ -290,10 +290,7 @@ try
             reverseProxyConfigurationErrors);
     }
 
-    if (reverseProxySettings.Enabled)
-    {
-        builder.Services.AddTrustedReverseProxy(reverseProxySettings);
-    }
+    builder.Services.AddTrustedReverseProxy(reverseProxySettings);
 
     // Read once and registered, so the value that decides the route is the one every consumer resolves. Whether the
     // endpoint exists is decided while the application is being built, before a container that could resolve a snapshot
@@ -559,12 +556,9 @@ try
 
     // First, ahead of the exception handler and of every isolation check, so that nothing downstream ever reads a
     // scheme or host the proxy already corrected. Discovery, the challenge, and any address composed from a request
-    // then agree with the name the client used, and a request from anything but a trusted proxy passes through with
-    // the scheme and host it arrived under.
-    if (reverseProxySettings.Enabled)
-    {
-        app.UseForwardedHeaders();
-    }
+    // then agree with the name the client used, and a request from a peer this deployment does not trust passes
+    // through with the scheme and host it arrived under.
+    app.UseForwardedHeaders();
 
     app.UseExceptionHandler();
 

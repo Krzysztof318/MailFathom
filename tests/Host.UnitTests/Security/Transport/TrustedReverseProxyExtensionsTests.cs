@@ -5,6 +5,8 @@
 using System.Net;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -93,6 +95,44 @@ public sealed class TrustedReverseProxyExtensionsTests
 
         // Act
         await ForwardThrough(TrustingProxies("0.0.0.0/0", "::/0"), request);
+
+        // Assert
+        Assert.Equal("https", request.Request.Scheme);
+        Assert.Equal("anything.example.test", request.Request.Host.Value);
+    }
+
+    /// <summary>
+    /// The default posture, asserted through the middleware because that is where it is felt: a deployment that
+    /// configured no proxy serves any peer's forwarded scheme and host. It is the same trust as the written-out prefix
+    /// above and gives up the same refusal, which is why the startup warning names it in the same terms.
+    /// </summary>
+    [Fact]
+    public async Task AddTrustedReverseProxy_ASectionNamingNoProxy_BelievesAnyPeerAtAll()
+    {
+        // Arrange
+        var request = RequestFrom(IPAddress.Parse("203.0.113.9"));
+        request.Request.Headers["X-Forwarded-Proto"] = "https";
+        request.Request.Headers["X-Forwarded-Host"] = "anything.example.test";
+
+        // Act
+        await ForwardThrough(new ReverseProxyOptions(), request);
+
+        // Assert
+        Assert.Equal("https", request.Request.Scheme);
+        Assert.Equal("anything.example.test", request.Request.Host.Value);
+    }
+
+    /// <summary>An IPv6 peer is believed by the default too, which is what the second prefix is for.</summary>
+    [Fact]
+    public async Task AddTrustedReverseProxy_ASectionNamingNoProxyReachedOverIPv6_BelievesThatPeerAsWell()
+    {
+        // Arrange
+        var request = RequestFrom(IPAddress.Parse("2001:db8::99"));
+        request.Request.Headers["X-Forwarded-Proto"] = "https";
+        request.Request.Headers["X-Forwarded-Host"] = "anything.example.test";
+
+        // Act
+        await ForwardThrough(new ReverseProxyOptions(), request);
 
         // Assert
         Assert.Equal("https", request.Request.Scheme);
@@ -216,6 +256,50 @@ public sealed class TrustedReverseProxyExtensionsTests
         Assert.Equal("mail.example.test", request.Request.Host.Value);
     }
 
+    /// <summary>
+    /// What the default posture costs, pinned as a test rather than left as prose. The refusal of an access token that
+    /// arrived without transport encryption reads the scheme after this policy applied it, so whoever is trusted here
+    /// decides whether that refusal fires. With every peer trusted, a client asserting that its own hop was encrypted
+    /// has a reusable credential accepted over clear text.
+    /// </summary>
+    [Fact]
+    public async Task AddTrustedReverseProxy_ASectionNamingNoProxy_LetsAClientsOwnClaimSatisfyTheTokenTransportRefusal()
+    {
+        // Arrange
+        var request = RequestFrom(IPAddress.Parse("203.0.113.9"));
+        request.Request.Headers["X-Forwarded-Proto"] = "https";
+
+        // Act
+        await ForwardThrough(new ReverseProxyOptions(), request);
+        var authentication = MessageReceivedOn(request);
+        await TransportSecurityExtensions.RefuseATokenThatArrivedWithoutTransportEncryption(authentication);
+
+        // Assert
+        Assert.Null(authentication.Result);
+    }
+
+    /// <summary>
+    /// The control the assertion above needs. Naming a proxy makes the same claim from the same peer change nothing,
+    /// so the token is refused — which is what proves the test above observes a real difference rather than a refusal
+    /// that never fires.
+    /// </summary>
+    [Fact]
+    public async Task AddTrustedReverseProxy_AnUntrustedPeerClaimingEncryption_StillHasItsTokenRefused()
+    {
+        // Arrange
+        var request = RequestFrom(IPAddress.Parse("203.0.113.9"));
+        request.Request.Headers["X-Forwarded-Proto"] = "https";
+
+        // Act
+        await ForwardThrough(TrustingProxies("10.0.0.5"), request);
+        var authentication = MessageReceivedOn(request);
+        await TransportSecurityExtensions.RefuseATokenThatArrivedWithoutTransportEncryption(authentication);
+
+        // Assert
+        Assert.NotNull(authentication.Result);
+        Assert.True(authentication.Result.None);
+    }
+
     /// <summary>The client address is deliberately out of scope: nothing here partitions, limits, or logs by one.</summary>
     [Fact]
     public async Task AddTrustedReverseProxy_RequestCarryingAForwardedClientAddress_KeepsThePeerItObservedItself()
@@ -261,7 +345,7 @@ public sealed class TrustedReverseProxyExtensionsTests
 
     private static ReverseProxyOptions TrustingProxies(params string[] trustedProxies)
     {
-        var settings = new ReverseProxyOptions { Enabled = true };
+        var settings = new ReverseProxyOptions();
 
         foreach (var trustedProxy in trustedProxies)
         {
@@ -294,6 +378,16 @@ public sealed class TrustedReverseProxyExtensionsTests
 
         return context;
     }
+
+    /// <summary>Presents the request to the bearer handler at the point the transport refusal reads its scheme.</summary>
+    private static MessageReceivedContext MessageReceivedOn(HttpContext request) =>
+        new(
+            request,
+            new AuthenticationScheme(
+                TransportSurface.Mcp.OAuthSchemeNameFor("workforce"),
+                displayName: null,
+                typeof(JwtBearerHandler)),
+            new JwtBearerOptions());
 
     private static Task ForwardThrough(ReverseProxyOptions settings, HttpContext request)
     {

@@ -8,16 +8,18 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Endpoints;
 
-/// <summary>Covers which reverse-proxy settings an operator is allowed to start the host on.</summary>
+/// <summary>Covers which reverse-proxy settings an operator is allowed to start the host on, and what an unnamed proxy resolves to.</summary>
 /// <remarks>
-/// A forwarded scheme and host are worth what the connection carrying them is worth, so the refusals here are what
-/// keep the mode from ever running on an unstated trust: enabling it without naming a proxy, and naming one that is
-/// neither an address nor a network.
+/// A forwarded scheme and host are worth what the connection carrying them is worth, so what the trust resolves to is
+/// the contract here: an entry that is neither an address nor a network is refused, and a section that names nothing
+/// trusts every peer rather than nobody. The second is the posture the startup warning exists for, and asserting it
+/// keeps the default from drifting silently.
 /// </remarks>
 public sealed class ReverseProxyOptionsTests
 {
+    /// <summary>An unconfigured section is a supported posture rather than a mistake, so it starts the host.</summary>
     [Fact]
-    public void FindConfigurationErrors_DisabledSection_FindsNothing()
+    public void FindConfigurationErrors_ASectionNamingNoProxy_FindsNothing()
     {
         // Arrange
         var settings = new ReverseProxyOptions();
@@ -29,35 +31,67 @@ public sealed class ReverseProxyOptionsTests
         Assert.Empty(errors);
     }
 
-    /// <summary>An operator who named their proxy and left the mode off has a deployment that reads no forwarded header.</summary>
+    /// <summary>
+    /// The default posture, asserted as trust rather than as an empty list, because that is what the middleware ends up
+    /// running on. An operator who configures nothing has every peer believed, and the refusal of an access token that
+    /// arrived without transport encryption reads a scheme any of them can set.
+    /// </summary>
     [Fact]
-    public void FindConfigurationErrors_ProxiesConfiguredWhileDisabled_RefusesTheUnreadSetting()
+    public void ToTrustedProxyNetworks_ASectionNamingNoProxy_TrustsEveryAddressOfBothFamilies()
     {
         // Arrange
         var settings = new ReverseProxyOptions();
-        settings.TrustedProxies.Add("10.0.0.5");
 
         // Act
-        var error = Assert.Single(settings.FindConfigurationErrors());
+        var networks = settings.ToTrustedProxyNetworks();
 
         // Assert
-        Assert.Contains("ReverseProxy:TrustedProxies", error, StringComparison.Ordinal);
-        Assert.Contains("Enabled", error, StringComparison.Ordinal);
+        Assert.Equal(
+            [IPNetwork.Parse("0.0.0.0/0"), IPNetwork.Parse("::/0")],
+            networks);
+        Assert.Empty(settings.ToTrustedProxyAddresses());
     }
 
-    /// <summary>The refusal that keeps the framework's loopback default, and a trust-everything workaround, both out of reach.</summary>
     [Fact]
-    public void FindConfigurationErrors_EnabledWithNoProxyNamed_RefusesStartup()
+    public void ToTrustedProxyRangesCoveringEveryAddress_ASectionNamingNoProxy_ReportsBothFamilies()
     {
         // Arrange
-        var settings = new ReverseProxyOptions { Enabled = true };
+        var settings = new ReverseProxyOptions();
 
         // Act
-        var error = Assert.Single(settings.FindConfigurationErrors());
+        var ranges = settings.ToTrustedProxyRangesCoveringEveryAddress();
 
         // Assert
-        Assert.Contains("ReverseProxy:TrustedProxies", error, StringComparison.Ordinal);
-        Assert.Contains("CIDR", error, StringComparison.Ordinal);
+        Assert.Equal(
+            [IPNetwork.Parse("0.0.0.0/0"), IPNetwork.Parse("::/0")],
+            ranges);
+    }
+
+    /// <summary>Naming one proxy replaces the default outright, rather than being added to it.</summary>
+    [Fact]
+    public void ToTrustedProxyNetworks_AProxyNamed_TrustsThatProxyAlone()
+    {
+        // Arrange
+        var settings = ProxiesTrusted("10.4.0.0/16");
+
+        // Act
+        var networks = settings.ToTrustedProxyNetworks();
+
+        // Assert
+        Assert.Equal([IPNetwork.Parse("10.4.0.0/16")], networks);
+        Assert.Empty(settings.ToTrustedProxyRangesCoveringEveryAddress());
+    }
+
+    [Fact]
+    public void NamesAProxy_ASectionNamingNoProxy_ReportsThatNothingStandsInFront()
+    {
+        // Arrange
+        var settings = new ReverseProxyOptions();
+
+        // Act
+        // Assert
+        Assert.False(settings.NamesAProxy);
+        Assert.True(ProxiesTrusted("10.0.0.5").NamesAProxy);
     }
 
     [Theory]
@@ -69,8 +103,7 @@ public sealed class ReverseProxyOptionsTests
     public void FindConfigurationErrors_ProxyNamedAsAnAddressOrNetwork_FindsNothing(string trustedProxy)
     {
         // Arrange
-        var settings = new ReverseProxyOptions { Enabled = true };
-        settings.TrustedProxies.Add(trustedProxy);
+        var settings = ProxiesTrusted(trustedProxy);
 
         // Act
         var errors = settings.FindConfigurationErrors();
@@ -80,9 +113,8 @@ public sealed class ReverseProxyOptionsTests
     }
 
     /// <summary>
-    /// A prefix covering every address is accepted, because it is a posture an operator can mean and one they have to
-    /// write. What it costs is documented rather than refused: the refusal of an OAuth token that arrived without TLS
-    /// reads the scheme this mode applies, so trusting every peer is trusting every peer to be honest about it.
+    /// A prefix covering every address is accepted, because it is the same posture the default resolves to and writing
+    /// it out is how an operator states that they meant it. What it costs is announced rather than refused.
     /// </summary>
     [Theory]
     [InlineData("0.0.0.0/0")]
@@ -90,8 +122,7 @@ public sealed class ReverseProxyOptionsTests
     public void FindConfigurationErrors_APrefixCoveringEveryAddress_IsAcceptedRatherThanRefused(string trustedProxy)
     {
         // Arrange
-        var settings = new ReverseProxyOptions { Enabled = true };
-        settings.TrustedProxies.Add(trustedProxy);
+        var settings = ProxiesTrusted(trustedProxy);
 
         // Act
         var errors = settings.FindConfigurationErrors();
@@ -109,8 +140,7 @@ public sealed class ReverseProxyOptionsTests
     public void FindConfigurationErrors_ProxyNamingNoAddress_RefusesTheEntryByIndex(string trustedProxy)
     {
         // Arrange
-        var settings = new ReverseProxyOptions { Enabled = true };
-        settings.TrustedProxies.Add(trustedProxy);
+        var settings = ProxiesTrusted(trustedProxy);
 
         // Act
         var error = Assert.Single(settings.FindConfigurationErrors());
@@ -126,8 +156,7 @@ public sealed class ReverseProxyOptionsTests
     public void FindConfigurationErrors_MalformedNetwork_RefusesTheEntry(string trustedProxy)
     {
         // Arrange
-        var settings = new ReverseProxyOptions { Enabled = true };
-        settings.TrustedProxies.Add(trustedProxy);
+        var settings = ProxiesTrusted(trustedProxy);
 
         // Act
         var error = Assert.Single(settings.FindConfigurationErrors());
@@ -149,8 +178,7 @@ public sealed class ReverseProxyOptionsTests
         string widenedNetwork)
     {
         // Arrange
-        var settings = new ReverseProxyOptions { Enabled = true };
-        settings.TrustedProxies.Add(trustedProxy);
+        var settings = ProxiesTrusted(trustedProxy);
 
         // Act
         var error = Assert.Single(settings.FindConfigurationErrors());
@@ -164,10 +192,7 @@ public sealed class ReverseProxyOptionsTests
     public void FindConfigurationErrors_SeveralFaultyEntries_ReportsEachByItsOwnIndex()
     {
         // Arrange
-        var settings = new ReverseProxyOptions { Enabled = true };
-        settings.TrustedProxies.Add("10.0.0.5");
-        settings.TrustedProxies.Add("ingress.example.test");
-        settings.TrustedProxies.Add("10.0.0.5/24");
+        var settings = ProxiesTrusted("10.0.0.5", "ingress.example.test", "10.0.0.5/24");
 
         // Act
         var errors = settings.FindConfigurationErrors();
@@ -195,8 +220,8 @@ public sealed class ReverseProxyOptionsTests
     public void FindConfigurationErrors_HopLimitBelowOne_RefusesStartup(int maximumForwardedHops)
     {
         // Arrange
-        var settings = new ReverseProxyOptions { Enabled = true, MaximumForwardedHops = maximumForwardedHops };
-        settings.TrustedProxies.Add("10.0.0.5");
+        var settings = ProxiesTrusted("10.0.0.5");
+        settings.MaximumForwardedHops = maximumForwardedHops;
 
         // Act
         var error = Assert.Single(settings.FindConfigurationErrors());
@@ -237,7 +262,7 @@ public sealed class ReverseProxyOptionsTests
 
     private static ReverseProxyOptions ProxiesTrusted(params string[] trustedProxies)
     {
-        var settings = new ReverseProxyOptions { Enabled = true };
+        var settings = new ReverseProxyOptions();
 
         foreach (var trustedProxy in trustedProxies)
         {

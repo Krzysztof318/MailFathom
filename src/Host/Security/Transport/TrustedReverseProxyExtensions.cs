@@ -15,6 +15,12 @@ namespace MailFathom.Host.Security.Transport;
 /// container, and it processes <c>X-Forwarded-For</c> when asked to, which this deployment never asks for.
 /// </para>
 /// <para>
+/// A policy is composed on every startup, because there is no posture in which no forwarded header is read. A section
+/// naming no proxy resolves to trusting every address, so the lists cleared below are repopulated with a prefix
+/// covering each family rather than left empty; <see cref="ReverseProxyOptions.TrustedProxies" /> states what that
+/// gives up and the startup warning names it.
+/// </para>
+/// <para>
 /// The client address is out of scope on purpose. Nothing here partitions, limits, or logs by remote address, so
 /// rewriting <see cref="ConnectionInfo.RemoteIpAddress" /> from a header would replace the
 /// one address this process observes for itself — the peer that opened the connection — with one an upstream wrote,
