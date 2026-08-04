@@ -2449,9 +2449,12 @@ every_workflow_job_declares_its_permissions() {
 
 # Every write scope in the repository, named here so a new one is a deliberate edit to this list
 # rather than a line nobody reviewed. The publishing jobs need a registry write and the two an
-# attestation takes; `announce` needs to write the release it announces. `release.yml` carries each of
-# the three twice because it calls two publishing workflows, one for the image and one for the chart,
-# and a caller states the permissions it hands down. One scope belongs to no publishing job:
+# attestation takes; `announce` needs to write the release it announces. `release.yml` states them for
+# each workflow it calls, because a caller states the permissions it hands down, and it calls three
+# that need any: the image, the chart, and `sign-cli-binaries.yml`. So it carries `id-token: write`
+# and `attestations: write` three times and `packages: write` twice — signing pushes to no registry,
+# and the attestation it makes over the signed binaries is what needs the other two. One scope
+# belongs to no publishing job:
 # `codeql.yml` holds `security-events: write` and runs for a pull request, which is the one exception
 # to the rule the rest of this list describes. It writes code-scanning alerts and nothing else, and an
 # analysis that cannot record one is a log line rather than a check. Nothing else writes at all.
