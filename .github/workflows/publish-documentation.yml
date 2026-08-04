@@ -30,11 +30,18 @@ on:
   # A tag is pushed before the publication it starts has finished, so the site can briefly carry a version whose image
   # and release do not exist yet. That resolves itself rather than needing handling: every run rebuilds the whole site
   # from the tags it can see, so a tag deleted after a failed publication is gone from the selector on the next one.
+  #
+  # The tag filter is narrowed to a leading `v` followed by three dot-separated groups each opening with a digit, rather
+  # than to `v*`, which would also start a publish for `vnext` or any other tag somebody spells with a leading v. A
+  # filter pattern is a glob and not a regular expression, so the exact `v<major>.<minor>.<patch>` shape is not
+  # expressible here and a prerelease or a fourth group still matches. That costs a rebuild and never a wrong version:
+  # `scripts/list-documented-versions.sh` decides what the site carries, and it does apply that exact expression — so
+  # this filter chooses when a rebuild runs, never what it publishes, and a spurious one rebuilds the same site.
   push:
     branches:
       - main
     tags:
-      - 'v*'
+      - 'v[0-9]*.[0-9]*.[0-9]*'
   # The site definition is verified on a pull request that changes it, and deploys nothing. A change under `src/`
   # cannot break this build — an XML comment docfx dislikes is a warning — so the filter deliberately leaves it out
   # rather than adding a multi-minute job to nearly every pull request the repository sees.

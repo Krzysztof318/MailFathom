@@ -170,7 +170,7 @@ the viewer opens from a single delegated listener rather than from handlers boun
 
 ## Publishing
 
-`.github/workflows/publish-documentation.yml` runs on every push to `main`, on a published release, and on demand. It
+`.github/workflows/publish-documentation.yml` runs on every push to `main`, on a pushed release tag, and on demand. It
 resolves the version list, builds each version in parallel, composes them into one tree, and deploys that tree with
 the repository's own Pages deployment — `actions/deploy-pages`, not a bot pushing to a branch. It needs no secret: the
 `pages: write` and `id-token: write` scopes on the deploying job are all it holds, and nothing in it writes to the
