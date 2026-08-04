@@ -5,6 +5,7 @@
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Security.Transport;
 using Microsoft.Extensions.Configuration;
@@ -223,6 +224,103 @@ public sealed class AdminEndpointOptionsTests
     }
 
     /// <summary>
+    /// The redirect's port is one this endpoint binds, so it is checked against every other listener in the process. Left
+    /// out, a deployment could hand it to the probes or to the MCP surface and meet an address-in-use failure naming a
+    /// socket rather than a section.
+    /// </summary>
+    [Fact]
+    public void ListenerPorts_AnEndpointTerminatingTls_ClaimsTheRedirectPortBesideTheProfiles()
+    {
+        // Arrange
+        var settings = TlsTerminatingEndpoint();
+
+        // Act, Assert
+        Assert.Equal([8091, 8543], settings.ListenerPorts.Order());
+    }
+
+    [Fact]
+    public void ListenerPorts_ARedirectTurnedOff_ClaimsTheProfilePortsAlone()
+    {
+        // Arrange
+        var settings = TlsTerminatingEndpoint();
+        settings.Https.Redirect.Enabled = false;
+
+        // Act, Assert
+        Assert.Equal([8543], settings.ListenerPorts.Order());
+    }
+
+    /// <summary>The clear-text port is what the endpoint binds when it terminates no TLS, and there is nothing to redirect from.</summary>
+    [Fact]
+    public void ListenerPorts_AnEndpointTerminatingNoTls_ClaimsItsClearTextPortAlone() =>
+        Assert.Equal([8090], EnabledEndpoint().ListenerPorts.Order());
+
+    [Fact]
+    public void FindConfigurationErrors_ARedirectPortAnotherListenerBinds_IsRefusedBeforeAnythingBinds()
+    {
+        // Arrange
+        var settings = TlsTerminatingEndpoint();
+
+        // Act, Assert
+        Assert.Contains(
+            settings.FindConfigurationErrors([8091]),
+            error => error.Contains("already bound by another listener", StringComparison.Ordinal));
+    }
+
+    /// <summary>A port nothing binds collides with nothing, so a disabled redirect is not compared against the other listeners.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ADisabledRedirectOnAClaimedPort_ReportsNothing()
+    {
+        // Arrange
+        var settings = TlsTerminatingEndpoint();
+        settings.Https.Redirect.Enabled = false;
+
+        // Act, Assert
+        Assert.Empty(settings.FindConfigurationErrors([8091]));
+    }
+
+    /// <summary>Each surface redirects to its own profiles, so the two defaults have to differ or enabling both would collide.</summary>
+    [Fact]
+    public void ClearTextRedirectPort_TheAdministrativeDefault_IsNotTheMcpEndpointsDefault() =>
+        Assert.NotEqual(
+            McpEndpointOptions.DefaultClearTextRedirectPort,
+            AdminEndpointOptions.DefaultClearTextRedirectPort);
+
+    [Fact]
+    public void ReadFrom_AConfiguredRedirect_BindsItAndRecordsThatItWasStated()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["AdminEndpoint:Enabled"] = "true",
+            ["AdminEndpoint:Https:Redirect:Port"] = "8092",
+        });
+
+        // Act
+        var settings = AdminEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.True(settings.Https.Redirect.WasStated);
+        Assert.Equal(8092, settings.ClearTextRedirectPort);
+    }
+
+    /// <summary>Stating a redirect for an endpoint that terminates no TLS is refused, because nothing would bind it and the endpoint is already served in clear text.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ARedirectStatedForAnEndpointTerminatingNoTls_IsRefused()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["AdminEndpoint:Enabled"] = "true",
+            ["AdminEndpoint:Https:Redirect:Port"] = "8092",
+        });
+
+        // Act, Assert
+        Assert.Contains(
+            AdminEndpointOptions.ReadFrom(configuration).FindConfigurationErrors([]),
+            error => error.Contains("nothing to redirect to", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The section that must apply whether or not anyone wrote it: an administrative endpoint reachable from a network
     /// with no limit is unbounded key guessing, and the surface where a successful guess is worth the most.
     /// </summary>
@@ -293,6 +391,23 @@ public sealed class AdminEndpointOptionsTests
     }
 
     private static AdminEndpointOptions EnabledEndpoint() => new() { Enabled = true };
+
+    private static AdminEndpointOptions TlsTerminatingEndpoint()
+    {
+        var settings = EnabledEndpoint();
+        settings.Https.Endpoints.Add(new TransportHttpsEndpointOptions
+        {
+            Name = "admin",
+            Domain = "admin.example.test",
+            Port = 8543,
+            ServerCertificate = new TlsServerCertificateOptions
+            {
+                Bundle = new ConfiguredSecret { Name = "bundle", SecretReference = "file:/etc/mailfathom/tls/admin.pfx" },
+            },
+        });
+
+        return settings;
+    }
 
     private static AdminEndpointOptions OAuthEndpoint(string resource)
     {

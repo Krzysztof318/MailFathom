@@ -37,17 +37,19 @@ namespace MailFathom.Host.Security.Transport;
 /// </remarks>
 internal static class TransportHttpsEndpointBinder
 {
-    /// <summary>Binds one Kestrel listener per address the configured profiles name.</summary>
+    /// <summary>Binds one Kestrel listener per address the configured profiles name, and the clear-text redirect beside them.</summary>
     /// <param name="kestrelOptions">The server options being composed.</param>
     /// <param name="httpsSettings">The validated HTTPS profiles.</param>
     /// <param name="certificateStore">The store the handshake reads its identities from.</param>
     /// <param name="requestClientCertificates">Whether the handshake asks the client for a certificate, which it does when any client certificate profile is configured.</param>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <param name="clearTextRedirect">The socket the redirect listener binds, or <see langword="null" /> when this surface serves none.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="clearTextRedirect" /> is <see langword="null" />.</exception>
     internal static void Bind(
         KestrelServerOptions kestrelOptions,
         TransportHttpsOptions httpsSettings,
         TransportServerCertificateStore certificateStore,
-        bool requestClientCertificates)
+        bool requestClientCertificates,
+        TransportHttpsListenerAddress? clearTextRedirect)
     {
         ArgumentNullException.ThrowIfNull(kestrelOptions);
         ArgumentNullException.ThrowIfNull(httpsSettings);
@@ -71,6 +73,15 @@ internal static class TransportHttpsEndpointBinder
                         context),
                 });
             });
+        }
+
+        // No UseHttps, because the point of the socket is to accept the clear-text request a client has not been
+        // repointed from, and no protocol selection either: the listener default accepts anything a stray client speaks
+        // over clear text, and every request it accepts is answered by the redirect middleware before routing. Narrowing
+        // it would turn a client this exists to help into a connection failure, which is the outcome it exists to avoid.
+        if (clearTextRedirect is { } redirect)
+        {
+            kestrelOptions.Listen(redirect.Address, redirect.Port);
         }
     }
 

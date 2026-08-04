@@ -347,6 +347,20 @@ A certificate block names either `Bundle` (one PKCS#12 secret block, optionally 
 `CertificateChain` and `PrivateKey` (PEM, as two secret blocks). Startup proves the material loads, covers the stated
 domain, and is not expired — before any listener opens.
 
+### Clear-text redirect — `McpEndpoint:Https:Redirect`
+
+One clear-text listener whose only answer is a `308` to the address the profiles above are served at, so enabling TLS does
+not read as an outage to a client nobody repointed yet. It maps no route and runs no credential check, and it exists only
+while `McpEndpoint:Https:Endpoints` names a profile. Writing this section without one fails startup.
+[Redirecting a client still pointed at `http://`](mcp-endpoint.md#redirecting-a-client-still-pointed-at-http) records what
+a redirect does and does not protect.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:Enabled` | bool | `true` | Honored only while an HTTPS profile is configured | restart |
+| `…:BindAddress` | string | `0.0.0.0` | An IP address; `::` binds IPv6 | restart |
+| `…:Port` | int | `8080` | 1 – 65535; the resulting address and port bound by no HTTPS profile in this section, and the port bound by no other listener in the process | restart |
+
 ### Client certificates — `McpEndpoint:ClientCertificateProfiles:<n>`
 
 Mutual TLS, judged per configured client application. A certificate exists only on a TLS connection this process
@@ -395,7 +409,8 @@ request or per handshake. [Administering a deployment](admin-endpoint.md) is the
 | `AdminEndpoint:Authentication` | flag set | `None` | `ApiKey`, `OAuth`, both comma-separated, or `None`; `None` warns at startup | restart |
 | `AdminEndpoint:ApiKeys` | list of secret blocks | empty | Required non-empty when `ApiKey` is named; refused when configured while it is not | restart; material per request |
 | `AdminEndpoint:OAuth` | block | empty | Same shape and rules as `McpEndpoint:OAuth`, with one addition: `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document. Refused when configured while `OAuth` is not named | restart |
-| `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`; naming any binds those listeners and no clear-text one | restart; material per handshake |
+| `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`; naming any binds those listeners and no clear-text one serving these routes | restart; material per handshake |
+| `AdminEndpoint:Https:Redirect` | block | on, port `8091` | Same shape and rules as `McpEndpoint:Https:Redirect`; the default port differs so terminating TLS on both surfaces opens two clear-text ports that do not collide | restart |
 | `AdminEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as `McpEndpoint:RateLimiting` above; applied whether or not it is written | restart |
 
 The routes are served beneath `/api/admin`, which is a constant rather than a setting: a client is configured with a

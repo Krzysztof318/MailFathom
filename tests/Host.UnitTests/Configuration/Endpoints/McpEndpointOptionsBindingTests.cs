@@ -344,6 +344,141 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Equal([TransportHttpProtocol.Http1, TransportHttpProtocol.Http2], profile.ServedHttpProtocols);
     }
 
+    /// <summary>
+    /// The redirect is on by default, so an absent section and one an operator wrote bind to identical values. Only
+    /// configuration can tell them apart, which is what makes a redirect stated for a surface terminating no TLS a startup
+    /// error rather than a default nobody asked for.
+    /// </summary>
+    [Fact]
+    public void ReadFrom_ASectionWithNoRedirectOfItsOwn_LeavesTheRedirectUnstated()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+        });
+
+        // Act
+        var settings = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.False(settings.Https.Redirect.WasStated);
+        Assert.True(settings.Https.Redirect.Enabled);
+        Assert.Null(settings.Https.Redirect.Port);
+    }
+
+    [Fact]
+    public void ReadFrom_AConfiguredRedirect_BindsItAndRecordsThatItWasStated()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+            ["McpEndpoint:Https:Redirect:Port"] = "8888",
+            ["McpEndpoint:Https:Redirect:BindAddress"] = "127.0.0.1",
+        });
+
+        // Act
+        var settings = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.True(settings.Https.Redirect.WasStated);
+        Assert.Equal(8888, settings.Https.Redirect.Port);
+        Assert.Equal(8888, settings.ClearTextRedirectPort);
+        Assert.Equal("127.0.0.1", settings.Https.Redirect.BindAddress);
+    }
+
+    /// <summary>Turning it off is stating it, which is what makes the setting readable as a decision rather than as silence.</summary>
+    [Fact]
+    public void ReadFrom_ARedirectTurnedOff_BindsAsStatedAndDisabled()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+            ["McpEndpoint:Https:Redirect:Enabled"] = "false",
+        });
+
+        // Act
+        var settings = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.True(settings.Https.Redirect.WasStated);
+        Assert.False(settings.Https.Redirect.Enabled);
+    }
+
+    /// <summary>The default is the surface's own, so a deployment reads a port it never wrote from the same place composition does.</summary>
+    [Fact]
+    public void ClearTextRedirectPort_ADeploymentStatingNoPort_TakesTheEndpointsOwnDefault()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+        });
+
+        // Act, Assert
+        Assert.Equal(8080, McpEndpointOptions.ReadFrom(configuration).ClearTextRedirectPort);
+    }
+
+    /// <summary>
+    /// Every socket the surface opens, so the probes and the administrative endpoint are checked against the redirect port
+    /// as well and a conflict is reported against a section rather than as an address already in use.
+    /// </summary>
+    [Fact]
+    public void ListenerPorts_ASurfaceTerminatingTls_ClaimsTheRedirectPortBesideTheProfiles()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(HttpsProfile(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Https:Endpoints:0:Port"] = "9443",
+        }));
+
+        // Act, Assert
+        Assert.Equal([8080, 9443], McpEndpointOptions.ReadFrom(configuration).ListenerPorts.Order());
+    }
+
+    [Fact]
+    public void ListenerPorts_ARedirectTurnedOff_ClaimsTheProfilePortsAlone()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(HttpsProfile(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Https:Redirect:Enabled"] = "false",
+        }));
+
+        // Act, Assert
+        Assert.Equal([8443], McpEndpointOptions.ReadFrom(configuration).ListenerPorts.Order());
+    }
+
+    /// <summary>A surface terminating no TLS binds no listener of its own; it is served over whichever one the host was started with.</summary>
+    [Fact]
+    public void ListenerPorts_ASurfaceTerminatingNoTls_ClaimsNothing()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+        });
+
+        // Act, Assert
+        Assert.Empty(McpEndpointOptions.ReadFrom(configuration).ListenerPorts);
+    }
+
+    private static Dictionary<string, string?> HttpsProfile(Dictionary<string, string?> extraValues)
+    {
+        var values = new Dictionary<string, string?>(extraValues)
+        {
+            ["McpEndpoint:Enabled"] = "true",
+            ["McpEndpoint:Https:Endpoints:0:Name"] = "public",
+            ["McpEndpoint:Https:Endpoints:0:Domain"] = "mail.example.test",
+            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:Name"] = "bundle",
+            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:SecretReference"] = "file:/etc/mailfathom/tls/bundle.pfx",
+        };
+
+        return values;
+    }
+
     private static IConfiguration ConfigurationFrom(Dictionary<string, string?> values) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(values)

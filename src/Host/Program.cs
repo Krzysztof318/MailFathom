@@ -371,7 +371,11 @@ try
             kestrelOptions,
             mcpEndpointSettings.Https,
             kestrelOptions.ApplicationServices.GetRequiredService<TransportServerCertificateStore>(),
-            mcpEndpointSettings.ClientCertificateProfiles.Count > 0));
+            mcpEndpointSettings.ClientCertificateProfiles.Count > 0,
+            mcpEndpointSettings.Https.RedirectsClearText
+                ? mcpEndpointSettings.Https.Redirect.ListenerAddress(
+                    McpEndpointOptions.DefaultClearTextRedirectPort)
+                : null));
     }
 
     // Read once, like the MCP section and for the same reason. Administering this service and reading a mailbox
@@ -384,6 +388,10 @@ try
     // Registered whether or not the endpoint is enabled, because it is the warning that decides whether it has
     // anything to say — the same reason the MCP warnings above are registered unconditionally.
     builder.Services.AddHostedService<AdminTransportSecurityWarning>();
+
+    // Registered here rather than beside the MCP warnings because it reads both surfaces, and unconditionally for the
+    // same reason they are: the report is what decides whether either surface has a clear-text port to account for.
+    builder.Services.AddHostedService<TransportClearTextRedirectReport>();
 
     // Read once, like the MCP section and for the same reason: it decides which sockets are opened and which routes
     // exist, both of which are settled while the application is being built. Bound strictly, so a misspelled key cannot
@@ -402,7 +410,10 @@ try
 
     IReadOnlyCollection<int> applicationListenerPorts = (mcpTerminatesTls, configuredKestrelEndpoints) switch
     {
-        (true, _) => [.. mcpEndpointSettings.Https.Endpoints.Select(static endpoint => endpoint.Port)],
+        // Every socket the MCP surface opens, the clear-text redirect included: it is bound by the same profiles and is
+        // the one a deployment can end up with without having written a port, so leaving it out would let the probes or
+        // the administrative endpoint take it and report the conflict as an address-in-use error naming a socket.
+        (true, _) => [.. mcpEndpointSettings.ListenerPorts],
         (false, true) => ConfiguredKestrelEndpoints.ListenerPorts(builder.Configuration),
         _ => ConfiguredApplicationListeners.ListenerPorts(applicationListenerUrls),
     };
@@ -556,6 +567,34 @@ try
     }
 
     app.UseExceptionHandler();
+
+    // One listener per surface that terminates TLS and redirects, each carrying its own domains: the two surfaces publish
+    // different names on different ports, so a request is redirected to the surface whose clear-text port it arrived on
+    // rather than to whichever set of profiles was composed first.
+    var clearTextRedirectListeners = new List<ClearTextRedirectListener>(capacity: 2);
+
+    if (mcpEndpointSettings is { Enabled: true, Https.RedirectsClearText: true })
+    {
+        clearTextRedirectListeners.Add(new ClearTextRedirectListener(
+            mcpEndpointSettings.ClearTextRedirectPort,
+            mcpEndpointSettings.Https.PublishedDomainPorts()));
+    }
+
+    if (adminEndpointSettings is { Enabled: true, Https.RedirectsClearText: true })
+    {
+        clearTextRedirectListeners.Add(new ClearTextRedirectListener(
+            adminEndpointSettings.ClearTextRedirectPort,
+            adminEndpointSettings.Https.PublishedDomainPorts()));
+    }
+
+    if (clearTextRedirectListeners.Count > 0)
+    {
+        // Ahead of both isolation middlewares and every route, which is what makes the clear-text listener serve nothing
+        // but the redirect. Behind it, an administrative path arriving on a redirect port would be answered by
+        // administrative isolation with a 404 — a listener that is not the administrative one refusing a path that is —
+        // and the client would read the endpoint as gone rather than as moved.
+        app.UseClearTextRedirectToHttps(new ClearTextRedirectTargets(clearTextRedirectListeners));
+    }
 
     if (healthEndpointSettings.Enabled)
     {

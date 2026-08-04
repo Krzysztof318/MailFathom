@@ -118,7 +118,34 @@ None is refused, because each is legitimate somewhere and only you know which yo
 
 Configure `AdminEndpoint:Https:Endpoints` to have Kestrel terminate TLS itself. It takes the same profile shape the MCP
 endpoint's does, including `HttpProtocols`, which defaults to HTTP/1.1 and HTTP/2. Naming any profile binds those
-listeners and no clear-text one stays open behind them.
+listeners and no clear-text one stays open behind them serving these routes.
+
+### Redirecting `mfctl` after you configure TLS
+
+A profile also binds one clear-text listener whose only answer is a `308` to the address the profiles are served at, on
+**port 8091** unless you state another. It is what keeps an `mfctl` profile that still holds an `http://` endpoint from
+failing as though the deployment were down:
+
+```console
+$ curl -i http://admin.example.com:8091/api/admin/session
+HTTP/1.1 308 Permanent Redirect
+Location: https://admin.example.com:8543/api/admin/session
+```
+
+**Repoint the profile rather than relying on it.** An administrative API key sent in clear text was on the wire before
+anything answered, and this route stores mailbox credentials — a redirect protects the next request and never the one that
+arrived. `mfctl login --endpoint https://admin.example.com:8543` writes the corrected address; see
+[working with more than one deployment](#working-with-more-than-one-deployment).
+
+That listener maps no route. No administrative operation, no session probe, and no protected-resource metadata document is
+reachable over it, and no credential check runs for a request that arrived on it — every path gets the same redirect, and a
+`Host` header naming no configured domain gets `400`. The port is checked against every other listener in the process, so a
+conflict with the MCP surface, the probes, or the application listener is reported against the section that asked for it.
+
+Turn it off with `AdminEndpoint:Https:Redirect:Enabled` set to `false`, which is what a deployment behind a proxy that
+already answers the clear-text port wants. The setting shape and every refusal are the MCP endpoint's, documented once in
+[redirecting a client still pointed at `http://`](mcp-endpoint.md#redirecting-a-client-still-pointed-at-http); only the
+default port differs, so enabling TLS on both surfaces opens two clear-text ports that do not collide.
 
 ## Behind a TLS-terminating reverse proxy
 
