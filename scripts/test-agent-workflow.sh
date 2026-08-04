@@ -1701,6 +1701,62 @@ every_published_documentation_page_is_in_a_table_of_contents() {
   (( failures == 0 ))
 }
 
+# The repository-root README is the one document rendered outside the repository, and `AGENTS.md` splits its links in
+# two: a page the site publishes is linked on the site, at the address that names no version, and everything else is
+# linked in the repository. Each half fails in a way nobody would notice from the file — a site address that names no
+# page is a 404 only a reader meets, and a repository link to a published page silently sends somebody to a Markdown
+# file in a tree instead of to the readable form.
+documentation_site_address='https://krzysztof318.github.io/MailFathom/'
+repository_blob_address='https://github.com/Krzysztof318/MailFathom/blob/main/'
+
+# The two documentation paths the README is allowed to link in the repository, because the site publishes neither.
+readonly unpublished_documentation_links='^docs/README\.md$|^docs/decisions/'
+
+every_readme_site_link_names_a_page_that_exists() {
+  local link page failures=0
+
+  while IFS= read -r link; do
+    page="${link#"$documentation_site_address"}"
+    page="${page%.html}.md"
+
+    # `CHANGELOG.md` is published from the repository root; every other page comes from `docs/`.
+    [[ "$page" == 'CHANGELOG.md' ]] || page="docs/$page"
+
+    if [[ ! -f "$source_repository_root/$page" ]]; then
+      printf 'README links %s, which the site would generate from %s — and that file does not exist\n' \
+        "$link" "$page" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done < <(
+    grep --only-matching --extended-regexp \
+      "${documentation_site_address}[A-Za-z0-9_./-]*\.html" "$source_repository_root/README.md" |
+      sort --unique
+  )
+
+  (( failures == 0 ))
+}
+
+no_readme_link_reaches_a_published_page_through_the_repository() {
+  local link page failures=0
+
+  while IFS= read -r link; do
+    page="${link#"$repository_blob_address"}"
+
+    if [[ "$page" =~ $unpublished_documentation_links ]]; then
+      continue
+    fi
+
+    printf 'README links %s in the repository, and the site publishes that page\n' "$link" >&2
+    failures=$(( failures + 1 ))
+  done < <(
+    grep --only-matching --extended-regexp \
+      "${repository_blob_address}docs/[A-Za-z0-9_./-]*\.md" "$source_repository_root/README.md" |
+      sort --unique
+  )
+
+  (( failures == 0 ))
+}
+
 every_table_of_contents_entry_names_a_page_that_exists() {
   local target failures=0
 
@@ -2928,6 +2984,8 @@ run_test every_documentation_page_declares_what_it_describes
 run_test every_describes_pattern_matches_something_that_exists
 run_test every_published_documentation_page_is_in_a_table_of_contents
 run_test every_table_of_contents_entry_names_a_page_that_exists
+run_test every_readme_site_link_names_a_page_that_exists
+run_test no_readme_link_reaches_a_published_page_through_the_repository
 run_test closing_references_collect_every_issue_the_body_closes
 run_test closing_references_match_every_keyword_github_acts_on
 run_test closing_references_ignore_a_keyword_inside_another_word

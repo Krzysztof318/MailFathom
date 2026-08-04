@@ -15,6 +15,8 @@ set -euo pipefail
 #
 #   versions.json   what the selector in the header offers, and which version the site opens on
 #   index.html      the landing page, which sends a reader to that version
+#   <page>.html     one redirect per page of that version, mirrored at the site root, so that a page has an address
+#                   naming no version — which is what the repository-root README links to
 #   .nojekyll       what stops GitHub Pages from running the whole site through Jekyll first
 #
 # **The site opens on the newest release, not on `latest`.** Somebody arriving at the documentation is running a
@@ -104,26 +106,65 @@ done
   printf '}\n'
 } > "$site_directory/versions.json"
 
-# A meta refresh rather than a redirect the server issues, because GitHub Pages serves static files and offers no
-# rewrite rule. The link is there for the reader whose browser honours neither the refresh nor the script.
-cat > "$site_directory/index.html" <<HTML
+# The addresses that outlive a release. Every page of the default version is mirrored at the site root as a redirect,
+# so `…/MailFathom/operations/mcp-endpoint.html` names a page without naming a version and lands on whichever version
+# the site currently opens on. The root `README.md` links that way: a link carrying a version would be wrong the day
+# the next one ships, and one carrying `latest` would quietly opt a reader out of the release the site opens on.
+#
+# The API reference is left out. It is a thousand generated pages whose names are type names, nothing links into it by
+# hand, and mirroring it would treble the file count of the site to no end.
+write_redirect() {
+  local page_path="$1"
+  local target="$2"
+  local label="$3"
+
+  mkdir --parents "$(dirname "$site_directory/$page_path")"
+
+  cat > "$site_directory/$page_path" <<HTML
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <title>MailFathom documentation</title>
-    <link rel="canonical" href="$default_version/">
-    <meta http-equiv="refresh" content="0; url=$default_version/">
+    <link rel="canonical" href="$target">
+    <meta http-equiv="refresh" content="0; url=$target">
   </head>
   <body>
-    <p>The MailFathom documentation is at <a href="$default_version/">$default_version</a>.</p>
+    <p>The MailFathom documentation is at <a href="$target">$label</a>.</p>
   </body>
 </html>
 HTML
+}
+
+stub_count=0
+
+while IFS= read -r page_path; do
+  # `index.html` at the root is written below and points at the version's front page rather than at its `index.html`,
+  # which is the same destination stated as the address a reader would type.
+  [[ "$page_path" == 'index.html' ]] && continue
+
+  # One `../` per directory the page sits in, because a static site has no root-relative form that survives being
+  # served from a project subpath — `/operations/…` would resolve above `…/MailFathom/` on GitHub Pages.
+  ascent=''
+  for ((depth = $(tr --delete --complement '/' <<< "$page_path" | wc --chars); depth > 0; depth--)); do
+    ascent+='../'
+  done
+
+  write_redirect "$page_path" "$ascent$default_version/$page_path" "$default_version/$page_path"
+  stub_count=$(( stub_count + 1 ))
+done < <(
+  cd "$site_directory/$default_version" &&
+    find . -name '*.html' -type f -not -path './api/*' -not -name 'toc.html' -printf '%P\n' | sort
+)
+
+# The landing page, written last so that it names the version's front page rather than its `index.html` — the same
+# destination, stated as the address a reader would type.
+write_redirect 'index.html' "$default_version/" "$default_version"
 
 # Jekyll is what GitHub Pages runs by default, and it drops every path beginning with an underscore. Nothing docfx
 # generates needs building, so the whole pass is skipped rather than configured around.
 touch "$site_directory/.nojekyll"
 
-printf 'Composed %d version(s) in %s, opening on %s:\n' "${#ordered_versions[@]}" "$site_directory" "$default_version"
+printf 'Composed %d version(s) in %s, opening on %s, with %d version-agnostic address(es):\n' \
+  "${#ordered_versions[@]}" "$site_directory" "$default_version" "$stub_count"
 printf '  %s\n' "${ordered_versions[@]}"

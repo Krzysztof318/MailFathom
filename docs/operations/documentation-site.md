@@ -91,7 +91,23 @@ ADR is an absolute URL for a second reason — a relative path from a source fil
 either.
 
 The repository-root `README.md` is a separate case with a stricter rule, recorded in `AGENTS.md`: every link in it is
-absolute, because it is rendered outside the repository as well.
+absolute, because it is rendered outside the repository as well, and a link to a published page goes to the site
+rather than to the Markdown file behind it.
+
+### The addresses that outlive a release
+
+A page has two addresses. `…/MailFathom/v0.3.0/operations/mcp-endpoint.html` is where it is served, and
+`…/MailFathom/operations/mcp-endpoint.html` — the same path without the version — is a redirect at the site root that
+lands on whichever version the site opens on.
+
+The second is what anything outside the site links to, the root `README.md` above all. A link carrying a version would
+be wrong the day the next one ships, and one carrying `latest` would quietly opt a reader out of the release the site
+opens on, which is the whole point of opening on it.
+
+`scripts/compose-docs-site.sh` writes one such redirect per page of the default version, so the set of stable
+addresses moves with the pages rather than being maintained beside them: a page that a release removes loses its
+address on the next publish. The API reference is left out — it is a thousand generated pages whose names are type
+names, nothing links into it by hand, and mirroring it would treble the file count of the site for nothing.
 
 ## Building it locally
 
