@@ -53,8 +53,30 @@ location exactly when the resource names the same one. A deployment whose resour
 document nothing could find, and OAuth sign-in would be unreachable for a reason no refusal would explain. Behind a
 reverse proxy, write the public URL and keep the path: `https://mail.example.test/api/admin`.
 
-> **Every authenticated caller may perform every administrative operation.** There is no permission model yet. The
+> **Every authenticated caller may perform every administrative operation.** There is no permission model. The
 > credential is what bounds access, so provision one per client and rotate it like any other secret.
+>
+> Weigh that against what the operations are. The endpoint serves one read — who a credential makes the caller — and
+> one write, which stores a mailbox refresh token. Any credential that can do the first can therefore do the second, so
+> an administrative key is as sensitive as the mailbox credentials it can place.
+
+## What the endpoint serves
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/admin/session` | Reports the credential that authenticated and the running version. This is what `login` and `status` ask. |
+| `POST /api/admin/mailbox/refresh-token` | Stores a mailbox refresh token for one configured account, sealed under the deployment's data-encryption key. This is what [`mfctl mailbox authorize --account`](mailbox-oauth.md#sending-the-token-to-the-deployment) sends. |
+
+The write route's body carries a long-lived credential for a named mailbox owner, which is what makes the clear-text
+warning below matter more here than it does for a session probe. It refuses, with `400` and a sentence naming what was
+wrong, an account this deployment does not configure and a body missing either field; a second grant for the same
+account replaces the first rather than adding to it. It reads at most 16 KB, which is far more than any authorization
+server's refresh token and far less than the server's own default. It answers with no body at all, so nothing it stores
+can be read back out through it.
+
+Storing seals the token under the deployment's [data-encryption key](secret-provisioning.md). A deployment that
+configures no key ring cannot store one, and the route answers `500` rather than a refusal it can explain, because
+nothing about the request was wrong.
 
 ## Two postures the endpoint warns about
 
@@ -271,7 +293,10 @@ encryption answers the copy. Holding the credential in the platform's own secret
 | `There is no profile named …` | A typo, or a profile that was never created. The message lists the ones that exist. |
 | `Not signed in to https://…` | `--endpoint` named an address no profile serves. Sign in to it, or name a profile instead. |
 | `The deployment refused the credential.` | The key is not one this endpoint is configured with, or its lifetime has ended. Note that an MCP API key is not one of them. |
-| `serves no administrative endpoint at /api/admin/session` | The address answered, but on a listener that serves something else. Check the port, and check that `AdminEndpoint:Enabled` is true. |
+| `serves no administrative endpoint at /api/admin/…` | The address answered, but on a listener that serves something else. Check the port, and check that `AdminEndpoint:Enabled` is true. |
+| `This deployment configures no mail account named …` | `mailbox authorize --account` named an identifier no `MailSynchronization:Accounts` entry carries, or you are signed in to the wrong deployment. Nothing was stored. |
+| `The deployment refused the grant without saying why.` | The request was refused with no reason in the answer, which is what something in front of the endpoint answering `400` looks like. Check that `--endpoint` reaches the deployment itself. |
+| `rather than storing the token` | The endpoint answered with neither an acceptance nor an explained refusal. The token was not stored and the account is unchanged. A `500` here is most often a deployment with no `DataEncryption` key ring, which is what a stored token is sealed under; its own log names the cause. |
 | `did not identify itself as MailFathom` | Something else is answering on that port — a proxy, or another service. |
 | `could not be reached` | Nothing is listening, or a firewall is in the way. The endpoint binds only what `BindAddress` names; `127.0.0.1` is unreachable from another machine by design. |
 | `did not answer in time` | The connection was accepted and no answer arrived within 30 seconds, so the address and the port are right and the deployment is what to look at — an overloaded host, a stalled process, or a firewall that drops rather than refuses. |

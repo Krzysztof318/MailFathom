@@ -68,6 +68,64 @@ internal sealed class AdminApiClient
         return await ReadSessionBodyAsync(response, cancellationToken);
     }
 
+    /// <summary>Hands a deployment the refresh token it should keep for one of its mail accounts.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account the grant acts for, as the deployment's configuration names it.</param>
+    /// <param name="refreshToken">The token the authorization run produced.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the deployment has stored the token.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the credential or the grant, could not be reached, or answered with anything but an acceptance.</exception>
+    /// <remarks>
+    /// The one request this command sends that carries a credential of somebody else's. It is presented once and never
+    /// echoed: the deployment answers with no body, so a success is the status alone and there is nothing here that
+    /// could report the token back.
+    /// </remarks>
+    internal async Task StoreMailboxRefreshTokenAsync(
+        string token,
+        string account,
+        string refreshToken,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(token);
+        ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(refreshToken);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, AdminEndpointRoutes.MailboxRefreshTokenPath)
+        {
+            Content = JsonContent.Create(
+                new MailboxRefreshTokenRequest(account, refreshToken),
+                CliJsonContext.Default.MailboxRefreshTokenRequest),
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await this.SendAsync(request, cancellationToken);
+
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            throw new CliFailure(
+                "The deployment refused the credential. Check that it is one the administrative endpoint is configured with, and that it has not expired.");
+        }
+
+        if (response.StatusCode is HttpStatusCode.NotFound)
+        {
+            throw new CliFailure(
+                $"The address answered, but serves no administrative endpoint at {AdminEndpointRoutes.MailboxRefreshTokenPath}. Check the port: the administrative endpoint binds a listener of its own, and it is disabled unless the deployment enabled it.");
+        }
+
+        if (response.StatusCode is HttpStatusCode.BadRequest)
+        {
+            throw new CliFailure(
+                await ReadRefusalAsync(response, cancellationToken)
+                ?? "The deployment refused the grant without saying why.");
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new CliFailure($"The deployment answered {(int)response.StatusCode} rather than storing the token.");
+        }
+    }
+
     /// <summary>Turns a transport failure into something the operator can act on.</summary>
     /// <remarks>A cancelled request is left alone: the operator interrupted it, and reporting that as a deployment problem would be wrong.</remarks>
     private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -92,6 +150,31 @@ internal sealed class AdminApiClient
     /// unrelated service can do that. Requiring the body to name the service is what keeps <c>login</c> from reporting
     /// success against something that never saw the credential.
     /// </remarks>
+    /// <summary>Reads the sentence a refusal carries, when it carries one.</summary>
+    /// <remarks>
+    /// A deployment states what was wrong with the request — an account it does not configure, a field the body omitted
+    /// — and repeating that is more use than any wording invented here. Anything that is not a problem document is read
+    /// as no reason rather than as a failure of its own, because the request was already refused and how the refusal
+    /// was phrased is not the operator's problem to solve.
+    /// </remarks>
+    private static async Task<string?> ReadRefusalAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var problem = await response.Content.ReadFromJsonAsync(
+                CliJsonContext.Default.AdminProblem,
+                cancellationToken);
+
+            return problem?.Detail is { Length: > 0 } stated ? stated : null;
+        }
+        catch (Exception failure) when (failure is JsonException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
     private static async Task<AdminSession> ReadSessionBodyAsync(
         HttpResponseMessage response,
         CancellationToken cancellationToken)

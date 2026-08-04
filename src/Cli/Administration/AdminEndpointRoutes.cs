@@ -6,11 +6,11 @@ namespace MailFathom.Cli.Administration;
 
 /// <summary>Where a deployment answers, relative to the address the operator gave.</summary>
 /// <remarks>
-/// The command is configured with a host and a port and appends the rest, so these two paths are the whole of what it
+/// The command is configured with a host and a port and appends the rest, so these paths are the whole of what it
 /// assumes about the other side. Stated together rather than beside the code that calls each, because they are one
-/// agreement with the service: the deployment publishes its administrative routes beneath the first and refuses to
-/// start unless its resource identifier names that same prefix, which is what puts the second exactly where RFC 9728
-/// says to look for it.
+/// agreement with the service: the deployment publishes its administrative routes beneath the prefix and refuses to
+/// start unless its resource identifier names that same prefix, which is what puts the metadata document exactly where
+/// RFC 9728 says to look for it.
 /// </remarks>
 internal static class AdminEndpointRoutes
 {
@@ -19,6 +19,9 @@ internal static class AdminEndpointRoutes
 
     /// <summary>Where a deployment reports who a presented credential makes the caller.</summary>
     internal const string SessionPath = $"{Prefix}/session";
+
+    /// <summary>Where a deployment accepts the refresh token it should keep for one of its mail accounts.</summary>
+    internal const string MailboxRefreshTokenPath = $"{Prefix}/mailbox/refresh-token";
 
     /// <summary>Where a deployment publishes the document naming its authorization servers, resource, and required scopes.</summary>
     /// <remarks>

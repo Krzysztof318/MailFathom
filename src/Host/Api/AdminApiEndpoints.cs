@@ -12,14 +12,18 @@ namespace MailFathom.Host.Api;
 /// <summary>Maps the administrative routes the <c>mailfathom</c> command reaches.</summary>
 /// <remarks>
 /// <para>
-/// One route today, and it is the one <c>mailfathom login</c> exists for: a client that has just been handed a
-/// credential needs to know whether this deployment accepts it before it stores it and reports success. Answering that
-/// is what turns a stored credential from something an operator hopes is right into something the service confirmed.
+/// The first is the one <c>mailfathom login</c> exists for: a client that has just been handed a credential needs to
+/// know whether this deployment accepts it before it stores it and reports success. Answering that is what turns a
+/// stored credential from something an operator hopes is right into something the service confirmed.
 /// </para>
 /// <para>
 /// It reports what the deployment knows about the caller and nothing else. There is no configuration, no account list,
 /// and no mailbox here: the response names the credential that authenticated and the product version, which is what a
 /// client needs to tell "signed in" from "reached something else that answers HTTP".
+/// </para>
+/// <para>
+/// The second is the surface's only write, and <see cref="MailboxRefreshTokenEndpoint" /> states what that costs. Both
+/// are mapped into one group so a route cannot be added outside the requirement the endpoint attaches to it.
 /// </para>
 /// </remarks>
 internal static class AdminApiEndpoints
@@ -35,6 +39,7 @@ internal static class AdminApiEndpoints
         var api = endpoints.MapGroup(AdminEndpointOptions.RoutePrefix);
 
         api.MapGet("/session", (ClaimsPrincipal caller) => Results.Ok(AdminSessionResponse.For(caller)));
+        api.MapMailboxRefreshToken();
 
         return api;
     }
