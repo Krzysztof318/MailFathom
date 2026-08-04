@@ -274,7 +274,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
     /// <summary>Proves a losing writer that retries in the same scope commits, rather than losing to itself.</summary>
     /// <remarks>
     /// <para>
-    /// The three tests above end where a conflict is reported; this one is what a caller does next. Every attempt runs
+    /// The three conflict tests above end where a conflict is reported; this one is what a caller does next. Every attempt runs
     /// in a fresh session but through the same scoped context, so the entities the losing attempt staged are still
     /// tracked when the next one begins — and the next one would insert them again, collide on the same constraint, and
     /// exhaust the policy. That the retry commits instead is what proves session disposal cleared the tracked state,
@@ -282,7 +282,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
     /// </para>
     /// <para>
     /// Which of the two constraints the losing attempt violates depends on whether the account row is already stored
-    /// when this test runs, exactly as it does for the two tests above. Both are recognized, both leave the winner's
+    /// when this test runs, exactly as it does for the two binding races above. Both are recognized, both leave the winner's
     /// binding as the only one, and the retry re-resolves from whichever the loser found — so this test asserts the
     /// outcome rather than the constraint and stays independent of the order the suite ran in.
     /// </para>
