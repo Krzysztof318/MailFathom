@@ -292,15 +292,22 @@ it takes in either of them is in one tag list. After the push it is inspected by
 platforms, to identify itself as the channel and version it was published as, and to resolve to the same digest in each
 registry. A failure anywhere above publishes nothing.
 
-A release additionally synchronizes this repository's root `README.md` onto the Docker Hub repository page, which is
-the one registry overview that is not rendered from the repository itself, together with the short description that sits
-above it — taken from the published image's own `org.opencontainers.image.description`. GHCR reads the repository
-through the image's `org.opencontainers.image.source` label and needs nothing pushed to it.
+A release additionally synchronizes `deploy/docker/README.md` onto the Docker Hub repository page, which is the one
+registry overview that is not rendered from the repository itself, together with the short description that sits above
+it — taken from the published image's own `org.opencontainers.image.description`. GHCR reads the repository through the
+image's `org.opencontainers.image.source` label and needs nothing pushed to it.
+
+That page exists rather than the root README being pushed, because the two are read by different people. Somebody on
+Docker Hub already has an image reference and wants to run a container: the tags, what the image needs before it starts,
+how it runs, and how to verify it. Somebody on the repository is deciding whether to adopt the project at all. The chart
+listing still renders the root README, because an Artifact Hub page is read by the second reader rather than the first.
 
 Docker Hub's two limits are checked before that write rather than left to the action performing it, which truncates
-over-long content and reports success: a release fails if the README exceeds 25000 bytes or if the description label
+over-long content and reports success: a release fails if the overview exceeds 25000 bytes or if the description label
 exceeds 100. The second is the one worth failing for. A truncated overview is visibly broken and would be noticed, while
 a truncated short description is a sentence cut mid-word that reads like a sentence the project meant to write.
+`scripts/test-agent-workflow.sh` reads the overview's length as well, so a page that outgrew the limit fails on the pull
+request that wrote it rather than here, where the image is published by the time the check runs.
 
 A re-run of a publication is safe and does not rebuild. A version already present in both registries from the same
 commit is reported and its image left untouched; a version present in one and missing from the other — what a partial publication
