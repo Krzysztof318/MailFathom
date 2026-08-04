@@ -23,37 +23,26 @@ on:
       - converted_to_draft
     branches:
       - main
-  # `main` itself, once a merge has landed there, and a deliberately smaller run than a pull request's:
-  # the build, the unit tests, the coverage gate, and the pending-model-changes check, which are the
-  # questions about the code. The `main` ruleset requires a branch to be current with `main` before it
-  # merges, so a pull request is normally verified against the state its merge produces — but the
-  # repository admin role bypasses the ruleset when merging, `Nightly` and `Release` both build from
-  # `main` without verifying it first, and *is `main` green right now* is otherwise not a fact that
-  # exists anywhere, only one inferred from the last pull request that closed. `CodeQL` watches the
-  # branch this way for its own reasons already.
+  # `main` itself, once a merge has landed there: the build, the unit tests, the coverage gate, the
+  # pending-model-changes check, and the workflow contracts. The `main` ruleset requires a branch to be
+  # current with `main` before it merges, so a pull request is normally verified against the state its
+  # merge produces — but the repository admin role bypasses the ruleset when merging, `Nightly` and
+  # `Release` both build from `main` without verifying it first, and *is `main` green right now* is
+  # otherwise not a fact that exists anywhere, only one inferred from the last pull request that closed.
+  # `CodeQL` watches the branch this way for its own reasons already.
+  #
+  # No path filter here either, and for a different reason than the pull-request one stated below. That
+  # one protects a required check, and nothing waits on a push conclusion, so it does not reach this
+  # trigger. What does reach it is `Workflow contracts`, which reads the whole tree and therefore has no
+  # path filter to inherit one from: `docs/`, `scripts/`, `.agents/`, `deploy/`, and the root Markdown
+  # files are its subject matter rather than paths it can be told to ignore, so a filter naming them
+  # would suppress precisely the run most likely to have something to report. Which part of a merge is
+  # worth verifying is decided inside the run instead, by the same `Detect changes` job that decides it
+  # for a pull request — so a merge moving nothing the build reads costs the contract job's twenty
+  # seconds rather than a full build.
   push:
     branches:
       - main
-    # A path filter here, and the reason the `pull_request` trigger above cannot have one does not apply.
-    # What that reason protects is a required check: a run GitHub never instantiated reports no
-    # conclusion, so a pull request would wait forever on it. Nothing waits on a push run — required
-    # checks are a pull-request contract — so a run that could only rebuild what the merge cannot have
-    # touched is worth not starting at all, and skipping it leaves the branch's last real verdict
-    # standing rather than replacing it with one that means less.
-    #
-    # Everything listed is invisible to `dotnet build`, `dotnet test`, and the EF Core model: prose,
-    # specifications, images, the deployment assets no job here renders, the scripts and skills that are
-    # the local gate rather than the built one. `.github/**` is deliberately absent, because this
-    # workflow and the one it calls decide what the run does.
-    paths-ignore:
-      - 'docs/**'
-      - 'specs/**'
-      - 'assets/**'
-      - 'deploy/**'
-      - 'scripts/**'
-      - '.agents/**'
-      - '.claude/**'
-      - '*.md'
   workflow_dispatch:
 
 # No `paths` filter on the `pull_request` trigger, deliberately. GitHub reports a workflow the path
@@ -79,29 +68,42 @@ jobs:
   detect-changes:
     name: Detect changes
     runs-on: ubuntu-latest
-    # Not on a push. Deciding which part of a change to verify is a pull-request question, and on `main`
-    # the trigger's `paths-ignore` above has already answered the only version of it that is asked there:
-    # either the merge could move the build and the whole of it runs, or it could not and no run exists.
-    # A second, finer decision inside the run would only reproduce the first one less legibly.
-    if: github.event_name != 'push'
-    # The changed-file query reads the pull request through the REST API and never checks the branch
-    # out, so this is the whole privilege it needs.
+    # The changed-file query reads a pull request through the REST API and a push through git, so the
+    # two events need different privileges and the job holds both. Neither exceeds read.
     permissions:
       contents: read
       pull-requests: read
     outputs:
-      build: ${{ github.event_name != 'pull_request' || steps.filter.outputs.build == 'true' }}
-      format: ${{ github.event_name != 'pull_request' || steps.filter.outputs.format == 'true' }}
-      model: ${{ github.event_name != 'pull_request' || steps.filter.outputs.model == 'true' }}
+      build: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.build == 'true' }}
+      format: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.format == 'true' }}
+      model: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.model == 'true' }}
     steps:
-      # A manual dispatch reaches this job but has no pull request to compare against, so the filter is
-      # skipped and all three outputs fall back to `true` above: an explicitly started run always does
-      # the work.
+      # Only a push needs a working copy. A pull request is compared through the REST API, which reads
+      # none; a push is compared with `git diff` between the commit the branch carried before it and the
+      # one it carries now. `fetch-depth: 0` is what puts the first of those in the clone: without it the
+      # action fetches that commit by SHA from an origin the next line has just stripped the credentials
+      # for, which works only for as long as this repository is public and GitHub keeps serving a bare
+      # SHA to an anonymous client. The history is small and the fetch is the same one either way.
+      - name: Check out repository
+        if: github.event_name == 'push'
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # A manual dispatch reaches this job but has neither a pull request to compare against nor a
+      # commit the branch carried before it, so the filter is skipped and all three outputs fall back
+      # to `true` above: an explicitly started run always does the work.
       - name: Detect changed paths
         id: filter
-        if: github.event_name == 'pull_request'
+        if: github.event_name != 'workflow_dispatch'
         uses: dorny/paths-filter@v4
         with:
+          # Empty on a pull request, where the action reads the base from the event and warns that a
+          # `base` it will not use was supplied. On a push, naming the branch that was pushed is what
+          # selects the comparison this job wants: against the commit `main` carried before the merge,
+          # rather than against a merge base with itself.
+          base: ${{ github.event_name == 'push' && github.ref || '' }}
           filters: |
             build:
               - 'src/**'
@@ -153,30 +155,28 @@ jobs:
   # here is the part that is about the event: which of them this change can affect, and whether the pull
   # request carrying it is still a draft.
   #
-  # `!cancelled()` rather than no condition at all, because `detect-changes` is skipped on a push and a
-  # job whose dependency skipped would otherwise skip with it. The `result` test is what keeps that from
-  # turning into *runs no matter what*: change detection failing means nothing here knows what the pull
-  # request touched, and the aggregate refuses such a run anyway.
+  # The draft test is the whole condition, because `detect-changes` runs on every event this workflow
+  # takes and the ordinary dependency semantics cover the rest: change detection that failed leaves this
+  # job knowing nothing about the change, and skipping it is the right outcome. A pull request then fails
+  # through the aggregate, which refuses a run whose change detection did not succeed, and a push through
+  # the run's own conclusion.
   verify:
     name: Verify
     needs:
       - detect-changes
-    if: >-
-      !cancelled()
-      && needs.detect-changes.result != 'failure'
-      && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     permissions:
       contents: read
     uses: ./.github/workflows/build-test-format-and-migrations.yml
     with:
-      # A push to `main` runs the build and the model check unconditionally, and never `dotnet format`.
-      # Formatting is a property of the files a change wrote, which is exactly what the pull request that
-      # wrote them already answered — and it is the one verdict here that cannot be broken by two changes
-      # that merged without seeing each other. The model check can be: one pull request moves the model
-      # and another adds the migration, and neither run sees both.
-      run-build: ${{ github.event_name == 'push' || needs.detect-changes.outputs.build == 'true' }}
+      # `dotnet format` is the one input that still reads the event. Formatting is a property of the
+      # files a change wrote, which is exactly what the pull request that wrote them already answered —
+      # and it is the one verdict here that cannot be broken by two changes that merged without seeing
+      # each other. The model check can be: one pull request moves the model and another adds the
+      # migration, and neither run sees both, which is why that one is asked again on `main`.
+      run-build: ${{ needs.detect-changes.outputs.build == 'true' }}
       run-format: ${{ github.event_name != 'push' && needs.detect-changes.outputs.format == 'true' }}
-      run-model: ${{ github.event_name == 'push' || needs.detect-changes.outputs.model == 'true' }}
+      run-model: ${{ needs.detect-changes.outputs.model == 'true' }}
 
   # The one job here that reads the half of the repository the build, formatting, and model jobs cannot
   # see, and the only one that reports on a draft besides the two that cost seconds. `Detect changes`
@@ -186,22 +186,23 @@ jobs:
   # run only where somebody remembered `scripts/verify-full.sh`.
   #
   # No path filter, and that is the point rather than an omission: the suite asserts the licensing header
-  # in every `.yml`, `.sh`, Helm template, and `SKILL.md`, and the `describes:` marker on every page under
-  # `docs/`, over the whole tree at once. Narrowing it to the changed files would report green on contracts
-  # it never evaluated, which is worse than not running it.
+  # in every `.yml`, `.sh`, Helm template, and `SKILL.md`, the `describes:` marker on every page under
+  # `docs/`, and a table-of-contents entry behind every published page and a page behind every entry,
+  # over the whole tree at once. Narrowing it to the changed files would report green on contracts it
+  # never evaluated, which is worse than not running it.
   #
   # No draft condition either, unlike `verify` above. A draft-exempt contract check would not run over the
   # interval during which the change is actually being written — which is the whole interval in which a
   # broken contract is cheap to fix. The job costs about twenty seconds, so there is nothing to save by
   # deferring it.
   #
-  # Not on a push, for the reason the whole set of contracts is written the way it is: what it asserts is a
-  # property of the repository rather than of a change, so the answer on `main` is the answer the pull
-  # request already got over the same tree. What a push run is for is the code, which is the one thing a
-  # merge can break without any pull request having been wrong.
+  # And no event condition, so a push to `main` runs it too. Every invariant above spans files that
+  # different changes own, which makes the tree a merge produces the one tree no pull-request run was
+  # ever shown: one pull request deletes a page while another adds the entry naming it, and both are
+  # green while `main` is not. That is the argument keeping the model check on a push, applied to the
+  # half of the repository the build cannot see.
   workflow-contracts:
     name: Workflow contracts
-    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       # The default shallow fetch is enough. Every contract that reads this repository rather than a
@@ -216,8 +217,8 @@ jobs:
       # `dotnet` with a symlink to itself, so no SDK, no restore, and no NuGet cache, and it reaches no
       # network. `jq` is the one tool it needs beyond git and bash, and the runner image carries it. The
       # suite takes rather longer than this on a developer machine, where it is one step of the full gate
-      # and competes with everything else running there; the figure above is what the job costs a pull
-      # request, which is the only cost this file is about.
+      # and competes with everything else running there; the figure above is what the job costs a run,
+      # which is the only cost this file is about.
       - name: Run the workflow contracts
         run: bash scripts/test-agent-workflow.sh
 
@@ -232,11 +233,12 @@ jobs:
     # check itself skipped, which is the state this whole arrangement exists to avoid.
     #
     # The push exclusion does not weaken that. This job exists to be the `main` ruleset's one required
-    # check, and a ruleset evaluates a pull request; on a push there is nothing waiting for a conclusion,
-    # and two of the three results it reads are skipped by design there, which it would have to be taught
-    # to forgive one event at a time. The run's own conclusion is what a push reports through, and
-    # `Verify` is the whole of it. On every event the ruleset does read, this job runs under exactly this
-    # name — which is the invariant the comment below is about.
+    # check, and a ruleset evaluates a pull request; on a push there is nothing waiting for a conclusion.
+    # The three results it reads all arrive on their own there — each of those jobs runs, and a failed
+    # one fails the run, which is what the badge and the Actions list report — so a fourth job restating
+    # that verdict under a fourth name would add a check rather than an answer. On every event the
+    # ruleset does read, this job runs under exactly this name — which is the invariant the comment
+    # below is about.
     if: always() && github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
