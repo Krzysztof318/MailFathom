@@ -80,6 +80,11 @@ Two forms, and which one to use is decided by whether the target is on the site:
 - **A link to anything the site does not carry is written as an absolute `https://github.com/Krzysztof318/MailFathom`
   URL** — an ADR, a specification, a deployment asset, a source file. A relative link to one of those resolves on
   GitHub and reaches a 404 on the site.
+- **A link into the API reference is a `xref:`**, naming the type or namespace rather than the generated file, as
+  `[Domain](xref:MailFathom.Domain)`. It is the one kind of link a refactor breaks without touching the page, so it
+  resolves through docfx's cross-reference map and fails the build when the name stops being generated. On GitHub such
+  a link renders as text rather than as a link, which is why only `docs/api/index.md` uses it: that page exists for
+  the site.
 
 `scripts/build-docs-site.sh` fails when docfx resolves no target for a link, so neither mistake reaches a reader: the
 site build runs on every pull request that changes `docs/` or the site definition, and a broken link is a red check
