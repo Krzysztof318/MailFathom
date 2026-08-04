@@ -9,7 +9,7 @@ name: CI
 # ambiguous about which one it is waiting for. The expensive jobs stay separate inside this workflow
 # and keep the names they had.
 #
-# What this workflow owns is the pull request: which work a change can affect, whether the pull request
+# What this workflow owns is the change: which work it can affect, whether the pull request carrying it
 # is a draft, and the one required check. The work itself lives in `build-test-format-and-migrations.yml`, which the
 # publishing pipeline calls too — so a release and a nightly are gated on the same build, unit-test,
 # coverage, and formatting checks a pull request is, from one definition rather than from a copy.
@@ -23,16 +23,54 @@ on:
       - converted_to_draft
     branches:
       - main
+  # `main` itself, once a merge has landed there, and a deliberately smaller run than a pull request's:
+  # the build, the unit tests, the coverage gate, and the pending-model-changes check, which are the
+  # questions about the code. The `main` ruleset requires a branch to be current with `main` before it
+  # merges, so a pull request is normally verified against the state its merge produces — but the
+  # repository admin role bypasses the ruleset when merging, `Nightly` and `Release` both build from
+  # `main` without verifying it first, and *is `main` green right now* is otherwise not a fact that
+  # exists anywhere, only one inferred from the last pull request that closed. `CodeQL` watches the
+  # branch this way for its own reasons already.
+  push:
+    branches:
+      - main
+    # A path filter here, and the reason the `pull_request` trigger above cannot have one does not apply.
+    # What that reason protects is a required check: a run GitHub never instantiated reports no
+    # conclusion, so a pull request would wait forever on it. Nothing waits on a push run — required
+    # checks are a pull-request contract — so a run that could only rebuild what the merge cannot have
+    # touched is worth not starting at all, and skipping it leaves the branch's last real verdict
+    # standing rather than replacing it with one that means less.
+    #
+    # Everything listed is invisible to `dotnet build`, `dotnet test`, and the EF Core model: prose,
+    # specifications, images, the deployment assets no job here renders, the scripts and skills that are
+    # the local gate rather than the built one. `.github/**` is deliberately absent, because this
+    # workflow and the one it calls decide what the run does.
+    paths-ignore:
+      - 'docs/**'
+      - 'specs/**'
+      - 'assets/**'
+      - 'deploy/**'
+      - 'scripts/**'
+      - '.agents/**'
+      - '.claude/**'
+      - '*.md'
   workflow_dispatch:
 
-# No `paths` filter here, deliberately. GitHub reports a workflow the path filter excluded as neither
-# successful nor failed, so a required check never arrives and a documentation-only pull request waits
-# forever on a run that was never created. Change detection moved into `detect-changes` below, and the
-# expensive jobs skip themselves through `if` conditions instead.
+# No `paths` filter on the `pull_request` trigger, deliberately. GitHub reports a workflow the path
+# filter excluded as neither successful nor failed, so a required check never arrives and a
+# documentation-only pull request waits forever on a run that was never created. Change detection moved
+# into `detect-changes` below, and the expensive jobs skip themselves through `if` conditions instead.
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Cancellation is a pull-request behavior. There a superseded run is answering about a commit that is no
+  # longer the head, which is what the group exists to stop paying for. A push to `main` is the opposite
+  # case: every commit there is a state that was merged and that a nightly can be built from, and a run
+  # the next merge cancelled would leave that commit carrying a conclusion which reads as a failure
+  # everywhere while having verified nothing. Merges in quick succession therefore queue behind each
+  # other, and a manual dispatch on `main` — which lands in the same group — queues rather than displacing
+  # whichever of the two is running.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -41,6 +79,11 @@ jobs:
   detect-changes:
     name: Detect changes
     runs-on: ubuntu-latest
+    # Not on a push. Deciding which part of a change to verify is a pull-request question, and on `main`
+    # the trigger's `paths-ignore` above has already answered the only version of it that is asked there:
+    # either the merge could move the build and the whole of it runs, or it could not and no run exists.
+    # A second, finer decision inside the run would only reproduce the first one less legibly.
+    if: github.event_name != 'push'
     # The changed-file query reads the pull request through the REST API and never checks the branch
     # out, so this is the whole privilege it needs.
     permissions:
@@ -51,8 +94,9 @@ jobs:
       format: ${{ github.event_name != 'pull_request' || steps.filter.outputs.format == 'true' }}
       model: ${{ github.event_name != 'pull_request' || steps.filter.outputs.model == 'true' }}
     steps:
-      # A manual dispatch has no pull request to compare against, so the filter is skipped and both
-      # outputs fall back to `true` above: an explicitly started run always does the work.
+      # A manual dispatch reaches this job but has no pull request to compare against, so the filter is
+      # skipped and all three outputs fall back to `true` above: an explicitly started run always does
+      # the work.
       - name: Detect changed paths
         id: filter
         if: github.event_name == 'pull_request'
@@ -106,20 +150,33 @@ jobs:
 
   # The build, the unit-test and coverage gate, `dotnet format`, and the pending-model-changes check live
   # in `build-test-format-and-migrations.yml`, which the publishing pipeline calls as well. What stays
-  # here is the part that is about a pull request: which of them this change can affect, and whether the
-  # pull request is still a draft.
+  # here is the part that is about the event: which of them this change can affect, and whether the pull
+  # request carrying it is still a draft.
+  #
+  # `!cancelled()` rather than no condition at all, because `detect-changes` is skipped on a push and a
+  # job whose dependency skipped would otherwise skip with it. The `result` test is what keeps that from
+  # turning into *runs no matter what*: change detection failing means nothing here knows what the pull
+  # request touched, and the aggregate refuses such a run anyway.
   verify:
     name: Verify
     needs:
       - detect-changes
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    if: >-
+      !cancelled()
+      && needs.detect-changes.result != 'failure'
+      && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
     permissions:
       contents: read
     uses: ./.github/workflows/build-test-format-and-migrations.yml
     with:
-      run-build: ${{ needs.detect-changes.outputs.build == 'true' }}
-      run-format: ${{ needs.detect-changes.outputs.format == 'true' }}
-      run-model: ${{ needs.detect-changes.outputs.model == 'true' }}
+      # A push to `main` runs the build and the model check unconditionally, and never `dotnet format`.
+      # Formatting is a property of the files a change wrote, which is exactly what the pull request that
+      # wrote them already answered — and it is the one verdict here that cannot be broken by two changes
+      # that merged without seeing each other. The model check can be: one pull request moves the model
+      # and another adds the migration, and neither run sees both.
+      run-build: ${{ github.event_name == 'push' || needs.detect-changes.outputs.build == 'true' }}
+      run-format: ${{ github.event_name != 'push' && needs.detect-changes.outputs.format == 'true' }}
+      run-model: ${{ github.event_name == 'push' || needs.detect-changes.outputs.model == 'true' }}
 
   # The one job here that reads the half of the repository the build, formatting, and model jobs cannot
   # see, and the only one that reports on a draft besides the two that cost seconds. `Detect changes`
@@ -137,8 +194,14 @@ jobs:
   # interval during which the change is actually being written — which is the whole interval in which a
   # broken contract is cheap to fix. The job costs about twenty seconds, so there is nothing to save by
   # deferring it.
+  #
+  # Not on a push, for the reason the whole set of contracts is written the way it is: what it asserts is a
+  # property of the repository rather than of a change, so the answer on `main` is the answer the pull
+  # request already got over the same tree. What a push run is for is the code, which is the one thing a
+  # merge can break without any pull request having been wrong.
   workflow-contracts:
     name: Workflow contracts
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       # The default shallow fetch is enough. Every contract that reads this repository rather than a
@@ -167,7 +230,14 @@ jobs:
     # `always()` rather than `success() || failure()`, because this job has to report on a run that was
     # cancelled as well as on one whose dependencies were skipped. Anything weaker leaves the required
     # check itself skipped, which is the state this whole arrangement exists to avoid.
-    if: always()
+    #
+    # The push exclusion does not weaken that. This job exists to be the `main` ruleset's one required
+    # check, and a ruleset evaluates a pull request; on a push there is nothing waiting for a conclusion,
+    # and two of the three results it reads are skipped by design there, which it would have to be taught
+    # to forgive one event at a time. The run's own conclusion is what a push reports through, and
+    # `Verify` is the whole of it. On every event the ruleset does read, this job runs under exactly this
+    # name — which is the invariant the comment below is about.
+    if: always() && github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       # The name of this check is the only thing the branch ruleset knows about this workflow, so it
