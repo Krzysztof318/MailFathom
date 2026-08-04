@@ -149,7 +149,7 @@ MailFathom holds mailbox credentials, OAuth tokens, certificate material, and a 
 
 The two Windows `mfctl` binaries attached to each release are Authenticode-signed, so Windows names a publisher instead of warning about an unknown one. Free code signing is provided by [SignPath.io](https://signpath.io/), with the certificate issued by the [SignPath Foundation](https://signpath.org/). The Linux binaries carry no signature, and the checksum file published beside them is what verifies those.
 
-Every published artifact — signed or not, and including the container image and the Helm chart — also carries a signed build provenance statement naming the workflow and commit that produced it. The signature says who vouches for a file; the attestation says where it came from.
+The container image, the Helm chart, and every `mfctl` binary — signed or not — also carry a signed build provenance statement naming the workflow and commit that produced it. The signature says who vouches for a file; the attestation says where it came from.
 
 | Role | Who |
 | --- | --- |

@@ -190,7 +190,11 @@ jobs:
                   continue
               }
 
-              Write-Output "$($binary.Name): valid, signed by '$subject', timestamped $($signature.SignerCertificate.NotBefore.ToString('yyyy-MM-dd'))."
+              # No date is printed here on purpose. Get-AuthenticodeSignature exposes the timestamper's certificate but
+              # not the RFC 3161 time it attested, and every date reachable from these objects is a certificate
+              # validity bound rather than the moment of signing — a number that looks like the answer and is not.
+              $timestamper = $signature.TimeStamperCertificate.Subject
+              Write-Output "$($binary.Name): valid, signed by '$subject', timestamped by '$timestamper'."
           }
 
           if ($failed) {

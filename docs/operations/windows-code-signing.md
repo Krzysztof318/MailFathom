@@ -151,8 +151,8 @@ A `Status` of `Valid` is the whole answer: the bytes match the signature, the ch
 named. `SignerCertificate` is what shows that the publisher is SignPath Foundation rather than merely somebody a
 certificate authority vouched for.
 
-Every published file, signed or not, also carries a build provenance attestation naming the workflow and commit that
-produced it:
+Every binary this workflow publishes, signed or not, and the checksum file beside them, also carries a build provenance
+attestation naming the workflow and commit that produced it:
 
 ```bash
 gh attestation verify 'mfctl-<version>-win-x64.exe' --repo Krzysztof318/MailFathom

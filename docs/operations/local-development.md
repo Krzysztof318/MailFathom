@@ -609,17 +609,24 @@ again locally in `scripts/verify-full.sh`, from `scripts/test-agent-workflow.sh`
 
 | Contract | What it refuses |
 |---|---|
-| `every_external_action_names_an_approved_owner` | An action from an owner outside the reviewed set: `actions`, `github`, `Krzysztof318`, `dorny`, `anthropics`, `docker`, `crate-ci`, `aquasecurity`, `oras-project`, `peter-evans` |
+| `every_external_action_names_an_approved_owner` | An action from an owner outside the reviewed set: `actions`, `github`, `Krzysztof318`, `dorny`, `anthropics`, `docker`, `crate-ci`, `aquasecurity`, `oras-project`, `peter-evans`, `signpath` |
 | `every_workflow_job_declares_its_permissions` | A job that inherits the repository default instead of declaring a `permissions:` block, at the workflow level or its own |
 | `every_write_scope_is_one_the_policy_records` | A write scope appearing anywhere the list in that contract does not already name |
 | `every_checkout_refuses_to_persist_credentials` | An `actions/checkout` step that leaves the workflow token in `.git/config` for the steps after it |
 | `only_the_reviewer_workflow_uses_pull_request_target` | A second `pull_request_target` trigger beside the one `fathom-review.yml` holds |
 
-Every write scope in the repository but one belongs to a publishing job: `packages: write` with
-`id-token: write` and `attestations: write` in `nightly.yml`, `publish-container-image.yml`,
-`publish-helm-chart.yml`, and `release.yml` — which carries each of the three twice, because it calls
-both publishing workflows and a caller states the permissions it hands down — plus `packages: write`
-on the nightly prune job and `contents: write` on the job that writes the release announcement.
+Every write scope in the repository but one belongs to publishing something: `packages: write` with
+`id-token: write` and `attestations: write` in `nightly.yml`, `publish-container-image.yml`, and
+`publish-helm-chart.yml`, plus `packages: write` on the nightly prune job and `contents: write` on
+the job that writes the release announcement.
+
+`release.yml` states them for each workflow it calls, because a caller hands down the permissions the
+called workflow runs under. It calls three that need any: the image, the chart, and
+`sign-cli-binaries.yml`. So it carries `id-token: write` and `attestations: write` three times and
+`packages: write` twice — signing pushes to no registry, and its own attestation is what needs the
+other two. `sign-cli-binaries.yml` declares that same pair on the job that verifies a signature and
+then attests it; the job that submits the signing request holds `actions: read` and nothing that
+writes.
 
 The exception is `security-events: write` in `codeql.yml`, and it is the only write scope held by a
 job that runs for a pull request. It is what the analysis is for: the scope writes code-scanning
