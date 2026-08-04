@@ -95,26 +95,34 @@ The milestone is the release's gate, so it is closed as part of cutting the rele
 afterwards. Nothing here is inferred: **what is still open in the milestone is scope the owner is deciding about**, so
 ask before moving anything unless they already said what to do with it.
 
-1. **Create the next milestone if it does not exist.** Its name is the version being bumped to, per step 1's table.
-   `docs/operations/issue-tracking.md` forbids opening a further milestone beside the open one — the next is created
-   *when that one closes*, which is this step and nowhere else, so creating it here satisfies that rule rather than
-   bending it.
-2. **Move what is still open into it.** A release cut over an open milestone item releases the gap; moving the item
-   says the work is still accepted and names the release it now belongs to. An item the owner would rather drop is
-   closed as `not planned` on its own issue instead, which is their call and not one to make on their behalf.
+1. **Create the next milestone if it does not exist.** Its name is the version being bumped to, per the table under
+   **What the version is**. `docs/operations/issue-tracking.md` forbids opening a further milestone beside the open
+   one — the next is created *when that one closes*, which is this step and nowhere else, so creating it here
+   satisfies that rule rather than bending it.
+2. **Move what is still open into it, except the issue tracking this release.** A release cut over an open milestone
+   item releases the gap; moving the item says the work is still accepted and names the release it now belongs to. An
+   item the owner would rather drop is closed as `not planned` on its own issue instead, which is their call and not
+   one to make on their behalf. **The tracking issue is the one exception and it is not incidental**: it is open at
+   this point in the sequence and it is in this milestone, so a query for what to move returns it, and moving it would
+   file the release under the release *after* it.
 3. **Close the milestone being released.**
 
 ```bash
 gh api 'repos/Krzysztof318/MailFathom/milestones?state=all' --jq '.[] | "\(.number) \(.title) \(.state)"'
 gh api -X POST repos/Krzysztof318/MailFathom/milestones -f title='<next>'          # only when it does not exist
-gh api "repos/Krzysztof318/MailFathom/issues?milestone=<old>&state=open&per_page=100" --jq '.[].number'
+
+# What to move: open issues in the milestone being released, minus the tracking issue. `/issues` returns pull
+# requests as well, so both exclusions are the query's rather than the reader's to remember.
+gh api "repos/Krzysztof318/MailFathom/issues?milestone=<old>&state=open&per_page=100" \
+  --jq ".[] | select(.pull_request == null) | select(.number != <tracking issue>) | .number"
+
 gh api -X PATCH "repos/Krzysztof318/MailFathom/issues/<n>" -F milestone=<new-number>
 gh api -X PATCH "repos/Krzysztof318/MailFathom/milestones/<old>" -f state=closed
 ```
 
-**The issue tracking the release itself stays in the milestone being released and stays open**, because it closes on
-the merge in step 4 — which happens after this. A closed milestone holding one open issue is the expected shape here
-rather than an oversight, and it resolves itself.
+**That exception is why the milestone is closed holding one open issue.** The tracking issue closes on the merge in
+step 4, which happens after this, so a closed milestone with one open item is the expected shape here rather than an
+oversight, and it resolves itself.
 
 This step belongs to the owner's checkout alone. In the fork role a milestone write returns a permission error, which
 is the correct outcome rather than a partial one: nobody but the owner cuts a release of this repository.

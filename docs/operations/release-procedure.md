@@ -125,9 +125,10 @@ the milestones, opens both pull requests, and prints the ordering. It is manual-
 it — because when a version becomes real is a decision rather than a consequence of work looking finished.
 
 **Settling the milestones comes before the pull requests**, because the milestone is the release's gate: the next
-milestone is created if it does not exist, whatever is still open in the one being released moves into it, and the one
-being released is closed. That is the one place a milestone is opened, which is what keeps exactly one open at a time;
-`docs/operations/issue-tracking.md` holds the rule and the reasoning. The issue tracking the release itself stays
+milestone is created if it does not exist, whatever is still open in the one being released moves into it *except the
+issue tracking this release*, and the one being released is closed. That is the one place a milestone is opened, which
+is what keeps exactly one open at a time; `docs/operations/issue-tracking.md` holds the rule and the reasoning. The
+tracking issue is open and in that milestone at this point, so it is what a query for what to move returns; it stays
 where it is and stays open, because the merge below closes it.
 
 The sequence the skill prints is the whole of what follows, and it is recorded here so it survives the skill being
