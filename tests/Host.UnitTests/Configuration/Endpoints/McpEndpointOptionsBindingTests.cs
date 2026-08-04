@@ -89,7 +89,7 @@ public sealed class McpEndpointOptionsBindingTests
         var options = McpEndpointOptions.ReadFrom(configuration);
 
         // Assert
-        var defaults = new McpRateLimitingOptions();
+        var defaults = new TransportRateLimitingOptions();
         Assert.Equal(5, options.RateLimiting.MaxConcurrentRequests);
         Assert.Equal(defaults.TokenCapacity, options.RateLimiting.TokenCapacity);
         Assert.Equal(defaults.TokensPerReplenishmentPeriod, options.RateLimiting.TokensPerReplenishmentPeriod);

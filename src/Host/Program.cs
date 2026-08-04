@@ -266,7 +266,7 @@ try
     // to say. Registering it conditionally would put the same condition in two places.
     builder.Services.AddHostedService<McpTransportAuthenticationWarning>();
     builder.Services.AddHostedService<McpTransportEncryptionWarning>();
-    builder.Services.AddHostedService<McpRateLimitingStartupReport>();
+    builder.Services.AddHostedService<TransportRateLimitingStartupReport>();
     // Composed from the environment rather than resolved from the container, because the value it reports is one
     // OpenSSL read while it initialized and no configuration source can influence it afterwards. Registered
     // unconditionally for the same reason the warnings above are: the condition belongs in one place.
@@ -324,8 +324,9 @@ try
     }
 
     // Mapped once, next to the decision that reads it, so the numbers the limiters are built from and the numbers the
-    // startup report states are the same reading of the same settings. Null means an operator turned limiting off, which
-    // is the one case in which no limiter is registered at all rather than one configured to permit everything.
+    // startup report states are the same reading of the same settings. Null means an operator turned limiting off, or
+    // the endpoint is not served at all, which is the one case in which no limiter is registered for it rather than one
+    // configured to permit everything.
     var mcpRateLimits = mcpEndpointSettings is { Enabled: true, RateLimiting.Enabled: true }
         ? mcpEndpointSettings.RateLimiting.ToRateLimits()
         : null;
@@ -372,11 +373,6 @@ try
             mcpEndpointSettings.ClientCertificateProfiles.Count > 0));
     }
 
-    if (mcpRateLimits is not null)
-    {
-        builder.Services.AddMcpRateLimiting(mcpRateLimits);
-    }
-
     // Read once, like the MCP section and for the same reason. Administering this service and reading a mailbox
     // through it are different authorities, so the section is separate all the way down: its own listener, its own
     // credentials, and its own authorization servers. Bound strictly, so a misspelled key cannot leave a deployment
@@ -421,6 +417,31 @@ try
             AdminEndpointOptions.SectionName,
             typeof(AdminEndpointOptions),
             adminEndpointConfigurationErrors);
+    }
+
+    var adminRateLimits = adminEndpointSettings is { Enabled: true, RateLimiting.Enabled: true }
+        ? adminEndpointSettings.RateLimiting.ToRateLimits()
+        : null;
+
+    // Registered once with every bounded surface rather than once per endpoint. The process-wide limiter is a single
+    // property of one options object, so a second registration would replace the first endpoint's concurrency limit
+    // instead of adding to it — and it would do so silently, leaving whichever endpoint was registered first unbounded
+    // in the half nothing else reports.
+    var boundedSurfaces = new List<BoundedTransportSurface>();
+
+    if (mcpRateLimits is not null)
+    {
+        boundedSurfaces.Add(new BoundedTransportSurface(TransportSurface.Mcp, mcpRateLimits));
+    }
+
+    if (adminRateLimits is not null)
+    {
+        boundedSurfaces.Add(new BoundedTransportSurface(TransportSurface.Admin, adminRateLimits));
+    }
+
+    if (boundedSurfaces.Count > 0)
+    {
+        builder.Services.AddTransportRateLimiting(boundedSurfaces);
     }
 
     const string adminCertificateStoreKey = "mailfathom.admin";
@@ -520,6 +541,10 @@ try
     // adds it. Adding it twice would run every policy twice.
     var authorizationMiddlewareAdded = false;
 
+    // The same holds for the rate limiter, which is one middleware serving whichever endpoints carry a policy. Adding
+    // it twice would acquire a lease from both limiters twice and count one request as two.
+    var rateLimiterMiddlewareAdded = false;
+
     // First, ahead of the exception handler and of every isolation check, so that nothing downstream ever reads a
     // scheme or host the proxy already corrected. Discovery, the challenge, and any address composed from a request
     // then agree with the name the client used, and a request from anything but a trusted proxy passes through with
@@ -615,18 +640,25 @@ try
                 mcpBranch => mcpBranch.UseAuthentication());
         }
 
+        if (boundedSurfaces.Count > 0)
+        {
+            // Behind authentication, so the MCP endpoint's per-client limit is counted under the identity that
+            // established rather than under something the caller chose, and ahead of authorization, so a request that is
+            // about to be refused for its credential still spends anonymous capacity — otherwise a flood of bad
+            // credentials would be the one kind of traffic an endpoint served without limit. It is added here whenever
+            // either endpoint is bounded, because this is the point that satisfies both orderings: an administrative
+            // request reaches it as well, since what the branch above keeps away from those routes is the
+            // authentication middleware rather than the pipeline.
+            app.UseRateLimiter();
+            rateLimiterMiddlewareAdded = true;
+        }
+
         if (mcpRateLimits is not null)
         {
-            // Behind authentication, so a per-client limit is counted under the identity that established rather than
-            // under something the caller chose, and ahead of authorization, so a request that is about to be refused for
-            // its credential still spends anonymous capacity — otherwise a flood of bad credentials would be the one
-            // kind of traffic the endpoint served without limit.
-            app.UseRateLimiter();
-
             // On the endpoint for the same reason authorization is: the readiness and liveness endpoints have to keep
             // answering while this one is refusing. The process-wide half of the policy cannot be attached here, because
             // an endpoint resolves one limiter, so it rides on the global limiter and excludes every other route itself.
-            mcpEndpoint.RequireRateLimiting(McpRateLimiting.PolicyName);
+            mcpEndpoint.RequireRateLimiting(TransportSurface.Mcp.RateLimitingPolicyName);
         }
 
         if (mcpEndpointSettings.RequiresAuthentication)
@@ -644,16 +676,34 @@ try
 
     if (adminEndpointSettings.Enabled)
     {
+        // Ahead of the authorization middleware below, which is what judges this surface's credential, so a request
+        // about to be refused for a wrong key has already spent capacity. That ordering is the whole point of bounding
+        // this endpoint: unbounded key guessing is what it is exposed to, and the guesses are the traffic authorization
+        // turns away.
+        if (adminRateLimits is not null && !rateLimiterMiddlewareAdded)
+        {
+            app.UseRateLimiter();
+        }
+
         // The administrative routes carry no authentication middleware of their own. That middleware authenticates with
         // the application's default scheme, which belongs to the MCP surface; the authorization middleware instead
         // authenticates with the schemes the policy names, which are this surface's. So requiring the policy is both
         // what admits a caller and what establishes who they are.
+        //
+        // That is also why this surface's per-caller partition is one bucket rather than one per key: there is no
+        // identity to partition on until authorization has run, and running the limiter behind it would serve the
+        // guessing this exists to bound. The bucket is the endpoint's, and its capacity is sized as such.
         if (adminEndpointSettings.RequiresAuthentication && !authorizationMiddlewareAdded)
         {
             app.UseAuthorization();
         }
 
         var adminApi = app.MapAdminApi();
+
+        if (adminRateLimits is not null)
+        {
+            adminApi.RequireRateLimiting(TransportSurface.Admin.RateLimitingPolicyName);
+        }
 
         if (adminEndpointSettings.RequiresAuthentication)
         {

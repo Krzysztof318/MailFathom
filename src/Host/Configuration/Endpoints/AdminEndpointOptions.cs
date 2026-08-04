@@ -103,6 +103,15 @@ internal sealed class AdminEndpointOptions
     /// </remarks>
     public TransportHttpsOptions Https { get; set; } = new();
 
+    /// <summary>Gets or sets how much traffic the endpoint accepts before it starts refusing.</summary>
+    /// <remarks>
+    /// Unlike the settings above, every value in this section has a product default, so an endpoint an operator enabled
+    /// is bounded whether or not they wrote a number — which is what stops an administrative surface reachable from the
+    /// network from serving unbounded key guessing. It is the same section the MCP endpoint carries, configured
+    /// separately: neither endpoint's limits reach the other's traffic.
+    /// </remarks>
+    public TransportRateLimitingOptions RateLimiting { get; set; } = new();
+
     /// <summary>Gets whether a client may authenticate with one of the configured API keys.</summary>
     public bool AllowsApiKey => this.Authentication.HasFlag(TransportAuthenticationMethods.ApiKey);
 
@@ -145,6 +154,9 @@ internal sealed class AdminEndpointOptions
         }
 
         var errors = new List<string>(this.FindAuthenticationErrors());
+
+        errors.AddRange(this.RateLimiting.FindConfigurationErrors()
+            .Select(error => $"{SectionName}:{nameof(this.RateLimiting)}:{error}"));
 
         errors.AddRange(this.FindListenerErrors(portsClaimedElsewhere));
 

@@ -4,7 +4,9 @@
 
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Mcp;
+using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Security.Transport;
 using MailFathom.Mcp;
 using Microsoft.AspNetCore.Http;
@@ -12,21 +14,23 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Primitives;
 using Xunit;
 
-namespace MailFathom.Host.UnitTests.Security.Mcp;
+namespace MailFathom.Host.UnitTests.Security.Transport;
 
-/// <summary>Covers the limits the MCP endpoint admits traffic under.</summary>
+/// <summary>Covers the limits a bounded transport surface admits traffic under.</summary>
 /// <remarks>
-/// Nothing here observes a clock, and nothing here is raced by one. A test that spends a client's capacity builds its
+/// Nothing here observes a clock, and nothing here is raced by one. A test that spends a caller's capacity builds its
 /// bucket with the replenishment timer off, so a process that is suspended, debugged, or merely slow between two
 /// assertions cannot have capacity returned underneath it and turn an expected refusal into a pass. That leaves
 /// replenishment itself untested by construction, which is deliberate: <c>TokenBucketRateLimiter.TryReplenish</c> is
 /// gated on elapsed wall-clock time, so driving it would be a test of the clock. Restoring capacity on schedule is the
 /// framework's own contract; what belongs here is that the schedule reaching it is the one an operator configured, and
 /// that automatic replenishment is on in production so nothing in this process has to pump it — both asserted against
-/// the limiter description the endpoint is built from.
+/// the limiter description an endpoint is built from.
 /// </remarks>
-public sealed class McpRateLimitingTests
+public sealed class TransportRateLimitingTests
 {
+    private const string AdminRoute = AdminEndpointOptions.RoutePrefix + "/session";
+
     [Fact]
     public void ProcessConcurrencyOptions_CarriesTheConfiguredConcurrency()
     {
@@ -34,7 +38,7 @@ public sealed class McpRateLimitingTests
         var limits = Limits(maxConcurrentRequests: 9, concurrencyQueueLimit: 4);
 
         // Act
-        var limiterOptions = McpRateLimiting.ProcessConcurrencyOptions(limits);
+        var limiterOptions = TransportRateLimiting.ProcessConcurrencyOptions(limits);
 
         // Assert
         Assert.Equal(9, limiterOptions.PermitLimit);
@@ -43,7 +47,7 @@ public sealed class McpRateLimitingTests
     }
 
     [Fact]
-    public void ClientBucketOptions_CarriesTheConfiguredBurstAndSchedule()
+    public void CallerBucketOptions_CarriesTheConfiguredBurstAndSchedule()
     {
         // Arrange
         var limits = Limits(
@@ -53,7 +57,7 @@ public sealed class McpRateLimitingTests
             requestQueueLimit: 2);
 
         // Act
-        var limiterOptions = McpRateLimiting.ClientBucketOptions(limits);
+        var limiterOptions = TransportRateLimiting.CallerBucketOptions(limits);
 
         // Assert
         Assert.Equal(30, limiterOptions.TokenLimit);
@@ -64,16 +68,16 @@ public sealed class McpRateLimitingTests
     }
 
     [Fact]
-    public void ClientBucketOptions_RestoresCapacityWithoutBeingPumped()
+    public void CallerBucketOptions_RestoresCapacityWithoutBeingPumped()
     {
         // Arrange
         var limits = Limits();
 
         // Act
-        var limiterOptions = McpRateLimiting.ClientBucketOptions(limits);
+        var limiterOptions = TransportRateLimiting.CallerBucketOptions(limits);
 
         // Assert
-        // Automatic replenishment is what makes a client's capacity return on the framework's own timer. With it off,
+        // Automatic replenishment is what makes a caller's capacity return on the framework's own timer. With it off,
         // something in this process would have to call TryReplenish, and nothing does, so a spent bucket would stay
         // spent for the life of the process.
         Assert.True(limiterOptions.AutoReplenishment);
@@ -83,19 +87,20 @@ public sealed class McpRateLimitingTests
     [InlineData("/started")]
     [InlineData("/health")]
     [InlineData("/alive")]
-    public void PartitionForProcess_ForAProbeRequest_AppliesNoLimit(string probePath)
+    [InlineData("/")]
+    public void PartitionForProcess_ForARequestOnNoBoundedSurface_AppliesNoLimit(string unboundedPath)
     {
         // Arrange
-        var limits = Limits(maxConcurrentRequests: 1);
-        using var limiter = ProcessLimiter(limits);
+        var boundedSurfaces = BothSurfaces(Limits(maxConcurrentRequests: 1), Limits(maxConcurrentRequests: 1));
+        using var limiter = ProcessLimiter(boundedSurfaces);
 
         // Act
-        var leases = AcquireAll(limiter, () => RequestTo(probePath), attempts: 5);
+        var leases = AcquireAll(limiter, () => RequestTo(unboundedPath), attempts: 5);
 
         // Assert
         // A throttled probe fails, and a failed liveness probe restarts a process that was answering correctly, so a
         // limiter on the probe listener would turn a burst of polling into an outage. The process-wide limiter excludes
-        // every route that is not the MCP endpoint rather than counting them against the same permits.
+        // every route belonging to no bounded surface rather than counting them against some surface's permits.
         Assert.All(leases, lease => Assert.True(lease.IsAcquired));
 
         DisposeAll(leases);
@@ -105,8 +110,8 @@ public sealed class McpRateLimitingTests
     public void PartitionForProcess_ForMcpRequests_AdmitsExactlyTheConfiguredConcurrency()
     {
         // Arrange
-        var limits = Limits(maxConcurrentRequests: 3);
-        using var limiter = ProcessLimiter(limits);
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 3));
+        using var limiter = ProcessLimiter(boundedSurfaces);
 
         // Act
         var leases = AcquireAll(limiter, () => McpRequest(), attempts: 4);
@@ -118,11 +123,71 @@ public sealed class McpRateLimitingTests
     }
 
     [Fact]
+    public void PartitionForProcess_ForAdministrativeRequests_AdmitsExactlyTheConfiguredConcurrency()
+    {
+        // Arrange
+        var boundedSurfaces = AdminOnly(Limits(maxConcurrentRequests: 2));
+        using var limiter = ProcessLimiter(boundedSurfaces);
+
+        // Act
+        var leases = AcquireAll(limiter, () => AdminRequest(), attempts: 3);
+
+        // Assert
+        Assert.Equal([true, true, false], leases.Select(lease => lease.IsAcquired));
+
+        DisposeAll(leases);
+    }
+
+    /// <summary>
+    /// One endpoint saturating the process must not refuse the other's callers. Reading a mailbox and administering the
+    /// service that reads it are separate authorities configured separately, and a shared permit count would let a
+    /// runaway agent lock an operator out of the surface they would fix it from.
+    /// </summary>
+    [Fact]
+    public void PartitionForProcess_WithOneSurfaceSaturated_LeavesTheOthersConcurrencyIntact()
+    {
+        // Arrange
+        var boundedSurfaces = BothSurfaces(
+            mcpLimits: Limits(maxConcurrentRequests: 1),
+            adminLimits: Limits(maxConcurrentRequests: 1));
+        using var limiter = ProcessLimiter(boundedSurfaces);
+
+        // Act
+        var mcpAdmitted = limiter.AttemptAcquire(McpRequest());
+        var mcpRefused = limiter.AttemptAcquire(McpRequest());
+        var administrative = limiter.AttemptAcquire(AdminRequest());
+
+        // Assert
+        Assert.True(mcpAdmitted.IsAcquired);
+        Assert.False(mcpRefused.IsAcquired);
+        Assert.True(administrative.IsAcquired);
+
+        DisposeAll([mcpAdmitted, mcpRefused, administrative]);
+    }
+
+    /// <summary>An endpoint an operator left unbounded takes no capacity from the one they bounded, and is not bounded by it either.</summary>
+    [Fact]
+    public void PartitionForProcess_ForASurfaceThatIsNotBounded_AppliesNoLimit()
+    {
+        // Arrange
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 1));
+        using var limiter = ProcessLimiter(boundedSurfaces);
+
+        // Act
+        var leases = AcquireAll(limiter, () => AdminRequest(), attempts: 4);
+
+        // Assert
+        Assert.All(leases, lease => Assert.True(lease.IsAcquired));
+
+        DisposeAll(leases);
+    }
+
+    [Fact]
     public void PartitionForProcess_ForSeveralClients_CountsThemAgainstOneLimit()
     {
         // Arrange
-        var limits = Limits(maxConcurrentRequests: 2);
-        using var limiter = ProcessLimiter(limits);
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 2));
+        using var limiter = ProcessLimiter(boundedSurfaces);
 
         // Act
         var first = limiter.AttemptAcquire(McpRequest("desktop-agent"));
@@ -130,8 +195,8 @@ public sealed class McpRateLimitingTests
         var third = limiter.AttemptAcquire(McpRequest("third-client"));
 
         // Assert
-        // The concurrency limit bounds the process, which has one set of connections and threads however many clients
-        // there are; splitting it per client would let the total grow with the client list.
+        // The concurrency limit bounds what the process is serving on one surface, which has one set of connections and
+        // threads however many clients there are; splitting it per client would let the total grow with the client list.
         Assert.True(first.IsAcquired);
         Assert.True(second.IsAcquired);
         Assert.False(third.IsAcquired);
@@ -143,8 +208,8 @@ public sealed class McpRateLimitingTests
     public async Task PartitionForProcess_WithNoQueue_RefusesRatherThanWaiting()
     {
         // Arrange
-        var limits = Limits(maxConcurrentRequests: 1, concurrencyQueueLimit: 0);
-        using var limiter = ProcessLimiter(limits);
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 1, concurrencyQueueLimit: 0));
+        using var limiter = ProcessLimiter(boundedSurfaces);
         using var held = limiter.AttemptAcquire(McpRequest());
 
         // Act
@@ -162,8 +227,8 @@ public sealed class McpRateLimitingTests
     public async Task PartitionForProcess_WithABoundedQueue_LetsThatManyWaitAndRefusesTheRest()
     {
         // Arrange
-        var limits = Limits(maxConcurrentRequests: 1, concurrencyQueueLimit: 1);
-        using var limiter = ProcessLimiter(limits);
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 1, concurrencyQueueLimit: 1));
+        using var limiter = ProcessLimiter(boundedSurfaces);
         var held = limiter.AttemptAcquire(McpRequest());
 
         // Act
@@ -187,11 +252,11 @@ public sealed class McpRateLimitingTests
     }
 
     [Fact]
-    public void PartitionForClient_ExhaustingOneClientsBurst_LeavesAnotherClientUntouched()
+    public void PartitionForCaller_ExhaustingOneClientsBurst_LeavesAnotherClientUntouched()
     {
         // Arrange
         var limits = Limits(tokenCapacity: 2, tokensPerReplenishmentPeriod: 2);
-        using var limiter = ClientLimiter(limits);
+        using var limiter = CallerLimiter(TransportSurface.Mcp, limits);
 
         // Act
         var spent = AcquireAll(limiter, () => McpRequest("desktop-agent"), attempts: 3);
@@ -204,12 +269,56 @@ public sealed class McpRateLimitingTests
         DisposeAll([.. spent, otherClient]);
     }
 
+    /// <summary>
+    /// The two endpoints' key lists are configured separately and neither consults the other's, so one name can be
+    /// spelled under both. A client that spent the MCP endpoint's burst must not arrive at the administrative endpoint
+    /// already out of capacity, nor the other way about.
+    /// </summary>
     [Fact]
-    public void PartitionForClient_WithoutAnAuthenticatedIdentity_SharesOneAnonymousPartition()
+    public void PartitionForCaller_ExhaustingOneSurfacesBurst_LeavesTheOtherSurfaceUntouched()
+    {
+        // Arrange
+        var limits = Limits(tokenCapacity: 1, tokensPerReplenishmentPeriod: 1);
+        using var limiter = CallerLimiterForBothSurfaces(limits);
+
+        // Act
+        var spentOnMcp = AcquireAll(limiter, () => McpRequest("workstation"), attempts: 2);
+        var onAdmin = limiter.AttemptAcquire(AdminRequest("workstation"));
+        var spentOnAdmin = limiter.AttemptAcquire(AdminRequest("workstation"));
+
+        // Assert
+        Assert.Equal([true, false], spentOnMcp.Select(lease => lease.IsAcquired));
+        Assert.True(onAdmin.IsAcquired);
+        Assert.False(spentOnAdmin.IsAcquired);
+
+        DisposeAll([.. spentOnMcp, onAdmin, spentOnAdmin]);
+    }
+
+    /// <summary>The anonymous partition is the one a flood of bad credentials lands in, and it is per surface for the same reason a client's is.</summary>
+    [Fact]
+    public void PartitionForCaller_ExhaustingOneSurfacesAnonymousBurst_LeavesTheOtherSurfaceUntouched()
+    {
+        // Arrange
+        var limits = Limits(tokenCapacity: 1, tokensPerReplenishmentPeriod: 1);
+        using var limiter = CallerLimiterForBothSurfaces(limits);
+
+        // Act
+        var spentOnAdmin = AcquireAll(limiter, () => AdminRequest(), attempts: 2);
+        var onMcp = limiter.AttemptAcquire(McpRequest());
+
+        // Assert
+        Assert.Equal([true, false], spentOnAdmin.Select(lease => lease.IsAcquired));
+        Assert.True(onMcp.IsAcquired);
+
+        DisposeAll([.. spentOnAdmin, onMcp]);
+    }
+
+    [Fact]
+    public void PartitionForCaller_WithoutAnAuthenticatedIdentity_SharesOneAnonymousPartition()
     {
         // Arrange
         var limits = Limits(tokenCapacity: 2, tokensPerReplenishmentPeriod: 2);
-        using var limiter = ClientLimiter(limits);
+        using var limiter = CallerLimiter(TransportSurface.Mcp, limits);
 
         // Act
         // A request that presented nothing and a request whose credential was refused both arrive with an
@@ -227,12 +336,38 @@ public sealed class McpRateLimitingTests
         DisposeAll([presentedNothing, credentialRefused, beyondTheSharedBurst]);
     }
 
+    /// <summary>
+    /// The administrative endpoint judges its credential in the authorization middleware, which runs behind the limiter
+    /// so that a wrong key still costs capacity. There is therefore no identity to partition on, and every
+    /// administrative caller shares the surface's one bucket — the strongest bound available against the guessing this
+    /// endpoint is exposed to, and the reason its burst is the endpoint's rather than one caller's.
+    /// </summary>
     [Fact]
-    public void PartitionForClient_ForAnAuthenticatedClient_KeepsItOutOfTheAnonymousPartition()
+    public void PartitionForCaller_ForAdministrativeRequests_CountsEveryCallerUnderOneBucket()
+    {
+        // Arrange
+        var limits = Limits(tokenCapacity: 2, tokensPerReplenishmentPeriod: 2);
+        using var limiter = CallerLimiter(TransportSurface.Admin, limits);
+
+        // Act
+        var firstGuess = limiter.AttemptAcquire(AdminRequest());
+        var secondGuess = limiter.AttemptAcquire(AdminRequest());
+        var thirdGuess = limiter.AttemptAcquire(AdminRequest());
+
+        // Assert
+        Assert.True(firstGuess.IsAcquired);
+        Assert.True(secondGuess.IsAcquired);
+        Assert.False(thirdGuess.IsAcquired);
+
+        DisposeAll([firstGuess, secondGuess, thirdGuess]);
+    }
+
+    [Fact]
+    public void PartitionForCaller_ForAnAuthenticatedClient_KeepsItOutOfTheAnonymousPartition()
     {
         // Arrange
         var limits = Limits(tokenCapacity: 1, tokensPerReplenishmentPeriod: 1);
-        using var limiter = ClientLimiter(limits);
+        using var limiter = CallerLimiter(TransportSurface.Mcp, limits);
 
         // Act
         var anonymous = limiter.AttemptAcquire(McpRequest());
@@ -250,11 +385,11 @@ public sealed class McpRateLimitingTests
     /// applications keeps a bucket per application instead of pooling them all into the anonymous one.
     /// </summary>
     [Fact]
-    public void PartitionForClient_WithACertificateProfileAndNoCredential_KeepsEachClientApplicationApart()
+    public void PartitionForCaller_WithACertificateProfileAndNoCredential_KeepsEachClientApplicationApart()
     {
         // Arrange
         var limits = Limits(tokenCapacity: 1, tokensPerReplenishmentPeriod: 1);
-        using var limiter = ClientLimiter(limits);
+        using var limiter = CallerLimiter(TransportSurface.Mcp, limits);
 
         // Act
         var chatgpt = limiter.AttemptAcquire(McpRequest(certificateProfileName: "chatgpt-connector"));
@@ -277,11 +412,11 @@ public sealed class McpRateLimitingTests
     /// could present under — capacity bought by holding one more certificate.
     /// </summary>
     [Fact]
-    public void PartitionForClient_WithBothIdentities_SpendsTheAuthenticatedClientsCapacityOnly()
+    public void PartitionForCaller_WithBothIdentities_SpendsTheAuthenticatedClientsCapacityOnly()
     {
         // Arrange
         var limits = Limits(tokenCapacity: 1, tokensPerReplenishmentPeriod: 1);
-        using var limiter = ClientLimiter(limits);
+        using var limiter = CallerLimiter(TransportSurface.Mcp, limits);
 
         // Act
         var underOneProfile = limiter.AttemptAcquire(
@@ -300,14 +435,14 @@ public sealed class McpRateLimitingTests
     public async Task RefuseAsync_ForAnyRejection_AnswersTooManyRequestsWithoutABody()
     {
         // Arrange
-        var limits = Limits(maxConcurrentRequests: 1);
-        using var limiter = ProcessLimiter(limits);
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 1));
+        using var limiter = ProcessLimiter(boundedSurfaces);
         using var held = limiter.AttemptAcquire(McpRequest());
         using var refusedLease = limiter.AttemptAcquire(McpRequest());
         var httpContext = McpRequest();
 
         // Act
-        await McpRateLimiting.RefuseAsync(
+        await TransportRateLimiting.RefuseAsync(
             new OnRejectedContext { HttpContext = httpContext, Lease = refusedLease },
             CancellationToken.None);
 
@@ -325,13 +460,13 @@ public sealed class McpRateLimitingTests
             tokenCapacity: 1,
             tokensPerReplenishmentPeriod: 1,
             replenishmentPeriod: TimeSpan.FromSeconds(30));
-        using var limiter = ClientLimiter(limits);
+        using var limiter = CallerLimiter(TransportSurface.Mcp, limits);
         using var spent = limiter.AttemptAcquire(McpRequest("desktop-agent"));
         using var refusedLease = limiter.AttemptAcquire(McpRequest("desktop-agent"));
         var httpContext = McpRequest();
 
         // Act
-        await McpRateLimiting.RefuseAsync(
+        await TransportRateLimiting.RefuseAsync(
             new OnRejectedContext { HttpContext = httpContext, Lease = refusedLease },
             CancellationToken.None);
 
@@ -344,14 +479,14 @@ public sealed class McpRateLimitingTests
     public async Task RefuseAsync_WhenTheLimiterCannotSayWhenCapacityReturns_OmitsTheRetry()
     {
         // Arrange
-        var limits = Limits(maxConcurrentRequests: 1);
-        using var limiter = ProcessLimiter(limits);
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 1));
+        using var limiter = ProcessLimiter(boundedSurfaces);
         using var held = limiter.AttemptAcquire(McpRequest());
         using var refusedLease = limiter.AttemptAcquire(McpRequest());
         var httpContext = McpRequest();
 
         // Act
-        await McpRateLimiting.RefuseAsync(
+        await TransportRateLimiting.RefuseAsync(
             new OnRejectedContext { HttpContext = httpContext, Lease = refusedLease },
             CancellationToken.None);
 
@@ -367,7 +502,7 @@ public sealed class McpRateLimitingTests
     {
         // Arrange
         var limits = Limits(tokenCapacity: 1, tokensPerReplenishmentPeriod: 1);
-        using var limiter = ClientLimiter(limits);
+        using var limiter = CallerLimiter(TransportSurface.Mcp, limits);
         using var spentByFirst = limiter.AttemptAcquire(McpRequest("desktop-agent"));
         using var refusedFirst = limiter.AttemptAcquire(McpRequest("desktop-agent"));
         using var spentBySecond = limiter.AttemptAcquire(McpRequest("nightly-indexer"));
@@ -377,10 +512,10 @@ public sealed class McpRateLimitingTests
         var secondResponse = McpRequest("nightly-indexer");
 
         // Act
-        await McpRateLimiting.RefuseAsync(
+        await TransportRateLimiting.RefuseAsync(
             new OnRejectedContext { HttpContext = firstResponse, Lease = refusedFirst },
             CancellationToken.None);
-        await McpRateLimiting.RefuseAsync(
+        await TransportRateLimiting.RefuseAsync(
             new OnRejectedContext { HttpContext = secondResponse, Lease = refusedSecond },
             CancellationToken.None);
 
@@ -393,6 +528,36 @@ public sealed class McpRateLimitingTests
             secondResponse.Response.Headers.OrderBy(header => header.Key, StringComparer.Ordinal));
     }
 
+    /// <summary>A refusal must not tell an administrative caller anything an MCP caller is not told, or the other way about.</summary>
+    [Fact]
+    public async Task RefuseAsync_ForDifferentSurfaces_AnswersIdentically()
+    {
+        // Arrange
+        var limits = Limits(tokenCapacity: 1, tokensPerReplenishmentPeriod: 1);
+        using var limiter = CallerLimiterForBothSurfaces(limits);
+        using var spentOnMcp = limiter.AttemptAcquire(McpRequest());
+        using var refusedOnMcp = limiter.AttemptAcquire(McpRequest());
+        using var spentOnAdmin = limiter.AttemptAcquire(AdminRequest());
+        using var refusedOnAdmin = limiter.AttemptAcquire(AdminRequest());
+
+        var mcpResponse = McpRequest();
+        var adminResponse = AdminRequest();
+
+        // Act
+        await TransportRateLimiting.RefuseAsync(
+            new OnRejectedContext { HttpContext = mcpResponse, Lease = refusedOnMcp },
+            CancellationToken.None);
+        await TransportRateLimiting.RefuseAsync(
+            new OnRejectedContext { HttpContext = adminResponse, Lease = refusedOnAdmin },
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(mcpResponse.Response.StatusCode, adminResponse.Response.StatusCode);
+        Assert.Equal(
+            mcpResponse.Response.Headers.OrderBy(header => header.Key, StringComparer.Ordinal),
+            adminResponse.Response.Headers.OrderBy(header => header.Key, StringComparer.Ordinal));
+    }
+
     [Fact]
     public async Task PartitionForProcess_UnderConcurrentLoad_AdmitsTheLimitAndRefusesTheRest()
     {
@@ -400,8 +565,8 @@ public sealed class McpRateLimitingTests
         const int PermitLimit = 4;
         const int Attempts = 40;
 
-        var limits = Limits(maxConcurrentRequests: PermitLimit);
-        using var limiter = ProcessLimiter(limits);
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: PermitLimit));
+        using var limiter = ProcessLimiter(boundedSurfaces);
 
         var everyAttemptSettled = new TaskCompletionSource();
         var attemptsSettled = 0;
@@ -453,14 +618,14 @@ public sealed class McpRateLimitingTests
         Assert.True(afterTheLoad.IsAcquired);
     }
 
-    private static McpRateLimits Limits(
+    private static TransportRateLimits Limits(
         int maxConcurrentRequests = 8,
         int concurrencyQueueLimit = 0,
         int tokenCapacity = 100,
         int tokensPerReplenishmentPeriod = 100,
         TimeSpan? replenishmentPeriod = null,
         int requestQueueLimit = 0) =>
-        McpRateLimits.Create(
+        TransportRateLimits.Create(
             maxConcurrentRequests,
             concurrencyQueueLimit,
             tokenCapacity,
@@ -468,26 +633,64 @@ public sealed class McpRateLimitingTests
             replenishmentPeriod ?? TimeSpan.FromMinutes(1),
             requestQueueLimit);
 
-    private static PartitionedRateLimiter<HttpContext> ProcessLimiter(McpRateLimits limits) =>
+    private static BoundedTransportSurface[] McpOnly(TransportRateLimits limits) =>
+        [new BoundedTransportSurface(TransportSurface.Mcp, limits)];
+
+    private static BoundedTransportSurface[] AdminOnly(TransportRateLimits limits) =>
+        [new BoundedTransportSurface(TransportSurface.Admin, limits)];
+
+    private static BoundedTransportSurface[] BothSurfaces(
+        TransportRateLimits mcpLimits,
+        TransportRateLimits adminLimits) =>
+        [
+            new BoundedTransportSurface(TransportSurface.Mcp, mcpLimits),
+            new BoundedTransportSurface(TransportSurface.Admin, adminLimits),
+        ];
+
+    private static PartitionedRateLimiter<HttpContext> ProcessLimiter(
+        IReadOnlyList<BoundedTransportSurface> boundedSurfaces) =>
         PartitionedRateLimiter.Create<HttpContext, string>(
-            httpContext => McpRateLimiting.PartitionForProcess(httpContext, limits));
+            httpContext => TransportRateLimiting.PartitionForProcess(httpContext, boundedSurfaces));
 
     /// <summary>
-    /// Builds the endpoint's own partitions, with the replenishment timer left off so a test that spends capacity is
-    /// not racing it.
+    /// Builds one surface's own partitions, with the replenishment timer left off so a test that spends capacity is not
+    /// racing it.
     /// </summary>
     /// <remarks>
-    /// The partition key is the one <see cref="McpRateLimiting.PartitionForClient" /> computed, because which client a
-    /// request is counted under is what these tests are about, and the bucket is the one
-    /// <see cref="McpRateLimiting.ClientBucketOptions" /> described apart from
-    /// <see cref="TokenBucketRateLimiterOptions.AutoReplenishment" />. That the endpoint leaves it on is asserted
-    /// against those options directly, which is the only place it can be asserted without waiting for a clock.
+    /// The partition key is the one <see cref="TransportRateLimiting.PartitionForCaller" /> computed, because which
+    /// caller a request is counted under is what these tests are about, and the bucket is the one
+    /// <see cref="TransportRateLimiting.CallerBucketOptions" /> described apart from
+    /// <see cref="TokenBucketRateLimiterOptions.AutoReplenishment" />. That an endpoint leaves it on is asserted against
+    /// those options directly, which is the only place it can be asserted without waiting for a clock.
     /// </remarks>
-    private static PartitionedRateLimiter<HttpContext> ClientLimiter(McpRateLimits limits) =>
+    private static PartitionedRateLimiter<HttpContext> CallerLimiter(
+        TransportSurface surface,
+        TransportRateLimits limits)
+    {
+        var boundedSurface = new BoundedTransportSurface(surface, limits);
+
+        return PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+            RateLimitPartition.GetTokenBucketLimiter(
+                TransportRateLimiting.PartitionForCaller(httpContext, boundedSurface).PartitionKey,
+                _ => WithoutTheReplenishmentTimer(TransportRateLimiting.CallerBucketOptions(limits))));
+    }
+
+    /// <summary>
+    /// Builds both surfaces' partitions into one limiter, which is stricter than production: each endpoint's policy is
+    /// its own limiter with its own dictionary, so a key shared between them would collide here and cannot there. What
+    /// this proves is that the keys themselves are distinct, which is what makes the isolation independent of the
+    /// framework keeping two policies apart.
+    /// </summary>
+    private static PartitionedRateLimiter<HttpContext> CallerLimiterForBothSurfaces(TransportRateLimits limits) =>
         PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
             RateLimitPartition.GetTokenBucketLimiter(
-                McpRateLimiting.PartitionForClient(httpContext, limits).PartitionKey,
-                _ => WithoutTheReplenishmentTimer(McpRateLimiting.ClientBucketOptions(limits))));
+                TransportRateLimiting.PartitionForCaller(httpContext, SurfaceOf(httpContext, limits)).PartitionKey,
+                _ => WithoutTheReplenishmentTimer(TransportRateLimiting.CallerBucketOptions(limits))));
+
+    private static BoundedTransportSurface SurfaceOf(HttpContext httpContext, TransportRateLimits limits) =>
+        httpContext.Request.Path.StartsWithSegments(AdminEndpointOptions.RoutePrefix)
+            ? new BoundedTransportSurface(TransportSurface.Admin, limits)
+            : new BoundedTransportSurface(TransportSurface.Mcp, limits);
 
     private static TokenBucketRateLimiterOptions WithoutTheReplenishmentTimer(TokenBucketRateLimiterOptions options) =>
         new()
@@ -502,9 +705,19 @@ public sealed class McpRateLimitingTests
 
     private static DefaultHttpContext McpRequest(
         string? authenticatedClientName = null,
+        string? certificateProfileName = null) =>
+        RequestTo(McpEndpointRoute.Path, authenticatedClientName, certificateProfileName);
+
+    private static DefaultHttpContext AdminRequest(string? authenticatedClientName = null) =>
+        RequestTo(AdminRoute, authenticatedClientName);
+
+    private static DefaultHttpContext RequestTo(
+        string path,
+        string? authenticatedClientName = null,
         string? certificateProfileName = null)
     {
-        var httpContext = RequestTo(McpEndpointRoute.Path);
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Path = path;
 
         if (authenticatedClientName is not null)
         {
@@ -519,14 +732,6 @@ public sealed class McpRateLimitingTests
             // actually be handed rather than one shaped for the test.
             httpContext.Features.Set(new McpClientCertificateIdentity(certificateProfileName));
         }
-
-        return httpContext;
-    }
-
-    private static DefaultHttpContext RequestTo(string path)
-    {
-        var httpContext = new DefaultHttpContext();
-        httpContext.Request.Path = path;
 
         return httpContext;
     }

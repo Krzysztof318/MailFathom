@@ -223,7 +223,7 @@ Every one of those is a MailFathom setting rather than a chart value, so turning
 | Reading the public scheme and host from the ingress | `ReverseProxy:Enabled` and `ReverseProxy:TrustedProxies` | [Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) |
 | TLS terminated by the pod itself | `McpEndpoint:Https:Endpoints` | [HTTPS and your own domain](mcp-endpoint.md#https-and-your-own-domain) |
 | Client certificates | `McpEndpoint:ClientCertificateProfiles` | [Client certificates](mcp-endpoint.md#client-certificates) |
-| Rate limits | `McpEndpoint:RateLimiting` | [Rate limiting](mcp-endpoint.md#rate-limiting) |
+| Rate limits | `McpEndpoint:RateLimiting`, and `AdminEndpoint:RateLimiting` for the administrative endpoint | [Rate limiting](mcp-endpoint.md#rate-limiting) |
 
 The ingress row is the one an OAuth deployment cannot skip. The controller terminates TLS and dials the pod over plain
 HTTP under the Service name, so without it the protected resource metadata document answers `404` and discovery never

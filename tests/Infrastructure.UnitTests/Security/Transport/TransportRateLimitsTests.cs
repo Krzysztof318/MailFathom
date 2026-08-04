@@ -7,13 +7,13 @@ using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Security.Transport;
 
-public sealed class McpRateLimitsTests
+public sealed class TransportRateLimitsTests
 {
     [Fact]
     public void Default_BoundsBothResourcesWithoutQueueing()
     {
         // Act
-        var limits = McpRateLimits.Default;
+        var limits = TransportRateLimits.Default;
 
         // Assert
         Assert.True(limits.MaxConcurrentRequests > 0);
@@ -28,7 +28,7 @@ public sealed class McpRateLimitsTests
     public void Default_RestoresEveryTokenItHandsOut()
     {
         // Act
-        var limits = McpRateLimits.Default;
+        var limits = TransportRateLimits.Default;
 
         // Assert
         Assert.True(limits.TokensPerReplenishmentPeriod <= limits.TokenCapacity);
@@ -38,7 +38,7 @@ public sealed class McpRateLimitsTests
     public void Create_WithUsableValues_CarriesEveryLimit()
     {
         // Act
-        var limits = McpRateLimits.Create(
+        var limits = TransportRateLimits.Create(
             maxConcurrentRequests: 7,
             concurrencyQueueLimit: 3,
             tokenCapacity: 40,
@@ -73,7 +73,7 @@ public sealed class McpRateLimitsTests
         int requestQueueLimit)
     {
         // Act, Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() => McpRateLimits.Create(
+        Assert.Throws<ArgumentOutOfRangeException>(() => TransportRateLimits.Create(
             maxConcurrentRequests,
             concurrencyQueueLimit,
             tokenCapacity,
@@ -86,7 +86,7 @@ public sealed class McpRateLimitsTests
     public void Create_RestoringMoreThanTheBucketHolds_Throws()
     {
         // Act, Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() => McpRateLimits.Create(
+        Assert.Throws<ArgumentOutOfRangeException>(() => TransportRateLimits.Create(
             maxConcurrentRequests: 4,
             concurrencyQueueLimit: 0,
             tokenCapacity: 10,
@@ -97,19 +97,19 @@ public sealed class McpRateLimitsTests
 
     /// <summary>
     /// A queued request is holding a concurrency permit while it waits, because the process-wide limiter is acquired
-    /// first and the client's bucket second. A queue that could hold every permit would let one client out of capacity
-    /// stop the whole process until its next replenishment, which is the isolation the per-client bucket exists for,
+    /// first and the caller's bucket second. A queue that could hold every permit would let one caller out of capacity
+    /// stop the whole surface until its next replenishment, which is the isolation the per-caller bucket exists for,
     /// inverted.
     /// </summary>
     [Theory]
     [InlineData(4, 4)]
     [InlineData(4, 5)]
-    public void Create_WithAClientQueueThatCouldHoldEveryPermit_Throws(
+    public void Create_WithACallerQueueThatCouldHoldEveryPermit_Throws(
         int maxConcurrentRequests,
         int requestQueueLimit)
     {
         // Act, Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() => McpRateLimits.Create(
+        Assert.Throws<ArgumentOutOfRangeException>(() => TransportRateLimits.Create(
             maxConcurrentRequests,
             concurrencyQueueLimit: 0,
             tokenCapacity: 10,
@@ -119,10 +119,10 @@ public sealed class McpRateLimitsTests
     }
 
     [Fact]
-    public void Create_WithAClientQueueBelowThePermitCount_LeavesAPermitForEveryoneElse()
+    public void Create_WithACallerQueueBelowThePermitCount_LeavesAPermitForEveryoneElse()
     {
         // Act
-        var limits = McpRateLimits.Create(
+        var limits = TransportRateLimits.Create(
             maxConcurrentRequests: 4,
             concurrencyQueueLimit: 0,
             tokenCapacity: 10,

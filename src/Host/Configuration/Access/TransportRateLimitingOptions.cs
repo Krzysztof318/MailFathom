@@ -8,24 +8,29 @@ using MailFathom.Infrastructure.Security.Transport;
 
 namespace MailFathom.Host.Configuration.Access;
 
-/// <summary>How much MCP traffic the endpoint accepts before it starts refusing.</summary>
+/// <summary>How much traffic an endpoint accepts before it starts refusing.</summary>
 /// <remarks>
 /// <para>
 /// Every setting here has a product default, so a deployment that writes none of them still runs bounded. That is the
-/// opposite of how the endpoint itself is configured — <see cref="McpEndpointOptions.Enabled" /> and
+/// opposite of how an endpoint itself is configured — <see cref="McpEndpointOptions.Enabled" /> and
 /// <see cref="McpEndpointOptions.Authentication" /> have no safe default and refuse to be guessed — because the two
-/// questions are different. There is no such thing as a correct posture for who may read a mailbox, but there is such a
-/// thing as a sane bound on how fast one client may ask, and leaving the endpoint unbounded because nobody wrote a
-/// number is not a decision an operator made.
+/// questions are different. There is no such thing as a correct posture for who may read a mailbox or administer this
+/// service, but there is such a thing as a sane bound on how fast one caller may ask, and leaving an endpoint unbounded
+/// because nobody wrote a number is not a decision an operator made.
 /// </para>
 /// <para>
 /// Turning limiting off is therefore an explicit value rather than an omission, and it costs one startup warning. It is
 /// the right setting where something in front of the process already bounds the traffic and a second limit would only
 /// refuse requests the first one already shaped.
 /// </para>
+/// <para>
+/// One type for both endpoints, bound separately under each of their sections. The two are validated by the same rules
+/// and default to the same numbers, and they are still two independent decisions: an operator narrowing the
+/// administrative endpoint changes nothing about what the MCP endpoint serves.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
-internal sealed class McpRateLimitingOptions
+internal sealed class TransportRateLimitingOptions
 {
     private const int MaximumConcurrentRequests = 1000;
 
@@ -41,24 +46,24 @@ internal sealed class McpRateLimitingOptions
     /// <remarks>On unless a deployment states otherwise, so an endpoint someone enabled is bounded by the act of enabling it.</remarks>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Gets or sets how many MCP requests the process serves at once, across every client.</summary>
-    public int MaxConcurrentRequests { get; set; } = McpRateLimits.Default.MaxConcurrentRequests;
+    /// <summary>Gets or sets how many requests the process serves at once on this endpoint, across every caller.</summary>
+    public int MaxConcurrentRequests { get; set; } = TransportRateLimits.Default.MaxConcurrentRequests;
 
     /// <summary>Gets or sets how many requests wait for a concurrency slot before the rest are refused.</summary>
-    public int ConcurrencyQueueLimit { get; set; } = McpRateLimits.Default.ConcurrencyQueueLimit;
+    public int ConcurrencyQueueLimit { get; set; } = TransportRateLimits.Default.ConcurrencyQueueLimit;
 
-    /// <summary>Gets or sets the largest burst one client may spend at once.</summary>
-    public int TokenCapacity { get; set; } = McpRateLimits.Default.TokenCapacity;
+    /// <summary>Gets or sets the largest burst one caller may spend at once.</summary>
+    public int TokenCapacity { get; set; } = TransportRateLimits.Default.TokenCapacity;
 
-    /// <summary>Gets or sets how much of that burst one client gets back each <see cref="ReplenishmentPeriod" />.</summary>
-    public int TokensPerReplenishmentPeriod { get; set; } = McpRateLimits.Default.TokensPerReplenishmentPeriod;
+    /// <summary>Gets or sets how much of that burst one caller gets back each <see cref="ReplenishmentPeriod" />.</summary>
+    public int TokensPerReplenishmentPeriod { get; set; } = TransportRateLimits.Default.TokensPerReplenishmentPeriod;
 
-    /// <summary>Gets or sets how often a client's spent capacity is restored.</summary>
-    public TimeSpan ReplenishmentPeriod { get; set; } = McpRateLimits.Default.ReplenishmentPeriod;
+    /// <summary>Gets or sets how often a caller's spent capacity is restored.</summary>
+    public TimeSpan ReplenishmentPeriod { get; set; } = TransportRateLimits.Default.ReplenishmentPeriod;
 
-    /// <summary>Gets or sets how many of one client's requests wait for capacity before the rest are refused.</summary>
+    /// <summary>Gets or sets how many of one caller's requests wait for capacity before the rest are refused.</summary>
     /// <remarks>Has to stay below <see cref="MaxConcurrentRequests" />, because a request waiting here is already holding a concurrency permit.</remarks>
-    public int RequestQueueLimit { get; set; } = McpRateLimits.Default.RequestQueueLimit;
+    public int RequestQueueLimit { get; set; } = TransportRateLimits.Default.RequestQueueLimit;
 
     /// <summary>Finds everything an operator must fix before these limits can be applied.</summary>
     /// <returns>One message per faulty setting, relative to this section, empty when the limits are usable.</returns>
@@ -81,11 +86,11 @@ internal sealed class McpRateLimitingOptions
     /// <summary>Maps the configured settings onto the limits the endpoint runs under.</summary>
     /// <returns>The limits.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
-    public McpRateLimits ToRateLimits()
+    public TransportRateLimits ToRateLimits()
     {
         try
         {
-            return McpRateLimits.Create(
+            return TransportRateLimits.Create(
                 this.MaxConcurrentRequests,
                 this.ConcurrencyQueueLimit,
                 this.TokenCapacity,
@@ -115,12 +120,12 @@ internal sealed class McpRateLimitingOptions
 
         if (this.TokenCapacity is < 1 or > MaximumTokenCapacity)
         {
-            yield return $"{nameof(this.TokenCapacity)} — '{this.TokenCapacity}' is outside 1 to {MaximumTokenCapacity}; a client that may spend nothing could never call a tool.";
+            yield return $"{nameof(this.TokenCapacity)} — '{this.TokenCapacity}' is outside 1 to {MaximumTokenCapacity}; a caller that may spend nothing could never reach the endpoint.";
         }
 
         if (this.TokensPerReplenishmentPeriod is < 1 or > MaximumTokenCapacity)
         {
-            yield return $"{nameof(this.TokensPerReplenishmentPeriod)} — '{this.TokensPerReplenishmentPeriod}' is outside 1 to {MaximumTokenCapacity}; capacity that is never restored would refuse every client permanently once the first burst was spent.";
+            yield return $"{nameof(this.TokensPerReplenishmentPeriod)} — '{this.TokensPerReplenishmentPeriod}' is outside 1 to {MaximumTokenCapacity}; capacity that is never restored would refuse every caller permanently once the first burst was spent.";
         }
 
         if (this.ReplenishmentPeriod < ShortestReplenishmentPeriod || this.ReplenishmentPeriod > LongestReplenishmentPeriod)
@@ -130,7 +135,7 @@ internal sealed class McpRateLimitingOptions
 
         if (this.RequestQueueLimit is < 0 or > MaximumQueueLimit)
         {
-            yield return $"{nameof(this.RequestQueueLimit)} — '{this.RequestQueueLimit}' is outside 0 to {MaximumQueueLimit}; write 0 to refuse a request the moment a client is out of capacity, and any queue that waits instead has to be bounded.";
+            yield return $"{nameof(this.RequestQueueLimit)} — '{this.RequestQueueLimit}' is outside 0 to {MaximumQueueLimit}; write 0 to refuse a request the moment a caller is out of capacity, and any queue that waits instead has to be bounded.";
         }
     }
 
@@ -151,7 +156,7 @@ internal sealed class McpRateLimitingOptions
 
         if (bothLimitsAreUsable && this.RequestQueueLimit >= this.MaxConcurrentRequests)
         {
-            yield return $"{nameof(this.RequestQueueLimit)} — '{this.RequestQueueLimit}' is not below {nameof(this.MaxConcurrentRequests)} of '{this.MaxConcurrentRequests}', and a queued request holds a concurrency permit while it waits for its client's capacity to return; one client out of capacity could therefore hold every permit the process has until its next replenishment; lower this below {nameof(this.MaxConcurrentRequests)} or write 0 to refuse instead of queueing.";
+            yield return $"{nameof(this.RequestQueueLimit)} — '{this.RequestQueueLimit}' is not below {nameof(this.MaxConcurrentRequests)} of '{this.MaxConcurrentRequests}', and a queued request holds a concurrency permit while it waits for its caller's capacity to return; one caller out of capacity could therefore hold every permit the endpoint has until its next replenishment; lower this below {nameof(this.MaxConcurrentRequests)} or write 0 to refuse instead of queueing.";
         }
     }
 }

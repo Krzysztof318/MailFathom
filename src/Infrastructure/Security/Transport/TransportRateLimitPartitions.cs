@@ -6,11 +6,11 @@ using MailFathom.Infrastructure.Secrets;
 
 namespace MailFathom.Infrastructure.Security.Transport;
 
-/// <summary>Whose capacity an MCP request spends.</summary>
+/// <summary>Whose capacity a request spends, on which transport surface.</summary>
 /// <remarks>
 /// <para>
-/// A per-client limit needs a name to keep the count under, and which name it is decides whether the limit protects the
-/// endpoint or becomes the way to bring it down. Every partition a request can name is a dictionary entry the process
+/// A per-caller limit needs a name to keep the count under, and which name it is decides whether the limit protects the
+/// surface or becomes the way to bring it down. Every partition a request can name is a dictionary entry the process
 /// keeps for as long as the limiter does, so a key an attacker chooses is memory an attacker allocates. This type
 /// therefore admits exactly one source of names: the identity authentication established. Nothing a caller writes into
 /// a header, a path, a query string, an <c>Origin</c>, or a user agent reaches a key, and no forwarded address does
@@ -18,7 +18,14 @@ namespace MailFathom.Infrastructure.Security.Transport;
 /// review.
 /// </para>
 /// <para>
-/// Everything else shares one anonymous partition. That is deliberately coarse: under
+/// The surface leads every key, which is what keeps two endpoints' capacity independent no matter what they are
+/// configured with. A key list an operator wrote for the administrative endpoint may spell the same names as the MCP
+/// endpoint's — the two sections are configured separately and neither consults the other — and without the prefix a
+/// client named identically on both would spend one bucket from both surfaces. It also holds for the anonymous
+/// partition, which is the one every surface has and the one a flood of bad credentials lands in.
+/// </para>
+/// <para>
+/// Everything else shares one anonymous partition per surface. That is deliberately coarse: under
 /// <c>None</c> there is no identity to tell one caller from another, so a single bucket is the only bound that cannot be
 /// grown by asking for it, and unauthenticated callers being able to exhaust each other's capacity is a smaller problem
 /// than unauthenticated callers being able to exhaust the process's memory. The same partition absorbs a request whose
@@ -38,9 +45,9 @@ namespace MailFathom.Infrastructure.Security.Transport;
 /// is aimed at, and one client behind a shared address would otherwise be limited by another's behaviour.
 /// </para>
 /// </remarks>
-public static class McpRateLimitPartitions
+public static class TransportRateLimitPartitions
 {
-    /// <summary>The one partition every request without an authenticated identity is counted under.</summary>
+    /// <summary>The one identity every request on a surface without an authenticated identity is counted under.</summary>
     /// <remarks>
     /// <para>
     /// The angle brackets are what keep it from being a client's partition as well. An authenticated request is counted
@@ -50,22 +57,32 @@ public static class McpRateLimitPartitions
     /// theirs. A bracketed value cannot be spelled as a name at all, and a test holds that grammar to it.
     /// </para>
     /// <para>
-    /// The value never appears in a response. It is a dictionary key inside one process, named so a log or a test can
-    /// refer to it.
+    /// The value never appears in a response. It is part of a dictionary key inside one process, named so a log or a
+    /// test can refer to it.
     /// </para>
     /// </remarks>
-    public const string AnonymousKey = "<anonymous>";
+    public const string AnonymousIdentity = "<anonymous>";
+
+    /// <summary>Separates the surface from the identity, in a character neither of them can contain.</summary>
+    /// <remarks>
+    /// A surface name is one of MailFathom's own, and an identity is either a configured name — which
+    /// <see cref="SecretName" /> restricts to letters, digits, dots, hyphens, and underscores — or a bracketed sentinel.
+    /// None of them can hold this character, so no pair of surface and identity can be spelled as a different pair.
+    /// </remarks>
+    private const char SurfaceSeparator = '|';
 
     /// <summary>Names the partition a request's capacity is taken from.</summary>
+    /// <param name="surfaceName">The name of the transport surface the request arrived on.</param>
     /// <param name="authenticatedClientName">The name of the credential the request authenticated with, or <see langword="null" /> when it authenticated with none.</param>
     /// <param name="matchedCertificateProfileName">The name of the trust profile the connection certificate matched, or <see langword="null" /> when no certificate identified a client application.</param>
-    /// <returns>The configured name of the authenticated client, a partition of the identified client application, or <see cref="AnonymousKey" />.</returns>
+    /// <returns>The surface's name, followed by the configured name of the authenticated client, a partition of the identified client application, or <see cref="AnonymousIdentity" />.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="surfaceName" /> is <see langword="null" />, empty, or white space.</exception>
     /// <remarks>
     /// <para>
-    /// Both names are MailFathom's own configured identities, never a credential and never anything a certificate carried.
-    /// They are chosen by the operator who wrote the configuration, so the partitions an identified deployment keeps
-    /// number no more than its key list plus its profile list. A blank name is treated as no name at all rather than as
-    /// a partition of its own.
+    /// Both identity names are MailFathom's own configured identities, never a credential and never anything a
+    /// certificate carried. They are chosen by the operator who wrote the configuration, so the partitions an identified
+    /// surface keeps number no more than its key list plus its profile list. A blank name is treated as no name at all
+    /// rather than as a partition of its own.
     /// </para>
     /// <para>
     /// A profile's partition is bracketed and a key's is not, because the two grammars are the same — both accept
@@ -74,7 +91,18 @@ public static class McpRateLimitPartitions
     /// this with the profile its certificate matched.
     /// </para>
     /// </remarks>
-    public static string KeyFor(string? authenticatedClientName, string? matchedCertificateProfileName)
+    public static string KeyFor(
+        string surfaceName,
+        string? authenticatedClientName,
+        string? matchedCertificateProfileName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(surfaceName);
+
+        return $"{surfaceName}{SurfaceSeparator}{IdentityFor(authenticatedClientName, matchedCertificateProfileName)}";
+    }
+
+    /// <summary>Names the identity half of a partition key, without the surface it belongs to.</summary>
+    private static string IdentityFor(string? authenticatedClientName, string? matchedCertificateProfileName)
     {
         if (!string.IsNullOrWhiteSpace(authenticatedClientName))
         {
@@ -82,7 +110,7 @@ public static class McpRateLimitPartitions
         }
 
         return string.IsNullOrWhiteSpace(matchedCertificateProfileName)
-            ? AnonymousKey
+            ? AnonymousIdentity
             : $"<profile:{matchedCertificateProfileName}>";
     }
 }

@@ -45,7 +45,7 @@ service that reads it are different authorities.
 }
 ```
 
-Three things about that block are worth understanding before you copy it:
+Four things about that block are worth understanding before you copy it:
 
 - **It binds a socket of its own.** `127.0.0.1` above is the safe starting point — reachable from the machine the
   service runs on and nowhere else, which is what an SSH tunnel is for. Publishing it more widely is a decision, not a
@@ -57,6 +57,10 @@ Three things about that block are worth understanding before you copy it:
 - **A clear-text endpoint is warned about at startup, not refused.** It is the right posture behind a TLS-terminating
   proxy or on a loopback bind, and the wrong one anywhere else; only you know which you have. Configure
   `AdminEndpoint:Https:Endpoints` to have MailFathom terminate TLS itself.
+- **It is rate limited without your writing a number.** An endpoint that answers a network has to bound how fast a
+  caller may present wrong credentials, so the limits apply the moment you enable it and the applied numbers are stated
+  at startup. [Rate limiting](../operations/admin-endpoint.md#rate-limiting) is where the settings and the one way this
+  endpoint's limit differs from the MCP endpoint's are recorded.
 
 ## Getting the command
 

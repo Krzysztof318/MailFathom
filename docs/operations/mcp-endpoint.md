@@ -979,6 +979,12 @@ act of enabling it. There is no correct default for who may read a mailbox, whic
 guessed; there is a sane default for how fast one client may ask, and leaving the endpoint unbounded because nobody wrote
 a number is not a decision anyone made.
 
+**The administrative endpoint carries the same section.** `AdminEndpoint:RateLimiting` takes the same keys, the same
+defaults, and the same validation, and the two are configured independently: neither endpoint's traffic reaches the
+other's limits, and neither endpoint's numbers say anything about the other's.
+[Administering a deployment](admin-endpoint.md#rate-limiting) records the one behavioural difference between them,
+which follows from that endpoint judging its credential behind the limiter rather than in front of it.
+
 ```json
 {
   "McpEndpoint": {
@@ -1015,10 +1021,13 @@ Whatever is in force is stated once at startup, so a deployment running on defau
 rather than having to know these numbers:
 
 ```text
-info: MailFathom.Host.Hosting.Warnings.McpRateLimitingStartupReport
-      The MCP endpoint on /mcp serves at most 20 requests at once across every client, queueing 0 beyond that, and
-      allows each client a burst of 60 requests restored at 60 every 00:01:00, queueing 0 of its requests beyond that.
+info: MailFathom.Host.Hosting.Warnings.TransportRateLimitingStartupReport
+      The MCP endpoint on /mcp serves at most 20 requests at once across every caller, queueing 0 beyond that, and
+      allows each caller a burst of 60 requests restored at 60 every 00:01:00, queueing 0 of its requests beyond that.
 ```
+
+One line per enabled endpoint. A deployment serving both reads a second line naming the administrative endpoint and its
+own numbers, so a section somebody mistyped is visible at startup rather than the first time a caller is refused.
 
 **Queue limits default to zero throughout.** A queued request holds memory and a connection while it waits for capacity
 that is already gone, which turns an overload into a slower, larger overload; refusing it immediately tells the client to
@@ -1072,7 +1081,12 @@ something. The limiter runs **behind the certificate check and behind authentica
 before it counts, and **ahead of authorization**, so a request about to be refused for its credential has still spent
 capacity rather than being the one kind of traffic served without limit.
 
-Readiness, liveness, and the root endpoint are outside all of this and keep answering while the MCP endpoint is refusing.
+**Every partition is keyed by the surface it belongs to**, including the anonymous one. The two endpoints' key lists are
+configured separately and neither consults the other's, so one name spelled under both is two independent buckets rather
+than one shared between them — and the burst an agent spends reaching a mailbox is never the burst an operator needs to
+administer the service.
+
+Readiness, liveness, and the root endpoint are outside all of this and keep answering while either endpoint is refusing.
 
 ### What a refused request receives
 
@@ -1087,8 +1101,10 @@ scheduled moment at which a slot frees and a guess would be worse than silence. 
 second, so a client never reads it as "immediately" and retries into the same refusal.
 
 Rejections, active leases, queued requests, and lease durations are recorded through the built-in
-`Microsoft.AspNetCore.RateLimiting` metrics, tagged with the policy name. Nothing MailFathom adds records a client name, an
-address, an origin, a credential, or anything from a request or its response.
+`Microsoft.AspNetCore.RateLimiting` metrics, tagged with the policy name — `MailFathom:Mcp:RateLimiting` here and
+`MailFathom:Admin:RateLimiting` on the administrative endpoint, which is how a rejection says which surface refused it.
+Nothing MailFathom adds records a client name, an address, an origin, a credential, or anything from a request or its
+response.
 
 ### What this is not
 
@@ -1110,8 +1126,8 @@ job for whatever fronts the process.
 Turning the limits off is an explicit value and costs one startup warning:
 
 ```text
-warn: MailFathom.Host.Hosting.Warnings.McpRateLimitingStartupReport
-      The MCP endpoint is enabled on /mcp with rate limiting turned off, so one client can hold every database
+warn: MailFathom.Host.Hosting.Warnings.TransportRateLimitingStartupReport
+      The MCP endpoint is enabled on /mcp with rate limiting turned off, so one caller can hold every database
       connection, response stream, and thread the process has until something runs out. This is the right setting only
       where something in front of this process already bounds the traffic reaching it. Remove
       McpEndpoint:RateLimiting:Enabled to run under the product defaults.

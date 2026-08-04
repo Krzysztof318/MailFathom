@@ -361,17 +361,21 @@ plain-HTTP deployment presents none, which a `Required` profile refuses.
 | `…:TrustAnchors` | list of secret blocks | — | At least one; the authorities the client's chain must anchor in | restart; material per handshake |
 | `…:SubjectAlternativeNames` | string list | — | At least one; a DNS name the certificate must carry | restart |
 
-### Rate limiting — `McpEndpoint:RateLimiting`
+### Rate limiting — `McpEndpoint:RateLimiting` and `AdminEndpoint:RateLimiting`
 
-The one MCP subsection where every value has a product default, so an enabled endpoint is bounded whether or not
-anyone wrote a number. [Rate limiting](mcp-endpoint.md#rate-limiting) records whose capacity a request spends.
+The one endpoint subsection where every value has a product default, so an enabled endpoint is bounded whether or not
+anyone wrote a number. Both endpoints carry it, with the same keys, defaults, and validation, and configure it
+independently: neither one's traffic reaches the other's limits. [Rate limiting](mcp-endpoint.md#rate-limiting) records
+whose capacity a request spends, and [administering a deployment](admin-endpoint.md#rate-limiting) records the one
+behavioural difference on the administrative endpoint — its burst is the endpoint's rather than one caller's, because
+that surface judges a credential behind the limiter.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `…:Enabled` | bool | `true` | Turning it off costs a startup warning | restart |
-| `…:MaxConcurrentRequests` | int | `20` | 1 – 1000; process-wide | restart |
+| `…:MaxConcurrentRequests` | int | `20` | 1 – 1000; process-wide, per endpoint | restart |
 | `…:ConcurrencyQueueLimit` | int | `0` | 0 – 1000; `0` refuses instead of queueing | restart |
-| `…:TokenCapacity` | int | `60` | 1 – 1000000; the largest burst one client may spend | restart |
+| `…:TokenCapacity` | int | `60` | 1 – 1000000; the largest burst one caller may spend | restart |
 | `…:TokensPerReplenishmentPeriod` | int | `60` | 1 – 1000000, and not above `TokenCapacity` | restart |
 | `…:ReplenishmentPeriod` | TimeSpan | `00:01:00` | 1 s – 1 h | restart |
 | `…:RequestQueueLimit` | int | `0` | 0 – 1000, and below `MaxConcurrentRequests` | restart |
@@ -392,6 +396,7 @@ request or per handshake. [Administering a deployment](admin-endpoint.md) is the
 | `AdminEndpoint:ApiKeys` | list of secret blocks | empty | Required non-empty when `ApiKey` is named; refused when configured while it is not | restart; material per request |
 | `AdminEndpoint:OAuth` | block | empty | Same shape and rules as `McpEndpoint:OAuth`, with one addition: `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document. Refused when configured while `OAuth` is not named | restart |
 | `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`; naming any binds those listeners and no clear-text one | restart; material per handshake |
+| `AdminEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as `McpEndpoint:RateLimiting` above; applied whether or not it is written | restart |
 
 The routes are served beneath `/api/admin`, which is a constant rather than a setting: a client is configured with a
 host and a port and appends the rest.
