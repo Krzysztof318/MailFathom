@@ -60,9 +60,11 @@ error rather than a partial result.
    - Return `blocked` until every path is inventoried and the user explicitly approves its
      preservation plan, or the changes are moved to a separate worktree. Never assume existing
      changes are unrelated.
-5. Classify the task as a numbered roadmap specification, maintenance outside the roadmap, or
-   documentation-only work.
-6. Read the selected specification, affected implemented-behavior documentation, and relevant ADRs.
+5. Classify the task by what governs it: a numbered roadmap specification, an ADR or an existing
+   issue where no specification does, or documentation-only work. Work no specification backs is an
+   ordinary case and a feature can be one, so never write a specification to supply the
+   classification — say that nothing governs it and let the issue body carry the scope instead.
+6. Read whatever step 5 named, plus affected implemented-behavior documentation and relevant ADRs.
 7. Check the task against the protected paths before planning the work, not after the check refuses
    it. `.github/`, `.config/`, `.agents/`, `.claude/`, and `docs/decisions/`, an `.editorconfig`,
    `.gitattributes`, `.worktreeinclude`, `AGENTS.md`, or `CLAUDE.md` at any depth, and the
@@ -71,9 +73,9 @@ error rather than a partial result.
    of them is a task to raise in an issue instead of to implement; say so now rather than after a
    session spent on a diff that cannot merge.
 8. Identify the GitHub issue that governs the task, reading
-   `docs/operations/issue-tracking.md` first. Create it when none exists; its body draws on the
-   specification read in step 6. A change set that adds a numbered specification also creates that
-   specification's issue.
+   `docs/operations/issue-tracking.md` first. Create it when none exists; its body draws on what
+   step 6 read. A change set that adds a numbered specification also creates that specification's
+   issue.
 9. Place the issue — **owner's checkout only**. It carries exactly one `type:*` label, a `Track` and a
    `Queue` value on the board, a milestone when the milestone rule assigns one, and a `Size` value
    once the work is planned. Decide each from the rules on that page rather than asking. `Queue: Next`
@@ -93,7 +95,7 @@ Return:
 ```text
 Role: <owner's checkout or fork, and what resolved it>
 Workspace: <safe or blocked, branch, base branch>
-Scope: <specification or maintenance classification>
+Scope: <what governs the task, or that nothing does>
 Protected paths: <none reached, or which and what that means for this role>
 Issue: <number and title, or created with reason>
 Placement: <type label, Track, Queue, milestone or none, Size or deferred — or left to triage in the fork role>

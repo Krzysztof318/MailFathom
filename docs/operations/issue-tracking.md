@@ -4,7 +4,7 @@
 
 This page is the whole of how work is tracked here. `$start-task` reads it before opening or placing an issue and `$finish-change` before linking a pull request to one, which is every point at which the board is written.
 
-Work is tracked as GitHub issues on the `MailFathom roadmap` project board (project number `4`, owner `Krzysztof318`), which is the owner's view of progress. The board reflects the repository; it never becomes a second source of truth. `specs/` remains authoritative for what a change must do, and an issue links to its specification instead of restating it.
+Work is tracked as GitHub issues on the `MailFathom roadmap` project board (project number `4`, owner `Krzysztof318`), which is the owner's view of progress. The board reflects the repository; it never becomes a second source of truth. Where a specification under `specs/` governs a change, it remains authoritative for what that change must do, and the issue links to it instead of restating it.
 
 **The repository is public and the board is not.** Only the owner can reach project `4`, so every rule below that reads or writes it is a rule for an agent working in the owner's checkout. From a fork, `gh project item-list` and `gh project item-edit` fail on permission rather than degrading, and there is nothing to fall back to — so a fork's agent does not attempt them, and nothing here asks it to. The issues themselves are public and are where a contribution is discussed; what stays private is the owner's ordering of them. No public file links the board, for the same reason: a URL that answers `404` for everyone but one person is worse than no URL.
 
@@ -27,9 +27,9 @@ An open pull request moves both of the bottom two rows, and that is not the dupl
 
 ## The issue that governs a change
 
-- Every change starts from an issue. Identify it during `$start-task`, before editing files, and name it in the task brief. Read the governing specification and ADR context first, because an issue body is written from them.
+- Every change starts from an issue. Identify it during `$start-task`, before editing files, and name it in the task brief. Read whatever governs the change first — a specification, the ADR context, or both — because an issue body is written from it.
 - Each numbered specification under `specs/` has exactly one issue, titled `Spec NN — <specification title>`. Create the issue in the same change set that adds a new specification, so a specification never exists without a tracked unit of work.
-- Work that is not a numbered specification — maintenance, an ADR consequence, a defect — also gets an issue. State in its body that no `specs/` file backs it and name the ADR or the reason instead.
+- An issue names whatever governs it: the specification under `specs/`, the ADR under `docs/decisions/`, or the issue it follows from. A specification is how a large piece of the roadmap is decomposed into reviewable units, not what entitles work to exist, so an issue no specification backs — a feature as readily as maintenance, an ADR consequence, or a defect — is opened on exactly the same terms. Where nothing governs it, its own context is the governing text and there is nothing further to declare: that nothing is linked is already visible to anyone reading it.
 - Do not open a second issue for work an existing issue already covers. Extend the existing issue when scope grows and record why.
 
 ## Issue content
