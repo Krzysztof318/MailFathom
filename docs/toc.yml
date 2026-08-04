@@ -1,0 +1,22 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# The site's top navigation. Each entry points at a directory, so the entry decides the header link
+# and the `toc.yml` inside that directory decides the sidebar under it.
+- name: User guide
+  href: users/
+- name: Operations
+  href: operations/
+- name: Features
+  href: features/
+- name: Architecture
+  href: architecture/
+# The page here, rather than the directory: the rest of `api/` is generated at build time and carries its own sidebar,
+# and naming the directory would send docfx looking for a table of contents beside this file that nothing writes.
+- name: API reference
+  href: api/index.md
+# The repository-root changelog, published as it stands. It is the one page on this site written outside `docs/`,
+# because what a release shipped is a question a reader arrives with and the answer already exists in one place.
+- name: Changelog
+  href: ../CHANGELOG.md

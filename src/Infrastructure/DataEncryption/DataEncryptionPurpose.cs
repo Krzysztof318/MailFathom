@@ -25,7 +25,7 @@ namespace MailFathom.Infrastructure.DataEncryption;
 /// An identity is allocated once and never reused or respelled. Being a struct, <see langword="default" /> is reachable
 /// and names no purpose; <see cref="DataEncryptionBinding" /> is where it is rejected, because that is the last point
 /// before a value is bound to something meaningless. See
-/// <see href="../../../docs/decisions/0005-data-encryption-key-ring-and-provisioning.md">ADR 0005</see>.
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0005-data-encryption-key-ring-and-provisioning.md">ADR 0005</see>.
 /// </para>
 /// </remarks>
 [JsonConverter(typeof(DataEncryptionPurposeJsonConverter))]

@@ -66,7 +66,7 @@ public static class OrchestrationContract
     /// database or a log finds out what they are by decoding them. It protects one developer's synthetic mail on a
     /// container published on the loopback address alone and unlocks nothing a deployment holds: a deployed MailFathom
     /// resolves its key from a secret reference an operator provisioned, which
-    /// <see href="../../docs/decisions/0005-data-encryption-key-ring-and-provisioning.md">ADR 0005</see> records and
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0005-data-encryption-key-ring-and-provisioning.md">ADR 0005</see> records and
     /// which this app model builds no part of.
     /// </para>
     /// </remarks>

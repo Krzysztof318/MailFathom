@@ -15,6 +15,12 @@ artifacts/
 .env.*
 !.env.example
 
+# What a documentation build writes beside its own configuration. `api/` is the reference generated from the XML
+# comments in `src/`, and `_site/` is the rendered site when docfx is run without an output directory;
+# `scripts/build-docs-site.sh` writes under `artifacts/` instead, which is ignored above.
+docfx/api/
+docfx/_site/
+
 # The plans and design notes the agent harness writes while a change is being worked out. They record how a change
 # was arrived at rather than how the system behaves, which is the one thing `docs/` never carries, and they are
 # snapshots that were never meant to stay true. Ignored rather than tracked so the harness can keep writing them

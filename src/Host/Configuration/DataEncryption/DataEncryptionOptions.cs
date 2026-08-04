@@ -26,7 +26,7 @@ namespace MailFathom.Host.Configuration.DataEncryption;
 /// resolves, and whether it decodes to a key of the right length, is answered where the references are resolved, so a
 /// mistyped path and a truncated key are reported together with every other unusable secret rather than one restart
 /// apart. See
-/// <see href="../../../../docs/decisions/0005-data-encryption-key-ring-and-provisioning.md">ADR 0005</see>.
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0005-data-encryption-key-ring-and-provisioning.md">ADR 0005</see>.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]

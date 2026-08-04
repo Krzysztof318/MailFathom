@@ -1,0 +1,17 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# What the product does, from the mail arriving to the tool call answering.
+- name: The scope of the first release
+  href: initial-scope.md
+- name: IMAP synchronization
+  href: imap-synchronization.md
+- name: Mailbox queries
+  href: mailbox-queries.md
+- name: Lexical email search
+  href: lexical-email-search.md
+- name: Email content
+  href: email-content.md
+- name: MCP tools
+  href: mcp-tools.md

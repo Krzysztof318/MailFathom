@@ -1,0 +1,79 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dotnet/docfx/main/schemas/docfx.schema.json",
+  "metadata": [
+    {
+      "src": [
+        {
+          "files": [
+            "src/*/*.csproj"
+          ],
+          "exclude": [
+            "src/AppHost/**"
+          ],
+          "src": ".."
+        }
+      ],
+      "dest": "api",
+      "filter": "filter.yml",
+      "namespaceLayout": "nested",
+      "memberLayout": "separatePages"
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": [
+          "api/**.yml"
+        ]
+      },
+      {
+        "files": [
+          "**/*.md",
+          "**/toc.yml"
+        ],
+        "exclude": [
+          "README.md",
+          "decisions/**",
+          "**/AGENTS.md",
+          "**/CLAUDE.md"
+        ],
+        "src": "../docs"
+      },
+      {
+        "files": [
+          "CHANGELOG.md"
+        ],
+        "src": ".."
+      }
+    ],
+    "resource": [
+      {
+        "files": [
+          "assets/icon-180.png"
+        ],
+        "src": ".."
+      }
+    ],
+    "output": "_site",
+    "template": [
+      "default",
+      "modern",
+      "template"
+    ],
+    "globalMetadata": {
+      "_appName": "MailFathom",
+      "_appTitle": "MailFathom",
+      "_appLogoPath": "assets/icon-180.png",
+      "_appFaviconPath": "assets/icon-180.png",
+      "_appFooter": "<span>Copyright © 2026 Krzysztof Kasprowicz. Licensed under the <a href=\"https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE\">Apache License 2.0</a>.</span>",
+      "_enableSearch": true,
+      "_gitContribute": {
+        "repo": "https://github.com/Krzysztof318/MailFathom",
+        "branch": "main"
+      }
+    },
+    "postProcessors": [
+      "ExtractSearchIndex"
+    ]
+  }
+}

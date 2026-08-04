@@ -11,7 +11,7 @@ namespace MailFathom.Application.Emails.Summaries;
 /// <remarks>
 /// <para>
 /// The port is read-only and joins no transaction, per
-/// <see href="../../../docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>: it
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>: it
 /// takes no persistence session, because a read has nothing to participate in.
 /// </para>
 /// <para>

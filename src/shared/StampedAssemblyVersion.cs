@@ -15,7 +15,7 @@ namespace MailFathom.Versioning;
 /// <see cref="Version" /> is the compatibility statement, which is what an operator groups deployments by and what an
 /// MCP client compares against a tool contract it knows; <see cref="Revision" /> is build provenance, which is what
 /// turns a bug report from a deployment the reader did not build into something reproducible. See
-/// <see href="../../docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see> for where the number comes
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see> for where the number comes
 /// from.
 /// </para>
 /// <para>

@@ -59,7 +59,7 @@ public static class McpServiceCollectionExtensions
     /// </para>
     /// <para>
     /// Only the semantic version is reported, without the source revision that
-    /// <see href="../../docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see> also stamps. This value
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see> also stamps. This value
     /// answers a compatibility question — which tool contract a client is bound to — and the commit a build came from
     /// is provenance an operator reads from the startup record and the artifact's own labels.
     /// </para>

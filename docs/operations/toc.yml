@@ -1,0 +1,61 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# Grouped by the question an operator is holding, rather than alphabetically. `scripts/test-agent-workflow.sh`
+# asserts that every published page appears in one of these files, so a page added under `docs/`
+# without a place here fails before it can go missing on the site.
+- name: Configuration
+  items:
+    - name: Configuration reference
+      href: configuration-reference.md
+    - name: Configuration sources
+      href: configuration-sources.md
+    - name: Secret provisioning
+      href: secret-provisioning.md
+    - name: Secret rotation
+      href: secret-rotation.md
+- name: Deployment
+  items:
+    - name: The container image
+      href: container-image.md
+    - name: Docker Compose
+      href: deployment-compose.md
+    - name: Kubernetes
+      href: deployment-kubernetes.md
+    - name: Applying the database schema
+      href: database-schema.md
+- name: Endpoints
+  items:
+    - name: The MCP endpoint
+      href: mcp-endpoint.md
+    - name: The administrative endpoint
+      href: admin-endpoint.md
+    - name: Health endpoints
+      href: health-endpoints.md
+- name: Mail servers and transport security
+  items:
+    - name: Mailbox OAuth
+      href: mailbox-oauth.md
+    - name: The platform TLS policy
+      href: platform-tls-policy.md
+- name: What it reports about itself
+  items:
+    - name: Telemetry
+      href: telemetry.md
+    - name: Host startup telemetry
+      href: host-startup-telemetry.md
+- name: Developing and releasing
+  items:
+    - name: Local development
+      href: local-development.md
+    - name: The agent workflow
+      href: agent-workflow.md
+    - name: Issue tracking and the roadmap board
+      href: issue-tracking.md
+    - name: The release procedure
+      href: release-procedure.md
+    - name: The documentation site
+      href: documentation-site.md
+    - name: Signing the Windows CLI binaries
+      href: windows-code-signing.md

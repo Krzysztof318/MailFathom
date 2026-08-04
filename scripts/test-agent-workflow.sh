@@ -1608,6 +1608,82 @@ every_describes_pattern_matches_something_that_exists() {
   (( failures == 0 ))
 }
 
+# The pages under `docs/` are published as a site, and the site's navigation is written rather than
+# derived: `docs/toc.yml` is the header and a `toc.yml` in each section directory is its sidebar. That
+# leaves two ways for the two halves to come apart, and a reader meets each of them as an absence
+# rather than as an error — a page nothing links to, or a menu entry that leads nowhere. Both run
+# against the real repository, like the marker contracts above and for the same reason.
+#
+# Neither needs docfx. A build would find the second of these and report it as a warning among a
+# hundred lines of progress; asserting it here costs nothing and fails a pull request instead.
+published_documentation_pages() {
+  git -C "$source_repository_root" ls-files -- ':(glob)docs/**/*.md' |
+    grep -v '^docs/README\.md$' |
+    grep -v '^docs/decisions/' |
+    grep -v '/AGENTS\.md$' |
+    grep -v '/CLAUDE\.md$' || true
+}
+
+documentation_table_of_contents_files() {
+  git -C "$source_repository_root" ls-files -- ':(glob)docs/**/toc.yml'
+}
+
+# Every `href:` in a table of contents, resolved to a repository path so that an entry reaching out of
+# its own section — `../operations/configuration-reference.md` from the user guide, the repository-root
+# changelog from the header — compares against the same names the page list uses.
+documentation_table_of_contents_targets() {
+  local table href
+
+  while IFS= read -r table; do
+    while IFS= read -r href; do
+      [[ -n "$href" ]] || continue
+
+      realpath --canonicalize-missing --relative-to="$source_repository_root" \
+        "$source_repository_root/$(dirname "$table")/$href"
+    done < <(sed -nE 's|^[[:space:]]*-?[[:space:]]*href:[[:space:]]*||p' "$source_repository_root/$table")
+  done < <(documentation_table_of_contents_files)
+}
+
+every_published_documentation_page_is_in_a_table_of_contents() {
+  local page targets failures=0
+
+  targets="$(documentation_table_of_contents_targets)"
+
+  while IFS= read -r page; do
+    # The site's landing page, and the introduction to the generated API reference. Neither is listed:
+    # docfx makes the first the site root and reaches the second through the header's `api/` entry, so
+    # requiring an entry for either would mean writing one that duplicates a link the template already
+    # renders.
+    case "$page" in
+      docs/index.md | docs/api/index.md) continue ;;
+    esac
+
+    if ! grep --quiet --line-regexp --fixed-strings "$page" <<< "$targets"; then
+      printf '%s is published but appears in no toc.yml, so the site carries a page nothing links to\n' \
+        "$page" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done < <(published_documentation_pages)
+
+  (( failures == 0 ))
+}
+
+every_table_of_contents_entry_names_a_page_that_exists() {
+  local target failures=0
+
+  while IFS= read -r target; do
+    # A directory entry — `api/`, whose contents docfx generates — names no file here.
+    [[ "$target" == *.md ]] || continue
+
+    if [[ ! -f "$source_repository_root/$target" ]]; then
+      printf 'A toc.yml entry points at %s, which does not exist\n' "$target" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done < <(documentation_table_of_contents_targets)
+
+  (( failures == 0 ))
+}
+
 # The index itself. It calls no API, so unlike the gate and the settle loop it needs no `gh` stub and
 # no extraction from the workflow: the fixture is a tree on disk and a `files.json` beside it.
 create_obligation_fixture() {
@@ -2457,7 +2533,13 @@ every_workflow_job_declares_its_permissions() {
 # belongs to no publishing job:
 # `codeql.yml` holds `security-events: write` and runs for a pull request, which is the one exception
 # to the rule the rest of this list describes. It writes code-scanning alerts and nothing else, and an
-# analysis that cannot record one is a log line rather than a check. Nothing else writes at all.
+# analysis that cannot record one is a log line rather than a check.
+#
+# `publish-documentation.yml` publishes too, and what it publishes is a GitHub Pages deployment rather
+# than a package: `pages: write` creates the deployment and `id-token: write` is what the deployment is
+# claimed with. Both sit on the deploying job alone, and neither reaches the repository — the site is
+# deployed as an artifact rather than pushed to a branch, which is what keeps a documentation build off
+# the list of things that can write here. Nothing else writes at all.
 every_write_scope_is_one_the_policy_records() {
   local recorded_scopes
   local declared_scopes
@@ -2472,6 +2554,8 @@ every_write_scope_is_one_the_policy_records() {
       'publish-container-image.yml attestations: write' \
       'publish-container-image.yml id-token: write' \
       'publish-container-image.yml packages: write' \
+      'publish-documentation.yml id-token: write' \
+      'publish-documentation.yml pages: write' \
       'publish-helm-chart.yml attestations: write' \
       'publish-helm-chart.yml id-token: write' \
       'publish-helm-chart.yml packages: write' \
@@ -2668,6 +2752,38 @@ every_yaml_file_carries_the_license_header() {
   (( failures == 0 ))
 }
 
+# The documentation site's template is the fourth place the analyzer cannot reach, and it carries two
+# more forms of the same three lines. A module is JavaScript, where `//` opens a comment; a stylesheet
+# has no line-comment syntax at all, so CSS's one block form is what carries it there.
+module_license_header() {
+  license_header_lines | sed 's|^|// |'
+}
+
+stylesheet_license_header() {
+  printf '/*\n%s\n */\n' "$(license_header_lines | sed 's|^| * |')"
+}
+
+every_browser_asset_carries_the_license_header() {
+  local file expected actual failures=0
+
+  while IFS= read -r file; do
+    if [[ "$file" == *.css ]]; then
+      expected="$(stylesheet_license_header)"
+      actual="$(head -n 5 "$source_repository_root/$file")"
+    else
+      expected="$(module_license_header)"
+      actual="$(head -n 3 "$source_repository_root/$file")"
+    fi
+
+    if [[ "$actual" != "$expected" ]]; then
+      printf '%s does not open with the license header\n' "$file" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done < <(git -C "$source_repository_root" ls-files -- '*.js' '*.mjs' '*.css')
+
+  (( failures == 0 ))
+}
+
 # The shebang has to be the first line for the kernel to read it, so a script is the one place the
 # header is second rather than first.
 every_shell_script_carries_the_license_header() {
@@ -2775,6 +2891,8 @@ run_test fathom_review_fails_when_a_finished_reviewer_returned_no_answer
 run_test fathom_review_refuses_findings_that_carry_a_credential
 run_test every_documentation_page_declares_what_it_describes
 run_test every_describes_pattern_matches_something_that_exists
+run_test every_published_documentation_page_is_in_a_table_of_contents
+run_test every_table_of_contents_entry_names_a_page_that_exists
 run_test closing_references_collect_every_issue_the_body_closes
 run_test closing_references_match_every_keyword_github_acts_on
 run_test closing_references_ignore_a_keyword_inside_another_word
@@ -2817,6 +2935,7 @@ run_test only_the_reviewer_workflow_uses_pull_request_target
 run_test a_comment_never_cancels_a_review_in_flight
 run_test workflow_scripts_use_flat_manual_layout
 run_test every_yaml_file_carries_the_license_header
+run_test every_browser_asset_carries_the_license_header
 run_test every_shell_script_carries_the_license_header
 run_test every_skill_declares_its_license
 

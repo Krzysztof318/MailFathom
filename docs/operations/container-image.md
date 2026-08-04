@@ -106,7 +106,7 @@ The image carries the OCI labels that let a pulled image be traced back to the c
 `IMAGE_VERSION` has no useful default, and its `0.0.0-unversioned` placeholder says so. The version is declared once,
 as `VersionPrefix` in `Directory.Build.props`, and every build reads it with `scripts/read-declared-version.sh` rather
 than restating it — which is what keeps a labelled version from drifting away from the stamped one, because there is no
-second copy to drift. [ADR 0004](../decisions/0004-versioning-and-release-policy.md) records why the number lives in one
+second copy to drift. [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md) records why the number lives in one
 reviewed line.
 
 `IMAGE_REVISION` is passed to the publish inside the build as `SourceRevisionId`, so the assemblies report the same

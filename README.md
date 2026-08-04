@@ -94,7 +94,10 @@ Both registries carry the same manifest list under the same digest, so the one t
 
 ## Documentation
 
-[`docs/`](https://github.com/Krzysztof318/MailFathom/blob/main/docs/README.md) is the index. The pages you are most likely to want first:
+**[The documentation site](https://krzysztof318.github.io/MailFathom/)** is the readable form: the same pages with
+search, an API reference generated from the source, and a version selector that opens on the current release.
+[`docs/`](https://github.com/Krzysztof318/MailFathom/blob/main/docs/README.md) is the index for reading them in the
+repository instead. The pages you are most likely to want first:
 
 | | |
 | --- | --- |

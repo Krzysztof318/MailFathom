@@ -194,7 +194,7 @@ to outlive its operation, or a backoff ceiling longer than the total timeout, de
 reached. `MaxAttempts` counts the first call, so `1` disables retry and leaves the other strategies in place.
 
 The settings are classified **restart-required** under
-[ADR 0002](../decisions/0002-configuration-reading-mapping-and-reload-boundary.md), which is that ADR's default for a
+[ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md), which is that ADR's default for a
 group without a validated-snapshot layer. The registration binds a frozen copy of the section rather than the live
 configuration, so the classification holds by construction: a reloaded budget is not adopted, and a malformed one
 cannot disturb a pipeline that is already serving.
