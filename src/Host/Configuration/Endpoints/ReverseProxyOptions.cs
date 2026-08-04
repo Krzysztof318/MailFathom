@@ -128,6 +128,19 @@ internal sealed class ReverseProxyOptions
     public IReadOnlyList<IPNetwork> ToTrustedProxyNetworks() =>
         [.. this.TrustedProxies.Select(Normalize).Where(NamesNetwork).Select(IPNetwork.Parse)];
 
+    /// <summary>Reports the configured ranges that cover every address, and so believe any peer that can open a connection.</summary>
+    /// <returns>The ranges, in configuration order, empty when every entry names a proxy this deployment could have meant.</returns>
+    /// <exception cref="FormatException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
+    /// <remarks>
+    /// Accepted rather than refused, because trusting every peer is a posture an operator can mean — a load balancer
+    /// pool with no stable address, a network already closed by something other than this setting. What it is not is a
+    /// posture anybody should reach without knowing the cost, which is why it is reported at startup: the refusal of an
+    /// access token that arrived without transport encryption decides by reading the scheme this mode applies, so a
+    /// range covering every address is also the deployment where any client can claim its own hop was encrypted.
+    /// </remarks>
+    public IReadOnlyList<IPNetwork> ToTrustedProxyRangesCoveringEveryAddress() =>
+        [.. this.ToTrustedProxyNetworks().Where(static network => network.PrefixLength == 0)];
+
     private static bool NamesNetwork(string entry) => entry.Contains('/', StringComparison.Ordinal);
 
     /// <summary>Refuses a prefix that is not a network, and one that names a host inside a network rather than the network.</summary>
