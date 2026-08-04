@@ -44,6 +44,9 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
     /// <summary>The account the race over an account row runs under, which nothing else in the suite stores anything for.</summary>
     private const string UnstoredAccountId = "persistence-session-unstored-account";
 
+    /// <summary>The alias the retried race binds, which no other test writes and no other attempt may find bound.</summary>
+    private const string RetriedFolderAlias = "persistence-session-retry";
+
     private const uint RolledBackUid = 21;
 
     private const uint ConflictingUid = 22;
@@ -266,6 +269,80 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
         Assert.Equal(
             "concurrency-winning-writer",
             await ReadSubjectAsync(services, storedEmailId, cancellationToken));
+    }
+
+    /// <summary>Proves a losing writer that retries in the same scope commits, rather than losing to itself.</summary>
+    /// <remarks>
+    /// <para>
+    /// The three tests above end where a conflict is reported; this one is what a caller does next. Every attempt runs
+    /// in a fresh session but through the same scoped context, so the entities the losing attempt staged are still
+    /// tracked when the next one begins — and the next one would insert them again, collide on the same constraint, and
+    /// exhaust the policy. That the retry commits instead is what proves session disposal cleared the tracked state,
+    /// which is observable only after a conflict a real database produced.
+    /// </para>
+    /// <para>
+    /// Which of the two constraints the losing attempt violates depends on whether the account row is already stored
+    /// when this test runs, exactly as it does for the two tests above. Both are recognized, both leave the winner's
+    /// binding as the only one, and the retry re-resolves from whichever the loser found — so this test asserts the
+    /// outcome rather than the constraint and stays independent of the order the suite ran in.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task CommitAsync_AfterLosingTheBindingRace_CommitsOnTheRetryThroughTheSameScopedContext()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var retriedBinding = MailFolderResolution.FirstBindingOf(
+            MailFolderAlias.Create(RetriedFolderAlias),
+            RemoteFolderPath.Create(RetriedFolderAlias, hierarchyDelimiter: '.'));
+
+        // Act
+        var attemptCount = await services.InScopeAsync(
+            async (retryingScope, token) =>
+            {
+                var attempts = 0;
+
+                await retryingScope.GetRequiredService<OptimisticConcurrencyRetryPolicy>().CommitAsync(
+                    async (session, attemptToken) =>
+                    {
+                        attempts++;
+
+                        await retryingScope.GetRequiredService<IMailFolderResolutionStore>().SaveResolutionAsync(
+                            session,
+                            SyntheticMailAccount.AccountId,
+                            retriedBinding,
+                            attemptToken);
+
+                        if (attempts > 1)
+                        {
+                            return;
+                        }
+
+                        // The competing writer commits between this attempt's staging and its commit, which is the one
+                        // ordering in which the unique index rather than either writer decides the outcome.
+                        var winningCommit = await services.CommitAsync(
+                            (winningScope, winningSession, winningToken) => winningScope
+                                .GetRequiredService<IMailFolderResolutionStore>()
+                                .SaveResolutionAsync(
+                                    winningSession,
+                                    SyntheticMailAccount.AccountId,
+                                    retriedBinding,
+                                    winningToken),
+                            attemptToken);
+                        Assert.Equal(PersistenceCommitResult.Committed, winningCommit);
+                    },
+                    token);
+
+                return attempts;
+            },
+            cancellationToken);
+
+        // Assert
+        // Two rather than one, because a single attempt would mean the race never happened and the retry was never
+        // exercised; the policy allows three, so anything above two would mean the retry conflicted as well.
+        Assert.Equal(2, attemptCount);
+        Assert.Equal(1, await CountBindingsOfAsync(services, retriedBinding, cancellationToken));
     }
 
     private static async Task<StoredEmailId> StoreMetadataAsync(
