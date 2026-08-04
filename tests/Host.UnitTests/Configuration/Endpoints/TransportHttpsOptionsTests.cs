@@ -538,6 +538,102 @@ public sealed class TransportHttpsOptionsTests
         Assert.StartsWith($"{SectionPath}:Redirect:Port", error, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Two specific addresses are two sockets the operating system grants independently, which is exactly what
+    /// <c>FindConfigurationErrors_TwoSpecificAddressesOnOnePort_IsAccepted</c> already establishes between two profiles. A
+    /// redirect comparing port numbers alone would block this multi-interface deployment for a collision that does not
+    /// exist.
+    /// </summary>
+    [Fact]
+    public void FindConfigurationErrors_ARedirectOnAnotherSpecificAddressSharingAProfilePort_IsAccepted()
+    {
+        // Arrange
+        var profile = Profile();
+        profile.BindAddress = "10.0.0.5";
+        profile.Port = 9000;
+        var options = With(profile);
+        options.Redirect.BindAddress = "10.0.0.6";
+        options.Redirect.Port = 9000;
+
+        // Act, Assert
+        Assert.Empty(options.FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
+    }
+
+    /// <summary>The wildcard already accepts the connections the profile's address would receive, so only one of the two could bind.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AWildcardRedirectOverAProfilesSpecificAddress_IsRefused()
+    {
+        // Arrange
+        var profile = Profile();
+        profile.BindAddress = "10.0.0.5";
+        profile.Port = 9000;
+        var options = With(profile);
+        options.Redirect.BindAddress = "0.0.0.0";
+        options.Redirect.Port = 9000;
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors(
+            SectionPath,
+            http3Supported: true,
+            DefaultRedirectPort));
+
+        // Assert
+        Assert.StartsWith($"{SectionPath}:Redirect:Port", error, StringComparison.Ordinal);
+        Assert.Contains("public", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>And the reverse direction, because the wildcard is whichever of the two happens to be one.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ASpecificRedirectUnderAProfilesWildcard_IsRefused()
+    {
+        // Arrange
+        var profile = Profile();
+        profile.BindAddress = "0.0.0.0";
+        profile.Port = 9000;
+        var options = With(profile);
+        options.Redirect.BindAddress = "10.0.0.5";
+        options.Redirect.Port = 9000;
+
+        // Act, Assert
+        Assert.Single(options.FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
+    }
+
+    /// <summary>Kestrel binds <c>::</c> as a dual-mode socket, so an IPv6 wildcard accepts the IPv4 connections too.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AnIpv6WildcardRedirectOverAnIpv4Profile_IsRefused()
+    {
+        // Arrange
+        var profile = Profile();
+        profile.BindAddress = "10.0.0.5";
+        profile.Port = 9000;
+        var options = With(profile);
+        options.Redirect.BindAddress = "::";
+        options.Redirect.Port = 9000;
+
+        // Act, Assert
+        Assert.Single(options.FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
+    }
+
+    /// <summary>Reported once, against the address the operator wrote, rather than a second time as a collision nobody could act on.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ARedirectAddressThatDoesNotParseOnAProfilePort_ReportsOnlyTheAddress()
+    {
+        // Arrange
+        var profile = Profile();
+        var options = With(profile);
+        options.Redirect.BindAddress = "not-an-address";
+        options.Redirect.Port = profile.Port;
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors(
+            SectionPath,
+            http3Supported: true,
+            DefaultRedirectPort));
+
+        // Assert
+        Assert.StartsWith($"{SectionPath}:Redirect:BindAddress", error, StringComparison.Ordinal);
+    }
+
     /// <summary>A collision with a port nothing binds is no collision, so a redirect that is off is not checked against the profiles.</summary>
     [Fact]
     public void FindConfigurationErrors_ADisabledRedirectSharingAProfilePort_IsNotReported()

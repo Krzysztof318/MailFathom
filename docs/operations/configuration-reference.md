@@ -359,7 +359,7 @@ a redirect does and does not protect.
 | --- | --- | --- | --- | --- |
 | `…:Enabled` | bool | `true` | Honored only while an HTTPS profile is configured | restart |
 | `…:BindAddress` | string | `0.0.0.0` | An IP address; `::` binds IPv6 | restart |
-| `…:Port` | int | `8080` | 1 – 65535; bound by no HTTPS profile in this section and by no other listener in the process | restart |
+| `…:Port` | int | `8080` | 1 – 65535; the resulting address and port bound by no HTTPS profile in this section, and the port bound by no other listener in the process | restart |
 
 ### Client certificates — `McpEndpoint:ClientCertificateProfiles:<n>`
 

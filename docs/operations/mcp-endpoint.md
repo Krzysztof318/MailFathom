@@ -675,10 +675,16 @@ profile, so there is nothing to redirect to and this surface is already served i
 remove this section.
 ```
 
-And the redirect port collides with nothing: a conflict with one of this section's own profiles, with the
+And the redirect socket collides with nothing: a conflict with one of this section's own profiles, with the
 [administrative endpoint](admin-endpoint.md), with the [health listener](health-endpoints.md), or with a
 `Kestrel:Endpoints` entry is reported against the section that asked for it rather than as an address-in-use failure
 naming a socket.
+
+Within this section the check is on the socket rather than the port number, the same way it is
+[between two profiles](#several-domains-on-one-address). A profile on `10.0.0.5:9000` and a redirect on `10.0.0.6:9000`
+are two sockets the operating system grants independently, so that deployment is served; a redirect on `0.0.0.0:9000` or
+`::9000` beside that profile is refused, because the wildcard already accepts the connections the profile's address would
+receive and only one of the two could bind.
 
 ### Several domains on one address
 
