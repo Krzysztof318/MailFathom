@@ -144,12 +144,6 @@ internal sealed class AdminApiClient
         }
     }
 
-    /// <summary>Reads the body as a session, refusing anything that merely happens to be JSON.</summary>
-    /// <remarks>
-    /// An address that answers with a success status is not yet a MailFathom deployment — a proxy, a login page, or an
-    /// unrelated service can do that. Requiring the body to name the service is what keeps <c>login</c> from reporting
-    /// success against something that never saw the credential.
-    /// </remarks>
     /// <summary>Reads the sentence a refusal carries, when it carries one.</summary>
     /// <remarks>
     /// A deployment states what was wrong with the request — an account it does not configure, a field the body omitted
@@ -175,6 +169,12 @@ internal sealed class AdminApiClient
         }
     }
 
+    /// <summary>Reads the body as a session, refusing anything that merely happens to be JSON.</summary>
+    /// <remarks>
+    /// An address that answers with a success status is not yet a MailFathom deployment — a proxy, a login page, or an
+    /// unrelated service can do that. Requiring the body to name the service is what keeps <c>login</c> from reporting
+    /// success against something that never saw the credential.
+    /// </remarks>
     private static async Task<AdminSession> ReadSessionBodyAsync(
         HttpResponseMessage response,
         CancellationToken cancellationToken)

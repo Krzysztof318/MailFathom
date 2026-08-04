@@ -50,6 +50,10 @@ internal static class MailboxRefreshTokenEndpoint
     {
         ArgumentNullException.ThrowIfNull(api);
 
+        // The attribute is reached for its metadata rather than as an MVC filter, and it is worth saying so because the
+        // type's namespace suggests otherwise: it implements IRequestSizeLimitMetadata, which the routing pipeline
+        // reads and applies to the request body feature, so the bound holds on a minimal API route with no MVC in the
+        // process. A body over the limit is answered 413 before the handler is reached.
         api.MapPost(Route, StoreAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes));
     }
