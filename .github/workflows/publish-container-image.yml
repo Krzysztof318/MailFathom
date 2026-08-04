@@ -5,8 +5,9 @@
 name: Publish container image
 
 # The one place an image is built and pushed. Both channels call it — `Release` on an annotated tag, `Nightly` on a
-# schedule — and neither builds anything of its own, so a change to how MailFathom is built, gated, scanned, or attested
-# is one edit rather than two that can drift apart.
+# schedule — and neither builds an image of its own, so a change to how MailFathom is packaged, smoke-tested, scanned,
+# or attested is one edit rather than two that can drift apart. What the callers do own is the verification the whole
+# publication waits on, for the reason the first job below gives.
 #
 # The build happens once and the push is the only per-registry part, which is what keeps two registries one login and one
 # more repository to qualify the tags against rather than a second pipeline. GHCR and Docker Hub receive the same
@@ -71,46 +72,16 @@ env:
   TRIVY_SEVERITY: 'HIGH,CRITICAL'
 
 jobs:
-  # The same build, unit-test and coverage gate, `dotnet format`, and pending-model-changes check a pull request runs,
-  # from the same definition, against the commit being published rather than against a branch. Every switch stays at
-  # its default: `CI` skips work a pull request's changed files cannot affect, and a publication skips nothing.
-  build-test-format-and-migrations:
-    name: Build, test, format, and migrations
-    permissions:
-      contents: read
-    uses: ./.github/workflows/build-test-format-and-migrations.yml
-    with:
-      ref: ${{ inputs.ref }}
-
-  # A release additionally runs the suite that starts PostgreSQL, applies the baseline migration, and asserts against
-  # the result — and it runs *after* CI rather than beside it, so minutes of container time are never spent on a commit
-  # a unit test would have rejected in seconds.
+  # **The gates this publication stands on are the caller's, and none of them is here.** `Release` and `Nightly` each
+  # run `build-test-format-and-migrations.yml` against the commit being published — and a release additionally runs the
+  # integration suite — before any of the three jobs that build something from that commit starts. They sit there
+  # rather than here because the image is one of those three: a gate inside this workflow would gate the image alone
+  # while the schema script and the command binaries were built beside it from a commit whose unit tests had not run.
   #
-  # A nightly does not run it. A nightly is published every night, its whole value is being current, and the gate it is
-  # worth waiting for is the one above.
-  integration-tests:
-    name: Integration tests
-    needs:
-      - build-test-format-and-migrations
-    if: inputs.channel == 'release'
-    permissions:
-      contents: read
-    uses: ./.github/workflows/integration-tests.yml
-    with:
-      ref: ${{ inputs.ref }}
-
+  # What that leaves here is everything that is about the artifact itself: the image is built for one architecture and
+  # required to start and describe itself, scanned, and only then built for both and pushed.
   publish:
     name: Publish ${{ inputs.channel }} ${{ inputs.version }}
-    needs:
-      - build-test-format-and-migrations
-      - integration-tests
-    # `!cancelled()` is what lets a nightly publish at all: its integration-test job is skipped, and a skipped
-    # dependency would otherwise skip this job with it. Every other outcome still has to be `success`, so nothing
-    # weaker than a passing gate reaches a registry, and a cancelled run publishes nothing at all.
-    if: >-
-      !cancelled()
-      && needs.build-test-format-and-migrations.result == 'success'
-      && (needs.integration-tests.result == 'success' || needs.integration-tests.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: read

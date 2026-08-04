@@ -26,8 +26,9 @@ on:
   # `main` itself, once a merge has landed there: the build, the unit tests, the coverage gate, the
   # pending-model-changes check, and the workflow contracts. The `main` ruleset requires a branch to be
   # current with `main` before it merges, so a pull request is normally verified against the state its
-  # merge produces — but the repository admin role bypasses the ruleset when merging, `Nightly` and
-  # `Release` both build from `main` without verifying it first, and *is `main` green right now* is
+  # merge produces — but the repository admin role bypasses the ruleset when merging, a break that
+  # reached `main` would otherwise first be reported by that night's publication failing its own gate,
+  # which names a run at 02:00 rather than the merge that caused it, and *is `main` green right now* is
   # otherwise not a fact that exists anywhere, only one inferred from the last pull request that closed.
   # `CodeQL` watches the branch this way for its own reasons already.
   #

@@ -154,9 +154,11 @@ unavailable:
 2. **Push the annotated tag `v<x.y.z>` on that merge commit.** This is what makes the release real and what triggers
    the release workflow. Before publishing anything the workflow asserts the tag against the tagged commit's
    `VersionPrefix`, against the highest existing tag on the same `major.minor` line, and against the changelog section
-   for that version — `scripts/assert-release-tag.sh` is that check. It then builds and gates the image, pushes it to
-   both registries under `<x.y.z>`, moves `latest` onto the same digest, attests it, publishes the Helm chart against
-   that digest, and opens the GitHub release with that changelog section as its notes. Under the section it links
+   for that version — `scripts/assert-release-tag.sh` is that check. It then runs the same build, unit-test,
+   formatting, and migration checks a pull request runs, followed by the integration suite, and builds nothing at all
+   until both have passed. Only then does it build and gate the image, push it to
+   both registries under `<x.y.z>`, move `latest` onto the same digest, attest it, publish the Helm chart against
+   that digest, and open the GitHub release with that changelog section as its notes. Under the section it links
    `CHANGELOG.md` at the tag, so a reader of an older release reaches the file as that release shipped it rather than a
    copy already describing versions they have not upgraded to.
 
@@ -186,8 +188,15 @@ Four artifacts leave one run, and a failure in the first three leaves the releas
 | --- | --- | --- |
 | The image | `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` | the schema artifact building |
 | The Helm chart | `ghcr.io/krzysztof318/charts/mailfathom` | the image's digest |
-| `mailfathom-schema-<version>.sql` | the GitHub release's assets | nothing |
-| `mfctl-<version>-<rid>` for `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, plus one `.sha256` covering all of them | the GitHub release's assets | nothing, while signing is switched off |
+| `mailfathom-schema-<version>.sql` | the GitHub release's assets | nothing else the release produces |
+| `mfctl-<version>-<rid>` for `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, plus one `.sha256` covering all of them | the GitHub release's assets | nothing else, while signing is switched off |
+
+The column names what each artifact needs from the other three. What all four need is the same and comes before any of
+them: the tag assertion, then the build, unit-test, formatting, and migration checks, then the integration suite. **No
+artifact is built until every one of those has passed**, so a commit a unit test rejects costs the gate that rejected
+it rather than four `dotnet publish` invocations and a schema generation beside a red build.
+[The container image](container-image.md#verification) records the whole gate order, including the two gates that
+belong to the image alone.
 
 The command binaries are the one artifact that gates nothing, and that is deliberate: a release whose image and schema
 are correct is one an operator can deploy, so a build failure in the command is left visible on the run rather than

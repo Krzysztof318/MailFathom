@@ -280,6 +280,14 @@ Publication runs the gates instead, in an order that spends the cheap ones first
    it, which refuses to publish a release carrying a fixable `HIGH` or `CRITICAL` finding and only reports one on a
    nightly.
 
+**Nothing is built from the commit until the first two have passed** — not the image, not the schema script, and not
+the command binaries. They are jobs in `Release` and `Nightly` themselves rather than steps inside the workflow that
+pushes the image, because the image is one of three things a channel builds and a gate inside it would gate only that
+one. Everything above is therefore the order of a whole publication rather than of the image alone: what a red run
+costs is the gate that refused it, not four `dotnet publish` invocations and a schema generation beside a failing
+build. `scripts/test-agent-workflow.sh` reads both workflows' job graphs and fails one whose publishing job does not
+wait for the gate, so a fifth artifact is gated by being added rather than by being reviewed.
+
 Both channels also build the schema artifact, from one shared definition, and differ only in what they do with it. A
 release **waits** on it and refuses to push when it cannot be produced: an operator handed an image and no way to reach
 the schema it requires has a deployment that starts, fails the startup gate, and stays down. A nightly builds it beside
