@@ -18,8 +18,8 @@ name: Publish the documentation
 on:
   # Two pushes change what the site would carry, and both publish: a merge to the default branch moves `latest`, and a
   # release tag adds a version to the selector. Without the second, a release's version would first appear on whatever
-  # merged next — which is what `0.3.0` did, reaching the site only because the version-bump pull request happened to
-  # merge a minute after the tag.
+  # merged next — which is what the release that found this did, reaching the site only because the version-bump pull
+  # request happened to merge a minute after the tag. #407 records it.
   #
   # It is the tag rather than the release, and that is not a preference. `scripts/list-documented-versions.sh` answers
   # from the tags in the checkout rather than from GitHub's releases, so the tag is what the site is a function of — and

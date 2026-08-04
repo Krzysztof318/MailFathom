@@ -142,12 +142,17 @@ all: its own logo is an SVG whose intrinsic size already fits a header, so a ras
 was saved at. Nothing in the build can see that — docfx renders a page without laying it out, so a logo that fits and
 one that covers the page produce the same output.
 
+The selector itself sits at the right-hand end of the header, in front of the icon links. That is inside the element
+`modern` renders and re-renders — it writes the section links and the icon links there after the template's own module
+has run, and writes them again whenever the theme picker among them is used — so the selector is placed and then kept
+placed, from an observer that puts it back rather than from an insertion that happens once.
+
 That is the general shape of what this template can get wrong. Everything it adds happens in the browser, after the
 build has finished and against files the build never reads, so a page that renders the selector and one that silently
 does not are the same output as far as every gate here is concerned. **The site's appearance and its run-time
-behaviour are the parts of it verified by looking at the deployed site**, and both defects found that way so far — a
-logo at its natural size, and a selector missing from the two pages served from a version's own directory — were
-invisible to a green build.
+behaviour are the parts of it verified by looking at the deployed site**, and every defect found that way so far — a
+logo at its natural size, a selector missing from the two pages served from a version's own directory, and the same
+selector missing again when that directory was addressed without its trailing slash — was invisible to a green build.
 
 What the template adds beyond that:
 
