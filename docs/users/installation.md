@@ -6,15 +6,17 @@ MailFathom runs in three shapes, and each has one authoritative guide. This page
 assumes, what it is good for, and what every shape shares. Follow the linked guide for the commands; the guides do not
 repeat each other and neither does this page.
 
-**A release publishes an image, the chart, and the schema script.** The image is
-`ghcr.io/krzysztof318/mailfathom:0.1.0` and `docker.io/krzysztof318/mailfathom:0.1.0` — one manifest list under one
+**A release publishes an image, the chart, the schema script, and the administrative command.** The image is
+`ghcr.io/krzysztof318/mailfathom:0.2.0` and `docker.io/krzysztof318/mailfathom:0.2.0` — one manifest list under one
 digest, so the registry to pull from is whichever your environment already reaches — with `latest` on that same digest.
 The chart is `oci://ghcr.io/krzysztof318/charts/mailfathom` at the same version. Each release also attaches
-`mailfathom-schema-<version>.sql` and its checksum, which is the schema step below. Both packages are public, so
-pulling one needs no login.
+`mailfathom-schema-<version>.sql` and its checksum, which is the schema step below, and one `mfctl` binary per platform
+with a checksum file covering all of them — [getting the command](../operations/admin-endpoint.md#getting-the-command)
+is where that one is picked up. Both packages are public, so pulling one needs no login.
 
-**There is no binary artifact**, so the native shape below is published from a checkout, and so is the Compose
-deployment, whose `compose.yaml` lives here and is versioned with the code that reads it.
+**There is no binary artifact for the service itself**, so the native shape below is published from a checkout, and so
+is the Compose deployment, whose `compose.yaml` lives here and is versioned with the code that reads it. `mfctl` is the
+exception, and it is a client rather than the service: it runs on the machine you administer *from*.
 
 Beside the release runs the nightly channel: `ghcr.io/krzysztof318/mailfathom:nightly` — or
 `docker.io/krzysztof318/mailfathom:nightly`, which is the same digest in the other registry — and the

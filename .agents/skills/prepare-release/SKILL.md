@@ -110,15 +110,15 @@ which is what makes an edit to it outside this flow visible.
 
 #### The files that name a version in prose
 
-`<VersionPrefix>` is the only place a version is written for the *build*. Five files additionally name one in prose,
+`<VersionPrefix>` is the only place a version is written for the *build*. Seven files additionally name one in prose,
 where nothing derives it and nothing checks it, so they are read here by name rather than left to be noticed:
 
 | File | What to bring onto `x.y.z` |
 | --- | --- |
-| `README.md` | The **Project status** paragraph — which release is current and what it ships |
-| `docs/users/installation.md` | The image references in the opening paragraph, which quote the version literally |
+| `README.md` | The **Project status** paragraph — which release is current and what it ships — and the **Where the artifacts are published** table whenever a release starts or stops attaching one |
+| `docs/users/installation.md` | The image references in the opening paragraph, which quote the version literally, and the sentence naming what a release publishes |
 | `docs/users/README.md` | The **The state of the release** section — which release is current, and what a page is allowed to describe as already downloadable |
-| `docs/operations/admin-endpoint.md` | The **Getting the command** section, which names the release from which `mfctl` binaries are attached. Drop the threshold entirely once that release has shipped, rather than moving the number |
+| `docs/operations/database-schema.md`, `docs/operations/deployment-compose.md`, `docs/operations/deployment-kubernetes.md` | The `mailfathom-schema-<x.y.z>.sql` filename the apply and verify commands quote literally. An operator copies those lines, so a stale one checksums and applies the previous release's schema |
 | `SECURITY.md` | The **Supported versions** table. `x.y` becomes the supported line and the one it replaces moves down a row, per ADR 0004's rule that only the newest released minor is patched by default |
 
 **They belong in this pull request rather than the bump one, and the reason is what the whole ordering rests on:** this

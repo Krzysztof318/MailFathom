@@ -44,7 +44,7 @@ A connected agent can list, read, and search your mail. It cannot send, delete, 
 
 ## Project status
 
-`0.1.0` is the first release: the read side that makes the product usable — mailbox queries, email content, lexical search, and the three MCP tools — on a settled database schema. It ships as a container image, a Helm chart, and the SQL script that creates the schema it expects — [where the artifacts are published](https://github.com/Krzysztof318/MailFathom#where-the-artifacts-are-published) has the references. There is no binary artifact, so a native installation starts from a checkout of this repository. [The changelog](https://github.com/Krzysztof318/MailFathom/blob/main/CHANGELOG.md) states what the release promises across the MCP tool contract, the configuration schema, the database schema, and the deployment contract.
+`0.2.0` is the current release. It builds on `0.1.0`'s read side — mailbox queries, email content, lexical search, and the three MCP tools — with OAuth mailbox authentication, push synchronization that starts a pass when the mail server says a folder changed, and an administrative endpoint an operator reaches with the `mfctl` command. It ships as a container image, a Helm chart, the SQL script that creates the schema it expects, and an `mfctl` binary per platform — [where the artifacts are published](https://github.com/Krzysztof318/MailFathom#where-the-artifacts-are-published) has the references. There is no binary artifact for the service itself, so a native installation starts from a checkout of this repository. [The changelog](https://github.com/Krzysztof318/MailFathom/blob/main/CHANGELOG.md) states what the release promises across the MCP tool contract, the configuration schema, the database schema, and the deployment contract.
 
 Nightly images are built from `main` and published to both registries alongside the releases. A nightly is not a release: its schema can be ahead of any published migration, it has no upgrade path in either direction, and it is deleted once newer ones accumulate. [What a nightly build risks](https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/container-image.md#what-a-nightly-build-risks) states the whole of it before you choose one.
 
@@ -88,6 +88,7 @@ To evaluate MailFathom from the checkout instead of deploying it, the local Aspi
 | Container image | `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` |
 | Helm chart | `oci://ghcr.io/krzysztof318/charts/mailfathom` |
 | Database schema script | attached to each [release](https://github.com/Krzysztof318/MailFathom/releases) |
+| `mfctl`, the administrative command | attached to each [release](https://github.com/Krzysztof318/MailFathom/releases), one self-contained binary per platform |
 
 Both registries carry the same manifest list under the same digest, so the one to pull from is whichever your environment already reaches. Every published artifact carries a signed provenance statement; [the container image](https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/container-image.md#published-images) records what each tag means and how to verify one.
 

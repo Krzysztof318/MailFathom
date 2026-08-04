@@ -34,8 +34,8 @@ MailFathom can. [Rolling back](#rolling-back) is what that leaves.
 Read it before you run it. That is the whole reason the artifact is a SQL file rather than something that runs itself:
 
 ```bash
-sha256sum --check mailfathom-schema-0.1.0.sql.sha256
-less mailfathom-schema-0.1.0.sql
+sha256sum --check mailfathom-schema-0.2.0.sql.sha256
+less mailfathom-schema-0.2.0.sql
 ```
 
 ## The role that applies it
@@ -79,7 +79,7 @@ next statement.
 ```bash
 psql "postgresql://mailfathom_migrator@db.internal:5432/mailfathom" \
   --set ON_ERROR_STOP=on \
-  --file mailfathom-schema-0.1.0.sql
+  --file mailfathom-schema-0.2.0.sql
 ```
 
 Do not add `--single-transaction`. The script issues its own transaction statements, and psql's would nest around them.
@@ -96,7 +96,7 @@ cd deploy/compose
 docker compose exec --no-TTY postgres sh -c \
   'PGPASSWORD="$(cat /run/secrets/postgres-superuser-password)" exec psql \
      --username postgres --dbname "$MAILFATHOM_DATABASE" --set ON_ERROR_STOP=on' \
-  < mailfathom-schema-0.1.0.sql
+  < mailfathom-schema-0.2.0.sql
 ```
 
 [Deploying with Docker Compose](deployment-compose.md#starting) is where that step sits in the sequence.
@@ -111,7 +111,7 @@ kubectl --namespace databases port-forward service/postgres 5432:5432 &
 
 psql "postgresql://mailfathom_migrator@127.0.0.1:5432/mailfathom" \
   --set ON_ERROR_STOP=on \
-  --file mailfathom-schema-0.1.0.sql
+  --file mailfathom-schema-0.2.0.sql
 ```
 
 The chart renders no Job and no `initContainer` for this, deliberately. [Why the artifact is a SQL
@@ -133,7 +133,7 @@ already serving:
 
   ```bash
   PGOPTIONS='-c lock_timeout=5s' psql "postgresql://mailfathom_migrator@db.internal:5432/mailfathom" \
-    --set ON_ERROR_STOP=on --file mailfathom-schema-0.1.0.sql
+    --set ON_ERROR_STOP=on --file mailfathom-schema-0.2.0.sql
   ```
 
 - **Index creation on a large table takes time proportional to the table.** Stop MailFathom, or accept that its writes

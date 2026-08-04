@@ -111,7 +111,7 @@ and hand it the script on standard input — which also keeps the credential off
 docker compose exec --no-TTY postgres sh -c \
   'PGPASSWORD="$(cat /run/secrets/postgres-superuser-password)" exec psql \
      --username postgres --dbname "$MAILFATHOM_DATABASE" --set ON_ERROR_STOP=on' \
-  < mailfathom-schema-0.1.0.sql
+  < mailfathom-schema-0.2.0.sql
 ```
 
 Read the SQL before applying it, and take a backup first. The script is idempotent, so running it against a database
