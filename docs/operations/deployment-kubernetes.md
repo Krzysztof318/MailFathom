@@ -220,15 +220,17 @@ Every one of those is a MailFathom setting rather than a chart value, so turning
 | --- | --- | --- |
 | API keys | `McpEndpoint:Authentication` and `McpEndpoint:ApiKeys` | [Authentication](mcp-endpoint.md#authentication) |
 | An `Origin` gate | `McpEndpoint:Cors` | [CORS and the `Origin` header](mcp-endpoint.md#cors-and-the-origin-header) |
-| Reading the public scheme and host from the ingress | `ReverseProxy:Enabled` and `ReverseProxy:TrustedProxies` | [Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) |
+| Reading the public scheme and host from the ingress alone | `ReverseProxy:TrustedProxies` | [Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) |
 | TLS terminated by the pod itself | `McpEndpoint:Https:Endpoints` | [HTTPS and your own domain](mcp-endpoint.md#https-and-your-own-domain) |
 | Client certificates | `McpEndpoint:ClientCertificateProfiles` | [Client certificates](mcp-endpoint.md#client-certificates) |
 | Rate limits | `McpEndpoint:RateLimiting`, and `AdminEndpoint:RateLimiting` for the administrative endpoint | [Rate limiting](mcp-endpoint.md#rate-limiting) |
 
-The ingress row is the one an OAuth deployment cannot skip. The controller terminates TLS and dials the pod over plain
-HTTP under the Service name, so without it the protected resource metadata document answers `404` and discovery never
-completes. `TrustedProxies` then names the pod CIDR the ingress controller runs in, which
-`kubectl cluster-info dump | grep -m1 cluster-cidr` reports on most distributions.
+The ingress row is the one an OAuth deployment should not skip, and it narrows rather than enables. The controller
+terminates TLS and dials the pod over plain HTTP under the Service name, and MailFathom reads the forwarded scheme and
+host from any peer until you say otherwise — so discovery completes out of the box, and until `TrustedProxies` names
+the ingress, anything else that can reach the pod can set those headers too. Name the pod CIDR the ingress controller
+runs in, which `kubectl cluster-info dump | grep -m1 cluster-cidr` reports on most distributions. A `ClusterIP`
+Service is not a substitute: it keeps the pod off the cluster's edge, not away from every other pod.
 
 Configuring `Https:Endpoints` takes over the host's application listener, so the chart's `service.port` and the `http`
 container port have to match what the profiles bind. The probe listener is unaffected and keeps its own transport. That is a deliberate step rather than the default: in a cluster, TLS at the ingress is

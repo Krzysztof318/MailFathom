@@ -16,6 +16,13 @@ namespace MailFathom.Host.Configuration.Endpoints;
 /// and every address composed from a request agree with the name a client actually used.
 /// </para>
 /// <para>
+/// Reading them is not a mode to switch on. The middleware is always in the pipeline and the section carries one
+/// decision — which peers a forwarded value is believed from — because that is the only question an operator has to
+/// answer. A section that names a proxy believes that proxy and nothing else; a section that names none believes every
+/// peer that can open a connection, which is the default and is announced at startup rather than assumed to be
+/// understood. <see cref="TrustedProxies" /> states what the second posture costs.
+/// </para>
+/// <para>
 /// It changes nothing about who declares the deployment's identity. A resource identifier stays a configured value
 /// compared against a token's audience, never a header, so nothing an upstream writes can decide what a client is told
 /// to authorize for. What a forwarded header settles is which name this request arrived under, which is a fact about
@@ -29,8 +36,8 @@ namespace MailFathom.Host.Configuration.Endpoints;
 /// stands in front of the process, so it is stated once and holds on every listener the named proxy can reach.
 /// </para>
 /// <para>
-/// The section is read once, while the host is being composed, because it decides which middleware the pipeline
-/// carries. A change takes effect on restart.
+/// The section is read once, while the host is being composed, because it decides what the pipeline's forwarded-header
+/// policy is. A change takes effect on restart.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
@@ -39,13 +46,13 @@ internal sealed class ReverseProxyOptions
     /// <summary>The configuration section the reverse-proxy settings are bound from.</summary>
     public const string SectionName = "ReverseProxy";
 
-    /// <summary>Gets or sets whether a forwarded scheme and host are read at all.</summary>
+    /// <summary>The trust a section that names no proxy resolves to: every address of both families.</summary>
     /// <remarks>
-    /// Off unless a deployment states otherwise, so a process nobody put a proxy in front of ignores both headers
-    /// entirely. A forwarded header is a value whoever is upstream wrote, and a deployment reachable directly has no
-    /// upstream worth believing.
+    /// Held as the configured spelling rather than as parsed networks so that one code path composes trust and one
+    /// reports it. The startup warning names these strings back to the operator, which is the same text they would
+    /// write to state the posture explicitly.
     /// </remarks>
-    public bool Enabled { get; set; }
+    private static readonly string[] EveryAddress = ["0.0.0.0/0", "::/0"];
 
     /// <summary>Gets the proxy addresses or CIDR networks a forwarded scheme and host are accepted from.</summary>
     /// <remarks>
@@ -55,27 +62,51 @@ internal sealed class ReverseProxyOptions
     /// network and everything else as a single address.
     /// </para>
     /// <para>
-    /// Empty is not a permitted posture for an enabled section. The framework's own default trusts loopback, which is
-    /// wrong inside a container where the proxy is a peer on the pod or bridge network, and the usual workaround of
-    /// clearing its lists trusts every peer that can open a connection — which is worse than the problem it solves.
+    /// Empty is the default and means every peer is believed, which is the posture named by <see cref="EveryAddress" />
+    /// written out. It is a real posture — a load balancer pool with no stable address, a network already closed by
+    /// something other than this setting — and it is what an unconfigured deployment gets, so what it costs belongs
+    /// here rather than in a page somebody may not reach. The refusal of an access token that arrived without transport
+    /// encryption decides by reading the scheme this policy has already applied, so with every peer believed any client
+    /// that can reach the listener sends <c>X-Forwarded-Proto: https</c> and has a reusable credential accepted over
+    /// clear text. <see cref="Hosting.Warnings.ReverseProxyTrustWarning" /> says so at every startup
+    /// that runs on it. Naming the addresses your proxies actually use is what turns that refusal back on.
+    /// </para>
+    /// <para>
+    /// The list is deliberately left empty rather than pre-populated with <see cref="EveryAddress" />. The
+    /// configuration binder adds to an existing collection instead of replacing it, so a default written here would
+    /// survive alongside whatever an operator configured and every deployment would trust every peer no matter what it
+    /// wrote.
     /// </para>
     /// </remarks>
     public IList<string> TrustedProxies { get; } = [];
 
     /// <summary>Gets or sets how many proxies may have appended a value to the forwarded headers.</summary>
     /// <remarks>
-    /// One by default, which is the deployment this mode exists for: a single proxy in front of this process. Each
-    /// header is read right to left, so the limit is how far back into a chain a value is believed; raise it only to
-    /// the number of proxies a request genuinely passes through, because every entry beyond the real chain is one an
-    /// earlier hop could have appended.
+    /// One by default, which is the deployment this exists for: a single proxy in front of this process. Each header is
+    /// read right to left, so the limit is how far back into a chain a value is believed; raise it only to the number
+    /// of proxies a request genuinely passes through, because every entry beyond the real chain is one an earlier hop
+    /// could have appended.
     /// </remarks>
     public int MaximumForwardedHops { get; set; } = 1;
+
+    /// <summary>Gets whether the section names a proxy, rather than resolving to trusting every peer.</summary>
+    /// <remarks>
+    /// This is the operator saying what stands in front of the process, which is why it is what the startup warnings
+    /// read: one picks which posture to describe, and the other decides whether a clear-text hop is the one to a proxy
+    /// or the one to a client.
+    /// </remarks>
+    public bool NamesAProxy => this.TrustedProxies.Count > 0;
 
     /// <summary>Reads the section the way composition does, defaults included.</summary>
     /// <param name="configuration">The application configuration.</param>
     /// <returns>The bound settings.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
-    /// <remarks>Strict binding is part of the read, like every other security-sensitive section: a misspelled key here would leave a deployment believing it had named its proxy while nothing was trusted, or believing a chain limit applied that never bound.</remarks>
+    /// <remarks>
+    /// Strict binding is part of the read, like every other security-sensitive section: a misspelled key here would
+    /// leave a deployment believing it had named its proxy while every peer was trusted, or believing a chain limit
+    /// applied that never bound. It is also what makes the removal of the former <c>Enabled</c> key audible — a
+    /// deployment carrying it stops at startup naming the key rather than starting under a posture nobody chose.
+    /// </remarks>
     public static ReverseProxyOptions ReadFrom(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
@@ -87,56 +118,41 @@ internal sealed class ReverseProxyOptions
 
     /// <summary>Finds everything an operator must fix before a forwarded scheme and host can be read.</summary>
     /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
+    /// <remarks>
+    /// An empty list is not among them. It is the default posture rather than a mistake, so it is announced at startup
+    /// instead of refused here; refusing it would make every unconfigured deployment fail to start.
+    /// </remarks>
     public IReadOnlyList<string> FindConfigurationErrors()
     {
-        if (!this.Enabled)
-        {
-            // Configured-but-unread is refused rather than ignored, for the reason every other section refuses it: an
-            // operator who named their proxy and left the mode off has a deployment they believe reads a forwarded
-            // header and one that does not.
-            return this.TrustedProxies.Count == 0
-                ? []
-                : [$"{SectionName}:{nameof(this.TrustedProxies)} — proxies are configured while '{nameof(this.Enabled)}' is false, so no forwarded header is read from any of them; enable the section or remove them."];
-        }
-
-        var errors = new List<string>();
-
-        if (this.TrustedProxies.Count == 0)
-        {
-            errors.Add($"{SectionName}:{nameof(this.TrustedProxies)} — a forwarded scheme and host are worth what the connection that carried them is worth, so an enabled section must name the proxy it accepts them from. State one or more IP addresses or CIDR networks, for example '10.0.0.5' or '10.0.0.0/24'.");
-        }
-
-        errors.AddRange(this.FindTrustedProxyErrors());
+        var errors = new List<string>(this.FindTrustedProxyErrors());
 
         if (this.MaximumForwardedHops < 1)
         {
-            errors.Add($"{SectionName}:{nameof(this.MaximumForwardedHops)} — '{this.MaximumForwardedHops}' reads no forwarded value at all, which is what disabling the section already does. State the number of proxies a request passes through, which is 1 for a single proxy in front of this process.");
+            errors.Add($"{SectionName}:{nameof(this.MaximumForwardedHops)} — '{this.MaximumForwardedHops}' reads no forwarded value at all, so no proxy's scheme or host would reach a request however {nameof(this.TrustedProxies)} is stated. State the number of proxies a request passes through, which is 1 for a single proxy in front of this process.");
         }
 
         return errors;
     }
 
-    /// <summary>Maps the configured entries onto the single proxy addresses among them.</summary>
+    /// <summary>Maps the trusted entries onto the single proxy addresses among them.</summary>
     /// <returns>The addresses, in configuration order, empty when every entry names a network.</returns>
     /// <exception cref="FormatException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
     public IReadOnlyList<IPAddress> ToTrustedProxyAddresses() =>
-        [.. this.TrustedProxies.Select(Normalize).Where(static entry => !NamesNetwork(entry)).Select(IPAddress.Parse)];
+        [.. this.EffectiveTrustedProxies().Where(static entry => !NamesNetwork(entry)).Select(IPAddress.Parse)];
 
-    /// <summary>Maps the configured entries onto the proxy networks among them.</summary>
+    /// <summary>Maps the trusted entries onto the proxy networks among them.</summary>
     /// <returns>The networks, in configuration order, empty when every entry names a single address.</returns>
     /// <exception cref="FormatException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
     public IReadOnlyList<IPNetwork> ToTrustedProxyNetworks() =>
-        [.. this.TrustedProxies.Select(Normalize).Where(NamesNetwork).Select(IPNetwork.Parse)];
+        [.. this.EffectiveTrustedProxies().Where(NamesNetwork).Select(IPNetwork.Parse)];
 
-    /// <summary>Reports the configured ranges that cover every address, and so believe any peer that can open a connection.</summary>
+    /// <summary>Reports the trusted ranges that cover every address, and so believe any peer that can open a connection.</summary>
     /// <returns>The ranges, in configuration order, empty when every entry names a proxy this deployment could have meant.</returns>
     /// <exception cref="FormatException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
     /// <remarks>
-    /// Accepted rather than refused, because trusting every peer is a posture an operator can mean — a load balancer
-    /// pool with no stable address, a network already closed by something other than this setting. What it is not is a
-    /// posture anybody should reach without knowing the cost, which is why it is reported at startup: the refusal of an
-    /// access token that arrived without transport encryption decides by reading the scheme this mode applies, so a
-    /// range covering every address is also the deployment where any client can claim its own hop was encrypted.
+    /// Reached by a section that named such a range and by one that named nothing, because the two produce the same
+    /// trust and give up the same protection. Which of them a deployment is running is <see cref="NamesAProxy" />'s
+    /// question, and only the wording of the warning turns on it.
     /// </remarks>
     public IReadOnlyList<IPNetwork> ToTrustedProxyRangesCoveringEveryAddress() =>
         [.. this.ToTrustedProxyNetworks().Where(static network => network.PrefixLength == 0)];
@@ -168,6 +184,10 @@ internal sealed class ReverseProxyOptions
     }
 
     private static string Normalize(string? entry) => entry?.Trim() ?? string.Empty;
+
+    /// <summary>Produces the entries trust is actually composed from, which is every address when none is named.</summary>
+    private IEnumerable<string> EffectiveTrustedProxies() =>
+        this.NamesAProxy ? this.TrustedProxies.Select(Normalize) : EveryAddress;
 
     private IEnumerable<string> FindTrustedProxyErrors()
     {

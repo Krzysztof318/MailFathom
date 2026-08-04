@@ -19,10 +19,11 @@ namespace MailFathom.Host.Hosting.Warnings;
 /// </para>
 /// <para>
 /// Which of the two is running stopped being something only the operator knows once a trusted proxy could be named. A
-/// configured <see cref="ReverseProxyOptions" /> section is the operator saying what stands in front, so the warning
-/// then describes that deployment — the clear-text hop is the one between the proxy and this process — instead of
-/// listing the postures it would otherwise have to guess between. Nothing is silenced by it: that hop is real, and an
-/// API key crossing it is as readable as it was.
+/// <see cref="ReverseProxyOptions" /> section that names one is the operator saying what stands in front, so the
+/// warning then describes that deployment — the clear-text hop is the one between the proxy and this process — instead
+/// of listing the postures it would otherwise have to guess between. Nothing is silenced by it: that hop is real, and
+/// an API key crossing it is as readable as it was. A section naming no proxy says nothing about what stands in front,
+/// which is why it reads as the unqualified posture rather than as the proxied one.
 /// </para>
 /// <para>
 /// What it refuses to let happen is the third case: an endpoint reachable across a network that nobody meant to expose
@@ -69,7 +70,7 @@ internal sealed partial class McpTransportEncryptionWarning : IHostedService
             return Task.CompletedTask;
         }
 
-        if (this.reverseProxySettings.Enabled)
+        if (this.reverseProxySettings.NamesAProxy)
         {
             this.LogEndpointServedBehindTrustedReverseProxy(
                 McpEndpointRoute.Path,

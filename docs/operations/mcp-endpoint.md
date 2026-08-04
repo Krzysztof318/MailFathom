@@ -1,6 +1,6 @@
 # The MCP endpoint and what protects it
 
-<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/**, src/Common/OAuth/**, src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs -->
+<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/**, src/Common/OAuth/**, src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, src/Host/Configuration/Endpoints/ReverseProxyOptions.cs, src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs, src/Host/Hosting/Warnings/ReverseProxyTrustWarning.cs, src/Host/Hosting/Warnings/McpTransportEncryptionWarning.cs -->
 
 The MCP endpoint is how an agent reaches MailFathom. This page records what enabling it means operationally, what a client
 has to present to reach it, which browser origins it answers, which client applications it accepts a certificate from,
@@ -190,8 +190,8 @@ a token, and every token's audience is compared against it — which is what sto
 same authorization server from being replayed here. Behind a reverse proxy, write the proxy's public URL: deriving it from
 the `Host` or `X-Forwarded-Host` header would tell each client to authenticate for whichever name it arrived under, including
 one an attacker chose. That stays true with
-[a trusted proxy configured](#behind-a-tls-terminating-reverse-proxy) — the mode makes a request state the name it
-arrived under, and leaves the resource identifier a value you wrote.
+[a trusted proxy configured](#behind-a-tls-terminating-reverse-proxy) — a forwarded header makes a request state the
+name it arrived under, and leaves the resource identifier a value you wrote.
 
 **`Issuer` is copied verbatim from the authorization server**, trailing slash included where there is one. It is compared
 against a token's `iss` by exact string equality and checked against the `issuer` the discovery document reports. Several
@@ -296,10 +296,11 @@ the client; the server log is where they differ.
 > **The metadata document is served only to a request whose own scheme and host match `Resource`.** That is the MCP SDK's
 > check, and it is what stops the document being served under a name the deployment never claimed. Three deployments
 > satisfy it: MailFathom terminating TLS itself, a proxy that passes HTTPS through with the `Host` header intact, and a
-> TLS-terminating proxy that MailFathom has been told to trust — see
-> [behind a TLS-terminating reverse proxy](#behind-a-tls-terminating-reverse-proxy). Without that third setting the
-> request from such a proxy arrives as `http` under an internal name, nothing matches, and a `404` on the metadata
-> address with everything else working is what an operator sees.
+> TLS-terminating proxy whose forwarded scheme and host MailFathom believes — see
+> [behind a TLS-terminating reverse proxy](#behind-a-tls-terminating-reverse-proxy). In the third case the proxy has to
+> send both headers and has to fall inside `ReverseProxy:TrustedProxies`; a request that satisfies neither arrives as
+> `http` under an internal name, nothing matches, and a `404` on the metadata address with everything else working is
+> what an operator sees.
 
 #### What the MCP client does, not MailFathom
 
@@ -833,13 +834,12 @@ certificate's names carry.
 
 When nginx, Traefik, or an ingress controller holds your certificate, the request that reaches MailFathom arrives as
 `http` under whichever internal name the proxy dialled. Your deployment's public identity survives the hop only in
-`X-Forwarded-Proto` and `X-Forwarded-Host`, and MailFathom reads neither until you say which proxy it may read them
-from:
+`X-Forwarded-Proto` and `X-Forwarded-Host`. MailFathom always reads both; the one thing you configure is which peers it
+believes them from:
 
 ```json
 {
   "ReverseProxy": {
-    "Enabled": true,
     "TrustedProxies": [ "10.4.0.0/16" ]
   }
 }
@@ -847,13 +847,11 @@ from:
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `Enabled` | `false` | Whether a forwarded scheme and host are read at all |
-| `TrustedProxies` | empty | The proxy addresses or CIDR networks they are accepted from; required when enabled |
+| `TrustedProxies` | empty, which trusts every peer | The proxy addresses or CIDR networks a forwarded scheme and host are accepted from |
 | `MaximumForwardedHops` | `1` | How many proxies may have appended a value to either header |
 
-The mode applies the forwarded scheme and host to the request before anything reads it, so OAuth discovery, the `401`
-challenge, and every absolute address MailFathom writes carry your public name. Turning it on is what makes the
-metadata document answer behind such a proxy instead of `404` — see
+The forwarded scheme and host are applied to the request before anything reads it, so OAuth discovery, the `401`
+challenge, and every absolute address MailFathom writes carry your public name — see
 [discovery a client uses](#discovery-a-client-uses).
 
 **It is one setting for the whole process, not one per endpoint.** The MCP, administrative, and probe surfaces are
@@ -862,31 +860,41 @@ trusted on every listener it can reach, which is what a network fact should be: 
 rather than restating it beside each surface.
 
 **Trust is the connection, never the header.** A forwarded value is worth exactly what the peer that sent it is worth,
-so a request from any address outside `TrustedProxies` is served under the scheme and host it actually arrived with, and
-its `X-Forwarded-*` headers change nothing. Enabling the mode without naming a proxy fails startup rather than falling
-back to anything:
-
-```text
-ReverseProxy:TrustedProxies — a forwarded scheme and host are worth what the connection that carried them is worth, so
-an enabled section must name the proxy it accepts them from. State one or more IP addresses or CIDR networks, for
-example '10.0.0.5' or '10.0.0.0/24'.
-```
+so once you have named a proxy, a request from any address outside `TrustedProxies` is served under the scheme and host
+it actually arrived with, and its `X-Forwarded-*` headers change nothing.
 
 The framework's own default — trusting loopback — is cleared rather than inherited, because loopback is the wrong peer
-in a container and every other process on the machine in a native installation. `10.0.0.5/24` is refused too, naming
-the `10.0.0.0/24` it would otherwise have silently become; write the address or write the network, and the deployment
-gets what it asked for.
+in a container and every other process on the machine in a native installation. What you name replaces the default
+trust rather than adding to it. `10.0.0.5/24` is refused, naming the `10.0.0.0/24` it would otherwise have silently
+become; write the address or write the network, and the deployment gets what it asked for.
 
-> **`0.0.0.0/0` and `::/0` are accepted, and they mean what they say.** Nothing refuses a prefix that covers every
-> address, so a deployment can trust every peer — but it has to write that, which is the difference between a decision
-> and an empty field. Understand the cost before you do. **An OAuth access token is refused outright when the request
-> did not arrive over TLS, and that check reads the scheme after this mode has applied it.** With a real proxy named,
-> that is correct: the hop to the client genuinely was HTTPS. With every peer trusted, anything that can reach the
-> listener sends `X-Forwarded-Proto: https` and the refusal stops working, so a reusable credential crosses a
-> clear-text hop and is accepted. Use a range that covers your proxies and nothing else.
+### What an unconfigured section costs
 
-Because it is accepted rather than refused, it is announced. A `/0` in the list produces one startup warning naming
-what the deployment gave up:
+> **Name your proxies.** With `TrustedProxies` empty, MailFathom trusts `0.0.0.0/0` and `::/0` — every peer that can
+> open a connection. **An OAuth access token is refused outright when the request did not arrive over TLS, and that
+> check reads the scheme after a forwarded header has been applied.** With a real proxy named that is correct: the hop
+> to the client genuinely was HTTPS. With every peer trusted, anything that can reach the listener sends
+> `X-Forwarded-Proto: https` and the refusal stops working, so a reusable credential crosses a clear-text hop and is
+> accepted. `X-Forwarded-Host` is believed on the same terms, so the name your `401` challenge and every absolute
+> address carry is then a client's to choose. Name a range that covers your proxies and nothing else.
+
+Writing `0.0.0.0/0` and `::/0` out is the same posture stated deliberately, and it is a posture an operator can mean: a
+load balancer pool with no stable address, or a network already closed by something other than this setting.
+
+Either way it is announced. Every startup that runs on it logs one line naming what the deployment gave up. A section
+that named no proxy reads:
+
+```text
+warn: MailFathom.Host.Hosting.Warnings.ReverseProxyTrustWarning
+      ReverseProxy:TrustedProxies names no proxy, so this process trusts 0.0.0.0/0, ::/0 — a forwarded scheme and host
+      are read from any peer that can open a connection. This also turns off the refusal of an access token that
+      arrived without transport encryption, because that refusal reads the scheme a forwarded header set, so a client
+      can claim its own hop was encrypted and have the token accepted over clear text. Name the addresses or CIDR
+      networks your proxies actually use, for example '10.0.0.5' or '10.0.0.0/24', to read a forwarded header from them
+      alone; write the ranges above explicitly if trusting every peer is what this deployment means.
+```
+
+and one that wrote the ranges out reads:
 
 ```text
 warn: MailFathom.Host.Hosting.Warnings.ReverseProxyTrustWarning
@@ -897,8 +905,9 @@ warn: MailFathom.Host.Hosting.Warnings.ReverseProxyTrustWarning
       the addresses your proxies actually use unless something other than this setting already closes the network.
 ```
 
-A merely wide range — a private `/8` — produces nothing. How wide is too wide inside a network you own is a judgement
-only you can make, and a warning that fired on it would be a line you learn to scroll past before it ever mattered.
+Both are said once, while the host starts, and never per request. A merely wide range — a private `/8` — produces
+nothing at all. How wide is too wide inside a network you own is a judgement only you can make, and a warning that
+fired on it would be a line you learn to scroll past before it ever mattered.
 
 **Only the two headers are read.** `X-Forwarded-For` is not, so the peer MailFathom observes stays the one that opened
 the connection. Nothing here partitions, limits, or logs by client address, so adopting one from a header would replace

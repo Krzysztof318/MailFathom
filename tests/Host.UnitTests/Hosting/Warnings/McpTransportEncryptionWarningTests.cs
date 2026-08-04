@@ -179,7 +179,7 @@ public sealed class McpTransportEncryptionWarningTests
 
     private static ReverseProxyOptions TrustedProxyConfigured()
     {
-        var settings = new ReverseProxyOptions { Enabled = true };
+        var settings = new ReverseProxyOptions();
 
         settings.TrustedProxies.Add("10.0.0.5");
 

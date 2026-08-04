@@ -275,16 +275,22 @@ Two rules are MailFathom's rather than Kestrel's:
 
 ## `ReverseProxy`
 
-Which proxy this process accepts a public scheme and host from, when something in front of it terminates TLS. One
+Which peers this process accepts a public scheme and host from, when something in front of it terminates TLS. One
 section for the whole process rather than one per surface: it runs at the front of the one request pipeline every
 listener shares, so a proxy named here is trusted on each of them.
 [Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) is the page.
 
+`X-Forwarded-Proto` and `X-Forwarded-Host` are always read; there is no key that switches that off. What the section
+carries is who they are believed from, and **an unconfigured section believes every peer.**
+
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `ReverseProxy:Enabled` | bool | `false` | Off reads neither `X-Forwarded-Proto` nor `X-Forwarded-Host` from anybody | restart |
-| `ReverseProxy:TrustedProxies` | string list | empty | Required non-empty when enabled; refused when configured while it is not. Each entry an IP address or a CIDR network whose host bits are clear — not a DNS name. The framework's loopback default is cleared rather than inherited. `0.0.0.0/0` and `::/0` are accepted and trust every peer, which disables the refusal of an OAuth token that arrived without TLS — see [trust is the connection](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) | restart |
+| `ReverseProxy:TrustedProxies` | string list | empty, which trusts `0.0.0.0/0` and `::/0` | Each entry an IP address or a CIDR network whose host bits are clear — not a DNS name. What is named replaces the default rather than adding to it, and the framework's loopback default is cleared rather than inherited. Left empty, or written as `0.0.0.0/0` and `::/0`, it trusts every peer and so disables the refusal of an OAuth token that arrived without TLS — see [what the default costs](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) | restart |
 | `ReverseProxy:MaximumForwardedHops` | int | `1` | At least 1; how far right-to-left through each header a value is believed | restart |
+
+> **`ReverseProxy:Enabled` no longer exists.** A configuration still setting it fails at startup naming the key, because
+> every section here is bound strictly. Delete it: the posture it used to select is now the presence or absence of
+> `TrustedProxies`, and a deployment that had it `true` keeps its behaviour by keeping its list.
 
 `X-Forwarded-For` is never read, so the peer MailFathom observes stays the one that opened the connection, and
 `McpEndpoint:OAuth:Resource` stays a configured value rather than anything derived from a header.

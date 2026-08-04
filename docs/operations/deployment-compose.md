@@ -157,10 +157,11 @@ no default.
 Both ports are published on **loopback** by default. MailFathom speaks plain HTTP and terminates no TLS, so publishing
 the application port on another interface exposes synchronized mail without transport protection. Change
 `MAILFATHOM_HTTP_BIND` only once a reverse proxy on the `frontend` network is what listens publicly, and give that
-proxy the certificate. Tell MailFathom which proxy that is — `ReverseProxy:TrustedProxies`, naming the address or the
-`frontend` subnet — so the public scheme and host survive the hop and OAuth discovery answers over your domain rather
-than `404`. [Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) is the
-page.
+proxy the certificate. The public scheme and host survive the hop on their own, because MailFathom reads a forwarded
+header from any peer until told otherwise — so tell it which proxy to believe, `ReverseProxy:TrustedProxies` naming the
+address or the `frontend` subnet, and everything else on that network stops being able to set those headers.
+[Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) is the page, and it
+states what the unnamed default gives up.
 
 The probe port is separate and stays loopback unless the machine asking is not this one. It answers without a
 credential, so `MAILFATHOM_HEALTH_BIND` is the whole of its access control; a probe path is never served on the
