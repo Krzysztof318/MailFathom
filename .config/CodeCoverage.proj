@@ -12,6 +12,16 @@
 
   <ItemGroup>
     <TestProject Include="$(RepositoryRoot)tests/**/*.csproj" />
+    <ProductionProject Include="$(RepositoryRoot)src/**/*.csproj" />
+
+    <!-- The two composition roots, and the whole of what this gate deliberately does not measure.
+         `docs/architecture/solution-structure.md` states why: a host's wiring holds no logic of its
+         own, and counting it would dilute the measurement of the boundaries that do. Every other
+         project under src/ is measured, and this is the only list that decides which — the
+         reportgenerator filter and the mismatch check below are both derived from it, so widening
+         or narrowing the exclusion is one edit rather than three that can disagree. -->
+    <UnmeasuredProject Include="$(RepositoryRoot)src/Host/Host.csproj;$(RepositoryRoot)src/AppHost/AppHost.csproj" />
+    <MeasuredProject Include="@(ProductionProject)" Exclude="@(UnmeasuredProject)" />
   </ItemGroup>
 
   <Target Name="Collect">
@@ -20,14 +30,19 @@
 
     <Error Condition="'@(TestProject)' == ''"
            Text="No test projects were found under $(RepositoryRoot)tests." />
+    <Error Condition="'@(ProductionProject)' == ''"
+           Text="No production projects were found under $(RepositoryRoot)src." />
 
-    <!-- The item above discovers what exists on disk; the run below executes what the solution
+    <!-- The items above discover what exists on disk; the run below executes what the solution
          lists. A test project missing from MailFathom.slnx would disappear from every gate silently —
          from this one and its coverage for a unit suite, and from the build and formatting checks
-         for the integration suite — so the mismatch fails here instead. Project file names are
-         compared rather than paths, because a solution cannot hold two projects of the same name
-         and the comparison then survives the directory-separator differences between the recorded
-         solution paths and the globbed item identities. -->
+         for the integration suite — so the mismatch fails here instead. A production project missing
+         from it fails here for a different reason: it would still be built through a project
+         reference and still be instrumented, so `Enforce` would report an assembly nothing expected
+         and name the assembly rather than the cause. Project file names are compared rather than
+         paths, because a solution cannot hold two projects of the same name and the comparison then
+         survives the directory-separator differences between the recorded solution paths and the
+         globbed item identities. -->
     <XmlPeek XmlInputPath="$(RepositoryRoot)MailFathom.slnx" Query="//Project/@Path">
       <Output TaskParameter="Result" ItemName="SolutionProjectPath" />
     </XmlPeek>
@@ -36,10 +51,15 @@
       <SolutionProjectFileName Include="@(SolutionProjectPath->'%(Filename)%(Extension)')" />
       <UnlistedTestProject Include="@(TestProject->'%(Filename)%(Extension)')"
                            Exclude="@(SolutionProjectFileName)" />
+      <UnlistedProductionProject Include="@(ProductionProject->'%(Filename)%(Extension)')"
+                                 Exclude="@(SolutionProjectFileName)" />
     </ItemGroup>
 
     <Error Condition="'@(UnlistedTestProject)' != ''"
            Text="These test projects exist under $(RepositoryRoot)tests but are missing from MailFathom.slnx, so the solution-wide run would skip them: @(UnlistedTestProject, ', ')." />
+
+    <Error Condition="'@(UnlistedProductionProject)' != ''"
+           Text="These production projects exist under $(RepositoryRoot)src but are missing from MailFathom.slnx: @(UnlistedProductionProject, ', ')." />
 
     <!-- One solution-wide run rather than an Exec batched over the test projects, which MSBuild
          executes one item at a time: eight sequential processes cost about 50 seconds here against
@@ -49,20 +69,95 @@
     <CallTarget Targets="GenerateAndEnforceReport" />
   </Target>
 
+  <!-- The measured assemblies are asked of the projects rather than described by a pattern. A pattern over
+       `MailFathom.*` would stand in for "every boundary" only while every assembly is named after its boundary, and one
+       is not: `Cli` publishes as `mfctl`, because an operator types it, and a name with no dot in it matches no such
+       pattern — the whole of that project would sit outside the gate, tested and counted nowhere. Reading
+       `AssemblyName` back out of each project is what makes the next override cost nothing: an assembly enters the
+       filter by being a measured project, and `Enforce` fails when one of them is missing from the report.
+       `GetTargetPath` evaluates a project without building it, which is what the built-in target exists for. -->
+  <Target Name="ResolveMeasuredAssemblies">
+    <MSBuild Projects="@(MeasuredProject)" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="MeasuredAssemblyPath" />
+    </MSBuild>
+
+    <!-- A project compiling nothing produces an assembly with no coverable line in it, and no collector emits a report
+         for one: `AI` is a scaffold today and has never appeared. Demanding it would make the check below fail on an
+         empty project rather than on the omission it exists to catch, and excluding it by name would reintroduce that
+         omission the moment the project gains its first file. Source presence is asked of the directory instead, so a
+         scaffold is expected to be absent and stops being the moment it holds a file. The batch runs once per project
+         and stamps each file with the project it was found under; only the presence of a file is read. A file of its
+         own is what counts, so a project that compiled nothing but linked source from elsewhere would be tolerated as
+         absent — no project does, and one that did would be reaching past its own directory for its whole contents. -->
+    <ItemGroup>
+      <MeasuredProjectSource Include="%(MeasuredProject.RootDir)%(MeasuredProject.Directory)**/*.cs"
+                             Exclude="%(MeasuredProject.RootDir)%(MeasuredProject.Directory)obj/**/*.cs;%(MeasuredProject.RootDir)%(MeasuredProject.Directory)bin/**/*.cs">
+        <Project>%(MeasuredProject.FullPath)</Project>
+      </MeasuredProjectSource>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectWithSource Include="@(MeasuredProjectSource->'%(Project)'->Distinct())" />
+    </ItemGroup>
+
+    <MSBuild Projects="@(ProjectWithSource)" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="ExpectedAssemblyPath" />
+    </MSBuild>
+
+    <ItemGroup>
+      <MeasuredAssembly Include="@(MeasuredAssemblyPath->'%(Filename)')" />
+      <ExpectedAssembly Include="@(ExpectedAssemblyPath->'%(Filename)')" />
+    </ItemGroup>
+
+    <PropertyGroup>
+      <MeasuredAssemblyFilters>@(MeasuredAssembly->'+%(Identity)', ';')</MeasuredAssemblyFilters>
+    </PropertyGroup>
+
+    <Error Condition="'$(MeasuredAssemblyFilters)' == ''"
+           Text="No measured assemblies were resolved from the projects under $(RepositoryRoot)src." />
+  </Target>
+
   <!-- The file filter drops the EF Core migrations from the denominator. They are generated, they are regenerated by the
        add-migration workflow, and no unit test may execute them: a migration is proven by applying it to a real
        PostgreSQL server and reviewing the resulting schema, which is what specification 20 and the schema dump cover.
        Leaving them in measured roughly a thousand lines nobody can cover and moved the aggregate by more than twenty
        points, which would have hidden a real regression anywhere else. Attribute-based exclusion is unavailable here
-       because the files carry no attribute the generator would preserve. -->
-  <Target Name="GenerateAndEnforceReport">
-    <Exec Command="dotnet tool run reportgenerator &quot;-reports:$(RawCoverageDirectory)/**/*.cobertura.*.xml&quot; &quot;-targetdir:$(CoverageReportDirectory)&quot; &quot;-reporttypes:Cobertura;HtmlInline&quot; &quot;-assemblyfilters:+MailFathom.*;-MailFathom.Host;-MailFathom.AppHost;-MailFathom.*.UnitTests&quot; &quot;-filefilters:-**/Persistence/Migrations/*.cs&quot;" />
+       because the files carry no attribute the generator would preserve.
+
+       The assembly filter carries no exclusion of its own and needs none. It admits the measured assemblies by name and
+       nothing else, so anything that is not one of them — a unit-test assembly, a composition root, a package — is
+       already outside an include-only filter. -->
+  <Target Name="GenerateAndEnforceReport" DependsOnTargets="ResolveMeasuredAssemblies">
+    <Exec Command="dotnet tool run reportgenerator &quot;-reports:$(RawCoverageDirectory)/**/*.cobertura.*.xml&quot; &quot;-targetdir:$(CoverageReportDirectory)&quot; &quot;-reporttypes:Cobertura;HtmlInline&quot; &quot;-assemblyfilters:$(MeasuredAssemblyFilters)&quot; &quot;-filefilters:-**/Persistence/Migrations/*.cs&quot;" />
     <CallTarget Targets="Enforce" />
   </Target>
 
-  <Target Name="Enforce">
+  <Target Name="Enforce" DependsOnTargets="ResolveMeasuredAssemblies">
     <Error Condition="!Exists('$(MergedCoverageReport)')"
            Text="Merged coverage report was not found at $(MergedCoverageReport)." />
+
+    <!-- A percentage says nothing about what it was taken over, so the denominator is checked before it is read. Every
+         measured project must appear in the merged report and nothing else may, which is the assertion the aggregate
+         implies and cannot make on its own: an assembly the collector never instrumented lowers no number and raises no
+         complaint, it simply stops being measured, and a threshold met over the wrong set is the one failure a
+         coverage gate cannot report about itself. The two errors below are the two directions that drift, and each
+         names the file that decides it, because the cause is never in this one — an unreported assembly is the
+         Coverlet `Include` filter in .config/testconfig.json, which matches by assembly name and admits no project it
+         was not told about. -->
+    <XmlPeek XmlInputPath="$(MergedCoverageReport)" Query="/coverage/packages/package/@name">
+      <Output TaskParameter="Result" ItemName="ReportedAssembly" />
+    </XmlPeek>
+
+    <ItemGroup>
+      <UnreportedAssembly Include="@(ExpectedAssembly)" Exclude="@(ReportedAssembly)" />
+      <UnexpectedAssembly Include="@(ReportedAssembly)" Exclude="@(MeasuredAssembly)" />
+    </ItemGroup>
+
+    <Error Condition="'@(UnreportedAssembly)' != ''"
+           Text="These assemblies are built from source by measured projects under $(RepositoryRoot)src but are absent from $(MergedCoverageReport), so their code counts towards neither the aggregate nor the threshold: @(UnreportedAssembly, ', '). Admit each one to the Coverlet &quot;Include&quot; filter in .config/testconfig.json, whose entries are assembly names rather than project names." />
+
+    <Error Condition="'@(UnexpectedAssembly)' != ''"
+           Text="These assemblies appear in $(MergedCoverageReport) without being built by a measured project under $(RepositoryRoot)src: @(UnexpectedAssembly, ', '). Either the project is missing from MailFathom.slnx, or the assembly belongs to something this gate does not measure and the Coverlet filters in .config/testconfig.json admit it." />
 
     <XmlPeek XmlInputPath="$(MergedCoverageReport)" Query="/coverage/@line-rate">
       <Output TaskParameter="Result" PropertyName="ActualLineCoverageRate" />
