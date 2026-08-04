@@ -94,7 +94,9 @@ dispatch only, like the integration suite, and it publishes nothing.
 
 What does publish is `Release`, on an annotated version tag, and `Nightly`, on its schedule. Neither is something to
 start as part of a task, and neither has a local equivalent: they run `Build, test, format, and migrations` — the same
-workflow `CI` calls for a pull request — then, for a release, the integration suite, and only then build and push. [The container image](container-image.md#published-images) records
+workflow `CI` calls for a pull request — then, for a release, the integration suite, and build nothing at all until
+both have passed. That covers everything a channel produces rather than the image alone: the schema script and the
+`mfctl` binaries wait behind the same gate. [The container image](container-image.md#published-images) records
 what they produce and how a published image is verified.
 
 Both scripts stop immediately when `HEAD` resolves to `main` or `master`,
@@ -557,7 +559,7 @@ Each absence has its own reason, and neither of them is cost.
 
 The `push` trigger carries no path filter either, and for a different reason than the `pull_request` one. That reason protects a required check: a run GitHub never instantiated reports no conclusion, so a pull request would wait on it forever. Nothing waits on a push run, so it does not reach here. What does is the contract job, which reads the whole tree and therefore has no path filter of its own: `docs/`, `specs/`, `deploy/`, `scripts/`, `.agents/`, `.claude/`, and the repository-root Markdown files are its subject matter rather than paths it can be told to ignore, so a trigger filter naming them would suppress exactly the run most likely to have something to report. Which part of a merge is worth verifying is decided inside the run instead, by the same `Detect changes` job that decides it for a pull request — so a merge that moved nothing the build reads costs the contract job's twenty seconds rather than a full build and coverage run.
 
-Why run any of it, when the `main` ruleset requires a branch to be current with `main` before it merges and the run therefore normally repeats a verdict. Three things. The repository admin role bypasses the ruleset when merging, for the reason [Code owners](#code-owners) gives. `Nightly` and `Release` both build from `main` without verifying it first, so without this the earliest a broken `main` could be noticed is a publish. And *is `main` green right now* becomes a fact with a run behind it rather than one inferred from whichever pull request closed last.
+Why run any of it, when the `main` ruleset requires a branch to be current with `main` before it merges and the run therefore normally repeats a verdict. Three things. The repository admin role bypasses the ruleset when merging, for the reason [Code owners](#code-owners) gives. `Nightly` and `Release` do gate the commit they publish, so a broken `main` is caught before anything reaches a registry — but without this run the earliest it is *reported* is that night's publication failing its own gate, which names a scheduled run at 02:00 rather than the merge that broke it. And *is `main` green right now* becomes a fact with a run behind it rather than one inferred from whichever pull request closed last.
 
 Concurrency differs by event too. Cancelling a superseded run is a pull-request behavior, because there the run being cancelled is answering about a commit that is no longer the head. A push to `main` is the opposite case: every commit there is a state that was merged and that a nightly can be built from, and a run the next merge cancelled would leave that commit carrying a conclusion which reads as a failure everywhere while having verified nothing. Merges in quick succession queue behind each other instead, and a manual dispatch on `main` — which shares their concurrency group — queues rather than displacing whichever of the two is running.
 

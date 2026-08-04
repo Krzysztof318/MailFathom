@@ -10,8 +10,10 @@ name: Integration tests
 # a run when the change is one this suite can speak to.
 #
 # It is reachable two ways, and both are deliberate acts rather than a schedule: a manual dispatch,
-# and the `Release` workflow, which will not publish an image until this suite has passed on the
-# commit it is about to release. A nightly does not call it — see `publish-container-image.yml`.
+# and the `Release` workflow, which builds nothing at all from the commit it is about to release —
+# not the image, not the schema script, not the command binaries — until this suite has passed on it.
+# A nightly does not call it, which is the difference between the channels rather than an omission;
+# `Nightly` says why.
 on:
   workflow_dispatch:
     inputs:

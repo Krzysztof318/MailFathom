@@ -2755,6 +2755,150 @@ the_release_restores_the_annotated_tag_before_asserting_it() {
   fi
 }
 
+# Reads a workflow's job graph as `<job> <the job it waits for>` pairs, one per line. Comment lines
+# inside a `needs:` block are ignored rather than ending it, because both publishing workflows explain
+# individual dependencies where they are declared.
+extract_workflow_job_dependencies() {
+  local workflow_file="$1"
+
+  awk '
+    /^jobs:/ { in_jobs = 1; next }
+    !in_jobs { next }
+    /^[^[:space:]#]/ { in_jobs = 0; next }
+    /^  [a-zA-Z0-9_-]+:[[:space:]]*$/ { job = substr($1, 1, length($1) - 1); in_needs = 0; next }
+    /^    needs:[[:space:]]*$/ { in_needs = 1; next }
+    in_needs && /^      - / { printf "%s %s\n", job, $2; next }
+    /^    [a-zA-Z0-9_-]+:/ { in_needs = 0 }
+  ' "$workflow_file"
+}
+
+# The jobs that build something from the commit being published, read off the workflow rather than
+# listed here: each of them hands the resolved revision down to the workflow it calls, which is what
+# separates a job that consumes this commit from one that only reasons about the run. A fourth
+# artifact is therefore covered by being added rather than by this list being remembered.
+extract_workflow_jobs_consuming_the_commit() {
+  local workflow_file="$1"
+
+  awk '
+    /^jobs:/ { in_jobs = 1; next }
+    !in_jobs { next }
+    /^[^[:space:]#]/ { in_jobs = 0; next }
+    /^  [a-zA-Z0-9_-]+:[[:space:]]*$/ { job = substr($1, 1, length($1) - 1); next }
+    /^      ref:[[:space:]]+\$\{\{[[:space:]]*needs\.[a-zA-Z0-9_-]+\.outputs\.revision[[:space:]]*\}\}$/ { print job }
+  ' "$workflow_file"
+}
+
+# The reusable workflow a job calls, which is what makes the job names below mean something: a `verify`
+# job that stopped calling the verification workflow would satisfy every dependency and gate nothing.
+extract_workflow_job_uses() {
+  local workflow_file="$1"
+  local job="$2"
+
+  awk -v job_header="  ${job}:" '
+    $0 == job_header { in_job = 1; next }
+    in_job && /^  [a-zA-Z0-9_-]+:[[:space:]]*$/ { exit }
+    in_job && /^    uses:[[:space:]]/ { print $2; exit }
+  ' "$workflow_file"
+}
+
+# Whether a job waits for another, directly or through anything in between. Transitive rather than
+# direct, because a publishing job reaching the gate through the artifact it already waits for is
+# gated just as firmly as one naming it.
+workflow_job_waits_for() {
+  local dependencies="$1"
+  local job="$2"
+  local awaited="$3"
+  local reached=" $job "
+  local grew=1
+  local dependent
+  local dependency
+
+  while ((grew)); do
+    grew=0
+
+    while read -r dependent dependency; do
+      [[ -n "$dependent" ]] || continue
+
+      if [[ "$reached" == *" $dependent "* && "$reached" != *" $dependency "* ]]; then
+        reached+="$dependency "
+        grew=1
+      fi
+    done <<< "$dependencies"
+  done
+
+  [[ "$reached" == *" $awaited "* ]]
+}
+
+# Every artifact a channel publishes is built from a commit that has verified, and the dependency
+# saying so lives in the workflow that publishes rather than inside the reusable workflow one of the
+# artifacts happens to call. A gate belonging to the image would gate the image: `Schema artifact` and
+# `CLI binaries` would start beside it from a commit whose unit tests had not run, so a release would
+# spend four `dotnet publish` invocations and a schema generation before the failure was legible and
+# would start them minutes before the integration suite had said anything. A job graph makes none of
+# that visible on a green run, which is why a fourth artifact is gated by this assertion rather than
+# by whoever reviews it.
+no_channel_builds_an_artifact_before_the_commit_has_verified() {
+  local workflow_directory="$source_repository_root/.github/workflows"
+  local release_dependencies
+  local nightly_dependencies
+  local release_consumers
+  local nightly_consumers
+  local job
+  local failures=''
+
+  release_dependencies="$(extract_workflow_job_dependencies "$workflow_directory/release.yml")"
+  nightly_dependencies="$(extract_workflow_job_dependencies "$workflow_directory/nightly.yml")"
+  release_consumers=" $(extract_workflow_jobs_consuming_the_commit "$workflow_directory/release.yml" | tr '\n' ' ')"
+  nightly_consumers=" $(extract_workflow_jobs_consuming_the_commit "$workflow_directory/nightly.yml" | tr '\n' ' ')"
+
+  # The gate is what the rest waits for, so it is what the rest is measured against rather than
+  # something to measure. Everything else that reads the commit is checked below whatever it is named.
+  for job in $release_consumers; do
+    [[ "$job" == 'verify' || "$job" == 'integration-tests' ]] && continue
+
+    workflow_job_waits_for "$release_dependencies" "$job" verify ||
+      failures+="release.yml: ${job} does not wait for verify. "
+    workflow_job_waits_for "$release_dependencies" "$job" integration-tests ||
+      failures+="release.yml: ${job} does not wait for integration-tests. "
+  done
+
+  for job in $nightly_consumers; do
+    [[ "$job" == 'verify' ]] && continue
+
+    workflow_job_waits_for "$nightly_dependencies" "$job" verify ||
+      failures+="nightly.yml: ${job} does not wait for verify. "
+  done
+
+  # A derived list that derives nothing asserts nothing, and it would do so silently: the loops above
+  # are vacuous the moment the `ref:` expression they read is spelled some other way. These three are
+  # the floor rather than the coverage.
+  for job in schema-artifact cli-binaries publish; do
+    [[ "$release_consumers" == *" $job "* ]] ||
+      failures+="release.yml: ${job} was not recognized as building from the released commit. "
+    [[ "$nightly_consumers" == *" $job "* ]] ||
+      failures+="nightly.yml: ${job} was not recognized as building from the previewed commit. "
+  done
+
+  [[ "$(extract_workflow_job_uses "$workflow_directory/release.yml" verify)" == './.github/workflows/build-test-format-and-migrations.yml' ]] ||
+    failures+='release.yml: verify does not call build-test-format-and-migrations.yml. '
+  [[ "$(extract_workflow_job_uses "$workflow_directory/release.yml" integration-tests)" == './.github/workflows/integration-tests.yml' ]] ||
+    failures+='release.yml: integration-tests does not call integration-tests.yml. '
+  [[ "$(extract_workflow_job_uses "$workflow_directory/nightly.yml" verify)" == './.github/workflows/build-test-format-and-migrations.yml' ]] ||
+    failures+='nightly.yml: verify does not call build-test-format-and-migrations.yml. '
+
+  # The gate has one home. A copy of it back inside the publishing workflow would run the whole thing
+  # twice per publication while gating one artifact of the three.
+  if grep -qE '^[[:space:]]+uses:[[:space:]]+\./\.github/workflows/(build-test-format-and-migrations|integration-tests)\.yml$' \
+    "$workflow_directory/publish-container-image.yml"; then
+    failures+='publish-container-image.yml calls a verification workflow its callers already run. '
+  fi
+
+  if [[ -n "$failures" ]]; then
+    printf 'Publication is not gated as recorded: %s\n' "$failures" >&2
+    return 1
+  fi
+}
+
 # `pull_request_target` runs the base branch's workflow with the repository's secrets against a
 # contribution nobody has reviewed. `fathom-review.yml` uses it deliberately, #189 decided so, and
 # `docs/operations/agent-workflow.md` records why the purpose of the rule is still met there — it
@@ -3053,6 +3197,7 @@ run_test every_workflow_job_declares_its_permissions
 run_test every_write_scope_is_one_the_policy_records
 run_test every_checkout_refuses_to_persist_credentials
 run_test the_release_restores_the_annotated_tag_before_asserting_it
+run_test no_channel_builds_an_artifact_before_the_commit_has_verified
 run_test only_the_reviewer_workflow_uses_pull_request_target
 run_test a_comment_never_cancels_a_review_in_flight
 run_test workflow_scripts_use_flat_manual_layout

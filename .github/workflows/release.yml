@@ -90,12 +90,47 @@ jobs:
             printf 'tags<<TAGS\n%s\nTAGS\n' "$image_tags"
           } >> "$GITHUB_OUTPUT"
 
+  # Everything this release publishes waits behind these two, and they are jobs here rather than steps inside the
+  # workflow that pushes the image because more than the image is built from this commit. A gate belonging to the image
+  # would gate the image: the schema script and the command binaries would start beside it, so a commit a unit test
+  # rejects would still spend four `dotnet publish` invocations and a schema generation before the failure was legible,
+  # and would start them minutes before the integration suite had said anything at all. Declared here, the dependency
+  # is what a fourth artifact inherits by being added rather than by being reviewed.
+  #
+  # The same definition a pull request is verified by, against the tagged commit rather than against a branch, with
+  # every switch at its default: `CI` skips work a pull request's changed files cannot affect, and a release skips
+  # nothing.
+  verify:
+    name: Build, test, format, and migrations
+    needs:
+      - assert
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-test-format-and-migrations.yml
+    with:
+      ref: ${{ needs.assert.outputs.revision }}
+
+  # The suite that starts PostgreSQL, applies the baseline migration, and asserts against the result. A release is the
+  # one channel that runs it, and it runs *after* the gate above rather than beside it, so minutes of container time are
+  # never spent on a commit a unit test would have rejected in seconds.
+  integration-tests:
+    name: Integration tests
+    needs:
+      - assert
+      - verify
+    permissions:
+      contents: read
+    uses: ./.github/workflows/integration-tests.yml
+    with:
+      ref: ${{ needs.assert.outputs.revision }}
+
   # The artifact a released installation applies, built from the definition both channels share. A release blocks its
   # image push on it; docs/operations/database-schema.md is what an operator then does with the file.
   schema-artifact:
     name: Schema artifact
     needs:
       - assert
+      - integration-tests
     permissions:
       contents: read
     uses: ./.github/workflows/build-schema-artifact.yml
@@ -109,6 +144,7 @@ jobs:
     name: CLI binaries
     needs:
       - assert
+      - integration-tests
     permissions:
       contents: read
     uses: ./.github/workflows/build-cli-binaries.yml
@@ -150,6 +186,9 @@ jobs:
       # A release that cannot produce its schema artifact publishes no image. An operator handed an image and no way to
       # reach the schema it requires has a deployment that starts, fails the startup gate, and stays down.
       - schema-artifact
+      # Reached through `schema-artifact` already, and named anyway: what gates a publication is the sort of thing that
+      # has to be readable off the job that publishes rather than followed through another job's dependencies.
+      - integration-tests
     permissions:
       contents: read
       packages: write

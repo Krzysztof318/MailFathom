@@ -144,6 +144,30 @@ jobs:
             printf 'Nothing was built.\n'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+  # Everything a nightly builds waits behind this, for the reason `Release` states at greater length: a gate belonging
+  # to the image would gate the image, leaving the schema script and the command binaries to be built beside it from a
+  # commit whose unit tests had not run. It is the same definition a pull request is verified by, against the revision
+  # being previewed rather than against a branch, with every switch at its default — `CI` skips work a pull request's
+  # changed files cannot affect, and a publication skips nothing.
+  #
+  # The migration check is the half worth naming on this channel: a nightly is installable long before any tag, so an
+  # image whose committed model snapshot describes a schema no migration produces would be discovered by whoever
+  # deployed it.
+  #
+  # The integration suite is not here, and that is the channels' difference rather than an omission. It is minutes of
+  # container time on something published every night whose whole value is being current, and `Release` is where the
+  # answer is worth waiting for.
+  verify:
+    name: Build, test, format, and migrations
+    needs:
+      - decide
+    if: needs.decide.outputs.publish == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-test-format-and-migrations.yml
+    with:
+      ref: ${{ needs.decide.outputs.revision }}
+
   # A nightly needs its schema script more than a release does, not less: its schema can be ahead of every published
   # migration, so no release's artifact covers it and there is nothing else to reach for. It is left on the run rather
   # than attached to anything, because a nightly is not a release and has nothing to attach to.
@@ -157,6 +181,7 @@ jobs:
     name: Schema artifact
     needs:
       - decide
+      - verify
     if: needs.decide.outputs.publish == 'true'
     permissions:
       contents: read
@@ -175,6 +200,7 @@ jobs:
     name: CLI binaries
     needs:
       - decide
+      - verify
     if: needs.decide.outputs.publish == 'true'
     permissions:
       contents: read
@@ -187,6 +213,7 @@ jobs:
     name: Publish
     needs:
       - decide
+      - verify
     if: needs.decide.outputs.publish == 'true'
     permissions:
       contents: read
