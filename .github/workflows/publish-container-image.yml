@@ -534,19 +534,29 @@ jobs:
 
       # Docker Hub renders a repository overview and a short description beside it; GHCR renders this repository's README
       # on the package page and reads the image's own labels, so only one of the two registries needs anything pushed to
-      # it. Both halves come from the repository rather than from a copy maintained beside it: the overview is the root
-      # README — the file `AGENTS.md` already requires to carry absolute links for exactly this reason — and the short
-      # description is the image's own `org.opencontainers.image.description`, read back off the manifest this run just
-      # published. That is what keeps the registry page and the label every other registry indexes from drifting into
-      # saying different things, and it is why the repository's GitHub description is not what goes here: that field is
-      # 300-odd characters of pitch, and Docker Hub takes 100.
+      # it. Both halves come from the repository rather than from a copy maintained beside it: the overview is
+      # `deploy/docker/README.md` and the short description is the image's own
+      # `org.opencontainers.image.description`, read back off the manifest this run just published. That is what keeps
+      # the registry page and the label every other registry indexes from drifting into saying different things, and it
+      # is why the repository's GitHub description is not what goes here: that field is 300-odd characters of pitch, and
+      # Docker Hub takes 100.
+      #
+      # The overview is a page of its own rather than the root README, and the reason is what a reader arriving at each
+      # one already has. Somebody on Docker Hub has an image reference and wants to run a container: the tags, what the
+      # image needs before it starts, how it runs, and how to verify it. Somebody on GitHub is deciding whether to adopt
+      # the project. The root README is written for the second and is far longer than the first needs — long enough that
+      # it outgrew Docker Hub's 25000 and failed a release here, which is the concrete cost of one file serving two
+      # audiences. The chart listing still renders the root README, because an Artifact Hub page is read by the second
+      # reader rather than the first. Both files carry absolute links for the same reason, which `AGENTS.md` states.
       #
       # Both limits are asserted rather than left to the action, which truncates over-long content and carries on. A
       # truncated overview is visibly broken; a truncated short description is not — it is a sentence cut mid-word, and
-      # it reads as though the project meant to say that much.
+      # it reads as though the project meant to say that much. `scripts/test-agent-workflow.sh` asserts the overview's
+      # length as well, so a page that outgrew the limit fails on the pull request that wrote it rather than here, after
+      # the image is already published.
       #
-      # Release only. A nightly re-pushing an unchanged README would spend a write on nothing, and the overview
-      # describes the product rather than the night's snapshot.
+      # Release only. A nightly re-pushing an unchanged overview would spend a write on nothing, and the page describes
+      # the product rather than the night's snapshot.
       - name: Resolve the Docker Hub description and check both halves against its limits
         id: overview
         if: inputs.channel == 'release'
@@ -556,10 +566,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          overview_length="$(wc -c < README.md)"
+          overview_length="$(wc -c < deploy/docker/README.md)"
 
           if (( overview_length > 25000 )); then
-            echo "::error::README.md is ${overview_length} characters and Docker Hub accepts 25000 as a repository overview. Shorten it, or the release publishes an image whose registry page still describes the previous version."
+            echo "::error::deploy/docker/README.md is ${overview_length} characters and Docker Hub accepts 25000 as a repository overview. Shorten it, or the release publishes an image whose registry page still describes the previous version."
             exit 1
           fi
 
@@ -584,7 +594,7 @@ jobs:
             printf 'SHORT_DESCRIPTION\n'
           } >> "$GITHUB_OUTPUT"
 
-          printf 'README.md is %s characters, within the 25000 Docker Hub accepts. The short description is %s bytes, within 100: %s\n' \
+          printf 'deploy/docker/README.md is %s characters, within the 25000 Docker Hub accepts. The short description is %s bytes, within 100: %s\n' \
             "$overview_length" "$short_description_length" "$short_description"
 
       - name: Synchronize the Docker Hub repository overview
@@ -594,7 +604,7 @@ jobs:
           username: ${{ steps.reference.outputs.docker-hub-namespace }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ steps.reference.outputs.docker-hub-repository }}
-          readme-filepath: ./README.md
+          readme-filepath: ./deploy/docker/README.md
           short-description: ${{ steps.overview.outputs.short-description }}
 
       - name: Summarize the publication
