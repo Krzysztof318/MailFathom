@@ -177,7 +177,9 @@ with a startup warning, because an unauthenticated endpoint serves your mailbox 
 origins, serving your own domain over TLS, client certificates, and the rate limits that apply out of the box.
 
 MailFathom itself serves plain HTTP unless its own TLS termination is configured, so keep the application port on
-loopback or behind a TLS-terminating proxy — the Compose deployment's default — and give the proxy the certificate.
+loopback or behind a TLS-terminating proxy — the Compose deployment's default — and give the proxy the certificate. If
+you put a proxy in front, name it in `ReverseProxy:TrustedProxies` as well, so the public scheme and host survive the
+hop: [behind a TLS-terminating reverse proxy](../operations/mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy).
 
 ## 7. Connect an MCP client
 

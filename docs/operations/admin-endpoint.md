@@ -91,6 +91,25 @@ Configure `AdminEndpoint:Https:Endpoints` to have Kestrel terminate TLS itself. 
 endpoint's does, including `HttpProtocols`, which defaults to HTTP/1.1 and HTTP/2. Naming any profile binds those
 listeners and no clear-text one stays open behind them.
 
+## Behind a TLS-terminating reverse proxy
+
+If a proxy holds your certificate, `ReverseProxy:TrustedProxies` is what makes the request state the public name it
+arrived under, which is what lets `AdminEndpoint:OAuth` discovery complete over a proxied address.
+[Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) documents the mode in
+full; three things are worth stating from this endpoint's side.
+
+- **It is one process-wide setting, not one per endpoint.** This surface is a separate listener over the same request
+  pipeline, so naming your proxy once covers it along with the MCP and probe listeners. There is no
+  `AdminEndpoint:ReverseProxy`, deliberately.
+- **`AdminEndpoint:OAuth:Resource` is unaffected.** It stays the value you wrote, still ends in `/api/admin`, and is
+  still what a token's audience is compared against. The mode never derives it from a header.
+- **A proxy that authenticates its own callers is not this endpoint's authentication.** `AdminEndpoint:Authentication`
+  still decides who may administer the service, and the clear-text warning above still fires, because the hop between
+  the proxy and this process is still clear text.
+
+Whether the proxy publishes this listener at all is your decision: the administrative port is separate from the
+application port, so a deployment can proxy the MCP surface publicly and keep this one on a network you control.
+
 ## Getting the command
 
 Each release attaches a self-contained binary per platform, plus one checksum file covering all of them.

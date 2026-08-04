@@ -189,7 +189,9 @@ from the request. It is published in the metadata document, a client copies it i
 a token, and every token's audience is compared against it — which is what stops a token issued for some other service on the
 same authorization server from being replayed here. Behind a reverse proxy, write the proxy's public URL: deriving it from
 the `Host` or `X-Forwarded-Host` header would tell each client to authenticate for whichever name it arrived under, including
-one an attacker chose.
+one an attacker chose. That stays true with
+[a trusted proxy configured](#behind-a-tls-terminating-reverse-proxy) — the mode makes a request state the name it
+arrived under, and leaves the resource identifier a value you wrote.
 
 **`Issuer` is copied verbatim from the authorization server**, trailing slash included where there is one. It is compared
 against a token's `iss` by exact string equality and checked against the `issuer` the discovery document reports. Several
@@ -292,12 +294,12 @@ Neither response says why. An expired token, a wrong audience, an unknown issuer
 the client; the server log is where they differ.
 
 > **The metadata document is served only to a request whose own scheme and host match `Resource`.** That is the MCP SDK's
-> check, and it is what stops the document being served under a name the deployment never claimed. A deployment where
-> MailFathom terminates TLS itself, or one behind a proxy that passes HTTPS through with the `Host` header intact, satisfies
-> it; a proxy that terminates TLS does not, because the request then arrives as `http` and no forwarded header changes
-> that — MailFathom does not process `X-Forwarded-Proto` or `X-Forwarded-Host` today, so nothing on either side configures
-> it away. A `404` on the metadata address with everything else working is this, and OAuth discovery cannot complete
-> until the deployment is one of the two shapes above.
+> check, and it is what stops the document being served under a name the deployment never claimed. Three deployments
+> satisfy it: MailFathom terminating TLS itself, a proxy that passes HTTPS through with the `Host` header intact, and a
+> TLS-terminating proxy that MailFathom has been told to trust — see
+> [behind a TLS-terminating reverse proxy](#behind-a-tls-terminating-reverse-proxy). Without that third setting the
+> request from such a proxy arrives as `http` under an internal name, nothing matches, and a `404` on the metadata
+> address with everything else working is what an operator sees.
 
 #### What the MCP client does, not MailFathom
 
@@ -480,6 +482,22 @@ warn: MailFathom.Host.Hosting.Warnings.McpTransportEncryptionWarning
 
 It fires whatever authentication mode is configured. An API key travels in a request header, so on a clear-text hop the
 credential is as readable as the mail it protects.
+
+Once [a trusted proxy is named](#behind-a-tls-terminating-reverse-proxy), the same warning stops guessing between those
+two deployments and describes the one you configured:
+
+```text
+warn: MailFathom.Host.Hosting.Warnings.McpTransportEncryptionWarning
+      The MCP endpoint is enabled on /mcp behind the 1 trusted reverse proxy source(s) ReverseProxy:TrustedProxies
+      names, so the hop this process serves is the one between that proxy and here and TLS to your clients is the
+      proxy's to terminate. Keep that hop inside a network you control: on it, anything on the path can read the API
+      key a client presents and every message the tools return. A client certificate still never arrives, because the
+      handshake ended at the proxy.
+```
+
+The clear-text hop is still stated, because it is still there. What changes is that the line no longer suggests
+configuring `McpEndpoint:Https:Endpoints`, which is the wrong advice for a deployment whose certificate lives on the
+proxy.
 
 ### One domain
 
@@ -719,6 +737,102 @@ MailFathom. It has no ACME client and issues nothing. Startup only refuses a `Do
 an IP address, a wildcard, a name with characters a DNS name cannot carry, or a name a second profile already publishes.
 An internationalized domain is configured in its punycode A-label form, because that is what a client sends and what a
 certificate's names carry.
+
+## Behind a TLS-terminating reverse proxy
+
+When nginx, Traefik, or an ingress controller holds your certificate, the request that reaches MailFathom arrives as
+`http` under whichever internal name the proxy dialled. Your deployment's public identity survives the hop only in
+`X-Forwarded-Proto` and `X-Forwarded-Host`, and MailFathom reads neither until you say which proxy it may read them
+from:
+
+```json
+{
+  "ReverseProxy": {
+    "Enabled": true,
+    "TrustedProxies": [ "10.4.0.0/16" ]
+  }
+}
+```
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `Enabled` | `false` | Whether a forwarded scheme and host are read at all |
+| `TrustedProxies` | empty | The proxy addresses or CIDR networks they are accepted from; required when enabled |
+| `MaximumForwardedHops` | `1` | How many proxies may have appended a value to either header |
+
+The mode applies the forwarded scheme and host to the request before anything reads it, so OAuth discovery, the `401`
+challenge, and every absolute address MailFathom writes carry your public name. Turning it on is what makes the
+metadata document answer behind such a proxy instead of `404` — see
+[discovery a client uses](#discovery-a-client-uses).
+
+**It is one setting for the whole process, not one per endpoint.** The MCP, administrative, and probe surfaces are
+separate listeners over one request pipeline, and this runs at the front of that pipeline. A trusted proxy is therefore
+trusted on every listener it can reach, which is what a network fact should be: you state where your proxy is once
+rather than restating it beside each surface.
+
+**Trust is the connection, never the header.** A forwarded value is worth exactly what the peer that sent it is worth,
+so a request from any address outside `TrustedProxies` is served under the scheme and host it actually arrived with, and
+its `X-Forwarded-*` headers change nothing. Enabling the mode without naming a proxy fails startup rather than falling
+back to anything:
+
+```text
+ReverseProxy:TrustedProxies — a forwarded scheme and host are worth what the connection that carried them is worth, so
+an enabled section must name the proxy it accepts them from. State one or more IP addresses or CIDR networks, for
+example '10.0.0.5' or '10.0.0.0/24'.
+```
+
+The framework's own default — trusting loopback — is cleared rather than inherited, because loopback is the wrong peer
+in a container and every other process on the machine in a native installation. `10.0.0.5/24` is refused too, naming
+the `10.0.0.0/24` it would otherwise have silently become; write the address or write the network, and the deployment
+gets what it asked for.
+
+**Only the two headers are read.** `X-Forwarded-For` is not, so the peer MailFathom observes stays the one that opened
+the connection. Nothing here partitions, limits, or logs by client address, so adopting one from a header would replace
+an observed fact with a claim and buy nothing. Each header is read right to left, and `MaximumForwardedHops` says how
+far back the chain is believed — raise it only to the number of proxies a request genuinely passes through. A value
+that parses as no scheme or no host is discarded and the request keeps what it arrived with for that component; nothing
+is half-read out of it.
+
+A worked nginx location, with `Host` preserved as well so the deployment works whichever of the two MailFathom ends up
+reading:
+
+```nginx
+location /mcp {
+    proxy_pass         http://10.4.2.11:8080;
+    proxy_http_version 1.1;
+    proxy_set_header   Host              $host;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+    proxy_set_header   X-Forwarded-Host  $host;
+    proxy_buffering    off;
+}
+```
+
+`proxy_buffering off` is what lets the Streamable HTTP response stream rather than arrive at the end.
+
+### What the proxy owns in this mode
+
+- **TLS and the certificate.** `McpEndpoint:Https:Endpoints` stays empty, because a second TLS layer inside the trust
+  boundary protects nothing. `Domain` on an HTTPS profile selects the certificate *MailFathom* presents, so a
+  deployment in this mode configures none.
+- **Redirecting a clear-text client to HTTPS**, which belongs to whichever side faces the client rather than to both.
+
+### What MailFathom keeps owning
+
+- **Authentication.** A proxy that authenticates its own callers is not this endpoint's authentication. `Authentication`
+  still decides who reads the owner's mail, and `OAuth.AuthorizationServers[n].AuthorizedSubjects` still decides whose
+  tokens are served.
+- **`OAuth.Resource`.** It stays required and stays the identifier a token's audience is compared against. Nothing an
+  upstream writes reaches it, which is the property that keeps a client from ever being told to authorize for a name an
+  attacker chose.
+- **CORS.** The response headers a browser reads are written here, so `Cors.AllowedOrigins` is still what decides them.
+- **Rate limiting**, which keeps reading no address at all — neither forwarded nor remote. See
+  [whose capacity a request spends](#whose-capacity-a-request-spends).
+
+### What becomes unreachable
+
+**Client certificates.** The TLS handshake ended at the proxy, so no certificate reaches this process, and no header is
+read as a substitute. `McpEndpoint:ClientCertificateProfiles` is therefore not a posture a TLS-terminating proxy can be
+combined with — the next section says the same thing from the other side.
 
 ## Client certificates
 

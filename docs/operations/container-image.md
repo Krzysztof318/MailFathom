@@ -57,7 +57,9 @@ Linux capability.
 
 **The container speaks plain HTTP and terminates no TLS.** A certificate belongs to the reverse proxy or the ingress in
 front of it, which is also the only place one has to exist. An MCP endpoint reached over plain HTTP hands its API key
-and every message it serves to anything on the network path.
+and every message it serves to anything on the network path. Name that proxy in `ReverseProxy:TrustedProxies` so the
+public scheme and host reach the process — see
+[behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy).
 
 `DOTNET_EnableDiagnostics=0` is set, so no diagnostic IPC socket is created. That socket can request a process dump,
 and a dump is a way to read secret material out of managed memory — the residual exposure

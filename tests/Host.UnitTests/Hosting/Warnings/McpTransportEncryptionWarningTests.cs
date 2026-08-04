@@ -99,6 +99,51 @@ public sealed class McpTransportEncryptionWarningTests
         Assert.Empty(logs.Records);
     }
 
+    /// <summary>With the proxy named, the posture stops being a guess between two deployments and becomes the one the operator described.</summary>
+    [Fact]
+    public async Task StartAsync_ClearTextEndpointBehindATrustedProxy_NamesTheProxiedHopRatherThanGuessing()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var warning = WarningFor(Enabled(), logs, TrustedProxyConfigured());
+
+        // Act
+        await warning.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Equal(LogLevel.Warning, record.Level);
+        Assert.Contains("between that proxy and here", record.Message, StringComparison.Ordinal);
+        Assert.Contains("ReverseProxy:TrustedProxies", record.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("McpEndpoint:Https:Endpoints", record.Message, StringComparison.Ordinal);
+        Assert.Equal(1, Assert.Contains("TrustedProxyCount", record.Properties));
+    }
+
+    /// <summary>The proxy stands in front of a process, not in front of a listener it never touches, so a deployment terminating its own TLS is still silent.</summary>
+    [Fact]
+    public async Task StartAsync_EndpointServingItsOwnCertificateBehindATrustedProxy_SaysNothing()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var settings = Enabled();
+        settings.Https.Endpoints.Add(new TransportHttpsEndpointOptions
+        {
+            Name = "public",
+            Domain = "mail.example.test",
+            ServerCertificate = new TlsServerCertificateOptions
+            {
+                Bundle = new ConfiguredSecret { Name = "bundle", SecretReference = "file:/etc/mailfathom/tls/bundle.pfx" },
+            },
+        });
+        var warning = WarningFor(settings, logs, TrustedProxyConfigured());
+
+        // Act
+        await warning.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(logs.Records);
+    }
+
     [Fact]
     public async Task StopAsync_AnyPosture_CompletesWithoutSayingAnythingFurther()
     {
@@ -119,12 +164,25 @@ public sealed class McpTransportEncryptionWarningTests
         Authentication = TransportAuthenticationMethods.None,
     };
 
-    private static McpTransportEncryptionWarning WarningFor(McpEndpointOptions settings, RecordingLoggerProvider logs)
+    private static McpTransportEncryptionWarning WarningFor(
+        McpEndpointOptions settings,
+        RecordingLoggerProvider logs,
+        ReverseProxyOptions? reverseProxySettings = null)
     {
         using var loggerFactory = LoggerFactory.Create(logging => logging.AddProvider(logs));
 
         return new McpTransportEncryptionWarning(
             Options.Create(settings),
+            Options.Create(reverseProxySettings ?? new ReverseProxyOptions()),
             loggerFactory.CreateLogger<McpTransportEncryptionWarning>());
+    }
+
+    private static ReverseProxyOptions TrustedProxyConfigured()
+    {
+        var settings = new ReverseProxyOptions { Enabled = true };
+
+        settings.TrustedProxies.Add("10.0.0.5");
+
+        return settings;
     }
 }
