@@ -165,8 +165,9 @@ What the template adds beyond that:
   how much detail it holds, and this is what makes the detail reachable.
 
 Both are written against the DOM the `modern` template produces, which re-renders the navigation bar and every Mermaid
-diagram after the page loads. The selector is therefore placed in the one header element that is never rewritten, and
-the viewer opens from a single delegated listener rather than from handlers bound to elements about to be replaced.
+diagram after the page loads. The selector is therefore re-placed by an observer whenever the navigation bar is written
+again, and the viewer opens from a single delegated listener rather than from handlers bound to elements about to be
+replaced.
 
 ## Publishing
 
