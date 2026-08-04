@@ -24,9 +24,11 @@ internal static class AdminEndpointListenerBinder
     /// <param name="certificateStore">The store holding the TLS identity of each configured profile.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <remarks>
-    /// Naming any HTTPS profile binds those and nothing else, exactly as the MCP endpoint behaves: there is no mixed
-    /// state in which a clear-text listener stays open behind a profile an operator configured TLS for, because that
-    /// listener would serve the same administrative routes without the protection the profile was added for.
+    /// Naming any HTTPS profile binds those and nothing else that serves a route, exactly as the MCP endpoint behaves:
+    /// there is no mixed state in which a clear-text listener stays open behind a profile an operator configured TLS for,
+    /// because that listener would serve the same administrative routes without the protection the profile was added for.
+    /// The redirect listener is not that state and is the reason the distinction is worth stating — it maps no route and
+    /// answers every request with the address the profiles are served at, so nothing administrative is reachable over it.
     /// </remarks>
     internal static void Bind(
         KestrelServerOptions kestrelOptions,
@@ -43,7 +45,11 @@ internal static class AdminEndpointListenerBinder
                 kestrelOptions,
                 endpointSettings.Https,
                 certificateStore,
-                requestClientCertificates: false);
+                requestClientCertificates: false,
+                endpointSettings.Https.RedirectsClearText
+                    ? endpointSettings.Https.Redirect.ListenerAddress(
+                        AdminEndpointOptions.DefaultClearTextRedirectPort)
+                    : null);
 
             return;
         }

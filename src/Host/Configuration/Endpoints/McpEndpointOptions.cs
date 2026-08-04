@@ -38,6 +38,14 @@ internal sealed class McpEndpointOptions
     /// <summary>The configuration section the endpoint settings are bound from.</summary>
     public const string SectionName = "McpEndpoint";
 
+    /// <summary>The port the clear-text redirect binds when a deployment configures HTTPS profiles and states no port for it.</summary>
+    /// <remarks>
+    /// This surface's own default rather than a shared one, because the administrative endpoint redirects to its own
+    /// profiles: one number for both would have the two collide the moment a deployment terminated TLS on each. It is
+    /// above 1024 so the process needs no privilege to bind it, and it is not a port any other listener here defaults to.
+    /// </remarks>
+    internal const int DefaultClearTextRedirectPort = 8080;
+
     private const TransportAuthenticationMethods KnownAuthenticationMethods =
         TransportAuthenticationMethods.ApiKey | TransportAuthenticationMethods.OAuth;
 
@@ -98,6 +106,41 @@ internal sealed class McpEndpointOptions
     /// </remarks>
     public bool RequiresAuthentication => this.Authentication != TransportAuthenticationMethods.None;
 
+    /// <summary>Gets the port the clear-text redirect listener binds, whether or not this deployment stated one.</summary>
+    /// <remarks>Read whether or not a redirect is served, because a port has to be known before it can be checked against the other listeners in the process; <see cref="TransportHttpsOptions.RedirectsClearText" /> is what decides whether anything binds it.</remarks>
+    public int ClearTextRedirectPort => this.Https.Redirect.Port ?? DefaultClearTextRedirectPort;
+
+    /// <summary>Gets the ports this endpoint's listeners bind, which no other listener in the process may claim.</summary>
+    /// <remarks>
+    /// The redirect's port is one of them, so a deployment cannot give it to the probes or to the administrative surface
+    /// and discover the conflict as an address-in-use error naming a socket rather than a section.
+    /// <para>
+    /// Empty when this endpoint terminates no TLS, because it then binds no listener of its own at all: it is served over
+    /// whichever listener the host was started with, whose ports belong to that listener rather than to this section. That
+    /// is the one way this differs from <see cref="AdminEndpointOptions.ListenerPorts" />, which reports its own clear-text
+    /// port in the same posture because the administrative surface always has a listener of its own.
+    /// </para>
+    /// </remarks>
+    public IReadOnlySet<int> ListenerPorts
+    {
+        get
+        {
+            if (!this.Https.TerminatesTls)
+            {
+                return new HashSet<int>();
+            }
+
+            var ports = this.Https.Endpoints.Select(static endpoint => endpoint.Port).ToHashSet();
+
+            if (this.Https.RedirectsClearText)
+            {
+                ports.Add(this.ClearTextRedirectPort);
+            }
+
+            return ports;
+        }
+    }
+
     /// <summary>Reads the section the way composition does, defaults included.</summary>
     /// <param name="configuration">The application configuration.</param>
     /// <returns>The bound settings, with the defaults no binder can apply already applied.</returns>
@@ -123,6 +166,15 @@ internal sealed class McpEndpointOptions
         if (!section.GetSection($"{nameof(Cors)}:{nameof(McpCorsOptions.AllowedOrigins)}").Exists())
         {
             settings.Cors.ServeEveryBrowserOrigin();
+        }
+
+        // Read from configuration for the same reason the origin list above is: the redirect is on by default, so an
+        // absent section and one an operator wrote bind to identical values, and only configuration can say which
+        // happened. It is the difference between refusing a redirect configured for a surface that terminates no TLS and
+        // staying silent about a default that surface never asked for.
+        if (section.GetSection($"{nameof(Https)}:{nameof(TransportHttpsOptions.Redirect)}").Exists())
+        {
+            settings.Https.Redirect.MarkStated();
         }
 
         return settings;
@@ -157,7 +209,8 @@ internal sealed class McpEndpointOptions
         // depend on it live in the section itself, where a test can state both answers.
         errors.AddRange(this.Https.FindConfigurationErrors(
             $"{SectionName}:{nameof(this.Https)}",
-            QuicListener.IsSupported));
+            QuicListener.IsSupported,
+            DefaultClearTextRedirectPort));
 
         return errors;
     }

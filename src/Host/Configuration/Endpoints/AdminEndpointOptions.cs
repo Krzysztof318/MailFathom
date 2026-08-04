@@ -58,6 +58,14 @@ internal sealed class AdminEndpointOptions
     /// </remarks>
     public const string RoutePrefix = "/api/admin";
 
+    /// <summary>The port the clear-text redirect binds when a deployment configures HTTPS profiles and states no port for it.</summary>
+    /// <remarks>
+    /// This surface's own default rather than a shared one, because the MCP endpoint redirects to its own profiles: one
+    /// number for both would have the two collide the moment a deployment terminated TLS on each. It sits beside
+    /// <see cref="Port" /> so the two administrative sockets read as a pair, and no other listener here defaults to it.
+    /// </remarks>
+    internal const int DefaultClearTextRedirectPort = 8091;
+
     private const TransportAuthenticationMethods KnownAuthenticationMethods =
         TransportAuthenticationMethods.ApiKey | TransportAuthenticationMethods.OAuth;
 
@@ -121,10 +129,31 @@ internal sealed class AdminEndpointOptions
     /// <summary>Gets whether a request must present a credential naming who is calling.</summary>
     public bool RequiresAuthentication => this.Authentication != TransportAuthenticationMethods.None;
 
+    /// <summary>Gets the port the clear-text redirect listener binds, whether or not this deployment stated one.</summary>
+    /// <remarks>Read whether or not a redirect is served, because a port has to be known before it can be checked against the other listeners in the process; <see cref="TransportHttpsOptions.RedirectsClearText" /> is what decides whether anything binds it.</remarks>
+    public int ClearTextRedirectPort => this.Https.Redirect.Port ?? DefaultClearTextRedirectPort;
+
     /// <summary>Gets the ports this endpoint's listeners bind, which no other listener in the process may claim.</summary>
-    public IReadOnlySet<int> ListenerPorts => this.Https.TerminatesTls
-        ? this.Https.Endpoints.Select(static endpoint => endpoint.Port).ToHashSet()
-        : new HashSet<int> { this.Port };
+    /// <remarks>The redirect's port is one of them, so a deployment cannot give it to the probes, to the application listener, or to the MCP surface and discover the conflict as an address-in-use error naming a socket rather than a section.</remarks>
+    public IReadOnlySet<int> ListenerPorts
+    {
+        get
+        {
+            if (!this.Https.TerminatesTls)
+            {
+                return new HashSet<int> { this.Port };
+            }
+
+            var ports = this.Https.Endpoints.Select(static endpoint => endpoint.Port).ToHashSet();
+
+            if (this.Https.RedirectsClearText)
+            {
+                ports.Add(this.ClearTextRedirectPort);
+            }
+
+            return ports;
+        }
+    }
 
     /// <summary>Reads the section the way composition does, defaults included.</summary>
     /// <param name="configuration">The application configuration.</param>
@@ -135,9 +164,20 @@ internal sealed class AdminEndpointOptions
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        return configuration.GetSection(SectionName)
-            .Get<AdminEndpointOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        var section = configuration.GetSection(SectionName);
+        var settings = section.Get<AdminEndpointOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             ?? new AdminEndpointOptions();
+
+        // Read from configuration rather than from what was bound, because the redirect is on by default: an absent
+        // section and one an operator wrote produce identical values, and only configuration can say which happened. It is
+        // the difference between refusing a redirect configured for a surface that terminates no TLS and staying silent
+        // about a default that surface never asked for.
+        if (section.GetSection($"{nameof(Https)}:{nameof(TransportHttpsOptions.Redirect)}").Exists())
+        {
+            settings.Https.Redirect.MarkStated();
+        }
+
+        return settings;
     }
 
     /// <summary>Finds everything an operator must fix before the endpoint can be served.</summary>
@@ -164,7 +204,8 @@ internal sealed class AdminEndpointOptions
         // property of the machine the process is running on and not a decision composition takes.
         errors.AddRange(this.Https.FindConfigurationErrors(
             $"{SectionName}:{nameof(this.Https)}",
-            QuicListener.IsSupported));
+            QuicListener.IsSupported,
+            DefaultClearTextRedirectPort));
 
         return errors;
     }

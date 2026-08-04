@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Net;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -20,6 +21,10 @@ public sealed class TransportHttpsOptionsTests
 {
     private const string SectionPath = "McpEndpoint:Https";
 
+    /// <summary>The port a surface would redirect on, stated here so no rule below depends on which surface owns the section.</summary>
+    /// <remarks>Deliberately not the port <see cref="Profile" /> binds, so a well-formed profile beside an enabled redirect stays well formed and the collision rule has to be provoked to fire.</remarks>
+    private const int DefaultRedirectPort = 8080;
+
     [Fact]
     public void TerminatesTls_NoProfiles_IsTheClearTextPosture()
     {
@@ -28,7 +33,7 @@ public sealed class TransportHttpsOptionsTests
 
         // Assert
         Assert.False(options.TerminatesTls);
-        Assert.Empty(options.FindConfigurationErrors(SectionPath, http3Supported: true));
+        Assert.Empty(options.FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
     }
 
     [Fact]
@@ -39,7 +44,7 @@ public sealed class TransportHttpsOptionsTests
 
         // Act, Assert
         Assert.True(options.TerminatesTls);
-        Assert.Empty(options.FindConfigurationErrors(SectionPath, http3Supported: true));
+        Assert.Empty(options.FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
     }
 
     [Fact]
@@ -50,7 +55,7 @@ public sealed class TransportHttpsOptionsTests
         profile.Name = "   ";
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.StartsWith($"{SectionPath}:Endpoints:0:Name", error, StringComparison.Ordinal);
@@ -64,7 +69,7 @@ public sealed class TransportHttpsOptionsTests
         profile.Domain = string.Empty;
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.StartsWith($"{SectionPath}:Endpoints:0:Domain", error, StringComparison.Ordinal);
@@ -81,7 +86,7 @@ public sealed class TransportHttpsOptionsTests
         profile.Domain = domain;
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.Contains("BindAddress", error, StringComparison.Ordinal);
@@ -99,7 +104,7 @@ public sealed class TransportHttpsOptionsTests
         profile.Domain = domain;
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.StartsWith($"{SectionPath}:Endpoints:0:Domain", error, StringComparison.Ordinal);
@@ -114,7 +119,7 @@ public sealed class TransportHttpsOptionsTests
         profile.Domain = "poczta.wróbel.test";
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.Contains("punycode", error, StringComparison.Ordinal);
@@ -130,7 +135,7 @@ public sealed class TransportHttpsOptionsTests
         profile.Port = port;
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.StartsWith($"{SectionPath}:Endpoints:0:Port", error, StringComparison.Ordinal);
@@ -144,7 +149,7 @@ public sealed class TransportHttpsOptionsTests
         profile.BindAddress = "localhost";
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.StartsWith($"{SectionPath}:Endpoints:0:BindAddress", error, StringComparison.Ordinal);
@@ -159,7 +164,7 @@ public sealed class TransportHttpsOptionsTests
         profile.HttpProtocols = [];
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.StartsWith($"{SectionPath}:Endpoints:0:HttpProtocols", error, StringComparison.Ordinal);
@@ -183,7 +188,7 @@ public sealed class TransportHttpsOptionsTests
         profile.HttpProtocols = [TransportHttpProtocol.Http1, TransportHttpProtocol.Http1];
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.StartsWith($"{SectionPath}:Endpoints:0:HttpProtocols", error, StringComparison.Ordinal);
@@ -198,7 +203,7 @@ public sealed class TransportHttpsOptionsTests
         profile.HttpProtocols = [TransportHttpProtocol.Http1, TransportHttpProtocol.Http2, TransportHttpProtocol.Http3];
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: false));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: false, DefaultRedirectPort));
 
         // Assert
         Assert.Contains("Http3", error, StringComparison.Ordinal);
@@ -212,7 +217,7 @@ public sealed class TransportHttpsOptionsTests
         profile.HttpProtocols = [TransportHttpProtocol.Http3];
 
         // Act, Assert
-        Assert.Empty(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        Assert.Empty(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
     }
 
     /// <summary>The binder turns any number into an enum value, and a floor nobody declared would be applied as though it had been chosen.</summary>
@@ -224,7 +229,7 @@ public sealed class TransportHttpsOptionsTests
         profile.MinimumTlsVersion = (TransportMinimumTlsVersion)7;
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.StartsWith($"{SectionPath}:Endpoints:0:MinimumTlsVersion", error, StringComparison.Ordinal);
@@ -243,7 +248,7 @@ public sealed class TransportHttpsOptionsTests
         };
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.StartsWith($"{SectionPath}:Endpoints:0:ServerCertificate", error, StringComparison.Ordinal);
@@ -257,7 +262,7 @@ public sealed class TransportHttpsOptionsTests
         profile.ServerCertificate = new TlsServerCertificateOptions();
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.StartsWith($"{SectionPath}:Endpoints:0:ServerCertificate", error, StringComparison.Ordinal);
@@ -271,7 +276,7 @@ public sealed class TransportHttpsOptionsTests
         profile.ServerCertificate = new TlsServerCertificateOptions { CertificateChain = Block("chain") };
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.StartsWith($"{SectionPath}:Endpoints:0:ServerCertificate:PrivateKey", error, StringComparison.Ordinal);
@@ -285,7 +290,7 @@ public sealed class TransportHttpsOptionsTests
         profile.ServerCertificate = new TlsServerCertificateOptions { PrivateKey = Block("key") };
 
         // Act
-        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.StartsWith($"{SectionPath}:Endpoints:0:ServerCertificate:CertificateChain", error, StringComparison.Ordinal);
@@ -298,7 +303,7 @@ public sealed class TransportHttpsOptionsTests
         var options = With(Profile(name: "public"), Profile(name: "PUBLIC", domain: "other.example.test"));
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(options.FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.Contains("names more than one HTTPS profile", error, StringComparison.Ordinal);
@@ -312,7 +317,7 @@ public sealed class TransportHttpsOptionsTests
         var options = With(Profile(name: "first"), Profile(name: "second"));
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(options.FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.Contains("published by more than one HTTPS profile", error, StringComparison.Ordinal);
@@ -328,7 +333,7 @@ public sealed class TransportHttpsOptionsTests
         second.HttpProtocols = [TransportHttpProtocol.Http1];
 
         // Act
-        var error = Assert.Single(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true));
+        var error = Assert.Single(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.Contains("name different HTTP versions", error, StringComparison.Ordinal);
@@ -344,7 +349,7 @@ public sealed class TransportHttpsOptionsTests
         second.MinimumTlsVersion = TransportMinimumTlsVersion.Tls13;
 
         // Act, Assert
-        Assert.Empty(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true));
+        Assert.Empty(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
     }
 
     [Fact]
@@ -357,7 +362,7 @@ public sealed class TransportHttpsOptionsTests
         second.HttpProtocols = [TransportHttpProtocol.Http1];
 
         // Act, Assert
-        Assert.Empty(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true));
+        Assert.Empty(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
     }
 
     /// <summary>The wildcard socket already owns the specific address, so the second bind fails with an address-in-use error naming a socket rather than a profile.</summary>
@@ -371,7 +376,7 @@ public sealed class TransportHttpsOptionsTests
 
         // Act
         var error = Assert.Single(With(everyInterface, oneInterface)
-            .FindConfigurationErrors(SectionPath, http3Supported: true));
+            .FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.Contains("already accepts the connections", error, StringComparison.Ordinal);
@@ -390,7 +395,7 @@ public sealed class TransportHttpsOptionsTests
 
         // Act
         var error = Assert.Single(With(everyInterface, oneInterface)
-            .FindConfigurationErrors(SectionPath, http3Supported: true));
+            .FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
 
         // Assert
         Assert.Contains("already accepts the connections", error, StringComparison.Ordinal);
@@ -405,7 +410,7 @@ public sealed class TransportHttpsOptionsTests
         var second = Profile(name: "second", domain: "two.example.test");
 
         // Act, Assert
-        Assert.Empty(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true));
+        Assert.Empty(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
     }
 
     [Fact]
@@ -418,7 +423,7 @@ public sealed class TransportHttpsOptionsTests
         oneInterface.Port = 9443;
 
         // Act, Assert
-        Assert.Empty(With(everyInterface, oneInterface).FindConfigurationErrors(SectionPath, http3Supported: true));
+        Assert.Empty(With(everyInterface, oneInterface).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
     }
 
     /// <summary>Two specific addresses are two sockets the operating system grants independently.</summary>
@@ -432,8 +437,211 @@ public sealed class TransportHttpsOptionsTests
         second.BindAddress = "10.0.0.5";
 
         // Act, Assert
-        Assert.Empty(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true));
+        Assert.Empty(With(first, second).FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
     }
+
+    /// <summary>Enabling TLS should not read as an outage, which is why a deployment gets the redirect without asking.</summary>
+    [Fact]
+    public void RedirectsClearText_ASurfaceTerminatingTlsThatStatedNothing_RedirectsByDefault()
+    {
+        // Arrange
+        var options = With(Profile());
+
+        // Act, Assert
+        Assert.True(options.RedirectsClearText);
+        Assert.Empty(options.FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
+    }
+
+    /// <summary>A deployment behind a proxy that already answers the clear-text port turns it off rather than binding a port it did not ask for.</summary>
+    [Fact]
+    public void RedirectsClearText_ARedirectTurnedOff_BindsNoClearTextListener()
+    {
+        // Arrange
+        var options = With(Profile());
+        options.Redirect.Enabled = false;
+
+        // Act, Assert
+        Assert.False(options.RedirectsClearText);
+        Assert.Empty(options.FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
+    }
+
+    /// <summary>There is no clear-text listener to redirect away from, because the surface is already served over one.</summary>
+    [Fact]
+    public void RedirectsClearText_ASurfaceTerminatingNoTls_RedirectsNothingDespiteTheDefault() =>
+        Assert.False(new TransportHttpsOptions().RedirectsClearText);
+
+    /// <summary>
+    /// The default has to stay silent where it means nothing, or every clear-text deployment would fail startup over a
+    /// section it never wrote.
+    /// </summary>
+    [Fact]
+    public void FindConfigurationErrors_ARedirectLeftAtItsDefaultWithoutAnyProfile_IsNotReported() =>
+        Assert.Empty(new TransportHttpsOptions().FindConfigurationErrors(
+            SectionPath,
+            http3Supported: true,
+            DefaultRedirectPort));
+
+    /// <summary>Configured-but-unbound is refused rather than ignored, the same way every other unread setting here is.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ARedirectStatedWithoutAnyProfile_IsRefused()
+    {
+        // Arrange
+        var options = new TransportHttpsOptions();
+        options.Redirect.MarkStated();
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors(
+            SectionPath,
+            http3Supported: true,
+            DefaultRedirectPort));
+
+        // Assert
+        Assert.StartsWith($"{SectionPath}:Redirect", error, StringComparison.Ordinal);
+        Assert.Contains("nothing to redirect to", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>One socket cannot serve both schemes, and the operating system would report it as an address already in use.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ARedirectPortAProfileAlreadyBinds_IsRefused()
+    {
+        // Arrange
+        var profile = Profile();
+        var options = With(profile);
+        options.Redirect.Port = profile.Port;
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors(
+            SectionPath,
+            http3Supported: true,
+            DefaultRedirectPort));
+
+        // Assert
+        Assert.StartsWith($"{SectionPath}:Redirect:Port", error, StringComparison.Ordinal);
+        Assert.Contains("one socket cannot serve both schemes", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>The same collision, reached through the default rather than through a stated port.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ADefaultRedirectPortAProfileBinds_IsRefused()
+    {
+        // Arrange
+        var profile = Profile();
+        profile.Port = DefaultRedirectPort;
+
+        // Act
+        var error = Assert.Single(With(profile).FindConfigurationErrors(
+            SectionPath,
+            http3Supported: true,
+            DefaultRedirectPort));
+
+        // Assert
+        Assert.StartsWith($"{SectionPath}:Redirect:Port", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>A collision with a port nothing binds is no collision, so a redirect that is off is not checked against the profiles.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ADisabledRedirectSharingAProfilePort_IsNotReported()
+    {
+        // Arrange
+        var profile = Profile();
+        var options = With(profile);
+        options.Redirect.Enabled = false;
+        options.Redirect.Port = profile.Port;
+
+        // Act, Assert
+        Assert.Empty(options.FindConfigurationErrors(SectionPath, http3Supported: true, DefaultRedirectPort));
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_ARedirectBindAddressThatIsNotAnAddress_IsRefused()
+    {
+        // Arrange
+        var options = With(Profile());
+        options.Redirect.BindAddress = "not-an-address";
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors(
+            SectionPath,
+            http3Supported: true,
+            DefaultRedirectPort));
+
+        // Assert
+        Assert.StartsWith($"{SectionPath}:Redirect:BindAddress", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(65536)]
+    public void FindConfigurationErrors_ARedirectPortOutsideTheRange_IsRefused(int port)
+    {
+        // Arrange
+        var options = With(Profile());
+        options.Redirect.Port = port;
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors(
+            SectionPath,
+            http3Supported: true,
+            DefaultRedirectPort));
+
+        // Assert
+        Assert.StartsWith($"{SectionPath}:Redirect:Port", error, StringComparison.Ordinal);
+        Assert.Contains("is not a TCP port", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>The socket the binder opens, which is the whole of what it decides from this section.</summary>
+    [Fact]
+    public void ListenerAddress_ARedirectStatingNoPort_BindsEveryIpv4AddressOnTheSurfacesDefault()
+    {
+        // Arrange
+        var options = With(Profile());
+
+        // Act
+        var address = options.Redirect.ListenerAddress(DefaultRedirectPort);
+
+        // Assert
+        Assert.Equal(IPAddress.Any, address.Address);
+        Assert.Equal(DefaultRedirectPort, address.Port);
+    }
+
+    [Fact]
+    public void ListenerAddress_ARedirectStatingBoth_BindsWhatItStated()
+    {
+        // Arrange
+        var options = With(Profile());
+        options.Redirect.BindAddress = "127.0.0.1";
+        options.Redirect.Port = 8888;
+
+        // Act
+        var address = options.Redirect.ListenerAddress(DefaultRedirectPort);
+
+        // Assert
+        Assert.Equal(IPAddress.Loopback, address.Address);
+        Assert.Equal(8888, address.Port);
+    }
+
+    /// <summary>What a composed redirect resolves a client's host against, one entry per profile.</summary>
+    [Fact]
+    public void PublishedDomainPorts_SeveralProfiles_MapEachDomainToItsOwnPort()
+    {
+        // Arrange
+        var standard = Profile(name: "public", domain: "one.example.test");
+        var managed = Profile(name: "managed", domain: "two.example.test");
+        managed.Port = 9443;
+
+        // Act
+        var published = With(standard, managed).PublishedDomainPorts();
+
+        // Assert
+        Assert.Equal(8443, published["one.example.test"]);
+        Assert.Equal(9443, published["two.example.test"]);
+    }
+
+    /// <summary>A client sends a host name without regard to case, so the lookup a redirect performs cannot depend on it.</summary>
+    [Fact]
+    public void PublishedDomainPorts_ADomainInAnotherCase_StillResolves() =>
+        Assert.Equal(8443, With(Profile()).PublishedDomainPorts()["MAIL.EXAMPLE.TEST"]);
 
     private static TransportHttpsOptions With(params TransportHttpsEndpointOptions[] profiles)
     {

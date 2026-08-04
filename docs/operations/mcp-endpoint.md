@@ -1,6 +1,6 @@
 # The MCP endpoint and what protects it
 
-<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/**, src/Common/OAuth/** -->
+<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/**, src/Common/OAuth/**, src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs -->
 
 The MCP endpoint is how an agent reaches MailFathom. This page records what enabling it means operationally, what a client
 has to present to reach it, which browser origins it answers, which client applications it accepts a certificate from,
@@ -594,6 +594,84 @@ Kestrel:Endpoints:Http — a Kestrel endpoint is configured beside McpEndpoint:H
 listener would stay open alongside the HTTPS profiles and serve the same MCP endpoint without the TLS they were
 configured to add. Remove the endpoint, or remove the HTTPS profiles and let this listener serve the endpoint.
 ```
+
+### Redirecting a client still pointed at `http://`
+
+A client that has not been repointed after you configured a profile meets a refused connection or an unreadable handshake
+error, which is indistinguishable from an outage. So a surface that terminates TLS also binds one clear-text listener
+whose only answer is a redirect, on **port 8080** unless you state another:
+
+```console
+$ curl -i http://mail.example.com:8080/mcp
+HTTP/1.1 308 Permanent Redirect
+Location: https://mail.example.com:8443/mcp
+```
+
+**A redirect protects the next request, never the one that arrived.** An API key sent in clear text was on the wire before
+anything answered, and no redirect recovers it. Treat this as a way to find out that a client needs repointing, not as a
+supported way to reach the endpoint — and repoint the client rather than leaving it following a redirect.
+
+What that listener serves is the redirect and nothing else. It maps no route: `/mcp`, the protected-resource metadata
+document, and an unmapped path are all answered the same way, and no authentication, rate-limiting, CORS, or
+client-certificate handler runs for a request that arrived on it. There is nothing reachable over it to protect.
+
+The [health endpoints](health-endpoints.md) are untouched by this. They keep their own listener and their own
+`HealthEndpoints:Transport`, and no probe is ever asked on this port — which is deliberate, because a probe follows no
+redirect and would read a `308` as a failure.
+
+Four properties are worth knowing:
+
+- **`308`, not `301` or `302`.** The MCP transport is a `POST`; the older codes permit a client to re-send it as a `GET`,
+  which would arrive over TLS as a request nobody made. The path and query are preserved.
+- **The host is redirected to itself.** With [several domains on one address](#several-domains-on-one-address), each
+  redirects to its own profile's port, so no client is sent to a name it did not ask for under a certificate issued for a
+  different one.
+- **A `Host` header naming no configured domain gets `400`.** It is refused rather than rewritten to a domain the
+  deployment does publish.
+- **`:443` is left out of the `Location`**, because it is the scheme's own port and a client appends nothing for it.
+
+Turn it off with one setting, which is what a deployment behind a proxy that already answers the clear-text port wants:
+
+```json
+{
+  "McpEndpoint": {
+    "Https": {
+      "Redirect": { "Enabled": false }
+    }
+  }
+}
+```
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `Enabled` | `true` | Whether the clear-text listener is bound at all |
+| `BindAddress` | `0.0.0.0` | The IP address to bind; `::` binds IPv6 |
+| `Port` | `8080` | The TCP port to bind |
+
+Startup reports the port beside the domains it redirects to, so every socket the process opened is readable from the log:
+
+```text
+info: MailFathom.Host.Hosting.Warnings.TransportClearTextRedirectReport
+      The MCP endpoint redirects clear-text requests on port 8080 to https://mail.example.com:8443. That listener maps
+      no route and answers every path with a 308, so nothing is reachable over it. A redirect protects the next request
+      and not the one that arrived — a credential already sent in clear text is on the wire — so repoint your clients
+      rather than relying on it. Set McpEndpoint:Https:Redirect:Enabled to false to bind no clear-text port at all.
+```
+
+Two configurations are refused before anything binds. Writing a `Redirect` section for a surface that terminates no TLS
+fails startup rather than being ignored, because that surface is already served in clear text and nothing would have bound
+the port:
+
+```text
+McpEndpoint:Https:Redirect — a clear-text redirect is configured while McpEndpoint:Https:Endpoints names no HTTPS
+profile, so there is nothing to redirect to and this surface is already served in clear text. Configure a profile, or
+remove this section.
+```
+
+And the redirect port collides with nothing: a conflict with one of this section's own profiles, with the
+[administrative endpoint](admin-endpoint.md), with the [health listener](health-endpoints.md), or with a
+`Kestrel:Endpoints` entry is reported against the section that asked for it rather than as an address-in-use failure
+naming a socket.
 
 ### Several domains on one address
 

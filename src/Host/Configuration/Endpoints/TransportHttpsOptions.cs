@@ -29,15 +29,35 @@ internal sealed class TransportHttpsOptions
     /// <summary>Gets the HTTPS profiles served, empty when Kestrel terminates no TLS of its own.</summary>
     public IList<TransportHttpsEndpointOptions> Endpoints { get; } = [];
 
+    /// <summary>Gets or sets the clear-text listener that tells a client still pointed at <c>http://</c> where these profiles are.</summary>
+    public TransportClearTextRedirectOptions Redirect { get; set; } = new();
+
     /// <summary>Gets whether any profile is configured, which is what decides between the two postures.</summary>
     internal bool TerminatesTls => this.Endpoints.Count > 0;
+
+    /// <summary>Gets whether a clear-text listener is bound to redirect to these profiles.</summary>
+    /// <remarks>Both halves are required, and the first is what keeps the enabled-by-default setting silent on a surface that terminates no TLS: there is no clear-text listener to redirect away from, because the surface is already served over one.</remarks>
+    internal bool RedirectsClearText => this.TerminatesTls && this.Redirect.Enabled;
+
+    /// <summary>Reads the HTTPS port each configured domain is published on, which is what a redirect resolves against.</summary>
+    /// <returns>One entry per profile, keyed by the domain it publishes, matched without regard to case the way a host name is.</returns>
+    /// <remarks>Every profile carries a domain and no two share one, both of which validation has already proven by the time a composed redirect reads this.</remarks>
+    internal IReadOnlyDictionary<string, int> PublishedDomainPorts() =>
+        this.Endpoints.ToDictionary(
+            static endpoint => endpoint.Domain.Trim(),
+            static endpoint => endpoint.Port,
+            StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Finds everything an operator must fix before the configured profiles can be served.</summary>
     /// <param name="configurationPath">The configuration path of this section, which prefixes every reported error.</param>
     /// <param name="http3Supported">Whether the host platform can provide the QUIC transport HTTP/3 needs.</param>
+    /// <param name="defaultRedirectPort">The port this surface's clear-text redirect binds when the deployment states none.</param>
     /// <returns>One message per faulty setting, empty when the section is usable.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configurationPath" /> is <see langword="null" />.</exception>
-    internal IReadOnlyList<string> FindConfigurationErrors(string configurationPath, bool http3Supported)
+    internal IReadOnlyList<string> FindConfigurationErrors(
+        string configurationPath,
+        bool http3Supported,
+        int defaultRedirectPort)
     {
         ArgumentNullException.ThrowIfNull(configurationPath);
 
@@ -50,8 +70,49 @@ internal sealed class TransportHttpsOptions
         errors.AddRange(this.FindCollidingIdentities(configurationPath));
         errors.AddRange(this.FindListenerDisagreements(configurationPath));
         errors.AddRange(this.FindOverlappingListeners(configurationPath));
+        errors.AddRange(this.FindRedirectErrors(configurationPath, defaultRedirectPort));
 
         return errors;
+    }
+
+    /// <summary>Refuses a redirect this surface cannot serve, and one whose socket a profile of its own already binds.</summary>
+    /// <remarks>
+    /// A redirect stated for a surface that terminates no TLS is refused rather than ignored, because that surface is
+    /// already reachable in clear text: the setting would read as configured while nothing bound it and nothing redirected
+    /// anywhere. The port check is the within-surface half of the collision rule — these profiles are the only listeners
+    /// this section can see, and the surface that owns it compares the same port against every other listener the process
+    /// opens.
+    /// </remarks>
+    private IEnumerable<string> FindRedirectErrors(string configurationPath, int defaultRedirectPort)
+    {
+        var sectionPath = $"{configurationPath}:{nameof(this.Redirect)}";
+
+        if (!this.TerminatesTls)
+        {
+            if (this.Redirect.WasStated)
+            {
+                yield return $"{sectionPath} — a clear-text redirect is configured while {configurationPath}:{nameof(this.Endpoints)} names no HTTPS profile, so there is nothing to redirect to and this surface is already served in clear text. Configure a profile, or remove this section.";
+            }
+
+            yield break;
+        }
+
+        foreach (var error in this.Redirect.FindConfigurationErrors(sectionPath))
+        {
+            yield return error;
+        }
+
+        if (!this.Redirect.Enabled)
+        {
+            yield break;
+        }
+
+        var redirectPort = this.Redirect.Port ?? defaultRedirectPort;
+
+        if (this.Endpoints.Any(endpoint => endpoint.Port == redirectPort))
+        {
+            yield return $"{sectionPath}:{nameof(TransportClearTextRedirectOptions.Port)} — port {redirectPort} is bound by an HTTPS profile in this section, and one socket cannot serve both schemes. State a port no profile uses, or turn the redirect off.";
+        }
     }
 
     /// <summary>Refuses two profiles that cannot be told apart, by the name diagnostics use or by the name a handshake selects on.</summary>
