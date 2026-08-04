@@ -158,7 +158,7 @@ The container image, the Helm chart, and every `mfctl` binary — signed or not 
 
 Every release is approved by a person before anything is signed; nothing signs on a schedule, and the nightly channel signs nothing at all. [Signing the Windows CLI binaries](https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/windows-code-signing.md) records how the pipeline does it and how to verify a download.
 
-This project collects no telemetry and no personal data through its released binaries. What a deployment holds is a different question, and [SECURITY.md](https://github.com/Krzysztof318/MailFathom/blob/main/SECURITY.md) with the [user guide](https://github.com/Krzysztof318/MailFathom/blob/main/docs/users/README.md) is where that is described.
+**Privacy policy.** MailFathom transfers no information to other networked systems unless specifically requested by the user or the person installing or operating it. It reaches the mail servers, the database, and the model provider a deployment configures, and nothing else: it collects no telemetry, phones no home, and exports OpenTelemetry data only to an endpoint an operator sets. Where mail is stored, who can reach it, and which model receives a result are deployment decisions — [SECURITY.md](https://github.com/Krzysztof318/MailFathom/blob/main/SECURITY.md) and the [user guide](https://github.com/Krzysztof318/MailFathom/blob/main/docs/users/README.md) describe them, and the terms of any model provider a deployment chooses are that provider's own.
 
 ## License
 
