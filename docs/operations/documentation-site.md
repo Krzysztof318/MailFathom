@@ -4,7 +4,11 @@
 
 The pages under `docs/` are published as a browsable site at
 <https://krzysztof318.github.io/MailFathom/>. The site is generated from this repository by
-[docfx](https://dotnet.github.io/docfx/), deployed by GitHub Pages, and rebuilt in full on every merge to `main`.
+[docfx](https://dotnet.github.io/docfx/), deployed by GitHub Pages, and rebuilt in full by two pushes: a merge to
+`main`, which moves `latest`, and a release tag, which adds that release's version to the selector. It is the tag
+rather than the release, because the version list below is read from the tags in the checkout rather than from GitHub's
+releases — and because a `release: published` trigger cannot start a run at all, the release being created by `Release`
+with `GITHUB_TOKEN` and GitHub starting no workflow from an event that token generated.
 
 Nothing is authored on the site. A page is written here, reviewed in the same pull request as the behavior it
 describes, and published by the merge — which is the whole reason the site is generated from `docs/` rather than kept
