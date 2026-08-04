@@ -166,7 +166,7 @@ kubectl --namespace databases port-forward service/postgres 5432:5432 &
 
 psql "postgresql://mailfathom_migrator@127.0.0.1:5432/mailfathom" \
   --set ON_ERROR_STOP=on \
-  --file mailfathom-schema-0.2.0.sql
+  --file 'mailfathom-schema-<version>.sql'
 ```
 
 The role that applies it needs privileges `database.user` does not — the `vector` extension is one an ordinary role may

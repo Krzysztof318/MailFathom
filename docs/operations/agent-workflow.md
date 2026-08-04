@@ -218,7 +218,10 @@ The canonical skills are:
   the order they and the tag between them have to land in. Its changelog pull
   request also carries the files that name a version in prose and a sweep for
   prose describing the release state without naming one, because both go stale
-  at the tag and neither is reached by `<VersionPrefix>`. It is the one skill
+  at the tag and neither is reached by `<VersionPrefix>`. Before either pull
+  request it settles the milestones — creating the next one if it does not
+  exist, moving what is still open into it, and closing the one being released
+  — which is the only place a milestone is opened. It is the one skill
   an agent cannot invoke — its frontmatter sets `disable-model-invocation`, so
   only the owner reaches it, because when a version becomes real is their
   decision. It pushes no tag and merges nothing;

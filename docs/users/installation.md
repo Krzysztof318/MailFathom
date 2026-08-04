@@ -7,12 +7,18 @@ assumes, what it is good for, and what every shape shares. Follow the linked gui
 repeat each other and neither does this page.
 
 **A release publishes an image, the chart, the schema script, and the administrative command.** The image is
-`ghcr.io/krzysztof318/mailfathom:0.2.0` and `docker.io/krzysztof318/mailfathom:0.2.0` — one manifest list under one
-digest, so the registry to pull from is whichever your environment already reaches — with `latest` on that same digest.
-The chart is `oci://ghcr.io/krzysztof318/charts/mailfathom` at the same version. Each release also attaches
-`mailfathom-schema-<version>.sql` and its checksum, which is the schema step below, and one `mfctl` binary per platform
-with a checksum file covering all of them — [getting the command](../operations/admin-endpoint.md#getting-the-command)
-is where that one is picked up. Both packages are public, so pulling one needs no login.
+`ghcr.io/krzysztof318/mailfathom:<version>` and `docker.io/krzysztof318/mailfathom:<version>` — one manifest list under
+one digest, so the registry to pull from is whichever your environment already reaches — with `latest` on the newest
+release's digest in both. The chart is `oci://ghcr.io/krzysztof318/charts/mailfathom` at the same version. Each release
+also attaches `mailfathom-schema-<version>.sql` and its checksum, which is the schema step below, and one `mfctl`
+binary per platform with a checksum file covering all of them —
+[getting the command](../operations/admin-endpoint.md#getting-the-command) is where that one is picked up. Both
+packages are public, so pulling one needs no login.
+
+**`<version>` is the release you are installing**, and
+[the releases page](https://github.com/Krzysztof318/MailFathom/releases) is where the current one is named. Pin it
+rather than tracking `latest`: an immutable tag is what makes a deployment reproducible and an upgrade a decision,
+which matters here because a new release can require a schema step before it will serve.
 
 **There is no binary artifact for the service itself**, so the native shape below is published from a checkout, and so
 is the Compose deployment, whose `compose.yaml` lives here and is versioned with the code that reads it. `mfctl` is the
