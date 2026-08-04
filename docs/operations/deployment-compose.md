@@ -51,6 +51,8 @@ into `secrets/mailfathom/`, which is mounted read-only at `/etc/mailfathom/secre
 ```bash
 printf '%s' 'the-mailbox-password' > secrets/mailfathom/imap-primary-password
 openssl rand -base64 33 | tr -d '\n'  > secrets/mailfathom/mcp-workstation-key
+openssl rand -base64 32 | tr -d '\n'  > secrets/mailfathom/mailfathom-data-key   # only for an OAuth mailbox
+chmod 444 secrets/mailfathom/*
 ```
 
 ```json
@@ -70,6 +72,18 @@ configuration file does and does not expose.
 
 The two database credentials are Compose secrets rather than files in that directory, so the database superuser
 password is never on a path the service can read.
+
+**The data-encryption key is `-base64 32`, not the `-base64 33` on every other line here.** It is the one credential
+generated to a length rather than to a strength: the material has to decode to exactly 32 bytes, and startup refuses
+anything else naming the setting instead of accepting a weaker key. It is needed only when an account authenticates
+with OAuth, because the refresh token its authorization server rotates is the one value MailFathom seals today; a
+deployment whose mailboxes all use a password needs no key and starts without one. `10-mailfathom.json.example` carries
+the `DataEncryption` block commented out for exactly that reason — uncomment it when you configure an OAuth account.
+
+Generate it once and **back it up with the database, not beside it**. The key is not in the database, nothing in
+MailFathom regenerates it in any channel, and a database restored without it restores no sealed value — the failure
+appears at the next read rather than at the moment of loss.
+[The data-encryption key](secret-provisioning.md#the-data-encryption-key) covers rotation and what the ring is for.
 
 ## Starting
 
