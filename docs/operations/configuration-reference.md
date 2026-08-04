@@ -288,10 +288,6 @@ carries is who they are believed from, and **an unconfigured section believes ev
 | `ReverseProxy:TrustedProxies` | string list | empty, which trusts `0.0.0.0/0` and `::/0` | Each entry an IP address or a CIDR network whose host bits are clear — not a DNS name. What is named replaces the default rather than adding to it, and the framework's loopback default is cleared rather than inherited. Left empty, or written as `0.0.0.0/0` and `::/0`, it trusts every peer and so disables the refusal of an OAuth token that arrived without TLS — see [what the default costs](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) | restart |
 | `ReverseProxy:MaximumForwardedHops` | int | `1` | At least 1; how far right-to-left through each header a value is believed | restart |
 
-> **`ReverseProxy:Enabled` no longer exists.** A configuration still setting it fails at startup naming the key, because
-> every section here is bound strictly. Delete it: the posture it used to select is now the presence or absence of
-> `TrustedProxies`, and a deployment that had it `true` keeps its behaviour by keeping its list.
-
 `X-Forwarded-For` is never read, so the peer MailFathom observes stays the one that opened the connection, and
 `McpEndpoint:OAuth:Resource` stays a configured value rather than anything derived from a header.
 

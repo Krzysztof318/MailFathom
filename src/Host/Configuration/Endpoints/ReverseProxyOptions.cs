@@ -102,10 +102,9 @@ internal sealed class ReverseProxyOptions
     /// <returns>The bound settings.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// Strict binding is part of the read, like every other security-sensitive section: a misspelled key here would
-    /// leave a deployment believing it had named its proxy while every peer was trusted, or believing a chain limit
-    /// applied that never bound. It is also what makes the removal of the former <c>Enabled</c> key audible — a
-    /// deployment carrying it stops at startup naming the key rather than starting under a posture nobody chose.
+    /// Strict binding is part of the read, like every other security-sensitive section: a key this section does not
+    /// carry would otherwise leave a deployment believing it had named its proxy while every peer was trusted, or
+    /// believing a chain limit applied that never bound.
     /// </remarks>
     public static ReverseProxyOptions ReadFrom(IConfiguration configuration)
     {
