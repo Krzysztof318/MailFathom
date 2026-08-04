@@ -30,6 +30,113 @@ because they are, by definition, whatever has been merged since the newest secti
 Nothing yet. A section appears here only when a release is prepared, because this file is written by the release pull
 request and by nothing else; what has merged since the newest section below is what a nightly build carries.
 
+## [0.3.0] - 2026-08-04
+
+The third release, and the first whose upgrade is a new image and nothing else: **the database schema does not move.**
+No migration is added, so `0.3.0` serves the database `0.2.0` was serving, and `0.2.0` serves it again if you go back.
+Nothing `0.1.0` or `0.2.0` promised is withdrawn either — the MCP tool contract is unchanged, and every configuration
+key `0.2.0` accepted is still accepted and still means the same thing. There is no breaking entry below.
+
+What is new stands in front of the service rather than inside it: what terminates TLS for it, and what bounds the
+surface you administer it through. The pages describing all of it are now published as
+[a documentation site](https://krzysztof318.github.io/MailFathom/), with search, an API reference generated from the
+source, and a version selector; `0.3.0` is the first release it carries a version for.
+
+**One caveat, and it is a defect this release ships with**: a deployment that sets `HealthEndpoints:Enabled` to `false`
+*and* enables the administrative endpoint loses its application listener, because binding a socket in code makes
+Kestrel ignore `ASPNETCORE_HTTP_PORTS` and only the probe path restates it. The process starts and serves the
+administrative port alone, and every MCP client is refused.
+[#395](https://github.com/Krzysztof318/MailFathom/issues/395) carries the fix. Until it lands, leave the probes
+enabled — the default — or state the application listener as a `Kestrel:Endpoints` entry.
+
+### Added
+
+**A deployment behind a TLS-terminating reverse proxy.** When nginx, Traefik, or an ingress controller holds the
+certificate, the request that reaches MailFathom arrives as `http` under an internal name, and the deployment's public
+identity survives the hop only in two headers.
+
+- `X-Forwarded-Proto` and `X-Forwarded-Host` are read and applied before anything else sees the request, so OAuth
+  discovery, the `401` challenge, and every absolute address MailFathom writes carry your public name — the
+  protected-resource metadata document included, which is what a proxied OAuth deployment needed
+  ([#371](https://github.com/Krzysztof318/MailFathom/pull/371)).
+- `ReverseProxy:TrustedProxies` names the addresses or CIDR networks those headers are believed from, and
+  `ReverseProxy:MaximumForwardedHops` (default `1`) how far back through each header a value is believed
+  ([#371](https://github.com/Krzysztof318/MailFathom/pull/371),
+  [#397](https://github.com/Krzysztof318/MailFathom/pull/397)). It is one section for the whole process rather than one
+  per surface: a proxy's address is a network fact, so it is stated once and holds on every listener. What you name
+  replaces the framework's loopback default rather than adding to it, and `10.0.0.5/24` is refused naming the
+  `10.0.0.0/24` it would otherwise silently have become.
+- `X-Forwarded-For` is never read, so the peer MailFathom observes stays the one that opened the connection, and
+  `McpEndpoint:OAuth:Resource` stays a value you wrote rather than anything derived from a header
+  ([#371](https://github.com/Krzysztof318/MailFathom/pull/371)).
+- Client certificates are unreachable in this posture, because the handshake ended at the proxy and no header is read
+  as a substitute ([#371](https://github.com/Krzysztof318/MailFathom/pull/371)).
+  [Behind a TLS-terminating reverse proxy](https://krzysztof318.github.io/MailFathom/operations/mcp-endpoint.html#behind-a-tls-terminating-reverse-proxy)
+  is the page, including what the proxy owns and what MailFathom keeps owning.
+
+**A clear-text listener that redirects to HTTPS.** A surface that terminates TLS also binds one listener whose only
+answer is a `308` to the address its profiles are served at, so a client nobody repointed meets a redirect rather than a
+refused connection indistinguishable from an outage ([#374](https://github.com/Krzysztof318/MailFathom/pull/374)).
+
+- `McpEndpoint:Https:Redirect` binds port `8080` and `AdminEndpoint:Https:Redirect` port `8091` unless you state
+  another, each taking `Enabled`, `BindAddress`, and `Port`. The defaults differ so terminating TLS on both surfaces
+  opens two clear-text ports that do not collide.
+- That listener maps no route. Every path is answered the same way, and no authentication, rate-limiting, CORS, or
+  client-certificate handler runs for a request that arrived on it, so there is nothing reachable over it to protect.
+- `308` rather than `301` or `302`, because the MCP transport is a `POST` the older codes permit a client to re-send as
+  a `GET`. The path and query are preserved, each domain redirects to its own profile's port, a `Host` header naming no
+  configured domain gets `400`, and `:443` is left out of the `Location`.
+- Writing the section for a surface that terminates no TLS fails startup rather than being ignored, and a socket
+  conflict with any other listener in the process is reported against the section that asked for it. The health probes
+  keep their own listener and are never asked on this port, because a probe follows no redirect.
+
+**Rate limiting on the administrative endpoint.** `AdminEndpoint:RateLimiting` is the section
+`McpEndpoint:RateLimiting` is, with the same keys, the same product defaults, and the same validation
+([#373](https://github.com/Krzysztof318/MailFathom/pull/373)).
+
+- The two are configured independently and partitioned per surface, so neither endpoint's traffic reaches the other's
+  limits: an agent that exhausted `/mcp` has taken nothing from the surface you would use to stop it, and the
+  concurrency limits are separate for the same reason.
+- The burst is the endpoint's rather than one caller's. These routes carry no authentication middleware of their own —
+  the credential is judged behind the limiter, so a request about to be refused for a wrong key has still spent
+  capacity — and there is therefore no identity to partition on. Size `TokenCapacity` as what the whole endpoint may
+  burst to rather than what one operator may.
+
+### Changed
+
+- **An enabled administrative endpoint is bounded whether or not you configure it**: 20 concurrent requests and a burst
+  of 60 restored every minute, which are the MCP endpoint's defaults. `0.2.0` served it unbounded, so a deployment
+  whose automation asks faster than that raises the numbers or sets `AdminEndpoint:RateLimiting:Enabled` to `false`,
+  which costs one startup warning ([#373](https://github.com/Krzysztof318/MailFathom/pull/373)).
+- **Configuring an HTTPS profile now also binds a clear-text port** — `8080` beside the MCP profiles, `8091` beside the
+  administrative ones. Where a proxy in front of the process already answers that port, or something else on the host
+  holds it, set `…:Https:Redirect:Enabled` to `false`. A conflict with another listener of this process is refused at
+  startup naming the section that asked for it rather than failing later as an address-in-use error
+  ([#374](https://github.com/Krzysztof318/MailFathom/pull/374)).
+- The startup line stating the rate limits in force comes from
+  `MailFathom.Host.Hosting.Warnings.TransportRateLimitingStartupReport` rather than `…McpRateLimitingStartupReport`,
+  and one line is written per enabled endpoint. A deployment that matches on the logger category updates it
+  ([#373](https://github.com/Krzysztof318/MailFathom/pull/373)).
+- The clear-text transport warning describes the deployment you configured once a trusted proxy is named, rather than
+  suggesting `McpEndpoint:Https:Endpoints` to a deployment whose certificate lives on the proxy
+  ([#378](https://github.com/Krzysztof318/MailFathom/pull/378)).
+
+### Security
+
+- **A deployment that names no trusted proxy trusts every peer.** An OAuth access token is refused when the request did
+  not arrive over transport encryption, and that check reads the scheme a forwarded header set — so with
+  `ReverseProxy:TrustedProxies` left empty, anything that can open a connection sends `X-Forwarded-Proto: https` and
+  has a reusable credential accepted over a clear-text hop, and `X-Forwarded-Host` is believed on the same terms. Name
+  the addresses or CIDR networks your proxies actually use. Every startup running on the wide default logs one line
+  naming what the deployment gave up ([#378](https://github.com/Krzysztof318/MailFathom/pull/378),
+  [#397](https://github.com/Krzysztof318/MailFathom/pull/397)).
+- The administrative endpoint is bounded by default, which is what stops a surface reachable from a network from
+  serving unbounded API-key guessing — the attack it is most exposed to, and the one where a successful guess is worth
+  the most ([#373](https://github.com/Krzysztof318/MailFathom/pull/373)).
+- A redirect protects the next request and never the one that arrived: a credential sent in clear text was on the wire
+  before anything answered. Treat the redirect as a way to find out that a client needs repointing rather than as a
+  supported way to reach the endpoint ([#374](https://github.com/Krzysztof318/MailFathom/pull/374)).
+
 ## [0.2.0] - 2026-08-04
 
 The second release, and the first that had a previous one to differ from. **Nothing `0.1.0` promised is withdrawn:**
@@ -287,6 +394,7 @@ is the whole surface, key by key, including which keys reload and which need a r
   [`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) registers
   every dependency it ships beside ([#173](https://github.com/Krzysztof318/MailFathom/pull/173)).
 
-[Unreleased]: https://github.com/Krzysztof318/MailFathom/compare/v0.2.0...main
+[Unreleased]: https://github.com/Krzysztof318/MailFathom/compare/v0.3.0...main
+[0.3.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Krzysztof318/MailFathom/releases/tag/v0.1.0
