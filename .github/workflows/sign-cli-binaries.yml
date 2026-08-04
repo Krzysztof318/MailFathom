@@ -1,0 +1,206 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: Sign the CLI binaries
+
+# Authenticode signatures for the two Windows binaries `Build the CLI binaries` produces, issued by SignPath Foundation
+# under its free program for open-source projects. Only a release calls this. A nightly deliberately does not: every
+# Foundation signing request is approved by a person, and a channel that publishes on a schedule cannot ask for that.
+#
+# It sits between the build and the GitHub release because of what signing does to the bytes. A signature is written
+# into the PE file, so an artifact signed after publication is a different file from the one the release page already
+# offered, and the checksums the build computed stop describing anything an operator can download. Signing here means
+# the release only ever sees signed binaries and checksums taken over them.
+#
+# The split across two runners is the point rather than an accident. Signing is an API call and belongs on the runner
+# everything else here runs on; verifying an Authenticode signature is a question about what Windows concludes, and the
+# only engine that answers it the way an operator's machine will is Windows' own. Nothing is attested until that engine
+# has said yes.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'The full stamped version the binaries are named after, for example `0.2.0`.'
+        required: true
+        type: string
+      artifact-id:
+        description: 'The id of the GitHub Actions artifact holding the unsigned binaries. SignPath downloads the artifact itself through the GitHub API rather than being handed bytes, which is how it establishes that what it signs came from a run of this repository.'
+        required: true
+        type: string
+    secrets:
+      SIGNPATH_API_TOKEN:
+        description: 'A SignPath REST API token for a user holding submitter permission on the signing policy. It authorizes submission alone: the release is still approved by a person in SignPath before a certificate touches anything.'
+        required: true
+    outputs:
+      artifact:
+        description: 'The name of the artifact holding the signed binaries and the checksum file regenerated over them. This is what a release attaches; the unsigned artifact is never published.'
+        value: ${{ jobs.sign.outputs.artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    name: Submit the signing request
+    runs-on: ubuntu-latest
+    permissions:
+      # `actions: read` is what the SignPath connector needs: it reads this run's job details and downloads the artifact
+      # named above, and both are the Actions API rather than the contents API. Nothing here writes.
+      actions: read
+      contents: read
+    outputs:
+      artifact: ${{ steps.package.outputs.artifact }}
+    steps:
+      # The one third-party action in this repository pinned to a commit rather than to a moving major tag, and the
+      # exception is deliberate. Everything else here runs `actions/*` on `v<major>` because that tag is the update
+      # mechanism — see the reasoning recorded in THIRD_PARTY_LICENSES.md — and accepting an upstream fix at run time is
+      # worth more than freezing it. This step is where that trade turns over: it is the only step that holds a signing
+      # credential, so a compromised upstream release would reach a certificate rather than a build. The version the
+      # commit belongs to is in the comment, and moving one means moving both and the register row with them.
+      - name: Submit the binaries to SignPath and download the signed result
+        id: signpath
+        uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd # v2.2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ inputs.artifact-id }}
+          # The whole point of the step is to come back with the signed bytes, so it waits. The default of ten minutes
+          # is the service's turnaround, not the reviewer's: a Foundation policy requires a human approval, and the
+          # release is a scheduled act the owner is present for. Raised to an hour so a few minutes spent finding the
+          # approval screen does not fail a release that then has to be re-run.
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: '3600'
+          output-artifact-directory: artifacts/cli
+
+      # What SignPath returns is the artifact it was given, with the files the artifact configuration matched replaced
+      # by signed copies — so the Linux binaries and the build's checksum file come back untouched. That makes the
+      # checksum file wrong rather than merely stale: it still describes the Windows binaries as they were before a
+      # signature was written into them. Deleting it before regenerating is what keeps a partial failure from leaving
+      # the old file in place beside new binaries.
+      - name: Regenerate the checksums over the signed binaries
+        id: package
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          checksums="artifacts/cli/mfctl-${VERSION}.sha256"
+          rm -f "$checksums"
+
+          # What came back is checked against what was sent rather than trusted, because the archive is unpacked and
+          # repacked by a service configured elsewhere: the artifact configuration names the files to sign, and it
+          # lives in SignPath rather than in this repository, so a rename here that nobody mirrored there is a
+          # mismatch no gate in this repository would otherwise catch. The Windows check below proves the binaries are
+          # signed; this proves they are all still present, and it fails on the runner that can still name which one
+          # is missing.
+          for rid in linux-x64 linux-arm64 win-x64 win-arm64; do
+            case "$rid" in
+              win-*) name="mfctl-${VERSION}-${rid}.exe" ;;
+              *)     name="mfctl-${VERSION}-${rid}" ;;
+            esac
+
+            if [ ! -f "artifacts/cli/$name" ]; then
+              echo "::error::SignPath returned no $name. Check that the artifact configuration matches the archive this release built."
+              exit 1
+            fi
+          done
+
+          ( cd artifacts/cli && sha256sum ./* > "mfctl-${VERSION}.sha256" )
+
+          echo "artifact=cli-binaries-signed" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the signed binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-binaries-signed
+          path: artifacts/cli
+          if-no-files-found: error
+
+  verify:
+    name: Verify the Authenticode signatures
+    needs:
+      - sign
+    # The only Windows runner in this repository, and the reason it is worth one. `Get-AuthenticodeSignature` asks the
+    # operating system's own trust engine, so a `Valid` here is the same decision SmartScreen and the certificate
+    # dialog will reach on the machine an operator downloads to. Verifying the same file on Linux would check a
+    # signature against a CA bundle that does not model the Windows root program, which answers a different question.
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      # The two an attestation needs: an OIDC token proving this workflow's identity to the signing service, and the
+      # store the resulting statement is recorded in.
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download the signed binaries
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.sign.outputs.artifact }}
+          path: artifacts/cli
+
+      # Every failure mode this can have is a release that must not go out: a binary that came back unsigned, one whose
+      # signature does not match its bytes, one signed by a certificate this machine does not trust, and one signed by
+      # a certificate that is trusted but is not the project's. The last is the reason the expected signer is checked
+      # at all — `Valid` says a real CA vouched for whoever signed, not that it was us.
+      - name: Verify every Windows binary against the Windows trust engine
+        shell: pwsh
+        env:
+          EXPECTED_SIGNER: ${{ vars.SIGNPATH_EXPECTED_SIGNER }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $expectedSigner = $env:EXPECTED_SIGNER
+          if ([string]::IsNullOrWhiteSpace($expectedSigner)) {
+              throw 'SIGNPATH_EXPECTED_SIGNER is not set. It carries the subject the signing certificate must match, and without it this step would accept any certificate the runner happens to trust.'
+          }
+
+          $binaries = @(Get-ChildItem -Path 'artifacts/cli' -Filter '*.exe' -File)
+          if ($binaries.Count -eq 0) {
+              throw 'No Windows binary reached the verification step.'
+          }
+
+          $failed = $false
+
+          foreach ($binary in $binaries) {
+              $signature = Get-AuthenticodeSignature -FilePath $binary.FullName
+
+              if ($signature.Status -ne 'Valid') {
+                  Write-Output "::error::$($binary.Name): Authenticode status is $($signature.Status) — $($signature.StatusMessage)"
+                  $failed = $true
+                  continue
+              }
+
+              $subject = $signature.SignerCertificate.Subject
+              if ($subject -notlike "*$expectedSigner*") {
+                  Write-Output "::error::$($binary.Name): signed by '$subject', which does not carry the expected '$expectedSigner'."
+                  $failed = $true
+                  continue
+              }
+
+              # A signature without a timestamp stops verifying the day the certificate expires, which for a release
+              # artifact means a download that is fine today and untrusted in a year. The signing policy has to
+              # timestamp; this is what proves it did.
+              if ($null -eq $signature.TimeStamperCertificate) {
+                  Write-Output "::error::$($binary.Name): the signature carries no timestamp, so it expires with the certificate."
+                  $failed = $true
+                  continue
+              }
+
+              Write-Output "$($binary.Name): valid, signed by '$subject', timestamped $($signature.SignerCertificate.NotBefore.ToString('yyyy-MM-dd'))."
+          }
+
+          if ($failed) {
+              throw 'At least one Windows binary failed Authenticode verification. Nothing is attested and no binary is published.'
+          }
+
+      # Deliberately after verification and in the same job as it, so that the statement GitHub records is only ever
+      # made about bytes the trust engine has already accepted. It covers the Linux binaries and the checksum file too:
+      # those carry no signature and provenance is the only thing that says where they came from.
+      - name: Attest the signed binaries
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: 'artifacts/cli/*'

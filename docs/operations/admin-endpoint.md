@@ -107,6 +107,11 @@ have to run where the service runs.
 
 Nothing needs installing beside it: the .NET runtime is inside the file.
 
+The two Windows binaries are Authenticode-signed, so Windows names a publisher rather than warning about an unknown
+one; the Linux binaries carry no signature and the checksum file is what verifies those.
+[Signing the Windows CLI binaries](windows-code-signing.md) records who signs, how to check a download, and what a
+missing signature on a release means.
+
 ## Signing in
 
 `--mode` chooses how the credential is produced, and it is stated rather than guessed — guessing would put a machine

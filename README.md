@@ -88,7 +88,7 @@ To evaluate MailFathom from the checkout instead of deploying it, the local Aspi
 | Container image | `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` |
 | Helm chart | `oci://ghcr.io/krzysztof318/charts/mailfathom` |
 | Database schema script | attached to each [release](https://github.com/Krzysztof318/MailFathom/releases) |
-| `mfctl`, the administrative command | attached to each [release](https://github.com/Krzysztof318/MailFathom/releases), one self-contained binary per platform |
+| `mfctl`, the administrative command | attached to each [release](https://github.com/Krzysztof318/MailFathom/releases), one self-contained binary per platform, the Windows ones Authenticode-signed |
 
 Both registries carry the same manifest list under the same digest, so the one to pull from is whichever your environment already reaches. Every published artifact carries a signed provenance statement; [the container image](https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/container-image.md#published-images) records what each tag means and how to verify one.
 
@@ -144,6 +144,21 @@ Contributions are welcome, and the entry point is [CONTRIBUTING.md](https://gith
 ## Security
 
 MailFathom holds mailbox credentials, OAuth tokens, certificate material, and a local copy of someone's mail. Report a vulnerability privately through [SECURITY.md](https://github.com/Krzysztof318/MailFathom/blob/main/SECURITY.md) rather than in a public issue.
+
+## Code signing policy
+
+The two Windows `mfctl` binaries attached to each release are Authenticode-signed, so Windows names a publisher instead of warning about an unknown one. Free code signing is provided by [SignPath.io](https://signpath.io/), with the certificate issued by the [SignPath Foundation](https://signpath.org/). The Linux binaries carry no signature, and the checksum file published beside them is what verifies those.
+
+Every published artifact — signed or not, and including the container image and the Helm chart — also carries a signed build provenance statement naming the workflow and commit that produced it. The signature says who vouches for a file; the attestation says where it came from.
+
+| Role | Who |
+| --- | --- |
+| Committers | Krzysztof Kasprowicz, and contributors whose pull requests are merged after review |
+| Reviewers and approvers | Krzysztof Kasprowicz |
+
+Every release is approved by a person before anything is signed; nothing signs on a schedule, and the nightly channel signs nothing at all. [Signing the Windows CLI binaries](https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/windows-code-signing.md) records how the pipeline does it and how to verify a download.
+
+This project collects no telemetry and no personal data through its released binaries. What a deployment holds is a different question, and [SECURITY.md](https://github.com/Krzysztof318/MailFathom/blob/main/SECURITY.md) with the [user guide](https://github.com/Krzysztof318/MailFathom/blob/main/docs/users/README.md) is where that is described.
 
 ## License
 

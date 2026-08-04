@@ -2399,7 +2399,7 @@ workflow_files() {
 # Adding a name here is a supply-chain decision, so it fails here first and is argued in the pull
 # request rather than discovered in a run.
 every_external_action_names_an_approved_owner() {
-  local approved_owners=' actions github Krzysztof318 dorny anthropics docker crate-ci aquasecurity oras-project peter-evans '
+  local approved_owners=' actions github Krzysztof318 dorny anthropics docker crate-ci aquasecurity oras-project peter-evans signpath '
   local owner
   local unapproved=''
 
@@ -2474,11 +2474,15 @@ every_write_scope_is_one_the_policy_records() {
       'publish-helm-chart.yml packages: write' \
       'release.yml attestations: write' \
       'release.yml attestations: write' \
+      'release.yml attestations: write' \
       'release.yml contents: write' \
       'release.yml id-token: write' \
       'release.yml id-token: write' \
+      'release.yml id-token: write' \
       'release.yml packages: write' \
-      'release.yml packages: write' |
+      'release.yml packages: write' \
+      'sign-cli-binaries.yml attestations: write' \
+      'sign-cli-binaries.yml id-token: write' |
       sort
   )"
 
