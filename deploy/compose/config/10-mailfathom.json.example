@@ -11,6 +11,32 @@
 // The database is configured by compose.yaml through the environment block, which outranks this file, so it is
 // deliberately absent here.
 {
+  // Uncomment this block when an account below authenticates with OAuth rather than with a password. MailFathom seals
+  // the refresh token that account's authorization server rotates, and the key it seals under is provisioned like any
+  // other credential — a file in ./secrets/mailfathom/, named by a reference. The mailbox configured below uses a
+  // password, so a deployment copied from this file seals nothing and needs no key at all: an absent section is a valid
+  // configuration rather than an omission, and MailFathom starts without one. An OAuth account without a key still
+  // authenticates from its configured reference; what needs the key is the moment its authorization server rotates the
+  // refresh token, and without one that rotation is logged as an error instead of being stored.
+  //
+  // The material is base64 decoding to exactly 32 bytes — `openssl rand -base64 32`, never the `-base64 33` that
+  // generates the database passwords. `KeyId` is written beside every value this key seals, so it is chosen once and
+  // never edited afterwards; a date reads well because it says when the key entered service, which is the question a
+  // rotation asks.
+  //
+  // "DataEncryption": {
+  //   "ActiveKeyId": "2026-08",
+  //   "Keys": [
+  //     {
+  //       "KeyId": "2026-08",
+  //       "Material": {
+  //         "Name": "mailfathom-data-key",
+  //         "SecretReference": "file:/etc/mailfathom/secrets/mailfathom-data-key"
+  //       }
+  //     }
+  //   ]
+  // },
+
   "MailSynchronization": {
     "Enabled": true,
     "Interval": "00:05:00",

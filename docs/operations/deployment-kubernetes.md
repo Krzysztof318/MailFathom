@@ -31,11 +31,21 @@ kubectl create namespace mailfathom
 kubectl --namespace mailfathom create secret generic mailfathom-secrets \
   --from-literal=mailfathom-database-password='…' \
   --from-file=imap-primary-password=./imap-primary-password \
-  --from-file=mcp-workstation-key=./mcp-workstation-key
+  --from-file=mcp-workstation-key=./mcp-workstation-key \
+  --from-file=mailfathom-data-key=./mailfathom-data-key
 ```
 
 It is mounted read-only at `/etc/mailfathom/secrets`, one file per key, so every credential is a `file:` reference — the
 same path and the same references the Compose deployment uses.
+
+The last entry is the data-encryption key, and it belongs in this Secret rather than in a chart value: the chart creates
+no Secret and generates nothing, deliberately, because a Helm-generated key would be replaced on any upgrade that did
+not guard it with `lookup` — and `lookup` returns nothing during `helm template`, during a dry run, and under Argo CD.
+Every value already sealed would stop opening. Generate it once with `openssl rand -base64 32`; the material decodes to
+exactly 32 bytes and startup refuses any other length. Drop the line when no account authenticates with OAuth, since a
+deployment that seals nothing needs no key.
+[The data-encryption key](secret-provisioning.md#the-data-encryption-key) states the rest, including why it is backed
+up with the database and never regenerated.
 
 A Secrets Store CSI driver works, with one step this chart does not take for you. The pod mounts a Kubernetes `secret`
 volume and exposes no CSI volume of its own, so configure the driver's `secretObjects` to **synchronize** into the

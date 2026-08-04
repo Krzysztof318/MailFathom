@@ -23,7 +23,10 @@ You need two pieces of material before anything is configured:
 - **The mailbox password** or app password of the IMAP account to synchronize. A mailbox whose provider no longer
   accepts one — a Google Workspace or Exchange Online account — is authenticated with an OAuth refresh token instead;
   obtain it first with [mailbox OAuth](../operations/mailbox-oauth.md) and substitute that block for the password
-  below.
+  below. That account needs a third piece of material as well, the **data-encryption key** the rotated refresh token is
+  sealed under: `openssl rand -base64 32`, generated once and never regenerated, provisioned as a reference like
+  everything else here. [The data-encryption key](../operations/secret-provisioning.md#the-data-encryption-key) is the
+  whole of it.
 - **An MCP API key** for the client that will connect. Generate it rather than inventing it:
 
 ```bash

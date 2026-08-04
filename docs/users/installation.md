@@ -108,7 +108,33 @@ Build with the SDK pinned in `global.json`. The process is then an ordinary ASP.
   environment variables.
 - Credentials arrive as systemd credentials: `LoadCredential=` in the unit, `systemd-credential:` references in the
   configuration. [Secret provisioning](../operations/secret-provisioning.md#native-systemd-service) shows the unit
-  fragment, including the encrypted-at-rest variant and the core-dump limit worth setting alongside it.
+  fragment, including the encrypted-at-rest variant and the core-dump limit worth setting alongside it. The
+  data-encryption key is one of them, provisioned no differently from a mailbox password:
+
+  ```ini
+  [Service]
+  LoadCredentialEncrypted=mailfathom-data-key:/etc/mailfathom/mailfathom-data-key.cred
+  ```
+
+  ```json
+  {
+    "DataEncryption": {
+      "ActiveKeyId": "2026-08",
+      "Keys": [
+        {
+          "KeyId": "2026-08",
+          "Material": {
+            "Name": "mailfathom-data-key",
+            "SecretReference": "systemd-credential:mailfathom-data-key"
+          }
+        }
+      ]
+    }
+  }
+  ```
+
+  `KeyId` is stored beside every value the key seals, so it is chosen once and never edited afterwards. Leave both out
+  when no account authenticates with OAuth.
 - [The application listener](../operations/configuration-reference.md#the-application-listener) binds the address
   `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`, or your Kestrel configuration names, and `http://localhost:5000` when you
   name none — loopback, so a service you never gave an address to is not reachable from another machine. It is clear
