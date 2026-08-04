@@ -12,6 +12,7 @@ using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -64,6 +65,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
         builder.Services.AddOutboundResiliencePipelines(builder.Configuration.GetSection("Resilience"));
         builder.Services.AddSingleton<IImapAccountSettingsProvider>(account);
+        builder.Services.AddSingleton<IMailOAuthSettingsProvider>(new UnconfiguredMailOAuthSettingsProvider());
         builder.Services.AddSingleton<IMailTransportSecurityPolicyReader>(account);
         builder.Services.AddSingleton<IMailSynchronizationWindowReader>(account);
         builder.Services.AddSingleton<IRemotelyDeletedEmailDispositionReader>(account);
