@@ -81,8 +81,8 @@ internal sealed class McpEndpointOptions
     public IList<McpClientCertificateProfileOptions> ClientCertificateProfiles { get; } = [];
 
     /// <summary>Gets or sets how much traffic the endpoint accepts before it starts refusing.</summary>
-    /// <remarks>Unlike the settings above, every value in this section has a product default, so an endpoint an operator enabled is bounded whether or not they wrote a number.</remarks>
-    public McpRateLimitingOptions RateLimiting { get; set; } = new();
+    /// <remarks>Unlike the settings above, every value in this section has a product default, so an endpoint an operator enabled is bounded whether or not they wrote a number. The administrative endpoint configures its own copy of the same section, and neither endpoint's limits reach the other's traffic.</remarks>
+    public TransportRateLimitingOptions RateLimiting { get; set; } = new();
 
     /// <summary>Gets whether a client may authenticate with one of the configured API keys.</summary>
     public bool AllowsApiKey => this.Authentication.HasFlag(TransportAuthenticationMethods.ApiKey);

@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/**, src/Host/Hosting/Startup/AdminEndpointIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Security/Endpoints/Admin*, src/Cli/** -->
+<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/**, src/Host/Hosting/Startup/AdminEndpointIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Security/Endpoints/Admin*, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/** -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -78,14 +78,43 @@ Storing seals the token under the deployment's [data-encryption key](secret-prov
 configures no key ring cannot store one, and the route answers `500` rather than a refusal it can explain, because
 nothing about the request was wrong.
 
-## Two postures the endpoint warns about
+## Rate limiting
 
-Neither is refused, because both are legitimate somewhere and only you know which you have.
+An enabled endpoint is bounded, whether or not anyone wrote a number. That is what stops an administrative surface
+reachable from a network from serving unbounded API-key guessing, which is the attack it is most exposed to and the one
+where a successful guess is worth the most.
+
+`AdminEndpoint:RateLimiting` is the same section `McpEndpoint:RateLimiting` is, with the same keys, the same product
+defaults, and the same validation. [Rate limiting](mcp-endpoint.md#rate-limiting) is where the settings, the ranges, the
+reasoning, and what a refused request receives are recorded in full;
+[configuration reference](configuration-reference.md#rate-limiting--mcpendpointratelimiting-and-adminendpointratelimiting)
+is the key table.
+
+Two things differ here, and both follow from where the credential is judged:
+
+- **The burst is the endpoint's, not one caller's.** These routes carry no authentication middleware of their own — the
+  credential is judged by the authorization middleware, which runs *behind* the limiter so that a request about to be
+  refused for a wrong key has still spent capacity. There is therefore no identity to partition on when the limiter
+  counts, and every administrative caller shares one bucket. Size `TokenCapacity` as what the whole endpoint may burst
+  to rather than what one operator may.
+- **Neither endpoint's traffic reaches the other's limits.** The partitions are keyed per surface, so a key spelled the
+  same way under both sections is two independent buckets, and an agent that exhausted the MCP endpoint's capacity has
+  taken nothing from the surface you would use to stop it.
+
+The two endpoints' concurrency limits are separate for the same reason: a runaway agent saturating `/mcp` must not lock
+you out of `/api/admin`.
+
+Turning the limits off is an explicit value and costs one startup warning, as it does on the MCP endpoint.
+
+## Three postures the endpoint warns about
+
+None is refused, because each is legitimate somewhere and only you know which you have.
 
 | Startup warning | What it means |
 | --- | --- |
 | No authentication method turned on | Anything that can reach the address can administer the service. Right only for a loopback bind or a network you control. |
 | Served in clear text | Any credential a client presents is readable on the path. Right only behind a TLS-terminating reverse proxy, or on a loopback bind. |
+| `AdminEndpoint:RateLimiting:Enabled` set to `false` | Nothing bounds how fast a caller may present wrong credentials. Right only where something in front of the process already bounds the traffic reaching it. |
 
 Configure `AdminEndpoint:Https:Endpoints` to have Kestrel terminate TLS itself. It takes the same profile shape the MCP
 endpoint's does, including `HttpProtocols`, which defaults to HTTP/1.1 and HTTP/2. Naming any profile binds those
@@ -315,6 +344,7 @@ encryption answers the copy. Holding the credential in the platform's own secret
 | `There is no profile named …` | A typo, or a profile that was never created. The message lists the ones that exist. |
 | `Not signed in to https://…` | `--endpoint` named an address no profile serves. Sign in to it, or name a profile instead. |
 | `The deployment refused the credential.` | The key is not one this endpoint is configured with, or its lifetime has ended. Note that an MCP API key is not one of them. |
+| `answered 429` | The endpoint refused the request for its rate limit rather than for its credential. `Retry-After` on the response says when capacity returns where the limiter can compute one. The whole endpoint shares one bucket, so another caller's burst — including somebody guessing keys — is enough to cause this. |
 | `serves no administrative endpoint at /api/admin/…` | The address answered, but on a listener that serves something else. Check the port, and check that `AdminEndpoint:Enabled` is true. |
 | `This deployment configures no mail account named …` | `mailbox authorize --account` named an identifier no `MailSynchronization:Accounts` entry carries, or you are signed in to the wrong deployment. Nothing was stored. |
 | `The deployment refused the grant without saying why.` | The request was refused with no reason in the answer, which is what something in front of the endpoint answering `400` looks like. Check that `--endpoint` reaches the deployment itself. |

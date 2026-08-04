@@ -8,13 +8,13 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Access;
 
-public sealed class McpRateLimitingOptionsTests
+public sealed class TransportRateLimitingOptionsTests
 {
     [Fact]
     public void Enabled_WithNothingConfigured_BoundsTheEndpoint()
     {
         // Act
-        var settings = new McpRateLimitingOptions();
+        var settings = new TransportRateLimitingOptions();
 
         // Assert
         Assert.True(settings.Enabled);
@@ -24,10 +24,10 @@ public sealed class McpRateLimitingOptionsTests
     public void Defaults_WithNothingConfigured_AreTheProductLimits()
     {
         // Arrange
-        var expected = McpRateLimits.Default;
+        var expected = TransportRateLimits.Default;
 
         // Act
-        var settings = new McpRateLimitingOptions();
+        var settings = new TransportRateLimitingOptions();
 
         // Assert
         Assert.Equal(expected.MaxConcurrentRequests, settings.MaxConcurrentRequests);
@@ -42,7 +42,7 @@ public sealed class McpRateLimitingOptionsTests
     public void FindConfigurationErrors_WithNothingConfigured_ReportsNothing()
     {
         // Arrange
-        var settings = new McpRateLimitingOptions();
+        var settings = new TransportRateLimitingOptions();
 
         // Act
         var errors = settings.FindConfigurationErrors();
@@ -55,7 +55,7 @@ public sealed class McpRateLimitingOptionsTests
     public void FindConfigurationErrors_WhenLimitingIsOff_LeavesTheRemainingValuesAlone()
     {
         // Arrange
-        var settings = new McpRateLimitingOptions
+        var settings = new TransportRateLimitingOptions
         {
             Enabled = false,
             MaxConcurrentRequests = 0,
@@ -71,20 +71,20 @@ public sealed class McpRateLimitingOptionsTests
     }
 
     [Theory]
-    [InlineData(nameof(McpRateLimitingOptions.MaxConcurrentRequests), 0)]
-    [InlineData(nameof(McpRateLimitingOptions.MaxConcurrentRequests), -1)]
-    [InlineData(nameof(McpRateLimitingOptions.MaxConcurrentRequests), 1001)]
-    [InlineData(nameof(McpRateLimitingOptions.ConcurrencyQueueLimit), -1)]
-    [InlineData(nameof(McpRateLimitingOptions.ConcurrencyQueueLimit), 1001)]
-    [InlineData(nameof(McpRateLimitingOptions.TokenCapacity), 0)]
-    [InlineData(nameof(McpRateLimitingOptions.TokenCapacity), 1_000_001)]
-    [InlineData(nameof(McpRateLimitingOptions.TokensPerReplenishmentPeriod), 0)]
-    [InlineData(nameof(McpRateLimitingOptions.RequestQueueLimit), -1)]
-    [InlineData(nameof(McpRateLimitingOptions.RequestQueueLimit), 1001)]
+    [InlineData(nameof(TransportRateLimitingOptions.MaxConcurrentRequests), 0)]
+    [InlineData(nameof(TransportRateLimitingOptions.MaxConcurrentRequests), -1)]
+    [InlineData(nameof(TransportRateLimitingOptions.MaxConcurrentRequests), 1001)]
+    [InlineData(nameof(TransportRateLimitingOptions.ConcurrencyQueueLimit), -1)]
+    [InlineData(nameof(TransportRateLimitingOptions.ConcurrencyQueueLimit), 1001)]
+    [InlineData(nameof(TransportRateLimitingOptions.TokenCapacity), 0)]
+    [InlineData(nameof(TransportRateLimitingOptions.TokenCapacity), 1_000_001)]
+    [InlineData(nameof(TransportRateLimitingOptions.TokensPerReplenishmentPeriod), 0)]
+    [InlineData(nameof(TransportRateLimitingOptions.RequestQueueLimit), -1)]
+    [InlineData(nameof(TransportRateLimitingOptions.RequestQueueLimit), 1001)]
     public void FindConfigurationErrors_WithAnOutOfRangeValue_NamesTheSetting(string settingName, int configuredValue)
     {
         // Arrange
-        var settings = new McpRateLimitingOptions();
+        var settings = new TransportRateLimitingOptions();
         ApplyCountSetting(settings, settingName, configuredValue);
 
         // Act
@@ -102,29 +102,29 @@ public sealed class McpRateLimitingOptionsTests
     public void FindConfigurationErrors_WithAnUnusableReplenishmentPeriod_NamesTheSetting(int configuredSeconds)
     {
         // Arrange
-        var settings = new McpRateLimitingOptions { ReplenishmentPeriod = TimeSpan.FromSeconds(configuredSeconds) };
+        var settings = new TransportRateLimitingOptions { ReplenishmentPeriod = TimeSpan.FromSeconds(configuredSeconds) };
 
         // Act
         var errors = settings.FindConfigurationErrors();
 
         // Assert
         var error = Assert.Single(errors);
-        Assert.StartsWith(nameof(McpRateLimitingOptions.ReplenishmentPeriod), error, StringComparison.Ordinal);
+        Assert.StartsWith(nameof(TransportRateLimitingOptions.ReplenishmentPeriod), error, StringComparison.Ordinal);
     }
 
     [Fact]
     public void FindConfigurationErrors_RestoringMoreThanTheBucketHolds_ReportsTheCombination()
     {
         // Arrange
-        var settings = new McpRateLimitingOptions { TokenCapacity = 10, TokensPerReplenishmentPeriod = 11 };
+        var settings = new TransportRateLimitingOptions { TokenCapacity = 10, TokensPerReplenishmentPeriod = 11 };
 
         // Act
         var errors = settings.FindConfigurationErrors();
 
         // Assert
         var error = Assert.Single(errors);
-        Assert.StartsWith(nameof(McpRateLimitingOptions.TokensPerReplenishmentPeriod), error, StringComparison.Ordinal);
-        Assert.Contains(nameof(McpRateLimitingOptions.TokenCapacity), error, StringComparison.Ordinal);
+        Assert.StartsWith(nameof(TransportRateLimitingOptions.TokensPerReplenishmentPeriod), error, StringComparison.Ordinal);
+        Assert.Contains(nameof(TransportRateLimitingOptions.TokenCapacity), error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -133,22 +133,22 @@ public sealed class McpRateLimitingOptionsTests
         // Arrange
         // The two limiters are acquired in order, so a request waiting for its client's capacity is already holding a
         // concurrency permit. A queue this size lets one client out of tokens park every permit the process has.
-        var settings = new McpRateLimitingOptions { MaxConcurrentRequests = 4, RequestQueueLimit = 4 };
+        var settings = new TransportRateLimitingOptions { MaxConcurrentRequests = 4, RequestQueueLimit = 4 };
 
         // Act
         var errors = settings.FindConfigurationErrors();
 
         // Assert
         var error = Assert.Single(errors);
-        Assert.StartsWith(nameof(McpRateLimitingOptions.RequestQueueLimit), error, StringComparison.Ordinal);
-        Assert.Contains(nameof(McpRateLimitingOptions.MaxConcurrentRequests), error, StringComparison.Ordinal);
+        Assert.StartsWith(nameof(TransportRateLimitingOptions.RequestQueueLimit), error, StringComparison.Ordinal);
+        Assert.Contains(nameof(TransportRateLimitingOptions.MaxConcurrentRequests), error, StringComparison.Ordinal);
     }
 
     [Fact]
     public void FindConfigurationErrors_WithAClientQueueBelowThePermitCount_ReportsNothing()
     {
         // Arrange
-        var settings = new McpRateLimitingOptions { MaxConcurrentRequests = 4, RequestQueueLimit = 3 };
+        var settings = new TransportRateLimitingOptions { MaxConcurrentRequests = 4, RequestQueueLimit = 3 };
 
         // Act
         var errors = settings.FindConfigurationErrors();
@@ -162,14 +162,14 @@ public sealed class McpRateLimitingOptionsTests
     {
         // Arrange
         // A queue beyond its own range is also beyond the permit count; reporting both would describe one typo twice.
-        var settings = new McpRateLimitingOptions { RequestQueueLimit = 1001 };
+        var settings = new TransportRateLimitingOptions { RequestQueueLimit = 1001 };
 
         // Act
         var errors = settings.FindConfigurationErrors();
 
         // Assert
         var error = Assert.Single(errors);
-        Assert.StartsWith(nameof(McpRateLimitingOptions.RequestQueueLimit), error, StringComparison.Ordinal);
+        Assert.StartsWith(nameof(TransportRateLimitingOptions.RequestQueueLimit), error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -178,21 +178,21 @@ public sealed class McpRateLimitingOptionsTests
         // Arrange
         // Zero capacity is out of range and is also below the tokens restored each period; reporting both would describe
         // one typo twice and send an operator looking for a second mistake they did not make.
-        var settings = new McpRateLimitingOptions { TokenCapacity = 0 };
+        var settings = new TransportRateLimitingOptions { TokenCapacity = 0 };
 
         // Act
         var errors = settings.FindConfigurationErrors();
 
         // Assert
         var error = Assert.Single(errors);
-        Assert.StartsWith(nameof(McpRateLimitingOptions.TokenCapacity), error, StringComparison.Ordinal);
+        Assert.StartsWith(nameof(TransportRateLimitingOptions.TokenCapacity), error, StringComparison.Ordinal);
     }
 
     [Fact]
     public void FindConfigurationErrors_WithSeveralMistakes_ReportsEveryOne()
     {
         // Arrange
-        var settings = new McpRateLimitingOptions
+        var settings = new TransportRateLimitingOptions
         {
             MaxConcurrentRequests = 0,
             ConcurrencyQueueLimit = -1,
@@ -210,7 +210,7 @@ public sealed class McpRateLimitingOptionsTests
     public void ToRateLimits_WithConfiguredValues_CarriesEveryOne()
     {
         // Arrange
-        var settings = new McpRateLimitingOptions
+        var settings = new TransportRateLimitingOptions
         {
             MaxConcurrentRequests = 9,
             ConcurrencyQueueLimit = 4,
@@ -236,32 +236,32 @@ public sealed class McpRateLimitingOptionsTests
     public void ToRateLimits_BeforeValidation_RefusesToMapAnUnusableValue()
     {
         // Arrange
-        var settings = new McpRateLimitingOptions { MaxConcurrentRequests = 0 };
+        var settings = new TransportRateLimitingOptions { MaxConcurrentRequests = 0 };
 
         // Act, Assert
         Assert.Throws<InvalidOperationException>(settings.ToRateLimits);
     }
 
-    private static void ApplyCountSetting(McpRateLimitingOptions settings, string settingName, int configuredValue)
+    private static void ApplyCountSetting(TransportRateLimitingOptions settings, string settingName, int configuredValue)
     {
         switch (settingName)
         {
-            case nameof(McpRateLimitingOptions.MaxConcurrentRequests):
+            case nameof(TransportRateLimitingOptions.MaxConcurrentRequests):
                 settings.MaxConcurrentRequests = configuredValue;
                 break;
-            case nameof(McpRateLimitingOptions.ConcurrencyQueueLimit):
+            case nameof(TransportRateLimitingOptions.ConcurrencyQueueLimit):
                 settings.ConcurrencyQueueLimit = configuredValue;
                 break;
-            case nameof(McpRateLimitingOptions.TokenCapacity):
+            case nameof(TransportRateLimitingOptions.TokenCapacity):
                 settings.TokenCapacity = configuredValue;
                 // Kept at or below the capacity under test, so the assertion reads the range error rather than the
                 // combination error a default of sixty tokens per period would also produce.
                 settings.TokensPerReplenishmentPeriod = 1;
                 break;
-            case nameof(McpRateLimitingOptions.TokensPerReplenishmentPeriod):
+            case nameof(TransportRateLimitingOptions.TokensPerReplenishmentPeriod):
                 settings.TokensPerReplenishmentPeriod = configuredValue;
                 break;
-            case nameof(McpRateLimitingOptions.RequestQueueLimit):
+            case nameof(TransportRateLimitingOptions.RequestQueueLimit):
                 settings.RequestQueueLimit = configuredValue;
                 break;
             default:

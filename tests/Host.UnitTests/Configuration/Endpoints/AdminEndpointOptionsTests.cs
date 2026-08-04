@@ -6,6 +6,7 @@ using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Infrastructure.Security.Transport;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 
@@ -163,6 +164,7 @@ public sealed class AdminEndpointOptionsTests
             TransportSurface.Admin.RoutingSchemeName,
             TransportSurface.Admin.ApiKeySchemeName,
             TransportSurface.Admin.AccessPolicyName,
+            TransportSurface.Admin.RateLimitingPolicyName,
             TransportSurface.Admin.OAuthSchemeNameFor("workforce"),
         ];
 
@@ -171,6 +173,7 @@ public sealed class AdminEndpointOptionsTests
             TransportSurface.Mcp.RoutingSchemeName,
             TransportSurface.Mcp.ApiKeySchemeName,
             TransportSurface.Mcp.AccessPolicyName,
+            TransportSurface.Mcp.RateLimitingPolicyName,
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"),
         ];
 
@@ -217,6 +220,76 @@ public sealed class AdminEndpointOptionsTests
         // Assert
         Assert.Contains(errors, error => error.Contains("not a canonical resource URL", StringComparison.Ordinal));
         Assert.DoesNotContain(errors, error => error.Contains("must be '/api/admin'", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The section that must apply whether or not anyone wrote it: an administrative endpoint reachable from a network
+    /// with no limit is unbounded key guessing, and the surface where a successful guess is worth the most.
+    /// </summary>
+    [Fact]
+    public void RateLimiting_WithNothingConfigured_BoundsTheEndpointOnTheProductDefaults()
+    {
+        // Act
+        var settings = AdminEndpointOptions.ReadFrom(new ConfigurationBuilder().Build());
+
+        // Assert
+        Assert.True(settings.RateLimiting.Enabled);
+        Assert.Equal(TransportRateLimits.Default.MaxConcurrentRequests, settings.RateLimiting.MaxConcurrentRequests);
+        Assert.Equal(TransportRateLimits.Default.TokenCapacity, settings.RateLimiting.TokenCapacity);
+    }
+
+    [Fact]
+    public void ReadFrom_TheRateLimitingSection_BindsTheSameKeysTheMcpEndpointTakes()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["AdminEndpoint:Enabled"] = "true",
+            ["AdminEndpoint:RateLimiting:MaxConcurrentRequests"] = "4",
+            ["AdminEndpoint:RateLimiting:TokenCapacity"] = "30",
+            ["AdminEndpoint:RateLimiting:TokensPerReplenishmentPeriod"] = "30",
+            ["AdminEndpoint:RateLimiting:ReplenishmentPeriod"] = "00:00:30",
+        });
+
+        // Act
+        var settings = AdminEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.Equal(4, settings.RateLimiting.MaxConcurrentRequests);
+        Assert.Equal(30, settings.RateLimiting.TokenCapacity);
+        Assert.Equal(TimeSpan.FromSeconds(30), settings.RateLimiting.ReplenishmentPeriod);
+        Assert.Empty(settings.FindConfigurationErrors([]));
+    }
+
+    /// <summary>The same rules, reported under this section's own path so an operator knows which endpoint to fix.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AnUnusableRateLimit_IsRefusedUnderThisEndpointsSection()
+    {
+        // Arrange
+        var settings = EnabledEndpoint();
+        settings.RateLimiting.MaxConcurrentRequests = 0;
+
+        // Act
+        var errors = settings.FindConfigurationErrors([]);
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.StartsWith("AdminEndpoint:RateLimiting:MaxConcurrentRequests", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_ADisabledEndpointWithAnUnusableRateLimit_ReportsNothing()
+    {
+        // Arrange
+        var settings = new AdminEndpointOptions();
+        settings.RateLimiting.TokenCapacity = 0;
+
+        // Act
+        var errors = settings.FindConfigurationErrors([]);
+
+        // Assert
+        Assert.Empty(errors);
     }
 
     private static AdminEndpointOptions EnabledEndpoint() => new() { Enabled = true };

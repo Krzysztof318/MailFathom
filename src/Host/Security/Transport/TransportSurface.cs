@@ -2,7 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.ApiKeys;
+using MailFathom.Mcp;
 
 namespace MailFathom.Host.Security.Transport;
 
@@ -22,10 +24,10 @@ namespace MailFathom.Host.Security.Transport;
 /// hold for every route on the surface instead of for the routes somebody remembered.
 /// </para>
 /// <para>
-/// All four names are internal handles: nothing published, persisted, or configured reads them. A challenge names
-/// <see cref="ApiKeyAuthentication.Realm" /> rather than a scheme, and a client is never told which scheme judged it.
-/// They are derived from <see cref="Name" /> rather than stated per surface so that adding one cannot accidentally
-/// reuse another's, which would silently merge the two policies.
+/// The four authentication names are internal handles: nothing published, persisted, or configured reads them. A
+/// challenge names <see cref="ApiKeyAuthentication.Realm" /> rather than a scheme, and a client is never told which
+/// scheme judged it. Every name here is derived from <see cref="Name" /> rather than stated per surface so that adding
+/// one cannot accidentally reuse another's, which would silently merge the two surfaces' policies.
 /// </para>
 /// <para>
 /// It is a closed enumeration for the reason <see cref="Hosting.HealthProbe" /> is one: a surface is a decision about
@@ -36,15 +38,20 @@ namespace MailFathom.Host.Security.Transport;
 internal readonly record struct TransportSurface
 {
     private readonly string? name;
+    private readonly string? routePrefix;
 
-    private TransportSurface(string name) => this.name = name;
+    private TransportSurface(string name, string routePrefix)
+    {
+        this.name = name;
+        this.routePrefix = routePrefix;
+    }
 
     /// <summary>Gets the surface serving the MCP protocol.</summary>
-    internal static TransportSurface Mcp { get; } = new("Mcp");
+    internal static TransportSurface Mcp { get; } = new("Mcp", McpEndpointRoute.Path);
 
-    /// <summary>Gets the surface serving the administrative API the <c>mailfathom</c> command reaches.</summary>
+    /// <summary>Gets the surface serving the administrative API the <c>mfctl</c> command reaches.</summary>
     /// <remarks>Separate from <see cref="Mcp" /> because reading a mailbox and administering the service that reads it are different authorities, and a credential provisioned for one authenticates nothing on the other.</remarks>
-    internal static TransportSurface Admin { get; } = new("Admin");
+    internal static TransportSurface Admin { get; } = new("Admin", AdminEndpointOptions.RoutePrefix);
 
     /// <summary>Gets whether this value names a surface rather than the unusable struct default.</summary>
     internal bool IsSpecified => this.name is not null;
@@ -53,6 +60,27 @@ internal readonly record struct TransportSurface
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
     internal string Name => this.name
         ?? throw new InvalidOperationException("The value is the default of the struct and names no transport surface.");
+
+    /// <summary>Gets the path every route on this surface is served beneath.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
+    /// <remarks>
+    /// Both prefixes are constants published by the surfaces themselves rather than settings, so this restates neither:
+    /// it is where a control that has to recognize a surface from a request alone — the process-wide rate limiter, which
+    /// rides on one application-wide limiter and must exclude everything that is not the surface it bounds — reads the
+    /// same constant the routes were mapped from.
+    /// </remarks>
+    internal string RoutePrefix => this.routePrefix
+        ?? throw new InvalidOperationException("The value is the default of the struct and names no transport surface.");
+
+    /// <summary>Gets the name this surface's rate-limiting policy is registered under.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
+    /// <remarks>
+    /// A named policy resolves to exactly one limiter, so two surfaces cannot share one and the name is what keeps their
+    /// per-caller buckets apart. Unlike the four names above it is not purely internal: the built-in
+    /// <c>Microsoft.AspNetCore.RateLimiting</c> metrics tag a rejection with it, which is how an operator reads which
+    /// endpoint refused a request.
+    /// </remarks>
+    internal string RateLimitingPolicyName => $"MailFathom:{this.Name}:RateLimiting";
 
     /// <summary>Gets the scheme that decides which credential a request presented and forwards it to the handler that judges it.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>

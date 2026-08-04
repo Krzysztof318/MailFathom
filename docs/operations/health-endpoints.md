@@ -118,8 +118,9 @@ limiting. That is the stated posture, not an omission:
 - An orchestrator holds no credential and has nowhere to get one. A probe that could be refused for its credential is a
   probe that reports a process as failed while it is working.
 - A throttled probe fails, and a failed liveness probe restarts the container. A limiter on this listener would convert
-  a burst of polling into an outage, so the [MCP endpoint's rate limits](mcp-endpoint.md#rate-limiting) never extend to
-  it — the process-wide limiter explicitly applies no limit to a probe request.
+  a burst of polling into an outage, so neither the [MCP endpoint's rate limits](mcp-endpoint.md#rate-limiting) nor the
+  [administrative endpoint's](admin-endpoint.md#rate-limiting) ever extend to it — the process-wide limiter recognizes a
+  request by the route prefix it arrived under and explicitly applies no limit to one belonging to neither surface.
 
 Exposure is controlled by which network the port is published on, and by the transport it is served under. Nothing
 else on this listener depends on a credential, and the TLS listener asks for no client certificate even where the MCP
