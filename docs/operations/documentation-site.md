@@ -112,7 +112,13 @@ above it.
 ## What the template adds
 
 `docfx/template/` is a thin layer over docfx's own `modern` template — the appearance is docfx's, deliberately, and
-what is added is behavior the pages need:
+what is added is behavior the pages need. The one appearance rule is the header logo, which `modern` does not size at
+all: its own logo is an SVG whose intrinsic size already fits a header, so a raster file arrives at whatever size it
+was saved at. Nothing in the build can see that — docfx renders a page without laying it out, so a logo that fits and
+one that covers the page produce the same output — which makes the site's appearance the one part of it that is
+verified by looking at it.
+
+What the template adds beyond that:
 
 - **The version selector** in the header, and the banner a page outside the default version carries. Both read
   `versions.json` from the site root at run time, so a version built months ago joins the selector correctly without
