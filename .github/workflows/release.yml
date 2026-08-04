@@ -12,10 +12,23 @@ name: Release
 # Everything that could make a release wrong is asserted before anything is built. A tag that disagrees with the version
 # its own commit declares, that repeats or moves backwards on its line, that names a commit which never merged, or whose
 # changelog says nothing, fails here — while deleting the tag is still the whole remedy.
+#
+# The filter is version-shaped rather than `v*`, which would start this workflow for `vnext`, `viewer`, or any other tag
+# somebody spells with a leading v. That matters more here than anywhere else in the repository: these jobs hold write
+# credentials for two container registries, an attestation signing identity, and the token that creates a release, so a
+# tag nobody meant as one is better refused by never starting than by the assertion below.
+#
+# A filter pattern is a glob rather than a regular expression, so the exact shape is not expressible here — the `*`
+# following each `[0-9]` leaves the digits in a group unbounded, which is what admits `v0.15.0` and `v16.34.234`, and
+# also what leaves a prerelease and a fourth group matching. The assertion refuses both, and `$prepare-release` is what
+# a release is cut with in the first place.
+#
+# What this gives up is the one case where a version-shaped typo is not version-shaped enough: `v0.4` for `v0.4.0` used
+# to start a run and fail loudly, and now starts nothing at all. Read the absence of a run as the tag being malformed.
 on:
   push:
     tags:
-      - 'v*'
+      - 'v[0-9]*.[0-9]*.[0-9]*'
 
 # Never cancels a run in progress. Cancelling a publication half-way is exactly the state this pipeline is built to
 # avoid, and two release tags pushed close together are two different versions rather than a race.
