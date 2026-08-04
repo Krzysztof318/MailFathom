@@ -120,6 +120,11 @@ write_redirect() {
 
   mkdir --parents "$(dirname "$site_directory/$page_path")"
 
+  # The script carries the fragment and the query across; the refresh below is what happens without one. A meta refresh
+  # navigates to exactly the URL it names, and this is a page rather than an HTTP redirect, so nothing appends the
+  # fragment the reader arrived with — a link to `…/container-image.html#what-a-nightly-build-risks` would land at the
+  # top of the page instead of at the section the README named. `replace` rather than an assignment, so that going back
+  # returns to wherever the reader came from rather than to this page, which would send them forward again.
   cat > "$site_directory/$page_path" <<HTML
 <!DOCTYPE html>
 <html lang="en">
@@ -127,6 +132,9 @@ write_redirect() {
     <meta charset="utf-8">
     <title>MailFathom documentation</title>
     <link rel="canonical" href="$target">
+    <script>
+      window.location.replace('$target' + window.location.search + window.location.hash)
+    </script>
     <meta http-equiv="refresh" content="0; url=$target">
   </head>
   <body>

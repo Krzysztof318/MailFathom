@@ -96,9 +96,9 @@ rather than to the Markdown file behind it.
 
 ### The addresses that outlive a release
 
-A page has two addresses. `…/MailFathom/v0.3.0/operations/mcp-endpoint.html` is where it is served, and
+A page has two addresses. `…/MailFathom/v<version>/operations/mcp-endpoint.html` is where it is served, and
 `…/MailFathom/operations/mcp-endpoint.html` — the same path without the version — is a redirect at the site root that
-lands on whichever version the site opens on.
+lands on whichever version the site opens on, carrying the heading anchor with it.
 
 The second is what anything outside the site links to, the root `README.md` above all. A link carrying a version would
 be wrong the day the next one ships, and one carrying `latest` would quietly opt a reader out of the release the site
