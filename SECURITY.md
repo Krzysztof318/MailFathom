@@ -34,8 +34,8 @@ A confirmed vulnerability is fixed on `main` and reaches you in a release that c
 
 | Version | Supported |
 |---|---|
-| `0.2.x` | Yes — the newest released minor line |
-| `0.1.x` | Only by a decision recorded on the issue asking for it |
+| `0.3.x` | Yes — the newest released minor line |
+| `0.2.x` | Only by a decision recorded on the issue asking for it |
 | Any older release line | Only by a decision recorded on the issue asking for it |
 | `main`, and the `-nightly.<n>` builds from it | No. A fix lands here first, but nothing built from `main` carries a release promise |
 
