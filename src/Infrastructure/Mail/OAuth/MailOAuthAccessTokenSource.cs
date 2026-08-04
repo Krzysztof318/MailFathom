@@ -172,8 +172,8 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
 
             // The status code is not the verdict. RFC 6749 requires a rejected grant to arrive as 400 carrying a
             // machine-readable `error`, which says far more than the status does, so the body is read either way.
-            payload = await response.Content.ReadFromJsonAsync<OAuthTokenResponse>(
-                OAuthJsonContext.Default.Options,
+            payload = await response.Content.ReadFromJsonAsync(
+                OAuthJsonContext.Default.OAuthTokenResponse,
                 cancellationToken);
         }
         catch (Exception failure) when (failure is HttpRequestException or System.Text.Json.JsonException)

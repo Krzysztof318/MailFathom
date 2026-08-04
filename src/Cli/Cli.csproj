@@ -15,7 +15,10 @@
          referenced by a test host, and turning the trim analyzers on at build time puts Microsoft.NET.ILLink.Tasks in
          the ordinary restore graph — a package the SDK ships in its own library-packs directory, whose content hash
          differs from the feed copy, which makes this project's lock file fail everywhere it was not written. The
-         trimmer still runs at publish and its warnings are still read there, which is where a release acts on them. -->
+         trimmer still runs at publish and its warnings are still read there, which is where a release acts on them.
+         No gate a pull request passes through reaches a publish, though, so the reads that would fail one are refused
+         earlier and by a mechanism that costs the restore graph nothing: .config/BannedSymbols.txt bans the
+         reflection-based JSON overloads outright, and the ordinary build rejects the call. -->
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 

@@ -93,6 +93,31 @@ public sealed class MailboxAuthorizerTests
         Assert.Equal(Now.AddHours(1), grant.AccessTokenExpiresAt);
     }
 
+    /// <summary>
+    /// The body is read through the source-generated contract rather than through serializer options, because the
+    /// options overload resolves the shape by reflection and the trimmed command cannot carry that. Case-insensitive
+    /// matching is the part of the contract the two ways of writing the read do not obviously share, and a server whose
+    /// casing differs from the specification's must not authorize a mailbox here and fail at <c>login</c>.
+    /// </summary>
+    [Fact]
+    public async Task RedeemAuthorizationCodeAsync_AServerVaryingTheCaseOfTheTokenResponse_ReadsTheGrantTheSameWay()
+    {
+        // Arrange
+        using var transport = new FakeHttpMessageHandler((_, _) => Task.FromResult(
+            JsonResponse("""{"Access_Token":"at","Refresh_Token":"rt","Expires_In":3600}""")));
+        using var httpClient = new HttpClient(transport);
+        var authorizer = new MailboxAuthorizer(httpClient, new FakeTimeProvider(Now));
+        var request = CreateRequest();
+        var pending = authorizer.BuildAuthorization(request);
+
+        // Act
+        var grant = await authorizer.RedeemAuthorizationCodeAsync(request, pending, "code", CancellationToken.None);
+
+        // Assert
+        Assert.Equal("rt", grant.RefreshToken);
+        Assert.Equal(Now.AddHours(1), grant.AccessTokenExpiresAt);
+    }
+
     [Fact]
     public async Task RedeemAuthorizationCodeAsync_ResponseWithoutRefreshToken_FailsRatherThanProvisioningADeadGrant()
     {

@@ -11,7 +11,7 @@ Some of the rules below are enforced by the build rather than by a reader. Those
 | Enforced by | Covers |
 |---|---|
 | `.editorconfig` diagnostic severities, with `TreatWarningsAsErrors` | Formatting, unnecessary usings, accessibility modifiers, file-scoped namespaces, sealing internal types, disposal (`CA2000`), and the rest of the configured `CA`/`IDE` set |
-| `.config/BannedSymbols.txt`, through `Microsoft.CodeAnalysis.BannedApiAnalyzers` (`RS0030`) | Ambient clocks (`DateTime.Now`, `DateTimeOffset.UtcNow`, and siblings), `Thread.Sleep`, and the `System.Net.Mail` types |
+| `.config/BannedSymbols.txt`, through `Microsoft.CodeAnalysis.BannedApiAnalyzers` (`RS0030`) | Ambient clocks (`DateTime.Now`, `DateTimeOffset.UtcNow`, and siblings), `Thread.Sleep`, the `System.Net.Mail` types, and the `HttpContent.ReadFromJsonAsync` overloads that deserialize through reflection |
 | `Microsoft.VisualStudio.Threading.Analyzers` | Blocking on tasks and other async hazards |
 | `Roslynator.*` and `xunit.analyzers` | General C# quality and xUnit usage |
 
