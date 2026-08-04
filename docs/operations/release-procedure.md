@@ -126,15 +126,16 @@ version becomes real is a decision rather than a consequence of work looking fin
 whole procedure, and it is recorded here so it survives the skill being unavailable:
 
 1. **Merge the changelog pull request.** It adds `## [x.y.z] - YYYY-MM-DD` with the release's entries, composed from
-   what merged since the previous tag, and it brings the five files that name a version in prose onto that version:
-   the **Project status** paragraph in `README.md`, the image references opening `docs/users/installation.md`, the
-   **state of the release** section in `docs/users/README.md`, the **Getting the command** section in
-   `docs/operations/admin-endpoint.md`, and the **Supported versions** table in `SECURITY.md`. It touches nothing else.
-   It merges first because **its merge commit is what gets tagged and published**, so the tagged tree contains the
-   released changelog — and the five files describing the release they ship inside — rather than describing them
-   afterwards.
+   what merged since the previous tag, and it brings the files that name a version in prose onto that version: the
+   **Project status** paragraph and the **Where the artifacts are published** table in `README.md`, the image
+   references opening `docs/users/installation.md`, the **state of the release** section in `docs/users/README.md`,
+   the `mailfathom-schema-<x.y.z>.sql` filename the apply commands quote in `docs/operations/database-schema.md`,
+   `docs/operations/deployment-compose.md`, and `docs/operations/deployment-kubernetes.md`, and the **Supported
+   versions** table in `SECURITY.md`. It touches nothing else. It merges first because **its merge commit is what gets
+   tagged and published**, so the tagged tree contains the released changelog — and the files describing the release
+   they ship inside — rather than describing them afterwards.
 
-   Those five are the whole of what `<VersionPrefix>` does not reach *by name*. Everything a build stamps derives from
+   Those are the whole of what `<VersionPrefix>` does not reach *by name*. Everything a build stamps derives from
    that one declaration; prose does not, and nothing checks it, which is why the list is stated rather than searched
    for. The skill additionally sweeps the tree for prose that describes the release *state* without naming a version —
    "no versioned artifact exists yet", "a release will attach it" — because that kind of sentence goes stale at the

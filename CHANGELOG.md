@@ -30,6 +30,133 @@ because they are, by definition, whatever has been merged since the newest secti
 Nothing yet. A section appears here only when a release is prepared, because this file is written by the release pull
 request and by nothing else; what has merged since the newest section below is what a nightly build carries.
 
+## [0.2.0] - 2026-08-04
+
+The second release, and the first that had a previous one to differ from. **Nothing `0.1.0` promised is withdrawn:**
+the MCP tool contract is unchanged, every configuration key `0.1.0` accepted is still accepted and still means the
+same thing, and both schema changes are additive. There is no breaking entry below, so an upgrade is the schema step
+and a new image.
+
+What is new is how a mailbox authenticates, how quickly a change on the mail server reaches the local copy, and a
+second HTTP surface — an administrative endpoint with a command-line client of its own — that an operator reaches
+without going through the MCP surface.
+
+**The database schema.** Two migrations, both additive: one table and one nullable column
+([#343](https://github.com/Krzysztof318/MailFathom/pull/343),
+[#346](https://github.com/Krzysztof318/MailFathom/pull/346)). `0.2.0` refuses to serve until they are applied —
+startup is gated on the migrations the binary carries and will not migrate a database out from under a running
+process — but `0.1.0` neither reads nor writes what they add, so **they can be applied while `0.1.0` is still
+serving**, and the release then deploys over `0.1.0`'s data unchanged. The gate reads only what is *pending*, so a
+database already carrying both migrations still starts `0.1.0`: going back needs no schema step of its own.
+[Applying the database schema](https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/database-schema.md)
+records the apply path and the ordering a deployment follows.
+
+### Added
+
+**Mailbox authentication.** An IMAP account can present an OAuth token instead of a password.
+
+- `XOAUTH2` and `OAUTHBEARER` are accepted in
+  `MailSynchronization:Accounts:<n>:TransportSecurity:PermittedAuthenticationMechanisms`, and naming either one turns
+  on that account's `…:OAuth` block: the token endpoint, the client, the scope, and the grant — `refresh_token` or
+  `client_credentials` — with the client secret and the refresh token supplied by reference like every other
+  credential. Configuring the block for an account that authenticates with a password fails startup rather than
+  provisioning something nothing can use ([#306](https://github.com/Krzysztof318/MailFathom/pull/306)).
+  [Mailbox OAuth](https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/mailbox-oauth.md) is the page,
+  including where each value comes from for the providers this was verified against.
+- Calls to an authorization server get a retry, timeout, circuit-breaker, and concurrency budget of their own, as the
+  `Resilience:MailAuthorizationServerInvocation` class, rather than borrowing the mailbox session's
+  ([#306](https://github.com/Krzysztof318/MailFathom/pull/306)).
+
+**Continuous synchronization.** A folder change on the mail server can start a pass, instead of every change waiting
+for the account's next interval.
+
+- `MailSynchronization:Accounts:<n>:Mode` selects `Polling` — `0.1.0`'s behaviour, and still the default — or `Push`
+  ([#339](https://github.com/Krzysztof318/MailFathom/pull/339)).
+- Under `Push`, a server offering `NOTIFY` is watched over **one** connection per account covering every configured
+  folder, and a server offering only `IDLE` over one connection per folder
+  ([#339](https://github.com/Krzysztof318/MailFathom/pull/339),
+  [#346](https://github.com/Krzysztof318/MailFathom/pull/346)). `MaxSubscribedFolders` (default `20`) bounds how many
+  folders one subscription may name; the rest synchronize on the account's interval rather than being dropped.
+- Where the server offers `CONDSTORE` and `QRESYNC`, a pass asks what changed since the modification sequence it last
+  reconciled through instead of re-reading the folder, which is what the new nullable
+  `synchronization_checkpoints.ReconciledThroughModSeq` column records
+  ([#346](https://github.com/Krzysztof318/MailFathom/pull/346)).
+- Push degrades to polling rather than stalling: `MaxConsecutivePushFailures` (default `3`) and
+  `PushDegradationPeriod` (default `15 min`) decide when an account falls back and for how long, and
+  `PushRenewalInterval` (default `20 min`) is the lifetime of one `IDLE` command — RFC 2177's ceiling, not a polling
+  cycle ([#339](https://github.com/Krzysztof318/MailFathom/pull/339),
+  [#341](https://github.com/Krzysztof318/MailFathom/pull/341)). Synchronization stays read-only throughout: a push
+  pass sets the remote `\Seen` flag no more than a polled one does.
+
+**An administrative endpoint, and the `mfctl` command that reaches it.**
+
+- `AdminEndpoint` serves administrative routes beneath `/api/admin` on a listener, a credential set, and a set of
+  authorization servers of its own. It is off by default, and a key or an issuer configured under `McpEndpoint`
+  authenticates nothing here — the two surfaces are protected independently rather than sharing one policy
+  ([#313](https://github.com/Krzysztof318/MailFathom/pull/313),
+  [#317](https://github.com/Krzysztof318/MailFathom/pull/317)).
+- **Each release now attaches `mfctl`**, a self-contained binary per platform — `linux-x64`, `linux-arm64`, `win-x64`,
+  `win-arm64` — plus one checksum file covering all of them. It runs where you administer *from* rather than where the
+  service runs, and needs no .NET installation
+  ([#317](https://github.com/Krzysztof318/MailFathom/pull/317)).
+- `mfctl login` signs in with an API key read from standard input, with a browser redirect caught locally, or with a
+  device code entered elsewhere, and keeps the credential in a profile file of its own with the tokens encrypted at
+  rest — the refresh token included, so a session outlives an access token's expiry rather than sending the operator
+  back through the flow ([#348](https://github.com/Krzysztof318/MailFathom/pull/348)).
+  [Administering your deployment](https://github.com/Krzysztof318/MailFathom/blob/main/docs/users/administering.md)
+  states what that encryption protects and what it does not.
+- `mfctl mailbox authorize` runs a mailbox's own OAuth flow from the operator's machine and **sends the resulting
+  refresh token to the deployment**, which seals and stores it, instead of printing it for the operator to paste into
+  a configuration file ([#356](https://github.com/Krzysztof318/MailFathom/pull/356)).
+- [Administering a deployment](https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/admin-endpoint.md)
+  is the reference: every route, every `--mode`, the configuration, and what each failure means.
+
+  **One caveat, and it is a defect this release ships with**: a deployment that sets `HealthEndpoints:Enabled` to
+  `false` *and* enables this endpoint loses its application listener, because binding the administrative socket in
+  code makes Kestrel ignore `ASPNETCORE_HTTP_PORTS` and only the probe path restates it. The process starts and serves
+  the administrative port alone, and every MCP client is refused.
+  [#325](https://github.com/Krzysztof318/MailFathom/issues/325) carries the fix. Until it lands, leave the probes
+  enabled — the default — or state the application listener as a `Kestrel:Endpoints` entry.
+
+**Encryption at rest.**
+
+- `DataEncryption` configures a key ring: one active key, any number of retained ones, each 32 bytes of material
+  supplied by reference like every other credential, under which MailFathom seals what it stores. An absent section is
+  a valid deployment that seals nothing, and rotation is moving `ActiveKeyId` while leaving the previous key
+  configured, so nothing already sealed becomes unopenable
+  ([#338](https://github.com/Krzysztof318/MailFathom/pull/338)).
+  [ADR 0005](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0005-data-encryption-key-ring-and-provisioning.md)
+  records the decision.
+- The refresh token an authorization server rotates is followed and stored sealed under that ring, in the new
+  `mailbox_refresh_tokens` table, so a provider that issues a new refresh token on every exchange no longer strands an
+  account at the next restart ([#343](https://github.com/Krzysztof318/MailFathom/pull/343)).
+- Docker Compose, the Helm chart, and the native systemd unit each provision the key by the same mechanism they
+  provision every other secret, and the guides state where the file goes in each
+  ([#354](https://github.com/Krzysztof318/MailFathom/pull/354)).
+  [Secret provisioning](https://github.com/Krzysztof318/MailFathom/blob/main/docs/operations/secret-provisioning.md)
+  is the contract. **Back the key up with the database**: nothing in MailFathom regenerates it, and a database
+  restored without its key restores nothing that was sealed under it.
+
+### Changed
+
+- `MailSynchronization:Accounts:<n>:Secrets:Password` is required only when the account's permitted mechanisms include
+  a password mechanism. It was unconditionally required in `0.1.0`, which every configuration written for `0.1.0`
+  already satisfies; what changes is that an account authenticating with OAuth alone now configures no password at all
+  ([#306](https://github.com/Krzysztof318/MailFathom/pull/306)).
+
+### Security
+
+- A mailbox refresh token is held sealed in the database under the deployment's key ring rather than sitting in a
+  configuration file or a secret file that nothing rotates, and the rotation an authorization server performs is
+  followed rather than lost ([#343](https://github.com/Krzysztof318/MailFathom/pull/343)).
+- The refresh token an authorization flow produces never reaches the operator's terminal: `mfctl mailbox authorize`
+  sends it to the deployment over the administrative endpoint, so it is not in scrollback, in a shell history, or in a
+  file somebody has to remember to delete ([#356](https://github.com/Krzysztof318/MailFathom/pull/356)).
+- The administrative endpoint carries its own credentials, its own authorization servers, and its own TLS profiles, so
+  granting somebody administrative access does not grant them the MCP surface and the reverse holds
+  ([#313](https://github.com/Krzysztof318/MailFathom/pull/313),
+  [#317](https://github.com/Krzysztof318/MailFathom/pull/317)).
+
 ## [0.1.0] - 2026-08-02
 
 The first public release, and the point at which MailFathom's four public surfaces begin to promise anything. There is
@@ -160,5 +287,6 @@ is the whole surface, key by key, including which keys reload and which need a r
   [`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) registers
   every dependency it ships beside ([#173](https://github.com/Krzysztof318/MailFathom/pull/173)).
 
-[Unreleased]: https://github.com/Krzysztof318/MailFathom/compare/v0.1.0...main
+[Unreleased]: https://github.com/Krzysztof318/MailFathom/compare/v0.2.0...main
+[0.2.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Krzysztof318/MailFathom/releases/tag/v0.1.0
