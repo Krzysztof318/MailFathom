@@ -179,6 +179,7 @@ public static class ServiceCollectionExtensions
         // Registered here rather than beside the OAuth client it serves, because what it is is a table: the token
         // source asks for a credential and this is what knows the credential lives in PostgreSQL, sealed.
         services.AddScoped<IMailboxRefreshTokenStore, MailboxRefreshTokenStore>();
+        services.AddScoped<MailboxRefreshTokenRecorder>();
         // MimeKit arrives with MailKit, so message parsing needs no dependency of its own; the adapter keeps its types
         // out of Application the same way the IMAP adapter keeps MailKit's out.
         services.AddScoped<IEmailMimeReader>(provider => new MimeKitEmailMimeReader(

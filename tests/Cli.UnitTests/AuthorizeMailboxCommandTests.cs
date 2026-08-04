@@ -4,7 +4,9 @@
 
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using System.Web;
+using MailFathom.Cli.Administration;
 using MailFathom.Cli.Authorization;
 using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
@@ -200,6 +202,153 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
         Assert.DoesNotContain(this.console.Errors, line => line.Contains("a-refresh-token", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The whole point of <c>--account</c>: the token reaches the deployment and no stream. A regression that printed
+    /// it as well would leave it in the scrollback and in any session log, which is the exposure the option removes.
+    /// </summary>
+    [Fact]
+    public async Task Authorize_WithAnAccount_SendsTheTokenToTheDeploymentAndPrintsItNowhere()
+    {
+        // Arrange
+        this.SignInTo("production", "https://mail.example.test:8443", "an-admin-key");
+        using var handler = ProviderIssuingAGrantAndDeploymentAnswering(HttpStatusCode.NoContent);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            handler,
+            FakeMailboxRedirect.ApprovingWhenAsked("an-authorization-code", this.StateTheCommandGenerated),
+            "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--account", "workspace");
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.DoesNotContain(this.console.Lines, line => line.Contains("a-refresh-token", StringComparison.Ordinal));
+        Assert.DoesNotContain(this.console.Errors, line => line.Contains("a-refresh-token", StringComparison.Ordinal));
+        Assert.Contains(
+            this.console.Lines,
+            line => line.Contains("Stored the refresh token for account 'workspace' on 'production'", StringComparison.Ordinal));
+    }
+
+    /// <summary>The request the deployment receives is the other half of the contract: the route, the credential, and the body.</summary>
+    [Fact]
+    public async Task Authorize_WithAnAccount_PostsTheGrantToTheWriteRouteUnderTheStoredCredential()
+    {
+        // Arrange
+        this.SignInTo("production", "https://mail.example.test:8443", "an-admin-key");
+        using var handler = ProviderIssuingAGrantAndDeploymentAnswering(HttpStatusCode.NoContent);
+
+        // Act
+        await this.RunAsync(
+            handler,
+            FakeMailboxRedirect.ApprovingWhenAsked("an-authorization-code", this.StateTheCommandGenerated),
+            "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--account", "workspace");
+
+        // Assert
+        var sent = handler.RecordedRequests.Single(
+            recorded => recorded.RequestUri?.AbsolutePath == AdminEndpointRoutes.MailboxRefreshTokenPath);
+        Assert.Equal(HttpMethod.Post, sent.Method);
+        Assert.Equal("Bearer an-admin-key", sent.Headers["Authorization"][0]);
+
+        using var body = JsonDocument.Parse(sent.ContentAsUtf8String());
+        Assert.Equal("workspace", body.RootElement.GetProperty("account").GetString());
+        Assert.Equal("a-refresh-token", body.RootElement.GetProperty("refreshToken").GetString());
+    }
+
+    /// <summary>
+    /// A sign-in the deployment has nowhere to put is worse than no sign-in at all: somebody has already approved
+    /// access at the provider, and the credential that produced it is then discarded unread.
+    /// </summary>
+    [Fact]
+    public async Task Authorize_WithAnAccountAndNoProfile_FailsBeforeAnybodyIsAskedToApproveAnything()
+    {
+        // Arrange
+        using var handler = TokenEndpointRefusing();
+
+        // Act
+        var exitCode = await this.RunAsync(
+            handler,
+            FakeMailboxRedirect.Silent(),
+            "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--account", "workspace");
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Empty(handler.RecordedRequests);
+        Assert.Null(this.console.LastPrompt);
+    }
+
+    /// <summary>An account the deployment does not configure is refused by it, and its sentence is what the operator needs.</summary>
+    [Fact]
+    public async Task Authorize_AnAccountTheDeploymentDoesNotConfigure_ReportsWhatItSaid()
+    {
+        // Arrange
+        this.SignInTo("production", "https://mail.example.test:8443", "an-admin-key");
+        using var handler = ProviderIssuingAGrantAndDeploymentRefusing(
+            HttpStatusCode.BadRequest,
+            """{"detail":"This deployment configures no mail account named 'archive'."}""");
+
+        // Act
+        var exitCode = await this.RunAsync(
+            handler,
+            FakeMailboxRedirect.ApprovingWhenAsked("an-authorization-code", this.StateTheCommandGenerated),
+            "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--account", "archive");
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("configures no mail account named 'archive'", StringComparison.Ordinal));
+        Assert.DoesNotContain(this.console.Lines, line => line.Contains("a-refresh-token", StringComparison.Ordinal));
+    }
+
+    /// <summary>A deployment that refuses the administrative credential is reported as that rather than as a stored grant.</summary>
+    [Fact]
+    public async Task Authorize_ADeploymentRefusingTheAdministrativeCredential_SaysSoAndStoresNothing()
+    {
+        // Arrange
+        this.SignInTo("production", "https://mail.example.test:8443", "a-revoked-key");
+        using var handler = ProviderIssuingAGrantAndDeploymentRefusing(HttpStatusCode.Unauthorized, string.Empty);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            handler,
+            FakeMailboxRedirect.ApprovingWhenAsked("an-authorization-code", this.StateTheCommandGenerated),
+            "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--account", "workspace");
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(this.console.Errors, line => line.Contains("refused the credential", StringComparison.Ordinal));
+        Assert.DoesNotContain(this.console.Lines, line => line.Contains("a-refresh-token", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Each of these reaches an operator as a documented sentence, and each names a different thing to go and look at:
+    /// a listener serving something else, a refusal with no reason in it, and an answer that is neither.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound, "", "serves no administrative endpoint")]
+    [InlineData(HttpStatusCode.BadRequest, "", "refused the grant without saying why")]
+    [InlineData(HttpStatusCode.BadRequest, "<html>refused</html>", "refused the grant without saying why")]
+    [InlineData(HttpStatusCode.InternalServerError, "", "rather than storing the token")]
+    public async Task Authorize_ADeploymentThatDoesNotStoreTheGrant_ReportsWhichKindOfAnswerItGave(
+        HttpStatusCode deploymentStatus,
+        string deploymentBody,
+        string expectedReport)
+    {
+        // Arrange
+        this.SignInTo("production", "https://mail.example.test:8443", "an-admin-key");
+        using var handler = ProviderIssuingAGrantAndDeploymentRefusing(deploymentStatus, deploymentBody);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            handler,
+            FakeMailboxRedirect.ApprovingWhenAsked("an-authorization-code", this.StateTheCommandGenerated),
+            "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--account", "workspace");
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(this.console.Errors, line => line.Contains(expectedReport, StringComparison.Ordinal));
+        Assert.DoesNotContain(this.console.Lines, line => line.Contains("a-refresh-token", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("code=abc&state=xyz", "abc", "xyz", null)]
     [InlineData("?code=abc&state=xyz", "abc", "xyz", null)]
@@ -265,6 +414,39 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
         return HttpUtility.ParseQueryString(new Uri(address.Trim()).Query)["state"]
             ?? throw new InvalidOperationException("The printed authorization address carried no state.");
     }
+
+    /// <summary>Remembers a deployment the way <c>login</c> would, so a command has a profile to act through.</summary>
+    private void SignInTo(string name, string endpoint, string token) =>
+        new CredentialStore(
+            Path.Combine(this.storeDirectory, "credentials.json"),
+            new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")))
+            .Save(name, new Uri(endpoint), token, "workstation");
+
+    /// <summary>Answers as the provider's token endpoint and as the deployment, told apart by the path.</summary>
+    /// <remarks>
+    /// One handler serves every transport a command opens, so a run that sends to both is only meaningful if the two
+    /// answer differently. Routing on the administrative prefix is also what lets a test assert that the grant reached
+    /// the write route rather than merely that two requests happened.
+    /// </remarks>
+    private static FakeHttpMessageHandler ProviderIssuingAGrantAndDeploymentAnswering(HttpStatusCode deploymentStatus) =>
+        ProviderIssuingAGrantAndDeploymentRefusing(deploymentStatus, string.Empty);
+
+    private static FakeHttpMessageHandler ProviderIssuingAGrantAndDeploymentRefusing(
+        HttpStatusCode deploymentStatus,
+        string deploymentBody) =>
+        new((request, _) => Task.FromResult(
+            request.RequestUri?.AbsolutePath.StartsWith(AdminEndpointRoutes.Prefix, StringComparison.Ordinal) == true
+                ? new HttpResponseMessage(deploymentStatus)
+                {
+                    Content = new StringContent(deploymentBody, Encoding.UTF8, "application/problem+json"),
+                }
+                : new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """{"access_token":"an-access-token","refresh_token":"a-refresh-token","expires_in":3600}""",
+                        Encoding.UTF8,
+                        "application/json"),
+                }));
 
     /// <summary>A token endpoint that refuses everything, so a test reaching it fails loudly rather than passing quietly.</summary>
     private static FakeHttpMessageHandler TokenEndpointRefusing() =>

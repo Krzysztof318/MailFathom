@@ -18,15 +18,12 @@ in [configuration sources](../operations/configuration-sources.md); the command 
 database, and never touches the secret store. Nothing you do with it changes what the service will do on its next
 restart.
 
-> **Today it verifies who you are, and nothing it does changes a running deployment.** The administrative surface
-> publishes one route, and the commands below are the whole of what talks to it: sign in, keep several deployments
-> straight, and ask one whether your credential still works. Operational commands — inspecting synchronization,
-> triggering work, reading accounts — are not there yet. If you are looking for something to *do* to a running
-> deployment, this is not yet the page that has it.
+> **One thing it does changes a running deployment: it can place a mailbox credential.** Everything else below verifies
+> who you are and keeps several deployments straight. Operational commands — inspecting synchronization, triggering
+> work, reading accounts — are not there yet.
 >
-> One command is not a client of that surface at all. `mfctl mailbox authorize` signs you in to a *mail provider* to
-> produce a mailbox credential, which you then provision on the server yourself; it is described under
-> [authorizing a mailbox](#authorizing-a-mailbox) below.
+> The exception is [authorizing a mailbox](#authorizing-a-mailbox), which signs you in to a *mail provider* and can then
+> hand the resulting credential to your deployment to keep.
 
 ## Before it can answer
 
@@ -136,10 +133,25 @@ computer matters. It listens on a loopback address, opens your browser, and catc
 back — so there is nothing to copy, and the authorization code never crosses a network. On a machine with no browser,
 forward the port over SSH, or use `--mode device` for Microsoft and `--mode manual` for Google.
 
-What it produces is a refresh token printed on standard output. **You provision it on the server yourself**, as a
-secret reference like every other credential; the command writes nothing and the service reads it at startup.
+What it produces is a refresh token, and `--account` decides where that token goes:
+
+```console
+$ mfctl mailbox authorize --provider google --client-id <client-id> --account workspace
+…
+Stored the refresh token for account 'workspace' on 'production'. It was not printed.
+```
+
+**Named, the token goes straight to your deployment**, which encrypts it and keeps it. It is never printed, so it never
+reaches your scrollback or a session log, and there is nothing for you to place by hand. The account has to be one your
+deployment configures; a name it does not know is refused and nothing is stored. Re-running it replaces what was
+stored, which is what re-authorizing after a revocation is.
+
+**Omitted, the token is printed on standard output and you provision it on the server yourself**, as a secret reference
+like every other credential. That is what a deployment with no administrative endpoint needs, and it stays the right
+choice if you would rather place credentials yourself.
+
 [Mailbox OAuth](../operations/mailbox-oauth.md) is the whole procedure, including what each provider requires of the
-application you register.
+application you register and how a stored token relates to the reference in your configuration.
 
 ## Where to go next
 

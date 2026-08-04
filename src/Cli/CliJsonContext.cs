@@ -29,6 +29,8 @@ namespace MailFathom.Cli;
     PropertyNameCaseInsensitive = true,
     WriteIndented = true)]
 [JsonSerializable(typeof(AdminSession))]
+[JsonSerializable(typeof(MailboxRefreshTokenRequest))]
+[JsonSerializable(typeof(AdminProblem))]
 [JsonSerializable(typeof(StoredCredentials))]
 [JsonSerializable(typeof(ProtectedResourceMetadata))]
 [JsonSerializable(typeof(AuthorizationServerMetadata))]

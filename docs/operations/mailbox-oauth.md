@@ -1,14 +1,15 @@
 # Mailbox OAuth
 
-<!-- describes: src/Infrastructure/Mail/OAuth/**, src/Common/MailboxOAuth/**, src/Common/OAuth/**, src/Cli/**, src/Application/Accounts/**, src/Infrastructure/Persistence/Accounts/** -->
+<!-- describes: src/Infrastructure/Mail/OAuth/**, src/Common/MailboxOAuth/**, src/Common/OAuth/**, src/Cli/**, src/Host/Api/**, src/Application/Accounts/**, src/Infrastructure/Persistence/Accounts/** -->
 
 How a mailbox that no longer accepts a password is authenticated, and what each provider requires before it will
 issue the credential MailFathom runs on.
 
 MailFathom never obtains a refresh token while it is serving. It is a headless service, it ships in a container, and
 it serves no consent page and owns no redirect endpoint — so the sign-in that produces a refresh token is an
-administration act you perform once, with the `mfctl` command, and the result is provisioned as a secret like
-every other credential. The running service only ever exchanges that token for short-lived access tokens.
+administration act you perform once, with the `mfctl` command. The result is then either sent to the deployment to keep
+or provisioned as a secret like every other credential, and the running service only ever exchanges that token for
+short-lived access tokens.
 
 **Run the command on your own computer.** It administers a deployment over HTTP and needs nothing from the machine the
 service runs on, which is what makes the ordinary browser sign-in available: the command listens on a loopback address,
@@ -65,8 +66,12 @@ The authorization-code and device-code grants appear nowhere in the service's co
 
 ## Obtaining the refresh token
 
-The command is in the published container image and in the release archive. It writes nothing: the refresh token goes
-to standard output and everything else to standard error, so redirecting output captures the token alone.
+The command is in the published container image and in the release archive. `--mode` decides how the person signs in,
+and `--account` decides what becomes of the result — [sending it to the deployment](#sending-the-token-to-the-deployment)
+to keep, or printing it for you to provision. The two are independent: every mode below works either way.
+
+Without `--account` the refresh token goes to standard output and everything else to standard error, so redirecting
+output captures the token alone.
 
 Three modes, and the first is the one to reach for:
 
@@ -152,6 +157,48 @@ stays in the address bar and reaches the server only when you paste it. The requ
 
 This is the last resort. The default mode does listen at that address, which removes both pastes.
 
+## Sending the token to the deployment
+
+`--account` names an account in the deployment's own configuration, and the command sends the grant there instead of
+printing it. The deployment seals it under its [data-encryption key](secret-provisioning.md) and stores it, which is the
+same place a rotated token is kept.
+
+```console
+$ mfctl mailbox authorize --provider google --client-id <client-id> --account workspace
+Client secret (leave empty for a public client):
+
+A browser has been opened for you. If it did not appear, open this address yourself:
+
+  https://accounts.google.com/o/oauth2/v2/auth?client_id=…&code_challenge=…
+
+Waiting for the sign-in to come back to http://127.0.0.1:8765/...
+Stored the refresh token for account 'workspace' on 'production'. It was not printed.
+```
+
+Four things about that run are worth stating, because each removes a way the manual step could go wrong:
+
+- **The token reaches one place.** It is not printed, not redirected, not written to a file, and not repeated in the
+  line that confirms the outcome — so it never enters your scrollback, your shell history, or a session log.
+- **The account is checked against configuration.** A deployment that configures no account by that name refuses the
+  grant and names it, rather than storing a credential for a mailbox owner that nothing would ever read.
+- **Storing replaces.** Authorizing the same account again replaces what was stored, which is what re-authorizing after
+  a revocation is. Nothing accumulates.
+- **Being signed in is checked first.** The command resolves the deployment before it prompts or opens a browser, so
+  a missing profile fails at once instead of after somebody has approved access at the provider.
+
+It goes to the deployment you are signed in to — `--endpoint` names a different profile or address for one invocation,
+the same way it does for every other command. [Administering a deployment](admin-endpoint.md) is how you sign in, and
+the write needs the administrative endpoint enabled; a deployment without one still takes a token you provision
+yourself.
+
+> **The route this uses is behind the endpoint's authentication, and behind nothing else.** Every authenticated caller
+> may perform every administrative operation, so an administrative credential that can read a session can write a
+> mailbox credential. Provision one per client and treat it as what it now is.
+
+Sending a grant does **not** change the account's configuration. `OAuth:RefreshToken` stays a secret reference and is
+still what an account is served from until something is stored for it; what changes is that something now is. The
+interaction between the two is [rotation](#rotation).
+
 ## Configuring the account
 
 Provision the refresh token and the client secret through [secret provisioning](secret-provisioning.md), then point
@@ -231,11 +278,15 @@ A refresh token is still a long-lived credential you can rotate deliberately, th
 — **but only while no token has been stored for that account.** Once one has, the stored token wins on every request and
 the reference is never read again.
 
-**Nothing operator-facing replaces a stored token today.** `mfctl mailbox authorize` obtains a refresh token and prints
-it for you to provision; it writes nothing to the deployment, so re-running it does not change what a stored account
-sends. Writing a grant straight to a deployment through the administrative endpoint is [#331](https://github.com/Krzysztof318/MailFathom/issues/331)
-and does not exist yet. Until it does, the only way to make an account fall back to its configured reference is to
-delete its row with any PostgreSQL client:
+**A stored token is replaced by authorizing the account again**, with
+[`--account`](#sending-the-token-to-the-deployment). That is the repair for a stored grant the authorization server no
+longer accepts, and it needs no database access and no restart: the next token request spends what the run just stored.
+
+```console
+$ mfctl mailbox authorize --provider google --client-id <client-id> --account workspace
+```
+
+To make an account fall back to its configured reference instead, delete its row with any PostgreSQL client:
 
 ```sql
 DELETE FROM mailbox_refresh_tokens WHERE "MailboxAccountId" = 'workspace';
@@ -247,15 +298,17 @@ Two failures are worth knowing about, because neither is silent and both end the
 the rotated token — the database is unreachable, the key ring is gone — the token request still succeeds and the
 failure is logged as an error naming the account; the account keeps working until the token it replaced stops being
 accepted. If the process stops between receiving a rotated token and storing it, that rotation is lost. In both cases
-the account eventually answers `invalid_grant`, and the repair is the two steps above: delete the stored row, then
-provision a token from a fresh `mfctl mailbox authorize` at the configured reference.
+the account eventually answers `invalid_grant`, and the repair is to authorize the account again with `--account`.
 
 ## Troubleshooting
 
 | What you see | What it means |
 | --- | --- |
 | `no_refresh_token_issued` | The grant returned an access token only. For Google, consent was not re-prompted; the command already forces it, so check that the client is a Desktop app. For Microsoft, `offline_access` is missing from the scope. |
-| `invalid_grant` at startup or in a run | The refresh token is revoked, expired, or belongs to a different client. Re-run the authorization and provision the result at the configured reference — and if a token has already been stored for that account, delete its row first, because otherwise the reference is not read. [Rotation](#rotation) has the statement. A rotation MailFathom could not store reaches you this way too; the error logged when the store failed says so. |
+| `invalid_grant` at startup or in a run | The refresh token is revoked, expired, or belongs to a different client. Authorize the account again with `--account`, which replaces whatever was stored. [Rotation](#rotation) has the statement, including what to do on a deployment you provision by hand. A rotation MailFathom could not store reaches you this way too; the error logged when the store failed says so. |
+| `This deployment configures no mail account named …` | `--account` named an identifier no `MailSynchronization:Accounts` entry carries, or you are signed in to the wrong deployment. The grant was not stored; nothing was changed. |
+| `The deployment refused the grant without saying why.` | The administrative endpoint refused the request and sent no reason, which is what a proxy answering `400` in front of it looks like. Check that `--endpoint` reaches the deployment rather than something in front of it. |
+| `answered … rather than storing the token` | The endpoint was reached and answered with neither an acceptance nor a refusal it explained. The token was not stored; nothing about the account changed. A `500` is most often a deployment with no key ring, since that is what a stored token seals under — configure `DataEncryption`, or provision the token at the configured reference instead. |
 | `The rotated refresh token … could not be stored` | The database was unreachable, or the key ring the value seals under is not configured. The account keeps working until the previous token stops being accepted, so fix the cause and it recovers on the next rotation. |
 | `The data-encryption key ring configures no key` | A stored token names a key the ring no longer holds. Restore that key entry; a stored value cannot be opened without it. |
 | `invalid_client` | The client ID or client secret does not match the registration, or a confidential client was authorized as a public one. |

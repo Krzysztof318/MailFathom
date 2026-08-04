@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.CommandLine;
+using MailFathom.Cli.Administration;
+using MailFathom.Cli.Credentials;
 using MailFathom.Common.MailboxOAuth;
 using MailFathom.Common.OAuth;
 
@@ -11,9 +13,12 @@ namespace MailFathom.Cli.Commands;
 /// <summary>Builds the command that walks an operator through authorizing one mailbox.</summary>
 /// <remarks>
 /// <para>
-/// The command produces a refresh token and prints it. It writes no configuration file and contacts no mail server:
-/// provisioning the token is the operator's next step, through the same secret-reference mechanism every other
-/// MailFathom credential arrives by, and the service reads it from there.
+/// <c>--account</c> decides what becomes of the refresh token the run produces, and it is the only difference between
+/// the command's two shapes. Named, the token is sent to the deployment the command is signed in to, which seals it
+/// under its own key and keeps it; the token is then never printed, never redirected, and never placed by hand. Omitted,
+/// the token goes to standard output for the operator to provision through the same secret-reference mechanism every
+/// other MailFathom credential arrives by — which is what a deployment with no administrative endpoint, and an operator
+/// who provisions credentials themselves, still need.
 /// </para>
 /// <para>
 /// Three modes exist because the providers and the machines differ, rather than because an operator has a preference.
@@ -89,7 +94,14 @@ internal static class AuthorizeMailboxCommand
             Description = "Skips the client-secret prompt, for an application registered as a public client.",
         };
 
-        Command command = new("authorize", "Obtain a mailbox refresh token to provision as a secret.")
+        Option<string?> accountOption = new("--account")
+        {
+            Description = "Sends the refresh token to the deployment to keep, for the account this configuration identifier names, instead of printing it.",
+        };
+
+        var endpointOption = CliOptions.Endpoint();
+
+        Command command = new("authorize", "Obtain a mailbox refresh token, and store it on the deployment or print it.")
         {
             providerOption,
             clientIdOption,
@@ -97,6 +109,8 @@ internal static class AuthorizeMailboxCommand
             scopeOption,
             redirectUriOption,
             publicClientOption,
+            accountOption,
+            endpointOption,
         };
 
         command.SetAction((parseResult, cancellationToken) => RunAsync(
@@ -107,6 +121,8 @@ internal static class AuthorizeMailboxCommand
             parseResult.GetValue(scopeOption),
             parseResult.GetValue(redirectUriOption),
             parseResult.GetValue(publicClientOption),
+            parseResult.GetValue(accountOption),
+            CliOptions.RequestedDeployment(parseResult.GetValue(endpointOption)),
             cancellationToken));
 
         return command;
@@ -120,6 +136,8 @@ internal static class AuthorizeMailboxCommand
         string? scopeOverride,
         string? redirectAddress,
         bool isPublicClient,
+        string? accountId,
+        string? requestedDeployment,
         CancellationToken cancellationToken)
     {
         var redirectUri = ReadRedirectAddress(redirectAddress);
@@ -145,6 +163,15 @@ internal static class AuthorizeMailboxCommand
                 $"The {preset.PresetName} provider rejects an authorization that carries no client secret, so --public-client cannot be used with it. Register a confidential client and omit the flag.");
         }
 
+        // Resolved before anything is prompted for or opened in a browser, so a command that is not signed in, or that
+        // names a deployment no profile serves, says so at once instead of after somebody has completed a provider
+        // sign-in whose result it then has nowhere to put.
+        var destination = string.IsNullOrWhiteSpace(accountId)
+            ? null
+            : new GrantDestination(
+                accountId.Trim(),
+                await context.Deployment().ReachAsync(requestedDeployment, cancellationToken));
+
         var clientSecret = isPublicClient
             ? null
             : context.Console.ReadSecret("Client secret (leave empty for a public client): ");
@@ -163,18 +190,18 @@ internal static class AuthorizeMailboxCommand
         using var transport = context.OpenTransport(preset.TokenEndpoint);
         var authorizer = new MailboxAuthorizer(transport, TimeProvider.System);
 
+        // The catch translates failures of the exchange with the authorization server, so what the deployment does with
+        // the result is deliberately outside it: a transport failure reaching a deployment would otherwise be reported
+        // as one reaching the provider, naming the wrong machine to go and look at.
+        MailboxAuthorizationGrant grant;
         try
         {
-            var grant = mode switch
+            grant = mode switch
             {
                 AuthorizationMode.Device => await AuthorizeWithDeviceAsync(context, authorizer, request, cancellationToken),
                 AuthorizationMode.Manual => await AuthorizeManuallyAsync(context, authorizer, request, cancellationToken),
                 _ => await AuthorizeInteractivelyAsync(context, authorizer, request, cancellationToken),
             };
-
-            ReportGrant(context, grant);
-
-            return CliExitCode.Success;
         }
         catch (MailboxAuthorizationFailedException failure)
         {
@@ -185,6 +212,17 @@ internal static class AuthorizeMailboxCommand
             // The message is the transport's, not the authorization server's, so it carries no credential.
             throw new CliFailure($"The authorization server could not be reached: {failure.Message}", failure);
         }
+
+        if (destination is null)
+        {
+            ReportGrant(context, grant);
+        }
+        else
+        {
+            await StoreGrantAsync(context, destination, grant, cancellationToken);
+        }
+
+        return CliExitCode.Success;
     }
 
     private static Task<MailboxAuthorizationGrant> AuthorizeWithDeviceAsync(
@@ -327,4 +365,38 @@ internal static class AuthorizeMailboxCommand
 
         context.Console.WriteLine(grant.RefreshToken);
     }
+
+    /// <summary>Hands the refresh token to the deployment, and says so without saying what was sent.</summary>
+    /// <remarks>
+    /// The token reaches one place and stops there: it is not printed, not written to a file, and not repeated in the
+    /// line that confirms the outcome. That line names the account and the profile instead, which is what an operator
+    /// checks and the only part of this they could have got wrong.
+    /// </remarks>
+    private static async Task StoreGrantAsync(
+        CliContext context,
+        GrantDestination destination,
+        MailboxAuthorizationGrant grant,
+        CancellationToken cancellationToken)
+    {
+        using var transport = context.OpenTransport(destination.Deployment.Endpoint);
+
+        await new AdminApiClient(transport).StoreMailboxRefreshTokenAsync(
+            destination.Deployment.Token,
+            destination.AccountId,
+            grant.RefreshToken,
+            cancellationToken);
+
+        context.Console.WriteLine(
+            $"Stored the refresh token for account '{destination.AccountId}' on '{destination.Deployment.Name}'. It was not printed.");
+    }
+
+    /// <summary>Where a run's grant is going, when it is going anywhere but standard output.</summary>
+    /// <param name="AccountId">The account the deployment is asked to keep it for.</param>
+    /// <param name="Deployment">The deployment to send it to, with a credential it will still accept.</param>
+    /// <remarks>
+    /// The two travel together because they are settled together, before the sign-in, and neither is meaningful without
+    /// the other. Holding them as one value is also what keeps the rest of the run free of a pair of nullable locals
+    /// whose combinations the compiler cannot rule out but the code depends on.
+    /// </remarks>
+    private sealed record GrantDestination(string AccountId, SignedInProfile Deployment);
 }
