@@ -195,6 +195,19 @@ if (runsIntegrationTests)
             "McpEndpoint__ApiKeys__1__SecretReference",
             $"plaintext:{OrchestrationContract.McpExpendableApiKey}")
         .WithEnvironment("McpEndpoint__Cors__AllowedOrigins__0", OrchestrationContract.McpPermittedOrigin)
+        // The administrative surface, served under the posture worth proving end to end: enabled, on a listener of its
+        // own, and behind a credential that is none of the MCP keys above. Its port is allocated rather than defaulted,
+        // for the reason the probe port is — two MailFathom processes run at once under this topology — and injected
+        // into the host's own configuration key, so the number is written once rather than declared here and configured
+        // again beside it. The scheme is tcp, which OrchestrationContract.HostAdminEndpointName explains.
+        .WithEndpoint(name: OrchestrationContract.HostAdminEndpointName, scheme: "tcp", env: "AdminEndpoint__Port")
+        .WithEnvironment("AdminEndpoint__Enabled", "true")
+        .WithEnvironment("AdminEndpoint__BindAddress", OrchestrationContract.AdminEndpointBindAddress)
+        .WithEnvironment("AdminEndpoint__Authentication", "ApiKey")
+        .WithEnvironment("AdminEndpoint__ApiKeys__0__Name", OrchestrationContract.AdminApiKeyName)
+        .WithEnvironment(
+            "AdminEndpoint__ApiKeys__0__SecretReference",
+            $"plaintext:{OrchestrationContract.AdminApiKey}")
         // Narrowed from the product defaults for the same reason the origins are: a burst small enough to exhaust
         // deliberately is what makes the difference between a limiter that is wired in and one that is not observable.
         // The replenishment period outlasts the run, so what a client spent stays spent and a refusal cannot depend on

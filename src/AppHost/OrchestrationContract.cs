@@ -204,6 +204,39 @@ public static class OrchestrationContract
     /// </remarks>
     public const string McpPermittedOrigin = "https://client.mailfathom.test";
 
+    /// <summary>The endpoint the MailFathom host serves its administrative surface on.</summary>
+    /// <remarks>
+    /// <para>
+    /// Present only under <see cref="IntegrationTestingArgument" />. A developer's orchestration administers nothing
+    /// over the network, and an endpoint enabled for them would be a socket nobody asked for.
+    /// </para>
+    /// <para>
+    /// Declared with the <c>tcp</c> scheme rather than <c>http</c>, for the reason the probe endpoint is: Aspire builds
+    /// <c>ASPNETCORE_URLS</c> from the http and https endpoints, so an http one here would make this port an application
+    /// listener as well — and the host refuses that, because the administrative surface is served on a listener of its
+    /// own precisely so that reaching it does not mean reaching the MCP endpoint. A tcp endpoint is published without
+    /// reaching that variable, which leaves the two listeners separate; what the suite connects to it with is still HTTP.
+    /// </para>
+    /// </remarks>
+    public const string HostAdminEndpointName = "admin";
+
+    /// <summary>The IP address the administrative listener binds under the integration-test topology.</summary>
+    /// <remarks>Both loopback families, for the reason <see cref="MutualTlsHostBindAddress" /> is what it is: whether the orchestration reaches this listener over IPv4 or IPv6 is the machine's choice rather than the suite's.</remarks>
+    public const string AdminEndpointBindAddress = "::";
+
+    /// <summary>The name the integration-test topology configures its one administrative API key under.</summary>
+    /// <remarks>Present only under <see cref="IntegrationTestingArgument" />, like the key itself. It is also what the endpoint reports back as the credential that authenticated, so the suite asserts against this name rather than against the material.</remarks>
+    public const string AdminApiKeyName = "integration-tests-admin";
+
+    /// <summary>The administrative API key the integration-test topology's host accepts.</summary>
+    /// <remarks>
+    /// A literal under the same restriction as <see cref="McpApiKey" />, and it authenticates the same ephemeral host.
+    /// It is deliberately a different value from every MCP key: reading a mailbox and administering the service that
+    /// reads it are different authorities, and a suite whose two surfaces shared a key could not observe that neither
+    /// one's credential authenticates the other.
+    /// </remarks>
+    public const string AdminApiKey = "integration-tests-only-admin-api-key";
+
     /// <summary>The EF Core migration tool resource.</summary>
     public const string MigrationsResourceName = "mailfathom-migrations";
 
