@@ -87,7 +87,8 @@ where a successful guess is worth the most.
 `AdminEndpoint:RateLimiting` is the same section `McpEndpoint:RateLimiting` is, with the same keys, the same product
 defaults, and the same validation. [Rate limiting](mcp-endpoint.md#rate-limiting) is where the settings, the ranges, the
 reasoning, and what a refused request receives are recorded in full;
-[configuration reference](configuration-reference.md#rate-limiting--mcpendpointratelimiting) is the key table.
+[configuration reference](configuration-reference.md#rate-limiting--mcpendpointratelimiting-and-adminendpointratelimiting)
+is the key table.
 
 Two things differ here, and both follow from where the credential is judged:
 
