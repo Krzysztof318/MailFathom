@@ -4,11 +4,25 @@
  * Project repository: https://github.com/Krzysztof318/MailFathom
  */
 
-/* Everything here belongs to the two additions `main.js` makes. The rest of the appearance is the
-   `modern` template's, deliberately: a theme of our own would be one more thing to carry forward
+/* Almost everything here belongs to the two additions `main.js` makes. The rest of the appearance is
+   the `modern` template's, deliberately: a theme of our own would be one more thing to carry forward
    across docfx versions, and this site has no design problem that the default one fails to solve. */
 
+/* The exception, and it is the template's gap rather than a preference. `modern` styles
+   `.navbar-brand` and nothing inside it, because its own logo is an SVG whose intrinsic size already
+   fits a header; a raster logo arrives at whatever size the file is, which put a 180-pixel square
+   over the top of every page. The height is stated and the width follows the aspect ratio, so
+   replacing the file with one of different proportions changes nothing here. */
+.navbar-brand > #logo {
+  height: 1.75rem;
+  width: auto;
+  margin-inline-end: 0.5rem;
+}
+
 .mf-version-picker {
+  /* `flex-nowrap` on the header's container makes every child shrinkable, and a select that shrinks
+     to its container reads as a sliver rather than as a control. */
+  flex: 0 0 auto;
   width: auto;
   margin-inline-start: 0.75rem;
 }
