@@ -1,7 +1,7 @@
 {
   "platformOptions": {
     "Coverlet": {
-      "Include": "[MailFathom.*]*",
+      "Include": "[MailFathom.*]*,[mfctl]*",
       "Exclude": "[MailFathom.Host]*,[MailFathom.AppHost]*,[MailFathom.*.UnitTests]*,[coverlet.*]*,[xunit.*]*,[Microsoft.Testing.*]*,[Microsoft.TestPlatform.*]*,[Microsoft.VisualStudio.TestPlatform.*]*,[testhost*]*",
       "ExcludeByAttribute": "ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,GeneratedCodeAttribute,RequiresIntegrationCoverage,RequiresIntegrationCoverageAttribute",
       "ExcludeByFile": "**/Persistence/Migrations/*.cs",

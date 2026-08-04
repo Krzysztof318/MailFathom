@@ -85,7 +85,7 @@ It prints what your change obliges the rest of the repository to do — the test
 ## Making the change
 
 - **Branch off `main`, never commit to it.** In a fork the branch name is yours to choose; with write access, name it `agent/<short-description>`.
-- **Behavior changes come with unit tests.** The suite enforces at least 85% aggregate line coverage across `Domain`, `Application`, `Infrastructure`, `AI`, and `Mcp`, and the gate fails below it. [`tests/AGENTS.md`](tests/AGENTS.md) is the unit-test policy — read it before adding tests, especially the rules on what belongs in the integration suite instead.
+- **Behavior changes come with unit tests.** The suite enforces at least 85% aggregate line coverage across every project under `src/` except the `Host` and `AppHost` composition roots, and the gate fails below it. [`tests/AGENTS.md`](tests/AGENTS.md) is the unit-test policy — read it before adding tests, especially the rules on what belongs in the integration suite instead.
 - **Update the documentation in the same change.** Stale guidance is a defect. [`docs/AGENTS.md`](docs/AGENTS.md) applies under `docs/`, and a new page there opens with a `describes:` marker naming the part of the repository it is written about — the contract suite fails a page without one, and a marker naming a path that no longer exists.
 - **Warnings are errors.** `TreatWarningsAsErrors` is on and the analyzer set is configured in `.editorconfig`; suppress a diagnostic only at the narrowest scope, with the concrete reason stated.
 - **Do not edit `CHANGELOG.md`.** It states what a release shipped and is written by the release pull request alone.
