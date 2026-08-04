@@ -273,6 +273,22 @@ Two rules are MailFathom's rather than Kestrel's:
   when they exist, and the URL-shaped addresses otherwise. A collision is reported against the section that asked for
   it rather than left to fail later as an address-in-use error naming a socket.
 
+## `ReverseProxy`
+
+Which proxy this process accepts a public scheme and host from, when something in front of it terminates TLS. One
+section for the whole process rather than one per surface: it runs at the front of the one request pipeline every
+listener shares, so a proxy named here is trusted on each of them.
+[Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) is the page.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `ReverseProxy:Enabled` | bool | `false` | Off reads neither `X-Forwarded-Proto` nor `X-Forwarded-Host` from anybody | restart |
+| `ReverseProxy:TrustedProxies` | string list | empty | Required non-empty when enabled; refused when configured while it is not. Each entry an IP address or a CIDR network whose host bits are clear — not a DNS name. The framework's loopback default is cleared rather than inherited | restart |
+| `ReverseProxy:MaximumForwardedHops` | int | `1` | At least 1; how far right-to-left through each header a value is believed | restart |
+
+`X-Forwarded-For` is never read, so the peer MailFathom observes stays the one that opened the connection, and
+`McpEndpoint:OAuth:Resource` stays a configured value rather than anything derived from a header.
+
 ## `McpEndpoint`
 
 Whether the protocol surface is served and what a client must present. The whole section is **restart** — it decides

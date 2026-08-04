@@ -15,8 +15,14 @@ namespace MailFathom.Host.Hosting.Warnings;
 /// Serving the endpoint over clear text is a supported posture rather than a mistake, which is why this reports and
 /// does not refuse. Two deployments run it deliberately: local development, where the endpoint is reachable only from
 /// the machine it runs on, and a deployment behind a TLS-terminating reverse proxy, where the proxy already holds the
-/// operator's certificate and a second TLS layer inside the trust boundary protects nothing. Only an operator knows
-/// which of those they have, and neither is something MailFathom can detect.
+/// operator's certificate and a second TLS layer inside the trust boundary protects nothing.
+/// </para>
+/// <para>
+/// Which of the two is running stopped being something only the operator knows once a trusted proxy could be named. A
+/// configured <see cref="ReverseProxyOptions" /> section is the operator saying what stands in front, so the warning
+/// then describes that deployment — the clear-text hop is the one between the proxy and this process — instead of
+/// listing the postures it would otherwise have to guess between. Nothing is silenced by it: that hop is real, and an
+/// API key crossing it is as readable as it was.
 /// </para>
 /// <para>
 /// What it refuses to let happen is the third case: an endpoint reachable across a network that nobody meant to expose
@@ -34,26 +40,42 @@ namespace MailFathom.Host.Hosting.Warnings;
 internal sealed partial class McpTransportEncryptionWarning : IHostedService
 {
     private readonly McpEndpointOptions endpointSettings;
+    private readonly ReverseProxyOptions reverseProxySettings;
     private readonly ILogger<McpTransportEncryptionWarning> logger;
 
     /// <summary>Initializes a new startup warning.</summary>
     /// <param name="endpointSettings">The endpoint settings startup was composed from.</param>
+    /// <param name="reverseProxySettings">The reverse-proxy settings startup was composed from, which say whether the operator has named what stands in front.</param>
     /// <param name="logger">The startup logger.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpointSettings" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpointSettings" /> or <paramref name="reverseProxySettings" /> is <see langword="null" />.</exception>
     public McpTransportEncryptionWarning(
         IOptions<McpEndpointOptions> endpointSettings,
+        IOptions<ReverseProxyOptions> reverseProxySettings,
         ILogger<McpTransportEncryptionWarning> logger)
     {
         ArgumentNullException.ThrowIfNull(endpointSettings);
+        ArgumentNullException.ThrowIfNull(reverseProxySettings);
 
         this.endpointSettings = endpointSettings.Value;
+        this.reverseProxySettings = reverseProxySettings.Value;
         this.logger = logger;
     }
 
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (this.endpointSettings is { Enabled: true, Https.TerminatesTls: false })
+        if (this.endpointSettings is not { Enabled: true, Https.TerminatesTls: false })
+        {
+            return Task.CompletedTask;
+        }
+
+        if (this.reverseProxySettings.Enabled)
+        {
+            this.LogEndpointServedBehindTrustedReverseProxy(
+                McpEndpointRoute.Path,
+                this.reverseProxySettings.TrustedProxies.Count);
+        }
+        else
         {
             this.LogEndpointServedWithoutTransportEncryption(McpEndpointRoute.Path);
         }
@@ -74,4 +96,13 @@ internal sealed partial class McpTransportEncryptionWarning : IHostedService
             + "anywhere else, configure McpEndpoint:Https:Endpoints so this process presents your domain's certificate "
             + "itself.")]
     private partial void LogEndpointServedWithoutTransportEncryption(string mcpEndpointPath);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The MCP endpoint is enabled on {McpEndpointPath} behind the {TrustedProxyCount} trusted reverse "
+            + "proxy source(s) ReverseProxy:TrustedProxies names, so the hop this process serves is the one between "
+            + "that proxy and here and TLS to your clients is the proxy's to terminate. Keep that hop inside a network "
+            + "you control: on it, anything on the path can read the API key a client presents and every message the "
+            + "tools return. A client certificate still never arrives, because the handshake ended at the proxy.")]
+    private partial void LogEndpointServedBehindTrustedReverseProxy(string mcpEndpointPath, int trustedProxyCount);
 }
