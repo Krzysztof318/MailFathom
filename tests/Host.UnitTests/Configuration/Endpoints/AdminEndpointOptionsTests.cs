@@ -165,6 +165,7 @@ public sealed class AdminEndpointOptionsTests
             TransportSurface.Admin.RoutingSchemeName,
             TransportSurface.Admin.ApiKeySchemeName,
             TransportSurface.Admin.AccessPolicyName,
+            TransportSurface.Admin.RateLimitingPolicyName,
             TransportSurface.Admin.OAuthSchemeNameFor("workforce"),
         ];
 
@@ -173,6 +174,7 @@ public sealed class AdminEndpointOptionsTests
             TransportSurface.Mcp.RoutingSchemeName,
             TransportSurface.Mcp.ApiKeySchemeName,
             TransportSurface.Mcp.AccessPolicyName,
+            TransportSurface.Mcp.RateLimitingPolicyName,
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"),
         ];
 
