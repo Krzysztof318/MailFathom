@@ -120,23 +120,33 @@ to. The file is a protected path, so an edit arriving through ordinary work is v
 
 ## Cutting a release
 
-The owner invokes `$prepare-release`, which reads the version, refuses the states that must not be released, opens both
-pull requests, and prints the ordering. It is manual-invocation only — no agent can reach it — because when a
-version becomes real is a decision rather than a consequence of work looking finished. The sequence it prints is the
-whole procedure, and it is recorded here so it survives the skill being unavailable:
+The owner invokes `$prepare-release`, which reads the version, refuses the states that must not be released, settles
+the milestones, opens both pull requests, and prints the ordering. It is manual-invocation only — no agent can reach
+it — because when a version becomes real is a decision rather than a consequence of work looking finished.
 
-1. **Merge the changelog pull request.** It adds `## [x.y.z] - YYYY-MM-DD` with the release's entries, composed from
-   what merged since the previous tag, and it brings the files that name a version in prose onto that version: the
-   **Project status** paragraph and the **Where the artifacts are published** table in `README.md`, the image
-   references opening `docs/users/installation.md`, the **state of the release** section in `docs/users/README.md`,
-   the `mailfathom-schema-<x.y.z>.sql` filename the apply commands quote in `docs/operations/database-schema.md`,
-   `docs/operations/deployment-compose.md`, and `docs/operations/deployment-kubernetes.md`, and the **Supported
-   versions** table in `SECURITY.md`. It touches nothing else. It merges first because **its merge commit is what gets
-   tagged and published**, so the tagged tree contains the released changelog — and the files describing the release
-   they ship inside — rather than describing them afterwards.
+**Settling the milestones comes before the pull requests**, because the milestone is the release's gate: the next
+milestone is created if it does not exist, whatever is still open in the one being released moves into it *except the
+issue tracking this release*, and the one being released is closed. That is the one place a milestone is opened, which
+is what keeps exactly one open at a time; `docs/operations/issue-tracking.md` holds the rule and the reasoning. The
+tracking issue is open and in that milestone at this point, so it is what a query for what to move returns; it stays
+where it is and stays open, because the merge below closes it.
 
-   Those are the whole of what `<VersionPrefix>` does not reach *by name*. Everything a build stamps derives from
-   that one declaration; prose does not, and nothing checks it, which is why the list is stated rather than searched
+The sequence the skill prints is the whole of what follows, and it is recorded here so it survives the skill being
+unavailable:
+
+1. **Merge the changelog pull request, titled `[#<issue>] Prepare release x.y.z`.** It adds
+   `## [x.y.z] - YYYY-MM-DD` with the release's entries, composed from what merged since the previous tag, and it
+   brings the three files that name a version in prose onto that version: the **Project status** paragraph and the
+   **Where the artifacts are published** table in `README.md`, the **state of the release** section in
+   `docs/users/README.md`, and the **Supported versions** table in `SECURITY.md`. It touches nothing else. It merges
+   first because **its merge commit is what gets tagged and published**, so the tagged tree contains the released
+   changelog — and the files describing the release they ship inside — rather than describing them afterwards.
+
+   Those three are the whole of what `<VersionPrefix>` does not reach *by name*, and they are the three that assert
+   *which release is current*. Everywhere a page quotes a version because a reader substitutes one — an image
+   reference, the `mailfathom-schema-<version>.sql` filename in the apply commands — it writes the placeholder and a
+   release touches it not at all. Everything a build stamps derives from that one declaration; prose does not, and
+   nothing checks it, which is why the short list is stated rather than searched
    for. The skill additionally sweeps the tree for prose that describes the release *state* without naming a version —
    "no versioned artifact exists yet", "a release will attach it" — because that kind of sentence goes stale at the
    moment of the tag and no search for the version number would ever find it. Each hit is read and either corrected in
@@ -160,7 +170,8 @@ whole procedure, and it is recorded here so it survives the skill being unavaila
    stays down. [Applying the database schema](database-schema.md) is what the artifact is; the release notes record its
    name, its checksum, and the migrations it carries.
 
-3. **Merge the version-bump pull request.** It raises `VersionPrefix` to the next version. It merges after the tag, so
+3. **Merge the version-bump pull request, titled `Bump main version to <next>`.** It raises `VersionPrefix` to the
+   next version, and carries no issue prefix because it closes none. It merges after the tag, so
    `main` returns to naming the next release. Skipping it fails loudly rather than silently: the next tag push repeats
    a version that already exists, and step 2 rejects it.
 

@@ -89,7 +89,48 @@ an internal rename earn no entry, and a changelog that lists them stops being re
 surfaces requires is the release's own. Raise the question with the owner when the entries and the version already
 declared disagree — an unnecessary major costs one careful upgrade, an unmarked break costs an outage.
 
-### 3. Open the changelog pull request
+### 3. Settle the milestones
+
+The milestone is the release's gate, so it is closed as part of cutting the release rather than left to be tidied
+afterwards. Nothing here is inferred: **what is still open in the milestone is scope the owner is deciding about**, so
+ask before moving anything unless they already said what to do with it.
+
+1. **Create the next milestone if it does not exist.** Its name is the version being bumped to, per the table under
+   **What the version is**. `docs/operations/issue-tracking.md` forbids opening a further milestone beside the open
+   one — the next is created *when that one closes*, which is this step and nowhere else, so creating it here
+   satisfies that rule rather than bending it.
+2. **Move what is still open into it, except the issue tracking this release.** A release cut over an open milestone
+   item releases the gap; moving the item says the work is still accepted and names the release it now belongs to. An
+   item the owner would rather drop is closed as `not planned` on its own issue instead, which is their call and not
+   one to make on their behalf. **The tracking issue is the one exception and it is not incidental**: it is open at
+   this point in the sequence and it is in this milestone, so a query for what to move returns it, and moving it would
+   file the release under the release *after* it.
+3. **Close the milestone being released.**
+
+```bash
+gh api 'repos/Krzysztof318/MailFathom/milestones?state=all' --jq '.[] | "\(.number) \(.title) \(.state)"'
+gh api -X POST repos/Krzysztof318/MailFathom/milestones -f title='<next>'          # only when it does not exist
+
+# What to move: open issues in the milestone being released, minus the tracking issue. `/issues` returns pull
+# requests as well, so both exclusions are the query's rather than the reader's to remember.
+gh api "repos/Krzysztof318/MailFathom/issues?milestone=<old>&state=open&per_page=100" \
+  --jq ".[] | select(.pull_request == null) | select(.number != <tracking issue>) | .number"
+
+gh api -X PATCH "repos/Krzysztof318/MailFathom/issues/<n>" -F milestone=<new-number>
+gh api -X PATCH "repos/Krzysztof318/MailFathom/milestones/<old>" -f state=closed
+```
+
+**That exception is why the milestone is closed holding one open issue.** The tracking issue closes on the merge in
+step 4, which happens after this, so a closed milestone with one open item is the expected shape here rather than an
+oversight, and it resolves itself.
+
+This step belongs to the owner's checkout alone. In the fork role a milestone write returns a permission error, which
+is the correct outcome rather than a partial one: nobody but the owner cuts a release of this repository.
+
+### 4. Open the changelog pull request
+
+**Its title is `[#<issue>] Prepare release x.y.z`**, naming the issue that tracks the release, per the repository's
+own rule that a pull request title opens with the issue it closes.
 
 On a branch off the release branch, and touching nothing else:
 
@@ -110,15 +151,13 @@ which is what makes an edit to it outside this flow visible.
 
 #### The files that name a version in prose
 
-`<VersionPrefix>` is the only place a version is written for the *build*. Seven files additionally name one in prose,
+`<VersionPrefix>` is the only place a version is written for the *build*. Three files additionally name one in prose,
 where nothing derives it and nothing checks it, so they are read here by name rather than left to be noticed:
 
 | File | What to bring onto `x.y.z` |
 | --- | --- |
 | `README.md` | The **Project status** paragraph — which release is current and what it ships — and the **Where the artifacts are published** table whenever a release starts or stops attaching one |
-| `docs/users/installation.md` | The image references in the opening paragraph, which quote the version literally, and the sentence naming what a release publishes |
 | `docs/users/README.md` | The **The state of the release** section — which release is current, and what a page is allowed to describe as already downloadable |
-| `docs/operations/database-schema.md`, `docs/operations/deployment-compose.md`, `docs/operations/deployment-kubernetes.md` | The `mailfathom-schema-<x.y.z>.sql` filename the apply and verify commands quote literally. An operator copies those lines, so a stale one checksums and applies the previous release's schema |
 | `SECURITY.md` | The **Supported versions** table. `x.y` becomes the supported line and the one it replaces moves down a row, per ADR 0004's rule that only the newest released minor is patched by default |
 
 **They belong in this pull request rather than the bump one, and the reason is what the whole ordering rests on:** this
@@ -126,9 +165,20 @@ diff's merge commit is what gets tagged, so it is the tree an operator reads at 
 after the tag names the previous line in the artifact people actually download, and `docs/` at a tag is read far more
 often than `docs/` on `main`. The bump pull request cannot carry them for the same reason it cannot carry the changelog.
 
+Three files each is a decision rather than an accident, and it is the ceiling rather than a starting point. **A page
+that quotes a version because a reader substitutes one writes `<version>` and stays off this list**: the image
+references and the `mailfathom-schema-<version>.sql` filename in `docs/users/installation.md`,
+`docs/operations/database-schema.md`, `docs/operations/deployment-compose.md`, and
+`docs/operations/deployment-kubernetes.md` were literal until they were placeholders, which is four more files a
+release had to touch and four more places it could miss. A command quotes the placeholder — `--file
+'mailfathom-schema-<version>.sql'` — so a line pasted unedited fails with a missing file rather than with a shell
+redirection. Only prose asserting *which release is current* has to name one, and that is what the three rows above
+are. Reach for the placeholder first and this table second.
+
 Nothing gates this, deliberately: no check can tell prose describing the release from prose quoting a version as an
 example, and one that tried would be satisfied by a search-and-replace through `docs/`. The list above is short and
-fixed instead, and a file joining it is an edit to this table.
+fixed instead, and a file joining it is an edit to this table — but a file that can take a placeholder instead should
+take one, and never join it at all.
 
 #### The release-state sweep
 
@@ -181,7 +231,11 @@ deciding whether to depend on it.
 Report the count and the disposition — swept, corrected, left — in the pull request body, so a reviewer can see the
 pass happened without re-running it. A release that corrects nothing is an ordinary outcome and is stated as one.
 
-### 4. Open the version-bump pull request
+### 5. Open the version-bump pull request
+
+**Its title is `Bump main version to <next>`**, and it carries no issue prefix, because it closes no issue. The pair
+therefore reads as `Prepare release 0.2.0` and `Bump main version to 0.3.0` in the pull-request list, which says which
+one is the release and which one follows it without either being opened.
 
 On a second branch off the release branch, raise `<VersionPrefix>` in `Directory.Build.props` to the next version from
 the table above. **That is the whole diff**, because that property is the only place in the repository where a version
@@ -194,17 +248,17 @@ edits to the chart directory would need raising on every release anyway — a pa
 each release produces chart content that differs from the last, and a published chart version is immutable — and it
 would leave an operator mapping two numbers onto one artifact.
 
-**Do not bring the three prose files here either.** They name the release that has just been *published*, and this
-pull request merges after the tag — so a `README.md` corrected here is a `README.md` that was wrong in the tagged tree.
-Step 3 owns them.
+**Do not bring the prose files here either.** They name the release that has just been *published*, and this pull
+request merges after the tag — so a `README.md` corrected here is a `README.md` that was wrong in the tagged tree.
+Step 4 owns them.
 
-### 5. Open both, and cross-reference them
+### 6. Open both, and cross-reference them
 
 Each body names the other by number, so neither is merged alone by accident. The changelog pull request carries
 `Closes #<issue>` for the issue that tracks this release; the version-bump one closes nothing, because bumping is what
 follows a release rather than what the release was for.
 
-### 6. Print the ordering, and stop
+### 7. Print the ordering, and stop
 
 Report exactly this to the owner, with the numbers filled in:
 
