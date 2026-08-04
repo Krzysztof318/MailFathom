@@ -1,6 +1,6 @@
 # Mailbox OAuth
 
-<!-- describes: src/Infrastructure/Mail/OAuth/**, src/Common/MailboxOAuth/**, src/Cli/**, src/Application/Accounts/**, src/Infrastructure/Persistence/Accounts/** -->
+<!-- describes: src/Infrastructure/Mail/OAuth/**, src/Common/MailboxOAuth/**, src/Common/OAuth/**, src/Cli/**, src/Application/Accounts/**, src/Infrastructure/Persistence/Accounts/** -->
 
 How a mailbox that no longer accepts a password is authenticated, and what each provider requires before it will
 issue the credential MailFathom runs on.

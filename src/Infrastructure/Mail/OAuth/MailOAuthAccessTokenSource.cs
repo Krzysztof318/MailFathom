@@ -5,7 +5,7 @@
 using System.Net.Http.Json;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Resilience;
-using MailFathom.Common.MailboxOAuth;
+using MailFathom.Common.OAuth;
 using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Resilience;
 using Microsoft.Extensions.Logging;
@@ -164,7 +164,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         Dictionary<string, string> form,
         CancellationToken cancellationToken)
     {
-        MailOAuthTokenResponse? payload;
+        OAuthTokenResponse? payload;
         try
         {
             using var content = new FormUrlEncodedContent(form);
@@ -172,8 +172,8 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
 
             // The status code is not the verdict. RFC 6749 requires a rejected grant to arrive as 400 carrying a
             // machine-readable `error`, which says far more than the status does, so the body is read either way.
-            payload = await response.Content.ReadFromJsonAsync<MailOAuthTokenResponse>(
-                MailOAuthJsonContext.Default.Options,
+            payload = await response.Content.ReadFromJsonAsync<OAuthTokenResponse>(
+                OAuthJsonContext.Default.Options,
                 cancellationToken);
         }
         catch (Exception failure) when (failure is HttpRequestException or System.Text.Json.JsonException)
@@ -225,7 +225,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     /// </remarks>
     private async Task StoreRotatedRefreshTokenAsync(
         MailOAuthAccountSettings settings,
-        MailOAuthTokenResponse payload,
+        OAuthTokenResponse payload,
         CancellationToken cancellationToken)
     {
         if (!settings.Grant.RequiresRefreshToken || payload.RefreshToken is not { Length: > 0 } rotatedToken)

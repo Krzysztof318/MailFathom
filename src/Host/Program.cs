@@ -547,7 +547,7 @@ try
             // none to carry it: the authentication handler publishes it instead of a mapped route. A browser client
             // reads that document before it holds any credential, so without the policy applied to its path the one
             // response that says where to authorize is the one a page cannot read.
-            var protectedResourceMetadataPath = McpProtectedResourceMetadata.PathFor(
+            var protectedResourceMetadataPath = ProtectedResourceMetadataAddress.PathFor(
                 mcpEndpointSettings.OAuth.CanonicalResource());
 
             app.UseWhen(
@@ -628,6 +628,13 @@ try
         if (adminEndpointSettings.RequiresAuthentication)
         {
             adminApi.RequireAuthorization(TransportSurface.Admin.AccessPolicyName);
+        }
+
+        if (adminEndpointSettings.AllowsOAuth)
+        {
+            // Outside the group the requirement was attached to, and deliberately: its reader is a client that has no
+            // credential yet and is reading this to find out where to obtain one.
+            app.MapAdminProtectedResourceMetadata(adminEndpointSettings.OAuth);
         }
     }
 

@@ -374,7 +374,7 @@ request or per handshake. [Administering a deployment](admin-endpoint.md) is the
 | `AdminEndpoint:Port` | int | `8090` | 1–65535, and bound by no other listener in the process; used only when no HTTPS profile is configured | restart |
 | `AdminEndpoint:Authentication` | flag set | `None` | `ApiKey`, `OAuth`, both comma-separated, or `None`; `None` warns at startup | restart |
 | `AdminEndpoint:ApiKeys` | list of secret blocks | empty | Required non-empty when `ApiKey` is named; refused when configured while it is not | restart; material per request |
-| `AdminEndpoint:OAuth` | block | empty | Same shape and rules as `McpEndpoint:OAuth`; refused when configured while `OAuth` is not named | restart |
+| `AdminEndpoint:OAuth` | block | empty | Same shape and rules as `McpEndpoint:OAuth`, with one addition: `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document. Refused when configured while `OAuth` is not named | restart |
 | `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`; naming any binds those listeners and no clear-text one | restart; material per handshake |
 
 The routes are served beneath `/api/admin`, which is a constant rather than a setting: a client is configured with a

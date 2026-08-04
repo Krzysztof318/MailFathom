@@ -17,8 +17,6 @@ namespace MailFathom.Cli.Administration;
 /// </remarks>
 internal sealed class AdminApiClient
 {
-    private const string SessionPath = "/api/admin/session";
-
     private readonly HttpClient transport;
 
     /// <summary>Initializes a client over a transport the caller owns.</summary>
@@ -45,7 +43,7 @@ internal sealed class AdminApiClient
     {
         ArgumentNullException.ThrowIfNull(token);
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, SessionPath);
+        using var request = new HttpRequestMessage(HttpMethod.Get, AdminEndpointRoutes.SessionPath);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         using var response = await this.SendAsync(request, cancellationToken);
@@ -59,7 +57,7 @@ internal sealed class AdminApiClient
         if (response.StatusCode is HttpStatusCode.NotFound)
         {
             throw new CliFailure(
-                $"The address answered, but serves no administrative endpoint at {SessionPath}. Check the port: the administrative endpoint binds a listener of its own, and it is disabled unless the deployment enabled it.");
+                $"The address answered, but serves no administrative endpoint at {AdminEndpointRoutes.SessionPath}. Check the port: the administrative endpoint binds a listener of its own, and it is disabled unless the deployment enabled it.");
         }
 
         if (!response.IsSuccessStatusCode)

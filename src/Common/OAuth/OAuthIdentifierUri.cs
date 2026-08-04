@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-namespace MailFathom.Infrastructure.Security.OAuth;
+namespace MailFathom.Common.OAuth;
 
 /// <summary>The shape OAuth requires of a URL used as a name rather than as something to fetch.</summary>
 /// <remarks>

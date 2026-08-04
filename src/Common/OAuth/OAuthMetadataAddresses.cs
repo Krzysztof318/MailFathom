@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Infrastructure.Security.OAuth;
+namespace MailFathom.Common.OAuth;
 
 /// <summary>Where an authorization server's metadata is looked for, given only its issuer.</summary>
 /// <remarks>

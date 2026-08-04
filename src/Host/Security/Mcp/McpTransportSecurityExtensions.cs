@@ -139,7 +139,7 @@ internal static class McpTransportSecurityExtensions
             // and the resource it advertises from the request's scheme and Host header, so a deployment behind a proxy
             // would tell each client to authenticate for whichever name that client arrived under.
             mcpOptions.ResourceMetadataUri = new Uri(
-                McpProtectedResourceMetadata.AddressFor(oauthSettings.CanonicalResource()));
+                ProtectedResourceMetadataAddress.AddressFor(oauthSettings.CanonicalResource()));
             mcpOptions.ResourceMetadata = new ProtectedResourceMetadata
             {
                 Resource = oauthSettings.CanonicalResource(),
@@ -165,7 +165,7 @@ internal static class McpTransportSecurityExtensions
         services.AddSingleton<IAuthorizationMiddlewareResultHandler>(
             new InsufficientScopeResultHandler(
                 [.. oauthSettings.RequiredScopes],
-                McpProtectedResourceMetadata.AddressFor(oauthSettings.CanonicalResource())));
+                ProtectedResourceMetadataAddress.AddressFor(oauthSettings.CanonicalResource())));
     }
 
     /// <summary>Builds the CORS policy from the configured origins.</summary>

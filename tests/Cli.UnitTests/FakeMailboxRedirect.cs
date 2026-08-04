@@ -43,6 +43,16 @@ internal sealed class FakeMailboxRedirect : IMailboxRedirectAwaiter
     internal static Func<Uri, IMailboxRedirectAwaiter> ApprovingWhenAsked(string code, Func<string> readState) =>
         Reacting(_ => Task.FromResult(new MailboxRedirect(code, readState(), Error: null)));
 
+    /// <summary>Builds a factory answering with a redirect that echoes this run's value and carries no code at all.</summary>
+    /// <param name="readState">Reads the value the command generated, so the redirect passes the anti-forgery check and reaches the decision under test.</param>
+    /// <returns>The factory a context is built with.</returns>
+    /// <remarks>
+    /// A redirect carrying neither a code nor an error, which is what a proxy or a hand-edited address produces. It has
+    /// to echo the right value or the command refuses it a step earlier, and the missing-code branch is never reached.
+    /// </remarks>
+    internal static Func<Uri, IMailboxRedirectAwaiter> EchoingStateWithoutACode(Func<string> readState) =>
+        Reacting(_ => Task.FromResult(new MailboxRedirect(Code: null, readState(), Error: null)));
+
     /// <summary>Builds a factory answering with whatever the authorization server put in the redirect.</summary>
     /// <param name="redirect">What the redirect carries.</param>
     /// <returns>The factory a context is built with.</returns>

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Common.OAuth;
 using MailFathom.Infrastructure.Security.OAuth;
 
 namespace MailFathom.Host.Configuration.Access;

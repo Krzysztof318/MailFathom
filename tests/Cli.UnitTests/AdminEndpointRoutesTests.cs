@@ -1,0 +1,39 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Cli.Administration;
+using Xunit;
+
+namespace MailFathom.Cli.UnitTests;
+
+/// <summary>Covers the paths the command assumes a deployment answers at.</summary>
+/// <remarks>
+/// These are the command's half of an agreement with a service it cannot reference: the deployment declares the same
+/// prefix in <c>AdminEndpointOptions.RoutePrefix</c>, and its own suite pins that constant to the same literal. Two
+/// assertions against one written-out path is what an agreement across an assembly boundary looks like — the
+/// alternative is a rename on one side that compiles cleanly and leaves every sign-in reaching a 404.
+/// </remarks>
+public sealed class AdminEndpointRoutesTests
+{
+    /// <summary>The literal the deployment's own tests pin its route prefix to.</summary>
+    [Fact]
+    public void Prefix_IsTheOneTheDeploymentServesItsRoutesBeneath() =>
+        Assert.Equal("/api/admin", AdminEndpointRoutes.Prefix);
+
+    [Fact]
+    public void SessionPath_IsTheRouteThatReportsWhoTheCallerIs() =>
+        Assert.Equal("/api/admin/session", AdminEndpointRoutes.SessionPath);
+
+    /// <summary>
+    /// RFC 9728 places the document under a well-known segment with the resource's path appended, and the deployment
+    /// refuses to start unless its resource path is the route prefix. Composing it here rather than reading it from a
+    /// challenge is what makes a sign-in one request instead of two, and this is the assertion that keeps the
+    /// composition honest.
+    /// </summary>
+    [Fact]
+    public void ProtectedResourceMetadataPath_PlacesTheDocumentWhereRfc9728Does() =>
+        Assert.Equal(
+            "/.well-known/oauth-protected-resource/api/admin",
+            AdminEndpointRoutes.ProtectedResourceMetadataPath);
+}

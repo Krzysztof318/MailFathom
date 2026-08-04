@@ -6,6 +6,7 @@ using System.Net;
 using System.Text;
 using System.Web;
 using MailFathom.Common.MailboxOAuth;
+using MailFathom.Common.OAuth;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;

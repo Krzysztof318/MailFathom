@@ -7,6 +7,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Web;
+using MailFathom.Common.OAuth;
 
 namespace MailFathom.Common.MailboxOAuth;
 
@@ -121,7 +122,7 @@ public sealed class MailboxAuthorizer
             form["client_secret"] = clientSecret;
         }
 
-        var response = await this.PostFormAsync<MailOAuthTokenResponse>(request.TokenEndpoint, form, cancellationToken);
+        var response = await this.PostFormAsync<OAuthTokenResponse>(request.TokenEndpoint, form, cancellationToken);
 
         return this.ToGrant(response);
     }
@@ -161,7 +162,7 @@ public sealed class MailboxAuthorizer
         return await this.PollForDeviceGrantAsync(request, deviceAuthorization, cancellationToken);
     }
 
-    private async Task<MailOAuthDeviceAuthorizationResponse> RequestDeviceAuthorizationAsync(
+    private async Task<OAuthDeviceAuthorizationResponse> RequestDeviceAuthorizationAsync(
         Uri deviceAuthorizationEndpoint,
         MailboxAuthorizationRequest request,
         CancellationToken cancellationToken)
@@ -172,7 +173,7 @@ public sealed class MailboxAuthorizer
             ["scope"] = request.Scope,
         };
 
-        var response = await this.PostFormAsync<MailOAuthDeviceAuthorizationResponse>(
+        var response = await this.PostFormAsync<OAuthDeviceAuthorizationResponse>(
             deviceAuthorizationEndpoint,
             form,
             cancellationToken);
@@ -189,7 +190,7 @@ public sealed class MailboxAuthorizer
 
     private async Task<MailboxAuthorizationGrant> PollForDeviceGrantAsync(
         MailboxAuthorizationRequest request,
-        MailOAuthDeviceAuthorizationResponse deviceAuthorization,
+        OAuthDeviceAuthorizationResponse deviceAuthorization,
         CancellationToken cancellationToken)
     {
         var form = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -215,7 +216,7 @@ public sealed class MailboxAuthorizer
         {
             await Task.Delay(pollInterval, this.timeProvider, cancellationToken);
 
-            var response = await this.PostFormAsync<MailOAuthTokenResponse>(request.TokenEndpoint, form, cancellationToken);
+            var response = await this.PostFormAsync<OAuthTokenResponse>(request.TokenEndpoint, form, cancellationToken);
 
             switch (response.Error)
             {
@@ -240,7 +241,7 @@ public sealed class MailboxAuthorizer
         throw new MailboxAuthorizationFailedException("expired_token");
     }
 
-    private static DeviceCodePrompt DescribePrompt(MailOAuthDeviceAuthorizationResponse deviceAuthorization, DateTimeOffset asOf) =>
+    private static DeviceCodePrompt DescribePrompt(OAuthDeviceAuthorizationResponse deviceAuthorization, DateTimeOffset asOf) =>
         new(
             deviceAuthorization.UserCode!,
             new Uri(deviceAuthorization.VerificationUri!),
@@ -251,7 +252,7 @@ public sealed class MailboxAuthorizer
     private static string CreateAntiForgeryState() =>
         Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
 
-    private MailboxAuthorizationGrant ToGrant(MailOAuthTokenResponse response)
+    private MailboxAuthorizationGrant ToGrant(OAuthTokenResponse response)
     {
         if (response.Error is { } error)
         {
@@ -284,7 +285,7 @@ public sealed class MailboxAuthorizer
             // The status code is not the verdict. RFC 6749 requires a rejected grant to arrive as 400 with a machine
             // readable `error`, so the body is read either way and the status is consulted only when it holds nothing.
             payload = await response.Content.ReadFromJsonAsync<TResponse>(
-                MailOAuthJsonContext.Default.Options,
+                OAuthJsonContext.Default.Options,
                 cancellationToken);
         }
         catch (JsonException)

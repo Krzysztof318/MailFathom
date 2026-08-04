@@ -8,6 +8,7 @@ using System.Web;
 using MailFathom.Cli.Authorization;
 using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Cli.UnitTests;
@@ -285,6 +286,7 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
                 endpoint => new HttpClient(handler, disposeHandler: false) { BaseAddress = endpoint },
                 awaitRedirect,
                 // Never started in a test: opening a browser is a side effect on the machine running the suite.
-                _ => false),
+                _ => false,
+                new FakeTimeProvider()),
             args);
 }

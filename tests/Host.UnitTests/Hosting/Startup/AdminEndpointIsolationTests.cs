@@ -49,4 +49,27 @@ public sealed class AdminEndpointIsolationTests
     [InlineData("/API/Admin/session")]
     public void IsAdminPath_TheRoutePrefixHoweverItIsSpelled_IsAnAdministrativePath(string path) =>
         Assert.True(AdminEndpointIsolation.IsAdminPath(new PathString(path)));
+
+    /// <summary>
+    /// RFC 9728 places the protected resource metadata document at the root rather than beneath the surface it describes,
+    /// so a rule reading the route prefix alone would refuse it here — where its only reader arrives.
+    /// </summary>
+    [Theory]
+    [InlineData("/.well-known/oauth-protected-resource/api/admin")]
+    [InlineData("/.WELL-KNOWN/oauth-protected-resource/API/admin")]
+    public void IsAdminPath_TheProtectedResourceMetadataDocument_IsAnAdministrativePath(string path) =>
+        Assert.True(AdminEndpointIsolation.IsAdminPath(new PathString(path)));
+
+    /// <summary>The other half: a document about the administrative surface must not answer on the port that serves the mailbox.</summary>
+    [Fact]
+    public void ListenerServesPath_TheAdministrativeMetadataDocumentOnAnotherListener_IsRefused() =>
+        Assert.False(AdminEndpointIsolation.ListenerServesPath(
+            8080,
+            "/.well-known/oauth-protected-resource/api/admin",
+            AdminListener));
+
+    /// <summary>The MCP endpoint publishes a document of its own at its own path, and that one is not this surface's.</summary>
+    [Fact]
+    public void IsAdminPath_AnotherSurfacesMetadataDocument_IsNotAnAdministrativePath() =>
+        Assert.False(AdminEndpointIsolation.IsAdminPath("/.well-known/oauth-protected-resource/mcp"));
 }

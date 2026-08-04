@@ -317,6 +317,44 @@ public sealed class CredentialStoreTests : IDisposable
             File.GetUnixFileMode(this.storeDirectory));
     }
 
+    /// <summary>
+    /// A write that fails must leave the previous profiles readable. Serializing over the store itself would truncate
+    /// it first, so an interruption would take every profile with it — and the write is reached silently by a renewal
+    /// during what an operator ran as a status check.
+    /// </summary>
+    [Fact]
+    public void Save_AWriteThatCannotComplete_LeavesTheProfilesThatWereAlreadyStored()
+    {
+        // Arrange: a directory where the pending file has to be created is what makes the write fail after the store exists.
+        this.store.Save("production", Production, "not-a-real-token", "workstation");
+
+        Directory.CreateDirectory(Path.Combine(this.storeDirectory, "credentials.json.pending"));
+
+        // Act
+        Assert.Throws<CliFailure>(() => this.store.Save("staging", Staging, "not-a-real-token-either", "workstation"));
+
+        // Assert
+        var stored = this.store.Read();
+
+        Assert.Equal("production", Assert.Single(stored.Profiles).Key);
+        Assert.Equal("production", stored.Default);
+    }
+
+    /// <summary>The pending file is an implementation of one atomic replacement, so nothing may be left behind for an operator to find beside their credentials.</summary>
+    [Fact]
+    public void Save_AProfile_LeavesNoPendingFileBesideTheStore()
+    {
+        // Act
+        this.store.Save("production", Production, "not-a-real-token", "workstation");
+
+        // Assert
+        Assert.Equal(
+            ["credentials.json", "credentials.key"],
+            Directory.EnumerateFiles(this.storeDirectory)
+                .Select(Path.GetFileName)
+                .Order(StringComparer.Ordinal));
+    }
+
     [Fact]
     public void Read_AStoreThatIsNotACredentialFile_SaysWhatToDoAboutIt()
     {

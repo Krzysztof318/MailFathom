@@ -1,6 +1,6 @@
 # The MCP endpoint and what protects it
 
-<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/** -->
+<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/**, src/Common/OAuth/** -->
 
 The MCP endpoint is how an agent reaches MailFathom. This page records what enabling it means operationally, what a client
 has to present to reach it, which browser origins it answers, which client applications it accepts a certificate from,
