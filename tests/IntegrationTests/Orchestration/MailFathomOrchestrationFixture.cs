@@ -37,8 +37,9 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
 
     private readonly SemaphoreSlim hostStartGate = new(1, 1);
 
-    /// <summary>The address each host resource the suite started is reachable at, keyed by resource name.</summary>
-    private readonly Dictionary<string, Uri> startedHostAddresses = new(StringComparer.Ordinal);
+    /// <summary>The host resources the suite has already started, so a second caller waits for one rather than starting it again.</summary>
+    /// <remarks>Kept per resource rather than per address, because one host publishes several endpoints and asking for a second of them must not issue a second start command.</remarks>
+    private readonly HashSet<string> startedHostResources = new(StringComparer.Ordinal);
 
     private DistributedApplication? application;
 
@@ -145,6 +146,22 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
         OrchestrationContract.HostHttpEndpointName,
         cancellationToken);
 
+    /// <summary>Starts the composed MailFathom host and reports the address its administrative surface serves on.</summary>
+    /// <param name="cancellationToken">Cancels waiting for the host to become reachable.</param>
+    /// <returns>The base address of the host's administrative endpoint.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started, or when the host resource refused the start command.</exception>
+    /// <remarks>
+    /// The same host as <see cref="StartMailFathomHostAsync" /> and a second socket on it, which is what the
+    /// administrative endpoint is: its own listener, its own credentials, and no route in common with the MCP surface.
+    /// Whichever of the two is asked for first starts the resource, and the other then reads its own endpoint from the
+    /// host already running.
+    /// </remarks>
+    public async Task<Uri> StartMailFathomAdminEndpointAsync(CancellationToken cancellationToken) => AsHttpAddress(
+        await this.StartHostOnceAsync(
+            OrchestrationContract.HostResourceName,
+            OrchestrationContract.HostAdminEndpointName,
+            cancellationToken));
+
     /// <summary>Starts the MailFathom host served over HTTPS behind mutual TLS and reports the address it serves on.</summary>
     /// <param name="cancellationToken">Cancels waiting for the host to become reachable.</param>
     /// <returns>The base address of the host's HTTPS endpoint.</returns>
@@ -172,6 +189,16 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
             await this.application.DisposeAsync();
         }
     }
+
+    /// <summary>Reads a published endpoint as the HTTP address a client calls it at.</summary>
+    /// <remarks>
+    /// The administrative endpoint is declared with the <c>tcp</c> scheme so that it stays out of <c>ASPNETCORE_URLS</c>
+    /// and off the application listener, which <see cref="OrchestrationContract.HostAdminEndpointName" /> states in full.
+    /// What the app model publishes is therefore a <c>tcp</c> address to a socket that speaks HTTP, and this is where the
+    /// two are reconciled — once, rather than in every test that builds a client.
+    /// </remarks>
+    private static Uri AsHttpAddress(Uri publishedEndpoint) =>
+        new UriBuilder(publishedEndpoint) { Scheme = Uri.UriSchemeHttp }.Uri;
 
     /// <summary>Hands the mutual-TLS host the material the app model deliberately does not carry.</summary>
     /// <remarks>
@@ -211,22 +238,23 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
 
         try
         {
-            if (this.startedHostAddresses.TryGetValue(resourceName, out var alreadyStarted))
+            var startedApplication = this.application
+                ?? throw new InvalidOperationException(
+                    $"The MailFathom host resource {resourceName} is started before the suite started the application.");
+
+            if (!this.startedHostResources.Contains(resourceName))
             {
-                return alreadyStarted;
+                using var startCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                startCancellation.CancelAfter(HostStartupTimeout);
+
+                await StartHostResourceAsync(startedApplication, resourceName, startCancellation.Token);
+
+                this.startedHostResources.Add(resourceName);
             }
 
-            using var startCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            startCancellation.CancelAfter(HostStartupTimeout);
-
-            var startedAddress = await this.StartHostResourceAsync(
-                resourceName,
-                endpointName,
-                startCancellation.Token);
-
-            this.startedHostAddresses[resourceName] = startedAddress;
-
-            return startedAddress;
+            // Read once the resource is healthy, because the host port is allocated when the project starts rather than
+            // when the app model describes it.
+            return startedApplication.GetEndpoint(resourceName, endpointName);
         }
         finally
         {
@@ -234,15 +262,11 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
         }
     }
 
-    private async Task<Uri> StartHostResourceAsync(
+    private static async Task StartHostResourceAsync(
+        DistributedApplication startedApplication,
         string resourceName,
-        string endpointName,
         CancellationToken cancellationToken)
     {
-        var startedApplication = this.application
-            ?? throw new InvalidOperationException(
-                $"The MailFathom host resource {resourceName} is started before the suite started the application.");
-
         // The resource carries WithExplicitStart, so the app model created it and left it stopped. This is the command
         // the dashboard's own Start button issues, which keeps the suite starting the host the way an operator would.
         var startResult = await startedApplication.ResourceCommands.ExecuteCommandAsync(
@@ -259,9 +283,5 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
         await startedApplication.ResourceNotifications.WaitForResourceHealthyAsync(
             resourceName,
             cancellationToken);
-
-        // Read once the resource is healthy, because the host port is allocated when the project starts rather than
-        // when the app model describes it.
-        return startedApplication.GetEndpoint(resourceName, endpointName);
     }
 }
