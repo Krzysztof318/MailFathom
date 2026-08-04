@@ -95,10 +95,10 @@ jobs:
           # One checksum file covering every binary, so an operator verifies whichever they downloaded with one command
           # from the directory they downloaded into.
           #
-          # These cover the binaries as built, which on the release path is not what an operator downloads: signing
-          # rewrites each Windows binary, so `Sign the CLI binaries` discards this file and regenerates it over the
-          # signed bytes. It is still produced here because a nightly publishes no signature and this artifact has to be
-          # self-consistent on its own.
+          # These cover the binaries as built, which is what every channel publishes while signing is switched off, and
+          # what a nightly publishes in any case. Once a release signs again it stops being what an operator downloads:
+          # signing rewrites each Windows binary, so `Sign the CLI binaries` discards this file and regenerates it over
+          # the signed bytes. Either way the artifact is self-consistent on its own.
           ( cd artifacts/cli && sha256sum ./* > "mfctl-${VERSION}.sha256" )
 
           echo "artifact=cli-binaries" >> "$GITHUB_OUTPUT"

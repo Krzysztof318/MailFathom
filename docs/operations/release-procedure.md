@@ -187,7 +187,7 @@ Four artifacts leave one run, and a failure in the first three leaves the releas
 | The image | `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` | the schema artifact building |
 | The Helm chart | `ghcr.io/krzysztof318/charts/mailfathom` | the image's digest |
 | `mailfathom-schema-<version>.sql` | the GitHub release's assets | nothing |
-| `mfctl-<version>-<rid>` for `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, plus one `.sha256` covering all of them | the GitHub release's assets | the Windows binaries being signed |
+| `mfctl-<version>-<rid>` for `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, plus one `.sha256` covering all of them | the GitHub release's assets | nothing, while signing is switched off |
 
 The command binaries are the one artifact that gates nothing, and that is deliberate: a release whose image and schema
 are correct is one an operator can deploy, so a build failure in the command is left visible on the run rather than
@@ -195,12 +195,17 @@ holding back the thing they are waiting for. They are self-contained and trimmed
 runs it — and they are built for the machine an operator administers *from*, which is why Windows is among them while
 the service itself is Linux-only.
 
-That last point is why the two Windows binaries are Authenticode-signed between the build and the release, and why the
-checksum file is taken after signing rather than before: signing rewrites the file, so checksums computed earlier would
-describe nothing anybody can download. Signing gates the command binaries and only them — a failure withholds them from
-the release page rather than publishing them unsigned, and leaves the other three artifacts published.
-[Signing the Windows CLI binaries](windows-code-signing.md) records the whole arrangement, including what has to exist
-in SignPath and in this repository's settings before a release can sign at all.
+That last point is why the two Windows binaries are to be Authenticode-signed between the build and the release, and why
+the checksum file is then taken after signing rather than before: signing rewrites the file, so checksums computed
+earlier would describe nothing anybody can download. Signing will gate the command binaries and only them — a failure
+withholds them from the release page rather than publishing them unsigned, and leaves the other three artifacts
+published.
+
+None of that runs yet. The certificate is not issued, so `Sign the CLI binaries` is switched off, the release attaches
+the binaries as built, and the build's own checksum file is the one operators verify against.
+[Signing the Windows CLI binaries](windows-code-signing.md) records the whole arrangement, what has to exist in
+SignPath and in this repository's settings before a release can sign at all, and
+[#390](https://github.com/Krzysztof318/MailFathom/issues/390) is where it is turned on.
 
 The chart is published **after** the image and **against the digest it produced**, because a chart names the image it
 deploys: before pushing, the run renders the packaged chart against that digest and refuses to publish one that would
