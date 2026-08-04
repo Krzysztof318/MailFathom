@@ -78,6 +78,27 @@ public sealed class TrustedReverseProxyExtensionsTests
         Assert.Equal("mail.example.test", request.Request.Host.Value);
     }
 
+    /// <summary>
+    /// The documented escape hatch, asserted so the page describing it describes something real: a prefix covering
+    /// every address believes any peer at all, which is why the page states what that gives up rather than leaving it
+    /// to whoever reads the parser.
+    /// </summary>
+    [Fact]
+    public async Task AddTrustedReverseProxy_APrefixCoveringEveryAddress_BelievesAnyPeerAtAll()
+    {
+        // Arrange
+        var request = RequestFrom(IPAddress.Parse("203.0.113.9"));
+        request.Request.Headers["X-Forwarded-Proto"] = "https";
+        request.Request.Headers["X-Forwarded-Host"] = "anything.example.test";
+
+        // Act
+        await ForwardThrough(TrustingProxies("0.0.0.0/0", "::/0"), request);
+
+        // Assert
+        Assert.Equal("https", request.Request.Scheme);
+        Assert.Equal("anything.example.test", request.Request.Host.Value);
+    }
+
     /// <summary>The header is a value whoever is upstream wrote, so a peer this deployment did not name writes nothing.</summary>
     [Fact]
     public async Task AddTrustedReverseProxy_RequestFromAnUntrustedPeer_KeepsTheSchemeAndHostItArrivedUnder()

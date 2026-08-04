@@ -283,7 +283,7 @@ listener shares, so a proxy named here is trusted on each of them.
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `ReverseProxy:Enabled` | bool | `false` | Off reads neither `X-Forwarded-Proto` nor `X-Forwarded-Host` from anybody | restart |
-| `ReverseProxy:TrustedProxies` | string list | empty | Required non-empty when enabled; refused when configured while it is not. Each entry an IP address or a CIDR network whose host bits are clear — not a DNS name. The framework's loopback default is cleared rather than inherited | restart |
+| `ReverseProxy:TrustedProxies` | string list | empty | Required non-empty when enabled; refused when configured while it is not. Each entry an IP address or a CIDR network whose host bits are clear — not a DNS name. The framework's loopback default is cleared rather than inherited. `0.0.0.0/0` and `::/0` are accepted and trust every peer, which disables the refusal of an OAuth token that arrived without TLS — see [trust is the connection](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) | restart |
 | `ReverseProxy:MaximumForwardedHops` | int | `1` | At least 1; how far right-to-left through each header a value is believed | restart |
 
 `X-Forwarded-For` is never read, so the peer MailFathom observes stays the one that opened the connection, and

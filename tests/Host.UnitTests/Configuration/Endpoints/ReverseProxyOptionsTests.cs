@@ -79,6 +79,27 @@ public sealed class ReverseProxyOptionsTests
         Assert.Empty(errors);
     }
 
+    /// <summary>
+    /// A prefix covering every address is accepted, because it is a posture an operator can mean and one they have to
+    /// write. What it costs is documented rather than refused: the refusal of an OAuth token that arrived without TLS
+    /// reads the scheme this mode applies, so trusting every peer is trusting every peer to be honest about it.
+    /// </summary>
+    [Theory]
+    [InlineData("0.0.0.0/0")]
+    [InlineData("::/0")]
+    public void FindConfigurationErrors_APrefixCoveringEveryAddress_IsAcceptedRatherThanRefused(string trustedProxy)
+    {
+        // Arrange
+        var settings = new ReverseProxyOptions { Enabled = true };
+        settings.TrustedProxies.Add(trustedProxy);
+
+        // Act
+        var errors = settings.FindConfigurationErrors();
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
     /// <summary>A DNS name resolves to whatever answers today, and the peer is judged by the address its connection arrives from.</summary>
     [Theory]
     [InlineData("ingress.example.test")]

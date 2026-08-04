@@ -266,6 +266,7 @@ try
     // to say. Registering it conditionally would put the same condition in two places.
     builder.Services.AddHostedService<McpTransportAuthenticationWarning>();
     builder.Services.AddHostedService<McpTransportEncryptionWarning>();
+    builder.Services.AddHostedService<ReverseProxyTrustWarning>();
     builder.Services.AddHostedService<TransportRateLimitingStartupReport>();
     // Composed from the environment rather than resolved from the container, because the value it reports is one
     // OpenSSL read while it initialized and no configuration source can influence it afterwards. Registered

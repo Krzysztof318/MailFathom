@@ -786,6 +786,29 @@ in a container and every other process on the machine in a native installation. 
 the `10.0.0.0/24` it would otherwise have silently become; write the address or write the network, and the deployment
 gets what it asked for.
 
+> **`0.0.0.0/0` and `::/0` are accepted, and they mean what they say.** Nothing refuses a prefix that covers every
+> address, so a deployment can trust every peer — but it has to write that, which is the difference between a decision
+> and an empty field. Understand the cost before you do. **An OAuth access token is refused outright when the request
+> did not arrive over TLS, and that check reads the scheme after this mode has applied it.** With a real proxy named,
+> that is correct: the hop to the client genuinely was HTTPS. With every peer trusted, anything that can reach the
+> listener sends `X-Forwarded-Proto: https` and the refusal stops working, so a reusable credential crosses a
+> clear-text hop and is accepted. Use a range that covers your proxies and nothing else.
+
+Because it is accepted rather than refused, it is announced. A `/0` in the list produces one startup warning naming
+what the deployment gave up:
+
+```text
+warn: MailFathom.Host.Hosting.Warnings.ReverseProxyTrustWarning
+      ReverseProxy:TrustedProxies names 0.0.0.0/0, which covers every address, so a forwarded scheme and host are read
+      from any peer that can open a connection rather than from a proxy. This also turns off the refusal of an access
+      token that arrived without transport encryption, because that refusal reads the scheme a forwarded header set —
+      so a client can claim its own hop was encrypted and have the token accepted over clear text. Narrow the range to
+      the addresses your proxies actually use unless something other than this setting already closes the network.
+```
+
+A merely wide range — a private `/8` — produces nothing. How wide is too wide inside a network you own is a judgement
+only you can make, and a warning that fired on it would be a line you learn to scroll past before it ever mattered.
+
 **Only the two headers are read.** `X-Forwarded-For` is not, so the peer MailFathom observes stays the one that opened
 the connection. Nothing here partitions, limits, or logs by client address, so adopting one from a header would replace
 an observed fact with a claim and buy nothing. Each header is read right to left, and `MaximumForwardedHops` says how
