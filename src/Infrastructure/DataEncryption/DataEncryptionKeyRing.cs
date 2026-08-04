@@ -23,7 +23,7 @@ namespace MailFathom.Infrastructure.DataEncryption;
 /// Every failure here is a defect or a deployment that changed underneath a running process, never an operator error
 /// waiting to be reported: startup already proved that the active key names a configured key and that every key's
 /// material resolves and decodes. See
-/// <see href="../../../docs/decisions/0005-data-encryption-key-ring-and-provisioning.md">ADR 0005</see>.
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0005-data-encryption-key-ring-and-provisioning.md">ADR 0005</see>.
 /// </para>
 /// </remarks>
 internal sealed class DataEncryptionKeyRing

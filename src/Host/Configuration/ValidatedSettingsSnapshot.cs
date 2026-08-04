@@ -14,7 +14,7 @@ namespace MailFathom.Host.Configuration;
 /// <para>
 /// A configuration reload can rewrite a secret reference, so a snapshot is a candidate until every reference in it has
 /// resolved. A candidate that fails validation is discarded and the last known good snapshot stays active, which is
-/// what <see href="../../../docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md">ADR 0002</see>
+/// what <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md">ADR 0002</see>
 /// requires of a reloadable setting group and what keeps a mistyped credential name from taking a running deployment
 /// offline.
 /// </para>

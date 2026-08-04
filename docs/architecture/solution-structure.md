@@ -4,6 +4,37 @@
 
 MailFathom uses a clean-architecture modular monolith. Dependencies point inward from adapters and hosts toward application and domain contracts.
 
+```mermaid
+flowchart TD
+    AppHost[AppHost]
+    Host[Host]
+    Cli[Cli — mfctl]
+    Mcp[Mcp]
+    Infrastructure[Infrastructure]
+    AI[AI]
+    Application[Application]
+    Common[Common]
+    Domain[Domain]
+
+    AppHost --> Host
+    AppHost --> Infrastructure
+    Host --> Mcp
+    Host --> Infrastructure
+    Host --> AI
+    Host --> Application
+    Cli --> Common
+    Mcp --> Application
+    Infrastructure --> Application
+    Infrastructure --> Common
+    AI --> Application
+    Application --> Domain
+    Common --> Domain
+```
+
+Every arrow is a project reference, and the diagram is the whole set: each project's references are exactly the ones
+drawn from it, with the reference every project holds to `Domain` left implicit where a path already reaches it. The
+sections below say what each project is for and why two of them are shaped against the ordering rather than by it.
+
 ## Runtime projects
 
 - `Domain` contains pure business concepts and invariants.

@@ -164,7 +164,7 @@ restart, because the connection pool attaches its password provider once.
 
 The key ring every value MailFathom seals at rest is sealed under. A configuration root of its own rather than a
 section of `Persistence`, because the database is the first thing sealed under it and there is no reason it is the
-last. [ADR 0005](../decisions/0005-data-encryption-key-ring-and-provisioning.md) records the whole decision, and
+last. [ADR 0005](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0005-data-encryption-key-ring-and-provisioning.md) records the whole decision, and
 [secret provisioning](secret-provisioning.md) states how the material is generated and referenced.
 
 An absent section is a valid deployment that seals nothing. Configuring the section makes every rule below apply.

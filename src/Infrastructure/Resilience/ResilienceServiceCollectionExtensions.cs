@@ -99,7 +99,7 @@ public static class ResilienceServiceCollectionExtensions
     /// cache when a change token fires and rebuilds the named instance inside that notification, so one malformed
     /// edit would raise `OptionsValidationException` on the thread that reported the change — a file-watcher callback
     /// in a deployed host.
-    /// <see href="../../../docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md">ADR 0002</see>
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md">ADR 0002</see>
     /// rules that out, and a validated-snapshot layer that would make these settings safely reloadable does not exist
     /// for them yet. Binding a frozen copy means a reload has nothing to notify:
     /// the pipeline keeps the budget the host validated at startup, and a bad edit is inert until a restart reads it.

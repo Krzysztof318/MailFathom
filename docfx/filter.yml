@@ -1,0 +1,16 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# What the API reference leaves out. The default already stops at public and protected members, so
+# every rule here removes something that is public and still not a reader's business.
+apiRules:
+  # EF Core writes a migration class per schema change and a model snapshot beside it. Both are
+  # generated, both are public, and neither is called by anything: `docs/operations/database-schema.md`
+  # documents the schema a release ships, and the migrations themselves are read as SQL.
+  - exclude:
+      uidRegex: ^MailFathom\.Infrastructure\.Persistence\.Migrations
+  # A compiler-generated type is an implementation detail of the syntax that produced it.
+  - exclude:
+      hasAttribute:
+        uid: System.Runtime.CompilerServices.CompilerGeneratedAttribute

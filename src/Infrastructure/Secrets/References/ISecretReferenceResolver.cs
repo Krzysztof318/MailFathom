@@ -12,7 +12,7 @@ namespace MailFathom.Infrastructure.Secrets.References;
 /// The contract lives in <c>Infrastructure</c> and is invoked by the host during startup and by the adapters that need
 /// material. It is deliberately unreachable from <c>Application</c> and <c>Domain</c>: a resolver visible there would
 /// give every use case the ability to ask for any secret by name, which is the broad secret access
-/// <see href="../../../docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md">ADR 0002</see>
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md">ADR 0002</see>
 /// forbids normalizing into application code. Application code receives only the narrowly scoped settings each operation needs.
 /// </para>
 /// <para>

@@ -1,0 +1,167 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: Publish the documentation
+
+# The published documentation site, rebuilt in full on every merge to the default branch and served from GitHub Pages.
+#
+# The whole site is a function of the repository rather than of the deployments that preceded it. Each run builds
+# `latest` from the default branch and one version from each release tag that carries the site definition, composes
+# them into one tree, and deploys that tree — so nothing accumulates, a version that stops being documented disappears
+# on the next publish, and a site rebuilt from the same tags is the same site. Publishing through the repository's own
+# Pages deployment rather than by pushing to a branch is what makes that possible: there is no second history to keep
+# consistent, and the run needs no secret and no token beyond the one GitHub gives it.
+#
+# docs/operations/documentation-site.md is the page a reader reaches for; it records what the site carries, why the
+# architectural decision records are not on it, and what enabling Pages took.
+on:
+  push:
+    branches:
+      - main
+  # A release adds its tag to the selector, and nothing else changes on the default branch when one is cut. Without
+  # this the new version would first appear on whatever merged next.
+  release:
+    types:
+      - published
+  # The site definition is verified on a pull request that changes it, and deploys nothing. A change under `src/`
+  # cannot break this build — an XML comment docfx dislikes is a warning — so the filter deliberately leaves it out
+  # rather than adding a multi-minute job to nearly every pull request the repository sees.
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'docfx/**'
+      - 'scripts/build-docs-site.sh'
+      - 'scripts/compose-docs-site.sh'
+      - 'scripts/list-documented-versions.sh'
+      - '.github/workflows/publish-documentation.yml'
+  workflow_dispatch:
+
+# A pull request's builds supersede each other; a deployment does not. Cancelling a publish half-way would leave the
+# live site describing whichever run last finished, which is the one state this workflow exists to make impossible.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || 'publish' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  versions:
+    name: Resolve the versions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      versions: ${{ steps.resolve.outputs.versions }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve which versions the site carries
+        id: resolve
+        env:
+          # A pull request verifies the definition it changes, so it builds the one version that definition belongs to.
+          BUILD_RELEASES: ${{ github.event_name != 'pull_request' }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo latest
+
+            if [ "$BUILD_RELEASES" = 'true' ]; then
+              bash scripts/list-documented-versions.sh
+            fi
+          } > versions.txt
+
+          cat versions.txt
+          echo "versions=$(jq --raw-input --slurp --compact-output 'split("\n") | map(select(length > 0))' versions.txt)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.version }}
+    needs: versions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      # One red version is worth seeing next to the others that succeeded, because the answer to a version that stops
+      # building may well be to stop publishing it.
+      fail-fast: false
+      matrix:
+        version: ${{ fromJSON(needs.versions.outputs.versions) }}
+    steps:
+      - name: Check out ${{ matrix.version }}
+        uses: actions/checkout@v7
+        with:
+          # `latest` is this run's commit; every other version is built from its own tag, with the site definition,
+          # the navigation, and the API surface that release actually shipped.
+          ref: ${{ matrix.version == 'latest' && github.sha || matrix.version }}
+          persist-credentials: false
+
+      - name: Set up the .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build the site
+        run: bash scripts/build-docs-site.sh "site/${{ matrix.version }}"
+
+      - name: Upload ${{ matrix.version }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs-site-${{ matrix.version }}
+          path: site
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    name: Deploy
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # What a Pages deployment takes and no more: the write scope that creates the deployment, and the OIDC token the
+      # deployment is claimed with. Nothing here writes to the repository.
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Download every built version
+        uses: actions/download-artifact@v8
+        with:
+          pattern: docs-site-*
+          # Each artifact holds one directory named after its version, so merging them is what produces the tree the
+          # site is composed from.
+          merge-multiple: true
+          path: site
+
+      - name: Compose the site
+        run: bash scripts/compose-docs-site.sh site
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+          # `.nojekyll` is the one file the archive would otherwise drop, and it is the file that would matter if this
+          # site were ever served by a Pages build rather than deployed as an artifact.
+          include-hidden-files: true
+
+      - name: Deploy to Pages
+        id: deploy
+        uses: actions/deploy-pages@v5

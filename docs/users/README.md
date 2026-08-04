@@ -3,7 +3,7 @@
 This is the documentation for people who install, configure, operate, and use MailFathom. It is a guided path rather
 than a second copy of the reference material: each step links into the operations and feature pages where the full
 contract lives, so nothing here goes stale on its own. Contributor and agent documentation is separate, under the
-repository root and [`docs/`](../README.md) generally.
+repository root and [`docs/`](https://github.com/Krzysztof318/MailFathom/blob/main/docs/README.md) generally.
 
 ## What MailFathom is
 

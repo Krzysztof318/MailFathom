@@ -17,7 +17,7 @@ namespace MailFathom.Host.Configuration.DataEncryption;
 /// entry holds exactly one material, so a second label would be a second name for the same object.
 /// </para>
 /// <para>
-/// See <see href="../../../../docs/decisions/0005-data-encryption-key-ring-and-provisioning.md">ADR 0005</see> for the
+/// See <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0005-data-encryption-key-ring-and-provisioning.md">ADR 0005</see> for the
 /// key ring, the provisioning model, and why the material is base64 rather than raw bytes.
 /// </para>
 /// </remarks>

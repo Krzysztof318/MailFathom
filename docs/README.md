@@ -2,6 +2,11 @@
 
 This documentation set explains the durable design and operating model for MailFathom.
 
+**These pages are also published as a site**, at <https://krzysztof318.github.io/MailFathom/>, with search, an API
+reference generated from the source, and one version per release. This file is the index for reading them here in the
+repository; [the documentation site](operations/documentation-site.md) records what the site carries, which versions
+it publishes, and what a new page owes it.
+
 ## For users
 
 [The user guide](users/README.md) is the guided path for people who install, configure, and use MailFathom rather
@@ -34,6 +39,7 @@ below for depth instead of duplicating them.
 - [Signing the Windows CLI binaries](operations/windows-code-signing.md) documents the SignPath Foundation signature the released `mfctl` binaries for Windows carry, where signing sits in the release, the variables and secret it needs, and what a signing failure withholds.
 - [Agent workflow](operations/agent-workflow.md) documents the shared Codex and Claude Code workflow.
 - [Issue tracking and the roadmap board](operations/issue-tracking.md) documents which work needs an issue, what its body carries, the one `type:*` label, the milestone, the board's fields and views, and how an arrival from outside the project is triaged.
+- [The documentation site](operations/documentation-site.md) documents how these pages are published, which versions the site carries and which one it opens on, where the navigation is written, and which links have to be absolute.
 - [Decisions](decisions/README.md) describes the ADR workflow and templates.
 
 - [IMAP synchronization](features/imap-synchronization.md)
@@ -44,4 +50,4 @@ below for depth instead of duplicating them.
 
 ## Planned work
 
-This documentation set describes behavior that exists. The architecture draft and the PR-sized specifications that decompose the gap between it and the code live in [`specs/`](../specs/README.md). A specification is a statement of intent; a page here is a statement of fact.
+This documentation set describes behavior that exists. The architecture draft and the PR-sized specifications that decompose the gap between it and the code live in [`specs/`](https://github.com/Krzysztof318/MailFathom/blob/main/specs/README.md). A specification is a statement of intent; a page here is a statement of fact.

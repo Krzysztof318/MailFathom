@@ -1,0 +1,89 @@
+/*
+ * Copyright © 2026 Krzysztof Kasprowicz
+ * Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+ * Project repository: https://github.com/Krzysztof318/MailFathom
+ */
+
+/* Everything here belongs to the two additions `main.js` makes. The rest of the appearance is the
+   `modern` template's, deliberately: a theme of our own would be one more thing to carry forward
+   across docfx versions, and this site has no design problem that the default one fails to solve. */
+
+.mf-version-picker {
+  width: auto;
+  margin-inline-start: 0.75rem;
+}
+
+.mf-version-notice {
+  margin-bottom: 1.5rem;
+}
+
+/* The affordance matters more than usual here: a Mermaid diagram looks like a picture rather than
+   like a control, so nothing else on the page suggests that it opens. */
+article img[src],
+article pre.mermaid {
+  cursor: zoom-in;
+}
+
+.mf-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: rgb(0 0 0 / 80%);
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+.mf-viewer[hidden] {
+  display: none;
+}
+
+.mf-viewer-stage {
+  cursor: grab;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.mf-viewer-panning .mf-viewer-stage {
+  cursor: grabbing;
+}
+
+/* The copy the viewer shows starts at the size the page would have given it and is scaled from
+   there, so opening a diagram never reflows it into a different layout than the one being read. */
+.mf-viewer-stage > * {
+  max-width: 92vw;
+  max-height: 88vh;
+  margin: 0;
+  background: var(--bs-body-bg);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.mf-viewer-stage img {
+  display: block;
+  object-fit: contain;
+}
+
+.mf-viewer-stage svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mf-viewer-controls {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: var(--bs-body-bg);
+  border-radius: 0.5rem;
+  box-shadow: 0 0.25rem 0.75rem rgb(0 0 0 / 30%);
+}
+
+body.mf-viewer-open {
+  overflow: hidden;
+}

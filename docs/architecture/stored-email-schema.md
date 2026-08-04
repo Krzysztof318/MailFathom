@@ -4,7 +4,7 @@
 
 `stored_emails` holds the normalized metadata a mailbox timeline is read from. Its raw MIME lives in a separate one-to-one table, `email_message_contents`, and the text derived from that MIME lives in a third, `email_search_documents`, so nothing that lists or filters mail ever loads a `bytea` value, a body's worth of text, or a search vector — let alone tracks one in the change tracker.
 
-This page describes the table as the EF Core model declares it and as the reviewed baseline migration creates it. [Specification 19](../../specs/19-ef-core-migration-baseline-and-apply-policy.md) generated that migration, so PostgreSQL has now had its say: the types, constraints, and indexes below are the ones a schema dump reports rather than the ones a model was hoped to produce. How the schema reaches a database is at the end of this page.
+This page describes the table as the EF Core model declares it and as the reviewed baseline migration creates it. [Specification 19](https://github.com/Krzysztof318/MailFathom/blob/main/specs/19-ef-core-migration-baseline-and-apply-policy.md) generated that migration, so PostgreSQL has now had its say: the types, constraints, and indexes below are the ones a schema dump reports rather than the ones a model was hoped to produce. How the schema reaches a database is at the end of this page.
 
 ## What a row records
 
@@ -26,7 +26,7 @@ The columns fall into five groups, each answering a different question.
 
 The sender is stored as three columns: the display name and address as the message wrote them, and the upper-cased comparison form that every filter and index matches on. The `From` header supplies it. `Sender` is the fallback and only stands in for a message that named no author at all, because it names whoever submitted a message written on someone else's behalf and therefore answers a different question.
 
-Recipients are PostgreSQL `text[]` columns — `to_addresses`, `cc_addresses`, `reply_to_addresses` — rather than a join table, because every planned query tests containment rather than joining to recipient rows. They hold the comparison form only. A recipient's display name is mail content that no planned query filters or sorts on, and a second copy of it would widen the access, export, and erasure surface for nothing; a reader that needs the names re-derives them from the stored raw MIME, which [specification 14](../../specs/14-email-content-read-model.md) parses anyway.
+Recipients are PostgreSQL `text[]` columns — `to_addresses`, `cc_addresses`, `reply_to_addresses` — rather than a join table, because every planned query tests containment rather than joining to recipient rows. They hold the comparison form only. A recipient's display name is mail content that no planned query filters or sorts on, and a second copy of it would widen the access, export, and erasure surface for nothing; a reader that needs the names re-derives them from the stored raw MIME, which [specification 14](https://github.com/Krzysztof318/MailFathom/blob/main/specs/14-email-content-read-model.md) parses anyway.
 
 ### Bounds on what a header may contribute
 
@@ -44,7 +44,7 @@ Where a bound cuts a sequence, it keeps the end that answers the question. Recip
 
 The row keeps the indexable part of what the MIME reader found and only that: `attachment_count`, `attachment_total_size_octets`, `inline_resource_count`, and the `is_encrypted`, `carries_unverified_signature`, and `contains_unexpanded_tnef_part` markers.
 
-**The per-attachment list of file names, media types, and sizes is deliberately not persisted.** The same reasoning as for recipient display names applies, and one more: a second representation of the attachment list can drift from the raw MIME it was derived from, and re-deriving it costs nothing in a pass a body reader is already making. [Email content](../features/email-content.md#attachments-are-re-derived-never-stored) is the read that makes it. The signature marker is named for presence rather than verification because nothing here verifies anything; a column called "signed" would be read as an authenticity result by every query that later touched it.
+**The per-attachment list of file names, media types, and sizes is deliberately not persisted.** The same reasoning as for recipient display names applies, and one more: a second representation of the attachment list can drift from the raw MIME it was derived from, and re-deriving it costs nothing in a pass a body reader is already making. [Email content](../features/email-content.md#the-descriptions-are-re-derived-never-stored) is the read that makes it. The signature marker is named for presence rather than verification because nothing here verifies anything; a column called "signed" would be read as an authenticity result by every query that later touched it.
 
 ## The derived search document
 

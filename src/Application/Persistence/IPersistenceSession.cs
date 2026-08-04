@@ -10,7 +10,7 @@ namespace MailFathom.Application.Persistence;
 /// appear in the signature of every use case that writes, and because this contract carries behavior the provider's
 /// does not: a commit reports an optimistic concurrency conflict as a result its caller loops on, which is the lower
 /// of the two altitudes
-/// <see href="../../../docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
 /// signals a conflict at.
 /// </remarks>
 public interface IPersistenceSession : IAsyncDisposable

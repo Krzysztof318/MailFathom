@@ -12,7 +12,7 @@ namespace MailFathom.Application.Synchronization;
 /// <remarks>
 /// The port narrows persistence to the single idempotent operation synchronization needs, which is the use-case-shaped
 /// contract
-/// <see href="../../../docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
 /// chose over a generic repository or an exposed <c>IQueryable</c>. It also has no published
 /// contract to restate: EF Core's query surface is a concrete <c>DbContext</c>, and MailFathom allows no fake provider to
 /// stand in for PostgreSQL semantics, so the upsert is expressed in domain terms and asserted through this port.
