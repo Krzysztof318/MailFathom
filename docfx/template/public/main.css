@@ -24,7 +24,24 @@
      to its container reads as a sliver rather than as a control. */
   flex: 0 0 auto;
   width: auto;
-  margin-inline-start: 0.75rem;
+
+  /* The picker sits in `#navbar`, in front of the icon links, and this is what puts it at that end of
+     the header rather than against the section links: the free space is spent here, so `form.icons`
+     — which carries `margin-left: auto` of its own — has none left to spend and follows immediately. */
+  margin-inline-start: auto;
+  margin-inline-end: 0.5rem;
+}
+
+/* Below the navbar's breakpoint `#navbar` becomes a column and the auto margin above would push the
+   picker against the right edge of an otherwise left-aligned panel. `order` places it after the section
+   links and ahead of the search box, which `modern` orders at 30 and the icon links at 40. */
+@media (max-width: 767.98px) {
+  .mf-version-picker {
+    order: 20;
+    align-self: stretch;
+    margin-inline: 0;
+    margin-block-start: 1rem;
+  }
 }
 
 .mf-version-notice {

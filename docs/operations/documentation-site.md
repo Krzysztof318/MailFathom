@@ -4,7 +4,11 @@
 
 The pages under `docs/` are published as a browsable site at
 <https://krzysztof318.github.io/MailFathom/>. The site is generated from this repository by
-[docfx](https://dotnet.github.io/docfx/), deployed by GitHub Pages, and rebuilt in full on every merge to `main`.
+[docfx](https://dotnet.github.io/docfx/), deployed by GitHub Pages, and rebuilt in full by two pushes: a merge to
+`main`, which moves `latest`, and a release tag, which adds that release's version to the selector. It is the tag
+rather than the release, because the version list below is read from the tags in the checkout rather than from GitHub's
+releases — and because a `release: published` trigger cannot start a run at all, the release being created by `Release`
+with `GITHUB_TOKEN` and GitHub starting no workflow from an event that token generated.
 
 Nothing is authored on the site. A page is written here, reviewed in the same pull request as the behavior it
 describes, and published by the merge — which is the whole reason the site is generated from `docs/` rather than kept
@@ -138,12 +142,17 @@ all: its own logo is an SVG whose intrinsic size already fits a header, so a ras
 was saved at. Nothing in the build can see that — docfx renders a page without laying it out, so a logo that fits and
 one that covers the page produce the same output.
 
+The selector itself sits at the right-hand end of the header, in front of the icon links. That is inside the element
+`modern` renders and re-renders — it writes the section links and the icon links there after the template's own module
+has run, and writes them again whenever the theme picker among them is used — so the selector is placed and then kept
+placed, from an observer that puts it back rather than from an insertion that happens once.
+
 That is the general shape of what this template can get wrong. Everything it adds happens in the browser, after the
 build has finished and against files the build never reads, so a page that renders the selector and one that silently
 does not are the same output as far as every gate here is concerned. **The site's appearance and its run-time
-behaviour are the parts of it verified by looking at the deployed site**, and both defects found that way so far — a
-logo at its natural size, and a selector missing from the two pages served from a version's own directory — were
-invisible to a green build.
+behaviour are the parts of it verified by looking at the deployed site**, and every defect found that way so far — a
+logo at its natural size, a selector missing from the two pages served from a version's own directory, and the same
+selector missing again when that directory was addressed without its trailing slash — was invisible to a green build.
 
 What the template adds beyond that:
 
@@ -156,12 +165,13 @@ What the template adds beyond that:
   how much detail it holds, and this is what makes the detail reachable.
 
 Both are written against the DOM the `modern` template produces, which re-renders the navigation bar and every Mermaid
-diagram after the page loads. The selector is therefore placed in the one header element that is never rewritten, and
-the viewer opens from a single delegated listener rather than from handlers bound to elements about to be replaced.
+diagram after the page loads. The selector is therefore re-placed by an observer whenever the navigation bar is written
+again, and the viewer opens from a single delegated listener rather than from handlers bound to elements about to be
+replaced.
 
 ## Publishing
 
-`.github/workflows/publish-documentation.yml` runs on every push to `main`, on a published release, and on demand. It
+`.github/workflows/publish-documentation.yml` runs on every push to `main`, on a pushed release tag, and on demand. It
 resolves the version list, builds each version in parallel, composes them into one tree, and deploys that tree with
 the repository's own Pages deployment — `actions/deploy-pages`, not a bot pushing to a branch. It needs no secret: the
 `pages: write` and `id-token: write` scopes on the deploying job are all it holds, and nothing in it writes to the

@@ -8,10 +8,10 @@
 //
 // Both are written against the DOM the `modern` template produces and nothing else, because that
 // template re-renders parts of the page after this module runs — the navigation bar when it loads
-// the table of contents, and every Mermaid diagram again whenever the theme changes or a tab is
-// selected. So the selector is placed in the one header element `modern` never rewrites, and the
-// viewer is opened from a single delegated listener on the document rather than from handlers bound
-// to elements that are about to be replaced.
+// the table of contents and again whenever the theme is changed, and every Mermaid diagram again
+// whenever the theme changes or a tab is selected. So the selector is re-placed by an observer
+// rather than inserted once, and the viewer is opened from a single delegated listener on the
+// document rather than from handlers bound to elements that are about to be replaced.
 
 const versionsFileName = 'versions.json'
 const zoomStep = 1.2
@@ -38,7 +38,7 @@ export default {
   }
 }
 
-// The directory the current documentation build was published into — `.../latest/` or `.../v0.3.0/`
+// The directory the current documentation build was published into — `.../latest/` or `.../v<version>/`
 // — and the site root above it, which is where `versions.json` and the redirecting landing page
 // live. `docfx:rel` is the relative path from the current page back to its own build root, so the
 // depth of the page this runs on never has to be guessed.
@@ -53,13 +53,24 @@ function resolveSiteLayout() {
     return null
   }
 
-  const versionUrl = new URL(relativeRoot || './', window.location.href)
+  // GitHub Pages serves a version's landing page at `.../v<version>` as readily as at `.../v<version>/`,
+  // and the two resolve `./` differently: the address without the trailing slash names the site root
+  // rather than the version's own directory, which leaves everything below looking for a version named
+  // after the repository and finding none. Every page docfx writes is a `.html` file, so a path ending in
+  // neither a slash nor `.html` is a directory served without its slash, and gets one here.
+  const pageUrl = new URL(window.location.href)
+  if (!pageUrl.pathname.endsWith('/') && !pageUrl.pathname.endsWith('.html')) {
+    pageUrl.pathname += '/'
+  }
+
+  const versionUrl = new URL(relativeRoot || './', pageUrl)
   const siteUrl = new URL('../', versionUrl)
   const segments = versionUrl.pathname.split('/').filter(segment => segment.length > 0)
 
   return {
     siteUrl,
     versionUrl,
+    pageUrl,
     currentVersion: segments.length > 0 ? segments[segments.length - 1] : null
   }
 }
@@ -90,11 +101,6 @@ async function renderVersionPicker() {
     return
   }
 
-  const brand = document.querySelector('header .navbar-brand')
-  if (!brand) {
-    return
-  }
-
   const picker = document.createElement('select')
   picker.className = 'form-select form-select-sm mf-version-picker'
   picker.setAttribute('aria-label', 'Documentation version')
@@ -112,11 +118,56 @@ async function renderVersionPicker() {
     void navigateToVersion(layout, picker.value)
   })
 
-  brand.insertAdjacentElement('afterend', picker)
+  if (!placeVersionPicker(picker)) {
+    return
+  }
 
   if (manifest.default && manifest.default !== layout.currentVersion) {
     renderVersionNotice(layout, manifest, current)
   }
+}
+
+// The picker reads as one of the header's controls rather than as part of the wordmark, so it belongs at
+// the right-hand end beside the icon links. That end is inside `#navbar`, which is the element `modern`
+// renders itself: it writes the section links and the icon links there after this module has run, and
+// writes them again every time the theme picker inside it is used. An insertion done once therefore
+// survives until the reader changes the theme and then silently does not.
+//
+// So this places the picker and keeps placing it. The observer re-runs the same placement whenever
+// `#navbar` changes, and the placement returns without touching the DOM when the picker is already where
+// it belongs — which is what stops an observer that reacts to its own insertion from looping.
+function placeVersionPicker(picker) {
+  const navbar = document.getElementById('navbar')
+
+  if (!navbar) {
+    // A page rendered with the navbar disabled has no such element and no icon links to sit beside. The
+    // brand is still there, and beside it is better than nowhere.
+    const brand = document.querySelector('header .navbar-brand')
+    brand?.insertAdjacentElement('afterend', picker)
+    return brand !== null
+  }
+
+  const place = () => {
+    const icons = navbar.querySelector('form.icons')
+
+    if (icons) {
+      if (picker.nextElementSibling !== icons) {
+        icons.insertAdjacentElement('beforebegin', picker)
+      }
+      return
+    }
+
+    // Before `modern` has rendered the icon links there is nothing to sit in front of, so the picker
+    // waits at the end of the navbar and the observer moves it once they arrive.
+    if (picker.parentElement !== navbar) {
+      navbar.appendChild(picker)
+    }
+  }
+
+  place()
+  new MutationObserver(place).observe(navbar, { childList: true, subtree: true })
+
+  return true
 }
 
 // The same page under another version when that version still has it, and that version's front page
@@ -124,7 +175,11 @@ async function renderVersionPicker() {
 // path blindly is how a version switch turns into a 404 on the release they were trying to reach.
 async function navigateToVersion(layout, selectedVersion) {
   const targetVersionUrl = new URL(`${selectedVersion}/`, layout.siteUrl)
-  const relativePagePath = window.location.href.slice(layout.versionUrl.href.length)
+  // The same normalized address the version directory was resolved from, because this subtracts one from
+  // the other: taking the browser's own would subtract a prefix the address may not carry, and produce a
+  // path that resolves against the wrong directory. A version's landing page yields the empty string
+  // either way, which is right — the reader is at the root, and so is where they are going.
+  const relativePagePath = layout.pageUrl.href.slice(layout.versionUrl.href.length)
   const candidate = new URL(relativePagePath, targetVersionUrl)
 
   try {

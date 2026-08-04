@@ -16,14 +16,32 @@ name: Publish the documentation
 # docs/operations/documentation-site.md is the page a reader reaches for; it records what the site carries, why the
 # architectural decision records are not on it, and what enabling Pages took.
 on:
+  # Two pushes change what the site would carry, and both publish: a merge to the default branch moves `latest`, and a
+  # release tag adds a version to the selector. Without the second, a release's version would first appear on whatever
+  # merged next — which is what the release that found this did, reaching the site only because the version-bump pull
+  # request happened to merge a minute after the tag. #407 records it.
+  #
+  # It is the tag rather than the release, and that is not a preference. `scripts/list-documented-versions.sh` answers
+  # from the tags in the checkout rather than from GitHub's releases, so the tag is what the site is a function of — and
+  # a `release: published` trigger could not start this workflow anyway, because `Release` creates the release with
+  # `GITHUB_TOKEN` and GitHub starts no workflow run from an event that token generated. This workflow carried one for
+  # exactly that purpose and it never once fired.
+  #
+  # A tag is pushed before the publication it starts has finished, so the site can briefly carry a version whose image
+  # and release do not exist yet. That resolves itself rather than needing handling: every run rebuilds the whole site
+  # from the tags it can see, so a tag deleted after a failed publication is gone from the selector on the next one.
+  #
+  # The tag filter is narrowed to a leading `v` followed by three dot-separated groups each opening with a digit, rather
+  # than to `v*`, which would also start a publish for `vnext` or any other tag somebody spells with a leading v. A
+  # filter pattern is a glob and not a regular expression, so the exact `v<major>.<minor>.<patch>` shape is not
+  # expressible here and a prerelease or a fourth group still matches. That costs a rebuild and never a wrong version:
+  # `scripts/list-documented-versions.sh` decides what the site carries, and it does apply that exact expression — so
+  # this filter chooses when a rebuild runs, never what it publishes, and a spurious one rebuilds the same site.
   push:
     branches:
       - main
-  # A release adds its tag to the selector, and nothing else changes on the default branch when one is cut. Without
-  # this the new version would first appear on whatever merged next.
-  release:
-    types:
-      - published
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
   # The site definition is verified on a pull request that changes it, and deploys nothing. A change under `src/`
   # cannot break this build — an XML comment docfx dislikes is a warning — so the filter deliberately leaves it out
   # rather than adding a multi-minute job to nearly every pull request the repository sees.
