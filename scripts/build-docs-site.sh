@@ -33,7 +33,10 @@ set -euo pipefail
 readonly configuration_file='docfx/docfx.json'
 readonly solution_file='MailFathom.slnx'
 readonly generated_metadata_directory='docfx/api'
-readonly unresolved_link_codes='InvalidFileLink|InvalidBookmark|InvalidExternalBookmark'
+# `UidNotFound` is the same defect reached the other way: a `xref:` naming a type or a namespace the reference no
+# longer generates. A page that links into the API reference is written against names the code owns, so it is the one
+# kind of link here that a refactor breaks without touching the page.
+readonly unresolved_link_codes='InvalidFileLink|InvalidBookmark|InvalidExternalBookmark|UidNotFound'
 # The one published page no change here may correct. `CHANGELOG.md` is written by the release pull request and by
 # nothing else — it is a statement about a release rather than about a change — so a link in it is fixed by the next
 # release rather than by whoever notices it. Failing every documentation build until then would stop the site from
