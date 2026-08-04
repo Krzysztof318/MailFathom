@@ -1088,6 +1088,39 @@ typo_check_passes_the_files_the_pull_request_changed() {
   assert_contains 'changes 3 file(s)' "$output_file"
 }
 
+typo_check_leaves_an_image_out_of_the_file_list() {
+  local output_file="$test_directory/typo-check-image-output"
+  local step_output_file="$test_directory/typo-check-image-step-output"
+
+  if ! run_typo_check_step \
+    $'README.md\nassets/icon-180.png' \
+    "$output_file" \
+    "$step_output_file"; then
+    printf 'Typo check failed to collect a changed-file list containing an image\n' >&2
+    return 1
+  fi
+
+  assert_file_content 'files=README.md' "$step_output_file"
+}
+
+typo_check_checks_nothing_when_a_pull_request_only_changes_images() {
+  local output_file="$test_directory/typo-check-images-only-output"
+  local step_output_file="$test_directory/typo-check-images-only-step-output"
+
+  if ! run_typo_check_step \
+    $'assets/icon-180.png\ndocs/diagram.svg.png' \
+    "$output_file" \
+    "$step_output_file"; then
+    printf 'Typo check failed on a pull request that only changes images\n' >&2
+    return 1
+  fi
+
+  # The empty list rather than the whole checkout. Falling back here would spell-check the repository
+  # over a change that added no words, which is the cost the fallback exists to avoid paying twice.
+  assert_file_content 'files=' "$step_output_file"
+  assert_contains 'nothing to spell-check' "$output_file"
+}
+
 typo_check_checks_nothing_when_the_pull_request_only_removes_files() {
   local output_file="$test_directory/typo-check-removals-output"
   local step_output_file="$test_directory/typo-check-removals-step-output"
@@ -2871,6 +2904,8 @@ run_test protected_paths_refuses_dependabot_outside_the_workflows
 run_test protected_paths_refuses_an_author_merely_resembling_dependabot
 run_test protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit
 run_test typo_check_passes_the_files_the_pull_request_changed
+run_test typo_check_leaves_an_image_out_of_the_file_list
+run_test typo_check_checks_nothing_when_a_pull_request_only_changes_images
 run_test typo_check_checks_nothing_when_the_pull_request_only_removes_files
 run_test typo_check_falls_back_to_the_whole_checkout_for_a_path_containing_whitespace
 run_test typo_check_falls_back_to_the_whole_checkout_for_a_path_containing_a_glob_character

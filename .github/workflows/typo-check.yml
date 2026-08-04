@@ -119,6 +119,29 @@ jobs:
             exit 0
           fi
 
+          # An image holds no prose, and `typos` will read one anyway. Its own binary detection and
+          # the exclusions in `.config/typos.toml` both belong to the walk it does when it is given a
+          # directory; a path named on the command line is read whether or not it looks like text, so
+          # a changed PNG arrives as a page of corrections against compressed bytes nobody wrote. The
+          # formats are listed rather than detected, because the question here is which files this
+          # repository carries that are not written in words.
+          readable_paths=()
+          for changed_path in "${changed_paths[@]}"; do
+            case "${changed_path,,}" in
+              *.png | *.jpg | *.jpeg | *.gif | *.ico | *.webp | *.woff | *.woff2 | *.pdf) continue ;;
+            esac
+
+            readable_paths+=("$changed_path")
+          done
+
+          changed_paths=("${readable_paths[@]}")
+
+          if (( ${#changed_paths[@]} == 0 )); then
+            echo 'Every file this pull request changes is an image, so there is nothing to spell-check.'
+            echo 'files=' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           # Whitespace splits one path into two, and a glob character can expand it into different
           # ones entirely — `docs/a[1].md` becomes `docs/a1.md` if that file happens to exist, which
           # is the checker reading somewhere the pull request never went while the path it was given
