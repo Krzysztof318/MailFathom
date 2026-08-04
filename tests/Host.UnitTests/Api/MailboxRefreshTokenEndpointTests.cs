@@ -17,9 +17,8 @@ namespace MailFathom.Host.UnitTests.Api;
 /// <remarks>
 /// The route is reached with a long-lived mailbox credential in the body, so what is asserted here is the shape of
 /// every refusal and the fact that a refusal stores nothing. Authentication is deliberately not among them: the route
-/// carries no requirement of its own and inherits the group's, which is what
-/// <see cref="AdminApiEndpoints.MapAdminApi" /> exists to guarantee and what the composed host proves in the
-/// integration suite.
+/// carries no requirement of its own and inherits the group's, so it is asserted where that inheritance happens, in
+/// <see cref="AdminApiEndpointsTests" />.
 /// </remarks>
 public sealed class MailboxRefreshTokenEndpointTests
 {
