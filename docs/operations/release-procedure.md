@@ -152,7 +152,9 @@ unavailable:
    moment of the tag and no search for the version number would ever find it. Each hit is read and either corrected in
    this same pull request or left alone; the sweep reports and never gates.
 2. **Push the annotated tag `v<x.y.z>` on that merge commit.** This is what makes the release real and what triggers
-   the release workflow. Before publishing anything the workflow asserts the tag against the tagged commit's
+   the release workflow — which starts only for a version-shaped tag, so a tag that is not one starts nothing at all
+   rather than a run that fails. **Read a pushed tag that produced no run as a malformed tag**, and check its spelling
+   before looking anywhere else. Before publishing anything the workflow asserts the tag against the tagged commit's
    `VersionPrefix`, against the highest existing tag on the same `major.minor` line, and against the changelog section
    for that version — `scripts/assert-release-tag.sh` is that check. It then runs the same build, unit-test,
    formatting, and migration checks a pull request runs, followed by the integration suite, and builds nothing at all
