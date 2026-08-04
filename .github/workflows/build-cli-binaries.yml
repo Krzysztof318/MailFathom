@@ -53,9 +53,13 @@ jobs:
         run: dotnet restore src/Cli/Cli.csproj --locked-mode
 
       # The publish-time shape lives here rather than in the project file, because a project marked self-contained
-      # cannot be referenced by the test host. Trimming is safe because src/Cli references no other project in the
-      # solution: there is no EF Core model and no MailKit to keep reflection alive, and serialization goes through a
-      # source-generated context.
+      # cannot be referenced by the test host. Trimming is safe because of how little src/Cli reaches: Common, and
+      # Domain through it, neither of which opens a database or speaks a mail protocol, so no EF Core model and no
+      # MailKit keeps reflection alive and every JSON read goes through a source-generated contract.
+      #
+      # That last condition is the one a change can break without noticing, because this job is the only thing that
+      # evaluates it and the soonest it runs is the next nightly. `.config/BannedSymbols.txt` refuses the
+      # reflection-based read overloads for that reason, so the ordinary build is what says so.
       - name: Publish every platform
         id: publish
         env:

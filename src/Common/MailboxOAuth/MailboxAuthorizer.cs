@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using System.Web;
 using MailFathom.Common.OAuth;
 
@@ -122,7 +123,11 @@ public sealed class MailboxAuthorizer
             form["client_secret"] = clientSecret;
         }
 
-        var response = await this.PostFormAsync<OAuthTokenResponse>(request.TokenEndpoint, form, cancellationToken);
+        var response = await this.PostFormAsync(
+            request.TokenEndpoint,
+            form,
+            OAuthJsonContext.Default.OAuthTokenResponse,
+            cancellationToken);
 
         return this.ToGrant(response);
     }
@@ -173,9 +178,10 @@ public sealed class MailboxAuthorizer
             ["scope"] = request.Scope,
         };
 
-        var response = await this.PostFormAsync<OAuthDeviceAuthorizationResponse>(
+        var response = await this.PostFormAsync(
             deviceAuthorizationEndpoint,
             form,
+            OAuthJsonContext.Default.OAuthDeviceAuthorizationResponse,
             cancellationToken);
 
         if (response.Error is { } error)
@@ -216,7 +222,11 @@ public sealed class MailboxAuthorizer
         {
             await Task.Delay(pollInterval, this.timeProvider, cancellationToken);
 
-            var response = await this.PostFormAsync<OAuthTokenResponse>(request.TokenEndpoint, form, cancellationToken);
+            var response = await this.PostFormAsync(
+                request.TokenEndpoint,
+                form,
+                OAuthJsonContext.Default.OAuthTokenResponse,
+                cancellationToken);
 
             switch (response.Error)
             {
@@ -273,6 +283,7 @@ public sealed class MailboxAuthorizer
     private async Task<TResponse> PostFormAsync<TResponse>(
         Uri endpoint,
         Dictionary<string, string> form,
+        JsonTypeInfo<TResponse> responseContract,
         CancellationToken cancellationToken)
         where TResponse : class
     {
@@ -284,9 +295,7 @@ public sealed class MailboxAuthorizer
         {
             // The status code is not the verdict. RFC 6749 requires a rejected grant to arrive as 400 with a machine
             // readable `error`, so the body is read either way and the status is consulted only when it holds nothing.
-            payload = await response.Content.ReadFromJsonAsync<TResponse>(
-                OAuthJsonContext.Default.Options,
-                cancellationToken);
+            payload = await response.Content.ReadFromJsonAsync(responseContract, cancellationToken);
         }
         catch (JsonException)
         {
