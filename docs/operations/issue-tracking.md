@@ -38,8 +38,8 @@ An open pull request moves both of the bottom two rows, and that is not the dupl
 - Every issue body carries two or three user stories and a condensed acceptance list. A specification issue additionally opens with a header block naming the roadmap group, the draft delivery stage, a link to the specification file, the issues it depends on, and the estimated change size.
 - Do not copy specification text into an issue. The specification is the contract, and a duplicated copy goes stale silently.
 - Express dependencies as issue references so the board shows them as links. Specification dependencies always point backwards to lower-numbered specifications.
-- Nothing on the board schedules work. The owner works alone at irregular times, so order is recorded and timing is not. The board carries a one-week `Week` field, kept deliberately informational: no rule reads it, no view filters on it, and an issue is complete without it. Never make it load-bearing, never add a deadline, day estimate, sprint, or capacity field beside it, and do not read `Size` as one — it estimates a diff, not a duration.
-- Use a parent issue only where it carries something no other field can. A parent standing over the issues a release needs answers the question the milestone already answers, and one standing over a theme does what `Track` does, so both create a second hierarchy next to the roadmap and neither is worth having. What earns a parent is one feature large enough that it had to be split into several issues, whose parts then have an order between them: which piece gates the rest, which two can run in either order, and what has to be true across all of them before the feature is done. The milestone cannot say that, `Track` cannot say it, and dependency references say it only to somebody who opens every child. `#332` is the worked example — one mailbox credential, four issues, one gate. Where the feature is small enough to be one issue, or where its parts have no order, the references each body already carries are enough, and a parent adds a place to keep up to date instead. Opening a parent also settles which milestone the parent itself takes, which is a decision rather than a step, and the rules under **Milestones** are where it is made.
+- Nothing on the board schedules work. The owner works alone at irregular times, so order is recorded and timing is not. There is no date, deadline, day-estimate, sprint, or capacity field, and none is to be added: the two the board once carried accumulated no value on any item across its whole history, which is what a field for a question nobody asks looks like. Do not read `Size` as one either — it estimates a diff, not a duration.
+- Use a parent issue only where it carries something no other field can. A parent standing over the issues a release needs answers the question the milestone already answers, and one standing over a theme does what `Area` does, so both create a second hierarchy next to the roadmap and neither is worth having. What earns a parent is one feature large enough that it had to be split into several issues, whose parts then have an order between them: which piece gates the rest, which two can run in either order, and what has to be true across all of them before the feature is done. The milestone cannot say that, `Area` cannot say it, and dependency references say it only to somebody who opens every child. `#332` is the worked example — one mailbox credential, four issues, one gate. Where the feature is small enough to be one issue, or where its parts have no order, the references each body already carries are enough, and a parent adds a place to keep up to date instead. Opening a parent also settles which milestone the parent itself takes, which is a decision rather than a step, and the rules under **Milestones** are where it is made.
 - A parent carries the `parent` label, applied in the same pass that links its children. Nothing else makes one findable from the board: the documented view qualifiers carry nothing that asks *which issues have children*, and the one sub-issue qualifier among them — `parent-issue:OWNER/REPO#NUMBER` — lists the children of a parent whose number the reader already knew. The label is not what makes an issue a parent, though. The sub-issue links are, they remain the only source of truth for the hierarchy, and where the two disagree the links are right and the label is stale. That is also why the label adds no fifth mechanism beside the four questions above: it answers none of them, and mirrors a structure GitHub already records for the one reader that cannot see it, which is a board view. Link each child by its `id` rather than by its number, which is the part of the call worth reading twice:
 
   ```bash
@@ -87,14 +87,28 @@ Do not open a further milestone beside the open one; the next is created when th
 
 ## Board fields
 
-The board carries three single-select fields beyond `Status`, plus an informational one. Set `Track` on every issue. Set `Queue` on every open issue. Leave `Size` empty until the work is planned, and leave `Week` alone entirely.
+The board carries three single-select fields beyond `Status`. Set `Area` on every issue. Set `Queue` on every open issue. Leave `Size` empty until the work is planned.
 
-- **`Track`** groups every item by the area of the system it belongs to, including work no specification backs. `A` through `E` are the roadmap groups from `specs/README.md`. `Release` is release-process and distribution work — licensing, versioning policy, branching, contributor entry points, packaging, publication — and it says nothing about which release ships it, because that is the milestone's question. `Platform` is repository tooling and cross-cutting concerns no roadmap group owns. `Future capabilities` is beyond the current roadmap segment.
+- **`Area`** groups every item by the part of the system it belongs to. Nine values, and each is a place rather than a phase, which is what lets the grouping survive the release that produced the work in it:
+
+  | `Area` | What belongs to it |
+  |---|---|
+  | Configuration & secrets | Configuration binding and validation, secret references, cryptographic material, listeners |
+  | Mail synchronization | IMAP sessions, folders, flags, transport security, and writes to the remote mailbox |
+  | Storage & retention | Persistence, schema, the content store, retention, and deletion |
+  | Retrieval & embeddings | Chunking, vectors, indexes, ranking, and search |
+  | Agents & answering | Chat providers, the agent, `ask_mail`, and the bounds on what leaves the process |
+  | Automation | Rules, the job model, executions, and classification |
+  | MCP surface | Tools, the protocol, and transport authentication |
+  | Platform | Repository tooling, CI, verification, dependencies, and telemetry |
+  | Release | Packaging, distribution, versioning, and user documentation — never which release ships it, because that is the milestone's question |
+
+  Two of those boundaries are decisions rather than descriptions. Retrieval and answering are separate because the two parent issues that own them draw that line already, so a parent's children never land in two areas. And there is no security area, because `security` is a label: encoding one state in two places is exactly the duplication **Four questions, four mechanisms** exists to prevent.
+
+  The values are deliberately not the roadmap groups from `specs/README.md`. Those decompose the gap to one release, so they name the phase that delivered a piece of work rather than the part of the system it lives in, and they age out the moment those specifications ship — which is what happened, and what this field was corrected from.
 - **`Queue`** is the ordering signal, and a new issue takes one of its three lower values without asking. `Later` is the default: accepted scope not yet started. `Needs decision` says this issue waits on an answer rather than on effort; name the `type:decision` issue that produces the answer, or state that none exists yet. `Parked` records a review outcome or a side question that carries no commitment to act — something the project decided about and may return to, which is why it never stands in for work the project has declined or for an issue nobody has read yet. `Next` means in the owner's field of view now, and it has two writers. The owner sets it to mean ready to start, and at most five **open** issues hold it that way; the cap is what keeps the value a decision rather than a copy of everything already accepted. `$finish-change` sets it as well, on the issue its pull request closes, so that work already in flight is legible in the view the owner reads instead of only in the pull request list. Those sit outside the cap: an agent opening a pull request is not choosing what to start next and must never spend one of the five slots that decision uses. A closed issue keeps whatever `Queue` value it had and stops counting, which is why neither kind has to be cleared on merge and why every view that reads `Queue` filters `is:open`.
 - **`Size`** measures the pull request in changed lines, additions plus deletions, including tests and documentation. The ranges are contiguous and leave no gap: `S` under 1000, `M` from 1000 to 2499, `L` from 2500 to 4999, `XL` from 5000 up and to be split before it starts. Read a specification's own line estimate through a factor of five, because that is what the nine merged specification pull requests measured — a median of 5.0 against the estimate, ranging from 2.6 to 7.3, never below. A specification that says 600 lines is an `L`. `L` is the normal size of a specification here, so an `XL` is a genuine warning rather than a large-sounding label.
-- **`Week`** is informational and unused. It exists because a one-week grid is occasionally worth glancing at, not because anything depends on it. Do not set it, do not filter on it, and do not let a rule come to rest on it.
-
-The built-in workflows set `Status` and nothing else, so a newly opened issue reaches the board with no `Track` and no `Queue`. Setting both is part of opening the issue:
+The built-in workflows set `Status` and nothing else, so a newly opened issue reaches the board with no `Area` and no `Queue`. Setting both is part of opening the issue:
 
 ```bash
 gh project field-list 4 --owner Krzysztof318 --format json   # field ids and option ids
@@ -103,29 +117,50 @@ gh project item-edit --project-id <project-id> --id <item-id> \
   --field-id <field-id> --single-select-option-id <option-id>
 ```
 
-Each field is a separate call, so one can land while another fails. A project view filters fields with `AND` and cannot ask for a missing `Track` *or* a missing `Queue` in one expression, which is why the `Triage` view catches only the untouched case. Audit both after placing an issue, and whenever the board is worth trusting:
+Each field is a separate call, so one can land while another fails. A project view filters fields with `AND` and cannot ask for a missing `Area` *or* a missing `Queue` in one expression, which is why the `Triage` view catches only the untouched case. Audit both after placing an issue, and whenever the board is worth trusting:
 
 ```bash
-gh project item-list 4 --owner Krzysztof318 --format json --limit 200 \
-  | jq -r '.items[] | select(.status != "Done") | select(.track == null or .queue == null)
-           | "\(.content.number) track=\(.track) queue=\(.queue)"'
+gh project item-list 4 --owner Krzysztof318 --format json --limit 400 \
+  | jq -r '.items[] | select(.status != "Done") | select(.area == null or .queue == null)
+           | "\(.content.number) area=\(.area) queue=\(.queue)"'
 ```
 
-A missing `Track` is also visible without running anything: the `Roadmap` view groups by `Track`, so an unplaced item sits in its own group at the end of the board.
+A missing `Area` is also visible without running anything: the `Roadmap` view groups by `Area`, so an unplaced item sits in its own group at the end of the board.
 
 ## Views
 
-`Now` is open issues with `Queue: Next`, grouped by `Status`, and it is the view the owner works from. That grouping is what separates the field's two writers without a second field: what the owner queued waits in `Todo`, and what a pull request carried in sits in `In Progress`, because the same event that set `Queue` also moved `Status` there. `Roadmap` is everything open grouped by `Track`. A `Release <version>` view carries one milestone each, so the release being worked and the one being planned are read separately rather than filtered apart by hand. `Decisions` is the open `type:decision` issues — the answers the owner owes, not the work waiting on them. `Parents` is the open issues carrying `parent`, in table layout so that `Sub-issues progress` reads as a column beside `Track` and the milestone; it is the way into the parents, because the qualifiers a view filters on ask what an item carries rather than what hangs beneath it, and it filters `is:open` for the ordinary reason that a parent whose children are all delivered is closed with them. `Triage` lists open items with no `Queue` value, which is the inbox for issues the project did not open: an arrival carries no board fields because none of the rules here reached its author, and **Issues and pull requests from outside the project** is what empties it. An item the project itself opened never belongs there, because an agent sets `Queue` as part of opening an issue. Every view that reads `Queue` filters `is:open`, so no `Next` value outlives its issue and a closed one never occupies one of the owner's five slots.
+A view holds no state. Every one of them is a filter over fields that already exist, which is why the set below adds nothing to the four mechanisms and why no view can be left out of date by an agent forgetting a step.
+
+| View | Filter | What it answers |
+|---|---|---|
+| `Now` | `queue:Next -status:Done` | what is in front of the owner |
+| `Roadmap` | `is:open -queue:Parked` | everything the project intends to build, grouped by `Area` |
+| `Backlog` | `is:open queue:Parked` | what it has considered and not committed to |
+| `Release <version>` | `milestone:"<version>"` | one release each |
+| `Parent features` | `is:open label:parent` | the features, with `Sub-issues progress` as a column |
+| `Decisions` | `is:open label:"type:decision"` | the answers the owner owes |
+| `Triage` | `is:open no:queue` | the inbox for issues the project did not open |
+| `All` | `-status:Done` | everything open, unfiltered, for when a query is easier than a view |
+
+`Now` groups by `Status`, and that grouping is what separates the field's two writers without a second field: what the owner queued waits in `Todo`, and what a pull request carried in sits in `In Progress`, because the same event that set `Queue` also moved `Status` there.
+
+**`Roadmap` and `Backlog` are two readings of `Queue`, not two mechanisms.** The line between them falls at `Parked` and nowhere else: `Later` and `Needs decision` are both on the roadmap, because an issue waiting on an answer is fully intended and merely blocked, and putting it on a shelf would say something untrue about it. That is also what keeps the word *roadmap* honest — after the filter, the view holds only work the project means to do.
+
+`Parent features` is in table layout so that `Sub-issues progress` reads as a column beside `Area` and the milestone. It is the way into the parents, because the qualifiers a view filters on ask what an item carries rather than what hangs beneath it, and it filters `is:open` for the ordinary reason that a parent whose children are all delivered is closed with them.
+
+`Triage` catches an arrival that carries no board fields, because none of the rules here reached its author; **Issues and pull requests from outside the project** is what empties it. An item the project itself opened never belongs there, because an agent sets `Queue` as part of opening an issue. Every view that reads `Queue` filters `is:open`, so no `Next` value outlives its issue and a closed one never occupies one of the owner's five slots.
+
+A view's filter and layout are writable through the GraphQL API, in two calls — `gh project` cannot create one, and `createProjectV2View` takes no filter, so it lands on the `updateProjectV2View` that follows. Its **grouping is not writable at all**: `ProjectV2ViewConfigurationInput` carries visible fields and nothing else, so a view that has to group by `Area` is grouped by hand in the interface once and then left alone.
 
 ## Issues and pull requests from outside the project
 
-An issue the project did not open arrives with no `type:*` label, no `Track`, no `Queue`, and no milestone, because none of the rules above reached its author. That is the expected shape of an arrival rather than a defect in it, and it is not corrected by inventing values at a glance.
+An issue the project did not open arrives with no `type:*` label, no `Area`, no `Queue`, and no milestone, because none of the rules above reached its author. That is the expected shape of an arrival rather than a defect in it, and it is not corrected by inventing values at a glance.
 
 The absence of a `type:*` label is what marks an issue untriaged, because an agent always sets one. Triage is therefore a state a reader can see without a field, a label, or a board column existing to announce it, which is why none was added: the four questions still have four mechanisms, and *has anyone read this* is answered by whether the first of them was ever asked.
 
 Triage is one pass over the issue and it is not implementation. Read it, then either place it or end it:
 
-- **Place it.** Assign exactly one `type:*` label, a `Track`, a `Queue`, and a milestone if the rules above assign one, by the same rules that govern an issue the project opened. `Later` is the value a placed arrival takes, and triage never assigns `Next`: that choice stays the owner's whoever opened the issue, and the other way into it is a pull request that does not exist yet. What the reporter asked for does not decide the label: a report that names a defect is `type:defect` even when it was written as a feature request.
+- **Place it.** Assign exactly one `type:*` label, an `Area`, a `Queue`, and a milestone if the rules above assign one, by the same rules that govern an issue the project opened. `Later` is the value a placed arrival takes, and triage never assigns `Next`: that choice stays the owner's whoever opened the issue, and the other way into it is a pull request that does not exist yet. What the reporter asked for does not decide the label: a report that names a defect is `type:defect` even when it was written as a feature request.
 - **End it.** Close it as `not planned` and state the reason on the issue. `Parked` is not that, for the reason the `Queue` rules give.
 
 A question is not a unit of work and does not become one by arriving as an issue. Move it to Discussions and close the issue with a link, rather than giving it a `type:*` label so the board has somewhere to put it. Discussions carries `Q&A` for questions, `Ideas` for proposals that are not yet scope, and `Announcements` for what the project says; a discussion that turns out to be work is converted to an issue and then triaged like any other.

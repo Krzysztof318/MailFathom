@@ -63,7 +63,7 @@ Do not proceed while a gate fails.
    does not exist in this role. Report it as `not applicable (fork)` rather than as incomplete.
 
 **Owner's checkout only:** confirm the issue is still placed, against
-`docs/operations/issue-tracking.md`: exactly one `type:*` label, a `Track` value on the board, a
+`docs/operations/issue-tracking.md`: exactly one `type:*` label, an `Area` value on the board, a
 milestone if the release rule assigns one, and a `Size`, which is no longer deferrable because the
 diff now exists and can be measured rather than estimated. A change that grew past what the issue
 described may have outgrown its placement too.

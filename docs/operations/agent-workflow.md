@@ -232,7 +232,7 @@ The canonical skills are:
 
 [Issue tracking and the roadmap board](issue-tracking.md) holds the issue rules
 themselves: which work needs an issue, what an issue body contains, the `type:*`
-label it carries, the `Track`, `Queue` and `Size` fields that place it on the
+label it carries, the `Area`, `Queue` and `Size` fields that place it on the
 board, the milestone that scopes it to a release, and which board transitions
 belong to the project automation rather than to an agent. It sits there rather
 than in root `AGENTS.md` because it is acted on twice per task and read by
