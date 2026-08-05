@@ -29,7 +29,7 @@ public sealed class AdminEndpointOptionsTests
         // Assert: off, and requiring no credential is then irrelevant because nothing is served.
         Assert.False(settings.Enabled);
         Assert.False(settings.RequiresAuthentication);
-        Assert.Empty(settings.FindConfigurationErrors([]));
+        Assert.Empty(settings.FindConfigurationErrors());
     }
 
     /// <summary>A misspelled key must fail rather than bind a default, or an operator reads their own configuration as though it took effect.</summary>
@@ -73,7 +73,7 @@ public sealed class AdminEndpointOptionsTests
 
         // Act, Assert
         Assert.Contains(
-            settings.FindConfigurationErrors([]),
+            settings.FindConfigurationErrors(),
             error => error.Contains("no key is configured", StringComparison.Ordinal));
     }
 
@@ -87,7 +87,7 @@ public sealed class AdminEndpointOptionsTests
 
         // Act, Assert
         Assert.Contains(
-            settings.FindConfigurationErrors([]),
+            settings.FindConfigurationErrors(),
             error => error.Contains("none of them is checked", StringComparison.Ordinal));
     }
 
@@ -100,36 +100,11 @@ public sealed class AdminEndpointOptionsTests
 
         // Act, Assert
         Assert.Contains(
-            settings.FindConfigurationErrors([]),
+            settings.FindConfigurationErrors(),
             error => error.Contains("names no authentication method", StringComparison.Ordinal));
     }
 
-    /// <summary>
-    /// Two endpoints on one port would leave whichever bound first deciding which credentials guarded the other's
-    /// routes, and the operating system's own failure names a socket rather than the section that asked for it.
-    /// </summary>
-    [Fact]
-    public void FindConfigurationErrors_APortAnotherListenerBinds_IsRefusedBeforeAnythingBinds()
-    {
-        // Arrange
-        var settings = EnabledEndpoint();
-        settings.Port = 8080;
 
-        // Act, Assert
-        Assert.Contains(
-            settings.FindConfigurationErrors([8080]),
-            error => error.Contains("already bound by another listener", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void FindConfigurationErrors_ADisabledEndpointOnAClaimedPort_ReportsNothing()
-    {
-        // Arrange: nothing binds, so nothing collides.
-        var settings = new AdminEndpointOptions { Port = 8080 };
-
-        // Act, Assert
-        Assert.Empty(settings.FindConfigurationErrors([8080]));
-    }
 
     [Theory]
     [InlineData("not-an-address")]
@@ -142,7 +117,7 @@ public sealed class AdminEndpointOptionsTests
 
         // Act, Assert
         Assert.Contains(
-            settings.FindConfigurationErrors([]),
+            settings.FindConfigurationErrors(),
             error => error.Contains(nameof(AdminEndpointOptions.BindAddress), StringComparison.Ordinal));
     }
 
@@ -198,7 +173,7 @@ public sealed class AdminEndpointOptionsTests
 
         // Act & Assert
         Assert.Contains(
-            settings.FindConfigurationErrors([]),
+            settings.FindConfigurationErrors(),
             error => error.Contains($"must be '{AdminEndpointOptions.RoutePrefix}'", StringComparison.Ordinal));
     }
 
@@ -206,7 +181,7 @@ public sealed class AdminEndpointOptionsTests
     [InlineData("https://mail.example.test:8090/api/admin")]
     [InlineData("https://mail.example.test:8090/api/admin/")]
     public void FindConfigurationErrors_AResourceNamingTheRoutePrefix_IsAccepted(string resource) =>
-        Assert.Empty(OAuthEndpoint(resource).FindConfigurationErrors([]));
+        Assert.Empty(OAuthEndpoint(resource).FindConfigurationErrors());
 
     /// <summary>A resource that is not an identifier at all is reported as that, rather than as one naming the wrong path.</summary>
     [Fact]
@@ -216,7 +191,7 @@ public sealed class AdminEndpointOptionsTests
         var settings = OAuthEndpoint("not-a-url");
 
         // Act
-        var errors = settings.FindConfigurationErrors([]);
+        var errors = settings.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(errors, error => error.Contains("not a canonical resource URL", StringComparison.Ordinal));
@@ -235,55 +210,22 @@ public sealed class AdminEndpointOptionsTests
         var settings = TlsTerminatingEndpoint();
 
         // Act, Assert
-        Assert.Equal([8091, 8543], settings.ListenerPorts.Order());
+        Assert.Equal([8080, 8543], settings.ListenerPorts.Order());
     }
 
     [Fact]
-    public void ListenerPorts_ARedirectTurnedOff_ClaimsTheProfilePortsAlone()
-    {
-        // Arrange
-        var settings = TlsTerminatingEndpoint();
-        settings.Https.Redirect.Enabled = false;
-
-        // Act, Assert
-        Assert.Equal([8543], settings.ListenerPorts.Order());
-    }
+    public void ListenerPorts_ATransportServingTlsAlone_ClaimsTheProfilePortsAlone() =>
+        Assert.Equal(
+            [8543],
+            TlsTerminatingEndpoint(EndpointTransport.HttpsOnly).ListenerPorts.Order());
 
     /// <summary>The clear-text port is what the endpoint binds when it terminates no TLS, and there is nothing to redirect from.</summary>
     [Fact]
     public void ListenerPorts_AnEndpointTerminatingNoTls_ClaimsItsClearTextPortAlone() =>
-        Assert.Equal([8090], EnabledEndpoint().ListenerPorts.Order());
+        Assert.Equal([8080], EnabledEndpoint().ListenerPorts.Order());
 
-    [Fact]
-    public void FindConfigurationErrors_ARedirectPortAnotherListenerBinds_IsRefusedBeforeAnythingBinds()
-    {
-        // Arrange
-        var settings = TlsTerminatingEndpoint();
 
-        // Act, Assert
-        Assert.Contains(
-            settings.FindConfigurationErrors([8091]),
-            error => error.Contains("already bound by another listener", StringComparison.Ordinal));
-    }
 
-    /// <summary>A port nothing binds collides with nothing, so a disabled redirect is not compared against the other listeners.</summary>
-    [Fact]
-    public void FindConfigurationErrors_ADisabledRedirectOnAClaimedPort_ReportsNothing()
-    {
-        // Arrange
-        var settings = TlsTerminatingEndpoint();
-        settings.Https.Redirect.Enabled = false;
-
-        // Act, Assert
-        Assert.Empty(settings.FindConfigurationErrors([8091]));
-    }
-
-    /// <summary>Each surface redirects to its own profiles, so the two defaults have to differ or enabling both would collide.</summary>
-    [Fact]
-    public void ClearTextRedirectPort_TheAdministrativeDefault_IsNotTheMcpEndpointsDefault() =>
-        Assert.NotEqual(
-            McpEndpointOptions.DefaultClearTextRedirectPort,
-            AdminEndpointOptions.DefaultClearTextRedirectPort);
 
     [Fact]
     public void ReadFrom_AConfiguredRedirect_BindsItAndRecordsThatItWasStated()
@@ -292,7 +234,7 @@ public sealed class AdminEndpointOptionsTests
         var configuration = Configuration(new Dictionary<string, string?>
         {
             ["AdminEndpoint:Enabled"] = "true",
-            ["AdminEndpoint:Https:Redirect:Port"] = "8092",
+            ["AdminEndpoint:Https:Redirect:Enabled"] = "true",
         });
 
         // Act
@@ -300,24 +242,24 @@ public sealed class AdminEndpointOptionsTests
 
         // Assert
         Assert.True(settings.Https.Redirect.WasStated);
-        Assert.Equal(8092, settings.ClearTextRedirectPort);
+        Assert.True(settings.Https.Redirect.Enabled);
     }
 
     /// <summary>Stating a redirect for an endpoint that terminates no TLS is refused, because nothing would bind it and the endpoint is already served in clear text.</summary>
     [Fact]
-    public void FindConfigurationErrors_ARedirectStatedForAnEndpointTerminatingNoTls_IsRefused()
+    public void FindConfigurationErrors_ARedirectStatedUnderATransportThatCannotServeOne_IsRefused()
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>
         {
             ["AdminEndpoint:Enabled"] = "true",
-            ["AdminEndpoint:Https:Redirect:Port"] = "8092",
+            ["AdminEndpoint:Https:Redirect:Enabled"] = "true",
         });
 
         // Act, Assert
         Assert.Contains(
-            AdminEndpointOptions.ReadFrom(configuration).FindConfigurationErrors([]),
-            error => error.Contains("nothing to redirect to", StringComparison.Ordinal));
+            AdminEndpointOptions.ReadFrom(configuration).FindConfigurationErrors(),
+            error => error.Contains("a clear-text redirect is configured", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -356,7 +298,7 @@ public sealed class AdminEndpointOptionsTests
         Assert.Equal(4, settings.RateLimiting.MaxConcurrentRequests);
         Assert.Equal(30, settings.RateLimiting.TokenCapacity);
         Assert.Equal(TimeSpan.FromSeconds(30), settings.RateLimiting.ReplenishmentPeriod);
-        Assert.Empty(settings.FindConfigurationErrors([]));
+        Assert.Empty(settings.FindConfigurationErrors());
     }
 
     /// <summary>The same rules, reported under this section's own path so an operator knows which endpoint to fix.</summary>
@@ -368,7 +310,7 @@ public sealed class AdminEndpointOptionsTests
         settings.RateLimiting.MaxConcurrentRequests = 0;
 
         // Act
-        var errors = settings.FindConfigurationErrors([]);
+        var errors = settings.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(
@@ -384,7 +326,7 @@ public sealed class AdminEndpointOptionsTests
         settings.RateLimiting.TokenCapacity = 0;
 
         // Act
-        var errors = settings.FindConfigurationErrors([]);
+        var errors = settings.FindConfigurationErrors();
 
         // Assert
         Assert.Empty(errors);
@@ -392,9 +334,11 @@ public sealed class AdminEndpointOptionsTests
 
     private static AdminEndpointOptions EnabledEndpoint() => new() { Enabled = true };
 
-    private static AdminEndpointOptions TlsTerminatingEndpoint()
+    private static AdminEndpointOptions TlsTerminatingEndpoint(
+        EndpointTransport transport = EndpointTransport.HttpAndHttps)
     {
         var settings = EnabledEndpoint();
+        settings.Transport = transport;
         settings.Https.Endpoints.Add(new TransportHttpsEndpointOptions
         {
             Name = "admin",

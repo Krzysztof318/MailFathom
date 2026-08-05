@@ -141,10 +141,12 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     /// command and the second would race a resource that is already leaving its stopped state.
     /// </para>
     /// </remarks>
-    public Task<Uri> StartMailFathomHostAsync(CancellationToken cancellationToken) => this.StartHostOnceAsync(
-        OrchestrationContract.HostResourceName,
-        OrchestrationContract.HostHttpEndpointName,
-        cancellationToken);
+    public async Task<Uri> StartMailFathomHostAsync(CancellationToken cancellationToken) => AsAddress(
+        await this.StartHostOnceAsync(
+            OrchestrationContract.HostResourceName,
+            OrchestrationContract.HostHttpEndpointName,
+            cancellationToken),
+        Uri.UriSchemeHttp);
 
     /// <summary>Starts the composed MailFathom host and reports the address its administrative surface serves on.</summary>
     /// <param name="cancellationToken">Cancels waiting for the host to become reachable.</param>
@@ -156,11 +158,12 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     /// Whichever of the two is asked for first starts the resource, and the other then reads its own endpoint from the
     /// host already running.
     /// </remarks>
-    public async Task<Uri> StartMailFathomAdminEndpointAsync(CancellationToken cancellationToken) => AsHttpAddress(
+    public async Task<Uri> StartMailFathomAdminEndpointAsync(CancellationToken cancellationToken) => AsAddress(
         await this.StartHostOnceAsync(
             OrchestrationContract.HostResourceName,
             OrchestrationContract.HostAdminEndpointName,
-            cancellationToken));
+            cancellationToken),
+        Uri.UriSchemeHttp);
 
     /// <summary>Starts the MailFathom host served over HTTPS behind mutual TLS and reports the address it serves on.</summary>
     /// <param name="cancellationToken">Cancels waiting for the host to become reachable.</param>
@@ -173,10 +176,12 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     /// this — a collection of its own, which the orderer places after the one that starts the host above, so a second
     /// project process is never starting while that collection measures a rate limit.
     /// </remarks>
-    public Task<Uri> StartMutualTlsHostAsync(CancellationToken cancellationToken) => this.StartHostOnceAsync(
-        OrchestrationContract.MutualTlsHostResourceName,
-        OrchestrationContract.MutualTlsHostHttpsEndpointName,
-        cancellationToken);
+    public async Task<Uri> StartMutualTlsHostAsync(CancellationToken cancellationToken) => AsAddress(
+        await this.StartHostOnceAsync(
+            OrchestrationContract.MutualTlsHostResourceName,
+            OrchestrationContract.MutualTlsHostHttpsEndpointName,
+            cancellationToken),
+        Uri.UriSchemeHttps);
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
@@ -190,15 +195,15 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
         }
     }
 
-    /// <summary>Reads a published endpoint as the HTTP address a client calls it at.</summary>
+    /// <summary>Reads a published endpoint as the address a client calls it at.</summary>
     /// <remarks>
-    /// The administrative endpoint is declared with the <c>tcp</c> scheme so that it stays out of <c>ASPNETCORE_URLS</c>
-    /// and off the application listener, which <see cref="OrchestrationContract.HostAdminEndpointName" /> states in full.
-    /// What the app model publishes is therefore a <c>tcp</c> address to a socket that speaks HTTP, and this is where the
-    /// two are reconciled — once, rather than in every test that builds a client.
+    /// Every endpoint this app model declares carries the <c>tcp</c> scheme, so that none of them reaches
+    /// <c>ASPNETCORE_URLS</c> — MailFathom refuses that variable, because each surface states where it is served in its
+    /// own configuration section. What the app model publishes is therefore a <c>tcp</c> address to a socket that speaks
+    /// HTTP or HTTPS, and this is where the two are reconciled: once, rather than in every test that builds a client.
     /// </remarks>
-    private static Uri AsHttpAddress(Uri publishedEndpoint) =>
-        new UriBuilder(publishedEndpoint) { Scheme = Uri.UriSchemeHttp }.Uri;
+    private static Uri AsAddress(Uri publishedEndpoint, string scheme) =>
+        new UriBuilder(publishedEndpoint) { Scheme = scheme }.Uri;
 
     /// <summary>Hands the mutual-TLS host the material the app model deliberately does not carry.</summary>
     /// <remarks>

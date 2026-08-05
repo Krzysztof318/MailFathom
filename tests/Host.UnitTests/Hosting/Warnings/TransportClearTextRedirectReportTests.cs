@@ -79,7 +79,7 @@ public sealed class TransportClearTextRedirectReportTests
     }
 
     [Fact]
-    public async Task StartAsync_AnAdministrativeEndpointRedirecting_NamesItsOwnDefaultPort()
+    public async Task StartAsync_AnAdministrativeEndpointRedirecting_NamesItsOwnClearTextPort()
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
@@ -90,7 +90,7 @@ public sealed class TransportClearTextRedirectReportTests
 
         // Assert
         var record = Assert.Single(logs.Records);
-        Assert.Equal(8091, Assert.Contains("ClearTextPort", record.Properties));
+        Assert.Equal(8080, Assert.Contains("ClearTextPort", record.Properties));
         Assert.Contains("AdminEndpoint:Https:Redirect:Enabled", record.Message, StringComparison.Ordinal);
     }
 
@@ -159,7 +159,7 @@ public sealed class TransportClearTextRedirectReportTests
 
     private static McpEndpointOptions McpTerminatingTls()
     {
-        var settings = new McpEndpointOptions { Enabled = true };
+        var settings = new McpEndpointOptions { Enabled = true, Transport = EndpointTransport.HttpAndHttps };
         settings.Https.Endpoints.Add(Profile());
 
         return settings;
@@ -167,7 +167,7 @@ public sealed class TransportClearTextRedirectReportTests
 
     private static AdminEndpointOptions AdminTerminatingTls()
     {
-        var settings = new AdminEndpointOptions { Enabled = true };
+        var settings = new AdminEndpointOptions { Enabled = true, Transport = EndpointTransport.HttpAndHttps };
         settings.Https.Endpoints.Add(Profile(domain: "admin.example.test", port: 8543));
 
         return settings;

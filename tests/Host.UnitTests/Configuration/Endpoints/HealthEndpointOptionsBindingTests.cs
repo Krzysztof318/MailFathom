@@ -28,7 +28,7 @@ public sealed class HealthEndpointOptionsBindingTests
         // Assert
         Assert.True(options.Enabled);
         Assert.Equal(8081, options.Port);
-        Assert.Equal(HealthEndpointTransport.Http, options.Transport);
+        Assert.Equal(EndpointTransport.Http, options.Transport);
     }
 
     [Fact]
@@ -54,10 +54,10 @@ public sealed class HealthEndpointOptionsBindingTests
         Assert.Equal("127.0.0.1", options.BindAddress);
         Assert.Equal(9090, options.Port);
         Assert.Equal(9443, options.HttpsPort);
-        Assert.Equal(HealthEndpointTransport.HttpAndHttps, options.Transport);
+        Assert.Equal(EndpointTransport.HttpAndHttps, options.Transport);
         Assert.Equal("probe.example.test", options.Domain);
         Assert.Equal("file:/run/secrets/probe.pfx", options.ServerCertificate.Bundle?.SecretReference);
-        Assert.Empty(options.FindConfigurationErrors([8080]));
+        Assert.Empty(options.FindConfigurationErrors());
     }
 
     [Fact]

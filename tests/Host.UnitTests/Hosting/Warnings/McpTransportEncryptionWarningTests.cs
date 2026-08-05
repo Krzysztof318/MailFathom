@@ -66,6 +66,7 @@ public sealed class McpTransportEncryptionWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var settings = Enabled();
+        settings.Transport = EndpointTransport.HttpsOnly;
         settings.Https.Endpoints.Add(new TransportHttpsEndpointOptions
         {
             Name = "public",
@@ -126,6 +127,7 @@ public sealed class McpTransportEncryptionWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var settings = Enabled();
+        settings.Transport = EndpointTransport.HttpsOnly;
         settings.Https.Endpoints.Add(new TransportHttpsEndpointOptions
         {
             Name = "public",

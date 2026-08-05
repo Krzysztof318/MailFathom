@@ -60,7 +60,7 @@ internal sealed partial class AdminTransportSecurityWarning : IHostedService
             this.LogEndpointServedWithoutAuthentication(AdminEndpointOptions.RoutePrefix);
         }
 
-        if (!this.endpointSettings.Https.TerminatesTls)
+        if (!this.endpointSettings.TerminatesTls)
         {
             this.LogEndpointServedWithoutTransportEncryption(this.endpointSettings.Port);
         }

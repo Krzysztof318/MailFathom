@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using System.Net;
 using System.Net.Quic;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -28,7 +27,11 @@ namespace MailFathom.Host.Configuration.Endpoints;
 /// <para>
 /// There is no CORS section and no client-certificate profile here, and neither is an omission. The clients are command
 /// line tools configured with an address, so no browser origin has anything to be told; and the trust question a
-/// certificate answers is a second one this endpoint does not yet ask.
+/// certificate answers is a second one this endpoint does not yet ask. Where it is served, however, is stated in
+/// exactly the settings the MCP endpoint uses — <see cref="BindAddress" />, <see cref="Port" />,
+/// <see cref="Transport" />, and the profiles beneath <see cref="Https" /> — so the day this endpoint does ask the trust
+/// question, the answer arrives as a profile on a listener already shaped to carry one rather than as a second way to
+/// configure a socket.
 /// </para>
 /// <para>
 /// The value is read once, while the host is being composed, because whether an endpoint exists and what guards it are
@@ -58,14 +61,6 @@ internal sealed class AdminEndpointOptions
     /// </remarks>
     public const string RoutePrefix = "/api/admin";
 
-    /// <summary>The port the clear-text redirect binds when a deployment configures HTTPS profiles and states no port for it.</summary>
-    /// <remarks>
-    /// This surface's own default rather than a shared one, because the MCP endpoint redirects to its own profiles: one
-    /// number for both would have the two collide the moment a deployment terminated TLS on each. It sits beside
-    /// <see cref="Port" /> so the two administrative sockets read as a pair, and no other listener here defaults to it.
-    /// </remarks>
-    internal const int DefaultClearTextRedirectPort = 8091;
-
     private const TransportAuthenticationMethods KnownAuthenticationMethods =
         TransportAuthenticationMethods.ApiKey | TransportAuthenticationMethods.OAuth;
 
@@ -73,12 +68,17 @@ internal sealed class AdminEndpointOptions
     /// <remarks>Disabled unless a deployment states otherwise, so administering this service over the network is always something an operator turned on.</remarks>
     public bool Enabled { get; set; }
 
-    /// <summary>Gets or sets the IP address the clear-text listener binds, used when <see cref="Https" /> names no profile.</summary>
+    /// <summary>Gets or sets the IP address the clear-text listener binds, defaulting to every IPv4 address.</summary>
+    /// <remarks>Use <c>127.0.0.1</c> to administer this deployment from its own machine only, one interface's address to restrict it to that interface, and <c>::</c> to bind IPv6, which on most systems accepts IPv4 connections as well.</remarks>
     public string BindAddress { get; set; } = "0.0.0.0";
 
-    /// <summary>Gets or sets the TCP port the clear-text listener binds, used when <see cref="Https" /> names no profile.</summary>
-    /// <remarks>The default is above 1024 so the process needs no privilege to bind it, and it is not a port any other listener here defaults to.</remarks>
-    public int Port { get; set; } = 8090;
+    /// <summary>Gets or sets the TCP port the clear-text listener binds.</summary>
+    /// <remarks>The default is the MCP endpoint's own, so enabling both surfaces without stating a port publishes one socket serving each of them rather than two. It is above 1024 so the process needs no privilege to bind it. Under <see cref="EndpointTransport.HttpsOnly" /> nothing binds it, because that mode opens no clear-text socket; the HTTPS profiles carry their own ports.</remarks>
+    public int Port { get; set; } = 8080;
+
+    /// <summary>Gets or sets which schemes the endpoint is served under.</summary>
+    /// <remarks>The same setting the MCP endpoint carries, read the same way. Clear text unless a deployment states otherwise, which is the right posture behind a TLS-terminating reverse proxy and wrong anywhere else, so startup warns about it.</remarks>
+    public EndpointTransport Transport { get; set; } = EndpointTransport.Http;
 
     /// <summary>Gets or sets which credentials a client may present, written as a set such as <c>ApiKey, OAuth</c>.</summary>
     /// <remarks>
@@ -101,12 +101,11 @@ internal sealed class AdminEndpointOptions
     /// <remarks>Configured separately from the MCP endpoint's even where both name one server, because the resource a token is issued for is what separates administering this service from reading a mailbox through it.</remarks>
     public OAuthValidationOptions OAuth { get; set; } = new();
 
-    /// <summary>Gets or sets whether Kestrel terminates TLS for this endpoint, and under which domains and certificates.</summary>
+    /// <summary>Gets or sets under which domains and certificates Kestrel terminates TLS for this endpoint.</summary>
     /// <remarks>
-    /// Empty by default, which serves the endpoint over the clear-text listener <see cref="BindAddress" /> and
-    /// <see cref="Port" /> name — which is the right posture behind a TLS-terminating reverse proxy and wrong anywhere
-    /// else, so startup warns about it. Naming any profile takes the opposite posture in full: only those listeners
-    /// bind, and no clear-text listener stays open behind them serving the same routes without the protection the
+    /// Read under the two <see cref="Transport" /> modes that terminate TLS and refused under the one that does not.
+    /// <see cref="EndpointTransport.HttpsOnly" /> takes the TLS posture in full: only these listeners bind, and no
+    /// clear-text listener stays open behind them serving the same administrative routes without the protection the
     /// profile was configured to add.
     /// </remarks>
     public TransportHttpsOptions Https { get; set; } = new();
@@ -129,31 +128,18 @@ internal sealed class AdminEndpointOptions
     /// <summary>Gets whether a request must present a credential naming who is calling.</summary>
     public bool RequiresAuthentication => this.Authentication != TransportAuthenticationMethods.None;
 
-    /// <summary>Gets the port the clear-text redirect listener binds, whether or not this deployment stated one.</summary>
-    /// <remarks>Read whether or not a redirect is served, because a port has to be known before it can be checked against the other listeners in the process; <see cref="TransportHttpsOptions.RedirectsClearText" /> is what decides whether anything binds it.</remarks>
-    public int ClearTextRedirectPort => this.Https.Redirect.Port ?? DefaultClearTextRedirectPort;
+    /// <summary>Gets whether Kestrel terminates TLS for this endpoint.</summary>
+    public bool TerminatesTls => TransportListenerConfiguration.TerminatesTls(this.Transport);
+
+    /// <summary>Gets whether the clear-text listener answers every request with the address of the TLS one.</summary>
+    public bool RedirectsClearText =>
+        TransportListenerConfiguration.RedirectsClearText(this.Transport, this.Https.Redirect);
 
     /// <summary>Gets the ports this endpoint's listeners bind, which no other listener in the process may claim.</summary>
-    /// <remarks>The redirect's port is one of them, so a deployment cannot give it to the probes, to the application listener, or to the MCP surface and discover the conflict as an address-in-use error naming a socket rather than a section.</remarks>
-    public IReadOnlySet<int> ListenerPorts
-    {
-        get
-        {
-            if (!this.Https.TerminatesTls)
-            {
-                return new HashSet<int> { this.Port };
-            }
-
-            var ports = this.Https.Endpoints.Select(static endpoint => endpoint.Port).ToHashSet();
-
-            if (this.Https.RedirectsClearText)
-            {
-                ports.Add(this.ClearTextRedirectPort);
-            }
-
-            return ports;
-        }
-    }
+    /// <remarks>Empty when the endpoint is not served at all. The clear-text port is one of them under every mode that opens that socket, whether it serves the routes or redirects away from them, so a deployment cannot give it to the probes or to the MCP surface and discover the conflict as an address-in-use error naming a socket rather than a section.</remarks>
+    public IReadOnlySet<int> ListenerPorts => this.Enabled
+        ? TransportListenerConfiguration.ListenerPorts(this.Transport, this.Port, this.Https)
+        : new HashSet<int>();
 
     /// <summary>Reads the section the way composition does, defaults included.</summary>
     /// <param name="configuration">The application configuration.</param>
@@ -180,14 +166,24 @@ internal sealed class AdminEndpointOptions
         return settings;
     }
 
-    /// <summary>Finds everything an operator must fix before the endpoint can be served.</summary>
-    /// <param name="portsClaimedElsewhere">The ports other listeners in this process bind, which this endpoint may not also claim.</param>
-    /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="portsClaimedElsewhere" /> is <see langword="null" />.</exception>
-    public IReadOnlyList<string> FindConfigurationErrors(IReadOnlyCollection<int> portsClaimedElsewhere)
-    {
-        ArgumentNullException.ThrowIfNull(portsClaimedElsewhere);
+    /// <summary>Describes every socket this endpoint asks for.</summary>
+    /// <returns>One declaration per socket, empty when the endpoint is not served.</returns>
+    /// <remarks>Whether another surface asks for one of the same sockets, and whether the two agree about it, is <see cref="ListenerComposition" />'s question rather than this section's.</remarks>
+    public IReadOnlyList<DeclaredListener> DeclareListeners() => this.Enabled
+        ? TransportListenerConfiguration.DeclareListeners(
+            SectionName,
+            ServedSurfaces.Admin,
+            this.BindAddress,
+            this.Port,
+            this.Transport,
+            this.Https,
+            requestsClientCertificates: false)
+        : [];
 
+    /// <summary>Finds everything an operator must fix before the endpoint can be served.</summary>
+    /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
+    public IReadOnlyList<string> FindConfigurationErrors()
+    {
         if (!this.Enabled)
         {
             return [];
@@ -198,44 +194,20 @@ internal sealed class AdminEndpointOptions
         errors.AddRange(this.RateLimiting.FindConfigurationErrors()
             .Select(error => $"{SectionName}:{nameof(this.RateLimiting)}:{error}"));
 
-        errors.AddRange(this.FindListenerErrors(portsClaimedElsewhere));
-
         // The platform capability is read here rather than passed in, because whether this host can serve HTTP/3 is a
         // property of the machine the process is running on and not a decision composition takes.
-        errors.AddRange(this.Https.FindConfigurationErrors(
-            $"{SectionName}:{nameof(this.Https)}",
-            QuicListener.IsSupported,
-            DefaultClearTextRedirectPort));
+        errors.AddRange(TransportListenerConfiguration.FindConfigurationErrors(
+            SectionName,
+            this.BindAddress,
+            this.Port,
+            this.Transport,
+            this.Https,
+            QuicListener.IsSupported));
+
 
         return errors;
     }
 
-    /// <summary>Refuses a listener that cannot bind, or that would take a socket another endpoint in this process needs.</summary>
-    /// <remarks>
-    /// A collision is reported here rather than left to the operating system, because an address-in-use failure names a
-    /// socket and not the section that asked for it — and because two endpoints on one port would mean whichever bound
-    /// first decided which credentials guarded the other's routes.
-    /// </remarks>
-    private IEnumerable<string> FindListenerErrors(IReadOnlyCollection<int> portsClaimedElsewhere)
-    {
-        if (!this.Https.TerminatesTls)
-        {
-            if (!IPAddress.TryParse(this.BindAddress?.Trim(), out _))
-            {
-                yield return $"{SectionName}:{nameof(this.BindAddress)} — state the IP address to bind, for example '0.0.0.0' for every IPv4 address, '127.0.0.1' to serve the administrative surface to this machine only, or '::' for IPv6.";
-            }
-
-            if (this.Port is < 1 or > 65535)
-            {
-                yield return $"{SectionName}:{nameof(this.Port)} — '{this.Port}' is not a TCP port; state a value between 1 and 65535.";
-            }
-        }
-
-        foreach (var collidingPort in this.ListenerPorts.Where(portsClaimedElsewhere.Contains))
-        {
-            yield return $"{SectionName} — port {collidingPort} is already bound by another listener in this process, and the administrative surface is served on a listener of its own so that reaching it does not mean reaching the MCP endpoint. State a port nothing else binds.";
-        }
-    }
 
     private IEnumerable<string> FindAuthenticationErrors()
     {

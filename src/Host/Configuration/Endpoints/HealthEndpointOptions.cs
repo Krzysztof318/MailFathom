@@ -51,19 +51,19 @@ internal sealed class HealthEndpointOptions
     public string BindAddress { get; set; } = "0.0.0.0";
 
     /// <summary>Gets or sets the TCP port the probes are served on.</summary>
-    /// <remarks>Under <see cref="HealthEndpointTransport.HttpsOnly" /> this port is the TLS one, because that mode opens no clear-text listener at all.</remarks>
+    /// <remarks>Under <see cref="EndpointTransport.HttpsOnly" /> this port is the TLS one, because that mode opens no clear-text listener at all.</remarks>
     public int Port { get; set; } = DefaultPort;
 
     /// <summary>Gets or sets the TCP port the TLS listener binds when both schemes are served.</summary>
     /// <remarks>
-    /// Unset by default and required by <see cref="HealthEndpointTransport.HttpAndHttps" /> alone. One socket serves one
+    /// Unset by default and required by <see cref="EndpointTransport.HttpAndHttps" /> alone. One socket serves one
     /// scheme, so the second port is what makes that mode possible; defaulting it would pick a port an operator never
     /// published and could collide with something already listening.
     /// </remarks>
     public int? HttpsPort { get; set; }
 
     /// <summary>Gets or sets which schemes the probe listener is opened under.</summary>
-    public HealthEndpointTransport Transport { get; set; } = HealthEndpointTransport.Http;
+    public EndpointTransport Transport { get; set; } = EndpointTransport.Http;
 
     /// <summary>Gets or sets the exact DNS domain the TLS listener's certificate covers, in its ASCII form.</summary>
     /// <remarks>
@@ -79,17 +79,17 @@ internal sealed class HealthEndpointOptions
     public TlsServerCertificateOptions ServerCertificate { get; set; } = new();
 
     /// <summary>Gets whether the configured transport opens a TLS listener.</summary>
-    public bool TerminatesTls => this.Transport is HealthEndpointTransport.HttpAndHttps or HealthEndpointTransport.HttpsOnly;
+    public bool TerminatesTls => this.Transport is EndpointTransport.HttpAndHttps or EndpointTransport.HttpsOnly;
 
     /// <summary>Gets whether the configured transport opens a clear-text listener.</summary>
-    public bool ServesClearText => this.Transport is HealthEndpointTransport.Http or HealthEndpointTransport.HttpAndHttps;
+    public bool ServesClearText => this.Transport is EndpointTransport.Http or EndpointTransport.HttpAndHttps;
 
     /// <summary>Gets the port the TLS listener binds, or <see langword="null" /> when the transport opens none.</summary>
-    /// <remarks><see cref="HealthEndpointTransport.HttpsOnly" /> serves TLS on <see cref="Port" /> itself, because it opens no clear-text listener for that port to belong to.</remarks>
+    /// <remarks><see cref="EndpointTransport.HttpsOnly" /> serves TLS on <see cref="Port" /> itself, because it opens no clear-text listener for that port to belong to.</remarks>
     public int? TlsListenerPort => this.Transport switch
     {
-        HealthEndpointTransport.HttpsOnly => this.Port,
-        HealthEndpointTransport.HttpAndHttps => this.HttpsPort,
+        EndpointTransport.HttpsOnly => this.Port,
+        EndpointTransport.HttpAndHttps => this.HttpsPort,
         _ => null,
     };
 
@@ -133,32 +133,78 @@ internal sealed class HealthEndpointOptions
             ?? new HealthEndpointOptions();
     }
 
-    /// <summary>Finds everything an operator must fix before the probes can be served.</summary>
-    /// <param name="applicationListenerPorts">The ports the application listener binds, which the probe listener must not take.</param>
-    /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="applicationListenerPorts" /> is <see langword="null" />.</exception>
+    /// <summary>Describes every socket the probes ask for.</summary>
+    /// <returns>One declaration per socket, empty when the probes are not served.</returns>
     /// <remarks>
-    /// Whether the configured certificate material resolves and is usable is not asked here. It is proven against the
-    /// real material before the server starts, so an unusable certificate fails startup with nothing listening rather
-    /// than with a TLS listener already bound.
+    /// The TLS declaration presents one certificate rather than selecting from profiles by server name, which is what
+    /// <see cref="ListenerComposition" /> refuses to share a socket with a surface that does select: a socket answers a
+    /// handshake one way. The clear-text one shares freely, which is the ordinary way a deployment puts the probes on
+    /// the port its endpoint already publishes.
     /// </remarks>
-    public IReadOnlyList<string> FindConfigurationErrors(IReadOnlyCollection<int> applicationListenerPorts)
+    public IReadOnlyList<DeclaredListener> DeclareListeners()
     {
-        ArgumentNullException.ThrowIfNull(applicationListenerPorts);
-
         if (!this.Enabled)
         {
             return [];
         }
 
-        var errors = new List<string>(this.FindListenerErrors(applicationListenerPorts));
+        var declarations = new List<DeclaredListener>();
+
+        if (this.ServesClearText)
+        {
+            declarations.Add(new DeclaredListener(
+                SectionName,
+                ServedSurfaces.Probes,
+                this.BindAddress,
+                this.Port,
+                TerminatesTls: false,
+                RedirectsClearText: false,
+                PresentsProfiles: false,
+                Profiles: [],
+                RequestsClientCertificates: false,
+                RedirectTargets: new Dictionary<string, int>()));
+        }
+
+        if (this.TlsListenerPort is { } tlsPort)
+        {
+            declarations.Add(new DeclaredListener(
+                SectionName,
+                ServedSurfaces.Probes,
+                this.BindAddress,
+                tlsPort,
+                TerminatesTls: true,
+                RedirectsClearText: false,
+                PresentsProfiles: false,
+                Profiles: [],
+                RequestsClientCertificates: false,
+                RedirectTargets: new Dictionary<string, int>()));
+        }
+
+        return declarations;
+    }
+
+    /// <summary>Finds everything an operator must fix before the probes can be served.</summary>
+    /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
+    /// <remarks>
+    /// Whether the configured certificate material resolves and is usable is not asked here. It is proven against the
+    /// real material before the server starts, so an unusable certificate fails startup with nothing listening rather
+    /// than with a TLS listener already bound.
+    /// </remarks>
+    public IReadOnlyList<string> FindConfigurationErrors()
+    {
+        if (!this.Enabled)
+        {
+            return [];
+        }
+
+        var errors = new List<string>(this.FindListenerErrors());
 
         errors.AddRange(this.FindTransportErrors());
 
         return errors;
     }
 
-    private IEnumerable<string> FindListenerErrors(IReadOnlyCollection<int> applicationListenerPorts)
+    private IEnumerable<string> FindListenerErrors()
     {
         if (!IPAddress.TryParse(this.BindAddress?.Trim(), out _))
         {
@@ -178,16 +224,8 @@ internal sealed class HealthEndpointOptions
             }
         }
 
-        // The application listener is what MCP clients reach. A probe listener sharing its port would either fail to
-        // bind and take the process down with an address-in-use error naming a socket rather than a setting, or — where
-        // the addresses differ — serve the probes to whoever can reach the application port, which is the exposure this
-        // section exists to control.
-        foreach (var port in this.ListenerPorts.Where(applicationListenerPorts.Contains))
-        {
-            yield return $"{SectionName} — port {port} is already the application listener's, and the probes are served on a listener of their own so that reaching them does not mean reaching the MCP endpoint. State a port no application listener binds.";
-        }
 
-        if (this.Transport is HealthEndpointTransport.HttpAndHttps && this.HttpsPort == this.Port)
+        if (this.Transport is EndpointTransport.HttpAndHttps && this.HttpsPort == this.Port)
         {
             yield return $"{SectionName}:{nameof(this.HttpsPort)} — '{this.Port}' is already the clear-text probe port, and one socket cannot serve both schemes. State a second port for the TLS listener.";
         }
@@ -197,28 +235,28 @@ internal sealed class HealthEndpointOptions
     {
         if (!Enum.IsDefined(this.Transport))
         {
-            yield return $"{SectionName}:{nameof(this.Transport)} — '{(int)this.Transport}' names no transport; state '{nameof(HealthEndpointTransport.Http)}', '{nameof(HealthEndpointTransport.HttpAndHttps)}', or '{nameof(HealthEndpointTransport.HttpsOnly)}'.";
+            yield return $"{SectionName}:{nameof(this.Transport)} — '{(int)this.Transport}' names no transport; state '{nameof(EndpointTransport.Http)}', '{nameof(EndpointTransport.HttpAndHttps)}', or '{nameof(EndpointTransport.HttpsOnly)}'.";
 
             yield break;
         }
 
-        if (this.Transport is HealthEndpointTransport.HttpAndHttps && this.HttpsPort is null)
+        if (this.Transport is EndpointTransport.HttpAndHttps && this.HttpsPort is null)
         {
-            yield return $"{SectionName}:{nameof(this.HttpsPort)} — '{nameof(HealthEndpointTransport.HttpAndHttps)}' serves both schemes and one socket serves one scheme, so the TLS listener needs a port of its own. State one, or select '{nameof(HealthEndpointTransport.Http)}' or '{nameof(HealthEndpointTransport.HttpsOnly)}'.";
+            yield return $"{SectionName}:{nameof(this.HttpsPort)} — '{nameof(EndpointTransport.HttpAndHttps)}' serves both schemes and one socket serves one scheme, so the TLS listener needs a port of its own. State one, or select '{nameof(EndpointTransport.Http)}' or '{nameof(EndpointTransport.HttpsOnly)}'.";
         }
 
         // Refused rather than ignored, for the reason the certificate block below is: a port an operator published and
         // nothing binds is a deployment believing its probes answer somewhere they do not.
-        if (this.Transport is not HealthEndpointTransport.HttpAndHttps && this.HttpsPort is not null)
+        if (this.Transport is not EndpointTransport.HttpAndHttps && this.HttpsPort is not null)
         {
-            yield return $"{SectionName}:{nameof(this.HttpsPort)} — a second port is configured while '{nameof(this.Transport)}' opens one listener, so nothing binds it. Select '{nameof(HealthEndpointTransport.HttpAndHttps)}', or remove it and state the port through '{nameof(this.Port)}'.";
+            yield return $"{SectionName}:{nameof(this.HttpsPort)} — a second port is configured while '{nameof(this.Transport)}' opens one listener, so nothing binds it. Select '{nameof(EndpointTransport.HttpAndHttps)}', or remove it and state the port through '{nameof(this.Port)}'.";
         }
 
         if (!this.TerminatesTls)
         {
             if (this.ServerCertificate.IsConfigured)
             {
-                yield return $"{SectionName}:{nameof(this.ServerCertificate)} — a server certificate is configured while '{nameof(this.Transport)}' opens no TLS listener, so nothing presents it; select '{nameof(HealthEndpointTransport.HttpAndHttps)}' or '{nameof(HealthEndpointTransport.HttpsOnly)}', or remove the material.";
+                yield return $"{SectionName}:{nameof(this.ServerCertificate)} — a server certificate is configured while '{nameof(this.Transport)}' opens no TLS listener, so nothing presents it; select '{nameof(EndpointTransport.HttpAndHttps)}' or '{nameof(EndpointTransport.HttpsOnly)}', or remove the material.";
             }
 
             yield break;

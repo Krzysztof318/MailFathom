@@ -4,6 +4,7 @@
 
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Security.ClientCertificates;
 using Xunit;
@@ -359,7 +360,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnUnusableClientCertificateProfile_IsReportedUnderItsPosition()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.None);
+        var options = MutualTlsEndpoint();
         var profile = ConnectorProfile();
         profile.TrustAnchors.Clear();
         options.ClientCertificateProfiles.Add(profile);
@@ -376,7 +377,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_TwoProfilesSharingAName_IsRefused()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.None);
+        var options = MutualTlsEndpoint();
         options.ClientCertificateProfiles.Add(ConnectorProfile());
         options.ClientCertificateProfiles.Add(ConnectorProfile());
 
@@ -391,7 +392,7 @@ public sealed class McpEndpointOptionsTests
     public void ToClientCertificateTrustProfiles_SeveralProfiles_MapsThemInConfigurationOrder()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.None);
+        var options = MutualTlsEndpoint();
         options.ClientCertificateProfiles.Add(ConnectorProfile());
         var reportingProfile = ConnectorProfile();
         reportingProfile.Name = "reporting-service";
@@ -404,6 +405,24 @@ public sealed class McpEndpointOptionsTests
         Assert.Equal(
             ["chatgpt-connector", "reporting-service"],
             trustProfiles.Select(profile => profile.Name));
+    }
+
+    /// <summary>An endpoint terminating TLS, which is what a client certificate needs before it can be presented at all.</summary>
+    private static McpEndpointOptions MutualTlsEndpoint()
+    {
+        var options = EnabledWith(TransportAuthenticationMethods.None);
+        options.Transport = EndpointTransport.HttpsOnly;
+        options.Https.Endpoints.Add(new TransportHttpsEndpointOptions
+        {
+            Name = "public",
+            Domain = "mail.example.test",
+            ServerCertificate = new TlsServerCertificateOptions
+            {
+                Bundle = new ConfiguredSecret { Name = "bundle", SecretReference = "file:/etc/mailfathom/tls/mail.pfx" },
+            },
+        });
+
+        return options;
     }
 
     private static McpEndpointOptions EnabledWith(TransportAuthenticationMethods authentication) =>

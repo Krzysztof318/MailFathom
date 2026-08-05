@@ -130,21 +130,21 @@ Three resources come up, in dependency order. The `postgres` container starts fi
 `mailfathom-migrations` resource then applies every pending migration to it; and `mailfathom-host` waits for that run
 to complete before starting, which is why the schema gate that fails a fresh deployment on purpose never fires on a
 local run — the explicit schema step the deployments require is performed here by the orchestration, before the host
-looks. The host runs in the `Development` environment on ports the app model states rather than allocates, so the
-application listener answers at `http://localhost:8080`, the TLS one at `https://localhost:8443`, and the probes at
-`http://127.0.0.1:8081`. An MCP client's configuration therefore names an address once instead of following whatever a
-launch profile or the orchestrator's port allocation produced that run. None of the three is proxied either: the socket
+looks. The host runs in the `Development` environment on ports the app model states rather than allocates, so the MCP endpoint
+answers at `http://localhost:8080` and the probes at `http://127.0.0.1:8081`. There is no local TLS listener: MailFathom
+never serves one out of an ASP.NET Core development certificate, so a developer who wants TLS configures
+`McpEndpoint:Https` the way a deployment does, which is also the shape they will ship. An MCP client's configuration therefore names an address once instead of following whatever a
+launch profile or the orchestrator's port allocation produced that run. Neither is proxied either: the socket
 a client connects to is the socket Kestrel opened, which is what keeps a TLS handshake — and a client certificate — a
 conversation with the host itself. The probe listener is pinned to loopback deliberately, because the probes answer
 without a credential and nothing on a local network has any business asking them.
 
-All three ports are stated by the app model, but not in the same way. The two application ones are HTTP endpoints, and
-the probe port is a TCP one that injects itself into the host's `HealthEndpoints:Port` setting — declared once rather
-than declared and then configured again beside it. The scheme is what makes that possible: Aspire builds
-`ASPNETCORE_URLS` from HTTP and HTTPS endpoints, so an HTTP endpoint on the probe port would make it an application
-listener, and the host refuses to start when the two collide. That refusal is the design working, not a limitation to
-route around; it is also why the resource carries no `WithHttpHealthCheck`, which derives its address from an endpoint
-and would need the HTTP one that stops the host from starting.
+Both ports are stated by the app model the same way: a TCP endpoint that injects itself into the host's own setting —
+`McpEndpoint:Port` and `HealthEndpoints:Port` — so each number is declared once rather than declared and then configured
+again beside it. The scheme is what makes that possible. Aspire builds `ASPNETCORE_URLS` from HTTP and HTTPS endpoints,
+and MailFathom refuses that variable outright, because each surface states where it is served in its own section; a TCP
+endpoint is published without ever reaching it. That is also why the resource carries no `WithHttpHealthCheck`, which
+derives its address from an HTTP endpoint this app model declares none of.
 
 `8080` and `8081` are the ports [the container image](container-image.md) publishes, so a local run and a deployed one
 answer on the same numbers. `8443` belongs to this topology alone: the image serves no TLS listener, and `443` is a
@@ -449,7 +449,7 @@ The app host is started with the argument `IntegrationTesting=true`, which selec
   `mailfathom-integrationtests-<run>-postgres-data`. The volume is new on every run by construction, which is what the
   baseline migration has to apply to for a run to prove it applies cleanly at all;
 - a `mailserver` container named `mailfathom-integrationtests-<run>-mailserver` is added, which a developer's orchestration never gets — it exists so the suite has a real IMAP server to synchronize against, and starting one beside a developer's own accounts would advertise a mailbox nothing points at;
-- the `mailfathom-host` project resource is added to the model but never started, because the suite exercises classes against real infrastructure and a running MailFathom would synchronize mail underneath the data a test is asserting on. What a collection eventually starts is a host serving both of its network surfaces under the posture worth proving end to end: the MCP endpoint behind an API key and a narrowed origin list, and the administrative endpoint enabled on a listener of its own behind an API key that is none of the MCP ones — which is what lets the suite establish from outside the process that neither surface's credential authenticates the other's routes. The administrative port is allocated like the probe port and published as a TCP endpoint for the same reason: an HTTP one joins `ASPNETCORE_URLS`, and the host refuses to serve an administrative route on the application listener;
+- the `mailfathom-host` project resource is added to the model but never started, because the suite exercises classes against real infrastructure and a running MailFathom would synchronize mail underneath the data a test is asserting on. What a collection eventually starts is a host serving both of its network surfaces under the posture worth proving end to end: the MCP endpoint behind an API key and a narrowed origin list, and the administrative endpoint enabled on a listener of its own behind an API key that is none of the MCP ones — which is what lets the suite establish from outside the process that neither surface's credential authenticates the other's routes. The administrative port is allocated like the probe port and published as a TCP endpoint for the same reason every endpoint on that resource is: an HTTP one joins `ASPNETCORE_URLS`, which the host refuses outright;
 - a second project resource, `mailfathom-mtls-host`, is added on the same terms and started by a collection of its own, `MutualTlsHostCollectionDefinition`, which the assembly's orderer places after the collection that starts the host above — starting a second project process must not be what a rate limit is measured against. It serves the endpoint over an HTTPS profile behind a `Required` client-certificate profile, which is what lets the suite prove the mTLS rules against a real handshake; a certificate requirement is one answer for a whole process, so it cannot be a posture applied to the host above. Its server certificate, private key, and trust anchor are issued in memory per run by the test suite and injected into the environment variables the app model's `env:` secret references name, so nothing of the kind is committed and a developer's orchestration never gets this resource at all.
 
 The prefix comes from `OrchestrationContract` in `src/AppHost`, and nothing else in the repository uses it. The run

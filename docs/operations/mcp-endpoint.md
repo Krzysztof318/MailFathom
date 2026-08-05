@@ -1,6 +1,6 @@
 # The MCP endpoint and what protects it
 
-<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/**, src/Common/OAuth/**, src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, src/Host/Configuration/Endpoints/ReverseProxyOptions.cs, src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs, src/Host/Hosting/Warnings/ReverseProxyTrustWarning.cs, src/Host/Hosting/Warnings/McpTransportEncryptionWarning.cs -->
+<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/**, src/Common/OAuth/**, src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, src/Host/Configuration/Endpoints/TransportListenerConfiguration.cs, src/Host/Configuration/Endpoints/ExternalListenerConfiguration.cs, src/Host/Configuration/Endpoints/ReverseProxyOptions.cs, src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs, src/Host/Hosting/Warnings/ReverseProxyTrustWarning.cs, src/Host/Hosting/Warnings/McpTransportEncryptionWarning.cs -->
 
 The MCP endpoint is how an agent reaches MailFathom. This page records what enabling it means operationally, what a client
 has to present to reach it, which browser origins it answers, which client applications it accepts a certificate from,
@@ -39,13 +39,13 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
 | `Cors.AllowedOrigins` | `["*"]` | The browser origins served: `*` for every one, a list for exactly those, an empty list for none |
 | `ClientCertificateProfiles` | empty | The client applications whose certificates are accepted, each with its own authorities and expected names |
 | `RateLimiting` | bounded — see [Rate limiting](#rate-limiting) | How much traffic the endpoint accepts, per process and per client |
-| `Https.Endpoints` | empty | The domains MailFathom terminates TLS for; empty serves the endpoint over the application listener |
+| `BindAddress`, `Port`, `Transport` | `0.0.0.0`, `8080`, `Http` | Where the endpoint is served, and under which schemes |
+| `Https.Endpoints` | empty | The domains MailFathom terminates TLS for, read under the two `Transport` modes that terminate TLS |
 
-Nothing in this section says *where* the endpoint is served. Enabling it maps `/mcp` on
-[the application listener](configuration-reference.md#the-application-listener) — the socket `ASPNETCORE_URLS`,
-`ASPNETCORE_HTTP_PORTS`, or `Kestrel:Endpoints` names, and `http://localhost:5000` when a deployment names none. That
-listener is clear text unless something in front of it terminates TLS or one of those addresses is an `https://` one,
-which is what [`Https.Endpoints`](#https-and-your-own-domain) is the alternative to: it moves the endpoint onto
+Where the endpoint is served is stated here and nowhere else. `BindAddress` and `Port` bind its clear-text socket, and
+the host's own ways of naming a listener — `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`, `Kestrel:Endpoints` — are refused
+at startup rather than ignored. That socket is clear text unless something in front of it terminates TLS, which is what
+[`Https.Endpoints`](#https-and-your-own-domain) is the alternative to: it moves the endpoint onto
 listeners of its own rather than adding TLS to that one.
 
 The endpoint always answers on **`/mcp`**, which is a constant rather than a setting. An MCP client is configured with a
@@ -574,11 +574,13 @@ needs a handshake this process terminated, and configuring one here is how it ge
 
 ### Configuring a profile takes over the host's listeners
 
-Binding a listener explicitly replaces whatever URLs the host was otherwise configured with, so **no clear-text listener
-stays open behind an HTTPS profile**. There is no mixed posture in which the MCP route is protected while a second
-listener offers the same mailbox without protection.
+Under `Transport: HttpsOnly` **no clear-text listener stays open behind an HTTPS profile**. There is no mixed posture
+arrived at by accident in which the MCP route is protected while a second listener offers the same mailbox without
+protection.
 
-`ASPNETCORE_URLS`, `--urls`, and the Aspire-issued endpoints are therefore all ignored once a profile is configured.
+`Transport: HttpAndHttps` is the deliberate exception, and the clear-text socket it keeps redirects to the profiles
+unless you turn the redirect off. `ASPNETCORE_URLS`, `--urls`, and any Aspire-issued HTTP endpoint are refused at
+startup whichever mode you choose, because where this endpoint is served is this section's question alone.
 
 The [health endpoints](health-endpoints.md) are the one thing this does not take over. They are served on a listener of
 their own, and that listener keeps its own transport: a deployment terminating TLS for the MCP endpoint still serves
@@ -622,7 +624,7 @@ redirect and would read a `308` as a failure.
 
 **If you also run a proxy, point it at a profile's port and never at this one.** The two postures rarely meet — a
 deployment [behind a TLS-terminating proxy](#behind-a-tls-terminating-reverse-proxy) normally configures no profile here,
-and then `8080` is the ordinary application listener rather than a redirect. Where a deployment does both, a proxy
+and then `8080` serves the routes rather than redirecting away from them. Where a deployment does both, a proxy
 forwarding to the redirect port would have every request answered with a `308` to the profile it should have been sent to
 in the first place. With [a trusted proxy named](#behind-a-tls-terminating-reverse-proxy) the redirect uses the forwarded
 public host, so the `Location` carries the name your clients use rather than the internal one the proxy dialled.
@@ -963,9 +965,9 @@ Mutual TLS is off unless `McpEndpoint:ClientCertificateProfiles` names at least 
 *application* — the ChatGPT connector, a reporting service, a workstation fleet — and it composes with the authentication
 methods rather than replacing any of them. A certificate says which program is calling; it never says on whose behalf.
 
-**A client certificate only arrives over a TLS connection this process terminated.** That is either an HTTPS profile
-from the section above, or a listener the host was started with that serves HTTPS of its own — a `https://` entry in
-`ASPNETCORE_URLS` with a certificate configured under Kestrel's own `Certificates` section. Where TLS is terminated by a
+**A client certificate only arrives over a TLS connection this process terminated.** That means an HTTPS profile from
+the section above, under a `Transport` that terminates TLS; configuring profiles while `Transport` is `Http` is refused
+at startup, because no certificate could ever be presented to judge against them. Where TLS is terminated by a
 reverse proxy in front, the handshake happened somewhere else and no certificate reaches here; the headers a proxy sets
 to describe what it saw are ignored, deliberately and permanently. A `Required` profile in that deployment refuses every
 request, which is the honest outcome rather than a silent one.

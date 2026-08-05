@@ -65,7 +65,7 @@ internal sealed partial class McpTransportEncryptionWarning : IHostedService
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (this.endpointSettings is not { Enabled: true, Https.TerminatesTls: false })
+        if (this.endpointSettings is not { Enabled: true, TerminatesTls: false })
         {
             return Task.CompletedTask;
         }
