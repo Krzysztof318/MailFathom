@@ -240,9 +240,9 @@ this default is the native-process path's.
 Kestrel's own fallback would add `https://localhost:5001` whenever an ASP.NET Core development certificate happens to
 be installed. MailFathom restates only the clear-text half, so what the process listens on is decided by what was
 configured rather than by what is installed on the machine — it never serves a listener out of a development
-certificate. That restatement happens while the [probe listener](health-endpoints.md#the-application-listener-is-preserved)
-is being opened, which is the default; a deployment that sets `HealthEndpoints:Enabled` to `false` restates nothing and
-is left with Kestrel's own defaults, development certificate included.
+certificate. That [restatement](health-endpoints.md#the-application-listener-is-preserved) happens whenever this process
+binds a listener of its own — the probes, which are the default, or the administrative endpoint; a deployment that
+enables neither restates nothing and is left with Kestrel's own defaults, development certificate included.
 
 ### `Kestrel:Endpoints:<name>`
 

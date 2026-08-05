@@ -402,18 +402,34 @@ try
     // when neither exists. Reading the wrong one would leave the collision check comparing the probe port against
     // sockets nothing opens, which is the check passing on the strength of a number nobody binds.
     var applicationListenerUrls = ConfiguredApplicationListeners.ResolveUrls(builder.Configuration);
-    var mcpTerminatesTls = mcpEndpointSettings.Enabled && mcpEndpointSettings.Https.TerminatesTls;
     var configuredKestrelEndpoints = ConfiguredKestrelEndpoints.AnyConfigured(builder.Configuration);
 
-    IReadOnlyCollection<int> applicationListenerPorts = (mcpTerminatesTls, configuredKestrelEndpoints) switch
+    IReadOnlyCollection<int> applicationListenerPorts =
+        (mcpEndpointSettings.BindsOwnListeners, configuredKestrelEndpoints) switch
+        {
+            // Every socket the MCP surface opens, the clear-text redirect included: it is bound by the same profiles and
+            // is the one a deployment can end up with without having written a port, so leaving it out would let the
+            // probes or the administrative endpoint take it and report the conflict as an address-in-use error naming a
+            // socket.
+            (true, _) => [.. mcpEndpointSettings.ListenerPorts],
+            (false, true) => ConfiguredKestrelEndpoints.ListenerPorts(builder.Configuration),
+            _ => ConfiguredApplicationListeners.ListenerPorts(applicationListenerUrls),
+        };
+
+    // Kestrel ignores the URL-shaped addresses as soon as any listener is bound in code, so opening the probe listener
+    // or the administrative one would silently take the application listener away from a deployment that states its
+    // port through ASPNETCORE_HTTP_PORTS or ASPNETCORE_URLS. Restating those addresses as Kestrel endpoints hands the
+    // same strings back to the framework's own parser, which binds the same sockets it would have bound. Asked here,
+    // of every endpoint at once, rather than from inside the branch of whichever one happens to be checked first.
+    if (ApplicationListenerRestatement.IsRequired(
+        builder.Configuration,
+        mcpEndpointSettings,
+        healthEndpointSettings,
+        adminEndpointSettings))
     {
-        // Every socket the MCP surface opens, the clear-text redirect included: it is bound by the same profiles and is
-        // the one a deployment can end up with without having written a port, so leaving it out would let the probes or
-        // the administrative endpoint take it and report the conflict as an address-in-use error naming a socket.
-        (true, _) => [.. mcpEndpointSettings.ListenerPorts],
-        (false, true) => ConfiguredKestrelEndpoints.ListenerPorts(builder.Configuration),
-        _ => ConfiguredApplicationListeners.ListenerPorts(applicationListenerUrls),
-    };
+        builder.Configuration.AddInMemoryCollection(
+            ConfiguredApplicationListeners.AsKestrelEndpointConfiguration(applicationListenerUrls));
+    }
 
     // Against the application listener and the probe listener both, because a port is claimed by whichever binds
     // first and the loser fails with an address-in-use error naming a socket rather than the section that asked for it.
@@ -491,19 +507,6 @@ try
 
     if (healthEndpointSettings.Enabled)
     {
-        // Kestrel ignores the URL-shaped addresses as soon as any listener is bound in code, so opening the probe
-        // listener would silently take the application listener away from a deployment that states its port through
-        // ASPNETCORE_HTTP_PORTS or ASPNETCORE_URLS. Restating those addresses as Kestrel endpoints hands the same
-        // strings back to the framework's own parser, which binds the same sockets it would have bound. Nothing is
-        // restated where the addresses were already being ignored: a deployment that names its own Kestrel endpoints
-        // keeps them, and one whose MCP HTTPS profiles bind in code keeps the promise that no clear-text listener
-        // stays open behind them.
-        if (!mcpTerminatesTls && !configuredKestrelEndpoints)
-        {
-            builder.Configuration.AddInMemoryCollection(
-                ConfiguredApplicationListeners.AsKestrelEndpointConfiguration(applicationListenerUrls));
-        }
-
         // The callback runs when the server is constructed, after the container exists and after the composition root
         // below has loaded the certificate the TLS listener presents.
         builder.WebHost.ConfigureKestrel(kestrelOptions => HealthEndpointListenerBinder.Bind(

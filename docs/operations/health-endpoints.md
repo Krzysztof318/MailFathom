@@ -1,6 +1,6 @@
 # The health endpoints and the listener they are served on
 
-<!-- describes: src/Host/Hosting/** -->
+<!-- describes: src/Host/Hosting/**, src/Host/Configuration/Endpoints/HealthEndpointOptions.cs, src/Host/Configuration/Endpoints/ConfiguredApplicationListeners.cs, src/Host/Configuration/Endpoints/ApplicationListenerRestatement.cs, src/Host/Security/Endpoints/Health* -->
 
 An orchestrator decides three things about a process by asking it: whether it has finished coming up, whether it can
 serve a request right now, and whether it is still running rather than stuck. MailFathom answers those three questions on
@@ -59,20 +59,29 @@ its MCP clients reach.
 ### The application listener is preserved
 
 Kestrel ignores the URL-shaped addresses — `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS` — as soon as any listener is
-bound in code, and the probe listener is one. MailFathom therefore restates those addresses as `Kestrel:Endpoints`
-entries before opening the probe listener, which hands the same strings back to the framework's own parser and binds
-the same sockets. Nothing is restated where the addresses were already being ignored: a deployment that names its own
-`Kestrel:Endpoints` keeps exactly those, and one whose [MCP HTTPS profiles](mcp-endpoint.md#https-and-your-own-domain) bind their own
-listeners keeps the promise that no clear-text listener stays open behind them.
+bound in code, and the probe listener is one of them. MailFathom therefore restates those addresses as
+`Kestrel:Endpoints` entries before the server is built, which hands the same strings back to the framework's own parser
+and binds the same sockets.
 
-The consequence worth knowing is in the log. A host that opens the probe listener writes Kestrel's
-`Overriding address(es)` warning once at startup and then binds every address the warning named, plus the probe port.
+The question the restating answers is whether anything in this process binds a listener of its own, not whether the
+probes do. The [administrative endpoint](admin-endpoint.md) opens one the same way, so a deployment that sets
+`HealthEndpoints:Enabled` to `false` and `AdminEndpoint:Enabled` to `true` keeps its application address exactly as one
+serving both does.
+
+Nothing is restated where the addresses were already being ignored: a deployment that names its own `Kestrel:Endpoints`
+keeps exactly those, and one whose [MCP HTTPS profiles](mcp-endpoint.md#https-and-your-own-domain) bind their own
+listeners keeps the promise that no clear-text listener stays open behind them. A deployment that enables neither the
+probes nor the administrative endpoint restates nothing either, and hands that decision back to Kestrel, because
+nothing else here opens a socket for the addresses to be taken away by.
+
+The consequence worth knowing is in the log. A host that opens a listener of its own writes Kestrel's
+`Overriding address(es)` warning once at startup and then binds every address the warning named, plus that listener's
+own port.
 
 Restating is also what keeps a deployment that configures no address at all on `http://localhost:5000` alone: the
 clear-text half of Kestrel's own fallback is restated and its `https://localhost:5001` half deliberately is not, so no
-listener is ever served out of an ASP.NET Core development certificate. Turning the probes off restates nothing and
-hands that decision back to Kestrel. [The application listener](configuration-reference.md#the-application-listener)
-records where its address comes from.
+listener is ever served out of an ASP.NET Core development certificate.
+[The application listener](configuration-reference.md#the-application-listener) records where its address comes from.
 
 ## The three probes
 
