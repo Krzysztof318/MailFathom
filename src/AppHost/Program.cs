@@ -178,6 +178,13 @@ if (runsIntegrationTests)
         // Its scheme is tcp rather than http, for the reason the pinned topology's is: an http endpoint would join
         // ASPNETCORE_URLS and make the probe port an application listener, which the host refuses.
         .WithEndpoint(name: "health", scheme: "tcp", env: "HealthEndpoints__Port")
+        // The MCP endpoint's socket, allocated for the reason the probe port is and declared with the tcp scheme for
+        // the reason every endpoint on this resource is. It used to arrive from the project's launch profile through
+        // ASPNETCORE_URLS; the host refuses that variable now, so the suite states the port in the section that owns it.
+        .WithEndpoint(
+            name: OrchestrationContract.HostHttpEndpointName,
+            scheme: "tcp",
+            env: "McpEndpoint__Port")
         // Stated here rather than left to appsettings.json, because the isolation above is a promise this app model
         // makes: a default edited elsewhere must not be able to turn the started host into a synchronizing one.
         .WithEnvironment("MailSynchronization__Enabled", "false")
@@ -229,40 +236,41 @@ if (runsIntegrationTests)
 }
 else
 {
-    // Fixed rather than allocated, and bound by the host itself rather than by a proxy in front of it. An MCP client's
-    // configuration names an address once, so a port that moved with a launch profile or with the orchestrator's own
-    // allocation would make that address a per-run detail; unproxied also means the socket a client connects to is the
-    // socket Kestrel opened, which is what keeps a TLS handshake and a client certificate a conversation with the host.
-    //
-    // 8080 and 8081 are the numbers the container image already publishes, so a local run and a deployed one answer on
-    // the same ports. 8443 is this topology's own: the image serves no TLS listener, and 443 is privileged, which a
-    // developer's process cannot bind without a capability the repository has no business requiring.
-    //
-    // Only the ordinary topology pins them. The integration suite starts this same app model, and a fixed port there
-    // would let one run refuse to bind because another still holds it.
+    // The two sockets a developer's run serves, each stated by the section that owns it.
     mailFathomHost
-        .WithHttpEndpoint(
+        // The MCP endpoint's own socket, stated to the app model and injected into the host's own configuration key, so
+        // the number is written once rather than declared here and configured again beside it. Its scheme is tcp rather
+        // than http, for the reason the probe endpoint's is: Aspire builds ASPNETCORE_URLS from the http and https
+        // endpoints, and MailFathom refuses that variable outright — every surface states where it is served in its own
+        // section. A tcp endpoint is recorded and published without reaching it; what a client connects with is still
+        // HTTP.
+        //
+        // Fixed rather than allocated, and bound by the host itself rather than by a proxy in front of it. An MCP
+        // client's configuration names an address once, so a port that moved with a launch profile or with the
+        // orchestrator's own allocation would make that address a per-run detail; unproxied also means the socket a
+        // client connects to is the socket Kestrel opened, which is what keeps a TLS handshake and a client certificate
+        // a conversation with the host. 8080 and 8081 are the numbers the container image already publishes, so a local
+        // run and a deployed one answer on the same ports.
+        //
+        // Only the ordinary topology pins them. The integration suite starts this same app model, and a fixed port
+        // there would let one run refuse to bind because another still holds it.
+        //
+        // No HTTPS endpoint accompanies this one. Kestrel serves an https:// address it was handed with no endpoint
+        // configuration out of the ASP.NET Core development certificate, and MailFathom never serves a listener out of
+        // one — a developer who wants TLS locally configures McpEndpoint:Https the way a deployment does, which is also
+        // the shape they will ship.
+        .WithEndpoint(
             name: OrchestrationContract.HostHttpEndpointName,
+            scheme: "tcp",
             port: 8080,
             targetPort: 8080,
-            isProxied: false)
-        // Served out of the ASP.NET Core development certificate, which is what Kestrel presents for an HTTPS address
-        // no endpoint configuration claims. The MCP endpoint's own HTTPS profiles are the deployed shape and stay
-        // unconfigured here, so a developer needs `dotnet dev-certs https --trust` once rather than certificate
-        // material per checkout.
-        .WithHttpsEndpoint(port: 8443, targetPort: 8443, isProxied: false)
-        // The probe listener, declared here so that all three ports are read in one place and the orchestrator shows
-        // the one a developer curls. The endpoint states the port to the app model and injects it into the host's own
-        // configuration key, so the number is written once rather than declared here and configured again beside it.
+            isProxied: false,
+            env: "McpEndpoint__Port")
+        // The probe listener, declared here so that both ports are read in one place and the orchestrator shows the one
+        // a developer curls.
         //
-        // Its scheme is tcp rather than http, and that is the whole reason this works. Aspire builds ASPNETCORE_URLS
-        // from the http and https endpoints, so an http one here would make 8081 an application listener — and the
-        // host refuses exactly that, because the probes answer without a credential and must not share a socket with
-        // the MCP endpoint: `HealthEndpoints — port 8081 is already the application listener's`. A tcp endpoint is
-        // recorded and published without reaching that variable, which leaves the two listeners separate.
-        //
-        // WithHttpHealthCheck is unavailable for the same reason: it derives its address from an endpoint, and the
-        // only endpoint that would give it one is the http endpoint that stops the host from starting.
+        // WithHttpHealthCheck is unavailable for the reason the scheme above is tcp: it derives its address from an
+        // http endpoint, and this app model declares none.
         .WithEndpoint(
             name: "health",
             scheme: "tcp",
@@ -316,7 +324,7 @@ if (runsIntegrationTests)
     // opens one number rather than two.
     var mutualTlsHost = builder
         .AddProject<Projects.Host>(OrchestrationContract.MutualTlsHostResourceName, launchProfileName: null)
-        .WithHttpsEndpoint(name: OrchestrationContract.MutualTlsHostHttpsEndpointName)
+        .WithEndpoint(name: OrchestrationContract.MutualTlsHostHttpsEndpointName, scheme: "tcp")
         // Its own probe listener, allocated for the reason the host above allocates one: both processes run at once
         // under this topology, and the port a host defaults to is the same number in each. On loopback for that host's
         // reason as well — the probes answer without a credential, and the machine a suite runs on is a developer's as

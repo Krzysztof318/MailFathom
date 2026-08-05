@@ -144,18 +144,20 @@ LABEL org.opencontainers.image.licenses="Apache-2.0" \
       io.mailfathom.release-channel="${IMAGE_RELEASE_CHANNEL}" \
       io.artifacthub.package.logo-url="https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/icon-1254.png"
 
-# 8080 is what the .NET base images already listen on, restated here so the number is visible beside the EXPOSE that
-# publishes it. The container speaks plain HTTP: TLS terminates at the ingress or the reverse proxy in front of it,
-# which is also the only place a certificate needs to exist.
-ENV ASPNETCORE_HTTP_PORTS=8080 \
+# The MCP endpoint's own port, stated in the section that owns it. MailFathom refuses ASPNETCORE_HTTP_PORTS and every
+# other URL-shaped address, because each surface states where it is served in its own configuration section. 8080 is
+# restated here so the number is visible beside the EXPOSE that publishes it. The container speaks plain HTTP: TLS
+# terminates at the ingress or the reverse proxy in front of it, which is also the only place a certificate needs to
+# exist.
+ENV McpEndpoint__Port=8080 \
     # No diagnostic IPC socket. It would be the one thing this process writes outside /tmp's tmpfs, and a socket that
     # can request a process dump is a way to read secret material out of managed memory — the exposure
     # docs/operations/secret-provisioning.md documents and asks deployments to close. Set it back to 1 deliberately,
     # for one session, when a dump is genuinely needed.
     DOTNET_EnableDiagnostics=0
 
-# Two ports, because the image serves two listeners: 8080 for `/` and `/mcp`, and 8081 for the probes, which
-# HealthEndpoints:Port moves. Declaring only the first would leave `docker image inspect`, `docker run -P`, and a
+# Two ports, because the image serves two listeners: 8080 for `/mcp`, which McpEndpoint:Port moves, and 8081 for the
+# probes, which HealthEndpoints:Port moves. Declaring only the first would leave `docker image inspect`, `docker run -P`, and a
 # registry's port list describing an image that answers on one socket more than it admits to.
 EXPOSE 8080 8081
 

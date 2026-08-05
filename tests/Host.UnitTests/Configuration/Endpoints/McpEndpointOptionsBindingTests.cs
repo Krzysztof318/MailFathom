@@ -67,7 +67,7 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Equal(40, options.RateLimiting.TokenCapacity);
         Assert.Equal(10, options.RateLimiting.TokensPerReplenishmentPeriod);
         Assert.Equal(TimeSpan.FromSeconds(30), options.RateLimiting.ReplenishmentPeriod);
-        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Empty(options.FindConfigurationErrors([]));
     }
 
     /// <summary>
@@ -94,7 +94,7 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Equal(defaults.TokenCapacity, options.RateLimiting.TokenCapacity);
         Assert.Equal(defaults.TokensPerReplenishmentPeriod, options.RateLimiting.TokensPerReplenishmentPeriod);
         Assert.Equal(defaults.ReplenishmentPeriod, options.RateLimiting.ReplenishmentPeriod);
-        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Empty(options.FindConfigurationErrors([]));
     }
 
     /// <summary>A profile binds through three collections, any of which silently staying empty would leave a client certificate judged by less than was configured.</summary>
@@ -106,6 +106,11 @@ public sealed class McpEndpointOptionsBindingTests
         {
             ["McpEndpoint:Enabled"] = "true",
             ["McpEndpoint:Authentication"] = "None",
+            ["McpEndpoint:Transport"] = "HttpsOnly",
+            ["McpEndpoint:Https:Endpoints:0:Name"] = "public",
+            ["McpEndpoint:Https:Endpoints:0:Domain"] = "mail.example.test",
+            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:Name"] = "bundle",
+            ["McpEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:SecretReference"] = "file:/etc/mailfathom/tls/mail.pfx",
             ["McpEndpoint:ClientCertificateProfiles:0:Name"] = "chatgpt-connector",
             ["McpEndpoint:ClientCertificateProfiles:0:Requirement"] = "Optional",
             ["McpEndpoint:ClientCertificateProfiles:0:TrustAnchors:0:Name"] = "openai-connectors-ca",
@@ -126,7 +131,7 @@ public sealed class McpEndpointOptionsBindingTests
             ["openai-connectors-ca", "openai-connectors-ca-next"],
             profile.TrustAnchors.Select(anchor => anchor.Name));
         Assert.Equal(["mtls.prod.connectors.openai.com"], profile.SubjectAlternativeNames);
-        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Empty(options.FindConfigurationErrors([]));
     }
 
     [Fact]
@@ -177,7 +182,7 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Equal(["mailfathom.read"], options.OAuth.RequiredScopes);
         Assert.Equal(["workforce"], options.OAuth.AuthorizationServers.Select(server => server.Name));
         Assert.Equal(["9f2c"], options.OAuth.AuthorizationServers.Single().AuthorizedSubjects);
-        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Empty(options.FindConfigurationErrors([]));
     }
 
     /// <summary>A configured list replaces the default rather than being added to it, which a pre-populated collection could not achieve.</summary>
@@ -212,7 +217,7 @@ public sealed class McpEndpointOptionsBindingTests
         // Assert
         Assert.Empty(options.Cors.AllowedOrigins);
         Assert.False(options.Cors.ServesEveryBrowserOrigin);
-        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Empty(options.FindConfigurationErrors([]));
     }
 
     /// <summary>A misspelling that bound quietly would leave a security decision reading as one nobody made.</summary>
@@ -283,6 +288,7 @@ public sealed class McpEndpointOptionsBindingTests
         {
             ["McpEndpoint:Enabled"] = "true",
             ["McpEndpoint:Authentication"] = "None",
+            ["McpEndpoint:Transport"] = "HttpsOnly",
             ["McpEndpoint:Https:Endpoints:0:Name"] = "public",
             ["McpEndpoint:Https:Endpoints:0:Domain"] = "mail.example.test",
             ["McpEndpoint:Https:Endpoints:0:Port"] = "443",
@@ -306,7 +312,6 @@ public sealed class McpEndpointOptionsBindingTests
         var options = McpEndpointOptions.ReadFrom(configuration);
 
         // Assert
-        Assert.True(options.Https.TerminatesTls);
         Assert.Equal(["public", "connector"], options.Https.Endpoints.Select(endpoint => endpoint.Name));
         Assert.Equal(TransportMinimumTlsVersion.Tls13, options.Https.Endpoints[0].MinimumTlsVersion);
         Assert.Equal(
@@ -318,7 +323,7 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Equal(
             "systemd-credential:mailfathom-tls-password",
             options.Https.Endpoints[1].ServerCertificate.Bundle?.Password?.SecretReference);
-        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Empty(options.FindConfigurationErrors([]));
     }
 
     /// <summary>Absent is the documented default of HTTP/1.1 and HTTP/2, and it has to stay distinguishable from a list an operator emptied.</summary>
@@ -364,7 +369,6 @@ public sealed class McpEndpointOptionsBindingTests
         // Assert
         Assert.False(settings.Https.Redirect.WasStated);
         Assert.True(settings.Https.Redirect.Enabled);
-        Assert.Null(settings.Https.Redirect.Port);
     }
 
     [Fact]
@@ -374,8 +378,7 @@ public sealed class McpEndpointOptionsBindingTests
         var configuration = ConfigurationFrom(new Dictionary<string, string?>
         {
             ["McpEndpoint:Enabled"] = "true",
-            ["McpEndpoint:Https:Redirect:Port"] = "8888",
-            ["McpEndpoint:Https:Redirect:BindAddress"] = "127.0.0.1",
+            ["McpEndpoint:Https:Redirect:Enabled"] = "true",
         });
 
         // Act
@@ -383,9 +386,7 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         Assert.True(settings.Https.Redirect.WasStated);
-        Assert.Equal(8888, settings.Https.Redirect.Port);
-        Assert.Equal(8888, settings.ClearTextRedirectPort);
-        Assert.Equal("127.0.0.1", settings.Https.Redirect.BindAddress);
+        Assert.True(settings.Https.Redirect.Enabled);
     }
 
     /// <summary>Turning it off is stating it, which is what makes the setting readable as a decision rather than as silence.</summary>
@@ -407,30 +408,18 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.False(settings.Https.Redirect.Enabled);
     }
 
-    /// <summary>The default is the surface's own, so a deployment reads a port it never wrote from the same place composition does.</summary>
-    [Fact]
-    public void ClearTextRedirectPort_ADeploymentStatingNoPort_TakesTheEndpointsOwnDefault()
-    {
-        // Arrange
-        var configuration = ConfigurationFrom(new Dictionary<string, string?>
-        {
-            ["McpEndpoint:Enabled"] = "true",
-        });
-
-        // Act, Assert
-        Assert.Equal(8080, McpEndpointOptions.ReadFrom(configuration).ClearTextRedirectPort);
-    }
 
     /// <summary>
     /// Every socket the surface opens, so the probes and the administrative endpoint are checked against the redirect port
     /// as well and a conflict is reported against a section rather than as an address already in use.
     /// </summary>
     [Fact]
-    public void ListenerPorts_ASurfaceTerminatingTls_ClaimsTheRedirectPortBesideTheProfiles()
+    public void ListenerPorts_BothSchemes_ClaimsTheClearTextPortBesideTheProfiles()
     {
         // Arrange
         var configuration = ConfigurationFrom(HttpsProfile(new Dictionary<string, string?>
         {
+            ["McpEndpoint:Transport"] = "HttpAndHttps",
             ["McpEndpoint:Https:Endpoints:0:Port"] = "9443",
         }));
 
@@ -438,43 +427,60 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Equal([8080, 9443], McpEndpointOptions.ReadFrom(configuration).ListenerPorts.Order());
     }
 
+    /// <summary>The clear-text socket is claimed whether it redirects or serves the routes, because either way it is bound.</summary>
     [Fact]
-    public void ListenerPorts_ARedirectTurnedOff_ClaimsTheProfilePortsAlone()
+    public void ListenerPorts_BothSchemesWithTheRedirectOff_StillClaimsTheClearTextPort()
     {
         // Arrange
         var configuration = ConfigurationFrom(HttpsProfile(new Dictionary<string, string?>
         {
+            ["McpEndpoint:Transport"] = "HttpAndHttps",
             ["McpEndpoint:Https:Redirect:Enabled"] = "false",
         }));
 
         // Act, Assert
-        Assert.Equal([8443], McpEndpointOptions.ReadFrom(configuration).ListenerPorts.Order());
+        Assert.Equal([8080, 8443], McpEndpointOptions.ReadFrom(configuration).ListenerPorts.Order());
     }
 
-    /// <summary>A surface terminating no TLS binds no listener of its own; it is served over whichever one the host was started with.</summary>
     [Fact]
-    public void ListenerPorts_ASurfaceTerminatingNoTls_ClaimsNothing()
-    {
-        // Arrange
-        var configuration = ConfigurationFrom(new Dictionary<string, string?>
-        {
-            ["McpEndpoint:Enabled"] = "true",
-        });
+    public void ListenerPorts_TlsAlone_ClaimsTheProfilePortsAlone() =>
+        Assert.Equal(
+            [8443],
+            McpEndpointOptions.ReadFrom(ConfigurationFrom(HttpsProfile([]))).ListenerPorts.Order());
 
-        // Act, Assert
-        Assert.Empty(McpEndpointOptions.ReadFrom(configuration).ListenerPorts);
-    }
+    /// <summary>A surface nobody enabled binds nothing, so it claims no port for another surface to be refused over.</summary>
+    [Fact]
+    public void ListenerPorts_ASurfaceNobodyEnabled_ClaimsNothing() =>
+        Assert.Empty(McpEndpointOptions.ReadFrom(ConfigurationFrom([])).ListenerPorts);
+
+    /// <summary>Clear text is the default, so a deployment that states only that the endpoint is on binds one socket.</summary>
+    [Fact]
+    public void ListenerPorts_ClearTextAlone_ClaimsTheEndpointsOwnPort() =>
+        Assert.Equal(
+            [8080],
+            McpEndpointOptions.ReadFrom(ConfigurationFrom(new Dictionary<string, string?>
+            {
+                ["McpEndpoint:Enabled"] = "true",
+            })).ListenerPorts.Order());
 
     private static Dictionary<string, string?> HttpsProfile(Dictionary<string, string?> extraValues)
     {
-        var values = new Dictionary<string, string?>(extraValues)
+        var values = new Dictionary<string, string?>(extraValues);
+
+        foreach (var (key, value) in new Dictionary<string, string?>
         {
             ["McpEndpoint:Enabled"] = "true",
+            ["McpEndpoint:Transport"] = "HttpsOnly",
             ["McpEndpoint:Https:Endpoints:0:Name"] = "public",
             ["McpEndpoint:Https:Endpoints:0:Domain"] = "mail.example.test",
             ["McpEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:Name"] = "bundle",
             ["McpEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:SecretReference"] = "file:/etc/mailfathom/tls/bundle.pfx",
-        };
+        })
+        {
+            // The caller's own values win, so a test states the one key it is about and inherits a usable profile
+            // around it.
+            values.TryAdd(key, value);
+        }
 
         return values;
     }

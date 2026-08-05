@@ -93,7 +93,9 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ASPNETCORE_HTTP_PORTS: "8080"
+      # The MCP endpoint's own port. MailFathom refuses ASPNETCORE_HTTP_PORTS: each surface states where it is served
+      # in its own configuration section.
+      McpEndpoint__Port: "8080"
       # The directory of JSON files below becomes ordinary configuration, layered under the environment block. See
       # docs/operations/configuration-sources.md for the precedence and for what a directory contributes.
       ConfigurationSources__Directory: /etc/mailfathom/config

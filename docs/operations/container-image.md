@@ -46,8 +46,8 @@ resolves what the change was reviewed against.
 | Property | Value |
 | --- | --- |
 | User | `1654`, the unprivileged `app` account the .NET base images define |
-| Ports | `8080`, plain HTTP, for `/` and `/mcp`; `8081` for the probes, on a listener of its own |
-| Ports once TLS is configured | The HTTPS profiles' own ports, plus `8080` again — which becomes [a redirect to them](mcp-endpoint.md#redirecting-a-client-still-pointed-at-http) rather than the application listener, so the port this image already publishes keeps answering |
+| Ports | `8080`, plain HTTP, for `/mcp`, which `McpEndpoint:Port` moves; `8081` for the probes, on a listener of its own |
+| Ports once TLS is configured | The HTTPS profiles' own ports, plus `8080` again — which becomes [a redirect to them](mcp-endpoint.md#redirecting-a-client-still-pointed-at-http) rather than serving the routes, so the port this image already publishes keeps answering |
 | Writable paths | `/tmp` only, which a deployment supplies as a tmpfs or an `emptyDir` |
 | Entrypoint | `dotnet /app/MailFathom.Host.dll` |
 | Health check | None. See [the health endpoints](#the-health-endpoints) below. |

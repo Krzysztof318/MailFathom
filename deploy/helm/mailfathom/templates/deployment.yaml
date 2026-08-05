@@ -82,7 +82,13 @@ spec:
           env:
             - name: ASPNETCORE_ENVIRONMENT
               value: Production
-            - name: ASPNETCORE_HTTP_PORTS
+            {{- /*
+              The MCP endpoint's own port. MailFathom refuses ASPNETCORE_HTTP_PORTS and every other URL-shaped
+              address, because each surface states where it is served in its own configuration section. It restates
+              the container port above rather than reading .Values.service.port, which is what the Service publishes
+              and is free to differ from what the container listens on.
+            */}}
+            - name: McpEndpoint__Port
               value: "8080"
             - name: HealthEndpoints__Port
               value: {{ .Values.probes.port | quote }}

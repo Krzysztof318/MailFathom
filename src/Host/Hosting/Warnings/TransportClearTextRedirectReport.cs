@@ -58,21 +58,21 @@ internal sealed partial class TransportClearTextRedirectReport : IHostedService
         // The description is built into a local rather than passed as a call, so composing it is not an argument the
         // logging call has to evaluate before it knows the level is enabled. It is paid once, at startup, inside a branch
         // that has already decided this deployment has a socket to account for.
-        if (this.mcpEndpointSettings is { Enabled: true, Https.RedirectsClearText: true })
+        if (this.mcpEndpointSettings is { Enabled: true, RedirectsClearText: true })
         {
             var mcpRedirectTargets = DescribeTargets(this.mcpEndpointSettings.Https);
 
             this.LogMcpEndpointRedirectsClearText(
-                this.mcpEndpointSettings.ClearTextRedirectPort,
+                this.mcpEndpointSettings.Port,
                 mcpRedirectTargets);
         }
 
-        if (this.adminEndpointSettings is { Enabled: true, Https.RedirectsClearText: true })
+        if (this.adminEndpointSettings is { Enabled: true, RedirectsClearText: true })
         {
             var adminRedirectTargets = DescribeTargets(this.adminEndpointSettings.Https);
 
             this.LogAdminEndpointRedirectsClearText(
-                this.adminEndpointSettings.ClearTextRedirectPort,
+                this.adminEndpointSettings.Port,
                 adminRedirectTargets);
         }
 

@@ -4,6 +4,7 @@
 
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Security.ClientCertificates;
 using Xunit;
@@ -38,7 +39,7 @@ public sealed class McpEndpointOptionsTests
         options.Cors.AllowedOrigins.Add("not-an-origin");
 
         // Act, Assert
-        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Empty(options.FindConfigurationErrors([]));
     }
 
     [Fact]
@@ -64,7 +65,7 @@ public sealed class McpEndpointOptionsTests
         var options = new McpEndpointOptions { Enabled = true };
 
         // Act, Assert
-        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Empty(options.FindConfigurationErrors([]));
     }
 
     [Fact]
@@ -75,7 +76,7 @@ public sealed class McpEndpointOptionsTests
         options.ApiKeys.Add(Key("workstation"));
 
         // Act, Assert
-        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Empty(options.FindConfigurationErrors([]));
     }
 
     [Fact]
@@ -85,7 +86,7 @@ public sealed class McpEndpointOptionsTests
         var options = EnabledWith(TransportAuthenticationMethods.ApiKey);
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
+        var error = Assert.Single(options.FindConfigurationErrors([]));
 
         // Assert
         Assert.StartsWith("McpEndpoint:ApiKeys", error, StringComparison.Ordinal);
@@ -104,7 +105,7 @@ public sealed class McpEndpointOptionsTests
         var options = EnabledWith((TransportAuthenticationMethods)4);
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
+        var error = Assert.Single(options.FindConfigurationErrors([]));
 
         // Assert
         Assert.StartsWith("McpEndpoint:Authentication", error, StringComparison.Ordinal);
@@ -119,7 +120,7 @@ public sealed class McpEndpointOptionsTests
         options.ApiKeys.Add(Key("workstation"));
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
+        var error = Assert.Single(options.FindConfigurationErrors([]));
 
         // Assert
         Assert.StartsWith("McpEndpoint:Authentication", error, StringComparison.Ordinal);
@@ -135,7 +136,7 @@ public sealed class McpEndpointOptionsTests
         options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
 
         // Act, Assert
-        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Empty(options.FindConfigurationErrors([]));
         Assert.True(options.AllowsApiKey);
         Assert.True(options.AllowsOAuth);
     }
@@ -149,7 +150,7 @@ public sealed class McpEndpointOptionsTests
         options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
+        var error = Assert.Single(options.FindConfigurationErrors([]));
 
         // Assert
         Assert.StartsWith("McpEndpoint:OAuth", error, StringComparison.Ordinal);
@@ -163,7 +164,7 @@ public sealed class McpEndpointOptionsTests
         options.OAuth = new OAuthValidationOptions { Resource = "https://mail.example.test/mcp" };
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
+        var error = Assert.Single(options.FindConfigurationErrors([]));
 
         // Assert
         Assert.StartsWith("McpEndpoint:OAuth:AuthorizationServers", error, StringComparison.Ordinal);
@@ -185,7 +186,7 @@ public sealed class McpEndpointOptionsTests
         options.OAuth.Resource = resource;
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
+        var error = Assert.Single(options.FindConfigurationErrors([]));
 
         // Assert
         Assert.StartsWith("McpEndpoint:OAuth:Resource", error, StringComparison.Ordinal);
@@ -202,7 +203,7 @@ public sealed class McpEndpointOptionsTests
             AuthorizationServer("partners", "https://sso.example.test/realms/mailfathom"));
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
+        var error = Assert.Single(options.FindConfigurationErrors([]));
 
         // Assert
         Assert.StartsWith("McpEndpoint:OAuth:AuthorizationServers:1:Issuer", error, StringComparison.Ordinal);
@@ -222,7 +223,7 @@ public sealed class McpEndpointOptionsTests
         options.OAuth.RequiredScopes.Add(scope);
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
+        var error = Assert.Single(options.FindConfigurationErrors([]));
 
         // Assert
         Assert.StartsWith("McpEndpoint:OAuth:RequiredScopes:0", error, StringComparison.Ordinal);
@@ -237,7 +238,7 @@ public sealed class McpEndpointOptionsTests
         options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
 
         // Act, Assert
-        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Empty(options.FindConfigurationErrors([]));
     }
 
     /// <summary>
@@ -253,7 +254,7 @@ public sealed class McpEndpointOptionsTests
         var options = EnabledWith(TransportAuthenticationMethods.None);
 
         // Act, Assert
-        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Empty(options.FindConfigurationErrors([]));
     }
 
     /// <summary>Keys nothing checks are a deployment believing it is protected, which is worse than one knowing it is not.</summary>
@@ -265,7 +266,7 @@ public sealed class McpEndpointOptionsTests
         options.ApiKeys.Add(Key("workstation"));
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
+        var error = Assert.Single(options.FindConfigurationErrors([]));
 
         // Assert
         Assert.StartsWith("McpEndpoint:ApiKeys", error, StringComparison.Ordinal);
@@ -280,7 +281,7 @@ public sealed class McpEndpointOptionsTests
         options.Cors.AllowedOrigins.Add("https://client.example.test");
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
+        var error = Assert.Single(options.FindConfigurationErrors([]));
 
         // Assert
         Assert.StartsWith("McpEndpoint:Cors:AllowedOrigins", error, StringComparison.Ordinal);
@@ -294,7 +295,7 @@ public sealed class McpEndpointOptionsTests
         options.RateLimiting.MaxConcurrentRequests = 0;
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
+        var error = Assert.Single(options.FindConfigurationErrors([]));
 
         // Assert
         Assert.StartsWith("McpEndpoint:RateLimiting:MaxConcurrentRequests", error, StringComparison.Ordinal);
@@ -311,7 +312,7 @@ public sealed class McpEndpointOptionsTests
         var options = EnabledWith(TransportAuthenticationMethods.None);
 
         // Act
-        var errors = options.FindConfigurationErrors();
+        var errors = options.FindConfigurationErrors([]);
 
         // Assert
         Assert.Empty(errors);
@@ -326,7 +327,7 @@ public sealed class McpEndpointOptionsTests
         options.Cors.AllowedOrigins.Add("not-an-origin");
 
         // Act
-        var errors = options.FindConfigurationErrors();
+        var errors = options.FindConfigurationErrors([]);
 
         // Assert
         Assert.Equal(2, errors.Count);
@@ -351,7 +352,7 @@ public sealed class McpEndpointOptionsTests
 
         // Assert
         Assert.Empty(options.ClientCertificateProfiles);
-        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Empty(options.FindConfigurationErrors([]));
         Assert.Empty(options.ToClientCertificateTrustProfiles());
     }
 
@@ -359,13 +360,13 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnUnusableClientCertificateProfile_IsReportedUnderItsPosition()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.None);
+        var options = MutualTlsEndpoint();
         var profile = ConnectorProfile();
         profile.TrustAnchors.Clear();
         options.ClientCertificateProfiles.Add(profile);
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
+        var error = Assert.Single(options.FindConfigurationErrors([]));
 
         // Assert
         Assert.StartsWith("McpEndpoint:ClientCertificateProfiles:0:TrustAnchors", error, StringComparison.Ordinal);
@@ -376,12 +377,12 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_TwoProfilesSharingAName_IsRefused()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.None);
+        var options = MutualTlsEndpoint();
         options.ClientCertificateProfiles.Add(ConnectorProfile());
         options.ClientCertificateProfiles.Add(ConnectorProfile());
 
         // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
+        var error = Assert.Single(options.FindConfigurationErrors([]));
 
         // Assert
         Assert.StartsWith("McpEndpoint:ClientCertificateProfiles:1:Name", error, StringComparison.Ordinal);
@@ -391,7 +392,7 @@ public sealed class McpEndpointOptionsTests
     public void ToClientCertificateTrustProfiles_SeveralProfiles_MapsThemInConfigurationOrder()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.None);
+        var options = MutualTlsEndpoint();
         options.ClientCertificateProfiles.Add(ConnectorProfile());
         var reportingProfile = ConnectorProfile();
         reportingProfile.Name = "reporting-service";
@@ -404,6 +405,24 @@ public sealed class McpEndpointOptionsTests
         Assert.Equal(
             ["chatgpt-connector", "reporting-service"],
             trustProfiles.Select(profile => profile.Name));
+    }
+
+    /// <summary>An endpoint terminating TLS, which is what a client certificate needs before it can be presented at all.</summary>
+    private static McpEndpointOptions MutualTlsEndpoint()
+    {
+        var options = EnabledWith(TransportAuthenticationMethods.None);
+        options.Transport = EndpointTransport.HttpsOnly;
+        options.Https.Endpoints.Add(new TransportHttpsEndpointOptions
+        {
+            Name = "public",
+            Domain = "mail.example.test",
+            ServerCertificate = new TlsServerCertificateOptions
+            {
+                Bundle = new ConfiguredSecret { Name = "bundle", SecretReference = "file:/etc/mailfathom/tls/mail.pfx" },
+            },
+        });
+
+        return options;
     }
 
     private static McpEndpointOptions EnabledWith(TransportAuthenticationMethods authentication) =>

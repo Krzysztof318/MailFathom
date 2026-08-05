@@ -53,7 +53,7 @@ public sealed class HealthEndpointCertificateTests
         // Arrange
         var settings = new HealthEndpointOptions
         {
-            Transport = HealthEndpointTransport.HttpsOnly,
+            Transport = EndpointTransport.HttpsOnly,
             Domain = Domain,
             ServerCertificate = new TlsServerCertificateOptions
             {
@@ -127,7 +127,7 @@ public sealed class HealthEndpointCertificateTests
     private static HealthEndpointOptions TlsOptions(X509Certificate2 identity) =>
         new()
         {
-            Transport = HealthEndpointTransport.HttpsOnly,
+            Transport = EndpointTransport.HttpsOnly,
             Domain = Domain,
             ServerCertificate = new TlsServerCertificateOptions
             {

@@ -14,9 +14,9 @@ namespace MailFathom.Host.Security.Transport;
 /// <summary>Binds the configured HTTPS profiles onto Kestrel listeners.</summary>
 /// <remarks>
 /// <para>
-/// Binding a listener explicitly is what replaces whatever URLs the host was otherwise configured with, which is the
-/// mechanism behind this section's promise that no clear-text listener stays open behind an HTTPS profile. It applies
-/// to everything the process serves, the health endpoints included, because one Kestrel serves them all.
+/// Every listener this process opens is bound in code, from the section of the surface it belongs to, so what the
+/// process serves is exactly what those sections describe. Which sockets accompany these profiles — a clear-text one
+/// under HttpAndHttps, none under HttpsOnly — is the caller's decision, taken in TransportListenerBinder.
 /// </para>
 /// <para>
 /// Each profile's identity and TLS floor are settled per connection, from the server name in the client's hello,
@@ -37,19 +37,17 @@ namespace MailFathom.Host.Security.Transport;
 /// </remarks>
 internal static class TransportHttpsEndpointBinder
 {
-    /// <summary>Binds one Kestrel listener per address the configured profiles name, and the clear-text redirect beside them.</summary>
+    /// <summary>Binds one Kestrel listener per address the configured profiles name.</summary>
     /// <param name="kestrelOptions">The server options being composed.</param>
     /// <param name="httpsSettings">The validated HTTPS profiles.</param>
     /// <param name="certificateStore">The store the handshake reads its identities from.</param>
     /// <param name="requestClientCertificates">Whether the handshake asks the client for a certificate, which it does when any client certificate profile is configured.</param>
-    /// <param name="clearTextRedirect">The socket the redirect listener binds, or <see langword="null" /> when this surface serves none.</param>
-    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="clearTextRedirect" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     internal static void Bind(
         KestrelServerOptions kestrelOptions,
         TransportHttpsOptions httpsSettings,
         TransportServerCertificateStore certificateStore,
-        bool requestClientCertificates,
-        TransportHttpsListenerAddress? clearTextRedirect)
+        bool requestClientCertificates)
     {
         ArgumentNullException.ThrowIfNull(kestrelOptions);
         ArgumentNullException.ThrowIfNull(httpsSettings);
@@ -74,15 +72,6 @@ internal static class TransportHttpsEndpointBinder
                 });
             });
         }
-
-        // No UseHttps, because the point of the socket is to accept the clear-text request a client has not been
-        // repointed from, and no protocol selection either: the listener default accepts anything a stray client speaks
-        // over clear text, and every request it accepts is answered by the redirect middleware before routing. Narrowing
-        // it would turn a client this exists to help into a connection failure, which is the outcome it exists to avoid.
-        if (clearTextRedirect is { } redirect)
-        {
-            kestrelOptions.Listen(redirect.Address, redirect.Port);
-        }
     }
 
     /// <summary>Answers one client hello with the profile that publishes the name it asked for.</summary>
@@ -103,7 +92,7 @@ internal static class TransportHttpsEndpointBinder
         if (certificateStore.Find(listener, context.ClientHelloInfo.ServerName) is not { } identity)
         {
             throw new AuthenticationException(
-                $"No MCP HTTPS profile on {listener.Address}:{listener.Port} publishes the server name this connection asked for.");
+                $"No HTTPS profile on {listener.Address}:{listener.Port} publishes the server name this connection asked for.");
         }
 
         var authenticationOptions = new SslServerAuthenticationOptions

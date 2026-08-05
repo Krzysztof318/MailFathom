@@ -44,7 +44,7 @@ says so and names the release, rather than describing it as though you could alr
 | Question | Page |
 | --- | --- |
 | Is it healthy, and how do I probe it? | [Health endpoints](../operations/health-endpoints.md) |
-| Which port does it serve `/mcp` on, and is it HTTP or HTTPS? | [The application listener](../operations/configuration-reference.md#the-application-listener) |
+| Which port does it serve `/mcp` on, and is it HTTP or HTTPS? | [Where each surface is served](../operations/configuration-reference.md#where-each-surface-is-served) |
 | How do I reach a running deployment from my own machine? | [Administering your deployment](administering.md), [the administrative endpoint](../operations/admin-endpoint.md) |
 | How do I provision and rotate credentials? | [Secret provisioning](../operations/secret-provisioning.md), [secret rotation](../operations/secret-rotation.md) |
 | How do I protect the MCP endpoint — keys, OAuth, TLS, client certificates, rate limits? | [The MCP endpoint](../operations/mcp-endpoint.md) |

@@ -302,16 +302,59 @@ try
     var mcpEndpointSettings = McpEndpointOptions.ReadFrom(builder.Configuration);
     builder.Services.AddSingleton(Options.Create(mcpEndpointSettings));
 
-    // Validated here rather than through ValidateOnStart, because the section is read before a container exists and the
-    // decisions it carries — whether to map the endpoint, which scheme protects it — are taken during composition. The
-    // secrets it names are proven separately, by the startup validator that proves every other section's.
-    var mcpEndpointConfigurationErrors = new List<string>(mcpEndpointSettings.FindConfigurationErrors());
+    // Read once, like the MCP section and for the same reason. Administering this service and reading a mailbox
+    // through it are different authorities, so the section is separate all the way down: its own listener, its own
+    // credentials, and its own authorization servers. Bound strictly, so a misspelled key cannot leave a deployment
+    // serving an administrative surface nobody meant to enable.
+    var adminEndpointSettings = AdminEndpointOptions.ReadFrom(builder.Configuration);
+    builder.Services.AddSingleton(Options.Create(adminEndpointSettings));
 
-    // Read from the root configuration rather than from the bound section, because a listener Kestrel was configured
-    // with elsewhere survives the ones bound below and would serve the same route without the TLS a profile adds.
-    mcpEndpointConfigurationErrors.AddRange(ConfiguredKestrelEndpoints.FindHttpsProfileConflicts(
-        builder.Configuration,
-        mcpEndpointSettings.Https));
+    // Read once, like the two sections above and for the same reason: it decides which sockets are opened and which
+    // routes exist, both of which are settled while the application is being built. Bound strictly, so a misspelled key
+    // cannot leave a deployment serving a posture nobody selected.
+    var healthEndpointSettings = HealthEndpointOptions.ReadFrom(builder.Configuration);
+    builder.Services.AddSingleton(Options.Create(healthEndpointSettings));
+
+    // Every listener this process opens is bound in code, from the section of the surface it belongs to, so the host's
+    // own ways of naming one decide nothing here and are refused rather than ignored. Read at the root, before any
+    // section's own errors, because an operator who stated a port that no longer binds anything needs to be told that
+    // first — every message below would otherwise describe a section they had not been using.
+    var externalListenerConfigurationErrors = ExternalListenerConfiguration.FindConfigurationErrors(builder.Configuration);
+
+    if (externalListenerConfigurationErrors.Count > 0)
+    {
+        throw new OptionsValidationException(
+            ExternalListenerConfiguration.KestrelEndpointsSectionName,
+            typeof(McpEndpointOptions),
+            externalListenerConfigurationErrors);
+    }
+
+    // A process serving none of its surfaces opens no listener at all, and Kestrel answers that by binding its own
+    // default address — and, where an ASP.NET Core development certificate happens to be installed, a TLS one beside it.
+    // That is a socket no section describes, serving whatever a route happens to match, so it is refused here instead.
+    if (!mcpEndpointSettings.Enabled && !adminEndpointSettings.Enabled && !healthEndpointSettings.Enabled)
+    {
+        throw new OptionsValidationException(
+            McpEndpointOptions.SectionName,
+            typeof(McpEndpointOptions),
+            [
+                $"No network surface is enabled: '{McpEndpointOptions.SectionName}:Enabled', "
+                + $"'{AdminEndpointOptions.SectionName}:Enabled', and '{HealthEndpointOptions.SectionName}:Enabled' "
+                + "are all off, so the process would serve nothing while still holding a socket. Enable the surface this "
+                + "deployment exists to serve.",
+            ]);
+    }
+
+    // Validated here rather than through ValidateOnStart, because the sections are read before a container exists and
+    // the decisions they carry — which sockets to open, whether to map an endpoint, which scheme protects it — are taken
+    // during composition. The secrets they name are proven separately, by the startup validator that proves every other
+    // section's.
+    //
+    // Each surface is checked against the ports the ones before it claimed, so a collision is reported once, against the
+    // section that could still be moved, rather than twice in the words of both sides. A port is claimed by whichever
+    // listener binds first and the loser fails with an address-in-use error naming a socket rather than the section that
+    // asked for it, which is the failure this ordering exists to replace.
+    var mcpEndpointConfigurationErrors = mcpEndpointSettings.FindConfigurationErrors([]);
 
     if (mcpEndpointConfigurationErrors.Count > 0)
     {
@@ -321,66 +364,27 @@ try
             mcpEndpointConfigurationErrors);
     }
 
-    // Mapped once, next to the decision that reads it, so the numbers the limiters are built from and the numbers the
-    // startup report states are the same reading of the same settings. Null means an operator turned limiting off, or
-    // the endpoint is not served at all, which is the one case in which no limiter is registered for it rather than one
-    // configured to permit everything.
-    var mcpRateLimits = mcpEndpointSettings is { Enabled: true, RateLimiting.Enabled: true }
-        ? mcpEndpointSettings.RateLimiting.ToRateLimits()
-        : null;
+    var adminEndpointConfigurationErrors = adminEndpointSettings.FindConfigurationErrors(
+        [.. mcpEndpointSettings.ListenerPorts]);
 
-    if (mcpEndpointSettings.Enabled)
+    if (adminEndpointConfigurationErrors.Count > 0)
     {
-        // The tools read the local mailbox copy through the use cases the infrastructure registration above already
-        // added, so the protocol surface adds no port of its own.
-        builder.Services.AddMailFathomServer();
-        builder.Services.AddMcpTransportSecurity(mcpEndpointSettings);
-
-        // A certificate is asked for while the connection is being established or it never arrives at all, so this is a
-        // decision the server has to take before it is listening rather than one a request can reach. Which call states
-        // it depends on how the listener was configured, and that is not a second mechanism for one concern: one
-        // decision — whether any trust profile exists to judge a certificate — reaches whichever listener shape this
-        // deployment has. ConfigureHttpsDefaults below applies to a listener built from a URL, and a listener that
-        // supplies its own SslServerAuthenticationOptions never consults it, which is why the HTTPS profiles restate
-        // the same posture in their own handshake callback.
-        if (mcpEndpointSettings.ClientCertificateProfiles.Count > 0 && !mcpEndpointSettings.Https.TerminatesTls)
-        {
-            builder.WebHost.RequestMcpClientCertificates();
-        }
+        throw new OptionsValidationException(
+            AdminEndpointOptions.SectionName,
+            typeof(AdminEndpointOptions),
+            adminEndpointConfigurationErrors);
     }
 
-    // Registered whether or not any profile is configured, because the store is what the certificates are loaded into
-    // and disposed from, and an unconfigured deployment simply loads none.
-    builder.Services.AddSingleton(provider => new TransportServerCertificateStore(
-        mcpEndpointSettings.Https,
-        $"{McpEndpointOptions.SectionName}:{nameof(McpEndpointOptions.Https)}",
-        provider.GetRequiredService<TlsServerCertificateLoader>(),
-        provider.GetRequiredService<TimeProvider>(),
-        provider.GetRequiredService<ILogger<TransportServerCertificateStore>>()));
+    var healthEndpointConfigurationErrors = healthEndpointSettings.FindConfigurationErrors(
+        [.. mcpEndpointSettings.ListenerPorts, .. adminEndpointSettings.ListenerPorts]);
 
-    if (mcpEndpointSettings.Enabled && mcpEndpointSettings.Https.TerminatesTls)
+    if (healthEndpointConfigurationErrors.Count > 0)
     {
-        // Binding a listener here replaces the URLs the host was otherwise configured with, which is what keeps a
-        // clear-text listener from staying open behind an endpoint an operator configured HTTPS for. The callback runs
-        // when the server is constructed, after the container exists, so the store it reads is the one the composition
-        // root has already loaded.
-        builder.WebHost.ConfigureKestrel(kestrelOptions => TransportHttpsEndpointBinder.Bind(
-            kestrelOptions,
-            mcpEndpointSettings.Https,
-            kestrelOptions.ApplicationServices.GetRequiredService<TransportServerCertificateStore>(),
-            mcpEndpointSettings.ClientCertificateProfiles.Count > 0,
-            mcpEndpointSettings.Https.RedirectsClearText
-                ? mcpEndpointSettings.Https.Redirect.ListenerAddress(
-                    McpEndpointOptions.DefaultClearTextRedirectPort)
-                : null));
+        throw new OptionsValidationException(
+            HealthEndpointOptions.SectionName,
+            typeof(HealthEndpointOptions),
+            healthEndpointConfigurationErrors);
     }
-
-    // Read once, like the MCP section and for the same reason. Administering this service and reading a mailbox
-    // through it are different authorities, so the section is separate all the way down: its own listener, its own
-    // credentials, and its own authorization servers. Bound strictly, so a misspelled key cannot leave a deployment
-    // serving an administrative surface nobody meant to enable.
-    var adminEndpointSettings = AdminEndpointOptions.ReadFrom(builder.Configuration);
-    builder.Services.AddSingleton(Options.Create(adminEndpointSettings));
 
     // Registered whether or not the endpoint is enabled, because it is the warning that decides whether it has
     // anything to say — the same reason the MCP warnings above are registered unconditionally.
@@ -390,59 +394,13 @@ try
     // same reason they are: the report is what decides whether either surface has a clear-text port to account for.
     builder.Services.AddHostedService<TransportClearTextRedirectReport>();
 
-    // Read once, like the MCP section and for the same reason: it decides which sockets are opened and which routes
-    // exist, both of which are settled while the application is being built. Bound strictly, so a misspelled key cannot
-    // leave a deployment serving a posture nobody selected.
-    var healthEndpointSettings = HealthEndpointOptions.ReadFrom(builder.Configuration);
-    builder.Services.AddSingleton(Options.Create(healthEndpointSettings));
-
-    // The addresses the application listener would bind, read before anything is added to the Kestrel configuration
-    // below, and read from whichever of the three sources Kestrel would actually have bound: the MCP HTTPS profiles
-    // when they bind their own listeners, the endpoints an operator named otherwise, and the URL-shaped addresses only
-    // when neither exists. Reading the wrong one would leave the collision check comparing the probe port against
-    // sockets nothing opens, which is the check passing on the strength of a number nobody binds.
-    var applicationListenerUrls = ConfiguredApplicationListeners.ResolveUrls(builder.Configuration);
-    var configuredKestrelEndpoints = ConfiguredKestrelEndpoints.AnyConfigured(builder.Configuration);
-
-    IReadOnlyCollection<int> applicationListenerPorts =
-        (mcpEndpointSettings.BindsOwnListeners, configuredKestrelEndpoints) switch
-        {
-            // Every socket the MCP surface opens, the clear-text redirect included: it is bound by the same profiles and
-            // is the one a deployment can end up with without having written a port, so leaving it out would let the
-            // probes or the administrative endpoint take it and report the conflict as an address-in-use error naming a
-            // socket.
-            (true, _) => [.. mcpEndpointSettings.ListenerPorts],
-            (false, true) => ConfiguredKestrelEndpoints.ListenerPorts(builder.Configuration),
-            _ => ConfiguredApplicationListeners.ListenerPorts(applicationListenerUrls),
-        };
-
-    // Kestrel ignores the URL-shaped addresses as soon as any listener is bound in code, so opening the probe listener
-    // or the administrative one would silently take the application listener away from a deployment that states its
-    // port through ASPNETCORE_HTTP_PORTS or ASPNETCORE_URLS. Restating those addresses as Kestrel endpoints hands the
-    // same strings back to the framework's own parser, which binds the same sockets it would have bound. Asked here,
-    // of every endpoint at once, rather than from inside the branch of whichever one happens to be checked first.
-    if (ApplicationListenerRestatement.IsRequired(
-        builder.Configuration,
-        mcpEndpointSettings,
-        healthEndpointSettings,
-        adminEndpointSettings))
-    {
-        builder.Configuration.AddInMemoryCollection(
-            ConfiguredApplicationListeners.AsKestrelEndpointConfiguration(applicationListenerUrls));
-    }
-
-    // Against the application listener and the probe listener both, because a port is claimed by whichever binds
-    // first and the loser fails with an address-in-use error naming a socket rather than the section that asked for it.
-    var adminEndpointConfigurationErrors = adminEndpointSettings.FindConfigurationErrors(
-        [.. applicationListenerPorts, .. healthEndpointSettings.ListenerPorts]);
-
-    if (adminEndpointConfigurationErrors.Count > 0)
-    {
-        throw new OptionsValidationException(
-            AdminEndpointOptions.SectionName,
-            typeof(AdminEndpointOptions),
-            adminEndpointConfigurationErrors);
-    }
+    // Mapped once, next to the decision that reads it, so the numbers the limiters are built from and the numbers the
+    // startup report states are the same reading of the same settings. Null means an operator turned limiting off, or
+    // the endpoint is not served at all, which is the one case in which no limiter is registered for it rather than one
+    // configured to permit everything.
+    var mcpRateLimits = mcpEndpointSettings is { Enabled: true, RateLimiting.Enabled: true }
+        ? mcpEndpointSettings.RateLimiting.ToRateLimits()
+        : null;
 
     var adminRateLimits = adminEndpointSettings is { Enabled: true, RateLimiting.Enabled: true }
         ? adminEndpointSettings.RateLimiting.ToRateLimits()
@@ -471,6 +429,34 @@ try
 
     const string adminCertificateStoreKey = "mailfathom.admin";
 
+    // Registered whether or not any profile is configured, because the store is what the certificates are loaded into
+    // and disposed from, and an unconfigured deployment simply loads none.
+    builder.Services.AddSingleton(provider => new TransportServerCertificateStore(
+        mcpEndpointSettings.Https,
+        $"{McpEndpointOptions.SectionName}:{nameof(McpEndpointOptions.Https)}",
+        provider.GetRequiredService<TlsServerCertificateLoader>(),
+        provider.GetRequiredService<TimeProvider>(),
+        provider.GetRequiredService<ILogger<TransportServerCertificateStore>>()));
+
+    if (mcpEndpointSettings.Enabled)
+    {
+        // The tools read the local mailbox copy through the use cases the infrastructure registration above already
+        // added, so the protocol surface adds no port of its own.
+        builder.Services.AddMailFathomServer();
+        builder.Services.AddMcpTransportSecurity(mcpEndpointSettings);
+
+        // The callback runs when the server is constructed, after the container exists, so the store it reads is the one
+        // the composition root has already loaded.
+        builder.WebHost.ConfigureKestrel(kestrelOptions => TransportListenerBinder.Bind(
+            kestrelOptions,
+            mcpEndpointSettings.Transport,
+            mcpEndpointSettings.BindAddress,
+            mcpEndpointSettings.Port,
+            mcpEndpointSettings.Https,
+            kestrelOptions.ApplicationServices.GetRequiredService<TransportServerCertificateStore>(),
+            mcpEndpointSettings.ClientCertificateProfiles.Count > 0));
+    }
+
     if (adminEndpointSettings.Enabled)
     {
         builder.Services.AddAdminTransportSecurity(adminEndpointSettings);
@@ -484,21 +470,19 @@ try
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<ILogger<TransportServerCertificateStore>>()));
 
-        builder.WebHost.ConfigureKestrel(kestrelOptions => AdminEndpointListenerBinder.Bind(
+        // The same binder the MCP endpoint uses, because the two surfaces state where they are served in the same
+        // settings. No client certificate is asked for: the trust question one answers is a second one this endpoint
+        // does not yet ask, and asking it on a listener with no profile to judge the answer would refuse clients for a
+        // decision nobody configured.
+        builder.WebHost.ConfigureKestrel(kestrelOptions => TransportListenerBinder.Bind(
             kestrelOptions,
-            adminEndpointSettings,
+            adminEndpointSettings.Transport,
+            adminEndpointSettings.BindAddress,
+            adminEndpointSettings.Port,
+            adminEndpointSettings.Https,
             kestrelOptions.ApplicationServices.GetRequiredKeyedService<TransportServerCertificateStore>(
-                adminCertificateStoreKey)));
-    }
-
-    var healthEndpointConfigurationErrors = healthEndpointSettings.FindConfigurationErrors(applicationListenerPorts);
-
-    if (healthEndpointConfigurationErrors.Count > 0)
-    {
-        throw new OptionsValidationException(
-            HealthEndpointOptions.SectionName,
-            typeof(HealthEndpointOptions),
-            healthEndpointConfigurationErrors);
+                adminCertificateStoreKey),
+            requestClientCertificates: false));
     }
 
     // Registered whether or not the transport terminates TLS, because the holder is what a certificate is loaded into
@@ -532,13 +516,13 @@ try
     // Before the server starts rather than from a hosted service, because a hosted service could be started after the
     // web host and a certificate proven then would be proven after the listener was already open. A profile whose
     // material is missing, expired, or issued for another domain therefore fails startup with nothing listening.
-    if (mcpEndpointSettings.Enabled && mcpEndpointSettings.Https.TerminatesTls)
+    if (mcpEndpointSettings.Enabled && mcpEndpointSettings.TerminatesTls)
     {
         await app.Services.GetRequiredService<TransportServerCertificateStore>()
             .LoadAsync(app.Lifetime.ApplicationStopping);
     }
 
-    if (adminEndpointSettings.Enabled && adminEndpointSettings.Https.TerminatesTls)
+    if (adminEndpointSettings.Enabled && adminEndpointSettings.TerminatesTls)
     {
         await app.Services.GetRequiredKeyedService<TransportServerCertificateStore>(adminCertificateStoreKey)
             .LoadAsync(app.Lifetime.ApplicationStopping);
@@ -570,17 +554,17 @@ try
     // rather than to whichever set of profiles was composed first.
     var clearTextRedirectListeners = new List<ClearTextRedirectListener>(capacity: 2);
 
-    if (mcpEndpointSettings is { Enabled: true, Https.RedirectsClearText: true })
+    if (mcpEndpointSettings is { Enabled: true, RedirectsClearText: true })
     {
         clearTextRedirectListeners.Add(new ClearTextRedirectListener(
-            mcpEndpointSettings.ClearTextRedirectPort,
+            mcpEndpointSettings.Port,
             mcpEndpointSettings.Https.PublishedDomainPorts()));
     }
 
-    if (adminEndpointSettings is { Enabled: true, Https.RedirectsClearText: true })
+    if (adminEndpointSettings is { Enabled: true, RedirectsClearText: true })
     {
         clearTextRedirectListeners.Add(new ClearTextRedirectListener(
-            adminEndpointSettings.ClearTextRedirectPort,
+            adminEndpointSettings.Port,
             adminEndpointSettings.Https.PublishedDomainPorts()));
     }
 
@@ -623,8 +607,6 @@ try
         // refused before it reaches the protocol surface.
         app.UseAdminEndpointIsolation(adminEndpointSettings.ListenerPorts);
     }
-
-    app.MapGet("/", () => Results.Ok(new { service = "MailFathom", status = "ready" }));
 
     if (mcpEndpointSettings.Enabled)
     {

@@ -32,7 +32,7 @@ public sealed class HealthEndpointOptionsTests
         Assert.True(options.Enabled);
         Assert.Equal(8081, options.Port);
         Assert.Equal("0.0.0.0", options.BindAddress);
-        Assert.Equal(HealthEndpointTransport.Http, options.Transport);
+        Assert.Equal(EndpointTransport.Http, options.Transport);
         Assert.Null(options.HttpsPort);
         Assert.Equal([8081], options.ListenerPorts);
         Assert.Empty(errors);
@@ -50,7 +50,7 @@ public sealed class HealthEndpointOptionsTests
         {
             Enabled = false,
             Port = 8080,
-            Transport = HealthEndpointTransport.HttpsOnly,
+            Transport = EndpointTransport.HttpsOnly,
         };
 
         // Act
@@ -65,7 +65,7 @@ public sealed class HealthEndpointOptionsTests
     public void ListenerPorts_ServingBothSchemes_AnswersOnBothPorts()
     {
         // Arrange
-        var options = TlsOptions(HealthEndpointTransport.HttpAndHttps);
+        var options = TlsOptions(EndpointTransport.HttpAndHttps);
         options.HttpsPort = 8443;
 
         // Act
@@ -80,7 +80,7 @@ public sealed class HealthEndpointOptionsTests
     public void FindConfigurationErrors_TlsOnly_OpensNoClearTextListener()
     {
         // Arrange
-        var options = TlsOptions(HealthEndpointTransport.HttpsOnly);
+        var options = TlsOptions(EndpointTransport.HttpsOnly);
 
         // Act
         var errors = options.FindConfigurationErrors(ApplicationPorts);
@@ -102,8 +102,8 @@ public sealed class HealthEndpointOptionsTests
     {
         // Arrange
         var clearText = new HealthEndpointOptions();
-        var tlsOnly = TlsOptions(HealthEndpointTransport.HttpsOnly);
-        var bothSchemes = TlsOptions(HealthEndpointTransport.HttpAndHttps);
+        var tlsOnly = TlsOptions(EndpointTransport.HttpsOnly);
+        var bothSchemes = TlsOptions(EndpointTransport.HttpAndHttps);
         bothSchemes.HttpsPort = 8443;
 
         // Act
@@ -134,7 +134,7 @@ public sealed class HealthEndpointOptionsTests
     public void FindConfigurationErrors_ASecondPortUnderTlsOnly_IsRefused()
     {
         // Arrange
-        var options = TlsOptions(HealthEndpointTransport.HttpsOnly);
+        var options = TlsOptions(EndpointTransport.HttpsOnly);
         options.HttpsPort = 8443;
 
         // Act
@@ -161,7 +161,7 @@ public sealed class HealthEndpointOptionsTests
     }
 
     [Fact]
-    public void FindConfigurationErrors_APortTheApplicationListenerBinds_IsRefused()
+    public void FindConfigurationErrors_APortAnotherSurfaceBinds_IsRefused()
     {
         // Arrange
         var options = new HealthEndpointOptions { Port = 8080 };
@@ -170,14 +170,14 @@ public sealed class HealthEndpointOptionsTests
         var errors = options.FindConfigurationErrors(ApplicationPorts);
 
         // Assert
-        Assert.Contains(errors, error => error.Contains("already the application listener's", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("already bound by another listener", StringComparison.Ordinal));
     }
 
     [Fact]
     public void FindConfigurationErrors_TheTwoProbePortsColliding_IsRefused()
     {
         // Arrange
-        var options = TlsOptions(HealthEndpointTransport.HttpAndHttps);
+        var options = TlsOptions(EndpointTransport.HttpAndHttps);
         options.HttpsPort = options.Port;
 
         // Act
@@ -191,7 +191,7 @@ public sealed class HealthEndpointOptionsTests
     public void FindConfigurationErrors_BothSchemesWithNoTlsPort_IsRefused()
     {
         // Arrange
-        var options = TlsOptions(HealthEndpointTransport.HttpAndHttps);
+        var options = TlsOptions(EndpointTransport.HttpAndHttps);
 
         // Act
         var errors = options.FindConfigurationErrors(ApplicationPorts);
@@ -208,7 +208,7 @@ public sealed class HealthEndpointOptionsTests
     public void FindConfigurationErrors_ATransportNoMemberDeclares_IsRefused()
     {
         // Arrange
-        var options = new HealthEndpointOptions { Transport = (HealthEndpointTransport)7 };
+        var options = new HealthEndpointOptions { Transport = (EndpointTransport)7 };
 
         // Act
         var errors = options.FindConfigurationErrors(ApplicationPorts);
@@ -249,7 +249,7 @@ public sealed class HealthEndpointOptionsTests
         // Arrange
         var options = new HealthEndpointOptions
         {
-            Transport = HealthEndpointTransport.HttpsOnly,
+            Transport = EndpointTransport.HttpsOnly,
             Domain = "probe.example.test",
         };
 
@@ -264,7 +264,7 @@ public sealed class HealthEndpointOptionsTests
     public void FindConfigurationErrors_ATlsTransportWithNoDomain_IsRefused()
     {
         // Arrange
-        var options = TlsOptions(HealthEndpointTransport.HttpsOnly);
+        var options = TlsOptions(EndpointTransport.HttpsOnly);
         options.Domain = "   ";
 
         // Act
@@ -284,7 +284,7 @@ public sealed class HealthEndpointOptionsTests
     public void FindConfigurationErrors_ADomainThatIsNotADnsName_IsRefused(string domain)
     {
         // Arrange
-        var options = TlsOptions(HealthEndpointTransport.HttpsOnly);
+        var options = TlsOptions(EndpointTransport.HttpsOnly);
         options.Domain = domain;
 
         // Act
@@ -300,7 +300,7 @@ public sealed class HealthEndpointOptionsTests
         // Arrange
         var options = new HealthEndpointOptions
         {
-            Transport = HealthEndpointTransport.HttpsOnly,
+            Transport = EndpointTransport.HttpsOnly,
             Domain = "probe.example.test",
             ServerCertificate = new TlsServerCertificateOptions
             {
@@ -342,7 +342,7 @@ public sealed class HealthEndpointOptionsTests
     public void FindConfigurationErrors_BothKindsOfMaterial_IsRefused()
     {
         // Arrange
-        var options = TlsOptions(HealthEndpointTransport.HttpsOnly);
+        var options = TlsOptions(EndpointTransport.HttpsOnly);
         options.ServerCertificate.PrivateKey = new ConfiguredSecret
         {
             Name = "probe-key",
@@ -356,7 +356,7 @@ public sealed class HealthEndpointOptionsTests
         Assert.Contains(errors, error => error.Contains("state one or the other", StringComparison.Ordinal));
     }
 
-    private static HealthEndpointOptions TlsOptions(HealthEndpointTransport transport) =>
+    private static HealthEndpointOptions TlsOptions(EndpointTransport transport) =>
         new()
         {
             Transport = transport,

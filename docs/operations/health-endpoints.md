@@ -1,6 +1,6 @@
 # The health endpoints and the listener they are served on
 
-<!-- describes: src/Host/Hosting/**, src/Host/Configuration/Endpoints/HealthEndpointOptions.cs, src/Host/Configuration/Endpoints/ConfiguredApplicationListeners.cs, src/Host/Configuration/Endpoints/ApplicationListenerRestatement.cs, src/Host/Security/Endpoints/Health* -->
+<!-- describes: src/Host/Hosting/**, src/Host/Configuration/Endpoints/HealthEndpointOptions.cs, src/Host/Configuration/Endpoints/EndpointTransport.cs, src/Host/Security/Endpoints/Health* -->
 
 An orchestrator decides three things about a process by asking it: whether it has finished coming up, whether it can
 serve a request right now, and whether it is still running rather than stuck. MailFathom answers those three questions on
@@ -39,13 +39,13 @@ behind a configured certificate reference is the exception the [secret machinery
 rotating what a reference points at needs no configuration change, though this listener reads its certificate once,
 while starting.
 
-**The probe listener is never the application listener.** A probe path asked on the port that serves `/` and `/mcp` is
+**The probe listener is never the MCP endpoint's.** A probe path asked on the port that serves `/` and `/mcp` is
 answered with `404`, and `/mcp` asked on the probe port is answered with `404` as well. The decision is taken from the
 port the connection arrived at — a property of the socket the operating system accepted it on, not a header the caller
 wrote — so publishing the probe port to an orchestrator's network does not publish the mailbox to it, and publishing the
 application port to clients does not hand them an unauthenticated dependency report.
 
-A probe port that collides with the application listener fails startup with a message naming both, rather than failing
+A probe port that collides with another surface fails startup with a message naming both, rather than failing
 to bind with an address-in-use error that names a socket.
 
 ### Nothing changes with the environment
@@ -56,32 +56,20 @@ configured. The service-defaults scaffold MailFathom started from served the pro
 every container and Kubernetes deployment with nothing to ask and every development run serving them on the listener
 its MCP clients reach.
 
-### The application listener is preserved
+### The probe listener is one of three, and only one
 
-Kestrel ignores the URL-shaped addresses — `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS` — as soon as any listener is
-bound in code, and the probe listener is one of them. MailFathom therefore restates those addresses as
-`Kestrel:Endpoints` entries before the server is built, which hands the same strings back to the framework's own parser
-and binds the same sockets.
+Every surface this process serves binds its own listeners from its own section: the probes from `HealthEndpoints`, the
+protocol surface from `McpEndpoint`, and the administrative surface from `AdminEndpoint`. Nothing else opens a socket
+here, and the host's own ways of naming one — `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`, `ASPNETCORE_HTTPS_PORTS`, and
+`Kestrel:Endpoints` — are refused at startup rather than ignored, because Kestrel drops the first three as soon as a
+listener is bound in code and binds the last beside them on a socket no section describes.
 
-The question the restating answers is whether anything in this process binds a listener of its own, not whether the
-probes do. The [administrative endpoint](admin-endpoint.md) opens one the same way, so a deployment that sets
-`HealthEndpoints:Enabled` to `false` and `AdminEndpoint:Enabled` to `true` keeps its application address exactly as one
-serving both does.
+So a probe port is checked against the ports the other two surfaces claim, and a collision is reported against the
+section that asked for it. Turning `HealthEndpoints:Enabled` off changes nothing about where anything else is served,
+and turning every surface off is refused: a process binding no listener at all would fall back to Kestrel's own default
+address.
 
-Nothing is restated where the addresses were already being ignored: a deployment that names its own `Kestrel:Endpoints`
-keeps exactly those, and one whose [MCP HTTPS profiles](mcp-endpoint.md#https-and-your-own-domain) bind their own
-listeners keeps the promise that no clear-text listener stays open behind them. A deployment that enables neither the
-probes nor the administrative endpoint restates nothing either, and hands that decision back to Kestrel, because
-nothing else here opens a socket for the addresses to be taken away by.
-
-The consequence worth knowing is in the log. A host that opens a listener of its own writes Kestrel's
-`Overriding address(es)` warning once at startup and then binds every address the warning named, plus that listener's
-own port.
-
-Restating is also what keeps a deployment that configures no address at all on `http://localhost:5000` alone: the
-clear-text half of Kestrel's own fallback is restated and its `https://localhost:5001` half deliberately is not, so no
-listener is ever served out of an ASP.NET Core development certificate.
-[The application listener](configuration-reference.md#the-application-listener) records where its address comes from.
+[Where each surface is served](configuration-reference.md#where-each-surface-is-served) records the whole arrangement.
 
 ## The three probes
 
@@ -276,7 +264,7 @@ curl -fsS http://127.0.0.1:8081/alive      # is the process still running
 ```
 
 `MAILFATHOM_HEALTH_BIND` and `MAILFATHOM_HEALTH_PORT` move the published address, the way `MAILFATHOM_HTTP_BIND` and
-`MAILFATHOM_HTTP_PORT` do for the application listener. Keep it on loopback unless the machine asking is not this one.
+`MAILFATHOM_HTTP_PORT` do for the MCP endpoint. Keep it on loopback unless the machine asking is not this one.
 
 The container declares no Docker `HEALTHCHECK`. Docker and Podman run one as a command *inside* the container, and the
 image is chiseled: it carries no shell and no HTTP client for one to be written in. Adding either so the container could

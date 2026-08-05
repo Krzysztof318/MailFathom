@@ -75,7 +75,8 @@ public static class OrchestrationContract
     /// <summary>The MailFathom host project resource.</summary>
     public const string HostResourceName = "mailfathom-host";
 
-    /// <summary>The HTTP endpoint the MailFathom host serves its surface on, including the MCP endpoint.</summary>
+    /// <summary>The endpoint the MailFathom host serves its MCP surface on.</summary>
+    /// <remarks>Declared with the <c>tcp</c> scheme and its port injected into <c>McpEndpoint:Port</c>, for the reason <see cref="HostAdminEndpointName" /> gives: the host refuses <c>ASPNETCORE_URLS</c>, which Aspire would build from an http endpoint. The name is kept because it is what the orchestration and the suite resolve the address by; what a client speaks to it is HTTP.</remarks>
     public const string HostHttpEndpointName = "http";
 
     /// <summary>The second MailFathom host project resource, the one served over HTTPS behind mutual TLS.</summary>
@@ -211,11 +212,11 @@ public static class OrchestrationContract
     /// over the network, and an endpoint enabled for them would be a socket nobody asked for.
     /// </para>
     /// <para>
-    /// Declared with the <c>tcp</c> scheme rather than <c>http</c>, for the reason the probe endpoint is: Aspire builds
-    /// <c>ASPNETCORE_URLS</c> from the http and https endpoints, so an http one here would make this port an application
-    /// listener as well — and the host refuses that, because the administrative surface is served on a listener of its
-    /// own precisely so that reaching it does not mean reaching the MCP endpoint. A tcp endpoint is published without
-    /// reaching that variable, which leaves the two listeners separate; what the suite connects to it with is still HTTP.
+    /// Declared with the <c>tcp</c> scheme rather than <c>http</c>, for the reason every endpoint on this resource is:
+    /// Aspire builds <c>ASPNETCORE_URLS</c> from the http and https endpoints, and MailFathom refuses that variable
+    /// outright, because each surface states where it is served in its own configuration section. A tcp endpoint is
+    /// published without reaching that variable, and its port is injected into the section that owns it; what the suite
+    /// connects to it with is still HTTP.
     /// </para>
     /// </remarks>
     public const string HostAdminEndpointName = "admin";

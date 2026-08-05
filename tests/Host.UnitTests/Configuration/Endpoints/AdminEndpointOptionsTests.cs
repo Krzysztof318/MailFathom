@@ -235,19 +235,14 @@ public sealed class AdminEndpointOptionsTests
         var settings = TlsTerminatingEndpoint();
 
         // Act, Assert
-        Assert.Equal([8091, 8543], settings.ListenerPorts.Order());
+        Assert.Equal([8090, 8543], settings.ListenerPorts.Order());
     }
 
     [Fact]
-    public void ListenerPorts_ARedirectTurnedOff_ClaimsTheProfilePortsAlone()
-    {
-        // Arrange
-        var settings = TlsTerminatingEndpoint();
-        settings.Https.Redirect.Enabled = false;
-
-        // Act, Assert
-        Assert.Equal([8543], settings.ListenerPorts.Order());
-    }
+    public void ListenerPorts_ATransportServingTlsAlone_ClaimsTheProfilePortsAlone() =>
+        Assert.Equal(
+            [8543],
+            TlsTerminatingEndpoint(EndpointTransport.HttpsOnly).ListenerPorts.Order());
 
     /// <summary>The clear-text port is what the endpoint binds when it terminates no TLS, and there is nothing to redirect from.</summary>
     [Fact]
@@ -255,35 +250,22 @@ public sealed class AdminEndpointOptionsTests
         Assert.Equal([8090], EnabledEndpoint().ListenerPorts.Order());
 
     [Fact]
-    public void FindConfigurationErrors_ARedirectPortAnotherListenerBinds_IsRefusedBeforeAnythingBinds()
+    public void FindConfigurationErrors_AClearTextPortAnotherListenerBinds_IsRefusedBeforeAnythingBinds()
     {
         // Arrange
         var settings = TlsTerminatingEndpoint();
 
         // Act, Assert
         Assert.Contains(
-            settings.FindConfigurationErrors([8091]),
+            settings.FindConfigurationErrors([8090]),
             error => error.Contains("already bound by another listener", StringComparison.Ordinal));
     }
 
-    /// <summary>A port nothing binds collides with nothing, so a disabled redirect is not compared against the other listeners.</summary>
+    /// <summary>A port nothing binds collides with nothing, so a transport opening no clear-text socket is not compared against the other listeners on it.</summary>
     [Fact]
-    public void FindConfigurationErrors_ADisabledRedirectOnAClaimedPort_ReportsNothing()
-    {
-        // Arrange
-        var settings = TlsTerminatingEndpoint();
-        settings.Https.Redirect.Enabled = false;
+    public void FindConfigurationErrors_AClearTextPortNothingBinds_ReportsNothing() =>
+        Assert.Empty(TlsTerminatingEndpoint(EndpointTransport.HttpsOnly).FindConfigurationErrors([8090]));
 
-        // Act, Assert
-        Assert.Empty(settings.FindConfigurationErrors([8091]));
-    }
-
-    /// <summary>Each surface redirects to its own profiles, so the two defaults have to differ or enabling both would collide.</summary>
-    [Fact]
-    public void ClearTextRedirectPort_TheAdministrativeDefault_IsNotTheMcpEndpointsDefault() =>
-        Assert.NotEqual(
-            McpEndpointOptions.DefaultClearTextRedirectPort,
-            AdminEndpointOptions.DefaultClearTextRedirectPort);
 
     [Fact]
     public void ReadFrom_AConfiguredRedirect_BindsItAndRecordsThatItWasStated()
@@ -292,7 +274,7 @@ public sealed class AdminEndpointOptionsTests
         var configuration = Configuration(new Dictionary<string, string?>
         {
             ["AdminEndpoint:Enabled"] = "true",
-            ["AdminEndpoint:Https:Redirect:Port"] = "8092",
+            ["AdminEndpoint:Https:Redirect:Enabled"] = "true",
         });
 
         // Act
@@ -300,24 +282,24 @@ public sealed class AdminEndpointOptionsTests
 
         // Assert
         Assert.True(settings.Https.Redirect.WasStated);
-        Assert.Equal(8092, settings.ClearTextRedirectPort);
+        Assert.True(settings.Https.Redirect.Enabled);
     }
 
     /// <summary>Stating a redirect for an endpoint that terminates no TLS is refused, because nothing would bind it and the endpoint is already served in clear text.</summary>
     [Fact]
-    public void FindConfigurationErrors_ARedirectStatedForAnEndpointTerminatingNoTls_IsRefused()
+    public void FindConfigurationErrors_ARedirectStatedUnderATransportThatCannotServeOne_IsRefused()
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>
         {
             ["AdminEndpoint:Enabled"] = "true",
-            ["AdminEndpoint:Https:Redirect:Port"] = "8092",
+            ["AdminEndpoint:Https:Redirect:Enabled"] = "true",
         });
 
         // Act, Assert
         Assert.Contains(
             AdminEndpointOptions.ReadFrom(configuration).FindConfigurationErrors([]),
-            error => error.Contains("nothing to redirect to", StringComparison.Ordinal));
+            error => error.Contains("a clear-text redirect is configured", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -392,9 +374,11 @@ public sealed class AdminEndpointOptionsTests
 
     private static AdminEndpointOptions EnabledEndpoint() => new() { Enabled = true };
 
-    private static AdminEndpointOptions TlsTerminatingEndpoint()
+    private static AdminEndpointOptions TlsTerminatingEndpoint(
+        EndpointTransport transport = EndpointTransport.HttpAndHttps)
     {
         var settings = EnabledEndpoint();
+        settings.Transport = transport;
         settings.Https.Endpoints.Add(new TransportHttpsEndpointOptions
         {
             Name = "admin",

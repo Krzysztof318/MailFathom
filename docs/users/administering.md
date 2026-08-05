@@ -51,7 +51,7 @@ Four things about that block are worth understanding before you copy it:
   service runs on and nowhere else, which is what an SSH tunnel is for. Publishing it more widely is a decision, not a
   default. The keys are in the [configuration reference](../operations/configuration-reference.md#adminendpoint), and
   how it relates to the port your MCP clients use is
-  [the application listener](../operations/configuration-reference.md#the-application-listener).
+  [where each surface is served](../operations/configuration-reference.md#where-each-surface-is-served).
 - **`SecretReference` is a pointer, not a secret.** Where the material actually lives, and how it gets there, is
   [secret provisioning](../operations/secret-provisioning.md). Never write a key into a configuration file.
 - **A clear-text endpoint is warned about at startup, not refused.** It is the right posture behind a TLS-terminating

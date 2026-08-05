@@ -143,10 +143,11 @@ Build with the SDK pinned in `global.json`. The process is then an ordinary ASP.
 
   `KeyId` is stored beside every value the key seals, so it is chosen once and never edited afterwards. Leave both out
   when no account authenticates with OAuth.
-- [The application listener](../operations/configuration-reference.md#the-application-listener) binds the address
-  `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`, or your Kestrel configuration names, and `http://localhost:5000` when you
-  name none — loopback, so a service you never gave an address to is not reachable from another machine. It is clear
-  text unless you configure otherwise. The health probes answer on their own port, `8081` by default;
+- [Where each surface is served](../operations/configuration-reference.md#where-each-surface-is-served) is stated by
+  each surface's own section. `McpEndpoint:BindAddress` and `McpEndpoint:Port` bind the protocol surface, `0.0.0.0:8080`
+  by default, in clear text unless you configure otherwise. `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`, and
+  `Kestrel:Endpoints` are refused at startup, so an address you state is never one the process quietly ignores. The
+  health probes answer on their own port, `8081` by default;
   [health endpoints](../operations/health-endpoints.md) records how to move or disable that listener.
 - PostgreSQL, the `vector` extension, and the schema step are yours, exactly as they are under Kubernetes.
 - A mail server whose TLS parameters the machine's own OpenSSL refuses is reached by naming an OpenSSL configuration

@@ -211,67 +211,49 @@ The worker that extracts text for messages stored before extraction existed or b
 | `MailExtractionBackfill:BatchSize` | int | `50` | 1 – 500 | restart |
 | `MailExtractionBackfill:MaxBatchesPerRun` | int | `10` | 1 – 1000 | restart |
 
-## The application listener
+## Where each surface is served
 
-The socket that serves `/` and the MCP endpoint at `/mcp`. It is the one listener MailFathom configures nothing of its
-own for: `McpEndpoint` decides whether the protocol surface is served and what guards it, never where it is served, so
-a deployment that enables the endpoint and configures no address serves it here. The administrative and probe
-listeners are the opposite — each binds a socket of its own from its own section, and neither answers the other's
-paths.
+Every socket this process opens is named by the section of the surface that owns it, and by nothing else. `McpEndpoint`
+and `AdminEndpoint` each state a `BindAddress`, a `Port`, and a `Transport`; `HealthEndpoints` states the same three
+under a smaller set of TLS settings. Read those three sections and you have read every listener the process binds.
 
-**It is clear-text HTTP unless a deployment says otherwise.** Three things change that: a TLS-terminating reverse
-proxy in front of the process, an `https://` address configured below, or
-[`McpEndpoint:Https:Endpoints`](#tls-termination--mcpendpointhttpsendpointsn), which replaces this listener rather than
-adding to it.
+**The host's own ways of naming a listener are refused at startup.** `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`,
+`ASPNETCORE_HTTPS_PORTS`, `--urls`, and any endpoint under `Kestrel:Endpoints` each fail the process with a message
+naming the setting that replaces them. They are refused rather than ignored because ignoring them is silent: Kestrel
+drops the URL-shaped addresses as soon as a listener is bound in code — which every surface here does — and binds a
+configured endpoint beside them on a socket no section describes, no credential guards, and no isolation middleware was
+composed for. An operator who states a port deserves to be told it moved, not to find the surface answering somewhere
+else.
 
-### Where its address comes from
+A deployment that enables no surface at all is refused for the same reason. Kestrel answers zero listeners by binding
+its own default address, and a development certificate on the machine would add a TLS one beside it, so the process
+would hold a socket nothing configured.
 
-| Source | Value | Wins over |
+### `Transport`
+
+`McpEndpoint:Transport` and `AdminEndpoint:Transport` decide what the surface's clear-text socket does. The HTTPS half
+is the profiles under `Https:Endpoints`, each with its own domain, certificate, TLS floor, and HTTP versions.
+
+| Value | The socket at `BindAddress`:`Port` | `Https:Endpoints` |
 | --- | --- | --- |
-| `Kestrel:Endpoints:<name>:Url` | An address per named endpoint | Everything below; naming any endpoint makes Kestrel ignore the two rows under it |
-| `ASPNETCORE_URLS` | `;`-separated addresses | `ASPNETCORE_HTTP_PORTS` |
-| `ASPNETCORE_HTTP_PORTS` / `ASPNETCORE_HTTPS_PORTS` | `;`-separated ports, each expanded to every interface | Nothing |
-| Nothing configured | `http://localhost:5000` | — |
+| `Http` | Serves the routes | Must be empty |
+| `HttpAndHttps` | Redirects to the profiles, or serves the routes when `Https:Redirect:Enabled` is `false` | Bind |
+| `HttpsOnly` | Not opened at all | Bind |
 
-The default binds loopback alone, so a process installed natively and started without an address is reachable from its
-own machine and nowhere else. The container image and the Helm chart both set `ASPNETCORE_HTTP_PORTS=8080` instead, so
-this default is the native-process path's.
+`Http` is the default, so adopting a release costs no certificate work, and it is the right posture behind a
+TLS-terminating reverse proxy and wrong anywhere else — startup warns about it either way, because only an operator
+knows which they have.
 
-Kestrel's own fallback would add `https://localhost:5001` whenever an ASP.NET Core development certificate happens to
-be installed. MailFathom restates only the clear-text half, so what the process listens on is decided by what was
-configured rather than by what is installed on the machine — it never serves a listener out of a development
-certificate. That [restatement](health-endpoints.md#the-application-listener-is-preserved) happens whenever this process
-binds a listener of its own — the probes, which are the default, or the administrative endpoint; a deployment that
-enables neither restates nothing and is left with Kestrel's own defaults, development certificate included.
+`HttpsOnly` is the posture that leaves nothing reachable in clear text. `HttpAndHttps` keeps the clear-text socket, and
+the redirect is on unless a deployment turns it off, so enabling TLS does not read as an outage to a client nobody has
+repointed yet; turning the redirect off is what makes that socket serve the routes, which is the deliberate
+both-schemes posture rather than the migration one. `HealthEndpoints:Transport` takes the same three values, and
+because the probes carry one certificate rather than profiles, its `HttpAndHttps` needs a second port of its own in
+`HealthEndpoints:HttpsPort`.
 
-### `Kestrel:Endpoints:<name>`
-
-Kestrel's own section, bound by the framework rather than by MailFathom, and the way to give this listener TLS without
-moving the MCP endpoint onto profiles of its own. `<name>` is any name; it appears in the "Now listening on" line and
-in nothing else. The full contract is
-[Kestrel endpoint configuration](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel/endpoints?view=aspnetcore-10.0);
-the keys are listed here because two MailFathom rules depend on this section existing.
-
-| Key | Type | Default | Constraint | Change |
-| --- | --- | --- | --- | --- |
-| `…:Url` | string | — | Required; an endpoint carrying no `Url` binds nothing. This is the key MailFathom itself reads, for the port collision checks and the two rules below | restart |
-| `…:Protocols` | string | `Http1AndHttp2` | `Http1`, `Http2`, `Http3`, `Http1AndHttp2`, `Http1AndHttp2AndHttp3` | restart |
-| `…:SslProtocols` | string list | the platform's | The `SslProtocols` names, per the linked contract; MailFathom's own sections take `Tls12` and `Tls13` alone, and this one does not | restart |
-| `…:ClientCertificateMode` | string | `NoCertificate` | `NoCertificate`, `AllowCertificate`, `RequireCertificate` | restart |
-| `…:Certificate` | object | — | Kestrel's own certificate block — a file through `Path`, or a store through `Subject` — which is **not** the [secret block](secret-provisioning.md#the-secret-block) the MailFathom sections take, so material for it is provisioned as Kestrel documents rather than through a `SecretReference` | restart |
-| `…:Sni` | object | — | Kestrel's server-name mapping | restart |
-
-Two rules are MailFathom's rather than Kestrel's:
-
-- **An endpoint here beside `McpEndpoint:Https` fails startup**, naming both sides. Kestrel binds configured endpoints
-  alongside the ones bound in code rather than replacing them, so the configured listener would stay open and serve the
-  same MCP route without the TLS the profiles were configured to add. Only an operator can decide which of the two the
-  deployment meant. [Configuring a profile takes over the host's listeners](mcp-endpoint.md#configuring-a-profile-takes-over-the-hosts-listeners)
-  has the message.
-- **A port this listener binds is refused to the administrative and probe listeners**, checked against whichever source
-  is the one actually binding — the MCP HTTPS profiles when they have replaced this listener, the endpoints named here
-  when they exist, and the URL-shaped addresses otherwise. A collision is reported against the section that asked for
-  it rather than left to fail later as an address-in-use error naming a socket.
+A port one surface binds is refused to the others, reported against the section that asked for it rather than left to
+fail later as an address-in-use error naming a socket. The clear-text port counts under every mode that opens that
+socket, redirect included.
 
 ## `ReverseProxy`
 
@@ -295,12 +277,15 @@ carries is who they are believed from, and **an unconfigured section believes ev
 
 Whether the protocol surface is served and what a client must present. The whole section is **restart** — it decides
 routing and listeners — while key and certificate material is read per request or per handshake. Where it is served is
-[the application listener](#the-application-listener) unless `Https:Endpoints` moves it.
+[its own `BindAddress`, `Port`, and `Transport`](#where-each-surface-is-served).
 [The MCP endpoint](mcp-endpoint.md) is the page, section by section.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `McpEndpoint:Enabled` | bool | `false` | — | restart |
+| `McpEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; binds the clear-text socket, which `HttpsOnly` does not open | restart |
+| `McpEndpoint:Port` | int | `8080` | 1–65535, and bound by no other listener in the process | restart |
+| `McpEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — see [`Transport`](#transport) | restart |
 | `McpEndpoint:Authentication` | flag set | `None` | `ApiKey`, `OAuth`, both comma-separated, or `None`; `None` warns at startup | restart |
 | `McpEndpoint:ApiKeys` | list of secret blocks | empty | Required non-empty when `ApiKey` is named; refused when configured while it is not | restart; material per request |
 
@@ -331,7 +316,7 @@ protect.
 
 ### TLS termination — `McpEndpoint:Https:Endpoints:<n>`
 
-Empty by default, which serves the endpoint over [the application listener](#the-application-listener). Configuring any
+Read under the two `Transport` modes that terminate TLS and refused under the one that does not. Configuring any
 profile **takes over the host's listeners**: only the profiles' sockets are opened.
 [HTTPS and your own domain](mcp-endpoint.md#https-and-your-own-domain) is the page.
 
@@ -351,17 +336,19 @@ domain, and is not expired — before any listener opens.
 
 ### Clear-text redirect — `McpEndpoint:Https:Redirect`
 
-One clear-text listener whose only answer is a `308` to the address the profiles above are served at, so enabling TLS does
-not read as an outage to a client nobody repointed yet. It maps no route and runs no credential check, and it exists only
-while `McpEndpoint:Https:Endpoints` names a profile. Writing this section without one fails startup.
+What the surface's clear-text socket does while the profiles above are served. On, it answers every request with a `308`
+to the address those profiles are at, so enabling TLS does not read as an outage to a client nobody repointed yet; it
+then maps no route and runs no credential check. Off, the same socket serves the routes in clear text.
+
+The socket is `McpEndpoint:BindAddress` and `McpEndpoint:Port` — there is no address here to state again. The section is
+meaningful under `Transport: HttpAndHttps` alone, which is the one mode with both a clear-text socket and somewhere to
+send what arrives on it; writing it under either other mode fails startup.
 [Redirecting a client still pointed at `http://`](mcp-endpoint.md#redirecting-a-client-still-pointed-at-http) records what
 a redirect does and does not protect.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `…:Enabled` | bool | `true` | Honored only while an HTTPS profile is configured | restart |
-| `…:BindAddress` | string | `0.0.0.0` | An IP address; `::` binds IPv6 | restart |
-| `…:Port` | int | `8080` | 1 – 65535; the resulting address and port bound by no HTTPS profile in this section, and the port bound by no other listener in the process | restart |
+| `…:Enabled` | bool | `true` | Refused unless `Transport` is `HttpAndHttps` | restart |
 
 ### Client certificates — `McpEndpoint:ClientCertificateProfiles:<n>`
 
@@ -406,13 +393,14 @@ request or per handshake. [Administering a deployment](admin-endpoint.md) is the
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `AdminEndpoint:Enabled` | bool | `false` | — | restart |
-| `AdminEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; used only when no HTTPS profile is configured | restart |
-| `AdminEndpoint:Port` | int | `8090` | 1–65535, and bound by no other listener in the process; used only when no HTTPS profile is configured | restart |
+| `AdminEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; binds the clear-text socket, which `HttpsOnly` does not open | restart |
+| `AdminEndpoint:Port` | int | `8090` | 1–65535, and bound by no other listener in the process | restart |
+| `AdminEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — the same setting the MCP endpoint carries, read the same way | restart |
 | `AdminEndpoint:Authentication` | flag set | `None` | `ApiKey`, `OAuth`, both comma-separated, or `None`; `None` warns at startup | restart |
 | `AdminEndpoint:ApiKeys` | list of secret blocks | empty | Required non-empty when `ApiKey` is named; refused when configured while it is not | restart; material per request |
 | `AdminEndpoint:OAuth` | block | empty | Same shape and rules as `McpEndpoint:OAuth`, with one addition: `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document. Refused when configured while `OAuth` is not named | restart |
-| `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`; naming any binds those listeners and no clear-text one serving these routes | restart; material per handshake |
-| `AdminEndpoint:Https:Redirect` | block | on, port `8091` | Same shape and rules as `McpEndpoint:Https:Redirect`; the default port differs so terminating TLS on both surfaces opens two clear-text ports that do not collide | restart |
+| `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`, read under the two `Transport` modes that terminate TLS | restart; material per handshake |
+| `AdminEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port`, so terminating TLS on both surfaces opens two clear-text ports that do not collide | restart |
 | `AdminEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as `McpEndpoint:RateLimiting` above; applied whether or not it is written | restart |
 
 The routes are served beneath `/api/admin`, which is a constant rather than a setting: a client is configured with a
@@ -427,7 +415,7 @@ The startup, readiness, and liveness probes and the dedicated listener they answ
 | --- | --- | --- | --- | --- |
 | `HealthEndpoints:Enabled` | bool | `true` | Off maps no probe route and opens no listener | restart |
 | `HealthEndpoints:BindAddress` | string | `0.0.0.0` | An IP address; `127.0.0.1` restricts to the machine | restart |
-| `HealthEndpoints:Port` | int | `8081` | 1 – 65535; never a port the application listener binds | restart |
+| `HealthEndpoints:Port` | int | `8081` | 1 – 65535; never a port another surface binds | restart |
 | `HealthEndpoints:HttpsPort` | int | unset | Required by, and only valid with, `HttpAndHttps` | restart |
 | `HealthEndpoints:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` | restart |
 | `HealthEndpoints:Domain` | string | — | Required by the TLS transports; the name the certificate is proven against | restart |
@@ -478,7 +466,7 @@ belong to the platform rather than to MailFathom:
 | Variable | What it does |
 | --- | --- |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Attaches the OTLP exporter for logs, metrics, and traces — startup records included. Unset exports nothing. [Telemetry](telemetry.md) is the page, including the sibling `OTEL_*` variables the exporter reads itself |
-| `ASPNETCORE_URLS` / `ASPNETCORE_HTTP_PORTS` | [The application listener's](#the-application-listener) addresses, unless MCP HTTPS profiles or explicit Kestrel endpoints replace them |
+| `ASPNETCORE_URLS` / `ASPNETCORE_HTTP_PORTS` / `ASPNETCORE_HTTPS_PORTS` | Nothing — [each surface states where it is served](#where-each-surface-is-served), and setting one of these fails startup with a message naming the key that replaces it |
 | `DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT` | The environment name; `Development` is what admits user secrets and `appsettings.Development.json` |
 | `DOTNET_USE_POLLING_FILE_WATCHER` | Set to `1` where reload must observe a mounted volume's atomic update — Kubernetes ConfigMaps in particular |
 | `OPENSSL_CONF` | The OpenSSL configuration file every TLS connection in the process is handshaked under. Unset is the platform's own policy; setting it is how a mail server the platform refuses is reached at all, and the host warns at startup that it is in force. [The platform TLS policy](platform-tls-policy.md) is the page |

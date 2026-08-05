@@ -232,7 +232,7 @@ the ingress, anything else that can reach the pod can set those headers too. Nam
 runs in, which `kubectl cluster-info dump | grep -m1 cluster-cidr` reports on most distributions. A `ClusterIP`
 Service is not a substitute: it keeps the pod off the cluster's edge, not away from every other pod.
 
-Configuring `Https:Endpoints` takes over the host's application listener, so the chart's `service.port` and the `http`
+Configuring `Https:Endpoints` with a TLS `Transport` moves where the endpoint answers, so the chart's `service.port` and the `http`
 container port have to match what the profiles bind. The probe listener is unaffected and keeps its own transport. That is a deliberate step rather than the default: in a cluster, TLS at the ingress is
 usually what an operator already has.
 
