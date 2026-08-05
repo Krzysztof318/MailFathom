@@ -110,6 +110,15 @@ internal sealed class McpEndpointOptions
     /// <remarks>Read whether or not a redirect is served, because a port has to be known before it can be checked against the other listeners in the process; <see cref="TransportHttpsOptions.RedirectsClearText" /> is what decides whether anything binds it.</remarks>
     public int ClearTextRedirectPort => this.Https.Redirect.Port ?? DefaultClearTextRedirectPort;
 
+    /// <summary>Gets whether this endpoint binds listeners of its own instead of being served over the host's.</summary>
+    /// <remarks>
+    /// True only where the HTTPS profiles are bound, which is also what makes Kestrel ignore the URL-shaped addresses.
+    /// This endpoint therefore replaces the application listener rather than joining it, which is the promise that no
+    /// clear-text socket stays open behind the profiles, and <see cref="ApplicationListenerRestatement" /> reads it as
+    /// a reason not to restate those addresses rather than as a reason to.
+    /// </remarks>
+    public bool BindsOwnListeners => this.Enabled && this.Https.TerminatesTls;
+
     /// <summary>Gets the ports this endpoint's listeners bind, which no other listener in the process may claim.</summary>
     /// <remarks>
     /// The redirect's port is one of them, so a deployment cannot give it to the probes or to the administrative surface
