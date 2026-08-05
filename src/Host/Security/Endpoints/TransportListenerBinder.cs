@@ -2,78 +2,89 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Net;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
 
 namespace MailFathom.Host.Security.Endpoints;
 
-/// <summary>Opens the sockets a request-serving surface is served on, and only those.</summary>
+/// <summary>Opens the sockets the composition asked for, one <c>Listen</c> per socket.</summary>
 /// <remarks>
 /// <para>
-/// Each surface gets listeners of its own rather than a path on a shared one, because that is what lets a deployment
-/// reach the mailbox over MCP from one network and administer the service from another — or from nowhere at all. A port
-/// is the coarsest control an operator has and the only one a firewall can act on, so putting two surfaces on one socket
-/// would take that control away whatever the credentials said.
+/// Binding is driven by the composed sockets rather than by the surfaces, because a socket may serve more than one of
+/// them. A deployment that puts the MCP endpoint and the administrative endpoint on one port publishes one socket, and
+/// asking Kestrel to open it once per surface would fail the second bind and take the process down with an
+/// address-in-use error naming a socket rather than the sections that asked for it.
 /// </para>
 /// <para>
-/// One binder serves both surfaces because both answer the same question in the same settings. What differs between
-/// them — which credentials guard the routes, whether a client certificate is asked for, which origins are served — is
-/// decided by the caller and by the pipeline, never here.
-/// </para>
-/// <para>
-/// <see cref="EndpointTransport.HttpAndHttps" /> is the one mode that opens both kinds of socket, and it is deliberate
-/// rather than a state arrived at by accident: whether the clear-text one redirects or serves the routes is the
-/// redirect section's answer, and the pipeline reads it from the port a connection arrived on.
-/// <see cref="EndpointTransport.HttpsOnly" /> opens no clear-text socket at all, which is the promise that nothing
-/// stays behind the profiles serving the same routes without the protection they were configured to add.
+/// What each surface still decides for itself is which routes it answers and what guards them. Which paths a request
+/// arriving on a shared port may ask for is the isolation middlewares' question, answered from the same composition.
 /// </para>
 /// </remarks>
 internal static class TransportListenerBinder
 {
-    /// <summary>Binds the listeners the configured transport calls for.</summary>
+    /// <summary>Binds every composed socket.</summary>
     /// <param name="kestrelOptions">The server options being composed.</param>
-    /// <param name="transport">The schemes the surface is served under.</param>
-    /// <param name="bindAddress">The address the clear-text socket binds.</param>
-    /// <param name="port">The port the clear-text socket binds.</param>
-    /// <param name="httpsSettings">The HTTPS profiles, read only under a transport that terminates TLS.</param>
-    /// <param name="certificateStore">The store the handshake reads its identities from.</param>
-    /// <param name="requestClientCertificates">Whether the handshake asks the client for a certificate.</param>
-    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="bindAddress" /> is <see langword="null" />.</exception>
-    /// <exception cref="FormatException">Thrown when the configured bind address is not an IP address, which validation reports before anything reaches this.</exception>
+    /// <param name="listeners">The composed sockets.</param>
+    /// <param name="findProfileIdentity">Reads the identity a server name resolves to on a profile-backed TLS socket.</param>
+    /// <param name="probeCertificate">The identity a probe TLS socket presents, read when one is composed.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="FormatException">Thrown when a configured bind address is not an IP address, which validation reports before anything reaches this.</exception>
     internal static void Bind(
         KestrelServerOptions kestrelOptions,
-        EndpointTransport transport,
-        string bindAddress,
-        int port,
-        TransportHttpsOptions httpsSettings,
-        TransportServerCertificateStore certificateStore,
-        bool requestClientCertificates)
+        IReadOnlyList<ComposedListener> listeners,
+        Func<TransportHttpsListenerAddress, string?, TransportTlsEndpointIdentity?> findProfileIdentity,
+        Func<HealthEndpointCertificate> probeCertificate)
     {
         ArgumentNullException.ThrowIfNull(kestrelOptions);
-        ArgumentNullException.ThrowIfNull(httpsSettings);
-        ArgumentNullException.ThrowIfNull(certificateStore);
+        ArgumentNullException.ThrowIfNull(listeners);
+        ArgumentNullException.ThrowIfNull(findProfileIdentity);
+        ArgumentNullException.ThrowIfNull(probeCertificate);
 
-        if (TransportListenerConfiguration.OpensClearTextListener(transport))
+        foreach (var listener in listeners)
+        {
+            Bind(kestrelOptions, listener, findProfileIdentity, probeCertificate);
+        }
+    }
+
+    private static void Bind(
+        KestrelServerOptions kestrelOptions,
+        ComposedListener listener,
+        Func<TransportHttpsListenerAddress, string?, TransportTlsEndpointIdentity?> findProfileIdentity,
+        Func<HealthEndpointCertificate> probeCertificate)
+    {
+        if (!listener.TerminatesTls)
         {
             // No protocol selection, deliberately. Under a redirect this socket exists to accept whatever a client that
             // was never repointed happens to speak, and narrowing it would turn the client this helps into a connection
             // failure; where it serves the routes instead, the listener default is the same HTTP/1.1 and HTTP/2 a
             // profile serves without one.
-            //
-            // Validation has already refused an address that does not parse, so this cannot throw on a configuration an
-            // operator could have written.
-            kestrelOptions.Listen(IPAddress.Parse(bindAddress.Trim()), port);
+            kestrelOptions.Listen(listener.Address.Address, listener.Address.Port);
+
+            return;
         }
 
-        if (TransportListenerConfiguration.TerminatesTls(transport))
+        if (listener.PresentsProfiles)
         {
-            TransportHttpsEndpointBinder.Bind(
-                kestrelOptions,
-                httpsSettings,
-                certificateStore,
-                requestClientCertificates);
+            TransportHttpsEndpointBinder.Bind(kestrelOptions, listener, findProfileIdentity);
+
+            return;
         }
+
+        // The probes' own TLS socket: one certificate presented to every connection rather than a profile selected by
+        // server name. The composition refuses to share this socket with a surface that selects, so nothing else is
+        // served here and the client-certificate mode is stated rather than inherited — a probe has none to present.
+        kestrelOptions.Listen(
+            listener.Address.Address,
+            listener.Address.Port,
+            listenOptions => listenOptions.UseHttps(httpsOptions =>
+            {
+                var certificate = probeCertificate();
+
+                httpsOptions.ServerCertificate = certificate.Leaf;
+                httpsOptions.ServerCertificateChain = certificate.Chain;
+                httpsOptions.ClientCertificateMode = ClientCertificateMode.NoCertificate;
+            }));
     }
 }

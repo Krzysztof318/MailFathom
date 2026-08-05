@@ -37,41 +37,37 @@ namespace MailFathom.Host.Security.Transport;
 /// </remarks>
 internal static class TransportHttpsEndpointBinder
 {
-    /// <summary>Binds one Kestrel listener per address the configured profiles name.</summary>
+    /// <summary>Binds one composed TLS socket.</summary>
     /// <param name="kestrelOptions">The server options being composed.</param>
-    /// <param name="httpsSettings">The validated HTTPS profiles.</param>
-    /// <param name="certificateStore">The store the handshake reads its identities from.</param>
-    /// <param name="requestClientCertificates">Whether the handshake asks the client for a certificate, which it does when any client certificate profile is configured.</param>
+    /// <param name="listener">The socket, and the profiles every surface sharing it contributed.</param>
+    /// <param name="findIdentity">Reads the identity a server name resolves to, across the stores of the surfaces sharing this socket.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <remarks>One call per socket rather than per surface, because the composition has already grouped the profiles by the socket they bind and refused the surfaces that disagree about it. Binding per surface would ask Kestrel to open a shared socket twice.</remarks>
     internal static void Bind(
         KestrelServerOptions kestrelOptions,
-        TransportHttpsOptions httpsSettings,
-        TransportServerCertificateStore certificateStore,
-        bool requestClientCertificates)
+        ComposedListener listener,
+        Func<TransportHttpsListenerAddress, string?, TransportTlsEndpointIdentity?> findIdentity)
     {
         ArgumentNullException.ThrowIfNull(kestrelOptions);
-        ArgumentNullException.ThrowIfNull(httpsSettings);
-        ArgumentNullException.ThrowIfNull(certificateStore);
+        ArgumentNullException.ThrowIfNull(listener);
+        ArgumentNullException.ThrowIfNull(findIdentity);
 
-        foreach (var listener in httpsSettings.Endpoints.GroupBy(static endpoint => endpoint.ListenerAddress))
+        var address = listener.Address;
+        var servedProtocols = listener.Profiles[0].ServedHttpProtocols;
+
+        kestrelOptions.Listen(address.Address, address.Port, listenOptions =>
         {
-            var address = listener.Key;
-            var servedProtocols = listener.First().ServedHttpProtocols;
-
-            kestrelOptions.Listen(address.Address, address.Port, listenOptions =>
+            listenOptions.Protocols = MapProtocols(servedProtocols);
+            listenOptions.UseHttps(new TlsHandshakeCallbackOptions
             {
-                listenOptions.Protocols = MapProtocols(servedProtocols);
-                listenOptions.UseHttps(new TlsHandshakeCallbackOptions
-                {
-                    OnConnection = context => SelectIdentity(
-                        certificateStore,
-                        address,
-                        servedProtocols,
-                        requestClientCertificates,
-                        context),
-                });
+                OnConnection = context => SelectIdentity(
+                    findIdentity,
+                    address,
+                    servedProtocols,
+                    listener.RequestsClientCertificates,
+                    context),
             });
-        }
+        });
     }
 
     /// <summary>Answers one client hello with the profile that publishes the name it asked for.</summary>
@@ -83,13 +79,13 @@ internal static class TransportHttpsEndpointBinder
     /// </remarks>
     [SuppressMessage("Security", "CA5359:Do not disable certificate validation", Justification = "CA5359 reads this callback as a client deciding to trust the server it dialled, where accepting everything defeats TLS. This is the server side of the handshake and the certificate is the client's: refusing here would end the connection for the private authority a trust profile names, and accepting here grants nothing, because whether the certificate identifies a client this deployment serves is decided afterwards by McpClientCertificateValidation against that profile's own anchors, expected names, and required usage. It is set only when a profile exists to make that decision, and it is the same posture HttpsConnectionAdapterOptions.ClientCertificateValidation states for a listener built from a URL.")]
     private static ValueTask<SslServerAuthenticationOptions> SelectIdentity(
-        TransportServerCertificateStore certificateStore,
+        Func<TransportHttpsListenerAddress, string?, TransportTlsEndpointIdentity?> findIdentity,
         TransportHttpsListenerAddress listener,
         IReadOnlyList<TransportHttpProtocol> servedProtocols,
         bool requestClientCertificates,
         TlsHandshakeCallbackContext context)
     {
-        if (certificateStore.Find(listener, context.ClientHelloInfo.ServerName) is not { } identity)
+        if (findIdentity(listener, context.ClientHelloInfo.ServerName) is not { } identity)
         {
             throw new AuthenticationException(
                 $"No HTTPS profile on {listener.Address}:{listener.Port} publishes the server name this connection asked for.");

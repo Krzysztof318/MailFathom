@@ -1,6 +1,6 @@
 # The health endpoints and the listener they are served on
 
-<!-- describes: src/Host/Hosting/**, src/Host/Configuration/Endpoints/HealthEndpointOptions.cs, src/Host/Configuration/Endpoints/EndpointTransport.cs, src/Host/Security/Endpoints/Health* -->
+<!-- describes: src/Host/Hosting/**, src/Host/Configuration/Endpoints/HealthEndpointOptions.cs, src/Host/Configuration/Endpoints/EndpointTransport.cs, src/Host/Configuration/Endpoints/ListenerComposition.cs, src/Host/Configuration/Endpoints/ServedSurfaces.cs, src/Host/Security/Endpoints/Health* -->
 
 An orchestrator decides three things about a process by asking it: whether it has finished coming up, whether it can
 serve a request right now, and whether it is still running rather than stuck. MailFathom answers those three questions on
@@ -64,10 +64,12 @@ here, and the host's own ways of naming one — `ASPNETCORE_URLS`, `ASPNETCORE_H
 `Kestrel:Endpoints` — are refused at startup rather than ignored, because Kestrel drops the first three as soon as a
 listener is bound in code and binds the last beside them on a socket no section describes.
 
-So a probe port is checked against the ports the other two surfaces claim, and a collision is reported against the
-section that asked for it. Turning `HealthEndpoints:Enabled` off changes nothing about where anything else is served,
-and turning every surface off is refused: a process binding no listener at all would fall back to Kestrel's own default
-address.
+A probe port may be one another surface already binds. The socket is then bound once and serves both, and a probe path
+asked on a port the probes are not on is still refused with a `404` — sharing widens what a listener answers and nothing
+else. What it costs is exposure, which is the decision this section exists to give you: on a shared port the probes
+answer wherever that port is published. Turning `HealthEndpoints:Enabled` off changes nothing about where anything else
+is served, and turning every surface off is refused, because a process binding no listener at all would fall back to
+Kestrel's own default address.
 
 [Where each surface is served](configuration-reference.md#where-each-surface-is-served) records the whole arrangement.
 

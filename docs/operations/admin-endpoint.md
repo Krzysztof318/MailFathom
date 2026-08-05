@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/**, src/Host/Hosting/Startup/AdminEndpointIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/** -->
+<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/**, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/** -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -140,7 +140,7 @@ arrived. `mfctl login --endpoint https://admin.example.com:8543` writes the corr
 That listener maps no route. No administrative operation, no session probe, and no protected-resource metadata document is
 reachable over it, and no credential check runs for a request that arrived on it — every path gets the same redirect, and a
 `Host` header naming no configured domain gets `400`. The port is checked against every other listener in the process, so a
-conflict with the MCP surface or the probes is reported against the section that asked for it.
+port the MCP surface or the probes also bind is shared rather than refused, and a disagreement about what that shared socket is — one surface redirecting where the other serves, for instance — is reported against both sections.
 
 Turn it off with `AdminEndpoint:Https:Redirect:Enabled` set to `false`, which is what a deployment behind a proxy that
 already answers the clear-text port wants. The setting shape and every refusal are the MCP endpoint's, documented once in

@@ -251,9 +251,25 @@ both-schemes posture rather than the migration one. `HealthEndpoints:Transport` 
 because the probes carry one certificate rather than profiles, its `HttpAndHttps` needs a second port of its own in
 `HealthEndpoints:HttpsPort`.
 
-A port one surface binds is refused to the others, reported against the section that asked for it rather than left to
-fail later as an address-in-use error naming a socket. The clear-text port counts under every mode that opens that
-socket, redirect included.
+### Sharing a socket
+
+Two surfaces, or all three, may name one port. That is the posture a single-node deployment behind one ingress wants —
+one socket to publish and one backend to route — and it is why both request-serving surfaces default to `8080` for clear
+text and `8443` for a profile. The port is bound once and serves each surface's own paths; which paths a request may ask
+for is decided from the port it arrived on, so a surface that is not on that port is still refused there with a `404`.
+
+**What sharing costs is exposure.** The probes answer without a credential and the administrative surface is a different
+authority from the mailbox, so putting either on the endpoint's port publishes it wherever that port is published. Keep
+them apart when that matters; the ports exist so the decision is yours.
+
+**Surfaces sharing a socket must agree about it.** A socket is clear text or it is TLS, it redirects or it serves the
+routes, it asks for a client certificate or it does not, and it presents identities one way. Each disagreement fails
+startup naming both sections — one endpoint redirecting `8080` to its profiles while the other serves its routes there
+is the worked example. Two profiles publishing one domain on a shared TLS socket is refused for the same reason, while
+two publishing different domains is exactly what sharing one is for: the handshake tells them apart by server name.
+
+A wildcard address beside a specific one on the same port is still refused, because the operating system grants only one
+of those two sockets. Two specific addresses on one port are two sockets and are accepted.
 
 ## `ReverseProxy`
 
@@ -284,7 +300,7 @@ routing and listeners — while key and certificate material is read per request
 | --- | --- | --- | --- | --- |
 | `McpEndpoint:Enabled` | bool | `false` | — | restart |
 | `McpEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; binds the clear-text socket, which `HttpsOnly` does not open | restart |
-| `McpEndpoint:Port` | int | `8080` | 1–65535, and bound by no other listener in the process | restart |
+| `McpEndpoint:Port` | int | `8080` | 1–65535. The administrative endpoint's default as well — see [sharing a socket](#sharing-a-socket) | restart |
 | `McpEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — see [`Transport`](#transport) | restart |
 | `McpEndpoint:Authentication` | flag set | `None` | `ApiKey`, `OAuth`, both comma-separated, or `None`; `None` warns at startup | restart |
 | `McpEndpoint:ApiKeys` | list of secret blocks | empty | Required non-empty when `ApiKey` is named; refused when configured while it is not | restart; material per request |
@@ -394,7 +410,7 @@ request or per handshake. [Administering a deployment](admin-endpoint.md) is the
 | --- | --- | --- | --- | --- |
 | `AdminEndpoint:Enabled` | bool | `false` | — | restart |
 | `AdminEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; binds the clear-text socket, which `HttpsOnly` does not open | restart |
-| `AdminEndpoint:Port` | int | `8090` | 1–65535, and bound by no other listener in the process | restart |
+| `AdminEndpoint:Port` | int | `8080` | 1–65535. The MCP endpoint's default as well, so enabling both without stating a port publishes one shared socket — see [sharing a socket](#sharing-a-socket) | restart |
 | `AdminEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — the same setting the MCP endpoint carries, read the same way | restart |
 | `AdminEndpoint:Authentication` | flag set | `None` | `ApiKey`, `OAuth`, both comma-separated, or `None`; `None` warns at startup | restart |
 | `AdminEndpoint:ApiKeys` | list of secret blocks | empty | Required non-empty when `ApiKey` is named; refused when configured while it is not | restart; material per request |
@@ -415,7 +431,7 @@ The startup, readiness, and liveness probes and the dedicated listener they answ
 | --- | --- | --- | --- | --- |
 | `HealthEndpoints:Enabled` | bool | `true` | Off maps no probe route and opens no listener | restart |
 | `HealthEndpoints:BindAddress` | string | `0.0.0.0` | An IP address; `127.0.0.1` restricts to the machine | restart |
-| `HealthEndpoints:Port` | int | `8081` | 1 – 65535; never a port another surface binds | restart |
+| `HealthEndpoints:Port` | int | `8081` | 1 – 65535. A port another surface binds is permitted and shares that socket — see [sharing a socket](#sharing-a-socket) | restart |
 | `HealthEndpoints:HttpsPort` | int | unset | Required by, and only valid with, `HttpAndHttps` | restart |
 | `HealthEndpoints:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` | restart |
 | `HealthEndpoints:Domain` | string | — | Required by the TLS transports; the name the certificate is proven against | restart |

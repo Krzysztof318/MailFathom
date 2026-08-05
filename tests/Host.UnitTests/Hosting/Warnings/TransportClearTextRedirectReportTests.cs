@@ -90,7 +90,7 @@ public sealed class TransportClearTextRedirectReportTests
 
         // Assert
         var record = Assert.Single(logs.Records);
-        Assert.Equal(8090, Assert.Contains("ClearTextPort", record.Properties));
+        Assert.Equal(8080, Assert.Contains("ClearTextPort", record.Properties));
         Assert.Contains("AdminEndpoint:Https:Redirect:Enabled", record.Message, StringComparison.Ordinal);
     }
 

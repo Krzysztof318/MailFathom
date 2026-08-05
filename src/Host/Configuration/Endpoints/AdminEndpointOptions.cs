@@ -73,8 +73,8 @@ internal sealed class AdminEndpointOptions
     public string BindAddress { get; set; } = "0.0.0.0";
 
     /// <summary>Gets or sets the TCP port the clear-text listener binds.</summary>
-    /// <remarks>The default is above 1024 so the process needs no privilege to bind it, and it is not a port any other listener here defaults to. Under <see cref="EndpointTransport.HttpsOnly" /> nothing binds it, because that mode opens no clear-text socket; the HTTPS profiles carry their own ports.</remarks>
-    public int Port { get; set; } = 8090;
+    /// <remarks>The default is the MCP endpoint's own, so enabling both surfaces without stating a port publishes one socket serving each of them rather than two. It is above 1024 so the process needs no privilege to bind it. Under <see cref="EndpointTransport.HttpsOnly" /> nothing binds it, because that mode opens no clear-text socket; the HTTPS profiles carry their own ports.</remarks>
+    public int Port { get; set; } = 8080;
 
     /// <summary>Gets or sets which schemes the endpoint is served under.</summary>
     /// <remarks>The same setting the MCP endpoint carries, read the same way. Clear text unless a deployment states otherwise, which is the right posture behind a TLS-terminating reverse proxy and wrong anywhere else, so startup warns about it.</remarks>
@@ -166,14 +166,24 @@ internal sealed class AdminEndpointOptions
         return settings;
     }
 
-    /// <summary>Finds everything an operator must fix before the endpoint can be served.</summary>
-    /// <param name="portsClaimedElsewhere">The ports other listeners in this process bind, which this endpoint may not also claim.</param>
-    /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="portsClaimedElsewhere" /> is <see langword="null" />.</exception>
-    public IReadOnlyList<string> FindConfigurationErrors(IReadOnlyCollection<int> portsClaimedElsewhere)
-    {
-        ArgumentNullException.ThrowIfNull(portsClaimedElsewhere);
+    /// <summary>Describes every socket this endpoint asks for.</summary>
+    /// <returns>One declaration per socket, empty when the endpoint is not served.</returns>
+    /// <remarks>Whether another surface asks for one of the same sockets, and whether the two agree about it, is <see cref="ListenerComposition" />'s question rather than this section's.</remarks>
+    public IReadOnlyList<DeclaredListener> DeclareListeners() => this.Enabled
+        ? TransportListenerConfiguration.DeclareListeners(
+            SectionName,
+            ServedSurfaces.Admin,
+            this.BindAddress,
+            this.Port,
+            this.Transport,
+            this.Https,
+            requestsClientCertificates: false)
+        : [];
 
+    /// <summary>Finds everything an operator must fix before the endpoint can be served.</summary>
+    /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
+    public IReadOnlyList<string> FindConfigurationErrors()
+    {
         if (!this.Enabled)
         {
             return [];
@@ -194,22 +204,10 @@ internal sealed class AdminEndpointOptions
             this.Https,
             QuicListener.IsSupported));
 
-        errors.AddRange(this.FindListenerCollisions(portsClaimedElsewhere));
 
         return errors;
     }
 
-    /// <summary>Refuses a listener that would take a socket another endpoint in this process needs.</summary>
-    /// <remarks>
-    /// A collision is reported here rather than left to the operating system, because an address-in-use failure names a
-    /// socket and not the section that asked for it — and because two endpoints on one port would mean whichever bound
-    /// first decided which credentials guarded the other's routes.
-    /// </remarks>
-    private IEnumerable<string> FindListenerCollisions(IReadOnlyCollection<int> portsClaimedElsewhere) =>
-        this.ListenerPorts
-            .Where(portsClaimedElsewhere.Contains)
-            .Select(static collidingPort =>
-                $"{SectionName} — port {collidingPort} is already bound by another listener in this process, and the administrative surface is served on a listener of its own so that reaching it does not mean reaching the MCP endpoint. State a port nothing else binds.");
 
     private IEnumerable<string> FindAuthenticationErrors()
     {

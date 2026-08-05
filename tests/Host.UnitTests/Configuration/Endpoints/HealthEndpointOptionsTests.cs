@@ -17,7 +17,6 @@ namespace MailFathom.Host.UnitTests.Configuration.Endpoints;
 /// </remarks>
 public sealed class HealthEndpointOptionsTests
 {
-    private static readonly int[] ApplicationPorts = [8080];
 
     [Fact]
     public void Defaults_AnUnconfiguredSection_ServesThreeProbesOnItsOwnClearTextPort()
@@ -26,7 +25,7 @@ public sealed class HealthEndpointOptionsTests
         var options = new HealthEndpointOptions();
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.True(options.Enabled);
@@ -54,7 +53,7 @@ public sealed class HealthEndpointOptionsTests
         };
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Empty(options.ListenerPorts);
@@ -73,7 +72,7 @@ public sealed class HealthEndpointOptionsTests
 
         // Assert
         Assert.Equal([8081, 8443], listenerPorts.Order());
-        Assert.Empty(options.FindConfigurationErrors(ApplicationPorts));
+        Assert.Empty(options.FindConfigurationErrors());
     }
 
     [Fact]
@@ -83,7 +82,7 @@ public sealed class HealthEndpointOptionsTests
         var options = TlsOptions(EndpointTransport.HttpsOnly);
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.False(options.ServesClearText);
@@ -124,7 +123,7 @@ public sealed class HealthEndpointOptionsTests
         var options = new HealthEndpointOptions { HttpsPort = 8443 };
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(errors, error => error.Contains("nothing binds it", StringComparison.Ordinal));
@@ -138,7 +137,7 @@ public sealed class HealthEndpointOptionsTests
         options.HttpsPort = 8443;
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(errors, error => error.Contains("nothing binds it", StringComparison.Ordinal));
@@ -154,24 +153,12 @@ public sealed class HealthEndpointOptionsTests
         var options = new HealthEndpointOptions { Port = port };
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(errors, error => error.Contains("HealthEndpoints:Port", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public void FindConfigurationErrors_APortAnotherSurfaceBinds_IsRefused()
-    {
-        // Arrange
-        var options = new HealthEndpointOptions { Port = 8080 };
-
-        // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
-
-        // Assert
-        Assert.Contains(errors, error => error.Contains("already bound by another listener", StringComparison.Ordinal));
-    }
 
     [Fact]
     public void FindConfigurationErrors_TheTwoProbePortsColliding_IsRefused()
@@ -181,7 +168,7 @@ public sealed class HealthEndpointOptionsTests
         options.HttpsPort = options.Port;
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(errors, error => error.Contains("one socket cannot serve both schemes", StringComparison.Ordinal));
@@ -194,7 +181,7 @@ public sealed class HealthEndpointOptionsTests
         var options = TlsOptions(EndpointTransport.HttpAndHttps);
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(errors, error => error.Contains("HealthEndpoints:HttpsPort", StringComparison.Ordinal));
@@ -211,7 +198,7 @@ public sealed class HealthEndpointOptionsTests
         var options = new HealthEndpointOptions { Transport = (EndpointTransport)7 };
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(errors, error => error.Contains("names no transport", StringComparison.Ordinal));
@@ -224,7 +211,7 @@ public sealed class HealthEndpointOptionsTests
         var options = new HealthEndpointOptions { BindAddress = "probe.example.test" };
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(errors, error => error.Contains("HealthEndpoints:BindAddress", StringComparison.Ordinal));
@@ -237,7 +224,7 @@ public sealed class HealthEndpointOptionsTests
         var options = new HealthEndpointOptions { BindAddress = "127.0.0.1" };
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Empty(errors);
@@ -254,7 +241,7 @@ public sealed class HealthEndpointOptionsTests
         };
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(errors, error => error.Contains("no development-certificate fallback", StringComparison.Ordinal));
@@ -268,7 +255,7 @@ public sealed class HealthEndpointOptionsTests
         options.Domain = "   ";
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(errors, error => error.Contains("HealthEndpoints:Domain", StringComparison.Ordinal));
@@ -288,7 +275,7 @@ public sealed class HealthEndpointOptionsTests
         options.Domain = domain;
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(errors, error => error.StartsWith("HealthEndpoints:Domain", StringComparison.Ordinal));
@@ -309,7 +296,7 @@ public sealed class HealthEndpointOptionsTests
         };
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(errors, error => error.Contains("CertificateChain", StringComparison.Ordinal));
@@ -332,7 +319,7 @@ public sealed class HealthEndpointOptionsTests
         };
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(errors, error => error.Contains("opens no TLS listener", StringComparison.Ordinal));
@@ -350,7 +337,7 @@ public sealed class HealthEndpointOptionsTests
         };
 
         // Act
-        var errors = options.FindConfigurationErrors(ApplicationPorts);
+        var errors = options.FindConfigurationErrors();
 
         // Assert
         Assert.Contains(errors, error => error.Contains("state one or the other", StringComparison.Ordinal));

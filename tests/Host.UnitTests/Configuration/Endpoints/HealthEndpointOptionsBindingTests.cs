@@ -57,7 +57,7 @@ public sealed class HealthEndpointOptionsBindingTests
         Assert.Equal(EndpointTransport.HttpAndHttps, options.Transport);
         Assert.Equal("probe.example.test", options.Domain);
         Assert.Equal("file:/run/secrets/probe.pfx", options.ServerCertificate.Bundle?.SecretReference);
-        Assert.Empty(options.FindConfigurationErrors([8080]));
+        Assert.Empty(options.FindConfigurationErrors());
     }
 
     [Fact]

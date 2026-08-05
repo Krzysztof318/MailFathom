@@ -57,7 +57,7 @@ internal sealed class McpEndpointOptions
     public string BindAddress { get; set; } = "0.0.0.0";
 
     /// <summary>Gets or sets the TCP port the clear-text listener binds.</summary>
-    /// <remarks>The default is above 1024 so the process needs no privilege to bind it, and it is not a port any other listener here defaults to. Under <see cref="EndpointTransport.HttpsOnly" /> nothing binds it, because that mode opens no clear-text socket; the HTTPS profiles carry their own ports.</remarks>
+    /// <remarks>The default is the administrative endpoint's own as well, so enabling both surfaces without stating a port publishes one socket serving each of them rather than two. It is above 1024 so the process needs no privilege to bind it. Under <see cref="EndpointTransport.HttpsOnly" /> nothing binds it, because that mode opens no clear-text socket; the HTTPS profiles carry their own ports.</remarks>
     public int Port { get; set; } = 8080;
 
     /// <summary>Gets or sets which schemes the endpoint is served under.</summary>
@@ -169,19 +169,29 @@ internal sealed class McpEndpointOptions
         return settings;
     }
 
+    /// <summary>Describes every socket this endpoint asks for.</summary>
+    /// <returns>One declaration per socket, empty when the endpoint is not served.</returns>
+    /// <remarks>Whether another surface asks for one of the same sockets, and whether the two agree about it, is <see cref="ListenerComposition" />'s question rather than this section's.</remarks>
+    public IReadOnlyList<DeclaredListener> DeclareListeners() => this.Enabled
+        ? TransportListenerConfiguration.DeclareListeners(
+            SectionName,
+            ServedSurfaces.Mcp,
+            this.BindAddress,
+            this.Port,
+            this.Transport,
+            this.Https,
+            this.ClientCertificateProfiles.Count > 0)
+        : [];
+
     /// <summary>Finds everything an operator must fix before the endpoint can be served.</summary>
-    /// <param name="portsClaimedElsewhere">The ports other listeners in this process bind, which this endpoint may not also claim.</param>
     /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="portsClaimedElsewhere" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// This covers the structure of the section only. Whether a configured key names itself usably, and whether the
     /// material behind it can be retrieved, are the secret machinery's questions and are answered by
     /// <see cref="SecretConfigurationValidator" /> against the same section.
     /// </remarks>
-    public IReadOnlyList<string> FindConfigurationErrors(IReadOnlyCollection<int> portsClaimedElsewhere)
+    public IReadOnlyList<string> FindConfigurationErrors()
     {
-        ArgumentNullException.ThrowIfNull(portsClaimedElsewhere);
-
         if (!this.Enabled)
         {
             return [];
@@ -208,18 +218,10 @@ internal sealed class McpEndpointOptions
             this.Https,
             QuicListener.IsSupported));
 
-        errors.AddRange(this.FindListenerCollisions(portsClaimedElsewhere));
 
         return errors;
     }
 
-    /// <summary>Refuses a listener that would take a socket another endpoint in this process needs.</summary>
-    /// <remarks>A collision is reported here rather than left to the operating system, because an address-in-use failure names a socket and not the section that asked for it — and because two endpoints on one port would mean whichever bound first decided which credentials guarded the other's routes.</remarks>
-    private IEnumerable<string> FindListenerCollisions(IReadOnlyCollection<int> portsClaimedElsewhere) =>
-        this.ListenerPorts
-            .Where(portsClaimedElsewhere.Contains)
-            .Select(static collidingPort =>
-                $"{SectionName} — port {collidingPort} is already bound by another listener in this process, and each surface is served on a listener of its own so that reaching one does not mean reaching another. State a port nothing else binds.");
 
     /// <summary>Maps the configured profiles onto the ones a presented certificate is judged against.</summary>
     /// <returns>The trust profiles, in configuration order, empty when mutual TLS is off.</returns>

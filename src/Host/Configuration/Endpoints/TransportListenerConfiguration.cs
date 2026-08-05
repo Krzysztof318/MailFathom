@@ -89,6 +89,66 @@ internal static class TransportListenerConfiguration
         return ports;
     }
 
+    /// <summary>Describes every socket this surface asks for, which is what composition groups and refuses disagreement over.</summary>
+    /// <param name="sectionName">The configuration section the surface is bound from.</param>
+    /// <param name="surface">The surface served on these sockets.</param>
+    /// <param name="bindAddress">The configured clear-text bind address.</param>
+    /// <param name="port">The configured clear-text port.</param>
+    /// <param name="transport">The selected transport.</param>
+    /// <param name="httpsSettings">The HTTPS profiles.</param>
+    /// <param name="requestsClientCertificates">Whether the handshake asks the client for a certificate.</param>
+    /// <returns>One declaration per socket, empty when the transport opens none.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="bindAddress" /> is <see langword="null" />.</exception>
+    /// <remarks>The profiles are grouped by the socket they bind rather than declared one apiece, because profiles naming one address share a listener and are told apart by the server name a client sends.</remarks>
+    internal static IReadOnlyList<DeclaredListener> DeclareListeners(
+        string sectionName,
+        ServedSurfaces surface,
+        string bindAddress,
+        int port,
+        EndpointTransport transport,
+        TransportHttpsOptions httpsSettings,
+        bool requestsClientCertificates)
+    {
+        ArgumentNullException.ThrowIfNull(sectionName);
+        ArgumentNullException.ThrowIfNull(httpsSettings);
+
+        var declarations = new List<DeclaredListener>();
+
+        if (OpensClearTextListener(transport))
+        {
+            declarations.Add(new DeclaredListener(
+                sectionName,
+                surface,
+                bindAddress,
+                port,
+                TerminatesTls: false,
+                RedirectsClearText(transport, httpsSettings.Redirect),
+                PresentsProfiles: false,
+                Profiles: [],
+                RequestsClientCertificates: false));
+        }
+
+        if (!TerminatesTls(transport))
+        {
+            return declarations;
+        }
+
+        declarations.AddRange(httpsSettings.Endpoints
+            .GroupBy(static profile => (profile.BindAddress, profile.Port))
+            .Select(profileSocket => new DeclaredListener(
+                sectionName,
+                surface,
+                profileSocket.Key.BindAddress,
+                profileSocket.Key.Port,
+                TerminatesTls: true,
+                RedirectsClearText: false,
+                PresentsProfiles: true,
+                [.. profileSocket],
+                requestsClientCertificates)));
+
+        return declarations;
+    }
+
     /// <summary>Finds everything an operator must fix before the surface's listeners can bind.</summary>
     /// <param name="sectionName">The configuration section the surface is bound from, which prefixes every reported error.</param>
     /// <param name="bindAddress">The configured clear-text bind address.</param>

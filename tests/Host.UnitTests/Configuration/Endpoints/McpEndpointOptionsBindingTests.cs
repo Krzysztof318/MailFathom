@@ -67,7 +67,7 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Equal(40, options.RateLimiting.TokenCapacity);
         Assert.Equal(10, options.RateLimiting.TokensPerReplenishmentPeriod);
         Assert.Equal(TimeSpan.FromSeconds(30), options.RateLimiting.ReplenishmentPeriod);
-        Assert.Empty(options.FindConfigurationErrors([]));
+        Assert.Empty(options.FindConfigurationErrors());
     }
 
     /// <summary>
@@ -94,7 +94,7 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Equal(defaults.TokenCapacity, options.RateLimiting.TokenCapacity);
         Assert.Equal(defaults.TokensPerReplenishmentPeriod, options.RateLimiting.TokensPerReplenishmentPeriod);
         Assert.Equal(defaults.ReplenishmentPeriod, options.RateLimiting.ReplenishmentPeriod);
-        Assert.Empty(options.FindConfigurationErrors([]));
+        Assert.Empty(options.FindConfigurationErrors());
     }
 
     /// <summary>A profile binds through three collections, any of which silently staying empty would leave a client certificate judged by less than was configured.</summary>
@@ -131,7 +131,7 @@ public sealed class McpEndpointOptionsBindingTests
             ["openai-connectors-ca", "openai-connectors-ca-next"],
             profile.TrustAnchors.Select(anchor => anchor.Name));
         Assert.Equal(["mtls.prod.connectors.openai.com"], profile.SubjectAlternativeNames);
-        Assert.Empty(options.FindConfigurationErrors([]));
+        Assert.Empty(options.FindConfigurationErrors());
     }
 
     [Fact]
@@ -182,7 +182,7 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Equal(["mailfathom.read"], options.OAuth.RequiredScopes);
         Assert.Equal(["workforce"], options.OAuth.AuthorizationServers.Select(server => server.Name));
         Assert.Equal(["9f2c"], options.OAuth.AuthorizationServers.Single().AuthorizedSubjects);
-        Assert.Empty(options.FindConfigurationErrors([]));
+        Assert.Empty(options.FindConfigurationErrors());
     }
 
     /// <summary>A configured list replaces the default rather than being added to it, which a pre-populated collection could not achieve.</summary>
@@ -217,7 +217,7 @@ public sealed class McpEndpointOptionsBindingTests
         // Assert
         Assert.Empty(options.Cors.AllowedOrigins);
         Assert.False(options.Cors.ServesEveryBrowserOrigin);
-        Assert.Empty(options.FindConfigurationErrors([]));
+        Assert.Empty(options.FindConfigurationErrors());
     }
 
     /// <summary>A misspelling that bound quietly would leave a security decision reading as one nobody made.</summary>
@@ -323,7 +323,7 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Equal(
             "systemd-credential:mailfathom-tls-password",
             options.Https.Endpoints[1].ServerCertificate.Bundle?.Password?.SecretReference);
-        Assert.Empty(options.FindConfigurationErrors([]));
+        Assert.Empty(options.FindConfigurationErrors());
     }
 
     /// <summary>Absent is the documented default of HTTP/1.1 and HTTP/2, and it has to stay distinguishable from a list an operator emptied.</summary>

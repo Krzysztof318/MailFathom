@@ -348,13 +348,9 @@ try
     // Validated here rather than through ValidateOnStart, because the sections are read before a container exists and
     // the decisions they carry — which sockets to open, whether to map an endpoint, which scheme protects it — are taken
     // during composition. The secrets they name are proven separately, by the startup validator that proves every other
-    // section's.
-    //
-    // Each surface is checked against the ports the ones before it claimed, so a collision is reported once, against the
-    // section that could still be moved, rather than twice in the words of both sides. A port is claimed by whichever
-    // listener binds first and the loser fails with an address-in-use error naming a socket rather than the section that
-    // asked for it, which is the failure this ordering exists to replace.
-    var mcpEndpointConfigurationErrors = mcpEndpointSettings.FindConfigurationErrors([]);
+    // section's. Each section answers for itself first, so a message about a misspelled key is not delayed behind a
+    // question about a socket the deployment may not even share.
+    var mcpEndpointConfigurationErrors = mcpEndpointSettings.FindConfigurationErrors();
 
     if (mcpEndpointConfigurationErrors.Count > 0)
     {
@@ -364,8 +360,7 @@ try
             mcpEndpointConfigurationErrors);
     }
 
-    var adminEndpointConfigurationErrors = adminEndpointSettings.FindConfigurationErrors(
-        [.. mcpEndpointSettings.ListenerPorts]);
+    var adminEndpointConfigurationErrors = adminEndpointSettings.FindConfigurationErrors();
 
     if (adminEndpointConfigurationErrors.Count > 0)
     {
@@ -375,8 +370,7 @@ try
             adminEndpointConfigurationErrors);
     }
 
-    var healthEndpointConfigurationErrors = healthEndpointSettings.FindConfigurationErrors(
-        [.. mcpEndpointSettings.ListenerPorts, .. adminEndpointSettings.ListenerPorts]);
+    var healthEndpointConfigurationErrors = healthEndpointSettings.FindConfigurationErrors();
 
     if (healthEndpointConfigurationErrors.Count > 0)
     {
@@ -385,6 +379,26 @@ try
             typeof(HealthEndpointOptions),
             healthEndpointConfigurationErrors);
     }
+
+    // Composed once, from what every enabled surface asked for. Surfaces may share a socket — which is what lets a
+    // single-node deployment publish one port rather than three, and why both request-serving surfaces default to the
+    // same ones — but they may not disagree about it, and this is where that is settled before anything binds.
+    var composedListeners = ListenerComposition.Compose(
+    [
+        .. mcpEndpointSettings.DeclareListeners(),
+        .. adminEndpointSettings.DeclareListeners(),
+        .. healthEndpointSettings.DeclareListeners(),
+    ]);
+
+    if (composedListeners.Errors.Count > 0)
+    {
+        throw new OptionsValidationException(
+            McpEndpointOptions.SectionName,
+            typeof(McpEndpointOptions),
+            composedListeners.Errors);
+    }
+
+    var servedSurfacesByPort = composedListeners.SurfacesByPort();
 
     // Registered whether or not the endpoint is enabled, because it is the warning that decides whether it has
     // anything to say — the same reason the MCP warnings above are registered unconditionally.
@@ -438,65 +452,49 @@ try
         provider.GetRequiredService<TimeProvider>(),
         provider.GetRequiredService<ILogger<TransportServerCertificateStore>>()));
 
+    // Keyed, because two endpoints each own a store and the container has to tell them apart. Each store loads and
+    // disposes only its own endpoint's material, which is what keeps one endpoint's certificates out of the other's
+    // configuration — a shared socket is answered by consulting both in turn rather than by merging them.
+    builder.Services.AddKeyedSingleton(adminCertificateStoreKey, (provider, _) => new TransportServerCertificateStore(
+        adminEndpointSettings.Https,
+        $"{AdminEndpointOptions.SectionName}:{nameof(AdminEndpointOptions.Https)}",
+        provider.GetRequiredService<TlsServerCertificateLoader>(),
+        provider.GetRequiredService<TimeProvider>(),
+        provider.GetRequiredService<ILogger<TransportServerCertificateStore>>()));
+
+    // Registered whether or not the transport terminates TLS, because the holder is what a certificate is loaded into
+    // and disposed from, and a clear-text deployment simply loads none.
+    builder.Services.AddSingleton<HealthEndpointCertificate>();
+
     if (mcpEndpointSettings.Enabled)
     {
         // The tools read the local mailbox copy through the use cases the infrastructure registration above already
         // added, so the protocol surface adds no port of its own.
         builder.Services.AddMailFathomServer();
         builder.Services.AddMcpTransportSecurity(mcpEndpointSettings);
-
-        // The callback runs when the server is constructed, after the container exists, so the store it reads is the one
-        // the composition root has already loaded.
-        builder.WebHost.ConfigureKestrel(kestrelOptions => TransportListenerBinder.Bind(
-            kestrelOptions,
-            mcpEndpointSettings.Transport,
-            mcpEndpointSettings.BindAddress,
-            mcpEndpointSettings.Port,
-            mcpEndpointSettings.Https,
-            kestrelOptions.ApplicationServices.GetRequiredService<TransportServerCertificateStore>(),
-            mcpEndpointSettings.ClientCertificateProfiles.Count > 0));
     }
 
     if (adminEndpointSettings.Enabled)
     {
         builder.Services.AddAdminTransportSecurity(adminEndpointSettings);
-        // Keyed, because two endpoints each own a store and the container has to tell them apart. Each store loads
-        // and disposes only its own endpoint's material, which is what keeps one endpoint's certificates out of the
-        // other's handshake lookup.
-        builder.Services.AddKeyedSingleton(adminCertificateStoreKey, (provider, _) => new TransportServerCertificateStore(
-            adminEndpointSettings.Https,
-            $"{AdminEndpointOptions.SectionName}:{nameof(AdminEndpointOptions.Https)}",
-            provider.GetRequiredService<TlsServerCertificateLoader>(),
-            provider.GetRequiredService<TimeProvider>(),
-            provider.GetRequiredService<ILogger<TransportServerCertificateStore>>()));
-
-        // The same binder the MCP endpoint uses, because the two surfaces state where they are served in the same
-        // settings. No client certificate is asked for: the trust question one answers is a second one this endpoint
-        // does not yet ask, and asking it on a listener with no profile to judge the answer would refuse clients for a
-        // decision nobody configured.
-        builder.WebHost.ConfigureKestrel(kestrelOptions => TransportListenerBinder.Bind(
-            kestrelOptions,
-            adminEndpointSettings.Transport,
-            adminEndpointSettings.BindAddress,
-            adminEndpointSettings.Port,
-            adminEndpointSettings.Https,
-            kestrelOptions.ApplicationServices.GetRequiredKeyedService<TransportServerCertificateStore>(
-                adminCertificateStoreKey),
-            requestClientCertificates: false));
     }
 
-    // Registered whether or not the transport terminates TLS, because the holder is what a certificate is loaded into
-    // and disposed from, and a clear-text deployment simply loads none.
-    builder.Services.AddSingleton<HealthEndpointCertificate>();
-
-    if (healthEndpointSettings.Enabled)
+    if (composedListeners.Listeners.Count > 0)
     {
-        // The callback runs when the server is constructed, after the container exists and after the composition root
-        // below has loaded the certificate the TLS listener presents.
-        builder.WebHost.ConfigureKestrel(kestrelOptions => HealthEndpointListenerBinder.Bind(
+        // The callback runs when the server is constructed, after the container exists, so the stores it reads are the
+        // ones the composition root has already loaded. A profile-backed socket consults each endpoint's store in turn,
+        // which is what lets two surfaces publish different domains on one port without either one's material entering
+        // the other's section.
+        builder.WebHost.ConfigureKestrel(kestrelOptions => TransportListenerBinder.Bind(
             kestrelOptions,
-            healthEndpointSettings,
-            kestrelOptions.ApplicationServices.GetRequiredService<HealthEndpointCertificate>()));
+            composedListeners.Listeners,
+            (listener, serverName) =>
+                kestrelOptions.ApplicationServices.GetRequiredService<TransportServerCertificateStore>()
+                    .Find(listener, serverName)
+                ?? kestrelOptions.ApplicationServices
+                    .GetRequiredKeyedService<TransportServerCertificateStore>(adminCertificateStoreKey)
+                    .Find(listener, serverName),
+            kestrelOptions.ApplicationServices.GetRequiredService<HealthEndpointCertificate>));
     }
 
     // Both endpoints call AddAuthentication, and each call sets the application's one default scheme, so the default
@@ -577,6 +575,11 @@ try
         app.UseClearTextRedirectToHttps(new ClearTextRedirectTargets(clearTextRedirectListeners));
     }
 
+    // Ahead of everything any surface adds, so a request for a surface this listener does not serve is refused before
+    // it reaches CORS, authentication, the client-certificate check, or the rate limiter — and a probe that arrived
+    // where the probes are not served is refused before it can report dependency state to whoever can reach it.
+    app.UseSurfaceIsolation(servedSurfacesByPort);
+
     if (healthEndpointSettings.Enabled)
     {
         // A probe reports healthy over no checks at all, because the aggregate of nothing is healthy. Asserting the
@@ -593,19 +596,7 @@ try
                 unansweredProbes);
         }
 
-        // Ahead of everything the MCP endpoint adds, so a request for the protocol surface that arrived on the probe
-        // port is refused before it reaches CORS, authentication, or the rate limiter, and a probe request that arrived
-        // on the application port is refused before it can report dependency state to whoever can reach it.
-        app.UseHealthEndpointIsolation(healthEndpointSettings.ListenerPorts);
         app.MapHealthProbes();
-    }
-
-    if (adminEndpointSettings.Enabled)
-    {
-        // Ahead of everything either endpoint adds, so an administrative request that arrived on the MCP port is
-        // refused before it reaches any credential check, and an MCP request that arrived on the administrative port is
-        // refused before it reaches the protocol surface.
-        app.UseAdminEndpointIsolation(adminEndpointSettings.ListenerPorts);
     }
 
     if (mcpEndpointSettings.Enabled)

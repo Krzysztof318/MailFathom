@@ -133,32 +133,76 @@ internal sealed class HealthEndpointOptions
             ?? new HealthEndpointOptions();
     }
 
-    /// <summary>Finds everything an operator must fix before the probes can be served.</summary>
-    /// <param name="portsClaimedElsewhere">The ports other listeners in this process bind, which the probe listener must not take.</param>
-    /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="portsClaimedElsewhere" /> is <see langword="null" />.</exception>
+    /// <summary>Describes every socket the probes ask for.</summary>
+    /// <returns>One declaration per socket, empty when the probes are not served.</returns>
     /// <remarks>
-    /// Whether the configured certificate material resolves and is usable is not asked here. It is proven against the
-    /// real material before the server starts, so an unusable certificate fails startup with nothing listening rather
-    /// than with a TLS listener already bound.
+    /// The TLS declaration presents one certificate rather than selecting from profiles by server name, which is what
+    /// <see cref="ListenerComposition" /> refuses to share a socket with a surface that does select: a socket answers a
+    /// handshake one way. The clear-text one shares freely, which is the ordinary way a deployment puts the probes on
+    /// the port its endpoint already publishes.
     /// </remarks>
-    public IReadOnlyList<string> FindConfigurationErrors(IReadOnlyCollection<int> portsClaimedElsewhere)
+    public IReadOnlyList<DeclaredListener> DeclareListeners()
     {
-        ArgumentNullException.ThrowIfNull(portsClaimedElsewhere);
-
         if (!this.Enabled)
         {
             return [];
         }
 
-        var errors = new List<string>(this.FindListenerErrors(portsClaimedElsewhere));
+        var declarations = new List<DeclaredListener>();
+
+        if (this.ServesClearText)
+        {
+            declarations.Add(new DeclaredListener(
+                SectionName,
+                ServedSurfaces.Probes,
+                this.BindAddress,
+                this.Port,
+                TerminatesTls: false,
+                RedirectsClearText: false,
+                PresentsProfiles: false,
+                Profiles: [],
+                RequestsClientCertificates: false));
+        }
+
+        if (this.TlsListenerPort is { } tlsPort)
+        {
+            declarations.Add(new DeclaredListener(
+                SectionName,
+                ServedSurfaces.Probes,
+                this.BindAddress,
+                tlsPort,
+                TerminatesTls: true,
+                RedirectsClearText: false,
+                PresentsProfiles: false,
+                Profiles: [],
+                RequestsClientCertificates: false));
+        }
+
+        return declarations;
+    }
+
+    /// <summary>Finds everything an operator must fix before the probes can be served.</summary>
+    /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
+    /// <remarks>
+    /// Whether the configured certificate material resolves and is usable is not asked here. It is proven against the
+    /// real material before the server starts, so an unusable certificate fails startup with nothing listening rather
+    /// than with a TLS listener already bound.
+    /// </remarks>
+    public IReadOnlyList<string> FindConfigurationErrors()
+    {
+        if (!this.Enabled)
+        {
+            return [];
+        }
+
+        var errors = new List<string>(this.FindListenerErrors());
 
         errors.AddRange(this.FindTransportErrors());
 
         return errors;
     }
 
-    private IEnumerable<string> FindListenerErrors(IReadOnlyCollection<int> portsClaimedElsewhere)
+    private IEnumerable<string> FindListenerErrors()
     {
         if (!IPAddress.TryParse(this.BindAddress?.Trim(), out _))
         {
@@ -178,13 +222,6 @@ internal sealed class HealthEndpointOptions
             }
         }
 
-        // A probe listener sharing another surface's port would either fail to bind and take the process down with an
-        // address-in-use error naming a socket rather than a setting, or — where the addresses differ — serve the probes
-        // to whoever can reach that surface, which is the exposure this section exists to control.
-        foreach (var port in this.ListenerPorts.Where(portsClaimedElsewhere.Contains))
-        {
-            yield return $"{SectionName} — port {port} is already bound by another listener in this process, and the probes are served on a listener of their own so that reaching them does not mean reaching the MCP endpoint. State a port nothing else binds.";
-        }
 
         if (this.Transport is EndpointTransport.HttpAndHttps && this.HttpsPort == this.Port)
         {
