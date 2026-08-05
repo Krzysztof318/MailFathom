@@ -157,7 +157,7 @@ internal sealed class DeploymentAuthorizer
     /// <summary>Requests a device code, reports the prompt, and polls until the person completes the sign-in.</summary>
     /// <param name="authorization">Where to authorize, and for what.</param>
     /// <param name="clientId">The client identifier registered with the authorization server.</param>
-    /// <param name="reportPrompt">Receives the code and address to show the person, once, before polling begins.</param>
+    /// <param name="reportPrompt">Receives the code and address to show the person, once, before polling begins. Invoked on the calling thread, so whatever it writes has been written by the time the wait starts.</param>
     /// <param name="cancellationToken">Cancels the request and the polling.</param>
     /// <returns>The session to store.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -166,7 +166,7 @@ internal sealed class DeploymentAuthorizer
     internal async Task<DeploymentGrant> AuthorizeWithDeviceCodeAsync(
         DeploymentAuthorization authorization,
         string clientId,
-        IProgress<DeviceCodePrompt> reportPrompt,
+        Action<DeviceCodePrompt> reportPrompt,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(authorization);
@@ -185,7 +185,7 @@ internal sealed class DeploymentAuthorizer
             clientId,
             cancellationToken);
 
-        reportPrompt.Report(DescribePrompt(deviceAuthorization, this.timeProvider.GetUtcNow()));
+        reportPrompt(DescribePrompt(deviceAuthorization, this.timeProvider.GetUtcNow()));
 
         return await this.PollForDeviceGrantAsync(authorization, clientId, deviceAuthorization, cancellationToken);
     }

@@ -231,7 +231,7 @@ internal static class AuthorizeMailboxCommand
         MailboxAuthorizationRequest request,
         CancellationToken cancellationToken)
     {
-        var reportPrompt = new Progress<DeviceCodePrompt>(prompt =>
+        void ReportPrompt(DeviceCodePrompt prompt)
         {
             context.Console.WriteError(string.Empty);
             context.Console.WriteError("Open this address on any device with a browser:");
@@ -240,9 +240,9 @@ internal static class AuthorizeMailboxCommand
             context.Console.WriteError($"and enter the code: {prompt.UserCode}");
             context.Console.WriteError($"The code expires at {prompt.ExpiresAt:u}. Waiting for the sign-in to complete...");
             context.Console.WriteError(string.Empty);
-        });
+        }
 
-        return authorizer.AuthorizeWithDeviceCodeAsync(request, reportPrompt, cancellationToken);
+        return authorizer.AuthorizeWithDeviceCodeAsync(request, ReportPrompt, cancellationToken);
     }
 
     /// <summary>Reads the address the authorization code comes back to.</summary>
