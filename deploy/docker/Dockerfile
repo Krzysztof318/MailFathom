@@ -159,6 +159,12 @@ ENV McpEndpoint__Port=8080 \
 # Two ports, because the image serves two listeners: 8080 for `/mcp`, which McpEndpoint:Port moves, and 8081 for the
 # probes, which HealthEndpoints:Port moves. Declaring only the first would leave `docker image inspect`, `docker run -P`, and a
 # registry's port list describing an image that answers on one socket more than it admits to.
+#
+# The administrative endpoint is off in this image and gets no port of its own here, deliberately. Its own default is
+# 8080 as well, so a deployment that simply enables it serves it on the socket above — which is a decision worth taking
+# rather than inheriting, because administering the service is a different authority from reading the mailbox. Give it
+# AdminEndpoint:Port of its own and publish that port when the two should not share one; docs/operations/admin-endpoint.md
+# is the page.
 EXPOSE 8080 8081
 
 # Owned by root and copied with the default mode, so the unprivileged account below can read and execute the

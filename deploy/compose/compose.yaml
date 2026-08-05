@@ -125,6 +125,9 @@ services:
       # port to a network means exposing synchronized mail without transport protection; put a reverse proxy in front
       # of it and change MAILFATHOM_HTTP_BIND only once that proxy is what listens publicly.
       - "${MAILFATHOM_HTTP_BIND:-127.0.0.1}:${MAILFATHOM_HTTP_PORT:-8080}:8080"
+      # No port for the administrative endpoint, which this file leaves disabled. Its own default is 8080 as well, so
+      # enabling it without stating a port serves it on the socket above rather than on one nobody published — which is
+      # why enabling it is worth pairing with an AdminEndpoint__Port of its own and a mapping for that port here.
       # The probes, on a listener of their own. They answer without a credential, so what controls who can ask them is
       # which network the port is published to — here loopback, and never the same port the MCP endpoint is served on.
       # A probe path asked on 8080 is answered with 404, and so is `/mcp` asked on this one.
