@@ -36,9 +36,14 @@
    leave the picker stranded mid-header with the icons half a gap further on. Withdrawing the template's
    margin leaves the picker's as the only claim on that space, so it travels to that end and the icon
    links follow immediately. Below the navbar's breakpoint `modern` replaces that margin with
-   `margin: 1rem 0`, whose left margin is this same zero, so the collapsed panel is unaffected. */
-#navbar form.icons {
-  margin-inline-start: 0;
+   `margin: 1rem 0`, whose left margin is this same zero, so the collapsed panel is unaffected.
+
+   The selector is the template's own, `.navbar` and all, because a declaration is only withdrawn by one
+   that matches its specificity — `#navbar form.icons` carries one class fewer and loses however late it
+   is read. `margin-left` for the same reason: it is the property `modern` declares, so cancelling it
+   takes nothing on trust about how a logical property reaches a physical one through the cascade. */
+.navbar #navbar form.icons {
+  margin-left: 0;
 }
 
 /* Below the navbar's breakpoint `#navbar` becomes a column and the auto margin above would push the
