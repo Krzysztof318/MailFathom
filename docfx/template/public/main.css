@@ -25,11 +25,20 @@
   flex: 0 0 auto;
   width: auto;
 
-  /* The picker sits in `#navbar`, in front of the icon links, and this is what puts it at that end of
-     the header rather than against the section links: the free space is spent here, so `form.icons`
-     — which carries `margin-left: auto` of its own — has none left to spend and follows immediately. */
+  /* The picker sits in `#navbar`, in front of the icon links, and this is what carries it to that end
+     of the header rather than leaving it against the section links. */
   margin-inline-start: auto;
   margin-inline-end: 0.5rem;
+}
+
+/* `modern` pushes the icon links to that same end with an auto margin of its own, and a flex row divides
+   its free space equally among every auto margin on it rather than spending it at the first: two of them
+   leave the picker stranded mid-header with the icons half a gap further on. Withdrawing the template's
+   margin leaves the picker's as the only claim on that space, so it travels to that end and the icon
+   links follow immediately. Below the navbar's breakpoint `modern` replaces that margin with
+   `margin: 1rem 0`, whose left margin is this same zero, so the collapsed panel is unaffected. */
+#navbar form.icons {
+  margin-inline-start: 0;
 }
 
 /* Below the navbar's breakpoint `#navbar` becomes a column and the auto margin above would push the
