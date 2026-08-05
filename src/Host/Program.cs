@@ -547,31 +547,21 @@ try
 
     app.UseExceptionHandler();
 
-    // One listener per surface that terminates TLS and redirects, each carrying its own domains: the two surfaces publish
-    // different names on different ports, so a request is redirected to the surface whose clear-text port it arrived on
-    // rather than to whichever set of profiles was composed first.
-    var clearTextRedirectListeners = new List<ClearTextRedirectListener>(capacity: 2);
+    // Composed from the sockets rather than from the surfaces, because a redirect is a property of the socket a request
+    // arrived on. Two surfaces sharing one clear-text port contribute one listener between them, carrying the domains
+    // both of them publish — which is what lets each redirect to an HTTPS port of its own from that shared socket, and
+    // why one name published by both at different addresses is refused before composition reaches this.
+    var clearTextRedirectListeners = composedListeners.Listeners
+        .Where(static listener => listener.RedirectsClearText)
+        .Select(static listener => new ClearTextRedirectListener(listener.Address.Port, listener.RedirectTargets))
+        .ToArray();
 
-    if (mcpEndpointSettings is { Enabled: true, RedirectsClearText: true })
+    if (clearTextRedirectListeners.Length > 0)
     {
-        clearTextRedirectListeners.Add(new ClearTextRedirectListener(
-            mcpEndpointSettings.Port,
-            mcpEndpointSettings.Https.PublishedDomainPorts()));
-    }
-
-    if (adminEndpointSettings is { Enabled: true, RedirectsClearText: true })
-    {
-        clearTextRedirectListeners.Add(new ClearTextRedirectListener(
-            adminEndpointSettings.Port,
-            adminEndpointSettings.Https.PublishedDomainPorts()));
-    }
-
-    if (clearTextRedirectListeners.Count > 0)
-    {
-        // Ahead of both isolation middlewares and every route, which is what makes the clear-text listener serve nothing
-        // but the redirect. Behind it, an administrative path arriving on a redirect port would be answered by
-        // administrative isolation with a 404 — a listener that is not the administrative one refusing a path that is —
-        // and the client would read the endpoint as gone rather than as moved.
+        // Ahead of the isolation middleware and every route, which is what makes a redirecting socket serve nothing but
+        // the redirect. Behind it, an administrative path arriving on a redirect port would be answered by isolation
+        // with a 404 — a listener refusing a path it does not serve — and the client would read the endpoint as gone
+        // rather than as moved.
         app.UseClearTextRedirectToHttps(new ClearTextRedirectTargets(clearTextRedirectListeners));
     }
 

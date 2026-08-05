@@ -38,6 +38,7 @@ internal sealed record ComposedListeners(
 /// <param name="PresentsProfiles">Whether the TLS identity is selected from HTTPS profiles by server name.</param>
 /// <param name="Profiles">The HTTPS profiles bound here, across every surface that contributed one.</param>
 /// <param name="RequestsClientCertificates">Whether the handshake asks the client for a certificate.</param>
+/// <param name="RedirectTargets">Where each domain served over this socket's redirect is published, merged across every surface sharing it.</param>
 /// <param name="ContributingSections">The configuration sections that asked for this socket, in composition order.</param>
 internal sealed record ComposedListener(
     TransportHttpsListenerAddress Address,
@@ -47,6 +48,7 @@ internal sealed record ComposedListener(
     bool PresentsProfiles,
     IReadOnlyList<TransportHttpsEndpointOptions> Profiles,
     bool RequestsClientCertificates,
+    IReadOnlyDictionary<string, int> RedirectTargets,
     IReadOnlyList<string> ContributingSections);
 
 /// <summary>Composes the process's sockets from what each surface asked for, and refuses what cannot be shared.</summary>
@@ -104,6 +106,7 @@ internal static class ListenerComposition
                 first.PresentsProfiles,
                 [.. sharing.SelectMany(static declaration => declaration.Profiles)],
                 sharing.Any(static declaration => declaration.RequestsClientCertificates),
+                MergeRedirectTargets(sharing),
                 [.. sharing.Select(static declaration => declaration.SectionName).Distinct(StringComparer.Ordinal)]));
         }
 
@@ -139,6 +142,22 @@ internal static class ListenerComposition
             if (sharing.Select(static declaration => declaration.RedirectsClearText).Distinct().Count() > 1)
             {
                 yield return $"{sections} — {sections} share the clear-text socket {socket} while one redirects to its HTTPS profiles and the other serves its routes there. One socket cannot do both, so state the same 'Https:Redirect:Enabled' on both, or give one of them a port of its own.";
+
+                yield break;
+            }
+
+            // The surfaces sharing a redirect may publish HTTPS ports of their own, because a redirect resolves the name
+            // the client asked for. What they may not do is publish one name at two addresses: the client sent one host
+            // and there would be two answers to it, decided by composition order.
+            var contendedDomains = sharing
+                .SelectMany(static declaration => declaration.RedirectTargets)
+                .GroupBy(static target => target.Key, StringComparer.OrdinalIgnoreCase)
+                .Where(static group => group.Select(static target => target.Value).Distinct().Count() > 1)
+                .Select(static group => group.Key);
+
+            foreach (var domain in contendedDomains)
+            {
+                yield return $"{sections} — {sections} redirect {socket} while publishing '{domain}' on different HTTPS ports, so a client asking for that name could be sent to either. Publish it from one of them, or give each a clear-text port of its own.";
             }
 
             yield break;
@@ -179,6 +198,20 @@ internal static class ListenerComposition
         {
             yield return $"{sections} — the profiles sharing {socket} name different HTTP versions ({string.Join(" and ", declaredProtocolSets)}); ALPN offers what the listener was bound with, which is before any server name has been read.";
         }
+    }
+
+    /// <summary>Merges what each surface sharing a redirecting socket publishes, so one lookup answers for all of them.</summary>
+    /// <remarks>A name two surfaces publish at different addresses is refused above, so the last write here can only ever repeat what an earlier one already said.</remarks>
+    private static Dictionary<string, int> MergeRedirectTargets(IEnumerable<DeclaredListener> sharing)
+    {
+        var merged = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var target in sharing.SelectMany(static declaration => declaration.RedirectTargets))
+        {
+            merged[target.Key] = target.Value;
+        }
+
+        return merged;
     }
 
     /// <summary>Refuses a port whose sockets the operating system will only grant one of.</summary>

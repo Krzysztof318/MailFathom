@@ -14,6 +14,7 @@ namespace MailFathom.Host.Configuration.Endpoints;
 /// <param name="PresentsProfiles">Whether the TLS identity is selected from HTTPS profiles by server name, as opposed to being one certificate the socket always presents.</param>
 /// <param name="Profiles">The HTTPS profiles bound here, empty unless <paramref name="PresentsProfiles" /> is set.</param>
 /// <param name="RequestsClientCertificates">Whether the handshake asks the client for a certificate.</param>
+/// <param name="RedirectTargets">Where each domain this surface publishes is served over TLS, read by a redirecting clear-text socket and empty on every other one.</param>
 /// <remarks>
 /// Two surfaces may name one port, which is what lets a single-node deployment publish one socket rather than three.
 /// What they may not do is disagree about it: a socket is clear text or it is TLS, it redirects or it serves the routes,
@@ -30,4 +31,5 @@ internal sealed record DeclaredListener(
     bool RedirectsClearText,
     bool PresentsProfiles,
     IReadOnlyList<TransportHttpsEndpointOptions> Profiles,
-    bool RequestsClientCertificates);
+    bool RequestsClientCertificates,
+    IReadOnlyDictionary<string, int> RedirectTargets);

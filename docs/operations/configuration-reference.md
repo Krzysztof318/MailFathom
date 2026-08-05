@@ -262,14 +262,38 @@ for is decided from the port it arrived on, so a surface that is not on that por
 authority from the mailbox, so putting either on the endpoint's port publishes it wherever that port is published. Keep
 them apart when that matters; the ports exist so the decision is yours.
 
-**Surfaces sharing a socket must agree about it.** A socket is clear text or it is TLS, it redirects or it serves the
-routes, it asks for a client certificate or it does not, and it presents identities one way. Each disagreement fails
-startup naming both sections — one endpoint redirecting `8080` to its profiles while the other serves its routes there
-is the worked example. Two profiles publishing one domain on a shared TLS socket is refused for the same reason, while
-two publishing different domains is exactly what sharing one is for: the handshake tells them apart by server name.
+#### Which settings a shared socket couples
 
-A wildcard address beside a specific one on the same port is still refused, because the operating system grants only one
-of those two sockets. Two specific addresses on one port are two sockets and are accepted.
+Sharing is per socket, not per surface. Each surface declares its clear-text socket (`BindAddress` + `Port`) and one
+socket per HTTPS profile (`Https:Endpoints:<n>:BindAddress` + `:Port`) separately, so two surfaces may share the
+clear-text one and keep TLS sockets of their own. Every rule below applies to one socket at a time, and each failure
+names both sections.
+
+| Setting | Coupled on | Why it cannot differ |
+| --- | --- | --- |
+| `Transport` — whether *this* socket carries TLS | Every shared socket | One socket serves one scheme |
+| `Https:Redirect:Enabled` | A shared clear-text socket | The socket either redirects or serves the routes; it cannot do both |
+| The domain a redirect resolves | A shared **redirecting** socket | The client sent one host name, so two answers to it would be settled by composition order |
+| Profiles by server name vs one certificate | A shared TLS socket | A socket answers a handshake one way; the probes present one certificate and the endpoints select by name |
+| `ClientCertificateProfiles` — configured or not | A shared TLS socket | Whether a certificate is asked for is settled while the connection is established |
+| `Https:Endpoints:<n>:Domain` — uniqueness | A shared TLS socket | One name served by two surfaces would leave composition order deciding which the client reached |
+| `Https:Endpoints:<n>:HttpProtocols` | A shared TLS socket | ALPN offers what the listener was bound with, which is before any server name has been read |
+| `BindAddress` — a wildcard beside a specific address | The same port | The operating system grants only one of those two sockets |
+
+**What stays each surface's own, on a shared socket as much as on a separate one:**
+
+- The **HTTPS ports.** Two surfaces sharing a clear-text socket may redirect to profiles on ports of their own, because a
+  redirect resolves the name the client asked for: `mail.example.test` goes to the MCP endpoint's port and
+  `admin.example.test` to the administrative one, from the same `8080`. Only publishing *one* name at two ports is
+  refused.
+- `MinimumTlsVersion`, per profile. The TLS floor is settled per connection, after the server name is known, so profiles
+  on one socket may each keep their own.
+- Different **domains** on one TLS socket, which is what sharing one is for.
+- Everything decided per request rather than per socket: `Authentication`, `ApiKeys`, `OAuth`, `Cors`, `RateLimiting`,
+  origin validation, and the route prefix. An API key provisioned for an agent still authenticates nothing under
+  `/api/admin`, whichever port both are reached on.
+
+Two specific addresses on one port are two sockets and are accepted; none of the rules above applies between them.
 
 ## `ReverseProxy`
 

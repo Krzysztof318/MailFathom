@@ -161,7 +161,8 @@ internal sealed class HealthEndpointOptions
                 RedirectsClearText: false,
                 PresentsProfiles: false,
                 Profiles: [],
-                RequestsClientCertificates: false));
+                RequestsClientCertificates: false,
+                RedirectTargets: new Dictionary<string, int>()));
         }
 
         if (this.TlsListenerPort is { } tlsPort)
@@ -175,7 +176,8 @@ internal sealed class HealthEndpointOptions
                 RedirectsClearText: false,
                 PresentsProfiles: false,
                 Profiles: [],
-                RequestsClientCertificates: false));
+                RequestsClientCertificates: false,
+                RedirectTargets: new Dictionary<string, int>()));
         }
 
         return declarations;

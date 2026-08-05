@@ -125,7 +125,13 @@ internal static class TransportListenerConfiguration
                 RedirectsClearText(transport, httpsSettings.Redirect),
                 PresentsProfiles: false,
                 Profiles: [],
-                RequestsClientCertificates: false));
+                RequestsClientCertificates: false,
+                // Read from this surface's own profiles, because a redirect sends a client to the address the name it
+                // asked for is served at. A shared socket merges the maps rather than choosing one of them, which is
+                // what lets two surfaces redirect to HTTPS ports of their own from one clear-text port.
+                RedirectsClearText(transport, httpsSettings.Redirect)
+                    ? httpsSettings.PublishedDomainPorts()
+                    : new Dictionary<string, int>()));
         }
 
         if (!TerminatesTls(transport))
@@ -144,7 +150,8 @@ internal static class TransportListenerConfiguration
                 RedirectsClearText: false,
                 PresentsProfiles: true,
                 [.. profileSocket],
-                requestsClientCertificates)));
+                requestsClientCertificates,
+                RedirectTargets: new Dictionary<string, int>())));
 
         return declarations;
     }

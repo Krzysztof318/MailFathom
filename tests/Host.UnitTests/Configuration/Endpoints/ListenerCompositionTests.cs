@@ -249,6 +249,71 @@ public sealed class ListenerCompositionTests
         Assert.Empty(composed.Errors);
     }
 
+    /// <summary>Two surfaces redirecting one shared clear-text socket to HTTPS ports of their own, which is the case the merge exists for.</summary>
+    [Fact]
+    public void Compose_TwoSurfacesRedirectingOneSocketToTheirOwnHttpsPorts_MergesTheirTargets()
+    {
+        // Arrange
+        DeclaredListener[] declarations =
+        [
+            Redirecting("McpEndpoint", ServedSurfaces.Mcp, "mail.example.test", 8443),
+            Redirecting("AdminEndpoint", ServedSurfaces.Admin, "admin.example.test", 9443),
+        ];
+
+        // Act
+        var composed = ListenerComposition.Compose(declarations);
+
+        // Assert
+        Assert.Empty(composed.Errors);
+        var listener = Assert.Single(composed.Listeners);
+        Assert.Equal(8443, listener.RedirectTargets["mail.example.test"]);
+        Assert.Equal(9443, listener.RedirectTargets["admin.example.test"]);
+    }
+
+    /// <summary>One name at two addresses leaves the client's own host header with two answers, decided by composition order.</summary>
+    [Fact]
+    public void Compose_TwoSurfacesRedirectingOneNameToDifferentPorts_IsRefused()
+    {
+        // Arrange
+        DeclaredListener[] declarations =
+        [
+            Redirecting("McpEndpoint", ServedSurfaces.Mcp, "mail.example.test", 8443),
+            Redirecting("AdminEndpoint", ServedSurfaces.Admin, "mail.example.test", 9443),
+        ];
+
+        // Act
+        var error = Assert.Single(ListenerComposition.Compose(declarations).Errors);
+
+        // Assert
+        Assert.Contains("on different HTTPS ports", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>The same name at the same address says nothing two surfaces disagree about.</summary>
+    [Fact]
+    public void Compose_TwoSurfacesRedirectingOneNameToOnePort_IsAccepted()
+    {
+        // Arrange
+        DeclaredListener[] declarations =
+        [
+            Redirecting("McpEndpoint", ServedSurfaces.Mcp, "mail.example.test", 8443),
+            Redirecting("AdminEndpoint", ServedSurfaces.Admin, "mail.example.test", 8443),
+        ];
+
+        // Act, Assert
+        Assert.Empty(ListenerComposition.Compose(declarations).Errors);
+    }
+
+    private static DeclaredListener Redirecting(
+        string sectionName,
+        ServedSurfaces surface,
+        string domain,
+        int httpsPort) =>
+        ClearText(sectionName, surface) with
+        {
+            RedirectsClearText = true,
+            RedirectTargets = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [domain] = httpsPort },
+        };
+
     private static DeclaredListener ClearText(string sectionName, ServedSurfaces surface) => new(
         sectionName,
         surface,
@@ -258,7 +323,8 @@ public sealed class ListenerCompositionTests
         RedirectsClearText: false,
         PresentsProfiles: false,
         Profiles: [],
-        RequestsClientCertificates: false);
+        RequestsClientCertificates: false,
+        RedirectTargets: new Dictionary<string, int>());
 
     private static DeclaredListener Profiles(
         string sectionName,
@@ -273,7 +339,8 @@ public sealed class ListenerCompositionTests
         RedirectsClearText: false,
         PresentsProfiles: true,
         [new TransportHttpsEndpointOptions { Name = sectionName, Domain = domain, Port = port }],
-        RequestsClientCertificates: false);
+        RequestsClientCertificates: false,
+        RedirectTargets: new Dictionary<string, int>());
 
     private static DeclaredListener ProbeTls(string sectionName, int port) => new(
         sectionName,
@@ -284,5 +351,6 @@ public sealed class ListenerCompositionTests
         RedirectsClearText: false,
         PresentsProfiles: false,
         Profiles: [],
-        RequestsClientCertificates: false);
+        RequestsClientCertificates: false,
+        RedirectTargets: new Dictionary<string, int>());
 }

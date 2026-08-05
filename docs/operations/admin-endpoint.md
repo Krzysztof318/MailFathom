@@ -140,7 +140,7 @@ arrived. `mfctl login --endpoint https://admin.example.com:8543` writes the corr
 That listener maps no route. No administrative operation, no session probe, and no protected-resource metadata document is
 reachable over it, and no credential check runs for a request that arrived on it — every path gets the same redirect, and a
 `Host` header naming no configured domain gets `400`. The port is checked against every other listener in the process, so a
-port the MCP surface or the probes also bind is shared rather than refused, and a disagreement about what that shared socket is — one surface redirecting where the other serves, for instance — is reported against both sections.
+port the MCP surface or the probes also bind is shared rather than refused. What the two surfaces must then agree about is the socket itself — the scheme, the redirect, the client-certificate question — while their credentials, limits, and HTTPS ports stay their own; [which settings a shared socket couples](configuration-reference.md#which-settings-a-shared-socket-couples) is the table.
 
 Turn it off with `AdminEndpoint:Https:Redirect:Enabled` set to `false`, which is what a deployment behind a proxy that
 already answers the clear-text port wants. The setting shape and every refusal are the MCP endpoint's, documented once in
