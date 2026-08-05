@@ -79,6 +79,15 @@ public static class OrchestrationContract
     /// <remarks>Declared with the <c>tcp</c> scheme and its port injected into <c>McpEndpoint:Port</c>, for the reason <see cref="HostAdminEndpointName" /> gives: the host refuses <c>ASPNETCORE_URLS</c>, which Aspire would build from an http endpoint. The name is kept because it is what the orchestration and the suite resolve the address by; what a client speaks to it is HTTP.</remarks>
     public const string HostHttpEndpointName = "http";
 
+    /// <summary>The IP address the socket named by <see cref="HostHttpEndpointName" /> binds under the integration-test topology.</summary>
+    /// <remarks>
+    /// One value read by two configuration sections, because that socket serves two surfaces: the MCP endpoint and the
+    /// probes. A socket is identified by its address and its port, so a section stating one address while the other
+    /// defaults would describe two sockets rather than one, which the host refuses at startup — a refusal this suite
+    /// would meet as a host that never started rather than as the configuration mistake it is.
+    /// </remarks>
+    public const string ComposedHostBindAddress = "0.0.0.0";
+
     /// <summary>The second MailFathom host project resource, the one served over HTTPS behind mutual TLS.</summary>
     /// <remarks>
     /// <para>

@@ -17,8 +17,15 @@ namespace MailFathom.IntegrationTests.Hosting;
 /// Which credentials authenticate, how they are compared, and which origins are served are all unit-tested against
 /// <c>ApiKeyAuthenticator</c> and <c>McpOriginPolicy</c>, and none of that is repeated here. What only a composed
 /// host can establish is the part those tests cannot see: that the checks are wired into the request pipeline ahead of
-/// the endpoint at all, and that a refusal happens before the protocol surface produces anything. Every assertion below
-/// is about that ordering, which is why each one reads the body for a tool name the surface would have listed.
+/// the endpoint at all, and that a refusal happens before the protocol surface produces anything. Every assertion about
+/// a credential, an origin, or a limit below is about that ordering, which is why each one reads the body for a tool
+/// name the surface would have listed.
+/// </para>
+/// <para>
+/// The last test asks a different question of the same host, and is here because the answer comes from the same socket.
+/// The MCP endpoint shares that socket with the probes under this topology, so what it serves is decided by the
+/// composition rather than by routing — which is a claim about a listener, and therefore one nothing below a real
+/// Kestrel can make.
 /// </para>
 /// <para>
 /// Nothing here carries <c>[RequiresIntegrationCoverage]</c>. The marker records that a class's verification lives in
@@ -31,6 +38,12 @@ namespace MailFathom.IntegrationTests.Hosting;
 public sealed class ComposedMcpEndpointSecurityTests
 {
     private const string ToolListedByTheProtocolSurface = "list_emails";
+
+    /// <summary>The probe served on the socket below, chosen because it consults process-local state and nothing else.</summary>
+    private const string LivenessProbePath = "/alive";
+
+    /// <summary>A route of the administrative surface, which this topology serves on a socket of its own.</summary>
+    private const string AdministrativeRouteServedOnItsOwnSocket = "/api/admin/session";
 
     private readonly MailFathomOrchestrationFixture orchestration;
 
@@ -213,21 +226,41 @@ public sealed class ComposedMcpEndpointSecurityTests
     }
 
     /// <summary>
-    /// The requirement is carried by the MCP route rather than by a fallback policy, and the difference is not visible
-    /// from configuration. A probe has no credential to present, so a readiness response that started asking for one
-    /// would take the deployment out of rotation rather than protect anything.
+    /// The socket this reaches serves the MCP surface and the probes, which is the arrangement a single-node deployment
+    /// publishes, and what it answers there is the union of the two rather than everything the process routes.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The probe answers because the credential requirement is carried by the MCP route rather than by a fallback
+    /// policy — a difference that is invisible from configuration and identical under a substitute. A probe has nothing
+    /// to present, so a liveness answer that started asking for one would restart a working deployment rather than
+    /// protect anything. Liveness rather than readiness because it consults process-local state, which makes the answer
+    /// a fact about the pipeline instead of about what the database was doing at that moment.
+    /// </para>
+    /// <para>
+    /// The administrative path is refused because this socket does not serve that surface; it has one of its own under
+    /// this topology. Whether a route matches a path is not the question of whether the listener it arrived on serves
+    /// it, and only a real listener can tell the two apart. The refusal is <c>404</c> rather than <c>401</c>, which is
+    /// what says the isolation ran ahead of the credential check rather than the surface answering here unprotected.
+    /// </para>
+    /// </remarks>
     [Fact]
-    public async Task ReadinessResponse_WithNoCredential_StillAnswersBecauseOnlyTheMcpRouteRequiresOne()
+    public async Task SharedSocket_WithNoCredential_AnswersTheProbeAndServesNoAdministrativeRoute()
     {
         // Arrange
         using var client = await this.ComposedHostClientAsync();
 
         // Act
-        using var response = await client.GetAsync(new Uri("/", UriKind.Relative), TestContext.Current.CancellationToken);
+        using var probe = await client.GetAsync(
+            new Uri(LivenessProbePath, UriKind.Relative),
+            TestContext.Current.CancellationToken);
+        using var administrativeRoute = await client.GetAsync(
+            new Uri(AdministrativeRouteServedOnItsOwnSocket, UriKind.Relative),
+            TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, probe.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, administrativeRoute.StatusCode);
     }
 
     /// <summary>Builds a JSON-RPC request for the tool listing, optionally presenting a bearer credential.</summary>

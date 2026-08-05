@@ -16,7 +16,7 @@ namespace MailFathom.IntegrationTests.Hosting;
 /// <remarks>
 /// <para>
 /// Which credentials authenticate and how they are compared is unit-tested against <c>ApiKeyAuthenticator</c>, and how
-/// the isolation predicate matches a path is unit-tested against <c>AdminEndpointIsolation</c>; neither is repeated
+/// the isolation predicate matches a path is unit-tested against <c>SurfaceIsolation</c>; neither is repeated
 /// here. What only a composed host can establish is the part those tests structurally cannot see: that the endpoint has
 /// a listener of its own at all, that the authorization requirement is attached to the route group rather than merely
 /// registered in a container, and that a refusal happens before the session handler produces anything. Every assertion
