@@ -340,6 +340,10 @@ if (runsIntegrationTests)
         // Deliberately unauthenticated: what this host exists to prove is which certificate the endpoint judges, and a
         // credential in front of that would make every refusal answerable by two controls instead of one.
         .WithEnvironment("McpEndpoint__Authentication", "None")
+        // Stated rather than inferred from the profiles below. Terminating TLS is the transport's answer now, and a
+        // profile configured under the clear-text default is refused at startup precisely so that a deployment cannot
+        // believe it enabled TLS while nothing served it.
+        .WithEnvironment("McpEndpoint__Transport", "HttpsOnly")
         .WithEnvironment("McpEndpoint__Https__Endpoints__0__Name", "integration-tests")
         .WithEnvironment("McpEndpoint__Https__Endpoints__0__Domain", OrchestrationContract.MutualTlsHostDomain)
         .WithEnvironment("McpEndpoint__Https__Endpoints__0__BindAddress", OrchestrationContract.MutualTlsHostBindAddress)
