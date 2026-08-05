@@ -23,7 +23,7 @@ step 2 rather than assuming, and state it in the brief.
    access looks identical to the owner's checkout until that call fails; when it does, the fork role
    applies even though the remote is right.
 
-The fork role never opens the project board, never assigns a label, a milestone, `Track`, or
+The fork role never opens the project board, never assigns a label, a milestone, an `Area`, or
 `Queue`, and never pushes to `Krzysztof318/MailFathom`. Those are not degraded versions of the
 owner's steps — they are steps that belong to a maintainer, and attempting one produces a permission
 error rather than a partial result.
@@ -76,7 +76,7 @@ error rather than a partial result.
    `docs/operations/issue-tracking.md` first. Create it when none exists; its body draws on what
    step 6 read. A change set that adds a numbered specification also creates that specification's
    issue.
-9. Place the issue — **owner's checkout only**. It carries exactly one `type:*` label, a `Track` and a
+9. Place the issue — **owner's checkout only**. It carries exactly one `type:*` label, an `Area` and a
    `Queue` value on the board, a milestone when the milestone rule assigns one, and a `Size` value
    once the work is planned. Decide each from the rules on that page rather than asking. `Queue: Next`
    is never one of them: the owner chooses it, and `$finish-change` writes it once the pull request
