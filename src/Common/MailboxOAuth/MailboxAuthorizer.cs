@@ -134,7 +134,7 @@ public sealed class MailboxAuthorizer
 
     /// <summary>Requests a device code, reports the prompt, and polls until the person completes the sign-in.</summary>
     /// <param name="request">The provider endpoints and registered client.</param>
-    /// <param name="reportPrompt">Receives the code and address to show the person, once, before polling begins.</param>
+    /// <param name="reportPrompt">Receives the code and address to show the person, once, before polling begins. Invoked on the calling thread, so whatever it writes has been written by the time the wait starts.</param>
     /// <param name="cancellationToken">Cancels the request and the polling.</param>
     /// <returns>The grant to provision.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -146,7 +146,7 @@ public sealed class MailboxAuthorizer
     /// </remarks>
     public async Task<MailboxAuthorizationGrant> AuthorizeWithDeviceCodeAsync(
         MailboxAuthorizationRequest request,
-        IProgress<DeviceCodePrompt> reportPrompt,
+        Action<DeviceCodePrompt> reportPrompt,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -162,7 +162,7 @@ public sealed class MailboxAuthorizer
             request,
             cancellationToken);
 
-        reportPrompt.Report(DescribePrompt(deviceAuthorization, this.timeProvider.GetUtcNow()));
+        reportPrompt(DescribePrompt(deviceAuthorization, this.timeProvider.GetUtcNow()));
 
         return await this.PollForDeviceGrantAsync(request, deviceAuthorization, cancellationToken);
     }

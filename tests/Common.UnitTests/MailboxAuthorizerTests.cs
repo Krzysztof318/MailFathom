@@ -182,12 +182,16 @@ public sealed class MailboxAuthorizerTests
         var authorizer = new MailboxAuthorizer(httpClient, timeProvider);
 
         DeviceCodePrompt? reportedPrompt = null;
-        var reportPrompt = new Progress<DeviceCodePrompt>(prompt => reportedPrompt = prompt);
+        var pollsBeforeThePromptWasReported = -1;
 
         // Act
         var authorization = authorizer.AuthorizeWithDeviceCodeAsync(
             CreateRequest(),
-            reportPrompt,
+            prompt =>
+            {
+                reportedPrompt = prompt;
+                pollsBeforeThePromptWasReported = tokenRequestCount;
+            },
             CancellationToken.None);
 
         await AdvanceUntilCompletedAsync(timeProvider, authorization);
@@ -198,6 +202,10 @@ public sealed class MailboxAuthorizerTests
         Assert.Equal(3, tokenRequestCount);
         Assert.Equal("ABCD-EFGH", reportedPrompt?.UserCode);
         Assert.Equal(new Uri("https://authorization.test/activate"), reportedPrompt?.VerificationUri);
+
+        // The person cannot act on a code they have not been shown, so the prompt reaches them before the first poll
+        // rather than whenever a queued callback happens to run.
+        Assert.Equal(0, pollsBeforeThePromptWasReported);
     }
 
     [Fact]
@@ -229,7 +237,7 @@ public sealed class MailboxAuthorizerTests
         // Act
         var authorization = authorizer.AuthorizeWithDeviceCodeAsync(
             CreateRequest(),
-            new Progress<DeviceCodePrompt>(_ => { }),
+            _ => { },
             CancellationToken.None);
 
         await AdvanceUntilCompletedAsync(timeProvider, authorization);
@@ -257,7 +265,7 @@ public sealed class MailboxAuthorizerTests
         // Act, Assert
         await Assert.ThrowsAsync<InvalidOperationException>(() => authorizer.AuthorizeWithDeviceCodeAsync(
             request,
-            new Progress<DeviceCodePrompt>(_ => { }),
+            _ => { },
             CancellationToken.None));
     }
 
@@ -316,7 +324,7 @@ public sealed class MailboxAuthorizerTests
         var failure = await Assert.ThrowsAsync<MailboxAuthorizationFailedException>(
             () => authorizer.AuthorizeWithDeviceCodeAsync(
                 CreateRequest(),
-                new Progress<DeviceCodePrompt>(_ => { }),
+                _ => { },
                 CancellationToken.None));
 
         Assert.Equal("non_json_response_http_502", failure.AuthorizationServerErrorCode);
