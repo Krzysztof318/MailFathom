@@ -189,3 +189,31 @@ to nearly every pull request the repository sees and catch nothing.
 Pages itself is enabled once, in the repository settings, with **Build and deployment → Source** set to **GitHub
 Actions**. The workflow cannot enable it: the action that would needs a token with administration rights, which is
 exactly the kind of credential this workflow is built not to hold.
+
+### Recovering a failed publish
+
+**A failed publish is recovered by running the workflow again, never by re-running the failed job.** Use the
+`workflow_dispatch` on `main`; the next merge does it as well, since a publish rebuilds the whole site from the
+repository and therefore carries whatever the failed run would have.
+
+Re-running is not merely the slower option — it cannot succeed, and it leaves the run worse than it was.
+`actions/upload-pages-artifact` writes an artifact named `github-pages`, the one from the previous attempt stays
+attached to the same run, and `actions/deploy-pages` refuses to deploy when it finds two:
+
+```text
+Multiple artifacts named "github-pages" were unexpectedly found for this workflow run. Artifact count is 2.
+```
+
+Each further attempt adds another, so the count only climbs. The error names an artifact and reads like a defect in
+the workflow, which is what makes this worth stating rather than leaving to be worked out from the message: the run
+that failed is spent, and the fix is a new one.
+
+What fails a publish in the first place is usually the Pages queue rather than anything here — the deployment reports
+`deployment_queued` until `actions/deploy-pages` gives up and cancels it. The step therefore waits thirty minutes
+rather than the action's default of ten, which is enough for every degradation seen so far.
+
+A slow queue is not something the repository can see from the outside, and it is worth knowing that
+[GitHub's status page](https://www.githubstatus.com/) may not show it either: it read *all systems operational*
+throughout the degradation that prompted the thirty minutes, while two consecutive publishes were cancelled at exactly
+the old ten. So the evidence that this is the platform rather than the site is the deployment's own log — a step that
+reports `deployment_queued` on every poll and never advances has not been given anything to fail on.

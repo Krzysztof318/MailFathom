@@ -180,6 +180,20 @@ jobs:
           # site were ever served by a Pages build rather than deployed as an artifact.
           include-hidden-files: true
 
+      # A deployment that is merely slow must not fail, because a failed one cannot be re-run: the artifact
+      # `actions/upload-pages-artifact` writes is named `github-pages`, a re-run adds a second under the same run, and
+      # `actions/deploy-pages` refuses when it finds more than one. That asymmetry is what sizes the wait. Waiting
+      # longer costs runner minutes and nothing else; giving up costs a publish, and the recovery is a fresh run
+      # dispatched by hand rather than another attempt at this one.
+      #
+      # So the default of ten minutes is not above what a slow queue reaches — it is inside it. Deployment ordinarily
+      # takes between five and twenty seconds here, and on the day this was raised the queue degraded: one publish
+      # spent four and a half minutes in it, and the two after it were still `deployment_queued` when the default
+      # cancelled them at exactly ten. Thirty minutes is chosen against that rather than against the ordinary case,
+      # which it is roughly two orders of magnitude above.
+      # docs/operations/documentation-site.md records what a run that exhausts even this needs.
       - name: Deploy to Pages
         id: deploy
         uses: actions/deploy-pages@v5
+        with:
+          timeout: 1800000
