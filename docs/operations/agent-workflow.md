@@ -201,9 +201,9 @@ The board write is the one that has to be reported carefully. Without write
 access it is not a gate that was skipped — a grant on the owner's board is theirs
 to make, so the step does not exist in that session, and `finish-change` reports
 `not applicable (no board write)` rather than leaving a report that looks
-incomplete. `review-change`,
-`check-docs-licenses`, `closed-enumeration`, and `add-migration` need no
-authority over this repository at all and run unchanged in both roles.
+incomplete. `review-change`, `check-docs-licenses`, `closed-enumeration`, and
+`add-migration` need no authority over this repository at all and run unchanged
+in both roles.
 `prepare-release` is the owner's alone for a different reason: its frontmatter
 sets `disable-model-invocation`, so no agent reaches it in either role.
 

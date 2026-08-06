@@ -97,17 +97,17 @@ them if that access were ever removed.
    `docs/operations/issue-tracking.md` first. Create it when none exists; its body draws on what
    step 6 read. A change set that adds a numbered specification also creates that specification's
    issue.
-9. Place the issue. The label and the milestone need write access to the repository, so they belong to
-   the owner's checkout; the board fields need write access to the board, which step 2 established.
-   It carries exactly one `type:*` label, an `Area` and a
-   `Queue` value on the board, a milestone when the milestone rule assigns one, and a `Size` value
-   estimated from the scope the body describes. Decide each from the rules on that page rather than asking. `Queue: Next`
-   is never one of them: the owner chooses it, and `$finish-change` writes it once the pull request
-   exists, so a new issue takes `Later`, `Needs decision`, or `Parked` — and `Parent` where the issue
-   being opened is a parent whose children span releases, which is also where its title takes the
-   `[P]` prefix. Verify the values landed,
-   because the built-in workflows set `Status` and nothing else, and an unplaced issue disappears
-   from the views the owner reads.
+9. Place the issue. The label and the milestone need write access to the repository, so they belong
+   to the owner's checkout; the board fields need write access to the board, which step 2
+   established. It carries exactly one `type:*` label, an `Area` and a `Queue` value on the board, a
+   milestone when the milestone rule assigns one, and a `Size` value estimated from the scope the
+   body describes. Decide each from the rules on that page rather than asking. `Queue: Next` is never
+   one of them: the owner chooses it, and `$finish-change` writes it once the pull request exists, so
+   a new issue takes `Later`, `Needs decision`, or `Parked` — and `Parent` where the issue being
+   opened is a parent whose children span releases. Every parent's title begins `[P]` whatever its
+   `Queue` value, including one that fits a single milestone and therefore holds an ordinary one.
+   Verify the values landed, because the built-in workflows set `Status` and nothing else, and an
+   unplaced issue disappears from the views the owner reads.
 
    In the fork role, open the issue and stop at what the probe allows. Without board write that is the
    issue alone: an arrival carries no label, no milestone, and no board fields by design, and the

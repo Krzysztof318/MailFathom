@@ -83,7 +83,7 @@ The board paragraph is the only one worth checking rather than copying, because 
 gh api graphql -f query='{ user(login: "Krzysztof318") { projectV2(number: 4) { viewerCanUpdate } } }'
 ```
 
-No access reads as `"projectV2": null` beside `Could not resolve to a ProjectV2 with the number 4`. That is not a wrong number and not a deleted board: GitHub hides a project you cannot see rather than telling you that you cannot see it, so the message you get for *no permission* is the same one you would get for *does not exist*.
+No access prints the response body with `"projectV2": null` and a `NOT_FOUND` error, adds its own line on standard error — `gh: Could not resolve to a ProjectV2 with the number 4` — and exits `1`. That is not a wrong number and not a deleted board: GitHub hides a project you cannot see rather than telling you that you cannot see it, so the answer to *no permission* is worded as *does not exist*, and the one line `gh` puts in front of you is the half that says so least clearly.
 
 If that is what you got, check your credentials before believing it: your account's access and your token's access are different things, and only the second is what the call sees. `gh auth status` has to list the `project` scope — `gh auth refresh -s project` adds it — and a `GH_TOKEN` or `GITHUB_TOKEN` in your environment displaces the credential `gh` stored, without `gh auth status` being able to show you its scopes. A fine-grained token never reaches a user-owned project at all, whatever it was configured with; a classic token with `project`, or a plain `gh auth login`, is what does.
 

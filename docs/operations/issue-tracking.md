@@ -113,7 +113,8 @@ The board carries three single-select fields beyond `Status`. Set `Area` on ever
   The value is set when the issue is opened, as an estimate, and corrected against the diff the pull request actually produced. An estimate that turns out wrong is what makes the next one better, whereas an empty field says nothing and cannot be wrong — so the field is filled from the acceptance list the body already carries rather than left for a planning pass that never happens separately here. A `Size` that was never revised after the merge is the ordinary case and needs no action; one that was revised two steps is worth a sentence on the issue saying what the estimate missed.
 
   A parent issue takes `XL` and keeps it. Its size is the sum of its children rather than a diff of its own, and that sum is what puts it over the threshold, so the value reads as *this is delivered in pieces* on exactly the issues that already are. The warning `XL` carries elsewhere — split this before starting — is answered on a parent by the children themselves, which is what makes it the one place the value is not a problem to solve.
-The built-in workflows set `Status` and nothing else, so a newly opened issue reaches the board with no `Area` and no `Queue`. Setting both is part of opening the issue:
+
+The built-in workflows set `Status` and nothing else, so a newly opened issue reaches the board with no `Area`, no `Queue`, and no `Size`. Setting all three is part of opening the issue:
 
 ```bash
 gh project field-list 4 --owner Krzysztof318 --format json   # field ids and option ids
@@ -122,12 +123,13 @@ gh project item-edit --project-id <project-id> --id <item-id> \
   --field-id <field-id> --single-select-option-id <option-id>
 ```
 
-Each field is a separate call, so one can land while another fails. A project view filters fields with `AND` and cannot ask for a missing `Area` *or* a missing `Queue` in one expression, which is why the `Triage` view catches only the untouched case. Audit both after placing an issue, and whenever the board is worth trusting:
+Each field is a separate call, so one can land while another fails. A project view filters fields with `AND` and cannot ask for a missing `Area` *or* a missing `Queue` in one expression, which is why the `Triage` view catches only the untouched case. Audit all three after placing an issue, and whenever the board is worth trusting:
 
 ```bash
 gh project item-list 4 --owner Krzysztof318 --format json --limit 400 \
-  | jq -r '.items[] | select(.status != "Done") | select(.area == null or .queue == null)
-           | "\(.content.number) area=\(.area) queue=\(.queue)"'
+  | jq -r '.items[] | select(.status != "Done")
+           | select(.area == null or .queue == null or .size == null)
+           | "\(.content.number) area=\(.area) queue=\(.queue) size=\(.size)"'
 ```
 
 A missing `Area` is also visible without running anything: the `Roadmap` view groups by `Area`, so an unplaced item sits in its own group at the end of the board.
@@ -185,14 +187,15 @@ A pull request the project did not open is read in a fixed order, so a change is
   ```
 
 - Once the pull request exists, set `Queue: Next` on the issue it closes, through the same `gh project item-edit` call that placed the issue. Do this for every pull request, whether the issue was opened for this task or had been sitting in `Later` for weeks, and treat a value that did not land as an incomplete gate rather than as a detail to fix later. Nothing else writes the field afterwards: the issue keeps `Next` until the merge closes it out of every view that reads `Queue`.
+- That write never overwrites `Queue: Parent`. A pull request closes the issue that does the work rather than the parent grouping it, so a `Closes` reference pointing at a parent is a defect to correct in the pull request body rather than a value to write over — which is the one case where not setting `Next` is the correct outcome rather than a gate that failed.
 
 Writing it from the skill is not a shortcut past the automation; it is the only place the write can happen. The board's built-in workflows set `Status` and nothing else, so no project automation reaches a custom single-select field. A GitHub Actions workflow could, but this board belongs to a user rather than to an organization, and nothing scoped can write to a user's Projects v2 — a GitHub App has no permission that covers one, and a fine-grained token has no `Projects` scope at the account level. Only a classic token with the `project` scope can, and that scope is account-wide: storing one as a repository secret would give every workflow run write access to all of the owner's projects, to save a step in a skill that already holds such a token and already talks to this board. The cost is that a pull request opened outside `$finish-change` moves nothing, which for a repository whose pull requests are all opened by agents is a smaller gap than the credential would be.
 
 ## Status transitions
 
 - The board's `Status` field has `Todo`, `In progress`, `Ready to merge`, and `Done`.
-- The board's built-in workflows own every transition: `Auto-add to project` places a newly opened issue on the board, `Item added to project` puts it in `Todo`, `Pull request linked to issue` moves it to `In progress`, `Pull request approved` moves it to `Ready to merge`, `Pull request has a review requesting changes` moves it back to `In progress`, and `Pull request merged`, `Auto-close issue`, and `Item closed` carry it to `Done`. Do not set those statuses by hand; a manual status that contradicts the automation hides the real state.
-- `Ready to merge` is a review verdict rather than a fourth phase of the work, which is why the two review workflows are a pair: approval moves an item into it and a later review requesting changes moves it back out, so the value always reflects the newest verdict rather than the first one. It is what separates a pull request waiting on the owner's merge from one waiting on the owner's reading, and neither of them from work still being written — a distinction `Queue` cannot draw, because every one of those items is legitimately `Next`.
+- The board's built-in workflows own every transition: `Auto-add to project` places a newly opened issue on the board and `Auto-add sub-issues to project` places one opened beneath a parent, `Item added to project` puts either in `Todo`, `Pull request linked to issue` moves it to `In progress`, `Code review approved` moves it to `Ready to merge`, `Code changes requested` moves it back to `In progress`, and `Pull request merged`, `Auto-close issue`, and `Item closed` carry it to `Done`. Those are the names the board itself uses, which is what a reader checking whether one is enabled will look for. Do not set those statuses by hand; a manual status that contradicts the automation hides the real state.
+- `Ready to merge` is a review verdict rather than a fourth phase of the work, which is why `Code review approved` and `Code changes requested` are a pair: approval moves an item into it and a later review requesting changes moves it back out, so the value always reflects the newest verdict rather than the first one. It is what separates a pull request waiting on the owner's merge from one waiting on the owner's reading, and neither of them from work still being written — a distinction `Queue` cannot draw, because every one of those items is legitimately `Next`.
 - `Status` records what has happened and `Queue` records what is intended, which is why neither substitutes for the other. Work that stalls keeps whatever `Status` the automation gave it and moves to `Later` or `Parked` in `Queue`.
 - Automation does not add an issue that is already closed when it is created. Add a retrospective `shipped` issue to the board explicitly and set it to `Done`.
 - When work stops without merging, say so on the issue and leave the status to the automation rather than moving the card.

@@ -10,9 +10,11 @@ metadata:
 # Finish Change
 
 `$start-task` resolved whether this is the **owner's checkout** or the **fork role**, and the steps
-below split on it in two places: the branch name, and the board. Everything else — the gates, the
-verification, the diff review, the pull request, and `Closes #<issue>` — is identical, because
-a contribution is judged by what it does rather than by where it came from.
+below split on it in two places: the branch name, and the remote pushed to. The board is not one of
+them — it follows the access probe `$start-task` ran, which is a separate fact from the role.
+Everything else — the gates, the verification, the diff review, the pull request, and
+`Closes #<issue>` — is identical, because a contribution is judged by what it does rather than by
+where it came from.
 
 ## Required Gates
 
@@ -52,8 +54,9 @@ Do not proceed while a gate fails.
    through `gh api repos/<owner>/<repo>/pulls/<number> -X PATCH -f body=...`. That endpoint names the
    *base* repository even for a fork's pull request, and it is the author who is allowed to patch it
    rather than anyone with write access to that repository.
-7. **Wherever the board probe in `$start-task` returned write access:** set `Queue: Next` on the issue the pull request closes, whether it was
-   opened for this task or already existed, and confirm the value landed. No project automation can
+7. **Wherever the board probe in `$start-task` returned write access:** set `Queue: Next` on the
+   issue the pull request closes, whether it was opened for this task or already existed, and
+   confirm the value landed. No project automation can
    write that field, so a value that did not land is an incomplete gate in the same way a missing
    `Closes #<issue>` is. It sits outside the owner's five-slot cap and needs no clearing: the merge
    closes the issue out of every view that reads `Queue`. It never overwrites `Queue: Parent`, because
