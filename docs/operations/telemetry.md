@@ -93,3 +93,10 @@ collector outside your control is still the wrong place for a mailbox's activity
 The console log needs none of this. A container's log driver, `journalctl` for a native service, and
 `docker compose logs` all read the stream that is always written, and the startup records land there
 [synchronously](host-startup-telemetry.md) whether or not any exporter is attached.
+
+What that stream looks like is configuration rather than a fixed shape. `Logging:Console` selects the formatter —
+`json` where something parses the lines, `systemd` where `journalctl` should read the level rather than print it as
+text — and carries a level filter of its own, so a noisy container log can be quietened without changing what the
+exporter sends to a collector. [The `Logging` section](configuration-reference.md#logging) states those keys, together
+with the one asymmetry worth planning for: the startup records are written before that configuration exists and keep
+the default format whatever it selects.

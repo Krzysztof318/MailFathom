@@ -494,9 +494,40 @@ Defaults, per class:
 
 ## `Logging`
 
-The standard .NET `Logging` section applies unchanged — `Logging:LogLevel:Default` is `Information` out of the box,
-with `Microsoft.AspNetCore` at `Warning`. Log lines are structured and never carry credentials, message content, or
-raw MIME, whatever the level.
+The standard .NET `Logging` section applies unchanged, and the host clears no provider: `Console`, `Debug`, and
+`EventSource` stay attached beside the OpenTelemetry provider that the service defaults add. `Debug` writes only under
+an attached debugger, and `EventSource` writes to the `Microsoft-Extensions-Logging` event source, which produces
+nothing until something collects it — a `dotnet-trace` session, typically. So on a deployment the console is the
+provider that produces output, and until `OTEL_EXPORTER_OTLP_ENDPOINT` names a collector it is where logs go at all,
+which [telemetry](telemetry.md) records is the shipped default for both the Compose deployment and the chart. Log
+lines are structured and never carry credentials, message content, or raw MIME, whatever the level or the format.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Logging:LogLevel:<category>` | enum | `Information`, and `Warning` for `Microsoft.AspNetCore` | A `LogLevel` name. `Default` is the catch-all; any other segment is a log-category prefix | reload |
+| `Logging:Console:LogLevel:<category>` | enum | the `Logging:LogLevel` value | Filters the console alone, leaving what the OTLP exporter sends untouched | reload |
+| `Logging:Console:FormatterName` | string | `simple` | `simple`, `systemd`, or `json` | reload |
+| `Logging:Console:FormatterOptions:<name>` | mixed | — | `IncludeScopes`, `TimestampFormat`, and `UseUtcTimestamp` under any formatter; `SingleLine` and `ColorBehavior` under `simple` alone; `JsonWriterOptions` under `json` alone | reload |
+
+An option the selected formatter does not define is accepted and does nothing — `SingleLine` under `json` is the one
+worth naming, because it reads like it would fold a record onto one line and the JSON formatter already writes one
+line per record without it.
+
+`reload` here is the logging framework's own rather than a classification ADR 0002 made: a changed value is observed
+by the next record written, without a restart and without reloading anything else. It is also why this section is
+among the framework-shaped entries exempt from the strict binding above — a key this table does not name is the
+framework's to accept or to ignore, so a misspelling here leaves a default in force instead of failing startup with
+the path.
+
+Select `json` where something parses the stream rather than reads it, and `systemd` where `journalctl` should read
+the level rather than print it as text. Both are worth setting deliberately: `simple` is the default because it is
+what a person reading `docker compose logs` wants, and it is the wrong shape for everything downstream of that.
+
+**The startup records ignore every key above.** The host writes those four through a pipeline composed before
+configuration exists, which attaches a console of its own at a fixed `Information` level, so a deployment that selects
+`json` gets a stream whose `MailFathom.Host.Startup` records are still `simple` text — the `Critical` one explaining a
+failed start included. Give a log shipper a path for those lines rather than assuming the stream is uniform;
+[host startup telemetry](host-startup-telemetry.md) records why that pipeline cannot read this section.
 
 ## Environment-only settings
 
