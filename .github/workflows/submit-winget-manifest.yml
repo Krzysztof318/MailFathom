@@ -1,0 +1,213 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: Submit the winget manifest
+
+# Offers a released `mfctl` through the Windows Package Manager, by opening a pull request against
+# microsoft/winget-pkgs with the manifest set `scripts/build-winget-manifests.sh` renders.
+#
+# This runs *after* the release is published rather than beside the other publishing jobs, and the ordering is not a
+# preference: winget's validation downloads the installer from the URL the manifest names, and that URL is a release
+# asset which does not resolve until `Publish the GitHub release` has attached it. A manifest submitted earlier would
+# be refused for naming a download that does not exist yet.
+#
+# Nothing here gates anything. A release whose image, chart, and schema artifact are published is a release an operator
+# can deploy, and a channel that failed to offer the command is a red job beside it rather than a reason to withhold
+# any of that.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'The commit SHA the release was built from. Resolved by the caller, as everywhere else in this pipeline.'
+        required: true
+        type: string
+      version:
+        description: 'The full stamped version being offered, for example `0.4.0`. The release tag is this with a leading `v`.'
+        required: true
+        type: string
+      artifact:
+        description: 'The name of the artifact holding the built command binaries. Their bytes are what each InstallerSha256 is computed from.'
+        required: true
+        type: string
+    secrets:
+      WINGET_PKGS_TOKEN:
+        description: >-
+          A classic personal access token with the `public_repo` scope. A pull request to a repository the owner does
+          not own can be opened by nothing narrower: a fine-grained token creates the commit and then fails on the pull
+          request. docs/operations/release-procedure.md records what that scope reaches and why it is accepted.
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  UPSTREAM_REPOSITORY: microsoft/winget-pkgs
+  FORK_REPOSITORY: Krzysztof318/winget-pkgs
+  PACKAGE_IDENTIFIER: MailFathom.mfctl
+  PACKAGE_PATH: manifests/m/MailFathom/mfctl
+
+jobs:
+  submit:
+    name: Submit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the released commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # A missing secret would otherwise surface half-way through as a rejected push, after a fork had been synced and a
+      # branch created. This says which configuration is absent, before anything outside this repository is touched.
+      - name: Require the submission credential
+        env:
+          WINGET_PKGS_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$WINGET_PKGS_TOKEN" ]]; then
+            echo "::error::No WINGET_PKGS_TOKEN is configured, so the manifest cannot be submitted. It is a classic token with the public_repo scope; docs/operations/release-procedure.md says why nothing narrower works."
+            exit 1
+          fi
+
+      - name: Download the command binaries
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.artifact }}
+          path: artifacts/cli
+
+      # Idempotent for the same reason the registry publications are: a release is re-run when something else in it
+      # failed, and a version the community repository already carries is reported rather than submitted twice. Their
+      # one-pull-request-per-version rule makes the second attempt a refusal instead of a duplicate.
+      - name: Check what the community repository already carries
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if gh api "repos/$UPSTREAM_REPOSITORY/contents/$PACKAGE_PATH/$VERSION" --silent 2> /dev/null; then
+            echo "::notice::$PACKAGE_IDENTIFIER $VERSION is already in $UPSTREAM_REPOSITORY. Nothing to submit."
+            printf 'state=published\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Which of the two title forms the community repository expects, decided by whether this package has ever
+          # been submitted rather than by a flag somebody has to remember to unset after the first release.
+          if gh api "repos/$UPSTREAM_REPOSITORY/contents/$PACKAGE_PATH" --silent 2> /dev/null; then
+            printf 'state=new-version\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'state=new-package\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Render the manifest set
+        if: steps.existing.outputs.state != 'published'
+        id: manifests
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          # The release date the manifest carries is the day the release published, which is the day this runs.
+          bash scripts/build-winget-manifests.sh artifacts/cli artifacts/winget "$VERSION" "$(date --utc +%F)" \
+            >> "$GITHUB_OUTPUT"
+
+      # The fork is where the branch lives, because a pull request needs a head repository and nobody can push a branch
+      # to microsoft/winget-pkgs. Creating it when it is absent keeps the pipeline runnable from a clean account; it is
+      # a no-op on every run after the first.
+      - name: Prepare the fork
+        if: steps.existing.outputs.state != 'published'
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if ! gh repo view "$FORK_REPOSITORY" --json name > /dev/null 2>&1; then
+            gh repo fork "$UPSTREAM_REPOSITORY" --clone=false --default-branch-only
+          fi
+
+          # Forced, because the fork is a staging area for submissions and never carries work of its own. A fork behind
+          # upstream would put the branch on a stale base and invite a conflict in somebody else's repository.
+          gh repo sync "$FORK_REPOSITORY" --source "$UPSTREAM_REPOSITORY" --force
+
+      # Sparse and blobless: winget-pkgs holds hundreds of thousands of manifests, and this needs the one directory its
+      # own package occupies — which on a first submission does not exist yet, leaving an empty working tree that the
+      # rendered files are copied into.
+      - name: Commit the manifest set to a branch on the fork
+        if: steps.existing.outputs.state != 'published'
+        id: branch
+        env:
+          WINGET_PKGS_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          PACKAGE_DIRECTORY: ${{ steps.manifests.outputs.package-directory }}
+        run: |
+          set -euo pipefail
+
+          branch="mailfathom-mfctl-$VERSION"
+
+          git clone --depth 1 --filter=blob:none --sparse --branch master \
+            "https://x-access-token:$WINGET_PKGS_TOKEN@github.com/$FORK_REPOSITORY.git" fork
+          git -C fork sparse-checkout set "$PACKAGE_PATH"
+
+          # The commit is attributed to the account the token belongs to, through the address GitHub publishes for it,
+          # so nothing here writes a private address into a public repository's history.
+          git -C fork config user.name 'Krzysztof318'
+          git -C fork config user.email 'Krzysztof318@users.noreply.github.com'
+          git -C fork checkout -b "$branch"
+
+          mkdir --parents "fork/$PACKAGE_PATH/$VERSION"
+          cp "$PACKAGE_DIRECTORY"/* "fork/$PACKAGE_PATH/$VERSION/"
+
+          git -C fork add "$PACKAGE_PATH/$VERSION"
+          git -C fork commit --message "$PACKAGE_IDENTIFIER version $VERSION"
+          git -C fork push --force origin "$branch"
+
+          printf 'name=%s\n' "$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Open the pull request
+        if: steps.existing.outputs.state != 'published'
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          STATE: ${{ steps.existing.outputs.state }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+        run: |
+          set -euo pipefail
+
+          fork_owner="${FORK_REPOSITORY%%/*}"
+
+          # A re-run pushes the same branch again, so an open pull request from it is the expected state rather than a
+          # collision. Reporting it is what keeps the second run from failing on a duplicate.
+          existing_url="$(gh pr list --repo "$UPSTREAM_REPOSITORY" --head "$BRANCH" --state open \
+            --json url --jq '.[0].url // empty')"
+
+          if [[ -n "$existing_url" ]]; then
+            echo "::notice::$PACKAGE_IDENTIFIER $VERSION is already submitted: $existing_url"
+            exit 0
+          fi
+
+          if [[ "$STATE" == 'new-package' ]]; then
+            title="New package: $PACKAGE_IDENTIFIER version $VERSION"
+          else
+            title="New version: $PACKAGE_IDENTIFIER version $VERSION"
+          fi
+
+          # Says what was actually done rather than reproducing the repository's checklist, because a submission that
+          # ticks a box for a step nobody ran is worse than one that states which steps it took. Their automated
+          # validation is what installs and tests the package.
+          body="$(
+            printf '%s %s, submitted by the MailFathom release pipeline.\n\n' "$PACKAGE_IDENTIFIER" "$VERSION"
+            printf -- '- One package version, as three manifest files at schema 1.12.0.\n'
+            printf -- '- A portable installer per released Windows architecture, from version-specific release assets.\n'
+            printf -- '- Each `InstallerSha256` is computed from the bytes the release attaches, not from a re-download.\n\n'
+            printf 'Release: https://github.com/Krzysztof318/MailFathom/releases/tag/v%s\n' "$VERSION"
+          )"
+
+          gh pr create \
+            --repo "$UPSTREAM_REPOSITORY" \
+            --base master \
+            --head "$fork_owner:$BRANCH" \
+            --title "$title" \
+            --body "$body"

@@ -200,6 +200,26 @@ download — the checksum says the bytes are the ones published, and an attestat
 produced them — and the image and the chart are where this repository answers it.
 [The container image](container-image.md#published-images) records how.
 
+### On Windows, through winget
+
+The two Windows binaries are offered through the Windows Package Manager as well, so a Windows machine has a packaged
+path beside the download:
+
+```console
+> winget install MailFathom.mfctl
+```
+
+It is a portable package: winget places the binary, puts `mfctl` on your `PATH`, and `winget upgrade` carries you to
+the next release. The manifest names the same release asset the table above does and carries the same hash the checksum
+file does, so both paths install the same bytes and check them the same way. That is the whole of what it checks: what
+the two paragraphs above say about signatures and provenance is unchanged, and a package the Windows Package Manager
+offers is not thereby a package Windows knows a publisher for.
+
+A release submits its own manifest and the community repository's review is what accepts it, so a version is offered
+through winget a little after it is attached here. **No version has been accepted yet**, which is the thing to know
+before trying it: until the first one is, [the releases page](https://github.com/Krzysztof318/MailFathom/releases) is
+where the command comes from on every platform.
+
 ## Signing in
 
 `--mode` chooses how the credential is produced, and it is stated rather than guessed — guessing would put a machine
