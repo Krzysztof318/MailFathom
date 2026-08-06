@@ -246,13 +246,16 @@ of the short ones.
 
 The canonical skills are:
 
-- `get-started-contributors` takes a clone to its first green run: the platform
-  check that refuses anything but Linux, the toolchain and how each piece of it is
-  installed, the remote the gates resolve their base from, the local instruction
-  file above, the commands an agent harness has to permit for the loop to be a
-  loop, and what the fork role is refused before a session is spent on it. It is
-  the one skill written for somebody who has not read this page, and it changes no
-  tracked file. Like `prepare-release` it sets `disable-model-invocation`, for the
+- `get-started-contributors` takes somebody from arriving to a first green run: a
+  welcome, then an orientation in what MailFathom is, how this repository is
+  worked, where things live, what Apache-2.0 section 5 does and does not ask, the
+  file header that carries no name, and what a public repository is careful about
+  — and then the setup, which is the platform check that refuses anything but
+  Linux, the toolchain and how each piece of it is installed, the remote the gates
+  resolve their base from, the local instruction file above, the commands an agent
+  harness has to permit for the loop to be a loop, and what the fork role is
+  refused before a session is spent on it. It is the one skill written for
+  somebody who has not read this page, and it changes no tracked file. Like `prepare-release` it sets `disable-model-invocation`, for the
   opposite reason: setting a machine up is asked for once, by a person, and an
   agent that hits a missing SDK mid-task has a blocker to report rather than an
   installation to perform while nobody is looking;

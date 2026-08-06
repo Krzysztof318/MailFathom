@@ -1,6 +1,6 @@
 ---
 name: get-started-contributors
-description: Manual only. Invoked when a clone of MailFathom is being set up for the first time — the Linux-only platform check, the toolchain and its installation, the base remote, the local instruction file naming the role, the permissions an agent harness needs, and the first green verification run.
+description: Manual only. Invoked when somebody is contributing to MailFathom for the first time — the welcome, an orientation in what the project is and how it is licensed, then the Linux-only platform check, the toolchain and its installation, the base remote, the local instruction file naming the role, the permissions an agent harness needs, and the first green verification run.
 disable-model-invocation: true
 license: Apache-2.0
 metadata:
@@ -15,14 +15,73 @@ the frontmatter above keeps an agent from reaching this skill on its own — a s
 denied command has a workspace problem to report, not a setup to perform behind whoever is watching. It writes files
 outside the change, which is exactly why it waits to be asked.
 
-Everything a first change needs to be true before it starts, and nothing about the change. `start-task` is where work
-begins and it assumes all of this already holds; this skill is what makes it hold.
+Everything a first change needs to be true before it starts, and nothing about the change: a welcome, an orientation in
+what the project is and what its licence asks, and then the setup itself. `start-task` is where work begins and it
+assumes all of this already holds; this skill is what makes it hold.
 
 It is written for a contributor working through a fork, which is how every step below reads unless it says otherwise.
 The owner's checkout differs in two places, each marked **Owner's checkout**, and nowhere else.
 
 Nothing here edits a tracked file. One step writes a file the repository ignores, one writes a file that belongs to the
 agent harness, and the rest install software or report.
+
+## Welcome the contributor first
+
+Open by saying hello and meaning it. Somebody has decided to spend their own evening on a mailbox tool they did not
+write, and the first thing they meet should be a person's welcome rather than a checklist. Say plainly that the project
+is glad they are here, that a first contribution of any size is worth having — a typo fix, a documentation sentence, a
+whole feature — and that the rules below are dense because agents execute them, not because the bar for a human is high.
+Then say what the next few minutes will do: a short orientation, then the setup, and a green verification run at the end
+of it.
+
+Keep it short, warm, and specific to what they are about to read. Do not perform enthusiasm, do not promise a review
+time nobody controls, and never let the greeting turn into a wall of text that delays the orientation it introduces.
+
+## Walk them through the project before the tooling
+
+Setup makes no sense to somebody who does not yet know what they are setting up, so cover these six in order, a few
+sentences each, and stop when they are covered. Read the file named beside each rather than reciting it from memory, and
+offer to go deeper on any one of them instead of expanding all six.
+
+1. **What MailFathom is.** A self-hosted mail brain: it synchronizes IMAP accounts into a PostgreSQL database the
+   operator runs, indexes the whole archive rather than its newest slice, and serves it to AI agents over the Model
+   Context Protocol. Two properties shape nearly everything else — reads are local, so a tool call never contacts a mail
+   server, and synchronization never writes to the mailbox, so it cannot set the remote `\Seen` flag. Today's surface is
+   three read-only tools, `list_emails`, `search_emails`, and `get_email_content`. `README.md` has the current state and
+   the direction.
+
+2. **How this repository is worked.** Nearly every line here is written by an autonomous agent from an issue and the
+   rules in `AGENTS.md`, which is why those files read as a prescriptive contract. A contributor is encouraged to work
+   the same way and equally welcome not to — a hand-written patch is judged identically. Two things hold either way:
+   every change starts from an issue, and the person who opens the pull request is responsible for having read the diff.
+
+3. **Where things live.** `src/` holds the clean-architecture boundaries — `Domain`, `Application`, `Infrastructure`,
+   `AI`, `Mcp`, `Host`, `Cli` — and `tests/` mirrors them. `docs/` states what the code *does* and `specs/` states what a
+   planned change *must* do; `docs/decisions/` holds the ADRs a change is written to be consistent with. `deploy/`,
+   `scripts/`, and `.agents/skills/` are the deployment assets, the gates, and this workflow. Each directory's own
+   `AGENTS.md` governs it, and the table in the root one says which to read when.
+
+4. **The licence, and the one mistake that cannot be undone.** MailFathom is Apache-2.0, and section 5 puts a
+   contribution under the same licence by the act of submitting it: there is no CLA, no DCO, nothing to sign, and no bot
+   asking for an acknowledgement comment. The contributor keeps the copyright in what they write. What the licence
+   cannot check is whether the code was theirs to give — so anything copied from a GPL, AGPL, SSPL, BUSL, or
+   Commons Clause project, pasted from an answer with restrictive terms, or produced by a model that reproduced such
+   code, is the one defect a follow-up commit cannot repair, because it has to come out of the history. A new
+   dependency, service, image, or copied sample also needs a row in `THIRD_PARTY_LICENSES.md` in the same pull request.
+   `CONTRIBUTING.md` § *Licensing your contribution* is the whole of it.
+
+5. **The file header, and no name beside it.** Every file carries the same three lines naming the project, the licence,
+   and the repository. In a C# file it is never typed — `scripts/verify-fast.sh` inserts it and `IDE0073` fails the
+   build without it — and everywhere else it is written by hand in that file's own comment syntax. Nothing personal
+   joins it: no second copyright line, no `@author`, no handle, no "modified by". That is a consistency rule rather than
+   a claim about authorship, which is recorded where it is durable — in the commit history and the pull request.
+
+6. **What the repository is careful about.** It is public, so nothing credential-shaped, no real mailbox data, and no
+   personal information belongs in a commit; every fixture uses a synthetic value, and GitHub's push protection refuses
+   the push rather than raising a review comment. Mail content, metadata, and embeddings are treated as personal data by
+   design. The version is still `0.x`, so a breaking change to a public surface is permitted and has to be *recorded* in
+   the issue and the pull request; database migrations are append-only, and `CHANGELOG.md` is written by the release
+   pull request alone.
 
 ## Workflow
 
@@ -212,6 +271,7 @@ agent harness, and the rest install software or report.
 Return:
 
 ```text
+Orientation: <which of the six were covered, and what was asked about>
 Platform: <uname -s and the OpenSSL version, or refused with the reason>
 Role: <fork or owner's checkout, and what resolved it>
 Base remote: <name and URL, or the command that added it>
