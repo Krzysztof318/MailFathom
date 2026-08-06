@@ -52,21 +52,25 @@ Do not proceed while a gate fails.
    through `gh api repos/<owner>/<repo>/pulls/<number> -X PATCH -f body=...`. That endpoint names the
    *base* repository even for a fork's pull request, and it is the author who is allowed to patch it
    rather than anyone with write access to that repository.
-7. **Owner's checkout only:** set `Queue: Next` on the issue the pull request closes, whether it was
+7. **Wherever the board probe in `$start-task` returned write access:** set `Queue: Next` on the issue the pull request closes, whether it was
    opened for this task or already existed, and confirm the value landed. No project automation can
    write that field, so a value that did not land is an incomplete gate in the same way a missing
    `Closes #<issue>` is. It sits outside the owner's five-slot cap and needs no clearing: the merge
-   closes the issue out of every view that reads `Queue`.
+   closes the issue out of every view that reads `Queue`. It never overwrites `Queue: Parent`, because
+   a pull request closes the issue that does the work rather than the parent grouping it, and a
+   `Closes` reference pointing at a parent is the defect to correct rather than a value to write over.
 
-   In the fork role there is no board write and no gate here. Project `4` is private to the
-   maintainer, so this is not a step that failed or was skipped for convenience — it is a step that
-   does not exist in this role. Report it as `not applicable (fork)` rather than as incomplete.
+   Without that access there is no board write and no gate here. The board is the owner's and a grant
+   on it is theirs to make, so this is not a step that failed or was skipped for convenience — it is a
+   step that does not exist in this session. Report it as `not applicable (no board write)` rather
+   than as incomplete.
 
-**Owner's checkout only:** confirm the issue is still placed, against
-`docs/operations/issue-tracking.md`: exactly one `type:*` label, an `Area` value on the board, a
-milestone if the release rule assigns one, and a `Size`, which is no longer deferrable because the
-diff now exists and can be measured rather than estimated. A change that grew past what the issue
-described may have outgrown its placement too.
+Confirm the issue is still placed, against `docs/operations/issue-tracking.md`, as far as this
+session's access reaches: exactly one `type:*` label and a milestone if the release rule assigns one,
+both of which need write access to the repository, and an `Area` and a `Size` on the board, the
+`Size` estimated when the issue was opened and now corrected against the diff this pull request
+actually produced. A change that grew past what the issue described may have outgrown its placement
+too.
 
 Leave the board's `Status` field to the project automation. Set a status by hand only for an issue
 created already closed, which the automation does not add.
@@ -74,7 +78,7 @@ created already closed, which the automation does not add.
 Report:
 
 ```text
-Role: <owner's checkout or fork>
+Role: <owner's checkout or fork, and the board access the probe returned>
 Docs: <pass or n/a with evidence>
 Changelog: <pass or n/a with evidence>
 Licenses: <pass or n/a with evidence>
@@ -84,8 +88,8 @@ Commit: <hash and subject>
 Push: <remote and branch>
 Pull request: <URL, and the base repository it targets>
 Issue link: <Closes #N confirmed in the published body>
-Queue: <Next confirmed on the board after the pull request existed, or not applicable (fork)>
-Placement: <type label, Track, Size, milestone or none — or left to triage in the fork role>
+Queue: <Next confirmed on the board after the pull request existed, or not applicable (no board write)>
+Placement: <type label, Area, Size, milestone or none — or what this session's access left to triage>
 ```
 
 Never claim completion without fresh evidence for every line.

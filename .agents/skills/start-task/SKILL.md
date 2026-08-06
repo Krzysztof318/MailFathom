@@ -18,15 +18,34 @@ step 2 rather than assuming, and state it in the brief.
 1. Run `scripts/inspect-workspace.sh` and read `Base branch`. `origin/main` means `origin` is
    MailFathom itself, which is the **owner's checkout**. Anything else — `upstream/main`, or
    `unresolved` — means `origin` is a fork, which is the **fork role**.
-2. When it says `origin/main`, confirm board access with
-   `gh project item-list 4 --owner Krzysztof318 --limit 1`. A clone of MailFathom made without write
-   access looks identical to the owner's checkout until that call fails; when it does, the fork role
-   applies even though the remote is right.
+2. Probe the board, in either role, because access to it is a separate fact from which repository
+   this is: the owner grants read or write on project `4` to a contributor whenever they decide to,
+   and a clone of MailFathom made without write access reads as the owner's checkout until something
+   asks:
 
-The fork role never opens the project board, never assigns a label, a milestone, an `Area`, or
-`Queue`, and never pushes to `Krzysztof318/MailFathom`. Those are not degraded versions of the
-owner's steps — they are steps that belong to a maintainer, and attempting one produces a permission
-error rather than a partial result.
+   ```bash
+   gh api graphql -f query='{ user(login: "Krzysztof318") { projectV2(number: 4) { viewerCanUpdate } } }'
+   ```
+
+   `true` is write access and every board step below applies. `false` is read access: read the board
+   for context and report each write as unavailable rather than attempting it. An error naming
+   permission, or a `null` project, is no access at all. A `CLAUDE.local.md` written by
+   `$get-started-contributors` states the answer already, and this probe confirms it rather than
+   replacing it.
+
+   A negative is checked before it is reported, because the probe sees the credential's access rather
+   than the account's: confirm `gh auth status` lists the `project` scope, and that no `GH_TOKEN` or
+   `GITHUB_TOKEN` in the environment is displacing the stored credential — `gh` prefers one and cannot
+   list its scopes. Without that scope the call fails identically whoever is running it, so report it
+   as a credential to repair, never as the board being out of reach.
+
+The fork role never assigns a label or a milestone and never pushes to `Krzysztof318/MailFathom`,
+because those are write access to the repository rather than to the board, and no board grant confers
+them. Those are not degraded versions of the owner's steps — they are steps that belong to a
+maintainer, and attempting one produces a permission error rather than a partial result. The board
+fields — `Area`, `Queue`, `Size` — follow the probe instead of the role, so a contributor the owner
+granted write to sets them exactly as this file says, and the owner's own checkout would stop setting
+them if that access were ever removed.
 
 ## Workflow
 
@@ -76,29 +95,35 @@ error rather than a partial result.
    `docs/operations/issue-tracking.md` first. Create it when none exists; its body draws on what
    step 6 read. A change set that adds a numbered specification also creates that specification's
    issue.
-9. Place the issue — **owner's checkout only**. It carries exactly one `type:*` label, an `Area` and a
+9. Place the issue. The label and the milestone need write access to the repository, so they belong to
+   the owner's checkout; the board fields need write access to the board, which step 2 established.
+   It carries exactly one `type:*` label, an `Area` and a
    `Queue` value on the board, a milestone when the milestone rule assigns one, and a `Size` value
-   once the work is planned. Decide each from the rules on that page rather than asking. `Queue: Next`
+   estimated from the scope the body describes. Decide each from the rules on that page rather than asking. `Queue: Next`
    is never one of them: the owner chooses it, and `$finish-change` writes it once the pull request
-   exists, so a new issue takes `Later`, `Needs decision`, or `Parked`. Verify the values landed,
+   exists, so a new issue takes `Later`, `Needs decision`, or `Parked` — and `Parent` where the issue
+   being opened is a parent whose children span releases, which is also where its title takes the
+   `[P]` prefix. Verify the values landed,
    because the built-in workflows set `Status` and nothing else, and an unplaced issue disappears
    from the views the owner reads.
 
-   In the fork role, open the issue and stop there. An arrival carries no label, no milestone, and no
-   board fields by design, and the maintainer's triage pass supplies them; say so in the brief so
-   nobody reads the absence as a step that failed.
+   In the fork role, open the issue and stop at what the probe allows. Without board write that is the
+   issue alone: an arrival carries no label, no milestone, and no board fields by design, and the
+   maintainer's triage pass supplies them. With board write it is the issue plus its `Area`, `Queue`,
+   and `Size`, and the label and milestone still wait for triage. Say which of the two happened in the
+   brief, so nobody reads the absence as a step that failed.
 10. For dependency, CLI, protocol, service, or external API changes, consult current official
     documentation and flag licensing review.
 
 Return:
 
 ```text
-Role: <owner's checkout or fork, and what resolved it>
+Role: <owner's checkout or fork, what resolved it, and what the board probe returned>
 Workspace: <safe or blocked, branch, base branch>
 Scope: <what governs the task, or that nothing does>
 Protected paths: <none reached, or which and what that means for this role>
 Issue: <number and title, or created with reason>
-Placement: <type label, Track, Queue, milestone or none, Size or deferred — or left to triage in the fork role>
+Placement: <type label, Area, Queue, Size, milestone or none — or what the board probe left to triage>
 Required context: <files read>
 Assumptions or blockers: <none or explicit list>
 Verification: <fast loop and final gate>

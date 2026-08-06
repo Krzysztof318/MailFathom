@@ -178,20 +178,41 @@ offer to go deeper on any one of them instead of expanding all six.
    ```
 
    `Base branch: origin/main` means `origin` is MailFathom itself, which is the owner's checkout; `upstream/main` or
-   `unresolved` means `origin` is a fork, and that is the whole answer in every ordinary case.
+   `unresolved` means `origin` is a fork, and that is the whole answer to *which repository this is*.
 
-   One case reads as the owner's checkout without being it: a clone of MailFathom made without write access. Separating
-   the two costs a board probe, and the probe is only meaningful when `gh auth status` from the step above lists the
-   `project` scope — without it the call fails on permission whoever is running it, and reading that as the fork role
-   would misclassify the owner and write a `CLAUDE.local.md` telling every later session not to touch a board it owns:
+   It is not the answer to *what this account may do with the board*, and the two are separate facts. The maintainer
+   grants read or write on project `4` to a contributor whenever they decide to, so a fork is not evidence of no access
+   and a clone of MailFathom made without write access is not evidence of having it. Probe for it rather than inferring
+   it, always, in either role, and only when `gh auth status` from the step above lists the `project` scope — without it
+   the call fails whoever is running it, and reading that as no access would write a `CLAUDE.local.md` telling every
+   later session not to touch a board it may well own:
 
    ```bash
    gh auth status | grep -q 'project' \
-     && gh project item-list 4 --owner Krzysztof318 --limit 1
+     && gh api graphql -f query='{ user(login: "Krzysztof318") { projectV2(number: 4) { viewerCanUpdate } } }'
    ```
 
-   A permission failure *with* the scope present is the fork role. A failure without it says nothing, so add the scope
-   and ask again rather than concluding from it.
+   One call, three outcomes, and `viewerCanUpdate` is what separates the two that matter: `true` is write access, so
+   every board step in `start-task` and `finish-change` applies; `false` is read access, so the board may be read for
+   context and every write is reported as unavailable rather than attempted; an error naming permission or a `null`
+   project is no access at all. A failure *without* the scope says nothing, so add the scope and ask again rather than
+   concluding from it.
+
+   **Tell them to check their own credentials before believing a negative**, because the account's access and the
+   token's access are different things and only the second one is what the probe sees. An account the maintainer
+   granted write on the board still probes as no access when the credential in use carries no `project` scope, and the
+   answer is written into `CLAUDE.local.md` in the next step, where it goes on being wrong in every later session.
+   Three things produce that, and each has its own repair:
+
+   - the stored `gh` credential predates the grant, or was never asked for the scope — `gh auth refresh -s project`;
+   - `GH_TOKEN` or `GITHUB_TOKEN` is set in the environment, which `gh` prefers over anything it stored and whose
+     scopes `gh auth status` cannot list. Unset it for this shell, or reissue the token with the scope it needs;
+   - the token is fine-grained. Those carry no account-level `Projects` permission at all, so no fine-grained token
+     reaches a user-owned project however it was configured; a classic token with `project`, or `gh auth login`, is the
+     credential that does.
+
+   `gh auth status` is where they look first, and a `true` or `false` answer needs none of this — only a negative is
+   worth a second look, and it costs one command.
 
 4. **Point the gates at the base the work will actually merge into.** In a fork `origin/main` is whatever was last
    synced, so verifying against it proves nothing about the branch that will merge:
@@ -232,13 +253,20 @@ offer to go deeper on any one of them instead of expanding all six.
    Do not read it, do not write it, and do not treat that as a step that failed: an issue I
    open carries no `type:*` label, no milestone, and no `Area`, `Queue`, or `Size` value by
    design, and the maintainer's triage supplies them. `$start-task` opens the issue and stops
-   there; `$finish-change` reports the board write as `not applicable (fork)`.
+   there; `$finish-change` reports the board write as `not applicable (no board write)`.
 
    Workflow runs on my pull request wait for a maintainer to approve them, so a check that has
    not started is a queue rather than a failure to chase, and every push waits again.
    `Fathom review` runs only when a maintainer applies the `fathom-review` label; my own
    pushes never start one.
    ```
+
+   The board paragraph is the one the probe in step 3 decides, so write the outcome it returned rather than the common
+   case. On `viewerCanUpdate: false` it becomes *the maintainer has granted me read access to project `4`: read it for
+   context, and report every write as unavailable rather than attempting it*, and on `true` it becomes *the maintainer
+   has granted me write access to project `4`, so the board steps in `$start-task` and `$finish-change` apply to me as
+   written*. Both keep the rest of the block unchanged: the branch is still the contributor's, the push still goes to
+   the fork, and access to a board is not authority over a repository.
 
    `CONTRIBUTING.md` § *Tell your agent it is working in a fork* carries the same block, and the two are one text:
    change either and change both.
@@ -300,15 +328,18 @@ offer to go deeper on any one of them instead of expanding all six.
      `.gitattributes`, `.worktreeinclude`, `AGENTS.md`, or `CLAUDE.md` at any depth, and the repository-root
      `CHANGELOG.md`, `Directory.Build.props`, `LICENSE`, `NOTICE`, `NuGet.config`, and `global.json` — are refused from
      any author but the owner, whatever the change says. Raise one as an issue;
-   - **the roadmap board is private and stays that way.** Project `4` belongs to the maintainer's account, the
-     repository is public and the board is not, and no token, scope, or membership changes that for a contributor:
-     `gh project item-list` and `gh project item-edit` fail on permission and there is nothing to fall back to. What
-     follows is not a degraded workflow but a shorter one — an issue opened from outside carries no `type:*` label, no
-     milestone, and no `Area`, `Queue`, or `Size` value by design, triage supplies them, `start-task` opens the issue
-     and stops there, and `finish-change` reports the board write as `not applicable (fork)` rather than leaving a
-     report that reads as incomplete. Say this out loud, and make sure the local instruction file above carries it,
+   - **the roadmap board is private, and access to it is the maintainer's to grant.** Project `4` belongs to their
+     account, the repository is public and the board is not, and by default a contributor reaches neither: `gh project
+     item-list` and `gh project item-edit` fail on permission and there is nothing to fall back to. What follows is not
+     a degraded workflow but a shorter one — an issue opened from outside carries no `type:*` label, no milestone, and
+     no `Area`, `Queue`, or `Size` value by design, triage supplies them, `start-task` opens the issue and stops there,
+     and `finish-change` reports the board write as `not applicable (no board write)` rather than leaving a report that
+     reads as incomplete. The maintainer does grant read or write on the board when they decide to, which is why step 3
+     probes for it instead of reading it off the remote, and why what the local instruction file says about the board is
+     the probe's answer rather than this default. Either way, say it out loud and make sure that file carries it,
      because an agent that does not know it will spend a turn on a permission error and then report a gate it never
-     needed to pass;
+     needed to pass. Board access is never repository access: the label, the milestone, and the push stay the
+     maintainer's under every grant;
    - **no workflow starts by itself.** A run triggered by a fork's pull request waits for somebody with write access to
      approve it, on the first push and on every one after, so the checks sit unstarted rather than red and nothing about
      the branch can be read from them. That is why the local gates are the ones to trust, and why an agent left watching

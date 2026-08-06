@@ -176,23 +176,30 @@ states which rules belong to only one; this is how the skills tell them apart.
 
 `start-task` resolves the role from the workspace rather than from a question.
 `Base branch: origin/main` means `origin` is MailFathom, which is the owner's
-checkout; anything else means `origin` is a fork. A clone of MailFathom made
-without write access is the one case that reads the same as the owner's checkout,
-so the resolution then asks `gh project item-list 4 --owner Krzysztof318` and
-takes a failure as the fork role. Two checks, the second only when the first is
-inconclusive, and neither needs the network in the ordinary case.
+checkout; anything else means `origin` is a fork. That settles which repository
+this is, and it deliberately does not settle what the session may do with the
+board, because the owner grants read or write on project `4` to a contributor
+whenever they decide to. So the skill asks separately, in either role, with
+`{ user(login: "Krzysztof318") { projectV2(number: 4) { viewerCanUpdate } } }`:
+`true` is write, `false` is read, and a permission error is neither. One call,
+and the answer a `CLAUDE.local.md` already carries is confirmed rather than
+replaced.
 
-What differs is narrow and is listed in both skills at the step it applies to:
-the branch name and the linked worktree, the issue's label, milestone, and board
-fields, the `Queue: Next` write when the pull request opens, and which repository
-is pushed to. What does not differ is everything else, including both
-verification scripts, every gate, the pull request, and the
-`Closes #<issue>` reference.
+What differs is narrow and is listed in both skills at the step it applies to,
+and it splits along those two facts. The repository decides the branch name and
+the linked worktree, the issue's label and milestone, and which remote is pushed
+to; the board probe decides the `Area`, `Queue`, and `Size` fields and the
+`Queue: Next` write when the pull request opens. A contributor the owner granted
+board write therefore places an issue exactly as the owner's checkout does while
+still not labelling it, which is the point of separating them. What does not
+differ is everything else, including both verification scripts, every gate, the
+pull request, and the `Closes #<issue>` reference.
 
-The board write is the one that has to be reported carefully. In the fork role it
-is not a gate that was skipped — project `4` is private to the maintainer, so the
-step does not exist there, and `finish-change` reports `not applicable (fork)`
-rather than leaving a report that looks incomplete. `review-change`,
+The board write is the one that has to be reported carefully. Without write
+access it is not a gate that was skipped — a grant on the owner's board is theirs
+to make, so the step does not exist in that session, and `finish-change` reports
+`not applicable (no board write)` rather than leaving a report that looks
+incomplete. `review-change`,
 `check-docs-licenses`, `closed-enumeration`, and `add-migration` need no
 authority over this repository at all and run unchanged in both roles.
 `prepare-release` is the owner's alone for a different reason: its frontmatter
