@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail;
@@ -83,6 +84,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         });
         builder.Services.AddSingleton(new EmailContentReadOptions { MaxBodyCharacters = 10_000 });
         builder.Services.AddSingleton(new PersistenceConcurrencyOptions { MaximumCommitAttempts = 3 });
+
+        // Registered by a composition root rather than by AddInfrastructure, because persistence writes what the AI
+        // boundary derives and may not reference it. Without this the chunk writer resolves nothing.
+        builder.Services.AddLocalTextDerivations();
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),
             PostgresTextSearchConfiguration.Default);

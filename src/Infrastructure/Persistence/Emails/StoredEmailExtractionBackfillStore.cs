@@ -16,7 +16,10 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 
 /// <summary>EF Core state for the walk that re-derives extraction over emails stored before it existed.</summary>
 [RequiresIntegrationCoverage]
-internal sealed class StoredEmailExtractionBackfillStore(MailFathomDbContext dbContext, TimeProvider timeProvider)
+internal sealed class StoredEmailExtractionBackfillStore(
+    MailFathomDbContext dbContext,
+    TimeProvider timeProvider,
+    EmailChunkWriter chunkWriter)
     : IStoredEmailExtractionBackfillStore
 {
     /// <inheritdoc />
@@ -103,6 +106,10 @@ internal sealed class StoredEmailExtractionBackfillStore(MailFathomDbContext dbC
             metadata,
             timeProvider.GetUtcNow(),
             cancellationToken);
+
+        // Cut from the same extraction, so an email this walk reaches arrives at the same state a newly synchronized
+        // one does rather than at a state a second walk would have to complete.
+        await chunkWriter.SaveAsync(sessionContext, storedEmail, metadata.Text, cancellationToken);
     }
 
     /// <inheritdoc />

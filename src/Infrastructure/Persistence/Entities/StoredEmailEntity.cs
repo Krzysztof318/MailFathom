@@ -152,4 +152,10 @@ internal sealed class StoredEmailEntity
     /// read has found the stored copy unusable. Its presence is what a repair run selects on.
     /// </summary>
     public EmailContentRepairRequestEntity? ContentRepairRequest { get; set; }
+
+    /// <summary>
+    /// Gets or sets the retrievable passages this email's extracted text was cut into, which are empty until chunking
+    /// has run for it and stay empty for a message whose body yielded no text.
+    /// </summary>
+    public ICollection<EmailChunkEntity> Chunks { get; } = [];
 }

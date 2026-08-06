@@ -33,5 +33,9 @@
          from. -->
     <ProjectReference Include="..\..\src\AppHost\AppHost.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\Infrastructure.csproj" />
+
+    <!-- The local derivations persistence writes but may not reference, which a composition root supplies and which
+         this suite therefore has to supply too. -->
+    <ProjectReference Include="..\..\src\AI\AI.csproj" />
   </ItemGroup>
 </Project>
