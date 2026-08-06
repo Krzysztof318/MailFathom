@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.Emails.Extraction;
@@ -239,6 +240,9 @@ try
     // unsupported name throws here and is recorded by the bootstrap logger; PersistenceOptions validates the same value
     // on start, which is what reports the supported alternatives to an operator.
     var configuredTextSearchConfiguration = builder.Configuration["Persistence:TextSearchConfiguration"];
+
+    // Before persistence, which writes what these derive: the chunk writer resolves the chunker from here.
+    builder.Services.AddLocalTextDerivations();
     builder.Services.AddInfrastructure(
         provider => provider.GetRequiredService<DatabaseConnectionSettingsMapper>()
             .Map(provider.GetRequiredService<ISettingsSnapshot<PersistenceOptions>>().Current),

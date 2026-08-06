@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Chunking;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Connections;
@@ -46,6 +47,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal const string EmailSearchDocumentVectorIndexName = "ix_email_search_documents_search_vector";
 
+    internal const string EmailChunkOrdinalUniqueIndexName = "ix_email_chunks_email_ordinal";
+
     internal const string MailboxRefreshTokenKeyIndexName = "ix_mailbox_refresh_tokens_data_encryption_key";
 
     private readonly PostgresTextSearchConfiguration textSearchConfiguration;
@@ -79,6 +82,8 @@ internal sealed class MailFathomDbContext : DbContext
     internal DbSet<EmailMessageContentEntity> EmailMessageContents => this.Set<EmailMessageContentEntity>();
 
     internal DbSet<EmailSearchDocumentEntity> EmailSearchDocuments => this.Set<EmailSearchDocumentEntity>();
+
+    internal DbSet<EmailChunkEntity> EmailChunks => this.Set<EmailChunkEntity>();
 
     internal DbSet<EmailContentRepairRequestEntity> EmailContentRepairRequests => this.Set<EmailContentRepairRequestEntity>();
 
@@ -184,6 +189,35 @@ internal sealed class MailFathomDbContext : DbContext
         });
 
         this.ConfigureEmailSearchDocument(modelBuilder);
+
+        // Many rows per email, keyed by a surrogate identifier rather than by the email and the ordinal together,
+        // because a vector row hangs on one chunk and a composite key would put a re-cut message's ordinals into every
+        // table that references it. The pair is a unique index instead, which is what a reader of one message's
+        // passages orders by and what stops a re-cut from writing an ordinal twice.
+        modelBuilder.Entity<EmailChunkEntity>(entity =>
+        {
+            entity.ToTable("email_chunks");
+            entity.HasKey(chunk => chunk.Id);
+            entity.Property(chunk => chunk.Id).ValueGeneratedNever();
+
+            // Fixed length because a SHA-256 digest has one. Text rather than `bytea` for the reason the value object
+            // states: this digest is compared and read, unlike the raw MIME digest that only ever round-trips.
+            entity.Property(chunk => chunk.ContentHash)
+                .HasMaxLength(EmailChunkContentHash.Length)
+                .IsFixedLength()
+                .IsRequired();
+
+            entity.Property(chunk => chunk.Text).IsRequired();
+
+            entity.HasIndex(chunk => new { chunk.StoredEmailId, chunk.Ordinal })
+                .IsUnique()
+                .HasDatabaseName(EmailChunkOrdinalUniqueIndexName);
+
+            entity.HasOne(chunk => chunk.StoredEmail)
+                .WithMany(email => email.Chunks)
+                .HasForeignKey(chunk => chunk.StoredEmailId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
         // One row per email whose stored content a read found unusable, keyed by that email so a reader meeting the
         // same damage repeatedly leaves one outstanding request rather than a row per attempt. It is deliberately a

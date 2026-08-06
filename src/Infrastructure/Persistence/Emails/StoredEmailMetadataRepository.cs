@@ -16,7 +16,8 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 
 /// <summary>EF Core implementation for email metadata persistence.</summary>
 [RequiresIntegrationCoverage]
-internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider) : IEmailMetadataRepository
+internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider, EmailChunkWriter chunkWriter)
+    : IEmailMetadataRepository
 {
     /// <inheritdoc />
     public async Task<StoredEmailId> UpsertMetadataAsync(
@@ -76,6 +77,11 @@ internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider) :
                 extractedMetadata,
                 timeProvider.GetUtcNow(),
                 cancellationToken);
+
+            // Cut in the same session as the text it derives from, so a committed message is never one whose passages
+            // a later reader has to wait for. Nothing here reaches a provider: chunking is a local derivation, and an
+            // instance that never enables embeddings simply keeps passages nothing asks for yet.
+            await chunkWriter.SaveAsync(dbContext, entity, extractedMetadata.Text, cancellationToken);
         }
         else
         {

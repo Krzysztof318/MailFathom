@@ -162,6 +162,10 @@ public static class ServiceCollectionExtensions
             options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()));
         services.AddScoped<IPersistenceSessionFactory, PersistenceSessionFactory>();
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();
+        // Registered here rather than beside the chunker it calls, because what it is is a table: it decides which
+        // passage rows a message owns. Its `IEmailTextChunker` comes from the AI boundary, which this project may not
+        // reference, so a composition root that registers persistence without the local derivations resolves nothing.
+        services.AddScoped<EmailChunkWriter>();
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
         services.AddScoped<IDatabaseSchemaInspector, EfCoreDatabaseSchemaInspector>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();

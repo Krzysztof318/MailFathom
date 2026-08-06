@@ -56,6 +56,16 @@ It is a table of its own for the reason raw MIME is. The text is large, only sea
 
 The copies are bounded more tightly than the columns they come from: 2000 characters of subject and 64 participant addresses in total. A `tsvector` cannot exceed one megabyte, and the whole document — subject, addresses, and up to `MaxExtractedTextCharacters` of body — shares that budget. Exceeding it would not degrade search; it would make the row unwritable, because the generated column is computed on every insert.
 
+## Message chunks
+
+`email_chunks` holds the passages a message's extracted text was cut into, many rows per stored email. Each carries its `Ordinal` in reading order, the `StartOffset` the passage begins at in the extracted text, the `Text` itself, a `ContentHash` of `character(64)`, the `RuleSetVersion` it was cut to, whether it `IsDerivedFromLossyHtml`, and when it was `DerivedAt`. [Message chunks](../features/message-chunks.md) describes the boundary rules and what the hash covers.
+
+The key is a surrogate UUIDv7 rather than the email and the ordinal together, because a vector row will hang on one chunk and a composite key would put a re-cut message's ordinals into every table that references it. The pair is `ix_email_chunks_email_ordinal` instead, unique, which is what a reader of one message's passages orders by and what stops a re-cut from writing an ordinal twice.
+
+`Text` is the one column here that no bound applies to. Its length is decided by the chunking rules rather than by a sender, and extraction has already bounded the text all of one message's chunks are cut from, so a column bound would add nothing except a write failure the first time those rules are tuned upwards. `ContentHash` is fixed-length text rather than `bytea`, unlike the raw MIME digest: this one is compared and read — re-chunking decides what to write by comparing digests — while the MIME digest only ever round-trips between one writer and one reader.
+
+Only a message that yielded text has rows here, and deleting a message cascades to them.
+
 ## Outstanding content repair requests
 
 `email_content_repair_requests` is one-to-one with `stored_emails` and exists only while a read has found an email's
@@ -83,6 +93,7 @@ removes a request with the email it is about.
 | `ix_stored_emails_cc_addresses` | `(cc_addresses)`, GIN | Containment tests over the `Cc` recipients |
 | `ix_stored_emails_reply_to_addresses` | `(reply_to_addresses)`, GIN | Containment tests over the `Reply-To` addresses |
 | `ix_email_search_documents_search_vector` | `(search_vector)`, GIN | Lexical search over subject, participants, and body text |
+| `ix_email_chunks_email_ordinal` | `(StoredEmailId, Ordinal)`, unique | One message's passages in reading order, and the constraint a re-cut cannot write an ordinal twice past |
 
 The recipient and search-vector indexes are GIN rather than B-tree because both serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 
@@ -107,6 +118,8 @@ Unit tests pin the contract, including where an undated message lands. That the 
 Participants, subject, and thread identifiers are personal data. They are stored because a timeline and a filter cannot work without them, and the columns above are the minimum that supports the planned queries — which is why display names other than the sender's, and the attachment list, are not among them. No projection introduced here selects raw MIME, and the content relationship stays unloaded by default so a mailbox query cannot pull a `bytea` value into the change tracker by accident.
 
 The derived search document is not a lesser classification of the same data. Body text, the copied subject and addresses, and the search vector built from them are mail content, and none of them is anonymous merely because it was derived; they inherit the retention, access, export, and erasure obligations of the message they came from. The cascade from `stored_emails` is what makes that structural rather than a rule somebody has to remember.
+
+The same holds for `email_chunks`, and one thing about it is deliberate: a chunk records the message it came from and the span inside it, and nothing else. The account, folder, sender, recipients, date, and subject a retrieval will want to cite are reached through that message rather than copied onto the passage, so cutting mail into chunks widens no access, export, or erasure surface — it only adds rows the same cascade erases.
 
 ## How this schema reaches a database
 

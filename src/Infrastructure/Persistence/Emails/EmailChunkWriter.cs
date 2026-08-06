@@ -1,0 +1,133 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Application.Emails.Chunking;
+using MailFathom.Application.Emails.Extraction;
+using MailFathom.CodeCoverage;
+using MailFathom.Infrastructure.Persistence.Entities;
+using Microsoft.EntityFrameworkCore;
+
+namespace MailFathom.Infrastructure.Persistence.Emails;
+
+/// <summary>Cuts one stored email's extracted text into passages and writes them inside the caller's open session.</summary>
+/// <remarks>
+/// Both writers of extracted text use this, for the reason both use the search-document writer: synchronization has
+/// just read a message it fetched, the backfill re-derives from raw MIME stored before extraction existed, and one
+/// writer is what stops the two paths from storing passages built to different rules. Deriving in the same session as
+/// the metadata is what makes a message and its passages durable together, so nothing downstream has to handle a
+/// message that is committed and has not been cut.
+/// </remarks>
+[RequiresIntegrationCoverage]
+internal sealed class EmailChunkWriter(
+    IEmailTextChunker chunker,
+    EmailChunkingRules rules,
+    TimeProvider timeProvider)
+{
+    /// <summary>Saves the passages one extraction yields, leaving an unchanged message's rows untouched.</summary>
+    /// <param name="dbContext">The context whose transaction this write joins.</param>
+    /// <param name="storedEmail">The email the passages belong to, tracked or already persisted.</param>
+    /// <param name="text">The text extraction derived from the message's body.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>A task that completes when the write has been issued or staged, or immediately when nothing changed.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when any reference argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// What decides is the hash. A message whose text and rules have not moved yields the identical ordinals and
+    /// digests, and this returns having written nothing — which is what keeps a restart, a repair, or a backfill from
+    /// re-doing work already paid for, and what keeps whatever hangs on a passage hanging on the same row. Anything
+    /// else replaces the message's passages whole rather than reconciling them one by one, because a boundary change
+    /// shifts every ordinal after the first difference and a row-by-row merge would only make that look survivable.
+    /// </remarks>
+    public async Task SaveAsync(
+        MailFathomDbContext dbContext,
+        StoredEmailEntity storedEmail,
+        ExtractedEmailText text,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(dbContext);
+        ArgumentNullException.ThrowIfNull(storedEmail);
+        ArgumentNullException.ThrowIfNull(text);
+
+        var chunks = chunker.DeriveChunks(text, rules);
+
+        // The change-tracker pass comes first for the reason the search document's does: passages staged earlier in
+        // this same uncommitted session are invisible to a set-based delete, and inserting beside them would violate
+        // the ordinal index at commit rather than replace them.
+        var staged = FindStaged(dbContext, storedEmail.Id);
+        if (staged.Length > 0)
+        {
+            if (Matches(staged, chunks))
+            {
+                return;
+            }
+
+            dbContext.EmailChunks.RemoveRange(staged);
+            this.Insert(dbContext, storedEmail, chunks);
+
+            return;
+        }
+
+        var storedIdentities = await dbContext.EmailChunks
+            .Where(candidate => candidate.StoredEmailId == storedEmail.Id)
+            .OrderBy(candidate => candidate.Ordinal)
+            .Select(candidate => new StoredChunkIdentity(candidate.Ordinal, candidate.ContentHash))
+            .ToArrayAsync(cancellationToken);
+
+        if (Matches(storedIdentities, chunks))
+        {
+            return;
+        }
+
+        if (storedIdentities.Length > 0)
+        {
+            // A set-based delete, so re-cutting a message never reads a mailbox's worth of passage text back into
+            // memory to decide that it is about to be replaced.
+            await dbContext.EmailChunks
+                .Where(candidate => candidate.StoredEmailId == storedEmail.Id)
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+
+        this.Insert(dbContext, storedEmail, chunks);
+    }
+
+    private static EmailChunkEntity[] FindStaged(MailFathomDbContext dbContext, Guid storedEmailId) =>
+        [.. dbContext.EmailChunks.Local
+            .Where(candidate => candidate.StoredEmailId == storedEmailId)
+            .OrderBy(candidate => candidate.Ordinal)];
+
+    private static bool Matches(IReadOnlyList<EmailChunkEntity> stored, IReadOnlyList<EmailTextChunk> derived) =>
+        Matches([.. stored.Select(chunk => new StoredChunkIdentity(chunk.Ordinal, chunk.ContentHash))], derived);
+
+    private static bool Matches(IReadOnlyList<StoredChunkIdentity> stored, IReadOnlyList<EmailTextChunk> derived) =>
+        stored.Count == derived.Count
+            && stored.Zip(derived).All(pair =>
+                pair.First.Ordinal == pair.Second.Ordinal
+                && string.Equals(pair.First.ContentHash, pair.Second.ContentHash.Value, StringComparison.Ordinal));
+
+    private void Insert(
+        MailFathomDbContext dbContext,
+        StoredEmailEntity storedEmail,
+        IReadOnlyList<EmailTextChunk> chunks)
+    {
+        var derivedAt = timeProvider.GetUtcNow();
+
+        dbContext.EmailChunks.AddRange(chunks.Select(chunk => new EmailChunkEntity
+        {
+            // Version 7 for the reason every other identifier MailFathom generates is: the passages of one message are
+            // written together, so an identifier ordered by creation time keeps them on neighbouring index pages.
+            Id = Guid.CreateVersion7(derivedAt),
+            StoredEmailId = storedEmail.Id,
+            StoredEmail = storedEmail,
+            Ordinal = chunk.Ordinal,
+            StartOffset = chunk.StartOffset,
+            Text = chunk.Text,
+            ContentHash = chunk.ContentHash.Value,
+            RuleSetVersion = chunk.RuleSetVersion,
+            IsDerivedFromLossyHtml = chunk.IsDerivedFromLossyHtml,
+            DerivedAt = derivedAt,
+        }));
+    }
+
+    /// <summary>What a stored passage has to report for re-chunking to decide it is unchanged.</summary>
+    private sealed record StoredChunkIdentity(int Ordinal, string ContentHash);
+}

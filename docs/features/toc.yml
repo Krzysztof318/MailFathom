@@ -13,5 +13,7 @@
   href: lexical-email-search.md
 - name: Email content
   href: email-content.md
+- name: Message chunks
+  href: message-chunks.md
 - name: MCP tools
   href: mcp-tools.md
