@@ -255,8 +255,9 @@ The submission is idempotent for the reason the registry publications are. A ver
 carries is reported and skipped, and a re-run whose branch already has an open pull request reports that rather than
 opening a second one — which matters more here than elsewhere, because winget-pkgs allows exactly one pull request per
 package version. The branch itself lives on `Krzysztof318/winget-pkgs`, since nobody can push a branch to
-microsoft/winget-pkgs; the run creates that fork if it is absent and force-syncs it from upstream before branching, so
-it stays a staging area rather than a repository with state of its own.
+microsoft/winget-pkgs. That fork is part of the release setup rather than something a run creates: it has to exist
+before the first submission, and each run force-syncs it from upstream before branching, so it stays a staging area
+rather than a repository with state of its own.
 
 **The credential is the part worth reading twice.** `WINGET_PKGS_TOKEN` is a *classic* personal access token with the
 `public_repo` scope, and nothing narrower does this job: a fine-grained token creates the commit on the fork and then

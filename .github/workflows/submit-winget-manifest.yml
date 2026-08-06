@@ -115,18 +115,14 @@ jobs:
             >> "$GITHUB_OUTPUT"
 
       # The fork is where the branch lives, because a pull request needs a head repository and nobody can push a branch
-      # to microsoft/winget-pkgs. Creating it when it is absent keeps the pipeline runnable from a clean account; it is
-      # a no-op on every run after the first.
-      - name: Prepare the fork
+      # to microsoft/winget-pkgs. It exists already and is a standing part of the release setup rather than something a
+      # run creates; `docs/operations/release-procedure.md` says so beside the credential it is reached with.
+      - name: Sync the fork with upstream
         if: steps.existing.outputs.state != 'published'
         env:
           GH_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}
         run: |
           set -euo pipefail
-
-          if ! gh repo view "$FORK_REPOSITORY" --json name > /dev/null 2>&1; then
-            gh repo fork "$UPSTREAM_REPOSITORY" --clone=false --default-branch-only
-          fi
 
           # Forced, because the fork is a staging area for submissions and never carries work of its own. A fork behind
           # upstream would put the branch on a stale base and invite a conflict in somebody else's repository.
