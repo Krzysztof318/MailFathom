@@ -120,7 +120,17 @@ An unknown scheme is a startup failure naming the setting, which is also how an 
 
 A credential name for `systemd-credential:` may not contain `/`, `\`, or `..`, so a reference cannot escape the directory the unit was granted.
 
-Material is bounded at 1 MiB, whether it was retrieved or supplied inline. A mistaken reference to a log or a device-backed pseudo-file fails as an oversized secret rather than exhausting memory, and so does a whole document pasted where a credential belongs.
+Material is bounded at 1 MiB, whether it was retrieved or supplied inline. A mistaken reference to a log fails as an oversized secret rather than exhausting memory, and so does a whole document pasted where a credential belongs.
+
+### What a `file:` or `systemd-credential:` target must be
+
+**A regular file, and nothing else.** A path can name a FIFO, a socket, a terminal, or a device just as easily as a file, and none of them holds a credential: a FIFO yields nothing until a writer appears, and `/dev/zero` or `/dev/urandom` yields bytes without end. Any of them fails as `TargetNotRegularFile`, naming the setting as every other resolution failure does.
+
+That is decided from the opened target rather than from a file type, because .NET publishes none portably — permission bits are all `File.GetUnixFileMode` returns, and a FIFO reports the same attributes a file does. What an opened handle exposes is enough: a regular file can be seeked and yields exactly the byte count it reports, while a pipe cannot be seeked at all and a device reports no length while yielding bytes anyway. One consequence is worth knowing: `/dev/null` and an empty file are indistinguishable by that test, and both fail as `MaterialEmpty`.
+
+**And it must answer within five seconds.** Opening a file is the one step no cancellation reaches — the kernel returns from it when it is ready to, which for a FIFO nobody is writing to is never and for a mount that has stopped responding is whenever the storage recovers. Left alone that is a host which neither starts nor explains itself, because startup resolves every reference before any worker begins. A retrieval that has not finished within five seconds is therefore abandoned and reported as `RetrievalTimedOut`, which is a different operator problem from `ProviderUnavailable`: the provider refused in one case and never answered in the other.
+
+What abandoning costs is stated rather than hidden. **The thread already inside the kernel call stays there** until the storage answers or the process ends; nothing can interrupt it. At most four retrievals may be in flight at once, and a stalled one keeps its place, so once four are stuck every further retrieval reports `RetrievalTimedOut` immediately without entering the platform at all. That is the ceiling on the damage a dead mount does: four threads, not one per configured secret. It also bounds what a dead mount costs at startup, since references are resolved one after another — twenty seconds in total rather than five per unresolvable setting.
 
 ## The PostgreSQL connection string
 
@@ -263,8 +273,11 @@ Secret resolution runs before any hosted service starts, so no synchronization r
 ```
 MailSynchronization:Accounts:0:Secrets:Password — the secret reference could not be resolved [MaterialNotFound].
 MailSynchronization:Accounts:1:Secrets:Password — the secret reference could not be resolved [SchemeMissing].
-MailSynchronization:Accounts:2:Secrets:Password:Name — every secret needs a name, which is the identity a rotation, an expiry, and an audit record name it by.
+MailSynchronization:Accounts:2:Secrets:Password — the secret reference could not be resolved [RetrievalTimedOut].
+MailSynchronization:Accounts:3:Secrets:Password:Name — every secret needs a name, which is the identity a rotation, an expiry, and an audit record name it by.
 ```
+
+A target that never answers is one line of that report rather than the end of it, which is what the deadline above buys: the reference after an unreachable mount is still resolved and still reported.
 
 The path and the identity are the whole vocabulary. No message, log line, or exception carries the reference target, the environment variable's value, or any part of the material.
 

@@ -42,4 +42,18 @@ public enum SecretResolutionFailure
 
     /// <summary>The material exceeds the maximum size a secret may occupy.</summary>
     MaterialTooLarge = 9,
+
+    /// <summary>The target names something other than a regular file, such as a FIFO, a socket, or a device.</summary>
+    /// <remarks>
+    /// A mistyped path can name any of them, and none holds material a credential could be read from: a FIFO blocks
+    /// until a writer appears, and a character device yields bytes without end.
+    /// </remarks>
+    TargetNotRegularFile = 10,
+
+    /// <summary>Retrieving the material did not finish within the deadline the adapter enforces.</summary>
+    /// <remarks>
+    /// This is what a stalled network mount produces. It is distinct from <see cref="ProviderUnavailable" /> because a
+    /// provider that refused is a different operator problem from one that never answered.
+    /// </remarks>
+    RetrievalTimedOut = 11,
 }
