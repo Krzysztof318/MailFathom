@@ -165,33 +165,6 @@ jobs:
       ref: ${{ needs.assert.outputs.revision }}
       version: ${{ needs.assert.outputs.version }}
 
-  # Authenticode signatures for the two Windows binaries, and the attestation covering everything the release attaches.
-  # It gates nothing either, and it skips on its own when the build above failed, because a job is skipped when a need
-  # of it fails: no signing request is submitted for binaries that do not exist.
-  #
-  # It is switched off, and `announce` therefore attaches the build's artifact. The certificate this signs with does not
-  # exist yet, so every release would submit a signing request that cannot be approved and publish no command binaries
-  # at all — the arrangement below only ever attaches a signed artifact, and there is no signature to attach. The job,
-  # the workflow it calls, and everything recorded about both stay in place rather than being removed and rediscovered
-  # later: #390 turns this back on together with the release notes and the pages that describe it.
-  sign-cli-binaries:
-    name: Sign the CLI binaries
-    if: false
-    needs:
-      - assert
-      - cli-binaries
-    permissions:
-      actions: read
-      contents: read
-      id-token: write
-      attestations: write
-    uses: ./.github/workflows/sign-cli-binaries.yml
-    with:
-      version: ${{ needs.assert.outputs.version }}
-      artifact-id: ${{ needs.cli-binaries.outputs.artifact-id }}
-    secrets:
-      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
-
   publish:
     name: Publish
     needs:
@@ -250,10 +223,9 @@ jobs:
       - cli-binaries
     # cli-binaries is a need so that needs.cli-binaries.result exists to be read below — the context carries only a
     # job's declared dependencies, so a conditional step referring to a job that is not one is a condition that is
-    # always false. While signing is switched off it is also the job producing what the release attaches, which is why
-    # it is named here rather than the signing job that used to stand in front of it. The four gates that must pass are
-    # named here instead of left to the default, because a job with an `if` is still skipped when a need fails unless
-    # the condition tolerates it:
+    # always false. It is also the job producing what the release attaches. The four gates that must pass are named
+    # here instead of left to the default, because a job with an `if` is still skipped when a need fails unless the
+    # condition tolerates it:
     # !cancelled() is what admits a failed or skipped command build, and the four equality checks are what keep
     # everything else gating exactly as before.
     if: >-
@@ -281,9 +253,9 @@ jobs:
       # chart, and the schema script an operator is actually waiting for. A failure is a red job beside a published
       # release rather than no release at all.
       #
-      # The artifact named here is the build's, because nothing signs while `Sign the CLI binaries` is switched off.
-      # It carries the four binaries as built and the checksum file taken over exactly those bytes, so what a release
-      # offers is self-consistent and verifiable by checksum; #390 restores the signed artifact in its place.
+      # The artifact carries the four binaries as built and the checksum file taken over exactly those bytes, so what
+      # a release offers is self-consistent and verifiable by checksum. Nothing between the build and here rewrites a
+      # binary, which is what keeps those two halves describing each other.
       - name: Download the CLI binaries
         if: needs.cli-binaries.result == 'success'
         uses: actions/download-artifact@v8
@@ -359,10 +331,8 @@ jobs:
             printf '[Administering a deployment](https://github.com/%s/blob/%s/docs/operations/admin-endpoint.md)' \
               "$REPOSITORY" "$RELEASE_TAG"
             printf ' states what the service has to have enabled before it will answer.\n\n'
-            printf 'None of the binaries carries a code signature, so Windows warns about an unknown publisher and the '
-            printf 'checksum file is what verifies a download. Authenticode signing of the two Windows binaries '
-            printf 'through [SignPath Foundation](https://signpath.org/) is prepared and will be enabled once the '
-            printf 'certificate is issued.\n'
+            printf 'None of the binaries carries a code signature, so Windows warns about an unknown publisher and '
+            printf '`mfctl-%s.sha256` is what verifies a download — on every platform.\n' "$VERSION"
           } > "$notes_file"
 
           # Idempotent, because a re-run of a release must not fail on the release it already created.

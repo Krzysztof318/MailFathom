@@ -27,9 +27,6 @@ on:
       artifact:
         description: 'The name of the uploaded artifact holding every binary and the checksum file.'
         value: ${{ jobs.build.outputs.artifact }}
-      artifact-id:
-        description: 'The numeric id GitHub gave that artifact. `Sign the CLI binaries` passes it to SignPath, which downloads the artifact itself rather than being handed bytes, so the id is the only handle that identifies which run produced what is being signed.'
-        value: ${{ jobs.build.outputs.artifact-id }}
 
 permissions:
   contents: read
@@ -40,7 +37,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       artifact: ${{ steps.publish.outputs.artifact }}
-      artifact-id: ${{ steps.upload.outputs.artifact-id }}
     steps:
       - name: Check out the commit being released
         uses: actions/checkout@v7
@@ -93,18 +89,14 @@ jobs:
           done
 
           # One checksum file covering every binary, so an operator verifies whichever they downloaded with one command
-          # from the directory they downloaded into.
-          #
-          # These cover the binaries as built, which is what every channel publishes while signing is switched off, and
-          # what a nightly publishes in any case. Once a release signs again it stops being what an operator downloads:
-          # signing rewrites each Windows binary, so `Sign the CLI binaries` discards this file and regenerates it over
-          # the signed bytes. Either way the artifact is self-consistent on its own.
+          # from the directory they downloaded into. Nothing rewrites a binary between here and the release page, so
+          # these are the checksums of the file somebody downloads and they are the only thing that verifies it: no
+          # binary published here carries a code signature.
           ( cd artifacts/cli && sha256sum ./* > "mfctl-${VERSION}.sha256" )
 
           echo "artifact=cli-binaries" >> "$GITHUB_OUTPUT"
 
       - name: Upload the binaries
-        id: upload
         uses: actions/upload-artifact@v7
         with:
           name: cli-binaries

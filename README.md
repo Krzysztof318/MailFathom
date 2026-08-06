@@ -165,22 +165,19 @@ Setting up by hand takes the same steps in the same order, and [From a clone to 
 
 MailFathom holds mailbox credentials, OAuth tokens, certificate material, and a local copy of someone's mail. Report a vulnerability privately through [SECURITY.md](https://github.com/Krzysztof318/MailFathom/blob/main/SECURITY.md) rather than in a public issue.
 
-## Code signing policy
-
-The two Windows `mfctl` binaries attached to a release are to be Authenticode-signed, so that Windows names a publisher instead of warning about an unknown one. Free code signing is to be provided by [SignPath.io](https://signpath.io/), with the certificate issued by the [SignPath Foundation](https://signpath.org/). The Linux binaries will carry no signature, and the checksum file published beside them is what verifies those.
-
-**No release carries a code signature yet.** The certificate is not issued, so the pipeline that signs is written and switched off, and every `mfctl` binary published so far is verified by its checksum file alone — which is also what to check on the machine you downloaded it to. [#390](https://github.com/Krzysztof318/MailFathom/issues/390) is where signing is turned on.
-
-The container image and the Helm chart carry a signed build provenance statement naming the workflow and commit that produced it, and every `mfctl` binary — signed or not — is to carry one from the release that first signs, because the statement is made by the job that verifies the signature. The signature says who vouches for a file; the attestation says where it came from.
-
-| Role | Who |
-| --- | --- |
-| Committers | Krzysztof Kasprowicz, and contributors whose pull requests are merged after review |
-| Reviewers and approvers | Krzysztof Kasprowicz |
-
-Every release is to be approved by a person before anything is signed; nothing will sign on a schedule, and the nightly channel signs nothing at all. [Signing the Windows CLI binaries](https://krzysztof318.github.io/MailFathom/operations/windows-code-signing.html) records how the pipeline is to do it, what it needs before it can, and how to verify a download in the meantime.
-
 **Privacy policy.** MailFathom transfers no information to other networked systems unless specifically requested by the user or the person installing or operating it. It reaches the mail servers, the database, and the model provider a deployment configures, and nothing else: it collects no telemetry, phones no home, and exports OpenTelemetry data only to an endpoint an operator sets. Where mail is stored, who can reach it, and which model receives a result are deployment decisions — [SECURITY.md](https://github.com/Krzysztof318/MailFathom/blob/main/SECURITY.md) and the [user guide](https://krzysztof318.github.io/MailFathom/users/README.html) describe them, and the terms of any model provider a deployment chooses are that provider's own.
+
+### Verifying what you downloaded
+
+**No `mfctl` binary carries a code signature**, on any platform, so Windows warns about an unknown publisher when you run one. The checksum file attached beside them is what tells a genuine download from a tampered one, and checking it is a deliberate step rather than something the operating system does for you:
+
+```bash
+sha256sum --check --ignore-missing 'mfctl-<version>.sha256'
+```
+
+[The administrative endpoint](https://krzysztof318.github.io/MailFathom/operations/admin-endpoint.html#getting-the-command) is where getting the command and verifying it are documented.
+
+The container image and the Helm chart are different: each carries a signed build provenance statement naming the workflow and commit that produced it, so `gh attestation verify` answers where one came from without your having to trust the registry. [The container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html#published-images) records how to check one.
 
 ## License
 

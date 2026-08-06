@@ -183,10 +183,22 @@ have to run where the service runs.
 
 Nothing needs installing beside it: the .NET runtime is inside the file.
 
-None of the binaries is signed yet, so Windows warns about an unknown publisher and the checksum file is what verifies
-a download — on every platform, for now. The two Windows binaries are to be Authenticode-signed once the certificate
-is issued. [Signing the Windows CLI binaries](windows-code-signing.md) records who will sign, how to check a download
-today and after that, and what a missing signature on a release means.
+**No binary is signed**, on any platform, so Windows warns about an unknown publisher when you run one and the checksum
+file is the only thing that distinguishes a genuine download from a tampered one. Check it in the directory you
+downloaded into, before running anything:
+
+```bash
+sha256sum --check --ignore-missing 'mfctl-<version>.sha256'
+```
+
+`--ignore-missing` is what lets one file cover four binaries: it checks the ones present and says nothing about the
+three platforms you did not download. **`<version>` is the release you downloaded** — substitute it, and note that the
+name is quoted so a line pasted without that substitution fails with a missing file rather than with a redirection.
+
+The command binaries carry no build provenance attestation either. That is the other question worth asking about a
+download — the checksum says the bytes are the ones published, and an attestation would say which workflow and commit
+produced them — and the image and the chart are where this repository answers it.
+[The container image](container-image.md#published-images) records how.
 
 ## Signing in
 

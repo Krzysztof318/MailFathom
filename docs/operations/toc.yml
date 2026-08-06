@@ -57,5 +57,3 @@
       href: release-procedure.md
     - name: The documentation site
       href: documentation-site.md
-    - name: Signing the Windows CLI binaries
-      href: windows-code-signing.md
