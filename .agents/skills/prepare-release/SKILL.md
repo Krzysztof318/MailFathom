@@ -238,9 +238,46 @@ therefore reads as `Prepare release 0.2.0` and `Bump main version to 0.3.0` in t
 one is the release and which one follows it without either being opened.
 
 On a second branch off the release branch, raise `<VersionPrefix>` in `Directory.Build.props` to the next version from
-the table above. **That is the whole diff**, because that property is the only place in the repository where a version
-number is written: the image's tags and labels arrive as build arguments, and the chart's `version` and `appVersion`
-are both supplied at package time from the same declaration.
+the table above. That property is the only place a version is *written*: the image's tags and labels arrive as build
+arguments, and the chart's `version` and `appVersion` are both supplied at package time from the same declaration.
+
+**It is not the only place one is recorded.** Every `packages.lock.json` writes the version of each `MailFathom.*`
+project it references — `"MailFathom.Domain": "[x.y.z, )"` — so raising the declaration leaves those files naming a
+version the tree no longer has. They are part of this diff, and of no other: this is the pull request where the number
+they record stops being true.
+
+```bash
+dotnet restore MailFathom.slnx --force-evaluate
+git diff -U0 -- '**/packages.lock.json' | grep -E '^[+-][^+-]' | grep -v 'MailFathom\.'
+```
+
+**The second command has to print nothing.** A bump moves project versions and nothing else, so any other line is a
+transitive resolution that moved for its own reasons — a package published since the last regeneration — and a
+dependency change hidden inside a version bump is a dependency change nobody reviewed. Revert that file and raise it as
+its own pull request. Where one turns up and the release should not wait for it, correct the versions in place instead
+— the edit is mechanical, and what it writes is that same diff without the lines that did not belong:
+
+```bash
+git grep -lE '"MailFathom\.[A-Za-z]+": "\[' -- '**/packages.lock.json' \
+  | xargs sed --in-place --regexp-extended 's/("MailFathom\.[A-Za-z]+": ")\[[0-9]+\.[0-9]+\.[0-9]+, \)/\1[<next>, )/'
+```
+
+Either way, confirm that nothing still names another version. This is checked against `<next>` rather than against the
+version just released, because a lock file records whatever was current when it was last regenerated, which is not
+necessarily one release back:
+
+```bash
+git grep -hoE '"MailFathom\.[A-Za-z]+": "\[[0-9]+\.[0-9]+\.[0-9]+' -- '**/packages.lock.json' | grep -v '<next>'
+```
+
+`AppHost` and `IntegrationTests` carry no lock file and are not given one here. Root `AGENTS.md` records why: the
+Aspire SDK picks part of their graph from the host platform's runtime identifier.
+
+**Nothing gates any of this, which is what makes it a step rather than a check.** Locked-mode restore does not compare
+a project reference's version, so a lock file naming a version that has been released and superseded restores green in
+every workflow and in both verification scripts. The cost lands elsewhere and later: `--force-evaluate` writes the
+truth whenever it is next run, so a pull request moving one central pin arrives carrying every skipped bump beside it,
+and its reviewer has to tell that drift apart from the transitive closure the change actually moved.
 
 **Do not touch `deploy/helm/mailfathom/Chart.yaml`.** Its `version` is a `0.0.0` placeholder and it declares no
 `appVersion` at all; the release run supplies both, as one number equal to the application's. A chart version counting

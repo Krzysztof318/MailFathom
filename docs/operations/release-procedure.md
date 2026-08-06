@@ -179,6 +179,13 @@ unavailable:
    `main` returns to naming the next release. Skipping it fails loudly rather than silently: the next tag push repeats
    a version that already exists, and step 2 rejects it.
 
+   It also brings the lock files with it. Each `packages.lock.json` records the version of every `MailFathom.*`
+   project it references, so raising the declaration leaves them naming the release just published;
+   `dotnet restore MailFathom.slnx --force-evaluate` rewrites them, and the diff is confirmed to hold nothing but
+   those project lines. Nothing gates that half, because locked-mode restore does not compare a project reference's
+   version — which is why skipping it costs the next dependency change rather than this one, where a regeneration
+   would otherwise carry the skipped bumps beside the pin that was actually moved.
+
 No step is safe out of order, and nothing in a pull request can express that, which is why the ordering is printed
 rather than automated. Nothing here pushes a tag on the owner's behalf.
 
