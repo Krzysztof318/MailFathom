@@ -320,6 +320,38 @@ public sealed class MailKitImapWriteSessionTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// The UIDVALIDITY half of the same guard, which is the one the whole non-atomicity hazard rests on: a folder
+    /// recreated under a recovered connection hands the same UIDs to completely different emails, so an occurrence
+    /// carrying the right account and the right folder binding but a stale UIDVALIDITY must not be acted on. The
+    /// account and folder here deliberately match, so only the UIDVALIDITY comparison can refuse it.
+    /// </summary>
+    [Fact]
+    public async Task RelocateAsync_OccurrenceFromAnEarlierUidValidity_IsRefusedBeforeAnyCommand()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move | ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder(uidValidity: 7U);
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+        var staleOccurrence = CreateOccurrenceId(42U, uidValidity: 9U);
+
+        // Act
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => session.RelocateAsync(staleOccurrence, Archive, CancellationToken.None));
+
+        // Assert
+        await openFolder.DidNotReceive().MoveToAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IMailFolder>(),
+            Arg.Any<CancellationToken>());
+        await openFolder.DidNotReceive().CopyToAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IMailFolder>(),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A session covers one selection, and a UID from another folder names a different email in this one.</summary>
     [Fact]
     public async Task RelocateAsync_OccurrenceFromAnotherFolder_IsRefusedBeforeAnyCommand()

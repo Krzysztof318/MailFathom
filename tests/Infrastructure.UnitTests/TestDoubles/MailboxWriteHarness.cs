@@ -25,11 +25,13 @@ internal sealed class MailboxWriteHarness : IAsyncDisposable
     internal MailboxWriteHarness(
         MailboxWriteConnectionPool pool,
         MailboxMutationTelemetry telemetry,
-        RecordingLoggerProvider recordedLogs)
+        RecordingLoggerProvider recordedLogs,
+        MailKitImapWriteSessionTestContext.ScopeDisposalCounter scopeDisposals)
     {
         this.Pool = pool;
         this.telemetry = telemetry;
         this.RecordedLogs = recordedLogs;
+        this.ScopeDisposals = scopeDisposals;
         this.Factory = new MailKitImapWriteSessionFactory(pool, telemetry);
     }
 
@@ -41,6 +43,9 @@ internal sealed class MailboxWriteHarness : IAsyncDisposable
 
     /// <summary>Gets everything the telemetry wrote, so a test can read the level a fact was reported at.</summary>
     internal RecordingLoggerProvider RecordedLogs { get; }
+
+    /// <summary>Gets how many per-connection dependency-injection scopes the pool has released.</summary>
+    internal MailKitImapWriteSessionTestContext.ScopeDisposalCounter ScopeDisposals { get; }
 
     /// <summary>Opens a write session on the account's inbox.</summary>
     internal Task<IMailboxWriteSession> OpenSessionAsync() => this.OpenSessionAsync(InboxFolder);

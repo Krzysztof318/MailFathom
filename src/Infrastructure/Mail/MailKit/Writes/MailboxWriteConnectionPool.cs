@@ -123,12 +123,21 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
 
         this.disposed = true;
 
-        foreach (var account in this.accounts.Values)
+        // Drained rather than iterated over a snapshot. A caller that read the disposed flag above as false a moment
+        // before this ran can still reach GetOrAdd afterwards, and a snapshot would walk past the account it inserts:
+        // that connection would then be opened normally and kept alive by its own idle timer, against a mail server the
+        // host has already reported closing every connection to. Draining until the dictionary is empty collects it,
+        // and the flag the account's own lease checks is what stops one arriving after even that.
+        while (!this.accounts.IsEmpty)
         {
-            await account.DisposeAsync();
+            foreach (var accountKey in this.accounts.Keys)
+            {
+                if (this.accounts.TryRemove(accountKey, out var account))
+                {
+                    await account.DisposeAsync();
+                }
+            }
         }
-
-        this.accounts.Clear();
     }
 
     [LoggerMessage(
@@ -167,6 +176,11 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
             try
             {
                 ObjectDisposedException.ThrowIf(this.disposed, this);
+
+                // The pool's flag as well as this account's, because an account inserted after the shutdown drain had
+                // already passed its key would never be disposed by anything. Refusing here is what keeps that race
+                // from opening a connection nothing will ever close.
+                ObjectDisposedException.ThrowIf(pool.disposed, pool);
 
                 // Nothing may expire the connection while a caller holds it; the clock starts again on release.
                 this.idleTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
@@ -322,6 +336,12 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
         }
 
         /// <summary>Disposes the held connection and the scope it was resolved from, leaving the account holding neither.</summary>
+        /// <remarks>
+        /// The scope is released in a <c>finally</c> because the connection's own disposal genuinely throws: it logs out
+        /// politely first, and a socket the server reset while the connection sat idle fails that. Letting the failure
+        /// skip the scope would leak the account's settings provider and access token source on exactly the path that
+        /// meets a broken connection most often — the idle eviction, which catches the failure and only logs it.
+        /// </remarks>
         private async ValueTask CloseHeldConnectionAsync()
         {
             var closedConnection = this.connection;
@@ -331,13 +351,18 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
             this.connectionScope = null;
             this.selectedFolderId = null;
 
-            if (closedConnection is not null)
+            try
             {
-                await closedConnection.DisposeAsync();
-                pool.LogWriteConnectionClosed(accountId.Value);
+                if (closedConnection is not null)
+                {
+                    await closedConnection.DisposeAsync();
+                    pool.LogWriteConnectionClosed(accountId.Value);
+                }
             }
-
-            closedScope?.Dispose();
+            finally
+            {
+                closedScope?.Dispose();
+            }
         }
     }
 }

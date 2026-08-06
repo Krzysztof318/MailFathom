@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -116,9 +117,10 @@ internal static class MailKitImapWriteSessionTestContext
         MailboxWriteSessionOptions options)
     {
         var recordedLogs = new RecordingLoggerProvider();
+        var scopeDisposals = new ScopeDisposalCounter();
         var pool = new MailboxWriteConnectionPool(
             clientFactory,
-            CreateScopeFactory(),
+            CreateScopeFactory(scopeDisposals),
             resilience.Executor,
             resilience.TransientFailureClassifier,
             options,
@@ -128,7 +130,7 @@ internal static class MailKitImapWriteSessionTestContext
             new RecordingCategoryLogger<MailboxMutationTelemetry>(recordedLogs),
             new FakeTimeProvider(ObservedAt));
 
-        return new MailboxWriteHarness(pool, telemetry, recordedLogs);
+        return new MailboxWriteHarness(pool, telemetry, recordedLogs, scopeDisposals);
     }
 
     /// <summary>Prepares one scripted connection to answer a selection with the folder and a destination lookup by path.</summary>
@@ -155,13 +157,41 @@ internal static class MailKitImapWriteSessionTestContext
     }
 
     /// <summary>A container holding exactly the two scoped services a write connection resolves from its own scope.</summary>
-    private static IServiceScopeFactory CreateScopeFactory()
+    /// <param name="scopeDisposals">Counts the scopes the pool released, so a test can prove one was not leaked.</param>
+    /// <remarks>
+    /// The probe is resolved by the settings provider's own factory rather than registered and forgotten, because a
+    /// scoped service nothing ever asks for is never constructed and therefore never disposed — a probe like that would
+    /// report zero disposals whatever the pool did.
+    /// </remarks>
+    private static IServiceScopeFactory CreateScopeFactory(ScopeDisposalCounter scopeDisposals)
     {
         var services = new ServiceCollection();
-        services.AddScoped(_ => CreateSettingsProvider());
+        services.AddSingleton(scopeDisposals);
+        services.AddScoped<ScopeDisposalProbe>();
+        services.AddScoped(provider =>
+        {
+            provider.GetRequiredService<ScopeDisposalProbe>();
+
+            return CreateSettingsProvider();
+        });
         services.AddScoped<IMailAccessTokenSource>(_ => new UnusedMailAccessTokenSource());
 
         return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+    }
+
+    /// <summary>Counts how many of the pool's per-connection scopes were disposed.</summary>
+    internal sealed class ScopeDisposalCounter
+    {
+        internal int Count { get; private set; }
+
+        internal void RecordDisposal() => this.Count++;
+    }
+
+    /// <summary>A scoped service whose disposal is the observable fact that the scope around it was released.</summary>
+    [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The container instantiates it per scope; the settings provider's factory resolves it so the scope actually constructs one.")]
+    private sealed class ScopeDisposalProbe(ScopeDisposalCounter counter) : IDisposable
+    {
+        public void Dispose() => counter.RecordDisposal();
     }
 
     /// <summary>Adapts the shared recording provider to the typed logger a production type asks for.</summary>

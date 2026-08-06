@@ -6,6 +6,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using MailKit;
 using MailKit.Net.Imap;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -90,7 +91,12 @@ public sealed class MailboxWriteConnectionPoolTests
         Assert.Equal(1, secondClient.ConnectCount);
     }
 
-    /// <summary>The clock measures idleness, so a connection still being used is never taken away mid-run.</summary>
+    /// <summary>
+    /// The clock measures idleness, so a connection still being used is never taken away mid-run. The first session is
+    /// opened and disposed on purpose: the idle timer is created when a lease is released, so a test that only ever
+    /// held a session would advance a clock with no callback armed and pass whether or not the guard that cancels a
+    /// pending expiry on re-lease exists at all.
+    /// </summary>
     [Fact]
     public async Task LeaseAsync_WhileASessionIsStillOpen_DoesNotExpireTheConnectionUnderIt()
     {
@@ -105,13 +111,58 @@ public sealed class MailboxWriteConnectionPoolTests
             clock,
             new MailboxWriteSessionOptions { ConnectionIdlePeriod = IdlePeriod });
 
+        await using (var armingSession = await harness.OpenSessionAsync())
+        {
+            await armingSession.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, CancellationToken.None);
+        }
+
         // Act
-        await using var session = await harness.OpenSessionAsync();
-        await session.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, CancellationToken.None);
+        await using var heldSession = await harness.OpenSessionAsync();
         clock.Advance(IdlePeriod * 4);
-        await session.SetSeenAsync(CreateOccurrenceId(43U), isSeen: true, CancellationToken.None);
+        await heldSession.SetSeenAsync(CreateOccurrenceId(43U), isSeen: true, CancellationToken.None);
 
         // Assert
+        Assert.Equal(0, client.DisconnectCount);
+        Assert.Equal(1, client.ConnectCount);
+    }
+
+    /// <summary>
+    /// The bound is one connection per account at any moment, not one per sequence of callers. Every other test here
+    /// disposes a session before opening the next, so none of them would notice a gate that stopped blocking: two
+    /// overlapping mutations would each open their own connection and double the account's login count against a server
+    /// that counts them. The scripted sequence carries one connection, so a second establishment fails the test rather
+    /// than inflating a counter.
+    /// </summary>
+    [Fact]
+    public async Task LeaseAsync_WhileAnotherSessionHoldsTheAccount_WaitsInsteadOfOpeningASecondConnection()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var openFolder = CreateWritableFolder();
+        var client = PrepareServer(new FakeImapClient { Capabilities = ImapCapabilities.UidPlus }, openFolder);
+        await using var harness = CreateHarness(
+            resilience,
+            ConnectionSequence(client),
+            new FakeTimeProvider(ObservedAt),
+            new MailboxWriteSessionOptions { ConnectionIdlePeriod = IdlePeriod });
+
+        var heldSession = await harness.OpenSessionAsync();
+
+        // Act
+        var contendingSession = harness.OpenSessionAsync();
+
+        // Assert
+        // The gate is held, and a lease waiting on it cannot have run past its first await, so this is a state rather
+        // than a race: no delay is waited on and no clock is consulted.
+        Assert.False(contendingSession.IsCompleted);
+        Assert.Equal(1, client.ConnectCount);
+
+        await heldSession.DisposeAsync();
+
+        await using var resumedSession = await contendingSession;
+        await resumedSession.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, CancellationToken.None);
+
+        Assert.Equal(1, client.ConnectCount);
         Assert.Equal(0, client.DisconnectCount);
     }
 
@@ -147,6 +198,43 @@ public sealed class MailboxWriteConnectionPoolTests
         // Assert
         Assert.Equal(1, firstClient.DisconnectCount);
         Assert.Equal(1, secondClient.ConnectCount);
+    }
+
+    /// <summary>
+    /// The connection's own disposal logs out politely first, so a socket the server reset while the connection sat
+    /// idle makes it throw. The scope resolved for that connection holds the account's settings provider and access
+    /// token source, and it is the pool's to release whether or not the connection went quietly — otherwise the leak
+    /// happens on exactly the path that meets a broken connection most often, where the failure is caught and logged.
+    /// </summary>
+    [Fact]
+    public async Task IdleExpiry_WhenTheConnectionFailsToCloseCleanly_StillReleasesItsScope()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var openFolder = CreateWritableFolder();
+        var client = PrepareServer(new FakeImapClient { Capabilities = ImapCapabilities.UidPlus }, openFolder);
+        var clock = new FakeTimeProvider(ObservedAt);
+        await using var harness = CreateHarness(
+            resilience,
+            ConnectionSequence(client),
+            clock,
+            new MailboxWriteSessionOptions { ConnectionIdlePeriod = IdlePeriod });
+
+        await using (var session = await harness.OpenSessionAsync())
+        {
+            await session.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, CancellationToken.None);
+        }
+
+        client.DisconnectException = new IOException("the server reset the idle connection");
+
+        // Act
+        clock.Advance(IdlePeriod);
+
+        // Assert
+        Assert.Equal(1, harness.ScopeDisposals.Count);
+        Assert.Contains(
+            harness.RecordedLogs.Records,
+            record => record.Level == LogLevel.Warning && record.Failure is IOException);
     }
 
     /// <summary>A host stopping must not leave an authenticated connection open against the mail server.</summary>
