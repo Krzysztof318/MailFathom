@@ -21,6 +21,14 @@ artifacts/
 docfx/api/
 docfx/_site/
 
+# Instructions somebody writes for their own agent sessions and for nobody else's. Claude Code loads
+# `CLAUDE.local.md` from the repository root straight after `CLAUDE.md`, which is where a fork's contributor states
+# that they are one; `docs/operations/agent-workflow.md` § The two roles says what belongs in it. Ignored by suffix
+# rather than by that one name so the same convention holds for whatever else a harness reads, and so a note that is
+# true of one machine cannot arrive in a pull request as an unrelated file — no protected path catches it, because
+# `CLAUDE.local.md` is not `CLAUDE.md`.
+*.local.md
+
 # The plans and design notes the agent harness writes while a change is being worked out. They record how a change
 # was arrived at rather than how the system behaves, which is the one thing `docs/` never carries, and they are
 # snapshots that were never meant to stay true. Ignored rather than tracked so the harness can keep writing them

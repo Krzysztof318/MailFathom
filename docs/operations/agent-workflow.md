@@ -1,6 +1,6 @@
 # Agent workflow
 
-<!-- describes: scripts/**, .agents/skills/**, .github/workflows/**, .github/fathom-review/**, **/.editorconfig -->
+<!-- describes: scripts/**, .agents/skills/**, .github/workflows/**, .github/fathom-review/**, **/.editorconfig, .gitignore, .worktreeinclude -->
 
 Codex and Claude Code share one repository-owned workflow. Deterministic Git and
 .NET operations live in scripts, while repository-specific judgment lives in
@@ -198,10 +198,64 @@ authority over this repository at all and run unchanged in both roles.
 `prepare-release` is the owner's alone for a different reason: its frontmatter
 sets `disable-model-invocation`, so no agent reaches it in either role.
 
+### Stating the role before a skill resolves it
+
+That resolution happens one step into a session, and a session is not obliged to
+start there. A question about the code, a fix small enough that nobody reached
+for a skill, `review-change` or `finish-change` invoked on its own, a harness
+that loaded no skill at all — each runs on root `AGENTS.md`, which states both
+roles and cannot say which one is running. The fork role is then inferred, and
+the inference has a direction: this contract writes the owner's steps down in
+more places than the fork's, because those are the steps that need writing down.
+
+What a wrong inference costs is a turn each time, and every one of them is
+visible only after it fails: a board write that returns a permission error, a
+`type:*` label assigned where nothing can assign one, a push refused by
+`Krzysztof318/MailFathom`, a branch renamed to `agent/<short-description>` for
+nothing. So a contributor settles it once, in a file their harness loads before
+the first message and this repository ignores.
+
+Claude Code reads `CLAUDE.local.md` from the repository root immediately after
+`CLAUDE.md`, appending it rather than replacing it, which is the shape wanted:
+the contract holds and one fact joins it. Codex has no per-directory equivalent.
+It includes at most one file per directory and prefers `AGENTS.override.md` to
+`AGENTS.md`, so a root override would displace this repository's contract
+instead of adding to it; its global `~/.codex/AGENTS.md` is read before the
+repository's files, and that is where the same sentences go. `.gitignore`
+carries `*.local.md` so neither can reach a commit by accident — no protected
+path catches one, because `CLAUDE.local.md` is not `CLAUDE.md` and the guard
+matches a whole file name. `.worktreeinclude` copies `CLAUDE.local.md` into a
+new worktree for the same reason it copies `.env`: a gitignored file otherwise
+exists only in the checkout it was written in, and the workspace an agent works
+in is not that one.
+
+Four sentences are enough, and what earns a place in one is what an agent would
+otherwise get wrong: which remote is which, that project `4` is unreachable and
+its label, milestone, and board fields belong to triage, that nothing is pushed
+to `Krzysztof318/MailFathom`, and that the branch keeps the name it was given.
+The wording itself is written once, in
+`.agents/skills/get-started-contributors/SKILL.md`, and repeated once where a
+contributor reads it, in `CONTRIBUTING.md` § *Tell your agent it is working in a
+fork*; this page carries the reasoning and deliberately not a third copy.
+
+None of it is a rule the skills fail to enforce — `start-task` reaches the same
+answer from the remotes. It is the sessions that reach no skill, which is most
+of the short ones.
+
 ## Skills
 
 The canonical skills are:
 
+- `get-started-contributors` takes a clone to its first green run: the platform
+  check that refuses anything but Linux, the toolchain and how each piece of it is
+  installed, the remote the gates resolve their base from, the local instruction
+  file above, the commands an agent harness has to permit for the loop to be a
+  loop, and what the fork role is refused before a session is spent on it. It is
+  the one skill written for somebody who has not read this page, and it changes no
+  tracked file. Like `prepare-release` it sets `disable-model-invocation`, for the
+  opposite reason: setting a machine up is asked for once, by a person, and an
+  agent that hits a missing SDK mid-task has a blocker to report rather than an
+  installation to perform while nobody is looking;
 - `start-task` requires a clean workspace or an explicitly approved inventory
   and preservation plan, identifies or creates the GitHub issue that governs the
   task and places it on the board, then loads the applicable specification,
@@ -223,7 +277,7 @@ The canonical skills are:
   at the tag and neither is reached by `<VersionPrefix>`. Before either pull
   request it settles the milestones — creating the next one if it does not
   exist, moving what is still open into it, and closing the one being released
-  — which is the only place a milestone is opened. It is the one skill
+  — which is the only place a milestone is opened. It is one of the two skills
   an agent cannot invoke — its frontmatter sets `disable-model-invocation`, so
   only the owner reaches it, because when a version becomes real is their
   decision. It pushes no tag and merges nothing;

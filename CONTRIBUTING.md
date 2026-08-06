@@ -12,7 +12,7 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 **You are encouraged to work the same way.** Point an agent at your checkout — Claude Code, Codex, and anything else that reads `AGENTS.md` pick the rules up on their own — give it the issue, and let it produce the change, the tests, and the documentation in one pass. A hand-written patch is equally welcome and is judged identically; the point is that the conventions here are dense enough that an agent which has actually read them will satisfy them faster than a person skimming them.
 
-**The skills run in your fork too.** `.agents/skills/` holds the seven workflow skills the maintainer's agents use, and Claude Code finds them through the `.claude/skills` symlink in any clone. `start-task` works out from your remotes that it is running in a fork and adjusts three things: your branch keeps the name you gave it, the base it verifies against is `upstream/main` rather than `origin/main`, and it opens an issue without trying to label it or place it on a board. `review-change`, `check-docs-licenses`, `add-migration`, and `closed-enumeration` need nothing from this repository and run unchanged. `finish-change` runs the same gates and opens the same pull request against `main` here, and reports the one step it does not take — the maintainer's planning board is private, so there is nothing for it to write and nothing missing when it does not.
+**The skills run in your fork too.** `.agents/skills/` holds the eight workflow skills the maintainer's agents use, and Claude Code finds them through the `.claude/skills` symlink in any clone. [`get-started-contributors`](.agents/skills/get-started-contributors/SKILL.md) is the one written for you rather than for them, and the only one you invoke by hand rather than letting an agent reach for it: it takes a clone to its first green run — the platform check, the tools and how each is installed, the remote the gates measure against, the local file that says which role you are in, and the commands your agent has to be allowed to run. The setup sections below are its short form. `start-task` works out from your remotes that it is running in a fork and adjusts three things: your branch keeps the name you gave it, the base it verifies against is `upstream/main` rather than `origin/main`, and it opens an issue without trying to label it or place it on a board. `review-change`, `check-docs-licenses`, `add-migration`, and `closed-enumeration` need nothing from this repository and run unchanged. `finish-change` runs the same gates and opens the same pull request against `main` here, and reports the one step it does not take — the maintainer's planning board is private, so there is nothing for it to write and nothing missing when it does not.
 
 **What your agent should not spend a session on.** The protected paths below are refused from anyone but the maintainer, so a change to one cannot merge however good it is. `start-task` checks the task against them before the work rather than leaving the check to find out; if your idea needs one, open an issue and say so.
 
@@ -51,7 +51,36 @@ dotnet test MailFathom.slnx --no-build
 
 **The `upstream` remote is not optional.** Every gate here verifies your branch against the base it will actually merge into, and in your fork `origin/main` is whatever you last synced. The scripts find that base by looking for the remote that points at `Krzysztof318/MailFathom` — under any name, `upstream` is just the convention — and the full gate refuses to run rather than measure your work against the wrong base. Its refusal prints the two commands above.
 
-While you work, run the fast loop instead of the individual commands:
+## Tell your agent it is working in a fork
+
+`AGENTS.md` is written for two roles — the maintainer's checkout and yours — and it cannot tell which one is reading it. `start-task` works that out from your remotes, but only once it runs, and plenty of sessions never reach it: a question about the code, a one-line fix, a review of a diff you already have. In those, an agent guesses, and the guess costs you a turn every time it goes the maintainer's way — a write to a private board that answers with a permission error, a label on an issue nothing can label, a push this repository refuses.
+
+Say it once instead, in a file your agent loads before you type anything. **Claude Code** reads `CLAUDE.local.md` from the root of your clone straight after `CLAUDE.md`, adding to it rather than replacing it. **Codex** has no per-directory equivalent — it takes at most one file per directory and prefers `AGENTS.override.md`, so a file of that name at the root would *replace* this repository's instructions — and its global `~/.codex/AGENTS.md` is read first, which is where the same lines go. Another agent will have its own; the wording is what matters:
+
+```markdown
+I am an external contributor to MailFathom. `origin` is my fork and `upstream` is
+`Krzysztof318/MailFathom`, so the fork role in `AGENTS.md` governs every session in this
+checkout. Do not read or write project `4`, and do not assign a `type:*` label, a milestone,
+or a board field — triage does that. Never push to `Krzysztof318/MailFathom`. My branch keeps
+the name I gave it.
+```
+
+`.gitignore` covers `*.local.md`, so a file written that way cannot reach a commit by accident. Do not put any of this in `AGENTS.md` or `CLAUDE.md` themselves: both are protected paths, so the change would fail a check before anyone read it, and it would be telling every other contributor's agent something true only of your machine.
+
+## Let your agent run the loop
+
+A verification loop that stops for your consent on every `dotnet` and every `scripts/…` invocation is a conversation rather than a loop, and the usual repair — allowing everything once — gives away the boundary worth keeping. Configure the permissions where your agent keeps them, in Claude Code's `.claude/settings.local.json`, in Codex's `~/.codex/config.toml`, or wherever yours reads. What is portable is the list, not the file:
+
+- **allow** `dotnet` and everything under `scripts/` except `run-integration-tests.sh`, which starts containers and belongs in the last bullet, read-only Git (`status`, `diff`, `log`, `show`, `ls-files`, `rev-parse`, `merge-base`, `branch`, `fetch`, `add`), read-only `gh` (`pr list`, `pr view`, `pr diff`, `issue list`, `issue view`, `auth status`), and ordinary reading (`ls`, `cat`, `head`, `tail`, `wc`, `grep`, `rg`, `find`);
+- **if your agent sandboxes the filesystem**, allow the writes a .NET build makes outside the checkout whether or not anybody asked for them: `~/.nuget`, `~/.local/share/NuGet`, `~/.dotnet`, `~/.templateengine`, `~/.aspnet`, `~/.microsoft`, `~/.aspire`, and your temporary directory. Denied, they fail the restore, which reads as a broken repository rather than as a permission;
+- **if it sandboxes the network**, allow `nuget.org` and `pkgs.dev.azure.com` for packages, `dot.net`, `aka.ms`, `*.microsoft.com`, and `dotnetcli.blob.core.windows.net` for the SDK, `github.com` and `*.githubusercontent.com` for `gh`, and `mcr.microsoft.com` with the Docker registries for the PostgreSQL image, plus binding on the loopback for the local app model;
+- **leave everything in the other direction to you**: pushing, force-pushing, merging, deleting a branch, and running the integration suite are decisions rather than steps.
+
+`.claude/settings.local.json` is gitignored here, and everything else on that list lives outside the clone, so none of it can arrive in a pull request.
+
+## The verification loop
+
+While you work, run the fast loop instead of the three `dotnet` commands above:
 
 ```bash
 bash scripts/verify-fast.sh
