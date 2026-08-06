@@ -26,3 +26,4 @@ For background on ADRs, see <https://adr.github.io/>.
 - [0003: Give every first-party failure one base type and a five-digit stable error code](0003-first-party-exception-hierarchy-and-stable-error-codes.md)
 - [0004: Version the four public surfaces with SemVer, stamp builds from one declared prefix, and cut a release with a Git tag](0004-versioning-and-release-policy.md)
 - [0005: Seal data at rest under one deployment-wide symmetric key ring, provisioned as a secret reference the operator creates](0005-data-encryption-key-ring-and-provisioning.md)
+- [0006: Identify an embedding profile by the geometry of its vector space, keep that identity immutable, and make activation state what it is about to spend](0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
