@@ -206,17 +206,10 @@ holding back the thing they are waiting for. They are self-contained and trimmed
 runs it — and they are built for the machine an operator administers *from*, which is why Windows is among them while
 the service itself is Linux-only.
 
-That last point is why the two Windows binaries are to be Authenticode-signed between the build and the release, and why
-the checksum file is then taken after signing rather than before: signing rewrites the file, so checksums computed
-earlier would describe nothing anybody can download. Signing will gate the command binaries and only them — a failure
-withholds them from the release page rather than publishing them unsigned, and leaves the other three artifacts
-published.
-
-None of that runs yet. The certificate is not issued, so `Sign the CLI binaries` is switched off, the release attaches
-the binaries as built, and the build's own checksum file is the one operators verify against.
-[Signing the Windows CLI binaries](windows-code-signing.md) records the whole arrangement, what has to exist in
-SignPath and in this repository's settings before a release can sign at all, and
-[#390](https://github.com/Krzysztof318/MailFathom/issues/390) is where it is turned on.
+Nothing between the build and the release page rewrites a binary. No command binary carries a code signature or a build
+provenance attestation, so the checksum file the build takes over exactly the published bytes is what an operator
+verifies a download against, and it is the whole of what the release offers for that.
+[The administrative endpoint](admin-endpoint.md#getting-the-command) is where an operator is told so and how to check.
 
 The chart is published **after** the image and **against the digest it produced**, because a chart names the image it
 deploys: before pushing, the run renders the packaged chart against that digest and refuses to publish one that would
