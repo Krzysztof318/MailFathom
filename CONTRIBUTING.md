@@ -69,13 +69,25 @@ The roadmap board, project `4`, is private to the maintainer and I have no acces
 Do not read it, do not write it, and do not treat that as a step that failed: an issue I
 open carries no `type:*` label, no milestone, and no `Area`, `Queue`, or `Size` value by
 design, and the maintainer's triage supplies them. `$start-task` opens the issue and stops
-there; `$finish-change` reports the board write as `not applicable (fork)`.
+there; `$finish-change` reports the board write as `not applicable (no board write)`.
 
 Workflow runs on my pull request wait for a maintainer to approve them, so a check that has
 not started is a queue rather than a failure to chase, and every push waits again.
 `Fathom review` runs only when a maintainer applies the `fathom-review` label; my own
 pushes never start one.
 ```
+
+The board paragraph is the only one worth checking rather than copying, because the maintainer grants read or write on project `4` whenever they decide to, and a fork is no evidence either way. Ask, once, with the `project` scope on your `gh` credentials:
+
+```bash
+gh api graphql -f query='{ user(login: "Krzysztof318") { projectV2(number: 4) { viewerCanUpdate } } }'
+```
+
+No access prints the response body with `"projectV2": null` and a `NOT_FOUND` error, adds its own line on standard error — `gh: Could not resolve to a ProjectV2 with the number 4` — and exits `1`. That is not a wrong number and not a deleted board: GitHub hides a project you cannot see rather than telling you that you cannot see it, so the answer to *no permission* is worded as *does not exist*, and the one line `gh` puts in front of you is the half that says so least clearly.
+
+If that is what you got, check your credentials before believing it: your account's access and your token's access are different things, and only the second is what the call sees. `gh auth status` has to list the `project` scope — `gh auth refresh -s project` adds it — and a `GH_TOKEN` or `GITHUB_TOKEN` in your environment displaces the credential `gh` stored, without `gh auth status` being able to show you its scopes. A fine-grained token never reaches a user-owned project at all, whatever it was configured with; a classic token with `project`, or a plain `gh auth login`, is what does.
+
+A `NOT_FOUND` from a credential that does carry the scope is the paragraph as written above. `viewerCanUpdate: false` makes it *the maintainer has granted me read access to project `4`: read it for context, and report every write as unavailable rather than attempting it*, and `true` makes it *the maintainer has granted me write access to project `4`, so the board steps in `start-task` and `finish-change` apply to me as written*. Nothing else in the block changes: your branch is still yours, your push still goes to your fork, and access to a board is not authority over a repository.
 
 `.gitignore` covers `*.local.md`, so a file written that way cannot reach a commit by accident. Do not put any of this in `AGENTS.md` or `CLAUDE.md` themselves: both are protected paths, so the change would fail a check before anyone read it, and it would be telling every other contributor's agent something true only of your machine.
 
