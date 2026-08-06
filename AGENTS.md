@@ -33,6 +33,7 @@ This file is loaded into every agent session, so it holds what has to be true be
 
 ## Critical repository rules
 
+- **Everything written here and around it is in English**: identifiers, comments, documentation, specifications, commit messages, branch names, pull requests, issues, and every comment on one. The repository is public and its conversation is part of it, so the language a task is *discussed* in — with the owner, in a chat session, in any tongue — never reaches an artifact. This is the one place the rule is stated, and it holds in every directory.
 - Never commit directly on `main` or `master`. Branch before committing; in the owner's checkout that branch is named `agent/<short-description>`.
 - Preserve unrelated user changes. Stage only files that belong to the current task.
 - Make architectural decisions before implementation. Keep changes small, reviewable, and aligned with the architecture draft in `specs/`.
@@ -41,7 +42,7 @@ This file is loaded into every agent session, so it holds what has to be true be
 
 ## The two roles this contract is written for
 
-The repository is public and its roadmap board is not, so these rules run in two places and a few of them belong to only one. `$start-task` resolves which applies, from the workspace rather than from a question, and states it in the brief.
+The repository is public and its roadmap board is not, so these rules run in two places and a few of them belong to only one. `$start-task` resolves which applies, from the workspace rather than from a question, and states it in the brief. That is one step into a session and a session need not start there, so a contributor states the fork role once in a local instruction file their harness loads first — `CLAUDE.local.md` beside `CLAUDE.md`, which `.gitignore` covers as `*.local.md`. `$get-started-contributors` writes it while setting the clone up — a skill a person invokes by hand, never an agent — and `docs/operations/agent-workflow.md` § *Stating the role before a skill resolves it* carries what a wrong guess costs.
 
 **The owner's checkout** is where `origin` is `Krzysztof318/MailFathom` and project `4` answers. Everything here applies, including the rules that exist nowhere else: the `agent/<short-description>` branch name, the linked worktree, the `type:*` label and the milestone on an issue, the board's `Area`, `Queue`, and `Size` fields, and pushing to this repository.
 

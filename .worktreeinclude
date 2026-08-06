@@ -4,6 +4,11 @@
 .env
 .env.local
 
+# The personal instructions Claude Code loads after CLAUDE.md, where a fork's contributor states which role
+# their sessions run in. Gitignored, so it otherwise exists only in the checkout it was written in, which is
+# never the worktree the work happens in.
+CLAUDE.local.md
+
 # Claude Code already resolves .claude/settings.local.json to the main checkout, so a worktree sees
 # the same permissions without this line. It is listed anyway so the file is present on disk for
 # tooling that reads it directly; the main checkout stays the copy to edit.
