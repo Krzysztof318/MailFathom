@@ -279,6 +279,42 @@ public sealed class TransportSecurityExtensionsTests
         Assert.False(connection.AllowAutoRedirect);
     }
 
+    /// <summary>
+    /// Both surfaces may enable OAuth, and each registers the one metadata transport under the same name, so the
+    /// registration is written to assign rather than append. Nothing about that is visible in a deployment serving one
+    /// surface, which is every other test here: a registration that appended would leave the shared client carrying a
+    /// second bounded handler, and the response body of every key refresh would be buffered and length-checked twice
+    /// over on the deployments that enable both.
+    /// </summary>
+    [Fact]
+    public void AddTransportAuthentication_TwoOAuthSurfaces_LeaveOneBoundedHandlerOnTheSharedBackchannel()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Act
+        foreach (var surface in new[] { TransportSurface.Mcp, TransportSurface.Admin })
+        {
+            services.AddTransportAuthentication(
+                surface,
+                TransportAuthenticationMethods.OAuth,
+                [],
+                AnAuthorizationServer(),
+                surface.OAuthSchemeNameFor("workforce"));
+        }
+
+        using var composed = services.BuildServiceProvider();
+        var chain = HandlersOf(composed.GetRequiredService<IHttpMessageHandlerFactory>()
+            .CreateHandler(TransportSecurityExtensions.MetadataBackchannelTransportName));
+
+        // Assert
+        Assert.Single(chain, handler => handler is BoundedMetadataHttpMessageHandler);
+
+        var connection = Assert.IsType<SocketsHttpHandler>(chain[^1]);
+        Assert.Equal(OAuthValidationOptions.MetadataConnectionLifetime, connection.PooledConnectionLifetime);
+    }
+
     /// <summary>Reads a built handler chain from its outermost handler down to the one that opens the connection.</summary>
     /// <remarks><see cref="DelegatingHandler.InnerHandler" /> is public, so the walk needs no reflection; the chain ends at the first handler that delegates to nothing.</remarks>
     private static List<HttpMessageHandler> HandlersOf(HttpMessageHandler outermost)
