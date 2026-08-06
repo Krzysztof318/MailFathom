@@ -6,29 +6,28 @@ All notable changes to MailFathom are recorded here, in the format of
 [ADR 0004](docs/decisions/0004-versioning-and-release-policy.md) interprets it over MailFathom's four public surfaces:
 the MCP tool contract, the configuration schema, the database schema, and the deployment contract.
 
-**This file is written by the release pull request and by nothing else.** Ordinary work does not touch it — not a
-feature, not a fix, not a refactor — because a changelog is a statement about a *release*, and a release is what the
-tagged and published pull request makes. `$prepare-release` composes each section from the work merged since the
-previous tag, and that same pull request is the one whose merge commit is tagged and published to the container
-registries. `CHANGELOG.md` is a protected path for the same reason: an edit to it outside that flow changes what a
-release claims it shipped.
-
-What earns an entry is what a consumer of a release would notice — anything reaching one of the four surfaces, a fixed
-defect that was observable from outside, and any change with a security consequence. A refactor, a test, a
-continuous-integration adjustment, a documentation edit, and an internal rename earn none.
+**It is written for whoever runs MailFathom** — the person installing it and the administrator keeping it running — and
+every section answers the same question before an upgrade: what is new for you, what was fixed, what breaks, and what
+you have to do about it. So what earns an entry is what you would notice: anything reaching one of the four surfaces, a
+fixed defect that was observable from outside, and any change with a security consequence. A refactor, a test, a
+continuous-integration adjustment, a documentation edit, and an internal rename earn none, and nothing below is written
+in the terms of the code that produced it.
 
 A breaking entry opens with `**Breaking (<surface>)**` and states the operator's action rather than only the fact. A
 release that touches the database schema says whether a migration must be applied, whether it can be applied while the
 previous version is still running, and whether the release can be deployed over the previous release's data at all.
 
 MailFathom is pre-release. Within `0.x` a minor bump may break any of the four surfaces, and every break is named
-below against the surface it breaks; a patch is compatible on all four. Nightly builds get no section of their own,
-because they are, by definition, whatever has been merged since the newest section below.
+below against the surface it breaks; a patch is compatible on all four. There is no `Unreleased` heading, and neither
+nightly nor prerelease builds get a section of their own: what a nightly carries is, by definition, whatever has been
+merged since the newest section below.
 
-## [Unreleased]
-
-Nothing yet. A section appears here only when a release is prepared, because this file is written by the release pull
-request and by nothing else; what has merged since the newest section below is what a nightly build carries.
+**This file is written by the release pull request and by nothing else.** Ordinary work does not touch it — not a
+feature, not a fix, not a refactor — because a changelog is a statement about a *release*, and a release is what the
+tagged and published pull request makes. `$prepare-release` composes each section from the work merged since the
+previous tag, and that same pull request is the one whose merge commit is tagged and published to the container
+registries. `CHANGELOG.md` is a protected path for the same reason: an edit to it outside that flow changes what a
+release claims it shipped.
 
 ## [0.3.0] - 2026-08-04
 
@@ -113,10 +112,10 @@ refused connection indistinguishable from an outage ([#374](https://github.com/K
   holds it, set `…:Https:Redirect:Enabled` to `false`. A conflict with another listener of this process is refused at
   startup naming the section that asked for it rather than failing later as an address-in-use error
   ([#374](https://github.com/Krzysztof318/MailFathom/pull/374)).
-- The startup line stating the rate limits in force comes from
-  `MailFathom.Host.Hosting.Warnings.TransportRateLimitingStartupReport` rather than `…McpRateLimitingStartupReport`,
-  and one line is written per enabled endpoint. A deployment that matches on the logger category updates it
-  ([#373](https://github.com/Krzysztof318/MailFathom/pull/373)).
+- **Startup now reports the rate limits once per enabled endpoint rather than once**, and under a different logger
+  category: `MailFathom.Host.Hosting.Warnings.TransportRateLimitingStartupReport`, where `0.2.0` wrote
+  `…McpRateLimitingStartupReport`. A log pipeline that matches on that category updates it, or it stops seeing the
+  line ([#373](https://github.com/Krzysztof318/MailFathom/pull/373)).
 - The clear-text transport warning describes the deployment you configured once a trusted proxy is named, rather than
   suggesting `McpEndpoint:Https:Endpoints` to a deployment whose certificate lives on the proxy
   ([#378](https://github.com/Krzysztof318/MailFathom/pull/378)).
@@ -290,22 +289,24 @@ records the apply path and the ordering a deployment follows.
   never sets the remote `\Seen` flag, and that invariant is proven against a real IMAP server rather than asserted
   ([#13](https://github.com/Krzysztof318/MailFathom/pull/13),
   [#132](https://github.com/Krzysztof318/MailFathom/pull/132)).
-- A supervisor per configured account, each running on a schedule of its own
-  ([#167](https://github.com/Krzysztof318/MailFathom/pull/167)).
+- Each configured account synchronizes on a schedule of its own, and a failure is isolated to the account and the
+  folder it happened in rather than stopping the rest ([#167](https://github.com/Krzysztof318/MailFathom/pull/167)).
 - Remote deletions and flag changes are reconciled back onto the local copy
   ([#171](https://github.com/Krzysztof318/MailFathom/pull/171)).
 - Synchronization is bounded by a configured earliest received date, so an established mailbox is not backfilled in
   full on first run ([#133](https://github.com/Krzysztof318/MailFathom/pull/133)).
-- Normalized metadata is extracted from stored raw MIME and persisted with the indexes a timeline query reads
-  ([#98](https://github.com/Krzysztof318/MailFathom/pull/98),
+- Senders, recipients, subjects, and dates are read out of each stored message and indexed, so listing a folder by date
+  reads an index rather than re-parsing stored mail ([#98](https://github.com/Krzysztof318/MailFathom/pull/98),
   [#106](https://github.com/Krzysztof318/MailFathom/pull/106)).
-- Searchable text is derived from stored mail and indexed for PostgreSQL full-text search, with a backfill worker for
-  mail stored before extraction existed ([#110](https://github.com/Krzysztof318/MailFathom/pull/110)).
-- Folder aliases resolve to remote folders under a generation of their own, so a renamed or re-created folder is
-  detected rather than silently followed ([#94](https://github.com/Krzysztof318/MailFathom/pull/94)).
-- Each class of outbound dependency runs under one configurable resilience pipeline — timeout, bounded retry with
-  jittered backoff, and a circuit breaker ([#83](https://github.com/Krzysztof318/MailFathom/pull/83)) — and a dropped
-  IMAP session is recovered under it ([#92](https://github.com/Krzysztof318/MailFathom/pull/92)).
+- Message text is indexed for full-text search as mail arrives, and anything already stored before that indexing
+  existed is caught up in the background rather than left unsearchable
+  ([#110](https://github.com/Krzysztof318/MailFathom/pull/110)).
+- A folder renamed or re-created on the mail server is detected rather than silently followed
+  ([#94](https://github.com/Krzysztof318/MailFathom/pull/94)).
+- Everything MailFathom calls out to runs under a configurable timeout, a bounded retry with jittered backoff, and a
+  circuit breaker, set per class of dependency ([#83](https://github.com/Krzysztof318/MailFathom/pull/83)), and a
+  dropped IMAP session is recovered under that same budget
+  ([#92](https://github.com/Krzysztof318/MailFathom/pull/92)).
 
 **The MCP tool contract.** Served over the Streamable HTTP transport
 ([#135](https://github.com/Krzysztof318/MailFathom/pull/135)). Every call reads the local copy only, so no tool
@@ -383,18 +384,17 @@ is the whole surface, key by key, including which keys reload and which need a r
   [#264](https://github.com/Krzysztof318/MailFathom/pull/264)).
 - Each release publishes an idempotent `mailfathom-schema-<version>.sql` artifact naming the migrations it carries and
   the checksum that identifies it ([#258](https://github.com/Krzysztof318/MailFathom/pull/258)).
-- The declared version is written in one place and stamped from there into every assembly, the image's tags and
-  labels, the packaged chart's `appVersion`, the host's startup record, and the server's MCP `initialize` response
-  ([#208](https://github.com/Krzysztof318/MailFathom/pull/208)).
+- One version identifies a deployment wherever you look for it: the assemblies, the image's tags and labels, the
+  packaged chart's `appVersion`, the line the host writes at startup, and the server's MCP `initialize` response all
+  report the same number ([#208](https://github.com/Krzysztof318/MailFathom/pull/208)).
 - OpenTelemetry logs, metrics, and traces export when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and host start, startup
   failure, and shutdown are reported from a bootstrap logger that exists before configuration does
   ([#89](https://github.com/Krzysztof318/MailFathom/pull/89)).
-- Every published artifact carries `LICENSE` and `NOTICE`, and a publish that would omit either fails
+- Every published artifact carries `LICENSE` and `NOTICE`
   ([#172](https://github.com/Krzysztof318/MailFathom/pull/172)). MailFathom is licensed under Apache-2.0, and
   [`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) registers
   every dependency it ships beside ([#173](https://github.com/Krzysztof318/MailFathom/pull/173)).
 
-[Unreleased]: https://github.com/Krzysztof318/MailFathom/compare/v0.3.0...main
 [0.3.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Krzysztof318/MailFathom/releases/tag/v0.1.0
