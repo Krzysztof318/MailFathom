@@ -57,6 +57,12 @@ try
     var provisionedConfigurationFileCount = builder.Configuration.AddProvisionedConfiguration();
     bootstrapLogger.RecordProvisionedConfigurationFiles(provisionedConfigurationFileCount);
 
+    // Once every source exists and before anything binds one, because this asks whether a value can reach its reader at
+    // all rather than what the value says. The few settings only the environment can deliver were read before this line
+    // — by the pipeline above, by the OpenTelemetry exporter, by the .NET host, by OpenSSL — so a value that arrived
+    // from anywhere else is refused here instead of being accepted and ignored.
+    EnvironmentOnlySettings.RejectMisplacedValues(builder.Configuration, Environment.GetEnvironmentVariable);
+
     builder.AddServiceDefaults();
     builder.Services.AddProblemDetails();
     builder.Services.AddSingleton(TimeProvider.System);

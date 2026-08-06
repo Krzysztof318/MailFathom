@@ -174,10 +174,15 @@ therefore the same act written for a different launcher, and each is equally sup
 ## It cannot be an `appsettings.json` setting
 
 OpenSSL initializes before .NET configuration binding runs, and it reads `OPENSSL_CONF` while initializing. A value
-written into `appsettings.json`, a mounted ConfigMap, or user secrets is read long after that and is silently
-ineffective — the process starts, the setting is present, and the handshake fails exactly as before.
+written into `appsettings.json`, a mounted ConfigMap, or user secrets is read long after that and reaches nothing — the
+setting would be present, and the handshake would fail exactly as before.
 
-This is why MailFathom exposes no key for it. [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md)
+Which is why writing one there **fails startup** naming the variable rather than being accepted. The failure that
+reports it, and the other environment-only families it covers, are in
+[environment-only settings](configuration-reference.md#environment-only-settings). Set it the way the deployment shapes
+above set it, and confirm it arrived through the startup warning below.
+
+This is also why MailFathom exposes no key for it. [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md)
 places configuration reading at the host boundary; this is one step earlier than any boundary that ADR describes, which
 makes it a pre-start environment concern by nature rather than by choice.
 

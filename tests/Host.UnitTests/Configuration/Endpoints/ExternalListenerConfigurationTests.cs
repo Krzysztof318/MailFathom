@@ -39,6 +39,41 @@ public sealed class ExternalListenerConfigurationTests
         Assert.Contains($"{McpEndpointOptions.SectionName}:Port", error, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The host strips the prefix from an environment variable, so a file naming the variable itself produces a key no
+    /// prefix-stripping provider ever sees. Checking only the short key would accept a listener named in a mounted
+    /// ConfigMap and ignore it, which is the failure this type exists to prevent.
+    /// </summary>
+    [Theory]
+    [InlineData("ASPNETCORE_URLS")]
+    [InlineData("ASPNETCORE_HTTP_PORTS")]
+    [InlineData("ASPNETCORE_HTTPS_PORTS")]
+    public void FindConfigurationErrors_AUrlShapedAddressWrittenUnderItsVariableName_IsRefused(string variable)
+    {
+        // Act
+        var error = Assert.Single(ExternalListenerConfiguration.FindConfigurationErrors(
+            Configuration(new Dictionary<string, string?> { [variable] = "8080" })));
+
+        // Assert
+        Assert.StartsWith(variable, error, StringComparison.Ordinal);
+    }
+
+    /// <summary>An environment variable populates both keys at once, and the operator set one thing.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AUrlShapedAddressUnderBothOfItsKeys_IsReportedOnce()
+    {
+        // Act
+        var error = Assert.Single(ExternalListenerConfiguration.FindConfigurationErrors(
+            Configuration(new Dictionary<string, string?>
+            {
+                ["urls"] = "http://0.0.0.0:8080",
+                ["ASPNETCORE_URLS"] = "http://0.0.0.0:8080",
+            })));
+
+        // Assert
+        Assert.StartsWith("ASPNETCORE_URLS", error, StringComparison.Ordinal);
+    }
+
     /// <summary>Every one of them is reported, so an operator moving a deployment reads the whole list rather than one variable per restart.</summary>
     [Fact]
     public void FindConfigurationErrors_SeveralUrlShapedAddresses_AreAllReported() =>

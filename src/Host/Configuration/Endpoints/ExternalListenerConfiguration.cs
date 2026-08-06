@@ -33,10 +33,20 @@ internal static class ExternalListenerConfiguration
 
     /// <summary>The URL-shaped address keys, paired with the environment variable an operator wrote to reach each one.</summary>
     /// <remarks>
+    /// <para>
     /// The configuration keys are the host's own, and the variables are what an operator recognizes: a message naming
     /// <c>urls</c> would describe a key nobody typed. <c>--urls</c> and a launch profile's <c>applicationUrl</c> reach
     /// the same key and are reported against the same name, which is as close as this can come to naming what was
     /// actually written.
+    /// </para>
+    /// <para>
+    /// Each address is reachable under two configuration keys and both are checked. The host strips the
+    /// <c>ASPNETCORE_</c> prefix from an environment variable, so setting one produces the short key; writing the same
+    /// name into an <c>appsettings.json</c> file or a mounted ConfigMap produces the long one, which no prefix-stripping
+    /// provider ever sees. Checking only the short key would leave a listener named in a file accepted and ignored,
+    /// which is the failure this whole type exists to prevent. One error is reported per variable regardless, because an
+    /// environment variable populates both keys at once and an operator set one thing.
+    /// </para>
     /// </remarks>
     private static readonly (string ConfigurationKey, string Variable)[] UrlShapedAddressKeys =
     [
@@ -56,7 +66,8 @@ internal static class ExternalListenerConfiguration
         var errors = new List<string>();
 
         errors.AddRange(UrlShapedAddressKeys
-            .Where(key => !string.IsNullOrWhiteSpace(configuration[key.ConfigurationKey]))
+            .Where(key => !string.IsNullOrWhiteSpace(configuration[key.ConfigurationKey])
+                || !string.IsNullOrWhiteSpace(configuration[key.Variable]))
             .Select(static key =>
                 $"{key.Variable} — MailFathom serves no listener of its own from this variable. Each surface states where it is served in its own section: '{McpEndpointOptions.SectionName}:BindAddress' and '{McpEndpointOptions.SectionName}:Port' for the MCP endpoint, '{AdminEndpointOptions.SectionName}:*' for the administrative one, and '{HealthEndpointOptions.SectionName}:*' for the probes. Move the address there and remove this variable."));
 

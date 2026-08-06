@@ -537,11 +537,45 @@ belong to the platform rather than to MailFathom:
 | Variable | What it does |
 | --- | --- |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Attaches the OTLP exporter for logs, metrics, and traces — startup records included. Unset exports nothing. [Telemetry](telemetry.md) is the page, including the sibling `OTEL_*` variables the exporter reads itself |
+| `OTEL_SERVICE_NAME` | The service identity the startup records and every exported record carry. Unset reports the host assembly's own name |
 | `ASPNETCORE_URLS` / `ASPNETCORE_HTTP_PORTS` / `ASPNETCORE_HTTPS_PORTS` | Nothing — [each surface states where it is served](#where-each-surface-is-served), and setting one of these fails startup with a message naming the key that replaces it |
 | `DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT` | The environment name; `Development` is what admits user secrets and `appsettings.Development.json` |
 | `DOTNET_USE_POLLING_FILE_WATCHER` | Set to `1` where reload must observe a mounted volume's atomic update — Kubernetes ConfigMaps in particular |
 | `OPENSSL_CONF` | The OpenSSL configuration file every TLS connection in the process is handshaked under. Unset is the platform's own policy; setting it is how a mail server the platform refuses is reached at all, and the host warns at startup that it is in force. [The platform TLS policy](platform-tls-policy.md) is the page |
 
-`OPENSSL_CONF` is the one entry here that could not be a MailFathom setting even in principle: OpenSSL reads it while
-initializing, before configuration binding exists, so the same name written into `appsettings.json` or a mounted file is
-silently ineffective.
+Each of these has a reader that runs before MailFathom's configuration exists, or that never consults it: the bootstrap
+logging pipeline is composed before the configuration providers are, because a malformed `appsettings.json` is one of
+the failures it exists to report; the OpenTelemetry exporter reads its own `OTEL_*` variables directly; the .NET host
+settles the environment name before the application's configuration is composed; and OpenSSL reads `OPENSSL_CONF` while
+it initializes, which is the one entry here that could not be a MailFathom setting even in principle.
+
+### Writing one anywhere else fails startup
+
+A value for any of them that did not come from the process environment is refused, naming every such variable at once:
+
+```
+Settings only the process environment can deliver carry a value that did not come from it: OPENSSL_CONF,
+OTEL_SERVICE_NAME. Each is read before MailFathom's configuration exists, or by a library that never consults it, so a
+value written into an appsettings file, a provisioned configuration file, or a command-line argument reaches nobody. Set
+each as an environment variable on the host process, or remove it.
+```
+
+That failure carries error code `12002` and ends the process through the same bootstrap pipeline every other startup
+failure does. It exists because the mistake is otherwise invisible: the configuration pipeline accepts
+`"OTEL_SERVICE_NAME"` in a mounted ConfigMap and reads it back happily, while the exporter — which took its value from
+the environment long before that file was layered in — keeps reporting under the assembly name. Nothing in the file, in
+the logs, or in the process would say which of the two an operator was looking at.
+
+The check compares against the environment rather than merely looking for the name, because the environment provider
+puts these names into configuration too, and a value that arrived that way is exactly what a correct deployment looks
+like. What it catches beyond an absent variable is an override: a command-line argument outranks the environment
+provider, so `--OTEL_SERVICE_NAME=…` leaves configuration reporting one identity while the exporter keeps using another.
+
+Whole families are covered rather than the names in the table alone. Every `OTEL_*`, `ASPNETCORE_*`, and `DOTNET_*`
+variable belongs to a reader that takes it from the environment, so naming only the handful MailFathom itself reads
+would leave the rest — `OTEL_EXPORTER_OTLP_HEADERS` above all, which carries a collector's credential — silently
+ignorable. A blank value counts as unset on both sides, because templating a manifest routinely emits an empty string
+for a setting nobody chose.
+
+The three URL-shaped listener addresses are the exception, and they are stricter rather than looser: they are refused
+from *every* source, the environment included, because no MailFathom surface is served from one at all.

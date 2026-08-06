@@ -22,6 +22,14 @@ namespace MailFathom.Infrastructure.Persistence;
 /// command that does need a live database is expected to be run by the AppHost's migration resource, which supplies
 /// <see cref="OrchestratedConnectionStringVariableName" />; the two fallbacks below exist for a command run outside it.
 /// </para>
+/// <para>
+/// Every value below is read from the process environment rather than through <c>IConfiguration</c>, because under
+/// <c>dotnet ef</c> there is no configuration to read: the tooling loads this assembly and calls this factory without
+/// composing a host, so no content root, no <c>appsettings.json</c>, and no provisioned source is layered in. The names
+/// are nonetheless the double-underscore encoding of the configuration keys they stand for, which is what keeps a
+/// design-time command and a running host describing the same database and the same text search configuration in one
+/// vocabulary rather than two.
+/// </para>
 /// </remarks>
 internal sealed class MailFathomDbContextDesignTimeFactory : IDesignTimeDbContextFactory<MailFathomDbContext>
 {
