@@ -64,7 +64,9 @@ I am an external contributor to MailFathom. `origin` is my fork and `upstream` i
 `Krzysztof318/MailFathom`, so the fork role in `AGENTS.md` governs every session in this
 checkout. Do not read or write project `4`, and do not assign a `type:*` label, a milestone,
 or a board field — triage does that. Never push to `Krzysztof318/MailFathom`. My branch keeps
-the name I gave it.
+the name I gave it. Workflow runs on my pull request wait for a maintainer to approve them,
+so a check that has not started is a queue rather than a failure to chase, and every push
+waits again.
 ```
 
 `.gitignore` covers `*.local.md`, so a file written that way cannot reach a commit by accident. Do not put any of this in `AGENTS.md` or `CLAUDE.md` themselves: both are protected paths, so the change would fail a check before anyone read it, and it would be telling every other contributor's agent something true only of your machine.
@@ -131,7 +133,9 @@ Fix it in the commit rather than on top of it. A secret that reached a commit is
 - **Put `Closes #<issue>` in the body.** It closes the issue on merge, which is also how the maintainer's own planning view learns the work is done. That view is a private project board you neither see nor need; the issue is where the conversation lives.
 - **One change per pull request.** Split out anything the reviewer would have to judge separately.
 
-Two checks gate the merge and both always report:
+**Nothing runs until a maintainer approves the run.** A workflow triggered by a pull request from a fork waits for someone with write access to release it, so on your first push the checks sit unstarted rather than red, and every later push waits the same way. That is GitHub's protection against a fork running this repository's workflows unreviewed, not a fault in your branch and not something you can retry your way past. Two consequences worth knowing: a check that has not started tells you nothing about your change, so read it as a queue rather than as a signal; and if you are working with an agent, say so in its instructions, because an agent watching for a verdict will otherwise keep waiting for one that cannot arrive yet. Run the gates locally in the meantime — they are the same ones.
+
+Two checks gate the merge and both always report once the run is approved:
 
 - **`Required CI`** — the build, the unit tests, the coverage threshold, and formatting.
 - **`Protected paths`** — refuses a change from anyone but the repository owner to `.github/`, `.agents/`, `.claude/`, `.config/`, or `docs/decisions/`, to an `.editorconfig`, `.gitattributes`, `.worktreeinclude`, `AGENTS.md`, or `CLAUDE.md` at any depth, or to the repository-root `CHANGELOG.md`, `Directory.Build.props`, `LICENSE`, `NOTICE`, `NuGet.config`, or `global.json`. Those decide how every other change is judged rather than being judged by it, so a change to one is a separate conversation rather than a line inside a feature's diff. `docs/decisions/` is there for that reason and not because it is documentation: an architectural decision record is what the next change is written to be consistent with, so proposing a new one or a change to an existing one belongs in an issue. The check names the protected paths it found either way, so a passing run tells you which ones your change moved. If your work genuinely needs one — a new local tool, a coverage setting, a package pin, a workflow step — split it out and ask. A word for the typo checker's vocabulary is the exception, and the paragraph below says how to add one.

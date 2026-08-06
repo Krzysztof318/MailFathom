@@ -197,7 +197,9 @@ offer to go deeper on any one of them instead of expanding all six.
    `Krzysztof318/MailFathom`, so the fork role in `AGENTS.md` governs every session in this
    checkout. Do not read or write project `4`, and do not assign a `type:*` label, a milestone,
    or a board field — triage does that. Never push to `Krzysztof318/MailFathom`. My branch keeps
-   the name I gave it.
+   the name I gave it. Workflow runs on my pull request wait for a maintainer to approve them,
+   so a check that has not started is a queue rather than a failure to chase, and every push
+   waits again.
    ```
 
    `CONTRIBUTING.md` § *Tell your agent it is working in a fork* carries the same block, and the two are one text:
@@ -262,6 +264,10 @@ offer to go deeper on any one of them instead of expanding all six.
      any author but the owner, whatever the change says. Raise one as an issue;
    - the roadmap board is private, so an issue opened from outside carries no label, no milestone, and no board fields
      by design, and triage supplies them. That is the expected shape of an arrival, not a step that failed;
+   - **no workflow starts by itself.** A run triggered by a fork's pull request waits for somebody with write access to
+     approve it, on the first push and on every one after, so the checks sit unstarted rather than red and nothing about
+     the branch can be read from them. That is why the local gates are the ones to trust, and why an agent left watching
+     for a verdict waits for one that cannot arrive yet — which is what the local instruction file above says out loud;
    - `Fathom review` runs on a fork's pull request only when a maintainer applies the `fathom-review` label. Your own
      pushes never start one, and nothing you can write in a comment does either;
    - the integration suite starts containers and runs when a maintainer asks for it.
