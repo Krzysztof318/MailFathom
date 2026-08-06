@@ -76,6 +76,24 @@ internal sealed class MailSynchronizationOptions
     [Range(1, 20)]
     public int MaxConcurrentFoldersPerAccount { get; set; } = 1;
 
+    /// <summary>Gets or sets how long an account's write connection is kept after the last change it carried.</summary>
+    /// <remarks>
+    /// <para>
+    /// An account holds at most one connection able to change its mailbox, opened the first time something asks to and
+    /// closed once this long has passed without anything asking again. It is the third kind of connection an account
+    /// can hold, beside the <see cref="MaxConcurrentFoldersPerAccount" /> synchronization ones and the push session, so
+    /// it counts against whatever limit the mail server applies per account even though nothing is being written.
+    /// </para>
+    /// <para>
+    /// The bound is on the idle time rather than on the number of connections, because the number is already one and
+    /// cannot become two. Lowering it gives the slot back sooner at the cost of a fresh handshake and authentication
+    /// for the next change; raising it does the opposite. Zero is not accepted, because a connection closed the instant
+    /// it is released is the per-mutation connection this exists to avoid.
+    /// </para>
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:05", "00:30:00")]
+    public TimeSpan WriteConnectionIdlePeriod { get; set; } = TimeSpan.FromMinutes(2);
+
     /// <summary>Gets or sets how long shutdown waits for the work units already under way before cancelling them.</summary>
     /// <remarks>
     /// Shutdown stops scheduling immediately and only then waits, so this bounds the drain rather than delaying every

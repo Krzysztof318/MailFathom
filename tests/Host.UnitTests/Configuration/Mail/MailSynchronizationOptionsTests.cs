@@ -550,6 +550,44 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Contains("Push", result.ErrorMessage, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The write connection is the third kind an account can hold, and the setting bounds how long it keeps its slot
+    /// after the last change it carried. Zero is refused because a connection closed the instant it is released is the
+    /// per-mutation connection the pool exists to avoid, and the ceiling keeps an idle account from holding a slot for
+    /// most of an hour.
+    /// </summary>
+    [Theory]
+    [InlineData("00:00:00")]
+    [InlineData("00:00:04")]
+    [InlineData("00:31:00")]
+    public void Bind_WriteConnectionIdlePeriodOutsideItsRange_FailsDataAnnotationValidation(string configuredValue)
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions();
+        new ConfigurationBuilder()
+            .AddInMemoryCollection([
+                new KeyValuePair<string, string?>("WriteConnectionIdlePeriod", configuredValue),
+            ])
+            .Build()
+            .Bind(options);
+
+        // Act
+        var valid = Validator.TryValidateObject(options, new ValidationContext(options), null, validateAllProperties: true);
+
+        // Assert
+        Assert.False(valid);
+    }
+
+    [Fact]
+    public void WriteConnectionIdlePeriod_NothingIsConfigured_KeepsTheConnectionLongEnoughToBatchARunOfChanges()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions();
+
+        // Act, Assert
+        Assert.Equal(TimeSpan.FromMinutes(2), options.WriteConnectionIdlePeriod);
+    }
+
     /// <summary>RFC 2177 requires IDLE to be re-issued at least every 29 minutes, so the defaults have to sit under it.</summary>
     [Fact]
     public void PushDefaults_NothingIsConfigured_RenewWellInsideTheProtocolMandate()

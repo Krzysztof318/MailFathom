@@ -6,6 +6,7 @@ using MailFathom.AI;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -83,6 +84,9 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             MaxExtractedTextCharacters = 10_000,
         });
         builder.Services.AddSingleton(new EmailContentReadOptions { MaxBodyCharacters = 10_000 });
+        // Registered by the composition root rather than by AddInfrastructure, so the write-connection pool would fail
+        // to resolve here for the same reason every bound setting above is supplied: the suite does not start the host.
+        builder.Services.AddSingleton(new MailboxWriteSessionOptions());
         builder.Services.AddSingleton(new PersistenceConcurrencyOptions { MaximumCommitAttempts = 3 });
 
         // Registered by a composition root rather than by AddInfrastructure, because persistence writes what the AI

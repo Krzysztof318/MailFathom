@@ -50,14 +50,13 @@ internal sealed class MailKitRemoteFolderCatalog(
         MailTransportSecurityPolicy transportSecurityPolicy,
         CancellationToken cancellationToken)
     {
-        await using var connection = new MailKitImapConnection(
+        await using var connection = MailKitImapConnection.ForFolderDiscovery(
             clientFactory,
             settingsProvider,
             accessTokenSource,
             operationExecutor,
             transientFailureClassifier,
             accountId,
-            folder: null,
             transportSecurityPolicy);
 
         return await connection.ExecuteClientReadAsync(ListAdvertisedFoldersAsync, cancellationToken);

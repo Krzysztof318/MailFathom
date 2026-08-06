@@ -8,6 +8,7 @@ using MailFathom.Application.EmailContent;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -171,6 +172,14 @@ try
     builder.Services.AddScoped<IMailAccountCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();
     builder.Services.AddScoped<IMailOAuthSettingsProvider, ConfiguredMailOAuthSettingsProvider>();
+    // A singleton, unlike the settings around it, because the pool that reads it is one: the write connection is
+    // bounded per account across the process rather than per work unit. The idle period is therefore read once at
+    // startup, which is why the configuration reference marks it as needing a restart.
+    builder.Services.AddSingleton(provider => new MailboxWriteSessionOptions
+    {
+        ConnectionIdlePeriod = provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>()
+            .Current.WriteConnectionIdlePeriod,
+    });
     builder.Services.AddScoped(provider =>
     {
         var synchronizationSettings = provider.GetRequiredService<MailSynchronizationOptions>();

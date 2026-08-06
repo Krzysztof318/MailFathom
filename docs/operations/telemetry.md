@@ -21,10 +21,19 @@ its attempts, outcomes, timeouts, and circuit-breaker state transitions.
 [Outbound resilience](../architecture/outbound-resilience.md#telemetry-and-privacy) records which tags those events
 carry and which they never do.
 
+One meter is MailFathom's own: `MailFathom.Mailbox.Mutations` counts every change made to a remote mailbox and how
+long it took, broken down by the mutation, the account, the folder alias, and whether it succeeded. It is deliberately
+**not** broken down by which IMAP commands carried the change — a relocation is one operation whether the server
+offered RFC 6851 `MOVE` or the copy-flag-expunge sequence was used instead, and a dimension telling the two apart is
+exactly what would make a missing server extension look like a different operation on a dashboard. Which path ran is in
+the debug log.
+
 **Traces** cover incoming requests, outbound HTTP, and database commands, correlated end to end: the trace a request
 arrives with is the trace its log records and its failure diagnostics carry. One filter is deliberate: requests to the
 health-probe paths are not traced at all, because a probe arrives every few seconds for the life of the process and
-says the same thing every time — tracing it would fill a trace store with polling instead of work.
+says the same thing every time — tracing it would fill a trace store with polling instead of work. One first-party source joins them: `MailFathom.Mailbox.Mutations` opens a
+span per change to a remote mailbox, named after the mutation and carrying the same account and folder-alias tags the
+meter does. No mail content, remote folder path, UID, or credential reaches any of it.
 
 ## The one switch: `OTEL_EXPORTER_OTLP_ENDPOINT`
 

@@ -14,6 +14,7 @@ using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Synchronization;
@@ -25,8 +26,10 @@ using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Folders;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.MailKit;
+using MailFathom.Infrastructure.Mail.MailKit.Writes;
 using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.Infrastructure.Mail.OAuth;
+using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Accounts;
 using MailFathom.Infrastructure.Persistence.Connections;
@@ -228,6 +231,21 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<ITransientFailureClassifier>(),
             MailKitImapChangeSubscription.RequestFolderNotificationsAsync,
             provider.GetRequiredService<TimeProvider>()));
+        // The pool is a singleton because the bound it enforces is one write connection per account across the whole
+        // process; a scoped one would hold that bound per scope and let two concurrent runs open two. The factory in
+        // front of it stays scoped like every other mail adapter, and carries no state of its own.
+        services.AddSingleton<MailboxMutationTelemetry>();
+        services.AddSingleton(provider => new MailboxWriteConnectionPool(
+            static () => new ImapClient(),
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            provider.GetRequiredService<OutboundOperationExecutor>(),
+            provider.GetRequiredService<ITransientFailureClassifier>(),
+            provider.GetRequiredService<MailboxWriteSessionOptions>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILogger<MailboxWriteConnectionPool>>()));
+        services.AddScoped<IMailboxWriteSessionFactory>(provider => new MailKitImapWriteSessionFactory(
+            provider.GetRequiredService<MailboxWriteConnectionPool>(),
+            provider.GetRequiredService<MailboxMutationTelemetry>()));
         services.AddScoped<IRemoteFolderCatalog>(provider => new MailKitRemoteFolderCatalog(
             static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),

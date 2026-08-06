@@ -40,7 +40,7 @@ internal sealed class MailKitImapNotificationSessionFactory(
     {
         ArgumentNullException.ThrowIfNull(folder);
 
-        var connection = new MailKitImapConnection(
+        var connection = MailKitImapConnection.ForReading(
             clientFactory,
             settingsProvider,
             accessTokenSource,
@@ -101,7 +101,7 @@ internal sealed class MailKitImapNotificationSessionFactory(
             throw new ArgumentException("A subscription watches at least one folder.", nameof(folders));
         }
 
-        var connection = new MailKitImapConnection(
+        var connection = MailKitImapConnection.ForReading(
             clientFactory,
             settingsProvider,
             accessTokenSource,

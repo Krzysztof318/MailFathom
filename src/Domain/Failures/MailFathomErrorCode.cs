@@ -71,6 +71,15 @@ public readonly record struct MailFathomErrorCode
     /// <summary>Gets subcategory 4, answer completeness: a mail server answered for an email without the data items the command requested.</summary>
     public static MailFathomErrorCode MailboxAnswerIncomplete { get; } = new(24001);
 
+    /// <summary>Gets subcategory 5, mutation support: a mail server advertises no extension able to carry a requested change safely.</summary>
+    /// <remarks>
+    /// It is a subcategory of its own rather than one more availability failure, because the two say opposite things
+    /// about repeating the work. An unavailable mailbox is expected to serve the same operation on a later run; a server
+    /// that advertises no way to remove one message without removing others will still advertise none tomorrow, so the
+    /// operation is refused rather than deferred.
+    /// </remarks>
+    public static MailFathomErrorCode MailboxMutationUnsupported { get; } = new(25001);
+
     #endregion
 
     #region Category 3 — Persistence
@@ -177,6 +186,7 @@ public readonly record struct MailFathomErrorCode
         MailboxUnavailable,
         MailboxFolderRecreated,
         MailboxAnswerIncomplete,
+        MailboxMutationUnsupported,
         PersistenceConcurrencyConflict,
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,

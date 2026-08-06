@@ -139,6 +139,31 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
         await client.DisconnectAsync(quit: true, cancellationToken);
     }
 
+    /// <summary>Flags one message <c>\Deleted</c> without expunging it, the way another mail client would.</summary>
+    /// <param name="folderPath">The folder holding the message.</param>
+    /// <param name="uid">The message to flag.</param>
+    /// <param name="cancellationToken">Cancels the update.</param>
+    /// <remarks>
+    /// This is the neighbour a message-scoped expunge has to leave alone. A bare IMAP <c>EXPUNGE</c> removes every
+    /// message in the folder carrying this flag, so a message flagged here and still present afterwards is the whole
+    /// proof that MailFathom issued <c>UID EXPUNGE</c> rather than the unscoped command — and it has to be flagged over
+    /// a connection the adapter knows nothing about, because the point is that MailFathom never saw it.
+    /// </remarks>
+    internal async Task MarkDeletedAsync(string folderPath, ImapUid uid, CancellationToken cancellationToken)
+    {
+        using var client = await this.ConnectAndAuthenticateAsync(cancellationToken);
+
+        var folder = await client.GetFolderAsync(folderPath, cancellationToken);
+        await folder.OpenAsync(FolderAccess.ReadWrite, cancellationToken);
+
+        await folder.AddFlagsAsync(new UniqueId(uid.Value), MessageFlags.Deleted, silent: true, cancellationToken);
+
+        // expunge: false is the point of the method. Closing with an expunge would remove the message this just
+        // flagged, and the test would then pass without MailFathom having been asked to spare anything.
+        await folder.CloseAsync(expunge: false, cancellationToken);
+        await client.DisconnectAsync(quit: true, cancellationToken);
+    }
+
     /// <summary>Puts a brand-new folder under a name, retiring whatever the server currently holds there.</summary>
     /// <param name="folderName">The folder to create beneath the personal namespace root.</param>
     /// <param name="cancellationToken">Cancels the recreation.</param>
