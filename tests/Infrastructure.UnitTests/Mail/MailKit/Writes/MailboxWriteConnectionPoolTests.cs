@@ -119,10 +119,53 @@ public sealed class MailboxWriteConnectionPoolTests
         // Act
         await using var heldSession = await harness.OpenSessionAsync();
         clock.Advance(IdlePeriod * 4);
+
+        // The eviction runs from a timer callback nothing awaits, so without waiting for it here the assertions below
+        // would run before a wrongly-scheduled close had touched anything and pass whatever it went on to do.
+        await harness.Pool.WaitForPendingEvictionsAsync();
         await heldSession.SetSeenAsync(CreateOccurrenceId(43U), isSeen: true, CancellationToken.None);
 
         // Assert
         Assert.Equal(0, client.DisconnectCount);
+        Assert.Equal(1, client.ConnectCount);
+    }
+
+    /// <summary>
+    /// A session disposed twice must release the account's gate once. A second release would raise the semaphore's
+    /// count to two and let a caller take the connection while somebody else is still using it, which is the
+    /// one-connection-per-account bound failing in the least visible way: nothing throws, and two mutations simply
+    /// interleave on one IMAP connection.
+    /// </summary>
+    [Fact]
+    public async Task DisposeAsync_OnASessionDisposedTwice_ReleasesTheAccountOnlyOnce()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var openFolder = CreateWritableFolder();
+        var client = PrepareServer(new FakeImapClient { Capabilities = ImapCapabilities.UidPlus }, openFolder);
+        await using var harness = CreateHarness(
+            resilience,
+            ConnectionSequence(client),
+            new FakeTimeProvider(ObservedAt),
+            new MailboxWriteSessionOptions { ConnectionIdlePeriod = IdlePeriod });
+
+        var doublyDisposedSession = await harness.OpenSessionAsync();
+        await doublyDisposedSession.DisposeAsync();
+
+        // Act
+        await doublyDisposedSession.DisposeAsync();
+
+        // Assert
+        // The gate is proven to hold exactly one permit by contending for it: a second release would have left two, and
+        // the contending lease would then complete immediately instead of waiting for the held one.
+        var heldSession = await harness.OpenSessionAsync();
+        var contendingSession = harness.OpenSessionAsync();
+
+        Assert.False(contendingSession.IsCompleted);
+
+        await heldSession.DisposeAsync();
+
+        await using var resumedSession = await contendingSession;
         Assert.Equal(1, client.ConnectCount);
     }
 

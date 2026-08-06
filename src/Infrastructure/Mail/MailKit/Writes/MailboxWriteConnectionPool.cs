@@ -140,6 +140,20 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
         }
     }
 
+    /// <summary>Waits for every idle eviction currently running, so a background close can be observed rather than raced.</summary>
+    /// <returns>A task that completes once no account is part-way through closing an expired connection.</returns>
+    /// <remarks>
+    /// An eviction runs from a timer callback that nothing awaits, which makes it the one thing about this pool that
+    /// cannot be observed from the outside. Shutdown waits for it through the same path.
+    /// </remarks>
+    internal async Task WaitForPendingEvictionsAsync()
+    {
+        foreach (var account in this.accounts.Values)
+        {
+            await account.WaitForPendingEvictionAsync();
+        }
+    }
+
     [LoggerMessage(
         Level = LogLevel.Debug,
         Message = "Opened the write connection for account {AccountId}, selecting folder {FolderAlias}.")]
@@ -165,6 +179,14 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
         private MailFolderResolutionId? selectedFolderId;
         private ITimer? idleTimer;
         private bool disposed;
+
+        /// <summary>The eviction the idle timer last started, so shutdown can wait for it rather than race it.</summary>
+        /// <remarks>
+        /// The timer callback cannot be awaited by whoever scheduled it, so without holding on to the task a host could
+        /// return from <see cref="DisposeAsync" /> while a background close was still speaking to the mail server.
+        /// Volatile because the callback writes it from the timer's thread and shutdown reads it from another.
+        /// </remarks>
+        private volatile Task pendingEviction = Task.CompletedTask;
 
         internal async Task<MailboxWriteConnectionLease> LeaseAsync(
             MailFolderResolution folder,
@@ -220,6 +242,11 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
             // back. An expiry already running holds the gate, and the wait below is what lets it finish.
             this.idleTimer?.Dispose();
 
+            // Then the eviction it may already have started, because that one is closing a connection against the mail
+            // server on a thread nothing else is waiting for. Returning from here without it would report every
+            // connection closed while one was still being closed.
+            await this.WaitForPendingEvictionAsync();
+
             await this.gate.WaitAsync(CancellationToken.None);
             try
             {
@@ -269,7 +296,7 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
         private ValueTask ReleaseAsync()
         {
             this.idleTimer ??= pool.timeProvider.CreateTimer(
-                _ => _ = this.CloseIdleConnectionAsync(),
+                _ => this.pendingEviction = this.CloseIdleConnectionAsync(),
                 state: null,
                 Timeout.InfiniteTimeSpan,
                 Timeout.InfiniteTimeSpan);
@@ -316,6 +343,13 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
                 this.ReleaseGate();
             }
         }
+
+        /// <summary>Waits for the eviction the idle timer last started, if one is still running.</summary>
+        /// <remarks>
+        /// An eviction reports its own failure and never propagates one, so this only ever waits. It is what lets
+        /// shutdown — and a test that advanced a fake clock — observe a background close rather than race it.
+        /// </remarks>
+        internal Task WaitForPendingEvictionAsync() => this.pendingEviction;
 
         /// <summary>Gives the gate back, tolerating the one disposal that can race a release.</summary>
         /// <remarks>
