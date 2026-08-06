@@ -29,7 +29,16 @@ namespace MailFathom.Infrastructure.Mail.OAuth;
 /// </remarks>
 internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
 {
-    private readonly HttpClient httpClient;
+    /// <summary>Names the registered transport a token request is sent over.</summary>
+    /// <remarks>
+    /// Declared by the caller rather than by the registration, because a name resolved through
+    /// <see cref="IHttpClientFactory" /> is a string either side can get wrong in silence: asking for one that was never
+    /// registered yields a client with no bounds and no handlers rather than a failure. One constant, referenced from
+    /// both, is what makes that a compile-time agreement.
+    /// </remarks>
+    internal const string TransportName = "mailfathom.mail-oauth";
+
+    private readonly IHttpClientFactory transportFactory;
     private readonly IMailOAuthSettingsProvider settingsProvider;
     private readonly IMailboxRefreshTokenStore refreshTokenStore;
     private readonly MailAccessTokenCache tokenCache;
@@ -37,8 +46,8 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     private readonly TimeProvider timeProvider;
     private readonly ILogger<MailOAuthAccessTokenSource> logger;
 
-    /// <summary>Initializes a token source over a transport, the account settings, the stored grant, the shared cache, and the resilience budget.</summary>
-    /// <param name="httpClient">The transport used for token requests.</param>
+    /// <summary>Initializes a token source over a transport factory, the account settings, the stored grant, the shared cache, and the resilience budget.</summary>
+    /// <param name="transportFactory">Opens the transport a token request is sent over, one per exchange.</param>
     /// <param name="settingsProvider">Resolves one account's endpoint and secrets per request.</param>
     /// <param name="refreshTokenStore">Holds the refresh token MailFathom stores, and receives the one a rotation issues.</param>
     /// <param name="tokenCache">Holds the issued tokens across scopes and serializes the requests that replace them.</param>
@@ -47,7 +56,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     /// <param name="logger">Records the outcome without recording any token.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public MailOAuthAccessTokenSource(
-        HttpClient httpClient,
+        IHttpClientFactory transportFactory,
         IMailOAuthSettingsProvider settingsProvider,
         IMailboxRefreshTokenStore refreshTokenStore,
         MailAccessTokenCache tokenCache,
@@ -55,7 +64,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         TimeProvider timeProvider,
         ILogger<MailOAuthAccessTokenSource> logger)
     {
-        ArgumentNullException.ThrowIfNull(httpClient);
+        ArgumentNullException.ThrowIfNull(transportFactory);
         ArgumentNullException.ThrowIfNull(settingsProvider);
         ArgumentNullException.ThrowIfNull(refreshTokenStore);
         ArgumentNullException.ThrowIfNull(tokenCache);
@@ -63,7 +72,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
-        this.httpClient = httpClient;
+        this.transportFactory = transportFactory;
         this.settingsProvider = settingsProvider;
         this.refreshTokenStore = refreshTokenStore;
         this.tokenCache = tokenCache;
@@ -159,6 +168,14 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         return form;
     }
 
+    /// <summary>Posts the grant to the authorization server and reads the token out of the response.</summary>
+    /// <remarks>
+    /// The transport is opened per exchange and released with it, which is what keeps the registration free of a
+    /// connection lifetime: the factory retires a handler chain on its own schedule and a client asked for after that
+    /// carries the replacement, so an authorization server that has moved is reached at its new address by the next
+    /// exchange rather than by the next process. Holding one across a synchronization run would undo that, and this
+    /// runs inside a retry, where a per-attempt client also costs nothing.
+    /// </remarks>
     private async Task<MailAccessToken> ExchangeGrantAsync(
         MailOAuthAccountSettings settings,
         Dictionary<string, string> form,
@@ -167,8 +184,9 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         OAuthTokenResponse? payload;
         try
         {
+            using var transport = this.transportFactory.CreateClient(TransportName);
             using var content = new FormUrlEncodedContent(form);
-            using var response = await this.httpClient.PostAsync(settings.TokenEndpoint, content, cancellationToken);
+            using var response = await transport.PostAsync(settings.TokenEndpoint, content, cancellationToken);
 
             // The status code is not the verdict. RFC 6749 requires a rejected grant to arrive as 400 carrying a
             // machine-readable `error`, which says far more than the status does, so the body is read either way.

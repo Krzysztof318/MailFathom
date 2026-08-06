@@ -11,6 +11,7 @@ using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Mail.OAuth;
@@ -209,12 +210,19 @@ public sealed class MailOAuthAccessTokenSourceTests
         });
 
         var host = OutboundResilienceTestHost.WithConfiguredSettings();
-        var httpClient = new HttpClient(handler, disposeHandler: false);
         var cache = new MailAccessTokenCache(host.TimeProvider);
         var refreshTokenStore = new FakeMailboxRefreshTokenStore(storedRefreshToken);
 
+        // A fresh client per call, as the factory hands out: the source opens one per exchange and disposes it, so a
+        // double returning the same instance twice would answer the second exchange from a disposed client and report a
+        // failure the production wiring cannot produce. The handler outlives them all, which is what records the
+        // requests every one of them sent.
+        var transportFactory = Substitute.For<IHttpClientFactory>();
+        transportFactory.CreateClient(MailOAuthAccessTokenSource.TransportName)
+            .Returns(_ => new HttpClient(handler, disposeHandler: false));
+
         var source = new MailOAuthAccessTokenSource(
-            httpClient,
+            transportFactory,
             new FakeMailOAuthSettingsProvider(clientSecret, grant ?? MailOAuthGrant.RefreshToken),
             refreshTokenStore,
             cache,
@@ -222,20 +230,18 @@ public sealed class MailOAuthAccessTokenSourceTests
             host.TimeProvider,
             host.Services.GetRequiredService<ILogger<MailOAuthAccessTokenSource>>());
 
-        return new TokenEndpointContext(host, handler, httpClient, cache, refreshTokenStore, source);
+        return new TokenEndpointContext(host, handler, cache, refreshTokenStore, source);
     }
 
     private sealed record TokenEndpointContext(
         OutboundResilienceTestHost Host,
         FakeHttpMessageHandler Handler,
-        HttpClient HttpClient,
         MailAccessTokenCache Cache,
         FakeMailboxRefreshTokenStore RefreshTokenStore,
         MailOAuthAccessTokenSource Source) : IDisposable
     {
         public void Dispose()
         {
-            this.HttpClient.Dispose();
             this.Cache.Dispose();
             this.Handler.Dispose();
             this.Host.Dispose();

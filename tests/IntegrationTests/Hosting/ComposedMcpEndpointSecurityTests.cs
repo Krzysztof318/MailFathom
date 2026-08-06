@@ -56,7 +56,7 @@ public sealed class ComposedMcpEndpointSecurityTests
     public async Task McpEndpoint_RequestCarryingNoCredential_IsRefusedBeforeTheProtocolSurfaceAnswers()
     {
         // Arrange
-        using var client = await this.ComposedHostClientAsync();
+        using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
 
         // Act
         using var request = ListToolsRequest(apiKey: null);
@@ -80,7 +80,7 @@ public sealed class ComposedMcpEndpointSecurityTests
     public async Task McpEndpoint_RequestCarryingAnUnrecognizedCredential_IsRefusedIdenticallyToOneCarryingNone()
     {
         // Arrange
-        using var client = await this.ComposedHostClientAsync();
+        using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
 
         // Act
         using var anonymousRequest = ListToolsRequest(apiKey: null);
@@ -111,7 +111,7 @@ public sealed class ComposedMcpEndpointSecurityTests
     public async Task McpEndpoint_TheStatelessTransportsOnlyVerb_RefusesAToolCallCarryingNoCredential()
     {
         // Arrange
-        using var client = await this.ComposedHostClientAsync();
+        using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
         using var openStream = McpRequest(HttpMethod.Get, jsonRpcPayload: null);
         using var endSession = McpRequest(HttpMethod.Delete, jsonRpcPayload: null);
         using var callTool = McpRequest(HttpMethod.Post, ToolCallPayload());
@@ -134,7 +134,7 @@ public sealed class ComposedMcpEndpointSecurityTests
     public async Task McpEndpoint_RequestCarryingTheConfiguredKeyFromAServedOrigin_ReachesTheProtocolSurface()
     {
         // Arrange
-        using var client = await this.ComposedHostClientAsync();
+        using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
         using var request = ListToolsRequest(OrchestrationContract.McpApiKey);
         request.Headers.Add("Origin", OrchestrationContract.McpPermittedOrigin);
 
@@ -154,7 +154,7 @@ public sealed class ComposedMcpEndpointSecurityTests
     public async Task McpEndpoint_RequestFromAnOriginTheDeploymentDoesNotServe_IsRefusedEvenWithTheConfiguredKey()
     {
         // Arrange
-        using var client = await this.ComposedHostClientAsync();
+        using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
         using var request = ListToolsRequest(OrchestrationContract.McpApiKey);
         request.Headers.Add("Origin", "https://attacker.mailfathom.test");
 
@@ -196,7 +196,7 @@ public sealed class ComposedMcpEndpointSecurityTests
     public async Task McpEndpoint_AClientBurstingPastItsCapacity_IsRefusedWithoutSpendingAnotherClients()
     {
         // Arrange
-        using var client = await this.ComposedHostClientAsync();
+        using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
         var burstSize = OrchestrationContract.McpRateLimitTokenCapacity * 3;
 
         // Act
@@ -248,7 +248,7 @@ public sealed class ComposedMcpEndpointSecurityTests
     public async Task SharedSocket_WithNoCredential_AnswersTheProbeAndServesNoAdministrativeRoute()
     {
         // Arrange
-        using var client = await this.ComposedHostClientAsync();
+        using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
 
         // Act
         using var probe = await client.GetAsync(
@@ -320,11 +320,6 @@ public sealed class ComposedMcpEndpointSecurityTests
 
         return request;
     }
-
-    private async Task<HttpClient> ComposedHostClientAsync() => new()
-    {
-        BaseAddress = await this.orchestration.StartMailFathomHostAsync(TestContext.Current.CancellationToken),
-    };
 
     /// <summary>Sends one tool listing and reads everything a burst is judged on before the response is released.</summary>
     /// <remarks>

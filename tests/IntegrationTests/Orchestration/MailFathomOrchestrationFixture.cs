@@ -165,6 +165,31 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
             cancellationToken),
         Uri.UriSchemeHttp);
 
+    /// <summary>Opens a client aimed at the composed host's MCP surface, starting the host if it is not yet running.</summary>
+    /// <param name="cancellationToken">Cancels waiting for the host to become reachable.</param>
+    /// <returns>A client whose base address is the surface's, which the caller disposes.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started, or when the host resource refused the start command.</exception>
+    /// <remarks>
+    /// A test states which surface it is talking to and writes the route it is asking for; the address between the two
+    /// is this fixture's to know, because it is a port the orchestration allocated when the resource started. Handing
+    /// back a client with that address already set is what keeps a test from restating the pairing, and what keeps a
+    /// test aimed at one surface from being able to reach the other by holding the wrong address.
+    /// </remarks>
+    public async Task<HttpClient> OpenMcpEndpointClientAsync(CancellationToken cancellationToken) => new()
+    {
+        BaseAddress = await this.StartMailFathomHostAsync(cancellationToken),
+    };
+
+    /// <summary>Opens a client aimed at the composed host's administrative surface, starting the host if it is not yet running.</summary>
+    /// <param name="cancellationToken">Cancels waiting for the host to become reachable.</param>
+    /// <returns>A client whose base address is the surface's, which the caller disposes.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started, or when the host resource refused the start command.</exception>
+    /// <remarks>The second socket on the same host, for the reason <see cref="StartMailFathomAdminEndpointAsync" /> gives.</remarks>
+    public async Task<HttpClient> OpenAdminEndpointClientAsync(CancellationToken cancellationToken) => new()
+    {
+        BaseAddress = await this.StartMailFathomAdminEndpointAsync(cancellationToken),
+    };
+
     /// <summary>Starts the MailFathom host served over HTTPS behind mutual TLS and reports the address it serves on.</summary>
     /// <param name="cancellationToken">Cancels waiting for the host to become reachable.</param>
     /// <returns>The base address of the host's HTTPS endpoint.</returns>

@@ -179,6 +179,82 @@ public sealed class TransportSecurityExtensionsTests
             composed.GetRequiredService<IOptions<AuthenticationOptions>>().Value.DefaultScheme);
     }
 
+    /// <summary>
+    /// Every setting a token is judged by is applied through one options registration, and nothing fails if that
+    /// registration never runs — the scheme would simply validate with framework defaults: no configured metadata
+    /// address, error details returned to the caller, and inbound claims renamed out from under the identity mapping.
+    /// Reading the options back is what turns a silent misconfiguration into a failing test.
+    /// </summary>
+    [Fact]
+    public void AddTransportAuthentication_AnOAuthSurface_ConfiguresTheSchemeTheTokenIsJudgedBy()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTransportAuthentication(
+            TransportSurface.Mcp,
+            TransportAuthenticationMethods.OAuth,
+            [],
+            AnAuthorizationServer(),
+            TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
+
+        using var composed = services.BuildServiceProvider();
+
+        // Act
+        var schemeOptions = composed.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
+            .Get(TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
+
+        // Assert
+        Assert.Equal(
+            "https://sso.example.test/.well-known/oauth-authorization-server",
+            schemeOptions.MetadataAddress);
+        Assert.True(schemeOptions.RequireHttpsMetadata);
+        Assert.False(schemeOptions.MapInboundClaims);
+        Assert.False(schemeOptions.IncludeErrorDetails);
+    }
+
+    /// <summary>
+    /// The backchannel is resolved from the client factory rather than constructed, so the bounds it carries are the
+    /// registration's. A scheme reaching this point with the framework's own client would follow a redirect away from
+    /// the configured server and read an unbounded body during a key refresh, both inside a request's authentication
+    /// path, and every assertion about metadata retrieval elsewhere would be describing a client nothing built.
+    /// </summary>
+    [Fact]
+    public void AddTransportAuthentication_AnOAuthSurface_GivesTheSchemeTheRegisteredMetadataBackchannel()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTransportAuthentication(
+            TransportSurface.Mcp,
+            TransportAuthenticationMethods.OAuth,
+            [],
+            AnAuthorizationServer(),
+            TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
+
+        using var composed = services.BuildServiceProvider();
+
+        // Act
+        var schemeOptions = composed.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
+            .Get(TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
+
+        // Assert
+        Assert.NotNull(schemeOptions.Backchannel);
+        Assert.Equal(OAuthValidationOptions.MetadataRetrievalTimeout, schemeOptions.Backchannel.Timeout);
+    }
+
+    private static OAuthValidationOptions AnAuthorizationServer()
+    {
+        var oauthSettings = new OAuthValidationOptions { Resource = "https://mail.example.test/mcp" };
+        oauthSettings.AuthorizationServers.Add(new AuthorizationServerOptions
+        {
+            Name = "workforce",
+            Issuer = "https://sso.example.test",
+        });
+
+        return oauthSettings;
+    }
+
     private static void AddApiKeyAuthentication(IServiceCollection services, TransportSurface surface) =>
         services.AddTransportAuthentication(
             surface,

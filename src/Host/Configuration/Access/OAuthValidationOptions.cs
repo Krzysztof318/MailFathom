@@ -29,6 +29,15 @@ internal sealed class OAuthValidationOptions
     /// <remarks>A constant rather than a setting. It bounds an outbound call an operator never sees, and a deployment that needed it longer would be reporting a problem with the authorization server rather than with this value.</remarks>
     internal static readonly TimeSpan MetadataRetrievalTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>How long a pooled connection to an authorization server is reused, after which the next retrieval resolves the address again.</summary>
+    /// <remarks>
+    /// The backchannel is held for the life of the scheme that owns it, so nothing else would ever make it look the
+    /// address up a second time, and an authorization server that moves would keep being reached at where it used to be
+    /// until the process restarted. Five minutes is short enough that a move is followed within one refresh interval and
+    /// long enough that a key set fetched every few hours costs no handshake worth counting.
+    /// </remarks>
+    internal static readonly TimeSpan MetadataConnectionLifetime = TimeSpan.FromMinutes(5);
+
     /// <summary>The largest discovery document or key set the host reads, beyond which the retrieval fails.</summary>
     /// <remarks>A real document is a few kilobytes. The limit exists so a server that has been replaced, misconfigured, or compromised cannot make the host buffer an unbounded response during a key refresh.</remarks>
     internal const int MetadataSizeLimitInBytes = 256 * 1024;

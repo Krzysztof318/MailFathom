@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.ApiKeys;
@@ -35,6 +34,10 @@ namespace MailFathom.Host.Security.Transport;
 /// </remarks>
 internal static class TransportSecurityExtensions
 {
+    /// <summary>Names the registered transport an authorization server's metadata is retrieved over.</summary>
+    /// <remarks>One transport for every scheme on every surface, because what it carries is the same fetch of the same kind of document under the same bounds. Each scheme still holds a client of its own over it, so no key refresh can observe another scheme's.</remarks>
+    private const string MetadataBackchannelTransportName = "mailfathom.oauth-metadata";
+
     /// <summary>Adds one surface's authentication schemes and its authorization requirement.</summary>
     /// <param name="services">The container to add to.</param>
     /// <param name="surface">The surface being protected, which names every scheme and the policy.</param>
@@ -101,11 +104,20 @@ internal static class TransportSecurityExtensions
 
         if (allowsOAuth)
         {
+            AddMetadataBackchannel(services);
+
             foreach (var authorizationServer in oauthSettings.AuthorizationServers)
             {
-                authentication.AddJwtBearer(
-                    surface.OAuthSchemeNameFor(authorizationServer.Name!),
-                    jwtOptions => ConfigureAuthorizationServer(jwtOptions, authorizationServer, oauthSettings));
+                var schemeName = surface.OAuthSchemeNameFor(authorizationServer.Name!);
+
+                authentication.AddJwtBearer(schemeName);
+                services.AddOptions<JwtBearerOptions>(schemeName)
+                    .Configure<IHttpClientFactory>((jwtOptions, transportFactory) =>
+                        ConfigureAuthorizationServer(
+                            jwtOptions,
+                            authorizationServer,
+                            oauthSettings,
+                            transportFactory));
             }
         }
 
@@ -190,7 +202,8 @@ internal static class TransportSecurityExtensions
     private static void ConfigureAuthorizationServer(
         JwtBearerOptions jwtOptions,
         AuthorizationServerOptions authorizationServer,
-        OAuthValidationOptions oauthSettings)
+        OAuthValidationOptions oauthSettings,
+        IHttpClientFactory transportFactory)
     {
         var issuer = authorizationServer.ValidatedIssuer();
         var metadataAddresses = authorizationServer.MetadataAddresses();
@@ -208,7 +221,7 @@ internal static class TransportSecurityExtensions
         // merely expired. The server log keeps all of it.
         jwtOptions.IncludeErrorDetails = false;
 
-        jwtOptions.Backchannel = MetadataBackchannel();
+        jwtOptions.Backchannel = transportFactory.CreateClient(MetadataBackchannelTransportName);
         jwtOptions.ConfigurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
             metadataAddresses[0],
             new OAuthAuthorizationServerMetadataRetriever(authorizationServer.Name!, issuer, metadataAddresses),
@@ -254,22 +267,40 @@ internal static class TransportSecurityExtensions
         return Task.CompletedTask;
     }
 
-    /// <summary>Builds the client the discovery document and key set are retrieved through.</summary>
+    /// <summary>Registers the transport the discovery document and key set are retrieved through.</summary>
     /// <remarks>
+    /// <para>
     /// It follows no redirect and reads no more than the stated limit, so an authorization server cannot send a key
     /// refresh somewhere the configuration never named or answer it with an unbounded body. The timeout bounds how long
     /// a refresh can hold the request that provoked it.
+    /// </para>
+    /// <para>
+    /// This is the one client here that cannot be opened per operation, and the connection lifetime is the consequence
+    /// rather than a preference. <see cref="JwtBearerOptions.Backchannel" /> and <see cref="HttpDocumentRetriever" />
+    /// each take one client and keep it, so the instance a scheme is configured with performs every key refresh that
+    /// scheme ever makes — and the factory's handler rotation, which replaces the chain only for a client asked for
+    /// after it, would never reach it. Bounding the pooled connection is what makes an authorization server that moves
+    /// its address reachable without restarting the process.
+    /// </para>
+    /// <para>
+    /// A surface registers this before its schemes and both surfaces may register it, so every call here assigns rather
+    /// than appends: a second surface must not leave the chain carrying two bounded handlers, and
+    /// <c>ConfigurePrimaryHttpMessageHandler</c> replacing the whole chain is what keeps that true without a guard.
+    /// </para>
     /// </remarks>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The client and its handlers are owned by the JwtBearerOptions this is assigned to and live for the process lifetime; disposing them here would leave every key refresh without a transport.")]
-    private static HttpClient MetadataBackchannel()
-    {
-        var transport = new HttpClientHandler { AllowAutoRedirect = false };
-
-        return new HttpClient(new BoundedMetadataHttpMessageHandler(transport, OAuthValidationOptions.MetadataSizeLimitInBytes))
-        {
-            Timeout = OAuthValidationOptions.MetadataRetrievalTimeout,
-        };
-    }
+    private static void AddMetadataBackchannel(IServiceCollection services) =>
+        services.AddHttpClient(MetadataBackchannelTransportName)
+            .ConfigurePrimaryHttpMessageHandler(static () =>
+                new BoundedMetadataHttpMessageHandler(OAuthValidationOptions.MetadataSizeLimitInBytes)
+                {
+                    InnerHandler = new SocketsHttpHandler
+                    {
+                        AllowAutoRedirect = false,
+                        PooledConnectionLifetime = OAuthValidationOptions.MetadataConnectionLifetime,
+                    },
+                })
+            .ConfigureHttpClient(static backchannel =>
+                backchannel.Timeout = OAuthValidationOptions.MetadataRetrievalTimeout);
 
     /// <summary>Registers the requirement this surface's routes carry.</summary>
     /// <remarks>
