@@ -33,6 +33,7 @@ This file is loaded into every agent session, so it holds what has to be true be
 
 ## Critical repository rules
 
+- **Everything written here and around it is in English**: identifiers, comments, documentation, specifications, commit messages, branch names, pull requests, issues, and every comment on one. The repository is public and its conversation is part of it, so the language a task is *discussed* in — with the owner, in a chat session, in any tongue — never reaches an artifact. This is the one place the rule is stated, and it holds in every directory.
 - Never commit directly on `main` or `master`. Branch before committing; in the owner's checkout that branch is named `agent/<short-description>`.
 - Preserve unrelated user changes. Stage only files that belong to the current task.
 - Make architectural decisions before implementation. Keep changes small, reviewable, and aligned with the architecture draft in `specs/`.

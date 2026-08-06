@@ -34,7 +34,6 @@ An open pull request moves both of the bottom two rows, and that is not the dupl
 
 ## Issue content
 
-- Write issues in English, matching `specs/` and the rest of the repository.
 - Every issue body carries two or three user stories and a condensed acceptance list. A specification issue additionally opens with a header block naming the roadmap group, the draft delivery stage, a link to the specification file, the issues it depends on, and the estimated change size.
 - Do not copy specification text into an issue. The specification is the contract, and a duplicated copy goes stale silently.
 - Express dependencies as issue references so the board shows them as links. Specification dependencies always point backwards to lower-numbered specifications.

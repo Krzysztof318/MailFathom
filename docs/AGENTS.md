@@ -2,7 +2,7 @@
 
 These instructions apply under `docs/` in addition to the repository root instructions.
 
-- Write repository documentation in English and keep durable documentation under `docs/`.
+- Keep durable documentation under `docs/`. It is written in English, as everything in this repository is; root `AGENTS.md` states that rule once and it needs no restating here.
 - Documentation describes verified implemented behavior, not intended implementation. Keep future intent in specifications.
 - Document architecture, feature behavior, configuration, security assumptions, operational procedures, failure modes, and important implementation trade-offs when introduced or changed.
 - Keep documentation discoverable under `architecture/`, `features/`, `operations/`, and `decisions/`; add an index when more than a few pages exist.

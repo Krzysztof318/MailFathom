@@ -25,6 +25,8 @@ Two things are unchanged by whoever or whatever typed the code:
 
 **Every change starts from an issue.** Open one before writing code, or comment on an existing one to say you are working on it. That is not ceremony: it is where scope is agreed, and it is what a pull request closes. For anything larger than a typo, wait for a maintainer's reply before investing time — MailFathom is pre-release and its direction changes faster than its issue list.
 
+**Write in English.** Code, comments, documentation, commit messages, the pull request, the issue, and every comment on one. Ask questions in whatever language you are comfortable with — the artifacts stay English, because they are public and read by people who share no other language with you.
+
 **Do not report a security vulnerability as an issue.** [`SECURITY.md`](SECURITY.md) has the private channel.
 
 ## What you need
