@@ -142,6 +142,21 @@ Contributions are welcome, and the entry point is [CONTRIBUTING.md](https://gith
 
 [`docs/operations/local-development.md`](https://krzysztof318.github.io/MailFathom/operations/local-development.html) is the full development setup, [`AGENTS.md`](https://github.com/Krzysztof318/MailFathom/blob/main/AGENTS.md) is the entry point to the engineering rules the build and the review enforce, and [CODE_OF_CONDUCT.md](https://github.com/Krzysztof318/MailFathom/blob/main/CODE_OF_CONDUCT.md) applies to everyone taking part.
 
+### Your first contribution, from a fork to a green run
+
+Fork the repository, then clone your fork and point it at this one, because every verification gate here measures your branch against the base it will actually merge into rather than against your fork's `main`:
+
+```bash
+git clone https://github.com/<you>/MailFathom.git
+cd MailFathom
+git remote add upstream https://github.com/Krzysztof318/MailFathom.git
+git fetch upstream main
+```
+
+If you work with a coding agent, hand the rest to [`get-started-contributors`](https://github.com/Krzysztof318/MailFathom/blob/main/.agents/skills/get-started-contributors/SKILL.md), which is one of the workflow skills this repository ships and the one written for somebody arriving for the first time. In Claude Code it is `/get-started-contributors`; any other agent can be pointed at the file. It welcomes you and walks through what MailFathom is, how this repository is worked, where things live, and what Apache-2.0 asks of a contribution — then sets the machine up: the platform check, the .NET SDK the [`global.json`](https://github.com/Krzysztof318/MailFathom/blob/main/global.json) pin accepts, `gh`, Docker, the local file that tells your agent it is working in a fork rather than in the maintainer's checkout, the permissions your agent needs so the verification loop stops asking on every command, and a first green run. You invoke it yourself — it is deliberately not something an agent starts on its own.
+
+Setting up by hand takes the same steps in the same order, and [From a clone to a green run](https://github.com/Krzysztof318/MailFathom/blob/main/CONTRIBUTING.md#from-a-clone-to-a-green-run) is where they are written out. Development is on Linux; nothing here is verified against anything else.
+
 ### Questions, bugs, and proposals
 
 [Discussions](https://github.com/Krzysztof318/MailFathom/discussions) takes questions in `Q&A` and proposals in `Ideas`; a question is not a unit of work, and one that turns out to be work gets converted into an issue. A defect or a piece of scope belongs in [issues](https://github.com/Krzysztof318/MailFathom/issues) — except a vulnerability, which has a private channel below.

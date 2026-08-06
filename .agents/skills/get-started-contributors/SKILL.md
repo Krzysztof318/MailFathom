@@ -54,9 +54,9 @@ offer to go deeper on any one of them instead of expanding all six.
    rules in `AGENTS.md`, which is why those files read as a prescriptive contract. A contributor is encouraged to work
    the same way and equally welcome not to — a hand-written patch is judged identically. Three things hold either way:
    every change starts from an issue, the person who opens the pull request is responsible for having read the diff, and
-   **everything written is in English** — code, comments, documentation, commit messages, the pull request, the issue,
-   and every comment on one. Whatever language the contributor thinks or asks questions in, the artifacts are English,
-   because the repository and its conversation are public and read by people who share no other language.
+   **everything written lands in English**, which root `AGENTS.md` states in full among its critical rules. Say that
+   third one out loud rather than leaving it to be discovered in a review, and say the part that goes with it: the
+   language a contributor thinks and asks questions in is their own.
 
 3. **Where things live.** `src/` holds the clean-architecture boundaries — `Domain`, `Application`, `Infrastructure`,
    `AI`, `Mcp`, `Host`, `Cli` — and `tests/` mirrors them. `docs/` states what the code *does* and `specs/` states what a
