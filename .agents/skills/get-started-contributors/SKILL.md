@@ -136,12 +136,20 @@ offer to go deeper on any one of them instead of expanding all six.
    **`gh`** comes from GitHub's own package repository — the distribution's copy is frequently far behind, and several
    commands the workflow uses are recent. Install it as <https://github.com/cli/cli/blob/trunk/docs/install_linux.md>
    documents for the distribution in hand, then authenticate with the scope the roadmap board needs on top of the
-   defaults, which `docs/operations/local-development.md` § *Command-line tooling* is the source of:
+   defaults. Which command that is depends on whether this machine has ever authenticated, and
+   `docs/operations/local-development.md` § *Command-line tooling* is the source of both halves:
 
    ```bash
-   gh auth login -s project
-   gh auth status      # lists the scopes the token actually carries
+   gh auth status                 # first: is a host already authenticated, and with which scopes?
+   gh auth login -s project       # a machine that has never authenticated
+   gh auth refresh -s project     # a machine that already has: expands the stored credentials
    ```
+
+   Take the one the first line's answer picks. `gh auth refresh` fails outright when no host is authenticated, and
+   `gh auth login` on a machine that already has one either re-prompts interactively or does nothing under an agent's
+   non-interactive shell — so running the wrong one leaves the scope unadded while looking like it worked. Somebody
+   already using `gh` for their own projects is the common case here, not the rare one. Confirm with `gh auth status`
+   again, which must list `project` among the scopes.
 
    The scope matters to the next step and not only to the board: without `project`, `gh project` fails on permission in
    the owner's own checkout exactly as it does in a fork, and the two are then indistinguishable.
