@@ -62,11 +62,19 @@ Say it once instead, in a file your agent loads before you type anything. **Clau
 ```markdown
 I am an external contributor to MailFathom. `origin` is my fork and `upstream` is
 `Krzysztof318/MailFathom`, so the fork role in `AGENTS.md` governs every session in this
-checkout. Do not read or write project `4`, and do not assign a `type:*` label, a milestone,
-or a board field — triage does that. Never push to `Krzysztof318/MailFathom`. My branch keeps
-the name I gave it. Workflow runs on my pull request wait for a maintainer to approve them,
-so a check that has not started is a queue rather than a failure to chase, and every push
-waits again.
+checkout. My branch keeps the name I gave it, and nothing is ever pushed to
+`Krzysztof318/MailFathom`.
+
+The roadmap board, project `4`, is private to the maintainer and I have no access to it.
+Do not read it, do not write it, and do not treat that as a step that failed: an issue I
+open carries no `type:*` label, no milestone, and no `Area`, `Queue`, or `Size` value by
+design, and the maintainer's triage supplies them. `$start-task` opens the issue and stops
+there; `$finish-change` reports the board write as `not applicable (fork)`.
+
+Workflow runs on my pull request wait for a maintainer to approve them, so a check that has
+not started is a queue rather than a failure to chase, and every push waits again.
+`Fathom review` runs only when a maintainer applies the `fathom-review` label; my own
+pushes never start one.
 ```
 
 `.gitignore` covers `*.local.md`, so a file written that way cannot reach a commit by accident. Do not put any of this in `AGENTS.md` or `CLAUDE.md` themselves: both are protected paths, so the change would fail a check before anyone read it, and it would be telling every other contributor's agent something true only of your machine.

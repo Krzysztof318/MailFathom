@@ -52,7 +52,9 @@ offer to go deeper on any one of them instead of expanding all six.
 
 2. **How this repository is worked.** Nearly every line here is written by an autonomous agent from an issue and the
    rules in `AGENTS.md`, which is why those files read as a prescriptive contract. A contributor is encouraged to work
-   the same way and equally welcome not to — a hand-written patch is judged identically. Three things hold either way:
+   the same way and equally welcome not to — a hand-written patch is judged identically. The issues are public and are
+   where a contribution is discussed; what is private is the maintainer's ordering of them, on a roadmap board no
+   contributor can reach, which is why step 8 below matters more than it looks. Three things hold either way:
    every change starts from an issue, the person who opens the pull request is responsible for having read the diff, and
    **everything written lands in English**, which root `AGENTS.md` states in full among its critical rules. Say that
    third one out loud rather than leaving it to be discovered in a review, and say the part that goes with it: the
@@ -106,36 +108,9 @@ offer to go deeper on any one of them instead of expanding all six.
    OpenSSL is on the same line because it decides which mail and database servers are reachable at all: **1.1.1 is the
    hard floor**, below which .NET 10 does not start, and **3.0 or later** is what this repository is run against.
 
-2. **Resolve which role this workspace is in**, because several steps below read differently in each and none of them is
-   worth guessing at:
-
-   ```bash
-   bash scripts/inspect-workspace.sh
-   ```
-
-   `Base branch: origin/main` means `origin` is MailFathom itself, which is the owner's checkout; `upstream/main` or
-   `unresolved` means `origin` is a fork. The one case that reads as the owner's checkout without being it is a clone of
-   MailFathom made without write access, so confirm it with `gh project item-list 4 --owner Krzysztof318 --limit 1` and
-   take a permission failure as the fork role.
-
-3. **Point the gates at the base the work will actually merge into.** In a fork `origin/main` is whatever was last
-   synced, so verifying against it proves nothing about the branch that will merge:
-
-   ```bash
-   git remote add upstream https://github.com/Krzysztof318/MailFathom.git
-   git fetch upstream main
-   ```
-
-   The scripts identify the remote by the repository it points at rather than by its name, so `upstream` is the
-   convention and not a requirement. Run `scripts/inspect-workspace.sh` again and require `Base branch` to name a
-   remote and `Contains base branch` to say `yes`.
-
-   **Owner's checkout:** `origin` is already that remote and nothing is added. Work happens in a linked worktree on an
-   `agent/<short-description>` branch, and `start-task` refuses anything else.
-
-4. **Install what the build needs, and prove each one answers.** Ask the check first: a tool that is already installed
-   at a working version is left alone, because a second install of `dotnet` from a different source is how a machine
-   ends up with two SDKs and one `PATH`.
+2. **Install what the build needs, and prove each one answers.** This comes before the role is resolved, because
+   resolving it can need `gh`. Ask the check first: a tool already installed at a working version is left alone, since a
+   second install of `dotnet` from a different source is how a machine ends up with two SDKs and one `PATH`.
 
    | Tool | What needs it | Check |
    |---|---|---|
@@ -160,7 +135,16 @@ offer to go deeper on any one of them instead of expanding all six.
 
    **`gh`** comes from GitHub's own package repository — the distribution's copy is frequently far behind, and several
    commands the workflow uses are recent. Install it as <https://github.com/cli/cli/blob/trunk/docs/install_linux.md>
-   documents for the distribution in hand, then `gh auth login` and confirm with `gh auth status`.
+   documents for the distribution in hand, then authenticate with the scope the roadmap board needs on top of the
+   defaults, which `docs/operations/local-development.md` § *Command-line tooling* is the source of:
+
+   ```bash
+   gh auth login -s project
+   gh auth status      # lists the scopes the token actually carries
+   ```
+
+   The scope matters to the next step and not only to the board: without `project`, `gh project` fails on permission in
+   the owner's own checkout exactly as it does in a fork, and the two are then indistinguishable.
 
    **Docker** comes from the distribution or from Docker's own repository, and the part worth checking is not that it
    is installed but that it answers without `sudo`: the app model and the integration suite talk to the daemon socket
@@ -177,6 +161,44 @@ offer to go deeper on any one of them instead of expanding all six.
    The Aspire CLI and `csharp-ls` are installed globally, at versions
    `docs/operations/local-development.md` § *Command-line tooling* pins; take them from there rather than from here, so
    one file moves when a version does. Neither is needed by a first change.
+
+3. **Resolve which role this workspace is in**, because several steps below read differently in each and none of them is
+   worth guessing at:
+
+   ```bash
+   bash scripts/inspect-workspace.sh
+   ```
+
+   `Base branch: origin/main` means `origin` is MailFathom itself, which is the owner's checkout; `upstream/main` or
+   `unresolved` means `origin` is a fork, and that is the whole answer in every ordinary case.
+
+   One case reads as the owner's checkout without being it: a clone of MailFathom made without write access. Separating
+   the two costs a board probe, and the probe is only meaningful when `gh auth status` from the step above lists the
+   `project` scope — without it the call fails on permission whoever is running it, and reading that as the fork role
+   would misclassify the owner and write a `CLAUDE.local.md` telling every later session not to touch a board it owns:
+
+   ```bash
+   gh auth status | grep -q 'project' \
+     && gh project item-list 4 --owner Krzysztof318 --limit 1
+   ```
+
+   A permission failure *with* the scope present is the fork role. A failure without it says nothing, so add the scope
+   and ask again rather than concluding from it.
+
+4. **Point the gates at the base the work will actually merge into.** In a fork `origin/main` is whatever was last
+   synced, so verifying against it proves nothing about the branch that will merge:
+
+   ```bash
+   git remote add upstream https://github.com/Krzysztof318/MailFathom.git
+   git fetch upstream main
+   ```
+
+   The scripts identify the remote by the repository it points at rather than by its name, so `upstream` is the
+   convention and not a requirement. Run `scripts/inspect-workspace.sh` again and require `Base branch` to name a
+   remote and `Contains base branch` to say `yes`.
+
+   **Owner's checkout:** `origin` is already that remote and nothing is added. Work happens in a linked worktree on an
+   `agent/<short-description>` branch, and `start-task` refuses anything else.
 
 5. **Write the role into a local instruction file**, so it is true from the first message of every session rather than
    from the step where a skill resolves it. Root `AGENTS.md` states both roles and cannot say which one is running, and
@@ -195,11 +217,19 @@ offer to go deeper on any one of them instead of expanding all six.
    ```markdown
    I am an external contributor to MailFathom. `origin` is my fork and `upstream` is
    `Krzysztof318/MailFathom`, so the fork role in `AGENTS.md` governs every session in this
-   checkout. Do not read or write project `4`, and do not assign a `type:*` label, a milestone,
-   or a board field — triage does that. Never push to `Krzysztof318/MailFathom`. My branch keeps
-   the name I gave it. Workflow runs on my pull request wait for a maintainer to approve them,
-   so a check that has not started is a queue rather than a failure to chase, and every push
-   waits again.
+   checkout. My branch keeps the name I gave it, and nothing is ever pushed to
+   `Krzysztof318/MailFathom`.
+
+   The roadmap board, project `4`, is private to the maintainer and I have no access to it.
+   Do not read it, do not write it, and do not treat that as a step that failed: an issue I
+   open carries no `type:*` label, no milestone, and no `Area`, `Queue`, or `Size` value by
+   design, and the maintainer's triage supplies them. `$start-task` opens the issue and stops
+   there; `$finish-change` reports the board write as `not applicable (fork)`.
+
+   Workflow runs on my pull request wait for a maintainer to approve them, so a check that has
+   not started is a queue rather than a failure to chase, and every push waits again.
+   `Fathom review` runs only when a maintainer applies the `fathom-review` label; my own
+   pushes never start one.
    ```
 
    `CONTRIBUTING.md` § *Tell your agent it is working in a fork* carries the same block, and the two are one text:
@@ -262,8 +292,15 @@ offer to go deeper on any one of them instead of expanding all six.
      `.gitattributes`, `.worktreeinclude`, `AGENTS.md`, or `CLAUDE.md` at any depth, and the repository-root
      `CHANGELOG.md`, `Directory.Build.props`, `LICENSE`, `NOTICE`, `NuGet.config`, and `global.json` — are refused from
      any author but the owner, whatever the change says. Raise one as an issue;
-   - the roadmap board is private, so an issue opened from outside carries no label, no milestone, and no board fields
-     by design, and triage supplies them. That is the expected shape of an arrival, not a step that failed;
+   - **the roadmap board is private and stays that way.** Project `4` belongs to the maintainer's account, the
+     repository is public and the board is not, and no token, scope, or membership changes that for a contributor:
+     `gh project item-list` and `gh project item-edit` fail on permission and there is nothing to fall back to. What
+     follows is not a degraded workflow but a shorter one — an issue opened from outside carries no `type:*` label, no
+     milestone, and no `Area`, `Queue`, or `Size` value by design, triage supplies them, `start-task` opens the issue
+     and stops there, and `finish-change` reports the board write as `not applicable (fork)` rather than leaving a
+     report that reads as incomplete. Say this out loud, and make sure the local instruction file above carries it,
+     because an agent that does not know it will spend a turn on a permission error and then report a gate it never
+     needed to pass;
    - **no workflow starts by itself.** A run triggered by a fork's pull request waits for somebody with write access to
      approve it, on the first push and on every one after, so the checks sit unstarted rather than red and nothing about
      the branch can be read from them. That is why the local gates are the ones to trust, and why an agent left watching
@@ -282,9 +319,9 @@ Return:
 ```text
 Orientation: <which of the six were covered, and what was asked about>
 Platform: <uname -s and the OpenSSL version, or refused with the reason>
-Role: <fork or owner's checkout, and what resolved it>
+Toolchain: <SDK, Git, gh with its scopes, Docker — the version each answered with, or what was installed>
+Role: <fork or owner's checkout, and what resolved it — the base branch alone, or the board probe>
 Base remote: <name and URL, or the command that added it>
-Toolchain: <SDK, Git, gh, Docker — the version each answered with, or what was installed>
 Local role file: <path written, or not applicable in the owner's checkout>
 Harness permissions: <what was allowed, and where>
 First run: <verify-fast result>
