@@ -36,7 +36,7 @@ internal static class TransportSecurityExtensions
 {
     /// <summary>Names the registered transport an authorization server's metadata is retrieved over.</summary>
     /// <remarks>One transport for every scheme on every surface, because what it carries is the same fetch of the same kind of document under the same bounds. Each scheme still holds a client of its own over it, so no key refresh can observe another scheme's.</remarks>
-    private const string MetadataBackchannelTransportName = "mailfathom.oauth-metadata";
+    internal const string MetadataBackchannelTransportName = "mailfathom.oauth-metadata";
 
     /// <summary>Adds one surface's authentication schemes and its authorization requirement.</summary>
     /// <param name="services">The container to add to.</param>

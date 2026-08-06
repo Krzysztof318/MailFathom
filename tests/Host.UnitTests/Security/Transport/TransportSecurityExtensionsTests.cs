@@ -5,6 +5,7 @@
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Infrastructure.Security.OAuth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -241,6 +242,55 @@ public sealed class TransportSecurityExtensionsTests
         // Assert
         Assert.NotNull(schemeOptions.Backchannel);
         Assert.Equal(OAuthValidationOptions.MetadataRetrievalTimeout, schemeOptions.Backchannel.Timeout);
+    }
+
+    /// <summary>
+    /// The backchannel is held for the life of the scheme that owns it, so no handler rotation reaches it and the
+    /// connection it pools is the only thing that ever makes the address be resolved again. Without the lifetime an
+    /// authorization server that moves is reached at where it used to be until the process restarts, and without the
+    /// redirect refusal a key refresh can be sent somewhere the configuration never named. Both are settings rather
+    /// than behaviour a request could reveal, so a test that did not read them back would leave the defect this change
+    /// exists to fix free to return with every other assertion still passing.
+    /// </summary>
+    [Fact]
+    public void AddTransportAuthentication_AnOAuthSurface_BoundsTheBackchannelConnection()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTransportAuthentication(
+            TransportSurface.Mcp,
+            TransportAuthenticationMethods.OAuth,
+            [],
+            AnAuthorizationServer(),
+            TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
+
+        using var composed = services.BuildServiceProvider();
+
+        // Act
+        var chain = HandlersOf(composed.GetRequiredService<IHttpMessageHandlerFactory>()
+            .CreateHandler(TransportSecurityExtensions.MetadataBackchannelTransportName));
+
+        // Assert
+        Assert.Contains(chain, handler => handler is BoundedMetadataHttpMessageHandler);
+
+        var connection = Assert.IsType<SocketsHttpHandler>(chain[^1]);
+        Assert.Equal(OAuthValidationOptions.MetadataConnectionLifetime, connection.PooledConnectionLifetime);
+        Assert.False(connection.AllowAutoRedirect);
+    }
+
+    /// <summary>Reads a built handler chain from its outermost handler down to the one that opens the connection.</summary>
+    /// <remarks><see cref="DelegatingHandler.InnerHandler" /> is public, so the walk needs no reflection; the chain ends at the first handler that delegates to nothing.</remarks>
+    private static List<HttpMessageHandler> HandlersOf(HttpMessageHandler outermost)
+    {
+        var chain = new List<HttpMessageHandler>();
+
+        for (var handler = outermost; handler is not null; handler = (handler as DelegatingHandler)?.InnerHandler)
+        {
+            chain.Add(handler);
+        }
+
+        return chain;
     }
 
     private static OAuthValidationOptions AnAuthorizationServer()
