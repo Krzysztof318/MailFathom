@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Host.Hosting;
-using MailFathom.Infrastructure.Observability;
+using MailFathom.Host.Observability;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
@@ -68,14 +68,11 @@ internal static class ServiceDefaultsExtensions
                     // Emitting them is not exporting them: without this subscription the instruments exist and
                     // nothing collects them.
                     .AddMeter(PollyMeterName)
-                    // Changes MailFathom made to a remote mailbox, counted by mutation and outcome. Deliberately not
-                    // by protocol path: a relocation is one operation whichever IMAP commands carried it.
-                    .AddMeter(MailboxMutationTelemetry.MeterName);
+                    .AddMailFathomMeters();
             })
             .WithTracing(tracing =>
             {
-                tracing.AddSource(builder.Environment.ApplicationName)
-                    .AddSource(MailboxMutationTelemetry.ActivitySourceName)
+                tracing.AddMailFathomActivitySources()
                     // A probe arrives every few seconds for the lifetime of the process and says the same thing every
                     // time, so tracing it would fill a trace store with the polling rather than with the work.
                     .AddAspNetCoreInstrumentation(tracingOptions =>

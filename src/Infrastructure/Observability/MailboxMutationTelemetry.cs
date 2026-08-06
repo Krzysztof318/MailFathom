@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using MailFathom.Common.Observability;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
@@ -36,11 +37,17 @@ namespace MailFathom.Infrastructure.Observability;
 /// </remarks>
 public sealed partial class MailboxMutationTelemetry : IDisposable
 {
-    /// <summary>The meter a host subscribes to in order to collect mutation counts and durations.</summary>
-    public const string MeterName = "MailFathom.Mailbox.Mutations";
+    /// <summary>The meter the mutation counts and durations are published to.</summary>
+    /// <remarks>
+    /// A mutation is mailbox work, so it publishes under the name the mailbox subsystem already has rather than under
+    /// one of its own. Which mutation ran is a tag, not a second name: an operator watching mail work should not have
+    /// to know that relocations were instrumented before synchronization was in order to see them.
+    /// </remarks>
+    public const string MeterName = MailFathomTelemetry.Mail;
 
-    /// <summary>The activity source a host subscribes to in order to collect mutation spans.</summary>
-    public const string ActivitySourceName = "MailFathom.Mailbox.Mutations";
+    /// <summary>The activity source the mutation spans are published to.</summary>
+    /// <remarks>Shares <see cref="MeterName" />'s name, because the two registries cannot collide.</remarks>
+    public const string ActivitySourceName = MailFathomTelemetry.Mail;
 
     private const string MutationTagName = "mailfathom.mailbox.mutation";
     private const string AccountTagName = "mailfathom.mail.account";
