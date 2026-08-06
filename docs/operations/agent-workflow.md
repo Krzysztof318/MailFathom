@@ -181,9 +181,11 @@ this is, and it deliberately does not settle what the session may do with the
 board, because the owner grants read or write on project `4` to a contributor
 whenever they decide to. So the skill asks separately, in either role, with
 `{ user(login: "Krzysztof318") { projectV2(number: 4) { viewerCanUpdate } } }`:
-`true` is write, `false` is read, and a permission error is neither. One call,
-and the answer a `CLAUDE.local.md` already carries is confirmed rather than
-replaced.
+`true` is write, `false` is read, and neither of them is a `null` project beside
+a `NOT_FOUND` error, which is how GitHub reports a project the viewer cannot see
+— it hides one rather than refusing it, so the answer for *no permission* is
+worded as *does not exist* and is read as neither. One call, and the answer a
+`CLAUDE.local.md` already carries is confirmed rather than replaced.
 
 What differs is narrow and is listed in both skills at the step it applies to,
 and it splits along those two facts. The repository decides the branch name and

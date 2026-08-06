@@ -28,10 +28,12 @@ step 2 rather than assuming, and state it in the brief.
    ```
 
    `true` is write access and every board step below applies. `false` is read access: read the board
-   for context and report each write as unavailable rather than attempting it. An error naming
-   permission, or a `null` project, is no access at all. A `CLAUDE.local.md` written by
-   `$get-started-contributors` states the answer already, and this probe confirms it rather than
-   replacing it.
+   for context and report each write as unavailable rather than attempting it. No access reads as
+   `"projectV2": null` beside a `NOT_FOUND` error saying `Could not resolve to a ProjectV2 with the
+   number 4` — GitHub hides a project the viewer cannot see rather than refusing it, so nothing in
+   that answer says *permission* and it must not be reported as the board having been deleted or the
+   number being wrong. A `CLAUDE.local.md` written by `$get-started-contributors` states the answer
+   already, and this probe confirms it rather than replacing it.
 
    A negative is checked before it is reported, because the probe sees the credential's access rather
    than the account's: confirm `gh auth status` lists the `project` scope, and that no `GH_TOKEN` or

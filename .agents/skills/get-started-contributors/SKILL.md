@@ -194,9 +194,11 @@ offer to go deeper on any one of them instead of expanding all six.
 
    One call, three outcomes, and `viewerCanUpdate` is what separates the two that matter: `true` is write access, so
    every board step in `start-task` and `finish-change` applies; `false` is read access, so the board may be read for
-   context and every write is reported as unavailable rather than attempted; an error naming permission or a `null`
-   project is no access at all. A failure *without* the scope says nothing, so add the scope and ask again rather than
-   concluding from it.
+   context and every write is reported as unavailable rather than attempted; no access at all reads as
+   `"projectV2": null` beside a `NOT_FOUND` error saying `Could not resolve to a ProjectV2 with the number 4`. Read
+   that last one to them, because it does not look like what it is: GitHub hides a project the viewer cannot see
+   instead of refusing it, so the message reads as a wrong number or a deleted board and is neither. A failure
+   *without* the scope says nothing at all, so add the scope and ask again rather than concluding from it.
 
    **Tell them to check their own credentials before believing a negative**, because the account's access and the
    token's access are different things and only the second one is what the probe sees. An account the maintainer
