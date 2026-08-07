@@ -78,6 +78,7 @@ internal sealed class MailboxMutationRecordStore(MailFathomDbContext readContext
             DestinationHierarchyDelimiter = request.DestinationPath?.HierarchyDelimiter?.ToString(),
             DesiredSeenState = request.DesiredSeenState,
             Stage = MailboxMutationStage.Recorded,
+            RequiresSourceRemoval = false,
             AttemptCount = 0,
             RecordedAt = recordedAt,
             StageChangedAt = recordedAt,
@@ -99,6 +100,22 @@ internal sealed class MailboxMutationRecordStore(MailFathomDbContext readContext
         entity.AttemptCount++;
 
         return entity.AttemptCount;
+    }
+
+    /// <inheritdoc />
+    public async Task RecordPlacementIssuedAsync(
+        IPersistenceSession session,
+        MailboxMutationRecordId recordId,
+        bool requiresSourceRemoval,
+        CancellationToken cancellationToken)
+    {
+        var entity = await RequireEntityAsync(session, recordId, cancellationToken);
+
+        RequireForwardMovement(entity, MailboxMutationStage.PlacementIssued);
+
+        entity.Stage = MailboxMutationStage.PlacementIssued;
+        entity.RequiresSourceRemoval = requiresSourceRemoval;
+        entity.StageChangedAt = timeProvider.GetUtcNow();
     }
 
     /// <inheritdoc />
@@ -230,6 +247,7 @@ internal sealed class MailboxMutationRecordStore(MailFathomDbContext readContext
                 ToDestinationPath(entity),
                 entity.DesiredSeenState),
             Stage = entity.Stage,
+            RequiresSourceRemoval = entity.RequiresSourceRemoval,
             Placement = ToPlacement(entity),
             AttemptCount = entity.AttemptCount,
             RecordedAt = entity.RecordedAt,

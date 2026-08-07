@@ -281,7 +281,14 @@ reading and writing closes the window two concurrent writers fall through.
 whose flag landed reissues only the expunge; a `\Seen` change simply repeats, because the store is idempotent on the
 wire. The one case that is never retried is a placement command whose answer was never read: `COPY` issued twice is a
 second message, and nothing in the destination folder afterwards says whether the first attempt landed. Such a mutation
-is reported as an unknown outcome and stays visible for a person to resolve.
+is reported as an unknown outcome, records that as the reason it is stuck, and stays visible for a person to resolve.
+
+What a half-finished relocation still owes is read from the record rather than asked of the server again. `MOVE`
+removes the source itself and a copy does not, so the same stage means opposite things depending on which ran, and the
+connection a retry lands on is not required to be the one that answered the first — a fallback relocation resumed
+against a server that now advertises `MOVE` would otherwise be read as already finished, leaving the message in both
+folders for good. Which path ran is still invisible above `Debug`: it changes what the next attempt does, never what
+the operation is called.
 
 **What became of it.** `MaxMutationAttempts` bounds how many attempts one change may spend, counted before each attempt
 so one that kills the process still counts. A change that spends them, or that a server has no safe way to carry, stops

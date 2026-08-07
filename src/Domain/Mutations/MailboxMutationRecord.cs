@@ -38,6 +38,30 @@ public sealed record MailboxMutationRecord
     /// </remarks>
     public required RemoteEmailPlacement Placement { get; init; }
 
+    /// <summary>Gets whether the placement left a source occurrence that still has to be removed separately.</summary>
+    /// <remarks>
+    /// <para>
+    /// Written when the placement command is issued and read by a resumed attempt, because it is the one thing about a
+    /// half-finished relocation that cannot be worked out later. A relocation carried by <c>MOVE</c> removes the source
+    /// as part of the same command and a relocation carried by copy does not, so a record stopped at
+    /// <see cref="MailboxMutationStage.PlacementConfirmed" /> means opposite things depending on which ran.
+    /// </para>
+    /// <para>
+    /// Re-deriving it from what the connection advertises at resume time is exactly what this replaces. A recovered
+    /// connection can land on a server advertising something else, and a fallback relocation resumed against one
+    /// reporting <c>MOVE</c> would be read as already complete — leaving the email in both folders permanently, with
+    /// nothing left to surface it. That is the duplication this record exists to prevent, so the answer is durable
+    /// rather than inferred.
+    /// </para>
+    /// <para>
+    /// It is a fact about the sequence rather than a name for the operation. Which protocol path carried a relocation
+    /// still reaches no log above <c>Debug</c>, no span, and no metric dimension, exactly as
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
+    /// requires.
+    /// </para>
+    /// </remarks>
+    public required bool RequiresSourceRemoval { get; init; }
+
     /// <summary>Gets how many times this mutation has been attempted, counted before each attempt rather than after it.</summary>
     /// <remarks>
     /// Counting first is what makes the bound survive a crash loop: an attempt that kills the process still counted, so a

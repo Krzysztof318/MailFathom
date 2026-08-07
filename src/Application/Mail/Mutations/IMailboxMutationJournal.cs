@@ -32,14 +32,25 @@ public interface IMailboxMutationJournal
     /// <remarks>A resumed attempt that has nothing left to do returns this rather than asking the server again for an identity it already recorded.</remarks>
     RemoteEmailPlacement Placement { get; }
 
+    /// <summary>Gets whether the recorded placement left a source occurrence that still has to be removed separately.</summary>
+    /// <remarks>
+    /// This is what a resumed attempt reads instead of asking the connection what it can do. A relocation stopped at
+    /// <see cref="MailboxMutationStage.PlacementConfirmed" /> means opposite things depending on which command placed
+    /// the email, and the connection a retry lands on is not required to be the one that answered the first.
+    /// </remarks>
+    bool RequiresSourceRemoval { get; }
+
     /// <summary>Records that the command placing the email in its destination folder is about to be issued.</summary>
+    /// <param name="requiresSourceRemoval"><see langword="true" /> when the command leaves the source in place and a separate removal will be owed; <see langword="false" /> when it removes the source itself.</param>
     /// <param name="cancellationToken">Cancels the durable write.</param>
     /// <returns>A task that completes once the stage is durable.</returns>
     /// <remarks>
     /// It is announced before the command rather than after it, because the stage exists for the crash that happens
-    /// while the command is in flight. A mutation found here is never issued again.
+    /// while the command is in flight. A mutation found here is never issued again. The answer travels with the
+    /// announcement because it is decided by the same choice that picked the command, and a later attempt has no way
+    /// to recover it.
     /// </remarks>
-    Task PlacementIssuedAsync(CancellationToken cancellationToken);
+    Task PlacementIssuedAsync(bool requiresSourceRemoval, CancellationToken cancellationToken);
 
     /// <summary>Records that the server acknowledged the placement, and where it said the email landed.</summary>
     /// <param name="placement">What the server named, or the reported absence of a <c>COPYUID</c> response.</param>

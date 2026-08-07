@@ -43,6 +43,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
             Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(this.Advance())),
             Request = request,
             Stage = MailboxMutationStage.Recorded,
+            RequiresSourceRemoval = false,
             Placement = RemoteEmailPlacement.NotReported(),
             AttemptCount = 0,
             RecordedAt = this.now,
@@ -67,6 +68,31 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
         this.recordsById[recordId] = counted;
 
         return Task.FromResult(counted.AttemptCount);
+    }
+
+    /// <inheritdoc />
+    public Task RecordPlacementIssuedAsync(
+        IPersistenceSession session,
+        MailboxMutationRecordId recordId,
+        bool requiresSourceRemoval,
+        CancellationToken cancellationToken)
+    {
+        var record = this.Require(recordId);
+
+        if (record.IsTerminal || MailboxMutationStage.PlacementIssued <= record.Stage)
+        {
+            throw new InvalidOperationException(
+                $"Mailbox mutation record {recordId} is at stage {record.Stage} and cannot be moved to PlacementIssued.");
+        }
+
+        this.recordsById[recordId] = record with
+        {
+            Stage = MailboxMutationStage.PlacementIssued,
+            RequiresSourceRemoval = requiresSourceRemoval,
+            StageChangedAt = this.Advance(),
+        };
+
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc />

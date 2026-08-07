@@ -37,6 +37,7 @@ internal sealed class MailboxMutationJournal : IMailboxMutationJournal
         this.RecordId = record.Id;
         this.Stage = record.Stage;
         this.Placement = record.Placement;
+        this.RequiresSourceRemoval = record.RequiresSourceRemoval;
         this.AttemptCount = record.AttemptCount;
         this.LastFailure = record.LastFailure;
     }
@@ -50,6 +51,9 @@ internal sealed class MailboxMutationJournal : IMailboxMutationJournal
     /// <inheritdoc />
     public RemoteEmailPlacement Placement { get; private set; }
 
+    /// <inheritdoc />
+    public bool RequiresSourceRemoval { get; private set; }
+
     /// <summary>Gets how many attempts the record has counted, including one this journal has just counted.</summary>
     internal int AttemptCount { get; private set; }
 
@@ -57,8 +61,19 @@ internal sealed class MailboxMutationJournal : IMailboxMutationJournal
     internal MailFathomErrorCode? LastFailure { get; private set; }
 
     /// <inheritdoc />
-    public Task PlacementIssuedAsync(CancellationToken cancellationToken) =>
-        this.AdvanceAsync(MailboxMutationStage.PlacementIssued, placement: null, cancellationToken);
+    public async Task PlacementIssuedAsync(bool requiresSourceRemoval, CancellationToken cancellationToken)
+    {
+        await this.commitPolicy.CommitAsync(
+            (session, token) => this.store.RecordPlacementIssuedAsync(
+                session,
+                this.RecordId,
+                requiresSourceRemoval,
+                token),
+            cancellationToken);
+
+        this.Stage = MailboxMutationStage.PlacementIssued;
+        this.RequiresSourceRemoval = requiresSourceRemoval;
+    }
 
     /// <inheritdoc />
     public Task PlacementConfirmedAsync(RemoteEmailPlacement placement, CancellationToken cancellationToken)

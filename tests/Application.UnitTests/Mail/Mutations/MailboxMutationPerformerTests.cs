@@ -124,7 +124,11 @@ public sealed class MailboxMutationPerformerTests
         var context = new PerformerContext();
         var request = RelocationRequest();
         await context.OpenRecordFor(request);
-        context.Store.Arrange(request, record => record with { Stage = MailboxMutationStage.PlacementIssued });
+        context.Store.Arrange(request, record => record with
+        {
+            Stage = MailboxMutationStage.PlacementIssued,
+            RequiresSourceRemoval = true,
+        });
 
         // Act
         var outcome = await context.Performer.PerformAsync(
@@ -135,7 +139,11 @@ public sealed class MailboxMutationPerformerTests
 
         // Assert
         Assert.Equal(MailboxMutationStatus.OutcomeUnknown, outcome.Status);
-        Assert.Equal(MailboxMutationStage.PlacementIssued, context.Store.RecordOf(request).Stage);
+
+        // The stage a person has to resolve is the one that must say why, or it reads as merely old.
+        var record = context.Store.RecordOf(request);
+        Assert.Equal(MailboxMutationStage.PlacementIssued, record.Stage);
+        Assert.Equal(MailFathomErrorCode.MailboxMutationOutcomeUnknown, record.LastFailure);
         await context.WriteSessionFactory.DidNotReceive().OpenForWritingAsync(
             Arg.Any<MailAccountId>(),
             Arg.Any<MailFolderResolution>(),

@@ -21,9 +21,15 @@ namespace MailFathom.Infrastructure.Mail.MailKit.Writes;
 /// connection it runs on is one no read path can obtain.
 /// </para>
 /// <para>
-/// The protocol choices are made per attempt from what the connection actually advertises rather than from anything
-/// captured when the session opened, for the same reason the read session reads its capabilities that way: a recovered
-/// connection can land on a server advertising something else.
+/// Which command a *fresh* attempt uses is decided from what the connection actually advertises rather than from
+/// anything captured when the session opened, for the same reason the read session reads its capabilities that way: a
+/// recovered connection can land on a server advertising something else.
+/// </para>
+/// <para>
+/// A *resumed* attempt is the exact inverse, and for the same reason. What a half-finished sequence still owes was
+/// decided by the attempt that started it, so it is read from the durable record rather than asked of the connection
+/// again — a fallback relocation resumed against a server that now advertises <c>MOVE</c> would otherwise be read as
+/// already finished, leaving the email in both folders permanently.
 /// </para>
 /// <para>
 /// MailKit's own <c>MoveTo</c> would carry a relocation on either kind of server, and it is deliberately used for the
@@ -35,9 +41,9 @@ namespace MailFathom.Infrastructure.Mail.MailKit.Writes;
 /// </para>
 /// <para>
 /// Each operation announces the stage it has reached to the journal it is given, before the command that would change
-/// the mailbox rather than after it, and reads the journal's stage to know how much of the sequence a previous attempt
-/// already carried. That is what makes the sequences resumable without the caller knowing what they are made of: which
-/// commands are left depends on what the connection advertises, and that answer never leaves this adapter.
+/// the mailbox rather than after it, and reads that journal to know how much of the sequence a previous attempt already
+/// carried. That is what makes the sequences resumable without the caller knowing what they are made of: how a sequence
+/// is composed never leaves this adapter, and what a stopped one still owes is recorded rather than re-derived.
 /// </para>
 /// </remarks>
 internal sealed class MailKitImapWriteSession : IMailboxWriteSession
@@ -175,7 +181,8 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
 
                 var destination = await client.GetFolderAsync(destinationPath.Value, attemptToken);
 
-                await journal.PlacementIssuedAsync(attemptToken);
+                // A copy owes no source removal: leaving the source exactly where it is *is* the operation.
+                await journal.PlacementIssuedAsync(requiresSourceRemoval: false, attemptToken);
 
                 scope.CommandIssued("UID COPY");
                 var copied = await openFolder.CopyToAsync(
@@ -242,11 +249,12 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
     /// Both branches produce the same relocation from every layer above; only the debug record tells them apart.
     /// </para>
     /// <para>
-    /// A resumed relocation whose placement is already confirmed has the copy behind it, and what remains depends on
-    /// which path put it there. <c>MOVE</c> removes the source as part of the same command, so on a server advertising
-    /// it there is nothing left to do and the recorded placement is returned untouched; the fallback leaves the source
-    /// in the folder, so the two commands that remove it are what a resumed attempt issues. The path is decided by the
-    /// same capability check on every attempt, which is what keeps that reading of the stage true.
+    /// A resumed relocation whose placement is already confirmed has the copy behind it, and what remains is read from
+    /// the record rather than worked out again. <c>MOVE</c> removes the source as part of the same command and the
+    /// fallback leaves it in the folder, so the same stage means opposite things depending on which ran — and the
+    /// connection a retry lands on is not required to be the one that answered the first. Asking it would let a
+    /// fallback relocation resumed against a server now advertising <c>MOVE</c> be read as finished, leaving the email
+    /// in both folders with nothing left to surface it.
     /// </para>
     /// </remarks>
     private async Task<RemoteEmailPlacement> RelocateThroughBestAvailablePathAsync(
@@ -258,24 +266,26 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
         MailboxMutationScope scope,
         CancellationToken cancellationToken)
     {
-        var carriesMoveCommand = client.Capabilities.HasFlag(ImapCapabilities.Move);
-
         if (HasConfirmedPlacement(journal))
         {
-            scope.ProtocolPathChosen(carriesMoveCommand ? NativeProtocolPath : FallbackProtocolPath);
-
-            if (!carriesMoveCommand)
+            // The record says which sequence placed the email, so nothing here consults the connection about it.
+            if (!journal.RequiresSourceRemoval)
             {
-                RequireCapability(
-                    client,
-                    ImapCapabilities.UidPlus,
-                    MailboxMutation.Relocate,
-                    UidPlusCapabilityName,
-                    this.SessionAccountId,
-                    this.folder.Alias);
+                scope.ProtocolPathChosen(NativeProtocolPath);
 
-                await RemoveSourceAsync(openFolder, occurrenceId.Uid, journal, scope, cancellationToken);
+                return journal.Placement;
             }
+
+            scope.ProtocolPathChosen(FallbackProtocolPath);
+            RequireCapability(
+                client,
+                ImapCapabilities.UidPlus,
+                MailboxMutation.Relocate,
+                UidPlusCapabilityName,
+                this.SessionAccountId,
+                this.folder.Alias);
+
+            await RemoveSourceAsync(openFolder, occurrenceId.Uid, journal, scope, cancellationToken);
 
             return journal.Placement;
         }
@@ -283,11 +293,11 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
         var destination = await client.GetFolderAsync(destinationPath.Value, cancellationToken);
         var sourceUid = new UniqueId(occurrenceId.Uid.Value);
 
-        if (carriesMoveCommand)
+        if (client.Capabilities.HasFlag(ImapCapabilities.Move))
         {
             scope.ProtocolPathChosen(NativeProtocolPath);
 
-            await journal.PlacementIssuedAsync(cancellationToken);
+            await journal.PlacementIssuedAsync(requiresSourceRemoval: false, cancellationToken);
 
             scope.CommandIssued("UID MOVE");
             var moved = await openFolder.MoveToAsync([sourceUid], destination, cancellationToken);
@@ -311,7 +321,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
             this.SessionAccountId,
             this.folder.Alias);
 
-        await journal.PlacementIssuedAsync(cancellationToken);
+        await journal.PlacementIssuedAsync(requiresSourceRemoval: true, cancellationToken);
 
         scope.CommandIssued("UID COPY");
         var copied = await openFolder.CopyToAsync([sourceUid], destination, cancellationToken);

@@ -72,6 +72,11 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
 
         if (SettledOutcomeOf(record) is { } settledOutcome)
         {
+            if (settledOutcome.Status == MailboxMutationStatus.OutcomeUnknown)
+            {
+                await this.RecordUnknownOutcomeAsync(record, cancellationToken);
+            }
+
             return settledOutcome;
         }
 
@@ -131,6 +136,23 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
                 "The folder binding does not carry the occurrence the mutation was requested for.",
                 nameof(folder));
         }
+    }
+
+    /// <summary>Writes onto the record why a mutation stuck at an unacknowledged placement is stuck.</summary>
+    /// <remarks>
+    /// Without this the one stage that exists for a person to resolve would be the only one carrying no reason at all,
+    /// so an operator reading the outstanding mutations would see it as merely old. It is written once: a record that
+    /// already names this failure is left alone, so asking repeatedly costs no write.
+    /// </remarks>
+    private async Task RecordUnknownOutcomeAsync(MailboxMutationRecord record, CancellationToken cancellationToken)
+    {
+        if (record.LastFailure == MailFathomErrorCode.MailboxMutationOutcomeUnknown)
+        {
+            return;
+        }
+
+        await new MailboxMutationJournal(this.store, this.commitPolicy, record)
+            .RecordFailureAsync(MailFathomErrorCode.MailboxMutationOutcomeUnknown, cancellationToken);
     }
 
     private async Task<MailboxMutationOutcome> AttemptAsync(

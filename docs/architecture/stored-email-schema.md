@@ -147,10 +147,22 @@ from:
 | `Abandoned` | Nothing will attempt it again, and `LastFailureCode` says what ended it | all four |
 
 `PlacementIssued` is the one stage a retry may not act on. A `COPY` issued twice is a second message rather than a
-repeat of the first, so a mutation found there is reported as an unknown outcome and left for a person to resolve. Every
-other stage resumes: a relocation found at `PlacementConfirmed` removes its source without copying again, and a delete
-found at `SourceFlaggedDeleted` reissues only the expunge. A `\Seen` change never leaves `Recorded` until it completes —
-the store is idempotent on the wire, and its record exists for provenance rather than for retry safety.
+repeat of the first, so a mutation found there is reported as an unknown outcome, has
+`MailboxMutationOutcomeUnknown` (25002) written to `LastFailureCode` so an operator reading the row sees why it is
+stuck, and is left for a person to resolve. Every other stage resumes: a relocation found at `PlacementConfirmed`
+removes its source without copying again, and a delete found at `SourceFlaggedDeleted` reissues only the expunge. A
+`\Seen` change never leaves `Recorded` until it completes — the store is idempotent on the wire, and its record exists
+for provenance rather than for retry safety.
+
+`RequiresSourceRemoval` is what makes that resumption safe, and it is written together with `PlacementIssued` rather
+than worked out later. `MOVE` removes the source as part of the same command and a copy does not, so
+`PlacementConfirmed` means opposite things depending on which ran — and the connection a retry lands on is not required
+to be the one that answered the first. A fallback relocation resumed against a server that now advertises `MOVE` would
+otherwise be read as already finished, leaving the email in both folders permanently with nothing left to surface it.
+That is the duplication the record exists to prevent, so the answer is durable rather than inferred. It is a fact about
+the sequence rather than a name for the operation: which protocol path carried a relocation still reaches no log above
+`Debug`, no span, and no metric dimension, exactly as [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+requires.
 
 `AttemptCount` is written before each attempt rather than after it, which is what makes an attempt that kills the
 process count against `MailSynchronization:MaxMutationAttempts`. Spending that bound moves the row to `Abandoned`, and a

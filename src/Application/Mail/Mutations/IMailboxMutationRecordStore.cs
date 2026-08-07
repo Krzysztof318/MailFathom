@@ -48,6 +48,25 @@ public interface IMailboxMutationRecordStore
         MailboxMutationRecordId recordId,
         CancellationToken cancellationToken);
 
+    /// <summary>Moves the record to <see cref="MailboxMutationStage.PlacementIssued" /> and states what the command will leave behind.</summary>
+    /// <param name="session">The session the write joins.</param>
+    /// <param name="recordId">The record to advance.</param>
+    /// <param name="requiresSourceRemoval"><see langword="true" /> when the command leaves the source in place and a separate removal will be owed.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>A task that completes when the stage and the answer are written.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="recordId" />, or when the record has already passed this stage.</exception>
+    /// <remarks>
+    /// It is a transition of its own rather than a flag on <see cref="AdvanceAsync" />, because this is the only stage
+    /// the answer is knowable at and the only one it means anything for. Writing both in one transaction is what stops
+    /// a crash between them from leaving a placement whose obligation nobody recorded.
+    /// </remarks>
+    Task RecordPlacementIssuedAsync(
+        IPersistenceSession session,
+        MailboxMutationRecordId recordId,
+        bool requiresSourceRemoval,
+        CancellationToken cancellationToken);
+
     /// <summary>Moves the record to a later stage, recording the placement where the server named one.</summary>
     /// <param name="session">The session the write joins.</param>
     /// <param name="recordId">The record to advance.</param>

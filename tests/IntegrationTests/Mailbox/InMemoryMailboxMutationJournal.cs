@@ -16,7 +16,8 @@ namespace MailFathom.IntegrationTests.Mailbox;
 /// </remarks>
 internal sealed class InMemoryMailboxMutationJournal(
     MailboxMutationStage resumedFrom = MailboxMutationStage.Recorded,
-    RemoteEmailPlacement? recordedPlacement = null) : IMailboxMutationJournal
+    RemoteEmailPlacement? recordedPlacement = null,
+    bool requiresSourceRemoval = false) : IMailboxMutationJournal
 {
     /// <inheritdoc />
     public MailboxMutationStage Stage { get; private set; } = resumedFrom;
@@ -26,9 +27,13 @@ internal sealed class InMemoryMailboxMutationJournal(
         recordedPlacement ?? RemoteEmailPlacement.NotReported();
 
     /// <inheritdoc />
-    public Task PlacementIssuedAsync(CancellationToken cancellationToken)
+    public bool RequiresSourceRemoval { get; private set; } = requiresSourceRemoval;
+
+    /// <inheritdoc />
+    public Task PlacementIssuedAsync(bool requiresSourceRemoval, CancellationToken cancellationToken)
     {
         this.Stage = MailboxMutationStage.PlacementIssued;
+        this.RequiresSourceRemoval = requiresSourceRemoval;
 
         return Task.CompletedTask;
     }

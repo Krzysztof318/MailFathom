@@ -63,6 +63,16 @@ internal sealed class MailboxMutationEntity
 
     public MailboxMutationStage Stage { get; set; }
 
+    /// <summary>Gets or sets whether the placement left a source occurrence that still has to be removed separately.</summary>
+    /// <remarks>
+    /// Written with the <see cref="MailboxMutationStage.PlacementIssued" /> stage and read by a resumed attempt, because
+    /// it is the one thing about a half-finished relocation that cannot be worked out afterwards: <c>MOVE</c> removes
+    /// the source itself and a copy does not, so the same stage means opposite things depending on which ran. Asking the
+    /// connection instead would let a fallback relocation resumed against a server now advertising <c>MOVE</c> be read
+    /// as finished, leaving the email in both folders permanently.
+    /// </remarks>
+    public bool RequiresSourceRemoval { get; set; }
+
     /// <summary>Gets or sets the UIDVALIDITY a <c>COPYUID</c> response named, where the server supplied one.</summary>
     public uint? PlacementUidValidity { get; set; }
 

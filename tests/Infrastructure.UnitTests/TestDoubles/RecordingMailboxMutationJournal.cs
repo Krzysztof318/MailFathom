@@ -19,10 +19,12 @@ internal sealed class RecordingMailboxMutationJournal : IMailboxMutationJournal
 
     internal RecordingMailboxMutationJournal(
         MailboxMutationStage resumedFrom = MailboxMutationStage.Recorded,
-        RemoteEmailPlacement? recordedPlacement = null)
+        RemoteEmailPlacement? recordedPlacement = null,
+        bool requiresSourceRemoval = false)
     {
         this.Stage = resumedFrom;
         this.Placement = recordedPlacement ?? RemoteEmailPlacement.NotReported();
+        this.RequiresSourceRemoval = requiresSourceRemoval;
     }
 
     /// <inheritdoc />
@@ -31,12 +33,19 @@ internal sealed class RecordingMailboxMutationJournal : IMailboxMutationJournal
     /// <inheritdoc />
     public RemoteEmailPlacement Placement { get; private set; }
 
+    /// <inheritdoc />
+    public bool RequiresSourceRemoval { get; private set; }
+
     /// <summary>Gets the stages this attempt announced, in order.</summary>
     internal IReadOnlyList<MailboxMutationStage> AnnouncedStages => this.announcedStages;
 
     /// <inheritdoc />
-    public Task PlacementIssuedAsync(CancellationToken cancellationToken) =>
-        this.AdvanceAsync(MailboxMutationStage.PlacementIssued, placement: null);
+    public Task PlacementIssuedAsync(bool requiresSourceRemoval, CancellationToken cancellationToken)
+    {
+        this.RequiresSourceRemoval = requiresSourceRemoval;
+
+        return this.AdvanceAsync(MailboxMutationStage.PlacementIssued, placement: null);
+    }
 
     /// <inheritdoc />
     public Task PlacementConfirmedAsync(RemoteEmailPlacement placement, CancellationToken cancellationToken) =>
