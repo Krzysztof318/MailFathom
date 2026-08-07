@@ -21,7 +21,7 @@ Each question has exactly one owner, and no mechanism answers a question another
 | What kind of work is this? | A `type:*` label | the rules under **Labels** |
 | Which release does it ship in? | The milestone | the rules under **Milestones** |
 | Where is it in its lifecycle? | The board's `Status` field | the built-in board workflows, never by hand |
-| What is being worked next, and what is deliberately not being worked? | The board's `Queue` field | the rules under **Board fields**; the owner chooses `Next`, and `$finish-change` also writes it when a pull request opens |
+| What is being worked next, and what is deliberately not being worked? | The board's `Queue` field | the rules under **Board fields**; the owner chooses `Next`, and the skill that opens a pull request also writes it — `$finish-change` for ordinary work, `$prepare-release` for a release |
 
 An open pull request moves both of the bottom two rows, and that is not the duplication this table forbids. `Status: In progress` is the lifecycle fact and `Queue: Next` is what puts the item in front of the owner; they stay separate answers because a project view filters fields with `AND` and can therefore read only one of them. Asking `Now` for what the owner queued *or* what is in flight is not expressible, so the two conditions have to meet in one field for either to be visible there at all.
 
