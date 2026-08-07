@@ -8,9 +8,16 @@ namespace MailFathom.Cli;
 
 /// <summary>The options every command that reaches a deployment shares.</summary>
 /// <remarks>
+/// <para>
 /// A command acts on the profile <c>switch</c> last selected, and <c>--endpoint</c> overrides that for one invocation
 /// without changing it. The order is the option, then the environment variable, then the stored default: what an
 /// operator typed beats what their shell was told, and both beat what they chose last time.
+/// </para>
+/// <para>
+/// That order is applied here rather than by a configuration pipeline because <c>mfctl</c> composes none. It is a
+/// command-line tool with three inputs and no settings file, so the precedence is short enough to state in one method
+/// and is the whole of it; the host's own composed configuration governs the service, not the tool that talks to it.
+/// </para>
 /// </remarks>
 internal static class CliOptions
 {

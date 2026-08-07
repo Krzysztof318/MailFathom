@@ -47,6 +47,11 @@ is built before configuration exists, reads the same variable, and exports each 
 to export and the destination being exported to can never disagree between the two pipelines, and a start that fails
 while configuration is loading is still reported to the same place as everything else.
 
+Writing any `OTEL_*` name into `appsettings.json`, a provisioned configuration file, or a command-line argument fails
+startup naming it, rather than leaving a deployment exporting to nowhere while its own file says otherwise;
+[environment-only settings](configuration-reference.md#environment-only-settings) states that rule and the two other
+families it covers.
+
 ## Local development: the Aspire dashboard
 
 The AppHost orchestration is where the switch is flipped for you. When `src/AppHost` starts a project resource, Aspire

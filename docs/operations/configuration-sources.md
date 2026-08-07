@@ -24,6 +24,8 @@ The provisioned layer sits below the environment block on purpose. A file states
 
 Within the provisioned layer, the single file wins over the directory, so a deployment that mounts a shared ConfigMap and then names one file of its own gets the specific value rather than an order decided by how the two happen to sort.
 
+This order governs every MailFathom setting. A short list of platform variables sits outside it entirely — the OpenTelemetry exporter's `OTEL_*` family, the host's `ASPNETCORE_*` and `DOTNET_*` names, and `OPENSSL_CONF` — because each is read before this composition exists or by a library that never consults it. Writing one of them into a file or a command-line argument fails startup rather than being accepted and ignored; [environment-only settings](configuration-reference.md#environment-only-settings) is the list and the reasoning.
+
 ## Naming the provisioned sources
 
 Two keys, both unset by default. A deployment that names neither keeps exactly the default source list.
