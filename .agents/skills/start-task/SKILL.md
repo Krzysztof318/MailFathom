@@ -41,7 +41,7 @@ step 2 rather than assuming, and state it in the brief.
    list its scopes. Without that scope the call fails identically whoever is running it, so report it
    as a credential to repair, never as the board being out of reach.
 
-The fork role never assigns a label or a milestone and never pushes to `Krzysztof318/MailFathom`,
+The fork role assigns no label and no milestone and never pushes to `Krzysztof318/MailFathom`,
 because those are write access to the repository rather than to the board, and no board grant confers
 them. Those are not degraded versions of the owner's steps — they are steps that belong to a
 maintainer, and attempting one produces a permission error rather than a partial result. The board
@@ -114,7 +114,19 @@ them if that access were ever removed.
    maintainer's triage pass supplies them. With board write it is the issue plus its `Area`, `Queue`,
    and `Size`, and the label and milestone still wait for triage. Say which of the two happened in the
    brief, so nobody reads the absence as a step that failed.
-10. For dependency, CLI, protocol, service, or external API changes, consult current official
+10. Claim the issue, in the owner's checkout, once the brief below will read `safe`:
+
+    ```bash
+    gh issue edit <number> --repo Krzysztof318/MailFathom --add-label agent:claimed
+    ```
+
+    This is the step that says work has begun, so it belongs here rather than at step 8: an issue
+    identified while the workspace turns out to be `blocked` was read and not taken. Nothing reads
+    the label, so re-applying one already present is a harmless no-op and nothing has to look first,
+    and it is never removed — `docs/operations/issue-tracking.md` § *Labels* holds what it claims and
+    why the claim is the weaker of the two available. In the fork role this step does not exist, for
+    the reason every label step does not: it is write access to this repository.
+11. For dependency, CLI, protocol, service, or external API changes, consult current official
     documentation and flag licensing review.
 
 Return:
@@ -126,6 +138,7 @@ Scope: <what governs the task, or that nothing does>
 Protected paths: <none reached, or which and what that means for this role>
 Issue: <number and title, or created with reason>
 Placement: <type label, Area, Queue, Size, milestone or none — or what the board probe left to triage>
+Claim: <agent:claimed applied, already present, or not applicable in the fork role>
 Required context: <files read>
 Assumptions or blockers: <none or explicit list>
 Verification: <fast loop and final gate>
