@@ -124,7 +124,9 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         var mailbox = new OrchestratedMailbox(orchestration.MailServer);
-        await mailbox.RecreateFolderAsync(RemovedFolderName, cancellationToken);
+        // Created and removed rather than recreated and removed: the server has to have accepted the name for its
+        // absence to mean a folder somebody deleted, and a folder this suite selected cannot be deleted at all.
+        await mailbox.CreateFolderAsync(RemovedFolderName, cancellationToken);
         await mailbox.DeleteFolderAsync(RemovedFolderName, cancellationToken);
 
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);

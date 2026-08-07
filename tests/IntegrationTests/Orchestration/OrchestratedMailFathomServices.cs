@@ -123,6 +123,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),
             PostgresTextSearchConfiguration.Default);
+        // Registered by a composition root for the reason the generator above is: AddInfrastructure registers neither
+        // the embedding generation nor the backfill, because both resolve a text embedding generator an instance that
+        // declared no chain does not have. This suite declared one, so it registers both.
+        builder.Services.AddEmailEmbeddingGeneration();
 
         // The ring a composition root would build from the DataEncryption section. It is supplied here for the reason
         // every other bound setting above is: the suite does not start the host resource, so nothing else binds it, and

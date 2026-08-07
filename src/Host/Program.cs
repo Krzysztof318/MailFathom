@@ -330,6 +330,10 @@ try
             ?? throw new InvalidOperationException(
                 "The embedding chain was declared at registration and is absent from the validated configuration."));
         builder.Services.AddEmbeddingProviderAdapter();
+        // Beside the adapter rather than inside AddInfrastructure, because these two resolve the generator that call
+        // registers. An instance that declared no chain registers neither and starts; one that declared one registers
+        // both and the workers below have something to resolve.
+        builder.Services.AddEmailEmbeddingGeneration();
     }
     builder.Services.AddInfrastructure(
         provider => provider.GetRequiredService<DatabaseConnectionSettingsMapper>()
