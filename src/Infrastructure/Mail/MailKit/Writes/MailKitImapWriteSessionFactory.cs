@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
@@ -21,6 +22,7 @@ internal sealed class MailKitImapWriteSessionFactory(
     MailboxMutationTelemetry telemetry) : IMailboxWriteSessionFactory
 {
     /// <inheritdoc />
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The lease is handed to the session, which releases it from its own DisposeAsync, and every caller reaches this method through an await using. CA2000 cannot see that transfer: MailboxWriteConnectionLease releases asynchronously and implements no synchronous IDisposable, which is the call the rule asks for by name, so no arrangement of this method satisfies it. Returning the lease here rather than there would end the account's single write connection while the session it belongs to is still being used.")]
     public async Task<IMailboxWriteSession> OpenForWritingAsync(
         MailAccountId accountId,
         MailFolderResolution folder,

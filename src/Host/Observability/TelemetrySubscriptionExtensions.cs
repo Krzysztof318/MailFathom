@@ -11,8 +11,8 @@ namespace MailFathom.Host.Observability;
 /// <summary>Subscribes the activity source and meter MailFathom publishes to under its own name.</summary>
 /// <remarks>
 /// Emitting a signal is not collecting it: an unsubscribed source produces no span however much code publishes to it,
-/// and the failure is silent. Both methods therefore subscribe <see cref="MailFathomTelemetry.Name" /> from the
-/// declaration rather than repeating the string, so the host and the publishers cannot disagree about it.
+/// and the failure is silent. Both methods therefore subscribe <see cref="Telemetry.Name" /> from the declaration
+/// rather than repeating the string, so the host and the publishers cannot disagree about it.
 /// </remarks>
 internal static class TelemetrySubscriptionExtensions
 {
@@ -24,7 +24,7 @@ internal static class TelemetrySubscriptionExtensions
     {
         ArgumentNullException.ThrowIfNull(tracing);
 
-        return tracing.AddSource(MailFathomTelemetry.Name);
+        return tracing.AddSource(Telemetry.Name);
     }
 
     /// <summary>Subscribes the meter MailFathom publishes instruments to.</summary>
@@ -35,6 +35,6 @@ internal static class TelemetrySubscriptionExtensions
     {
         ArgumentNullException.ThrowIfNull(metrics);
 
-        return metrics.AddMeter(MailFathomTelemetry.Name);
+        return metrics.AddMeter(Telemetry.Name);
     }
 }

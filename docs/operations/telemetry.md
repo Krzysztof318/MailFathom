@@ -36,8 +36,13 @@ One name is what an operator filters a dashboard on to see everything this proce
 subsystem has a name of its own, and none gets one until there is something a name is the right way to tell apart:
 which subsystem a signal came from is already carried by the span or instrument name and by its tags, and a distinction
 added there costs an operator nothing, while a second registration is one more thing to subscribe to before anything is
-collected. The host subscribes the declared name and only that name, so a publisher that invented one of its own would
-be collected by nothing — which is a failing test here rather than a silently empty stream.
+collected.
+
+There is also one instance of each registry, held for the lifetime of the process, and a subsystem starts its spans and
+creates its instruments on those rather than constructing its own. That is what makes a name invented for a feature
+impossible rather than merely discouraged: there is no second source to give a different name to. Neither is disposed,
+because disposing a shared source would silence every other publisher, so a type that reports through them implements
+no disposal on their account.
 
 What publishes to that name is documented with the subsystem that does it, and today one subsystem does. Every change
 MailFathom makes to a remote mailbox opens a span named after the mutation, and is counted along with how long it took,

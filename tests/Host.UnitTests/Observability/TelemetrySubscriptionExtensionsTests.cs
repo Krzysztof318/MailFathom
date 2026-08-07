@@ -27,7 +27,7 @@ public sealed class TelemetrySubscriptionExtensionsTests
         tracing.AddMailFathomActivitySources();
 
         // Assert
-        Assert.Equal([MailFathomTelemetry.Name], tracing.SubscribedSources);
+        Assert.Equal([Telemetry.Name], tracing.SubscribedSources);
     }
 
     [Fact]
@@ -40,7 +40,7 @@ public sealed class TelemetrySubscriptionExtensionsTests
         metrics.AddMailFathomMeters();
 
         // Assert
-        Assert.Equal([MailFathomTelemetry.Name], metrics.SubscribedMeters);
+        Assert.Equal([Telemetry.Name], metrics.SubscribedMeters);
     }
 
     [Fact]

@@ -56,8 +56,9 @@ sections below say what each project is for and why two of them are shaped again
   like every other. Admission is narrow on purpose — code arrives when a second boundary genuinely needs it, and lives
   with its one consumer until then — because a project defined by what it is not becomes the drawer everything ends up
   in. Three things have earned it: the AES-GCM envelope, the mailbox OAuth exchange under `MailboxOAuth/`, and the
-  telemetry name under `Observability/`, which every subsystem that emits a signal reads and the host subscribes, so
-  that no boundary chooses what it is called.
+  telemetry name under `Observability/`, with the one activity source and the one meter carrying it, which every
+  subsystem that emits a signal publishes through and the host subscribes, so that no boundary chooses what it is
+  called.
 - `AppHost` is the Aspire local-development orchestration host.
 
 `Cli` also authorizes a mailbox, because one thing a headless service structurally cannot do is ask a person to sign
