@@ -123,6 +123,83 @@ public sealed class MailboxReconcilerTests
         Assert.Equal(RunInstant, store.RowOf(11).ObservedAt);
     }
 
+    /// <summary>A delete the owner authored is disposed of by its own record rather than by the setting for somebody else's deletion.</summary>
+    /// <remarks>
+    /// The account erases what its server loses, which is the arrangement that makes the two settings distinguishable:
+    /// every value below has to survive that, because reading the account's setting instead would destroy the local
+    /// copy whichever disposition the delete was authored under.
+    /// </remarks>
+    [Theory]
+    [InlineData(AuthoredDeleteEmailDisposition.RetainLocalCopy)]
+    [InlineData(AuthoredDeleteEmailDisposition.RetainTombstone)]
+    [InlineData(AuthoredDeleteEmailDisposition.EraseLocalCopy)]
+    public async Task ReconcileAsync_OccurrenceRemovedByAnAuthoredDelete_CarriesTheDispositionItWasAuthoredUnder(
+        AuthoredDeleteEmailDisposition authoredDisposition)
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(11));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        mutationStore.Add(MutationRemoving(
+            store.StoredEmailIdOf(11),
+            uid: 11,
+            isRelocation: false,
+            localDisposition: authoredDisposition));
+        await using var mailboxSession = CreateSessionHolding();
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.EraseLocalCopy,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.OwnMutationCompletedEmailCount);
+        Assert.Equal(0, result.RemotelyDeletedEmailCount);
+
+        var attributed = Assert.Single(Assert.Single(store.AppliedOutcomes).RemovedByOwnMutation);
+        Assert.Equal(authoredDisposition, attributed.LocalDisposition);
+
+        // The account's own setting travels beside it and answers only for the disappearances nothing accounted for,
+        // which this window has none of.
+        Assert.Equal(RemotelyDeletedEmailDisposition.EraseLocalCopy, Assert.Single(store.AppliedOutcomes).Disposition);
+        Assert.Empty(Assert.Single(store.AppliedOutcomes).Disappeared);
+    }
+
+    /// <summary>A relocation disposes of no local copy, so it reaches the store naming no disposition to apply.</summary>
+    [Fact]
+    public async Task ReconcileAsync_OccurrenceRemovedByARelocation_NamesNoLocalDisposition()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(11));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        mutationStore.Add(MutationRemoving(store.StoredEmailIdOf(11), uid: 11, isRelocation: true));
+        await using var mailboxSession = CreateSessionHolding();
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.EraseLocalCopy,
+            mutationStore: mutationStore);
+
+        // Act
+        await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        var attributed = Assert.Single(Assert.Single(store.AppliedOutcomes).RemovedByOwnMutation);
+        Assert.Null(attributed.LocalDisposition);
+    }
+
     /// <summary>One occurrence can carry several records, and the disappearance is credited to the one that has been outstanding longest.</summary>
     /// <remarks>
     /// The case is real rather than theoretical: a record matches at every stage past <c>Recorded</c>, abandoned
@@ -1022,7 +1099,8 @@ public sealed class MailboxReconcilerTests
         StoredEmailId storedEmailId,
         uint uid,
         bool isRelocation,
-        DateTimeOffset? recordedAt = null)
+        DateTimeOffset? recordedAt = null,
+        AuthoredDeleteEmailDisposition localDisposition = AuthoredDeleteEmailDisposition.RetainLocalCopy)
     {
         var occurrence = EmailOccurrenceId.Create(Account, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid));
         var requester = MailboxMutationRequester.Rule("file-newsletters", 1);
@@ -1037,7 +1115,11 @@ public sealed class MailboxReconcilerTests
                     occurrence,
                     requester,
                     RemoteFolderPath.Create("Archive", '/'))
-                : MailboxMutationRequest.Delete(storedEmailId, occurrence, requester),
+                : MailboxMutationRequest.Delete(
+                    storedEmailId,
+                    occurrence,
+                    requester,
+                    localDisposition),
             Stage = MailboxMutationStage.Completed,
             RequiresSourceRemoval = isRelocation,
             Placement = isRelocation

@@ -19,10 +19,16 @@ public sealed record ObservedEmailFlags(StoredEmailId StoredEmailId, RemoteEmail
 /// Which change it was, carried here so the suppression a run reports names the same word its log line and its counter
 /// already use rather than sending a reader back to the record to find out.
 /// </param>
+/// <param name="LocalDisposition">
+/// What the delete decided about the local copy, and <see langword="null" /> for every other mutation. It is read off
+/// the record rather than from the account's configuration, because the configuration says what a delete authored
+/// *now* would do and this window is applying one authored earlier.
+/// </param>
 public sealed record MutationAttributedDisappearance(
     StoredEmailId StoredEmailId,
     MailboxMutationRecordId MutationRecordId,
-    MailboxMutation Mutation);
+    MailboxMutation Mutation,
+    AuthoredDeleteEmailDisposition? LocalDisposition);
 
 /// <summary>Everything one reconciliation window learned, as one thing to apply.</summary>
 /// <param name="StillPresent">The emails the folder still holds, with the flags to write onto them.</param>
@@ -33,12 +39,16 @@ public sealed record MutationAttributedDisappearance(
 /// <param name="Disappeared">The emails the folder no longer holds and nothing MailFathom did accounts for.</param>
 /// <param name="RemovedByOwnMutation">
 /// The emails the folder no longer holds because MailFathom itself relocated or deleted them, each named with the record
-/// that says so. They are separated from <paramref name="Disappeared" /> before the disposition is reached, because the
-/// disposition answers what becomes of mail somebody else deleted and these are not that. Applying one is applying an
-/// observation and nothing else: the queue timestamp moves so the window can reach further into the folder, and the row
-/// itself is left for the relocation to carry across or for the delete action to decide about.
+/// that says so. They are separated from <paramref name="Disappeared" /> before <paramref name="Disposition" /> is
+/// reached, because that setting answers what becomes of mail somebody else deleted and these are not that. A relocation
+/// moves the queue timestamp and nothing else, leaving the row for the placement to carry across; a delete additionally
+/// applies the disposition its own record carries, which is the one the owner authored it under.
 /// </param>
-/// <param name="Disposition">What becomes of the local copy of each disappeared email.</param>
+/// <param name="Disposition">
+/// What becomes of the local copy of each email in <paramref name="Disappeared" />. It never reaches
+/// <paramref name="RemovedByOwnMutation" />, which is the whole point of the split: an account configured to erase what
+/// its server loses must not thereby erase what MailFathom itself was told to delete.
+/// </param>
 /// <param name="ObservedAt">When this window was read, which orders it against what other writers have recorded.</param>
 /// <remarks>
 /// <para>

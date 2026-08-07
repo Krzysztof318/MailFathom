@@ -192,6 +192,7 @@ try
     builder.Services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IMailSynchronizationWindowReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+    builder.Services.AddScoped<IAuthoredDeleteEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IMailAccountCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();
     builder.Services.AddScoped<IMailOAuthSettingsProvider, ConfiguredMailOAuthSettingsProvider>();

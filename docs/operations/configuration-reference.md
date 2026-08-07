@@ -108,6 +108,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `…:Mode` | enum | `Polling` | `Polling`, `Push`; push holds one connection open per account on a server supporting `NOTIFY`, and one per folder on a server offering only `IDLE` | reload; the next run adopts it |
 | `…:EarliestEmailReceivedDate` | date | unset (everything) | Not in the future (compared in UTC) | reload |
 | `…:RemotelyDeletedEmailDisposition` | enum | `RetainTombstone` | `RetainTombstone`, `EraseLocalCopy` | reload; governs disappearances observed from then on |
+| `…:AuthoredDeleteEmailDisposition` | enum | `RetainLocalCopy` | `RetainLocalCopy`, `RetainTombstone`, `EraseLocalCopy`; what becomes of the local copy of mail MailFathom itself deleted, and it takes precedence over the key above for those | reload; governs deletes authored from then on |
 | `…:Folders` | list | inbox by role | Aliases unique; each entry below | reload |
 
 A folder entry names `Alias` (required — your stable name for the folder) and **exactly one** of `RemotePath` (the

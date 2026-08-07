@@ -130,9 +130,14 @@ The snapshot travels in one direction only. Nothing in any read path turns a fla
 ### Mail the server no longer holds
 
 Every query here — the timeline, search, and the single-email lookup a content read starts from — excludes an email
-reconciliation found gone from its remote folder. The exclusion is written once, in the predicate both read models
-share, and no filter can opt out of it: an email the server deleted is not part of any mailbox a reader may see. An
-account configured to erase local copies leaves no row to exclude at all.
+reconciliation found gone from its remote folder. The exclusion is written once, and no filter can opt out of it: an
+email the server deleted is not part of any mailbox a reader may see. An account configured to erase local copies leaves
+no row to exclude at all.
+
+One case is deliberately not excluded, and it is the reason the rule reads two columns rather than one. Where MailFathom
+itself deleted the message on your instruction and the account keeps the local copy, the row stays in every query above
+although the server no longer holds it — [the authored-delete disposition](imap-synchronization.md#what-becomes-of-a-message-mailfathom-deleted-itself)
+is what chooses that, and nothing else produces it.
 
 `IsRemotelyDeleted` is a different question and is not that exclusion. It is reported on every result and filtered on by
 nothing, because it is the server's `\Deleted` flag on a message the folder still holds and still serves — a message a

@@ -49,7 +49,8 @@ internal static class MailboxMutationRecordMapping
                 mutation,
                 MailboxMutationRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
                 ToDestinationPath(entity),
-                entity.DesiredSeenState),
+                entity.DesiredSeenState,
+                ToLocalDisposition(entity, mutation)),
             Stage = entity.Stage,
             RequiresSourceRemoval = entity.RequiresSourceRemoval,
             Placement = ToPlacement(entity),
@@ -60,6 +61,26 @@ internal static class MailboxMutationRecordMapping
             PlacementObservedAt = entity.PlacementObservedAt,
             SourceRemovalObservedAt = entity.SourceRemovalObservedAt,
         };
+    }
+
+    /// <summary>Restores what the delete decided about the local copy, refusing a delete row that decided nothing.</summary>
+    /// <remarks>
+    /// The absence is a defect rather than a value to supply, because every disposition destroys something a different
+    /// one keeps. Reading a missing one as the default would silently retain mail an operator configured away, and
+    /// reading it as the erasure would destroy mail nobody agreed to lose, so the row is refused instead.
+    /// </remarks>
+    private static AuthoredDeleteEmailDisposition? ToLocalDisposition(
+        MailboxMutationEntity entity,
+        MailboxMutation mutation)
+    {
+        if (mutation != MailboxMutation.Delete)
+        {
+            return null;
+        }
+
+        return entity.LocalDisposition
+            ?? throw new InvalidOperationException(
+                $"Mailbox mutation record {entity.Id} deletes an email and names no local disposition.");
     }
 
     /// <summary>Restores the destination folder a relocation or a copy named, exactly as it was stored.</summary>

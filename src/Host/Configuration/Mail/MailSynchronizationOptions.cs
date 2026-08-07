@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -29,6 +30,7 @@ internal sealed class MailSynchronizationOptions
         IMailTransportSecurityPolicyReader,
         IMailSynchronizationWindowReader,
         IRemotelyDeletedEmailDispositionReader,
+        IAuthoredDeleteEmailDispositionReader,
         IMailAccountCatalog
 {
     /// <summary>The shutdown budget the .NET Generic Host applies when nothing configures one.</summary>
@@ -336,6 +338,14 @@ internal sealed class MailSynchronizationOptions
     }
 
     /// <inheritdoc />
+    public AuthoredDeleteEmailDisposition GetAuthoredDeleteDisposition(MailAccountId accountId)
+    {
+        var account = this.FindAccount(accountId.Value);
+
+        return account.AuthoredDeleteEmailDisposition;
+    }
+
+    /// <inheritdoc />
     /// <remarks>
     /// Configuration is what defines the set of accounts, so this answers from the same bound options every other
     /// per-account reader does. It deliberately ignores <see cref="Enabled" />: that switch stops runs from fetching
@@ -476,6 +486,24 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     public RemotelyDeletedEmailDisposition RemotelyDeletedEmailDisposition { get; set; } =
         RemotelyDeletedEmailDisposition.RetainTombstone;
 
+    /// <summary>Gets or sets what happens to the local copy of an email MailFathom itself deletes on this account's server.</summary>
+    /// <remarks>
+    /// <para>
+    /// It is a separate setting from <see cref="RemotelyDeletedEmailDisposition" /> and takes precedence over it for
+    /// every deletion MailFathom performed, because the two answer for different acts. That one governs a disappearance
+    /// somebody else caused; this one governs one the mailbox owner authored, and an account that erases what its
+    /// server loses must not thereby erase what it was just told to delete — freeing space on the server is not the
+    /// same instruction as forgetting the mail.
+    /// </para>
+    /// <para>
+    /// It binds as one of the names <see cref="AuthoredDeleteEmailDisposition" /> declares, and a value that is none of
+    /// them fails startup for the same reason the setting above does. The default keeps the local copy readable, which
+    /// is the value that destroys nothing.
+    /// </para>
+    /// </remarks>
+    public AuthoredDeleteEmailDisposition AuthoredDeleteEmailDisposition { get; set; } =
+        AuthoredDeleteEmailDisposition.RetainLocalCopy;
+
     /// <summary>Gets or sets what starts this account's next synchronization pass.</summary>
     /// <remarks>
     /// <para>
@@ -520,6 +548,16 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return new ValidationResult(
                 $"Account '{this.AccountId}': the remotely deleted email disposition must be one of {string.Join(", ", Enum.GetNames<RemotelyDeletedEmailDisposition>())}.",
                 [nameof(this.RemotelyDeletedEmailDisposition)]);
+        }
+
+        // Checked for the reason the disposition above is. An undefined value here names no decision about the local
+        // copy, so every delete this account authored would be refused where its record is built — a failure an
+        // operator would meet one deletion at a time rather than at the startup that accepted the typo.
+        if (!Enum.IsDefined(this.AuthoredDeleteEmailDisposition))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the authored delete email disposition must be one of {string.Join(", ", Enum.GetNames<AuthoredDeleteEmailDisposition>())}.",
+                [nameof(this.AuthoredDeleteEmailDisposition)]);
         }
 
         // Checked for the same reason as the disposition above: a bare number binds onto an enum whether or not a

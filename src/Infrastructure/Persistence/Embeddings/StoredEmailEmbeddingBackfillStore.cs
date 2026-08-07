@@ -161,7 +161,7 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     /// </remarks>
     private IQueryable<StoredEmailEntity> EmailsAwaitingEmbedding(Guid profileId) => dbContext.StoredEmails
         .AsNoTracking()
-        .Where(email => email.RemoteExpungeObservedAt == null)
+        .Where(StoredEmailTombstone.IsNotTombstoned)
         .Where(email => email.Chunks.Any(chunk =>
                 !chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId))
             || (!email.Chunks.Any()

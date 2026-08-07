@@ -41,15 +41,17 @@ internal static class StoredEmailSelectionPredicate
     /// </para>
     /// <para>
     /// The tombstone exclusion leads and no caller can turn it off, which is why it is written here rather than left to
-    /// each read model. An email the mail server no longer holds is not part of any mailbox a reader may see, and a
-    /// filter that could opt out of that would be a way to read deleted mail.
+    /// each read model. An email a tombstone hides is not part of any mailbox a reader may see, and a filter that could
+    /// opt out of that would be a way to read deleted mail. Which rows a tombstone hides is
+    /// <see cref="StoredEmailTombstone" />'s to say, because a delete the owner authored can keep its local copy
+    /// readable and the other reads have to agree with this one about that.
     /// </para>
     /// </remarks>
     internal static IQueryable<StoredEmailEntity> Matching(
         IQueryable<StoredEmailEntity> emails,
         MailboxEmailSelection selection)
     {
-        emails = emails.Where(email => email.RemoteExpungeObservedAt == null);
+        emails = emails.Where(StoredEmailTombstone.IsNotTombstoned);
 
         if (selection.Scope.AccountIds.Count > 0)
         {

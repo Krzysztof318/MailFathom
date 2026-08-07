@@ -76,6 +76,7 @@ internal sealed class MailboxMutationRecordStore(MailFathomDbContext readContext
             DestinationFolderPath = request.DestinationPath?.Value,
             DestinationHierarchyDelimiter = request.DestinationPath?.HierarchyDelimiter?.ToString(),
             DesiredSeenState = request.DesiredSeenState,
+            LocalDisposition = request.LocalDisposition,
             Stage = MailboxMutationStage.Recorded,
             RequiresSourceRemoval = false,
             AttemptCount = 0,
