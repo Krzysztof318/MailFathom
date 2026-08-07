@@ -85,12 +85,19 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Empty(results);
     }
 
-    /// <summary>Both bounds are enforced at run time, so a value outside their range has to fail startup rather than reach a scheduler.</summary>
+    /// <summary>Every bound is enforced at run time, so a value outside its range has to fail startup rather than reach a scheduler.</summary>
+    /// <remarks>
+    /// The mutation attempt bound is here rather than beside the connection bounds because it is validated the same
+    /// way, and because zero is the value worth catching: it would let a change be recorded and then never attempted,
+    /// which is the one state the record exists to make impossible.
+    /// </remarks>
     [Theory]
     [InlineData("MaxConcurrentAccounts", 0)]
     [InlineData("MaxConcurrentAccounts", 101)]
     [InlineData("MaxConcurrentFoldersPerAccount", 0)]
     [InlineData("MaxConcurrentFoldersPerAccount", 21)]
+    [InlineData("MaxMutationAttempts", 0)]
+    [InlineData("MaxMutationAttempts", 101)]
     public void Bind_ConcurrencyBoundOutsideItsRange_FailsDataAnnotationValidation(string settingName, int configuredValue)
     {
         // Arrange
