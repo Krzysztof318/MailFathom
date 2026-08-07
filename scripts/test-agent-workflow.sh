@@ -1600,20 +1600,14 @@ fi
 FAKE_GH
 chmod +x "$board_bin_directory/gh"
 
-run_fathom_review_board() {
-  local verdict="$1"
-  local body="$2"
-  local current_status="$3"
-  local output_file="$4"
-  # The ordinary case is a configured board; the contract about an unconfigured one names the empty
-  # token itself.
-  local board_token="${5-classic-token-that-is-not-real}"
-  local step_script="$test_directory/fathom-review-board.sh"
+# The board the two writing steps see: one pull request body, one field carrying every option the
+# real board carries, and one item at the status the contract is about.
+prepare_fathom_review_board_state() {
+  local body="$1"
+  local current_status="$2"
 
   board_directory="$test_directory/fathom-review-board-state"
   board_mutations_file="$board_directory/mutations.txt"
-
-  extract_fathom_review_step 'board' "$step_script"
 
   rm -rf "$board_directory"
   mkdir -p "$board_directory"
@@ -1623,6 +1617,7 @@ run_fathom_review_board() {
   cat > "$board_directory/field.json" <<'BOARD_FIELD'
 {"data":{"user":{"projectV2":{"id":"PVT_board","field":{"id":"PVTSSF_status","options":[
   {"id":"option-todo","name":"Todo"},
+  {"id":"option-review","name":"In review"},
   {"id":"option-changes","name":"Changes requested"},
   {"id":"option-ready","name":"Ready to merge"},
   {"id":"option-done","name":"Done"}
@@ -1634,24 +1629,68 @@ BOARD_FIELD
        {id: "PVTI_item", project: {id: "PVT_board"},
         status: (if $status == "" then null else {name: $status} end)}
      ]}}}}}' > "$board_directory/item.json"
+}
+
+# Both steps hand the same script the same environment, so what a contract varies is the step it
+# extracts and the two values that step passes: which status, and which statuses it refuses.
+export_fathom_review_board_environment() {
+  local board_token="$1"
+
+  export PATH="$board_bin_directory:$PATH"
+  export GH_TOKEN='ghs_workflowtokenthatisnotreal'
+  export BOARD_TOKEN="$board_token"
+  export REPOSITORY='Krzysztof318/MailFathom'
+  export PULL_REQUEST_NUMBER='1'
+  export BOARD_OWNER='Krzysztof318'
+  export BOARD_NUMBER='4'
+  export STATUS_FIELD='Status'
+  export CLOSING_REFERENCES_SCRIPT="$source_repository_root/.github/fathom-review/collect-closing-references.sh"
+  export CLOSING_REFERENCE_LIMIT='5'
+  export BOARD_STATUS_SCRIPT="$source_repository_root/.github/fathom-review/write-board-status.sh"
+  export FAKE_BOARD_DIRECTORY="$board_directory"
+}
+
+run_fathom_review_board() {
+  local verdict="$1"
+  local body="$2"
+  local current_status="$3"
+  local output_file="$4"
+  # The ordinary case is a configured board; the contract about an unconfigured one names the empty
+  # token itself.
+  local board_token="${5-classic-token-that-is-not-real}"
+  local step_script="$test_directory/fathom-review-board.sh"
+
+  extract_fathom_review_step 'board' "$step_script"
+  prepare_fathom_review_board_state "$body" "$current_status"
 
   set +e
   (
-    export PATH="$board_bin_directory:$PATH"
-    export GH_TOKEN='ghs_workflowtokenthatisnotreal'
-    export BOARD_TOKEN="$board_token"
-    export REPOSITORY='Krzysztof318/MailFathom'
-    export PULL_REQUEST_NUMBER='1'
+    export_fathom_review_board_environment "$board_token"
     export VERDICT="$verdict"
-    export BOARD_OWNER='Krzysztof318'
-    export BOARD_NUMBER='4'
-    export STATUS_FIELD='Status'
-    export CLOSING_REFERENCES_SCRIPT="$source_repository_root/.github/fathom-review/collect-closing-references.sh"
-    export CLOSING_REFERENCE_LIMIT='5'
     export APPROVED_STATUS='Ready to merge'
     export CHANGES_REQUESTED_STATUS='Changes requested'
     export PRESERVED_STATUSES='Done,Blocked'
-    export FAKE_BOARD_DIRECTORY="$board_directory"
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+  board_status=$?
+  set -e
+}
+
+run_fathom_review_announcement() {
+  local body="$1"
+  local current_status="$2"
+  local output_file="$3"
+  local board_token="${4-classic-token-that-is-not-real}"
+  local step_script="$test_directory/fathom-review-announce.sh"
+
+  extract_fathom_review_step 'in-review' "$step_script"
+  prepare_fathom_review_board_state "$body" "$current_status"
+
+  set +e
+  (
+    export_fathom_review_board_environment "$board_token"
+    export IN_REVIEW_STATUS='In review'
+    export PRESERVED_STATUSES='Done,Blocked'
     bash "$step_script"
   ) > "$output_file" 2>&1
   board_status=$?
@@ -1688,7 +1727,7 @@ fathom_review_leaves_a_finished_item_alone() {
 
   ((board_status == 0))
   [[ ! -s "$board_mutations_file" ]]
-  assert_contains 'which a review verdict does not overwrite' "$output_file"
+  assert_contains 'which a review does not overwrite' "$output_file"
 }
 
 fathom_review_leaves_a_blocked_item_alone() {
@@ -1716,6 +1755,52 @@ fathom_review_moves_nothing_for_a_pull_request_that_closes_no_issue() {
 # Writing a user-owned project needs a classic token with the `project` scope, which is account-wide.
 # Until one is stored the job says so and ends green: the workflow gates nothing, so a missing
 # credential must not turn a review red.
+# The review that has started is the newest thing true of the item, so the announcement says so from
+# an item that was still being written.
+fathom_review_announces_a_started_review() {
+  local output_file="$test_directory/fathom-review-announce-output"
+
+  run_fathom_review_announcement 'Closes #12' 'In progress' "$output_file"
+
+  ((board_status == 0))
+  assert_contains 'option=option-review' "$board_mutations_file"
+  assert_contains 'Issue 12 moved from In progress to In review' "$output_file"
+}
+
+# The two statuses a review does not get to erase are the same at both ends of it. `Done` is the
+# merge and the close and `Blocked` is the one status a hand writes about something outside the
+# project, and a review starting is no more a statement about either than a verdict is.
+fathom_review_announces_nothing_over_a_finished_or_blocked_item() {
+  local output_file
+  local previous_status
+
+  for previous_status in Done Blocked; do
+    output_file="$test_directory/fathom-review-announce-over-${previous_status}-output"
+
+    run_fathom_review_announcement 'Closes #12' "$previous_status" "$output_file"
+
+    ((board_status == 0))
+    [[ ! -s "$board_mutations_file" ]]
+    assert_contains "Issue 12 is ${previous_status}" "$output_file"
+  done
+}
+
+# Everything else is written over, including an item carrying no status at all: what the board said
+# before the review started is what the review has now replaced.
+fathom_review_announces_over_every_other_status() {
+  local output_file
+  local previous_status
+
+  for previous_status in Todo 'Ready to merge' '' ; do
+    output_file="$test_directory/fathom-review-announce-over-${previous_status:-none}-output"
+
+    run_fathom_review_announcement 'Closes #12' "$previous_status" "$output_file"
+
+    ((board_status == 0))
+    assert_contains 'option=option-review' "$board_mutations_file"
+  done
+}
+
 fathom_review_writes_no_status_without_the_board_token() {
   local output_file="$test_directory/fathom-review-board-untokened-output"
 
@@ -3257,6 +3342,7 @@ workflow_scripts_use_flat_manual_layout() {
   # part of the contract. The tests above run it through `bash` and would pass without it.
   [[ -x "$source_repository_root/.github/fathom-review/index-obligations.sh" ]]
   [[ -x "$source_repository_root/.github/fathom-review/collect-closing-references.sh" ]]
+  [[ -x "$source_repository_root/.github/fathom-review/write-board-status.sh" ]]
 }
 
 # The per-file licensing mark, everywhere the analyzer that applies it cannot reach. IDE0073 reads
@@ -3452,6 +3538,9 @@ run_test fathom_review_records_findings_as_changes_requested
 run_test fathom_review_leaves_a_finished_item_alone
 run_test fathom_review_leaves_a_blocked_item_alone
 run_test fathom_review_moves_nothing_for_a_pull_request_that_closes_no_issue
+run_test fathom_review_announces_a_started_review
+run_test fathom_review_announces_nothing_over_a_finished_or_blocked_item
+run_test fathom_review_announces_over_every_other_status
 run_test fathom_review_writes_no_status_without_the_board_token
 run_test every_documentation_page_declares_what_it_describes
 run_test every_describes_pattern_matches_something_that_exists
