@@ -29,7 +29,7 @@ public sealed class BoundedMetadataHttpMessageHandlerTests
         // Arrange
         using var response = Response(new StringContent(new string('a', 512)));
         using var transport = TransportAnswering(response);
-        using var handler = new BoundedMetadataHttpMessageHandler(transport, SizeLimit);
+        using var handler = new BoundedMetadataHttpMessageHandler(SizeLimit) { InnerHandler = transport };
         using var client = new HttpClient(handler, disposeHandler: false);
 
         // Act
@@ -46,7 +46,7 @@ public sealed class BoundedMetadataHttpMessageHandlerTests
         // Arrange
         using var response = Response(new StringContent(new string('a', SizeLimit + 1)));
         using var transport = TransportAnswering(response);
-        using var handler = new BoundedMetadataHttpMessageHandler(transport, SizeLimit);
+        using var handler = new BoundedMetadataHttpMessageHandler(SizeLimit) { InnerHandler = transport };
         using var client = new HttpClient(handler, disposeHandler: false);
 
         // Act, Assert
@@ -62,7 +62,7 @@ public sealed class BoundedMetadataHttpMessageHandlerTests
         var oversizedBody = new MemoryStream(Encoding.UTF8.GetBytes(new string('a', SizeLimit + 1)));
         using var response = Response(new StreamContent(oversizedBody));
         using var transport = TransportAnswering(response);
-        using var handler = new BoundedMetadataHttpMessageHandler(transport, SizeLimit);
+        using var handler = new BoundedMetadataHttpMessageHandler(SizeLimit) { InnerHandler = transport };
         using var client = new HttpClient(handler, disposeHandler: false);
 
         // Act, Assert
@@ -77,7 +77,7 @@ public sealed class BoundedMetadataHttpMessageHandlerTests
         // Arrange
         using var transport = new FakeHttpMessageHandler(
             (_, _) => throw new InvalidOperationException("The request must never reach the transport."));
-        using var handler = new BoundedMetadataHttpMessageHandler(transport, SizeLimit);
+        using var handler = new BoundedMetadataHttpMessageHandler(SizeLimit) { InnerHandler = transport };
         using var client = new HttpClient(handler, disposeHandler: false);
 
         // Act, Assert
@@ -87,14 +87,10 @@ public sealed class BoundedMetadataHttpMessageHandlerTests
     }
 
     [Fact]
-    public void Constructor_ANonPositiveLimit_IsRefused()
-    {
-        // Arrange
-        using var transport = new FakeHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage()));
+    public void Constructor_ANonPositiveLimit_IsRefused() =>
 
         // Act, Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() => new BoundedMetadataHttpMessageHandler(transport, 0));
-    }
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BoundedMetadataHttpMessageHandler(0));
 
     private static HttpResponseMessage Response(HttpContent body) => new(HttpStatusCode.OK) { Content = body };
 

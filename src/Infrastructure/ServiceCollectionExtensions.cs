@@ -50,10 +50,6 @@ namespace MailFathom.Infrastructure;
 [RequiresIntegrationCoverage]
 public static class ServiceCollectionExtensions
 {
-    /// <summary>Names the transport reserved for mailbox authorization-server requests.</summary>
-    /// <remarks>A key rather than the container's <see cref="HttpClient" />, so nothing else inherits a timeout and a handler chain chosen for a token endpoint.</remarks>
-    private const string MailOAuthTokenTransportKey = "mailfathom.mail-oauth";
-
     /// <summary>The largest token endpoint response read, beyond which the request fails.</summary>
     /// <remarks>An RFC 6749 token response is a few hundred bytes; even a JWT access token stays well inside this. The limit exists so a replaced or compromised authorization server cannot make a synchronization run buffer an unbounded body.</remarks>
     private const int MailOAuthTokenResponseSizeLimitInBytes = 64 * 1024;
@@ -207,35 +203,10 @@ public static class ServiceCollectionExtensions
         // while the source that fills it is scoped to the configuration snapshot it resolves settings from.
         services.AddSingleton<MailAccessTokenCache>();
 
-        // One long-lived client rather than one per request, with a connection lifetime that lets DNS changes at the
-        // authorization server be picked up. This is what IHttpClientFactory would provide, written out because the
-        // package that supplies it is not in this project's dependency closure and one client for one endpoint class
-        // does not justify adding it.
-        //
-        // It is keyed rather than registered as the container's HttpClient. Its timeout is chosen for a small form
-        // post to a token endpoint and it carries none of the service defaults' standard resilience handler, so an
-        // unrelated adapter resolving it later would silently inherit a budget meant for something else.
-        //
-        // The bounds are the ones the inbound metadata backchannel already applies, for the same reason: an
-        // authorization server is a machine this process does not own, it is reached inside an authentication path,
-        // and one that has been replaced or misconfigured must not be able to answer with an unbounded body or send
-        // the request somewhere the configuration never named.
-        services.AddKeyedSingleton(MailOAuthTokenTransportKey, (_, _) => new HttpClient(
-            new BoundedMetadataHttpMessageHandler(
-                new SocketsHttpHandler
-                {
-                    PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-                    AllowAutoRedirect = false,
-                },
-                MailOAuthTokenResponseSizeLimitInBytes))
-        {
-            // Deliberately tighter than the mailbox session establishment timeout that encloses it, so a hung
-            // authorization server surfaces as itself rather than as a mailbox timeout.
-            Timeout = TimeSpan.FromSeconds(15),
-        });
+        AddMailOAuthTokenClient(services);
 
         services.AddScoped<IMailAccessTokenSource>(provider => new MailOAuthAccessTokenSource(
-            provider.GetRequiredKeyedService<HttpClient>(MailOAuthTokenTransportKey),
+            provider.GetRequiredService<IHttpClientFactory>(),
             provider.GetRequiredService<IMailOAuthSettingsProvider>(),
             provider.GetRequiredService<IMailboxRefreshTokenStore>(),
             provider.GetRequiredService<MailAccessTokenCache>(),
@@ -265,5 +236,50 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<ITransientFailureClassifier>()));
 
         return services;
+    }
+
+    /// <summary>Registers the transport a mailbox token request is sent over.</summary>
+    /// <remarks>
+    /// <para>
+    /// The bounds are the ones the inbound metadata backchannel applies, for the same reason: an authorization server is
+    /// a machine this process does not own, it is reached inside an authentication path, and one that has been replaced
+    /// or misconfigured must not be able to answer with an unbounded body, hold the request open, or send it somewhere
+    /// the configuration never named. No base address is set, because the token endpoint is a per-account setting the
+    /// source resolves per request rather than an address this registration could know.
+    /// </para>
+    /// <para>
+    /// Nothing here bounds the connection lifetime, and that is what makes the client's own lifetime part of the
+    /// contract rather than an implementation detail of its caller. The factory retires a handler chain on its own
+    /// schedule and hands the replacement to the *next* client it is asked for, so an address the authorization server
+    /// has moved is picked up only by a caller that asks for a client per operation.
+    /// <see cref="MailOAuthAccessTokenSource" /> does, which is why this registration needs no connection lifetime of
+    /// its own; a caller that held one across a synchronization run would keep the address it resolved when the run
+    /// began, and would have to set the lifetime instead.
+    /// </para>
+    /// </remarks>
+    private static void AddMailOAuthTokenClient(IServiceCollection services)
+    {
+        var client = services.AddHttpClient(MailOAuthAccessTokenSource.TransportName)
+            .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler { AllowAutoRedirect = false })
+            .AddHttpMessageHandler(static () =>
+                new BoundedMetadataHttpMessageHandler(MailOAuthTokenResponseSizeLimitInBytes))
+            .ConfigureHttpClient(static client =>
+
+                // Deliberately tighter than the mailbox session establishment timeout that encloses it, so a hung
+                // authorization server surfaces as itself rather than as a mailbox timeout.
+                client.Timeout = TimeSpan.FromSeconds(15));
+
+        // This call is the one place the single-layer rule is enforced for HTTP, so it is the one place it can be got
+        // wrong. MailOAuthAccessTokenSource already runs the exchange under the MailAuthorizationServerInvocation
+        // pipeline, and the host's service defaults add the standard resilience handler to every client the factory
+        // builds; leaving both would multiply three attempts by three into nine token requests against an authorization
+        // server that is already refusing. Removal is registered rather than the handler being withheld, because the
+        // defaults apply to a name this project never sees.
+        //
+        // It removes what is registered before it, so it depends on AddServiceDefaults having run first. Host's
+        // composition root does, and MailOAuthTokenTransportTests fails if that ever stops being true.
+#pragma warning disable EXTEXP0001 // RemoveAllResilienceHandlers is experimental, and is how the standard handler is opted out of.
+        client.RemoveAllResilienceHandlers();
+#pragma warning restore EXTEXP0001
     }
 }

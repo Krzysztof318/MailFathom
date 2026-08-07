@@ -5,6 +5,7 @@
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Infrastructure.Security.OAuth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -177,6 +178,167 @@ public sealed class TransportSecurityExtensionsTests
         Assert.Equal(
             TransportSurface.Mcp.RoutingSchemeName,
             composed.GetRequiredService<IOptions<AuthenticationOptions>>().Value.DefaultScheme);
+    }
+
+    /// <summary>
+    /// Every setting a token is judged by is applied through one options registration, and nothing fails if that
+    /// registration never runs — the scheme would simply validate with framework defaults: no configured metadata
+    /// address, error details returned to the caller, and inbound claims renamed out from under the identity mapping.
+    /// Reading the options back is what turns a silent misconfiguration into a failing test.
+    /// </summary>
+    [Fact]
+    public void AddTransportAuthentication_AnOAuthSurface_ConfiguresTheSchemeTheTokenIsJudgedBy()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTransportAuthentication(
+            TransportSurface.Mcp,
+            TransportAuthenticationMethods.OAuth,
+            [],
+            AnAuthorizationServer(),
+            TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
+
+        using var composed = services.BuildServiceProvider();
+
+        // Act
+        var schemeOptions = composed.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
+            .Get(TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
+
+        // Assert
+        Assert.Equal(
+            "https://sso.example.test/.well-known/oauth-authorization-server",
+            schemeOptions.MetadataAddress);
+        Assert.True(schemeOptions.RequireHttpsMetadata);
+        Assert.False(schemeOptions.MapInboundClaims);
+        Assert.False(schemeOptions.IncludeErrorDetails);
+    }
+
+    /// <summary>
+    /// The backchannel is resolved from the client factory rather than constructed, so the bounds it carries are the
+    /// registration's. A scheme reaching this point with the framework's own client would follow a redirect away from
+    /// the configured server and read an unbounded body during a key refresh, both inside a request's authentication
+    /// path, and every assertion about metadata retrieval elsewhere would be describing a client nothing built.
+    /// </summary>
+    [Fact]
+    public void AddTransportAuthentication_AnOAuthSurface_GivesTheSchemeTheRegisteredMetadataBackchannel()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTransportAuthentication(
+            TransportSurface.Mcp,
+            TransportAuthenticationMethods.OAuth,
+            [],
+            AnAuthorizationServer(),
+            TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
+
+        using var composed = services.BuildServiceProvider();
+
+        // Act
+        var schemeOptions = composed.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
+            .Get(TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
+
+        // Assert
+        Assert.NotNull(schemeOptions.Backchannel);
+        Assert.Equal(OAuthValidationOptions.MetadataRetrievalTimeout, schemeOptions.Backchannel.Timeout);
+    }
+
+    /// <summary>
+    /// The backchannel is held for the life of the scheme that owns it, so no handler rotation reaches it and the
+    /// connection it pools is the only thing that ever makes the address be resolved again. Without the lifetime an
+    /// authorization server that moves is reached at where it used to be until the process restarts, and without the
+    /// redirect refusal a key refresh can be sent somewhere the configuration never named. Both are settings rather
+    /// than behaviour a request could reveal, so a test that did not read them back would leave the defect this change
+    /// exists to fix free to return with every other assertion still passing.
+    /// </summary>
+    [Fact]
+    public void AddTransportAuthentication_AnOAuthSurface_BoundsTheBackchannelConnection()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTransportAuthentication(
+            TransportSurface.Mcp,
+            TransportAuthenticationMethods.OAuth,
+            [],
+            AnAuthorizationServer(),
+            TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
+
+        using var composed = services.BuildServiceProvider();
+
+        // Act
+        var chain = HandlersOf(composed.GetRequiredService<IHttpMessageHandlerFactory>()
+            .CreateHandler(TransportSecurityExtensions.MetadataBackchannelTransportName));
+
+        // Assert
+        Assert.Contains(chain, handler => handler is BoundedMetadataHttpMessageHandler);
+
+        var connection = Assert.IsType<SocketsHttpHandler>(chain[^1]);
+        Assert.Equal(OAuthValidationOptions.MetadataConnectionLifetime, connection.PooledConnectionLifetime);
+        Assert.False(connection.AllowAutoRedirect);
+    }
+
+    /// <summary>
+    /// Both surfaces may enable OAuth, and each registers the one metadata transport under the same name, so the
+    /// registration is written to assign rather than append. Nothing about that is visible in a deployment serving one
+    /// surface, which is every other test here: a registration that appended would leave the shared client carrying a
+    /// second bounded handler, and the response body of every key refresh would be buffered and length-checked twice
+    /// over on the deployments that enable both.
+    /// </summary>
+    [Fact]
+    public void AddTransportAuthentication_TwoOAuthSurfaces_LeaveOneBoundedHandlerOnTheSharedBackchannel()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Act
+        foreach (var surface in new[] { TransportSurface.Mcp, TransportSurface.Admin })
+        {
+            services.AddTransportAuthentication(
+                surface,
+                TransportAuthenticationMethods.OAuth,
+                [],
+                AnAuthorizationServer(),
+                surface.OAuthSchemeNameFor("workforce"));
+        }
+
+        using var composed = services.BuildServiceProvider();
+        var chain = HandlersOf(composed.GetRequiredService<IHttpMessageHandlerFactory>()
+            .CreateHandler(TransportSecurityExtensions.MetadataBackchannelTransportName));
+
+        // Assert
+        Assert.Single(chain, handler => handler is BoundedMetadataHttpMessageHandler);
+
+        var connection = Assert.IsType<SocketsHttpHandler>(chain[^1]);
+        Assert.Equal(OAuthValidationOptions.MetadataConnectionLifetime, connection.PooledConnectionLifetime);
+    }
+
+    /// <summary>Reads a built handler chain from its outermost handler down to the one that opens the connection.</summary>
+    /// <remarks><see cref="DelegatingHandler.InnerHandler" /> is public, so the walk needs no reflection; the chain ends at the first handler that delegates to nothing.</remarks>
+    private static List<HttpMessageHandler> HandlersOf(HttpMessageHandler outermost)
+    {
+        var chain = new List<HttpMessageHandler>();
+
+        for (var handler = outermost; handler is not null; handler = (handler as DelegatingHandler)?.InnerHandler)
+        {
+            chain.Add(handler);
+        }
+
+        return chain;
+    }
+
+    private static OAuthValidationOptions AnAuthorizationServer()
+    {
+        var oauthSettings = new OAuthValidationOptions { Resource = "https://mail.example.test/mcp" };
+        oauthSettings.AuthorizationServers.Add(new AuthorizationServerOptions
+        {
+            Name = "workforce",
+            Issuer = "https://sso.example.test",
+        });
+
+        return oauthSettings;
     }
 
     private static void AddApiKeyAuthentication(IServiceCollection services, TransportSurface surface) =>

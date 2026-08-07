@@ -21,7 +21,7 @@ This file is loaded into every agent session, so it holds what has to be true be
 
 | Where | Read when | What it holds |
 |---|---|---|
-| `src/AGENTS.md` | A change under `src/` | The .NET and C# conventions, API and failure design, asynchronous return types, dependency injection and configuration |
+| `src/AGENTS.md` | A change under `src/` | The .NET and C# conventions, API and failure design, asynchronous return types, dependency injection and configuration, and the lifetime and bounds every outbound HTTP client is registered with |
 | `tests/AGENTS.md` | A change under `tests/` | Unit-test policy, coverage, and what belongs in the integration suite. It points at the C# conventions, which govern test code too |
 | `src/Infrastructure/AGENTS.md` | A change under `src/Infrastructure/` | Persistence and EF Core rules, and email-protocol safety |
 | `docs/AGENTS.md` | A change under `docs/` | Documentation rules and the `describes:` marker every page carries |

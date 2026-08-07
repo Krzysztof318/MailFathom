@@ -18,6 +18,11 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <!-- The client factory and the one call that opts a named client out of the standard resilience handler. Referenced
+         through the resilience package rather than Microsoft.Extensions.Http directly, because the opt-out lives here
+         and this package carries the factory along; the host resolves the same pair from the ASP.NET Core shared
+         framework, which is why it appears in this project's lock file and not in the host's. -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />

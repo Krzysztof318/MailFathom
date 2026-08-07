@@ -1,6 +1,6 @@
 # Outbound resilience
 
-<!-- describes: src/Application/Resilience/**, src/Infrastructure/Resilience/**, src/Domain/Transport/** -->
+<!-- describes: src/Application/Resilience/**, src/Infrastructure/Resilience/**, src/Domain/Transport/**, src/Host/ServiceDefaultsExtensions.cs, src/Infrastructure/ServiceCollectionExtensions.cs -->
 
 MailFathom calls dependencies it does not control: IMAP servers, SMTP servers, PostgreSQL, and chat and embedding
 providers. Each of them fails in ways that clear on their own and in ways that never will, and the difference decides
@@ -121,10 +121,19 @@ layer.
 The rule also governs three places where .NET already provides resilience, and in each of them the built-in mechanism
 is the layer rather than something MailFathom re-implements:
 
-- **HTTP.** `AddStandardResilienceHandler` in the host's service defaults already wraps every `HttpClient`. A provider
-  client that reaches its model over `HttpClient` is therefore already protected, and must not also be wrapped in the
-  `AiProviderInvocation` pipeline. An adapter that wants the pipeline instead has to remove the handler from its own
-  client; it may not have both.
+- **HTTP.** `AddStandardResilienceHandler` in the host's service defaults wraps every `HttpClient` the client factory
+  builds, and every outbound client in this process is built by that factory — which is the convention rather than an
+  accident, and `src/AGENTS.md` § *Outbound HTTP clients* is where it is stated. A provider client that reaches its
+  model over `HttpClient` is therefore already protected, and must not also be wrapped in the `AiProviderInvocation`
+  pipeline. An adapter that wants the pipeline instead removes the handler from its own registration with
+  `RemoveAllResilienceHandlers`; it may not have both.
+
+  One client does that today: the transport a mailbox token request is sent over. `MailOAuthAccessTokenSource` already
+  runs the exchange under `MailAuthorizationServerInvocation`, keyed per account, so leaving the handler on would put
+  three attempts inside three and send nine token requests to an authorization server that is refusing. The removal
+  takes out what was registered before it, so it holds only while the host adds the service defaults ahead of the
+  infrastructure; `MailOAuthTokenTransportTests` is what fails if that order is ever swapped, because neither
+  registration would.
 - **EF Core.** `EnableRetryOnFailure` is deliberately not configured. The obstacle is not the unit of work: with a
   retrying execution strategy each query and each `SaveChangesAsync` is already replayed as its own retriable unit. It
   is the *user-initiated* transaction. `PersistenceSessionFactory` opens one with `BeginTransactionAsync` for every

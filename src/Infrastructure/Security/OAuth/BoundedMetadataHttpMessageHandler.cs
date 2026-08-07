@@ -29,12 +29,14 @@ public sealed class BoundedMetadataHttpMessageHandler : DelegatingHandler
     private readonly int sizeLimitInBytes;
 
     /// <summary>Initializes a new bounded metadata handler.</summary>
-    /// <param name="innerHandler">The handler that performs the request.</param>
     /// <param name="sizeLimitInBytes">The largest response body accepted.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="innerHandler" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="sizeLimitInBytes" /> is not positive.</exception>
-    public BoundedMetadataHttpMessageHandler(HttpMessageHandler innerHandler, int sizeLimitInBytes)
-        : base(innerHandler)
+    /// <remarks>
+    /// The handler that performs the request is not taken here. Both clients that carry this one are built by
+    /// <see cref="IHttpClientFactory" />, which composes the chain and assigns <see cref="DelegatingHandler.InnerHandler" />
+    /// itself, so a constructor taking an inner handler would be one no caller could use.
+    /// </remarks>
+    public BoundedMetadataHttpMessageHandler(int sizeLimitInBytes)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sizeLimitInBytes);
 

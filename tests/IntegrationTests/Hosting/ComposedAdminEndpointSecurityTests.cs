@@ -54,7 +54,7 @@ public sealed class ComposedAdminEndpointSecurityTests
     public async Task AdminEndpoint_RequestCarryingNoCredential_IsRefusedBeforeTheSessionHandlerAnswers()
     {
         // Arrange
-        using var client = await this.AdminEndpointClientAsync();
+        using var client = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
 
         // Act
         using var request = SessionRequest(apiKey: null);
@@ -78,7 +78,7 @@ public sealed class ComposedAdminEndpointSecurityTests
     public async Task AdminEndpoint_RequestCarryingAnUnrecognizedCredential_IsRefusedIdenticallyToOneCarryingNone()
     {
         // Arrange
-        using var client = await this.AdminEndpointClientAsync();
+        using var client = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
 
         // Act
         using var anonymousRequest = SessionRequest(apiKey: null);
@@ -109,7 +109,7 @@ public sealed class ComposedAdminEndpointSecurityTests
     public async Task AdminEndpoint_RequestCarryingTheConfiguredKey_ReachesTheSessionHandler()
     {
         // Arrange
-        using var client = await this.AdminEndpointClientAsync();
+        using var client = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
         using var request = SessionRequest(OrchestrationContract.AdminApiKey);
 
         // Act
@@ -140,8 +140,8 @@ public sealed class ComposedAdminEndpointSecurityTests
     public async Task EachEndpoint_PresentedWithTheOthersConfiguredKey_RefusesItLikeAnyUnrecognizedCredential()
     {
         // Arrange
-        using var adminClient = await this.AdminEndpointClientAsync();
-        using var mcpClient = await this.McpEndpointClientAsync();
+        using var adminClient = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
+        using var mcpClient = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
 
         // Act
         using var mcpKeyOnAdminEndpoint = SessionRequest(OrchestrationContract.McpApiKey);
@@ -202,14 +202,4 @@ public sealed class ComposedAdminEndpointSecurityTests
 
         return request;
     }
-
-    private async Task<HttpClient> AdminEndpointClientAsync() => new()
-    {
-        BaseAddress = await this.orchestration.StartMailFathomAdminEndpointAsync(TestContext.Current.CancellationToken),
-    };
-
-    private async Task<HttpClient> McpEndpointClientAsync() => new()
-    {
-        BaseAddress = await this.orchestration.StartMailFathomHostAsync(TestContext.Current.CancellationToken),
-    };
 }
