@@ -132,6 +132,28 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         return await work(scope.ServiceProvider, cancellationToken);
     }
 
+    /// <summary>Runs one unit of work across two independent scopes, the way two writers reach the database at once.</summary>
+    /// <typeparam name="TResult">What the unit of work produces.</typeparam>
+    /// <param name="work">The unit of work, given a scope each.</param>
+    /// <param name="cancellationToken">Cancels the work.</param>
+    /// <returns>What the unit of work produced.</returns>
+    /// <remarks>
+    /// A competing writer is a second scope rather than a second session. The session factory begins its transaction on
+    /// the scoped <c>MailFathomDbContext</c>, so two sessions taken from one scope would share that context, its
+    /// connection, and its change tracker, and the second would be refused by EF Core before it reached the database at
+    /// all. Two scopes give each writer the context, connection, and transaction a worker or a request would have, which
+    /// is what leaves a database constraint free to be the thing that decides the race.
+    /// </remarks>
+    internal async Task<TResult> InTwoScopesAsync<TResult>(
+        Func<IServiceProvider, IServiceProvider, CancellationToken, Task<TResult>> work,
+        CancellationToken cancellationToken)
+    {
+        await using var first = this.host.Services.CreateAsyncScope();
+        await using var second = this.host.Services.CreateAsyncScope();
+
+        return await work(first.ServiceProvider, second.ServiceProvider, cancellationToken);
+    }
+
     /// <summary>Runs one write in its own scope and session, and commits it the way a use case does.</summary>
     /// <param name="write">The repository calls that join the session.</param>
     /// <param name="cancellationToken">Cancels the write and the commit.</param>

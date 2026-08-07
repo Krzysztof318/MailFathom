@@ -24,6 +24,15 @@ internal static class EmbeddingProviderContractSettings
     /// <summary>The variable that turns the provider-contract tests on. Nothing sets it by default.</summary>
     public const string EnablingVariable = "MAILFATHOM_EMBEDDING_CONTRACT_TESTS";
 
+    /// <summary>The reason a run nobody asked for reports against each skipped test.</summary>
+    /// <remarks>
+    /// xUnit requires this message beside a conditional skip and reads it before it reads the condition, so a test
+    /// carrying <c>SkipUnless</c> without <c>Skip</c> fails on every run rather than skipping on the ones that asked
+    /// for nothing.
+    /// </remarks>
+    public const string SkipReason =
+        $"A provider-contract run calls a real provider and spends credit, so it happens only when {EnablingVariable} is set to true.";
+
     private const string ApiKeyVariable = "MAILFATHOM_EMBEDDING_API_KEY";
     private const string AddressVariable = "MAILFATHOM_EMBEDDING_ADDRESS";
     private const string ModelVariable = "MAILFATHOM_EMBEDDING_MODEL";
