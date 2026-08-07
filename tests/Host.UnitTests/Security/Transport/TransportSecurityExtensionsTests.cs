@@ -2,7 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Common.ClientAssertions;
 using MailFathom.Host.Configuration.Access;
+using MailFathom.Host.Security.ClientAssertions;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Security.OAuth;
@@ -98,6 +100,58 @@ public sealed class TransportSecurityExtensionsTests
     }
 
     /// <summary>
+    /// A surface accepting assertions registers the scheme its routing forwards to, over its own key list and its own
+    /// audience. Forwarding to a scheme nothing registered would answer every request with a framework failure rather
+    /// than a refusal, and an audience taken from anywhere but the surface would let a credential minted to read a
+    /// mailbox administer the service.
+    /// </summary>
+    [Fact]
+    public void AddTransportAuthentication_ASurfaceAcceptingAssertions_RegistersTheSchemeOverItsOwnKeysAndAudience()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        var publicKey = new ConfiguredSecret { Name = "reporting-job", SecretReference = "plaintext:a-public-key" };
+
+        // Act
+        services.AddTransportAuthentication(
+            TransportSurface.Admin,
+            apiKeys: [],
+            [publicKey],
+            oauthMethods: [],
+            TransportSurface.Admin.ClientAssertionSchemeName);
+
+        // Assert
+        using var composed = services.BuildServiceProvider();
+        var schemeOptions = composed
+            .GetRequiredService<IOptionsMonitor<ClientAssertionAuthenticationSchemeOptions>>()
+            .Get(TransportSurface.Admin.ClientAssertionSchemeName);
+
+        Assert.Equal([publicKey], schemeOptions.PublicKeys);
+        Assert.Equal(ClientAssertion.AdminAudience, schemeOptions.Surface.ClientAssertionAudience);
+    }
+
+    /// <summary>A surface accepting no assertion registers no verifier, so nothing resolves a key list it was never given.</summary>
+    [Fact]
+    public void AddTransportAuthentication_ASurfaceAcceptingNoAssertion_RegistersNoAssertionScheme()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Act
+        AddApiKeyAuthentication(services, TransportSurface.Mcp);
+
+        // Assert
+        using var composed = services.BuildServiceProvider();
+        var schemes = composed.GetRequiredService<IOptions<AuthenticationOptions>>().Value.Schemes;
+
+        Assert.DoesNotContain(
+            schemes,
+            scheme => scheme.Name == TransportSurface.Mcp.ClientAssertionSchemeName);
+    }
+
+    /// <summary>
     /// Every name a surface registers is composed from the surface, so no two surfaces can collide on one. A shared
     /// name would merge two policies into whichever registration ran last, and the endpoint that lost would be
     /// protected by settings its operator never wrote.
@@ -113,6 +167,7 @@ public sealed class TransportSecurityExtensionsTests
         [
             mcp.RoutingSchemeName,
             mcp.ApiKeySchemeName,
+            mcp.ClientAssertionSchemeName,
             mcp.AccessPolicyName,
             mcp.OAuthSchemeNameFor("workforce"),
         ];
@@ -195,6 +250,7 @@ public sealed class TransportSecurityExtensionsTests
         services.AddTransportAuthentication(
             TransportSurface.Mcp,
             [],
+            [],
             [AnAuthorizationServer()],
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
 
@@ -228,6 +284,7 @@ public sealed class TransportSecurityExtensionsTests
         services.AddTransportAuthentication(
             TransportSurface.Mcp,
             [],
+            [],
             [AnAuthorizationServer()],
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
 
@@ -258,6 +315,7 @@ public sealed class TransportSecurityExtensionsTests
         services.AddLogging();
         services.AddTransportAuthentication(
             TransportSurface.Mcp,
+            [],
             [],
             [AnAuthorizationServer()],
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
@@ -295,6 +353,7 @@ public sealed class TransportSecurityExtensionsTests
         {
             services.AddTransportAuthentication(
                 surface,
+                [],
                 [],
                 [AnAuthorizationServer()],
                 surface.OAuthSchemeNameFor("workforce"));
@@ -341,6 +400,7 @@ public sealed class TransportSecurityExtensionsTests
         services.AddTransportAuthentication(
             surface,
             [new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:not-a-real-key" }],
+            publicKeys: [],
             oauthMethods: [],
             surface.IsSpecified ? surface.ApiKeySchemeName : "unused");
 

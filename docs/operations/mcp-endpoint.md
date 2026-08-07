@@ -1,6 +1,6 @@
 # The MCP endpoint and what protects it
 
-<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/**, src/Common/OAuth/**, src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, src/Host/Configuration/Endpoints/TransportListenerConfiguration.cs, src/Host/Configuration/Endpoints/ExternalListenerConfiguration.cs, src/Host/Configuration/Endpoints/ReverseProxyOptions.cs, src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs, src/Host/Hosting/Warnings/ReverseProxyTrustWarning.cs, src/Host/Hosting/Warnings/McpTransportEncryptionWarning.cs -->
+<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/**, src/Common/OAuth/**, src/Common/ClientAssertions/**, src/Host/Hosting/Warnings/McpTransportAuthenticationWarning.cs, src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, src/Host/Configuration/Endpoints/TransportListenerConfiguration.cs, src/Host/Configuration/Endpoints/ExternalListenerConfiguration.cs, src/Host/Configuration/Endpoints/ReverseProxyOptions.cs, src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs, src/Host/Hosting/Warnings/ReverseProxyTrustWarning.cs, src/Host/Hosting/Warnings/McpTransportEncryptionWarning.cs -->
 
 The MCP endpoint is how an agent reaches MailFathom. This page records what enabling it means operationally, what a client
 has to present to reach it, which browser origins it answers, which client applications it accepts a certificate from,
@@ -67,9 +67,10 @@ configured key is a separate matter and is re-read on every request, which is wh
 
 ## Authentication
 
-**`Authentication` is a list of credentials.** The two methods identify different kinds of caller — a key belongs to a client
-the operator provisioned, a token belongs to a person an external authorization server signed in — so a deployment serving
-both carries an entry for each:
+**`Authentication` is a list of credentials.** The three methods identify different kinds of caller — a key belongs to a
+client the operator provisioned, a public key belongs to a client that holds the private half and signs for itself, a
+token belongs to a person an external authorization server signed in — so a deployment serving several carries an entry
+for each:
 
 ```json
 {
@@ -77,6 +78,7 @@ both carries an entry for each:
     "Enabled": true,
     "Authentication": [
       { "ApiKey": { "Name": "nightly-digest", "SecretReference": "systemd-credential:mailfathom-mcp-digest-key" } },
+      { "PublicKey": { "Name": "reporting-job", "SecretReference": "file:/etc/mailfathom/reporting-job.pub" } },
       { "OAuth": { "Resource": "https://mail.example.test/mcp", "AuthorizationServers": [ { "Name": "workforce", "Issuer": "https://sso.example.test/realms/mailfathom", "AuthorizedSubjects": [ "9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04" ] } ] } }
     ]
   }
@@ -85,19 +87,20 @@ both carries an entry for each:
 
 **An entry states its method by carrying that method's block**, and nothing names the method a second time. That is what
 makes a method impossible to select without configuring it, or to configure without selecting it: a key is the entry that
-turns keys on. There is no limit on how many entries state either method — a second key is a second entry, and a second
-authorization server may be either — and an entry may carry both blocks at once, which is a matter of how you group what
-you wrote rather than a distinction the endpoint draws. Exactly one shape of entry fails startup, named by its position:
-one carrying neither block. So does a value written where the list belongs, because a value contributes no entries and
-would otherwise leave the endpoint served with no credential at all.
+turns keys on. There is no limit on how many entries state any method — a second key is a second entry, and a second
+authorization server may be either — and an entry may carry several blocks at once, which is a matter of how you group
+what you wrote rather than a distinction the endpoint draws. Exactly one shape of entry fails startup, named by its
+position: one carrying no block. So does a value written where the list belongs, because a value contributes no entries
+and would otherwise leave the endpoint served with no credential at all.
 
-A request is served when it satisfies **any one** of the entries. The credentials are told apart by shape: an access
-token is a JSON Web Token naming its issuer, an API key is anything else, and each reaches only the check that understands
-it. That is also why **an API key must not itself be a token of a configured authorization server**: such a key would be
-judged as an access token by that server and never compared as a key, so no client could authenticate with it. Startup
-refuses the combination by position — `McpEndpoint:Authentication:0:ApiKey` — rather than letting a deployment start
-with a key nothing can ever use. A token-shaped key naming an issuer this deployment does not configure selects no
-validator and is compared like any other opaque key, so it is accepted; issue opaque keys and the question does not arise.
+A request is served when it satisfies **any one** of the entries. The credentials are told apart by shape: a client
+assertion is a JSON Web Token declaring MailFathom's own media type in its header, an access token is a JSON Web Token
+naming its issuer, an API key is anything else, and each reaches only the check that understands it. That is also why
+**an API key must not itself be a token of a configured authorization server**: such a key would be judged as an access
+token by that server and never compared as a key, so no client could authenticate with it. Startup refuses the
+combination by position — `McpEndpoint:Authentication:0:ApiKey` — rather than letting a deployment start with a key
+nothing can ever use. A token-shaped key naming an issuer this deployment does not configure selects no validator and is
+compared like any other opaque key, so it is accepted; issue opaque keys and the question does not arise.
 
 **Authentication is turned on, not chosen.** An enabled endpoint whose list is empty is the unauthenticated posture and
 starts, because the loopback and reverse-proxy deployment is the ordinary one and making it need extra settings would be
@@ -175,6 +178,91 @@ shared anonymous partition on the way there. Once that partition or the process-
 same request is answered `429 Too Many Requests` with no body and never reaches the point where a challenge is written.
 That is deliberate — it is what makes a flood of bad credentials cost the sender something — and it means a client
 retrying against an exhausted partition sees `429` where it expected `401`. See [Rate limiting](#rate-limiting).
+
+### Key pairs
+
+A key pair answers the case the other two do not. An API key is a shared secret, so a copy of every credential that
+reaches the mailbox sits on the host and in whatever produced the configuration. OAuth answers for a person who signed
+in, which a scheduled job does not have. Here **the client holds the private key and the deployment holds only the public
+half**, so nothing this host stores in order to verify a request is worth stealing from it — not from the configuration,
+not from a backup of it, and not from the deployment tool that wrote it.
+
+Configure one public key per entry, exactly as you would a key:
+
+```json
+{
+  "McpEndpoint": {
+    "Enabled": true,
+    "Authentication": [
+      {
+        "PublicKey": {
+          "Name": "reporting-job",
+          "SecretReference": "file:/etc/mailfathom/reporting-job.pub",
+          "Lifetime": "2027-01-31T00:00:00Z"
+        }
+      }
+    ]
+  }
+}
+```
+
+The block is an ordinary [named secret](secret-provisioning.md#the-secret-block), so the material is reached through
+every reference scheme the deployment already has — a file, an environment variable, a systemd credential — the `Name` is
+what a diagnostic and the rate-limit partition correlate on, and the `Lifetime` is enforced. The material itself is not a
+secret; the shape is what gives it a name, a reference, and an expiry.
+
+**Generating a pair.** The client generates it and never sends the private half anywhere:
+
+```console
+$ openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out reporting-job.key
+$ chmod 600 reporting-job.key
+$ openssl pkey -in reporting-job.key -pubout -out reporting-job.pub
+```
+
+Give the deployment `reporting-job.pub`. RSA works too — `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072` —
+with a modulus of at least 2048 bits; elliptic curves P-256, P-384, and P-521 are accepted. The signature algorithm
+follows from the key, so there is nothing to agree on and nothing to configure. The permitted algorithms are the same
+asymmetric allow-list an access token is judged by: nothing symmetric, and no `none`.
+
+**What the client presents.** It mints a short-lived JSON Web Token, signs it with its private key, and presents it as an
+ordinary bearer credential — the arrangement RFC 7523 describes and OpenID Connect deploys as `private_key_jwt`. The
+header, the refusal, and the rate-limit partition are therefore the same as for any other method; only what verifies the
+credential is new. The assertion carries three claims and one header:
+
+```json
+{ "alg": "ES256", "typ": "mailfathom-client-assertion+jwt" }
+{ "aud": "urn:mailfathom:mcp", "exp": 1786060860, "jti": "hLdI6NHKQ4qXCXhPrsRJfA" }
+```
+
+- **`typ`** is `mailfathom-client-assertion+jwt`, which is what separates this credential from an access token. Declaring
+  it is required, not optional: nothing else may be presented here, and this may be presented nowhere else.
+- **`aud`** is `urn:mailfathom:mcp` for this endpoint and `urn:mailfathom:admin` for the
+  [administrative endpoint](admin-endpoint.md). It is what stops an assertion minted to read a mailbox from
+  administering the service, whichever surface the key is registered on. It does not separate two deployments that
+  registered the same public key; where that matters, give the client a key pair per deployment.
+- **`exp`** must be present and no more than five minutes ahead — a minute is a good value. This is what a shared secret
+  cannot offer: a captured assertion stops working on its own, whatever anyone does about it.
+- **`jti`** is a fresh unguessable value per assertion — 128 random bits, base64url-encoded, is the right shape. The
+  endpoint refuses an identifier it has already served, so a captured assertion cannot be replayed even inside its
+  remaining seconds.
+
+`mfctl` mints all of this for you; see [Signing in with a key pair](admin-endpoint.md#with-a-key-pair).
+
+**Every refusal answers the same way** as every other method's: an empty `401` with the same challenge. That covers a
+signature no configured key made, a key whose lifetime has ended, a wrong audience, an absent or too distant expiry, a
+missing identifier, and one already spent. Nothing in the response distinguishes them, and nothing logged carries the
+presented assertion or key material. The server log names the configured key at `Warning` for a retired key, an over-long
+expiry, and a replayed identifier, which are the three an operator acts on.
+
+**Rotating a key.** The same overlap a key rotation uses: add the new public key as a second entry, move the client to
+the new private key, remove the old entry. Nothing is refused in between, and there is no secret to coordinate across two
+machines — only a public file to replace.
+
+**Startup refuses unusable material by position.** An entry whose reference resolves to something that is not a PEM
+public key fails at `McpEndpoint:Authentication:0:PublicKey`, and so does an RSA key below the accepted modulus or a key
+of a kind no permitted algorithm covers. One of them is worth naming separately: **material carrying a private key is
+refused explicitly**, because it would otherwise import cleanly, verify every client correctly, and leave the host
+holding exactly what this method exists to keep off it.
 
 ### OAuth
 
@@ -364,9 +452,9 @@ explicitly and is exactly equivalent to leaving the setting out:
 }
 ```
 
-There is nothing to configure alongside it, which is the point of the shape: keys and authorization servers live inside
-the entry that turns their method on, so a deployment cannot end up carrying settings nothing checks — believing it is
-protected, which is worse than knowing it is not.
+There is nothing to configure alongside it, which is the point of the shape: keys, public keys, and authorization servers
+live inside the entry that turns their method on, so a deployment cannot end up carrying settings nothing checks —
+believing it is protected, which is worse than knowing it is not.
 
 Whenever an enabled endpoint requires no credential, startup logs one warning:
 
@@ -374,10 +462,10 @@ Whenever an enabled endpoint requires no credential, startup logs one warning:
 warn: MailFathom.Host.Hosting.Warnings.McpTransportAuthenticationWarning
       The MCP endpoint is enabled on /mcp with no authentication method configured, so anything that can reach this
       address can read the synchronized mailboxes. Add an entry to McpEndpoint:Authentication carrying an ApiKey block,
-      an OAuth block, or one of each, unless the address is reachable only from this machine or from a network you
-      control. Neither an origin policy nor a client certificate substitutes for this: the first restricts which page a
-      browser will let call, the second names the application calling, and neither identifies the person whose mail is
-      served.
+      a PublicKey block, an OAuth block, or any combination of them, unless the address is reachable only from this
+      machine or from a network you control. Neither an origin policy nor a client certificate substitutes for this: the
+      first restricts which page a browser will let call, the second names the application calling, and neither
+      identifies the person whose mail is served.
 ```
 
 Leaving `Cors.AllowedOrigins` at its default of `["*"]` with no credential required — which is what makes the endpoint
@@ -415,11 +503,17 @@ name an authorized subject: admitting a colleague of the same tenant would admit
 their own. Per-user permissions are future work; `RequiredScopes` is the seam they will be built on, which is why it
 exists before anything varies by it.
 
-A key identifies a *client*, a token identifies a *person*, and the difference matters operationally. A shared bearer
-credential has the properties every shared bearer credential has: it does not expire on its own unless you give it a
-lifetime, it cannot be revoked for one user without revoking it for the client, and anything that reads it can use it. A
-token expires on its own, is revoked where the authorization server says so, and carries the multi-factor and
-conditional-access policy that server already enforces.
+A key identifies a *client*, a public key identifies a *client that can prove it holds the other half*, a token
+identifies a *person*, and the difference matters operationally. A shared bearer credential has the properties every
+shared bearer credential has: it does not expire on its own unless you give it a lifetime, it cannot be revoked for one
+user without revoking it for the client, and anything that reads it can use it. A key pair removes the sharing: nothing
+reusable ever crosses the network or sits on the host, the credential presented expires within minutes, and revoking a
+client is deleting one entry. A token expires on its own, is revoked where the authorization server says so, and carries
+the multi-factor and conditional-access policy that server already enforces.
+
+Neither an authorized subject nor a required scope is asked of a key or of a public key. Both are credentials the
+operator provisioned by writing them into this deployment's configuration, so that decision *is* the authorization; a
+token is issued by a server that decides for itself who receives one, which is what makes both worth checking there.
 
 Of a validated token, MailFathom keeps three things and discards the rest: the issuer, the subject, and the scopes. A name,
 an email address, a group, and a tenant claim are dropped at the boundary, so nothing downstream can begin trusting a

@@ -47,6 +47,7 @@ internal static class AdminTransportSecurityExtensions
         services.AddTransportAuthentication(
             TransportSurface.Admin,
             endpointSettings.ApiKeys(),
+            endpointSettings.PublicKeys(),
             endpointSettings.OAuthMethods(),
             ChallengeSchemeFor(endpointSettings));
 
@@ -63,14 +64,23 @@ internal static class AdminTransportSecurityExtensions
     /// against at startup, so nothing about authorizing depends on the wording of a refusal.
     /// </para>
     /// <para>
-    /// With API keys turned off that scheme does not exist, so the first authorization server's validator answers
-    /// instead — it challenges identically. There is always one, because configuration validation refuses OAuth
-    /// authentication with no authorization server configured.
+    /// With API keys turned off the client assertion scheme answers, and with both turned off the first authorization
+    /// server's validator does. All three challenge identically, which is what makes the order here a matter of which
+    /// scheme is certain to exist rather than of what a client is told. One of them always does: an endpoint reaching
+    /// this point configured at least one method, and configuration validation refuses OAuth with no authorization
+    /// server behind it.
     /// </para>
     /// </remarks>
-    private static string ChallengeSchemeFor(AdminEndpointOptions endpointSettings) =>
-        endpointSettings.AllowsApiKey
-            ? TransportSurface.Admin.ApiKeySchemeName
+    private static string ChallengeSchemeFor(AdminEndpointOptions endpointSettings)
+    {
+        if (endpointSettings.AllowsApiKey)
+        {
+            return TransportSurface.Admin.ApiKeySchemeName;
+        }
+
+        return endpointSettings.AllowsClientAssertion
+            ? TransportSurface.Admin.ClientAssertionSchemeName
             : TransportSurface.Admin.OAuthSchemeNameFor(
                 endpointSettings.OAuthMethods()[0].AuthorizationServers[0].Name!);
+    }
 }

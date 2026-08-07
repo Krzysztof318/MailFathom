@@ -28,6 +28,17 @@ internal static class TransportAuthenticationConfiguration
         return [.. methods.Select(method => method.ApiKey).OfType<ConfiguredSecret>()];
     }
 
+    /// <summary>Reports every client public key a signed assertion may be verified against, across every entry that states one.</summary>
+    /// <param name="methods">The configured entries, in configuration order.</param>
+    /// <returns>The public keys, in configuration order, empty when the endpoint accepts no assertion.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="methods" /> is <see langword="null" />.</exception>
+    internal static IReadOnlyList<ConfiguredSecret> PublicKeysIn(IEnumerable<TransportAuthenticationOptions> methods)
+    {
+        ArgumentNullException.ThrowIfNull(methods);
+
+        return [.. methods.Select(method => method.PublicKey).OfType<ConfiguredSecret>()];
+    }
+
     /// <summary>Reports what a token must prove, once per entry that states OAuth.</summary>
     /// <param name="methods">The configured entries, in configuration order.</param>
     /// <returns>The OAuth blocks, in configuration order, empty when the endpoint accepts no token.</returns>

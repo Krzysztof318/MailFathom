@@ -5,6 +5,7 @@
 using System.Security.Claims;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.ApiKeys;
+using MailFathom.Host.Security.ClientAssertions;
 using MailFathom.Host.Security.Mcp;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Security.ApiKeys;
@@ -42,6 +43,7 @@ internal static class TransportSecurityExtensions
     /// <param name="services">The container to add to.</param>
     /// <param name="surface">The surface being protected, which names every scheme and the policy.</param>
     /// <param name="apiKeys">The keys a request may present one of, empty where the surface accepts none.</param>
+    /// <param name="publicKeys">The client public keys a signed assertion may be verified against, empty where the surface accepts no assertion.</param>
     /// <param name="oauthMethods">What a token must prove, one entry per configured OAuth block, empty where the surface accepts no access token.</param>
     /// <param name="challengeSchemeName">The scheme answering a request that presented no credential at all.</param>
     /// <returns>The authentication builder, so a surface can add schemes only it needs.</returns>
@@ -65,11 +67,13 @@ internal static class TransportSecurityExtensions
         this IServiceCollection services,
         TransportSurface surface,
         IReadOnlyList<ConfiguredSecret> apiKeys,
+        IReadOnlyList<ConfiguredSecret> publicKeys,
         IReadOnlyList<OAuthValidationOptions> oauthMethods,
         string challengeSchemeName)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(apiKeys);
+        ArgumentNullException.ThrowIfNull(publicKeys);
         ArgumentNullException.ThrowIfNull(oauthMethods);
         ArgumentNullException.ThrowIfNull(challengeSchemeName);
 
@@ -80,7 +84,24 @@ internal static class TransportSecurityExtensions
 
         var authentication = services.AddAuthentication(surface.RoutingSchemeName);
 
-        AddRoutingScheme(authentication, surface, apiKeys, oauthMethods, challengeSchemeName);
+        AddRoutingScheme(authentication, surface, apiKeys, publicKeys, oauthMethods, challengeSchemeName);
+
+        if (publicKeys.Count > 0)
+        {
+            // Added once however many surfaces accept an assertion, for the reason the API key authenticator is: the
+            // verifier holds no surface state, and the replay store is deliberately one for the process — an identifier
+            // spent on either surface is spent, which is the safe direction and costs a client nothing, since an
+            // identifier is minted fresh per request.
+            services.TryAddSingleton<ClientAssertionReplayStore>();
+            services.TryAddSingleton<ClientAssertionAuthenticator>();
+            authentication.AddScheme<ClientAssertionAuthenticationSchemeOptions, ClientAssertionAuthenticationHandler>(
+                surface.ClientAssertionSchemeName,
+                schemeOptions =>
+                {
+                    schemeOptions.Surface = surface;
+                    schemeOptions.PublicKeys = publicKeys;
+                });
+        }
 
         if (apiKeys.Count > 0)
         {
@@ -156,6 +177,7 @@ internal static class TransportSecurityExtensions
         AuthenticationBuilder authentication,
         TransportSurface surface,
         IReadOnlyList<ConfiguredSecret> apiKeys,
+        IReadOnlyList<ConfiguredSecret> publicKeys,
         IReadOnlyList<OAuthValidationOptions> oauthMethods,
         string challengeSchemeName)
     {
@@ -169,6 +191,7 @@ internal static class TransportSecurityExtensions
         var schemeSelector = new CredentialSchemeSelector(
             oauthSchemesByIssuer,
             apiKeys.Count > 0 ? surface.ApiKeySchemeName : null,
+            publicKeys.Count > 0 ? surface.ClientAssertionSchemeName : null,
             challengeSchemeName);
 
         authentication.AddPolicyScheme(

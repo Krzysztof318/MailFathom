@@ -9,18 +9,25 @@ namespace MailFathom.Cli.Credentials;
 /// <param name="Endpoint">The address to send to.</param>
 /// <param name="Token">The bearer credential, opened.</param>
 /// <param name="Credential">The name the deployment reported for the credential when it was stored.</param>
-/// <param name="Session">The OAuth session this profile holds, or <see langword="null" /> when the credential is an API key or a pasted token.</param>
+/// <param name="Session">The OAuth session this profile holds, or <see langword="null" /> when the credential is an API key, a pasted token, or a key pair.</param>
+/// <param name="KeyPair">Where this profile's private key lives, or <see langword="null" /> when it holds a stored credential instead.</param>
 /// <remarks>
 /// Distinct from <see cref="StoredCredential" /> because the two hold the tokens in different states: what is written to
 /// the file is sealed, and what a command sends is not. Keeping one type for both would leave every caller having to
 /// know which of the two it was holding.
+/// <para>
+/// <see cref="Token" /> is empty as this leaves the store when <see cref="KeyPair" /> is present, because such a profile
+/// stores no credential. <see cref="Administration.DeploymentAccess" /> is what fills it in, on the same seam an expired
+/// access token is renewed on, so nothing above it has to know which kind of profile it holds.
+/// </para>
 /// </remarks>
 internal sealed record SignedInProfile(
     string Name,
     Uri Endpoint,
     string Token,
     string Credential,
-    OAuthSession? Session = null)
+    OAuthSession? Session = null,
+    StoredKeyPair? KeyPair = null)
 {
     /// <inheritdoc />
     /// <remarks>Redacted, so no diagnostic or exception message prints the token by formatting the record it lives in.</remarks>

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Common.ClientAssertions;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Mcp;
@@ -24,10 +25,11 @@ namespace MailFathom.Host.Security.Transport;
 /// hold for every route on the surface instead of for the routes somebody remembered.
 /// </para>
 /// <para>
-/// The four authentication names are internal handles: nothing published, persisted, or configured reads them. A
-/// challenge names <see cref="ApiKeyAuthentication.Realm" /> rather than a scheme, and a client is never told which
-/// scheme judged it. Every name here is derived from <see cref="Name" /> rather than stated per surface so that adding
-/// one cannot accidentally reuse another's, which would silently merge the two surfaces' policies.
+/// The authentication names are internal handles: nothing published, persisted, or configured reads them. A challenge
+/// names <see cref="ApiKeyAuthentication.Realm" /> rather than a scheme, and a client is never told which scheme judged
+/// it. Every one of them is derived from <see cref="Name" /> rather than stated per surface so that adding one cannot
+/// accidentally reuse another's, which would silently merge the two surfaces' policies. The assertion audience is the
+/// exception and says why it is one.
 /// </para>
 /// <para>
 /// It is a closed enumeration for the reason <see cref="Hosting.HealthProbe" /> is one: a surface is a decision about
@@ -39,19 +41,24 @@ internal readonly record struct TransportSurface
 {
     private readonly string? name;
     private readonly string? routePrefix;
+    private readonly string? clientAssertionAudience;
 
-    private TransportSurface(string name, string routePrefix)
+    private TransportSurface(string name, string routePrefix, string clientAssertionAudience)
     {
         this.name = name;
         this.routePrefix = routePrefix;
+        this.clientAssertionAudience = clientAssertionAudience;
     }
 
     /// <summary>Gets the surface serving the MCP protocol.</summary>
-    internal static TransportSurface Mcp { get; } = new("Mcp", McpEndpointRoute.Path);
+    internal static TransportSurface Mcp { get; } = new("Mcp", McpEndpointRoute.Path, ClientAssertion.McpAudience);
 
     /// <summary>Gets the surface serving the administrative API the <c>mfctl</c> command reaches.</summary>
     /// <remarks>Separate from <see cref="Mcp" /> because reading a mailbox and administering the service that reads it are different authorities, and a credential provisioned for one authenticates nothing on the other.</remarks>
-    internal static TransportSurface Admin { get; } = new("Admin", AdminEndpointOptions.RoutePrefix);
+    internal static TransportSurface Admin { get; } = new(
+        "Admin",
+        AdminEndpointOptions.RoutePrefix,
+        ClientAssertion.AdminAudience);
 
     /// <summary>Gets whether this value names a surface rather than the unusable struct default.</summary>
     internal bool IsSpecified => this.name is not null;
@@ -89,6 +96,21 @@ internal readonly record struct TransportSurface
     /// <summary>Gets the scheme comparing a presented credential against this surface's configured API keys.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
     internal string ApiKeySchemeName => $"MailFathom:{this.Name}:ApiKey";
+
+    /// <summary>Gets the scheme verifying a signed assertion against this surface's configured client public keys.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
+    internal string ClientAssertionSchemeName => $"MailFathom:{this.Name}:ClientAssertion";
+
+    /// <summary>Gets the audience an assertion presented here must name.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
+    /// <remarks>
+    /// Unlike the scheme names it is not derived from <see cref="Name" />: it is a value a client writes into a
+    /// credential, so it is published by <see cref="ClientAssertion" /> where the command that mints one can read the
+    /// same constant. Carrying it as a field rather than composing it means a surface added later has to choose an
+    /// audience rather than silently receive one, which is what stops two surfaces from ever sharing it.
+    /// </remarks>
+    internal string ClientAssertionAudience => this.clientAssertionAudience
+        ?? throw new InvalidOperationException("The value is the default of the struct and names no transport surface.");
 
     /// <summary>Gets the name this surface's authorization requirement is registered under.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>

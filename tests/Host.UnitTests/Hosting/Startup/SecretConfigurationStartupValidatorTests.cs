@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Buffers.Text;
+using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Common;
 using MailFathom.Domain.Transport;
@@ -552,6 +553,93 @@ public sealed class SecretConfigurationStartupValidatorTests
         Assert.DoesNotContain(harness.ReportedMessages, message => message.Contains("ApiKey", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The one configuration mistake nothing about a running deployment would ever report. A private key written where
+    /// the public half belongs imports cleanly and verifies every client's signature correctly, so the host would start,
+    /// serve, and hold exactly the credential key-pair authentication exists to keep off it.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_APublicKeySettingHoldingAPrivateKey_FailsStartupSayingSo()
+    {
+        // Arrange
+        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var endpoint = EndpointAcceptingPublicKey($"plaintext:{clientKey.ExportPkcs8PrivateKeyPem()}");
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("McpEndpoint:Authentication:0:PublicKey", failure, StringComparison.Ordinal);
+        Assert.Contains("private key", failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>Material that resolves but is not a public key would pass a reference check and then refuse every client the entry exists to serve.</summary>
+    [Fact]
+    public async Task StartingAsync_APublicKeySettingHoldingSomethingElse_FailsStartupNamingItsPosition()
+    {
+        // Arrange
+        var endpoint = EndpointAcceptingPublicKey("plaintext:not-a-public-key");
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("McpEndpoint:Authentication:0:PublicKey", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartingAsync_AUsablePublicKey_PassesStartup()
+    {
+        // Arrange
+        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var endpoint = EndpointAcceptingPublicKey($"plaintext:{clientKey.ExportSubjectPublicKeyInfoPem()}");
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+
+        // Act, Assert
+        await harness.Validator.StartingAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// The administrative endpoint carries the same credential list, so the same material has to be proven there. It is
+    /// worth its own test because nothing else validates that section's secrets: a rule that held on one endpoint and
+    /// lapsed on the other would let an operator register a private key on the surface that administers the service.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_AnAdminPublicKeySettingHoldingAPrivateKey_FailsStartupSayingSo()
+    {
+        // Arrange
+        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var endpoint = new AdminEndpointOptions { Enabled = true };
+        endpoint.Authentication.Add(new TransportAuthenticationOptions
+        {
+            PublicKey = new ConfiguredSecret
+            {
+                Name = "nightly-digest",
+                SecretReference = $"plaintext:{clientKey.ExportPkcs8PrivateKeyPem()}",
+            },
+        });
+
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions(),
+            adminEndpointOptions: endpoint);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("AdminEndpoint:Authentication:0:PublicKey", failure, StringComparison.Ordinal);
+        Assert.Contains("private key", failure, StringComparison.Ordinal);
+    }
+
     /// <summary>Material that resolves but is not a certificate would pass a reference check and then refuse every client the profile exists to serve.</summary>
     [Fact]
     public async Task StartingAsync_AClientCertificateTrustAnchorThatIsNotACertificate_FailsStartupNamingItsPosition()
@@ -692,6 +780,18 @@ public sealed class SecretConfigurationStartupValidatorTests
     /// <summary>An enabled endpoint whose keys the caller adds, one entry per key.</summary>
     private static McpEndpointOptions EndpointAcceptingApiKeys() => new() { Enabled = true };
 
+    /// <summary>An enabled endpoint accepting one client's assertions, verified against whatever the reference resolves to.</summary>
+    private static McpEndpointOptions EndpointAcceptingPublicKey(string secretReference)
+    {
+        var endpoint = new McpEndpointOptions { Enabled = true };
+        endpoint.Authentication.Add(new TransportAuthenticationOptions
+        {
+            PublicKey = new ConfiguredSecret { Name = "nightly-digest", SecretReference = secretReference },
+        });
+
+        return endpoint;
+    }
+
     /// <summary>Adds one key as an entry of its own, which is what a configured credential is.</summary>
     private static void AcceptKey(McpEndpointOptions endpoint, ConfiguredSecret key) =>
         endpoint.Authentication.Add(new TransportAuthenticationOptions { ApiKey = key });
@@ -722,6 +822,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         SecretMaterialSource source = SecretMaterialSource.SchemeAdapter,
         IDatabaseConnectionSettingsValidator? databaseConnectionSettings = null,
         McpEndpointOptions? mcpEndpointOptions = null,
+        AdminEndpointOptions? adminEndpointOptions = null,
         DataEncryptionOptions? dataEncryptionOptions = null)
     {
         var resolver = new PlaintextOnlySecretReferenceResolver { Source = source };
@@ -735,6 +836,7 @@ public sealed class SecretConfigurationStartupValidatorTests
             new StubSettingsSnapshot<PersistenceOptions>(persistenceOptions),
             new StubSettingsSnapshot<DataEncryptionOptions>(dataEncryptionOptions ?? new DataEncryptionOptions()),
             Options.Create(mcpEndpointOptions ?? new McpEndpointOptions()),
+            Options.Create(adminEndpointOptions ?? new AdminEndpointOptions()),
             new SecretConfigurationValidator(
                 resolver,
                 new TrustAnchorLoader(resolver),

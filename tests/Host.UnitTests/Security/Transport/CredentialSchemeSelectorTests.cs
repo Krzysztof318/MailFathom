@@ -4,6 +4,7 @@
 
 using System.Buffers.Text;
 using System.Text;
+using MailFathom.Common.ClientAssertions;
 using MailFathom.Host.Security.Transport;
 using Xunit;
 
@@ -26,6 +27,8 @@ public sealed class CredentialSchemeSelectorTests
     private const string PartnerScheme = "MailFathomOAuth:partners";
 
     private const string ApiKeyScheme = "MailFathomApiKey";
+
+    private const string ClientAssertionScheme = "MailFathomClientAssertion";
 
     private const string MetadataScheme = "McpAuth";
 
@@ -98,6 +101,64 @@ public sealed class CredentialSchemeSelectorTests
         Assert.Equal(ApiKeyScheme, selector.SchemeFor(headerValue));
     }
 
+    /// <summary>An assertion declares its own type, which is what tells it from an access token before either has been verified.</summary>
+    [Fact]
+    public void SchemeFor_AnAssertionDeclaringItsType_ReachesTheAssertionVerification()
+    {
+        // Arrange
+        var selector = AcceptingBoth();
+
+        // Act, Assert
+        Assert.Equal(ClientAssertionScheme, selector.SchemeFor(AnAssertion()));
+    }
+
+    /// <summary>
+    /// The declared type is read before the issuer, so a credential claiming both never reaches a token validator it
+    /// could not satisfy. An assertion carrying a configured issuer is exactly what an attacker would send to try it.
+    /// </summary>
+    [Fact]
+    public void SchemeFor_AnAssertionAlsoNamingAConfiguredIssuer_ReachesTheAssertionVerification()
+    {
+        // Arrange
+        var selector = AcceptingBoth();
+        var header = Encode($$"""{"alg":"ES256","typ":"{{ClientAssertion.DeclaredType}}"}""");
+        var payload = Encode($$"""{"iss":"{{WorkforceIssuer}}","aud":"urn:mailfathom:admin","jti":"x"}""");
+
+        // Act, Assert
+        Assert.Equal(ClientAssertionScheme, selector.SchemeFor($"Bearer {header}.{payload}.signature"));
+    }
+
+    /// <summary>A token declaring some other type is not an assertion, so it keeps reaching the validator its issuer names.</summary>
+    [Theory]
+    [InlineData("JWT")]
+    [InlineData("at+jwt")]
+    [InlineData(null)]
+    public void SchemeFor_ATokenDeclaringAnotherType_ReachesItsIssuersValidator(string? declaredType)
+    {
+        // Arrange
+        var selector = AcceptingBoth();
+        var header = declaredType is null ? """{"alg":"RS256"}""" : $$"""{"alg":"RS256","typ":"{{declaredType}}"}""";
+        var payload = Encode($$"""{"iss":"{{WorkforceIssuer}}"}""");
+
+        // Act, Assert
+        Assert.Equal(WorkforceScheme, selector.SchemeFor($"Bearer {Encode(header)}.{payload}.signature"));
+    }
+
+    /// <summary>With assertions turned off nothing routes to a scheme that was never registered, which would forward to nothing.</summary>
+    [Fact]
+    public void SchemeFor_AnAssertionWhereAssertionsAreNotAccepted_ReachesTheApiKeyComparison()
+    {
+        // Arrange
+        var selector = new CredentialSchemeSelector(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            ApiKeyScheme,
+            clientAssertionSchemeName: null,
+            MetadataScheme);
+
+        // Act, Assert
+        Assert.Equal(ApiKeyScheme, selector.SchemeFor(AnAssertion()));
+    }
+
     /// <summary>With API keys turned off there is nothing to fall back to, so an unrecognized credential reaches the scheme that answers with the challenge.</summary>
     [Theory]
     [InlineData("Bearer an-opaque-api-key")]
@@ -108,6 +169,7 @@ public sealed class CredentialSchemeSelectorTests
         var selector = new CredentialSchemeSelector(
             new Dictionary<string, string> { [WorkforceIssuer] = WorkforceScheme },
             apiKeySchemeName: null,
+            clientAssertionSchemeName: null,
             MetadataScheme);
 
         // Act, Assert
@@ -122,6 +184,7 @@ public sealed class CredentialSchemeSelectorTests
         var selector = new CredentialSchemeSelector(
             new Dictionary<string, string>(StringComparer.Ordinal),
             ApiKeyScheme,
+            clientAssertionSchemeName: null,
             ApiKeyScheme);
 
         // Act, Assert
@@ -147,12 +210,25 @@ public sealed class CredentialSchemeSelectorTests
             [PartnerIssuer] = PartnerScheme,
         },
         ApiKeyScheme,
+        ClientAssertionScheme,
         MetadataScheme);
 
     private static string TokenIssuedBy(string issuer)
     {
         var payload = Base64Url.EncodeToString(Encoding.UTF8.GetBytes($$"""{"iss":"{{issuer}}","sub":"9f2c"}"""));
 
-        return $"Bearer header.{payload}.signature";
+        return $"Bearer {Encode("""{"alg":"RS256","typ":"JWT"}""")}.{payload}.signature";
     }
+
+    private static string AnAssertion(string? declaredType = ClientAssertion.DeclaredType)
+    {
+        var header = declaredType is null
+            ? """{"alg":"ES256"}"""
+            : $$"""{"alg":"ES256","typ":"{{declaredType}}"}""";
+
+        return $"Bearer {Encode(header)}.{Encode("""{"aud":"urn:mailfathom:admin","jti":"an-identifier"}""")}.signature";
+    }
+
+    private static string Encode(string document) =>
+        Base64Url.EncodeToString(Encoding.UTF8.GetBytes(document));
 }

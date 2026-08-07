@@ -21,14 +21,14 @@ namespace MailFathom.Host.Configuration.Access;
 /// written at.
 /// </para>
 /// <para>
-/// An entry may carry both blocks. Nothing about the two methods conflicts — they judge different credentials on
+/// An entry may carry several blocks. Nothing about the methods conflicts — they judge different credentials on
 /// different requests — so which entry a block sits in is a matter of how an operator groups what they wrote, and the
-/// endpoint accepts every block across every entry. The one shape that says nothing is an entry carrying neither, which
-/// is refused.
+/// endpoint accepts every block across every entry. The one shape that says nothing is an entry carrying none, which is
+/// refused.
 /// </para>
 /// <para>
-/// A method arriving later — a client certificate, say — is a block beside these two. Nothing else moves, because
-/// nothing outside an entry records which methods exist.
+/// A method arriving later — a client certificate, say — is a block beside these. Nothing else moves, because nothing
+/// outside an entry records which methods exist.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
@@ -42,8 +42,25 @@ internal sealed class TransportAuthenticationOptions
     /// <remarks><see langword="null" /> when this entry states no OAuth, because the block's presence is what selects the method.</remarks>
     public OAuthValidationOptions? OAuth { get; set; }
 
+    /// <summary>Gets or sets one client's public key, which a signed assertion is verified against.</summary>
+    /// <remarks>
+    /// <para>
+    /// <see langword="null" /> when this entry states no key pair, because the block's presence is what selects the
+    /// method. This is the half of the pair the deployment holds, and the whole point of the method is that it is the
+    /// only half it holds: nothing behind this reference is worth stealing from the host, from a backup of it, or from
+    /// the configuration an operator hands to a deployment tool.
+    /// </para>
+    /// <para>
+    /// It binds to the same secret-bearing shape a key or a password does, which is what reaches it through every
+    /// reference scheme the deployment already has — a file, an environment variable, a systemd credential — and what
+    /// gives it a name to be refused by and a lifetime to be retired at. That the material is not itself secret changes
+    /// none of those, and handling it under the same erasure discipline as everything else costs nothing.
+    /// </para>
+    /// </remarks>
+    public ConfiguredSecret? PublicKey { get; set; }
+
     /// <summary>Gets whether this entry states any credential at all.</summary>
-    public bool StatesAMethod => this.ApiKey is not null || this.OAuth is not null;
+    public bool StatesAMethod => this.ApiKey is not null || this.OAuth is not null || this.PublicKey is not null;
 
     /// <summary>Finds everything an operator must fix before this entry can accept a credential.</summary>
     /// <param name="settingPath">The configuration path this entry was bound from, which every message is written against.</param>
@@ -66,7 +83,7 @@ internal sealed class TransportAuthenticationOptions
         {
             return
             [
-                $"{settingPath} — this entry states no credential; write an '{nameof(this.ApiKey)}' block naming one key, or an '{nameof(this.OAuth)}' block naming the resource and its authorization servers.",
+                $"{settingPath} — this entry states no credential; write an '{nameof(this.ApiKey)}' block naming one key, a '{nameof(this.PublicKey)}' block naming one client's public key, or an '{nameof(this.OAuth)}' block naming the resource and its authorization servers.",
             ];
         }
 

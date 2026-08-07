@@ -100,7 +100,58 @@ public sealed class UnverifiedJsonWebTokenTests
         Assert.False(UnverifiedJsonWebToken.TryReadClaimedIssuer(token, out _));
     }
 
+    /// <summary>The declared type is what tells a credential a client minted for itself from one an authorization server issued, before either has been verified.</summary>
+    [Fact]
+    public void TryReadDeclaredType_ACompactTokenDeclaringAType_ReadsIt()
+    {
+        // Arrange
+        var token = TokenWithHeader("""{"alg":"ES256","typ":"mailfathom-client-assertion+jwt"}""");
+
+        // Act
+        var wasRead = UnverifiedJsonWebToken.TryReadDeclaredType(token, out var declaredType);
+
+        // Assert
+        Assert.True(wasRead);
+        Assert.Equal("mailfathom-client-assertion+jwt", declaredType);
+    }
+
+    /// <summary>A token declaring nothing selects no assertion handler, so the absence has to be reported rather than defaulted.</summary>
+    [Theory]
+    [InlineData("""{"alg":"RS256"}""")]
+    [InlineData("""{"alg":"RS256","typ":1}""")]
+    [InlineData("""["not","an","object"]""")]
+    [InlineData("not json at all")]
+    public void TryReadDeclaredType_AHeaderNamingNoType_ReadsNothing(string header)
+    {
+        // Arrange
+        var token = TokenWithHeader(header);
+
+        // Act
+        var wasRead = UnverifiedJsonWebToken.TryReadDeclaredType(token, out var declaredType);
+
+        // Assert
+        Assert.False(wasRead);
+        Assert.Null(declaredType);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("an-opaque-api-key")]
+    [InlineData("only.two")]
+    public void TryReadDeclaredType_ACredentialThatIsNotACompactToken_ReadsNothing(string? credential)
+    {
+        // Arrange, Act
+        var wasRead = UnverifiedJsonWebToken.TryReadDeclaredType(credential, out var declaredType);
+
+        // Assert
+        Assert.False(wasRead);
+        Assert.Null(declaredType);
+    }
+
     private static string TokenWithPayload(string payload) => $"header.{Encode(payload)}.signature";
+
+    private static string TokenWithHeader(string header) => $"{Encode(header)}.payload.signature";
 
     private static string Encode(string payload) => Base64Url.EncodeToString(Encoding.UTF8.GetBytes(payload));
 }

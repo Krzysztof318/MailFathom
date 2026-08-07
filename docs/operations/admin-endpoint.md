@@ -42,8 +42,13 @@ mechanical rather than conventional: each endpoint registers its own authenticat
 policy, and a policy consults only its own schemes.
 
 `Authentication` takes the same entries `McpEndpoint:Authentication` takes — one entry per credential, each carrying an
-`ApiKey` block, an `OAuth` block, or one of each — and every one of them is this endpoint's own. A misspelled key fails
-startup rather than binding a default.
+`ApiKey` block, a `PublicKey` block, an `OAuth` block, or any combination of them — and every one of them is this
+endpoint's own. A misspelled key fails startup rather than binding a default. Each method is documented once, under
+[the MCP endpoint](mcp-endpoint.md#authentication): what a key is, what a
+[key pair](mcp-endpoint.md#key-pairs) is and what a client signs to present one, and what a token must prove. The
+difference here is the audience an assertion names — `urn:mailfathom:admin` rather than `urn:mailfathom:mcp` — which is
+what keeps a credential minted to read a mailbox from administering the service even where one client is registered on
+both.
 
 **With an `OAuth` entry configured, every one of them must name a `Resource` ending in `/api/admin`** — the path these routes answer
 beneath. Startup refuses anything else, naming the setting. The reason is discovery rather than OAuth: `mfctl` is handed
@@ -227,6 +232,7 @@ with no browser on a redirect that can never arrive.
 | Mode | What it does | When |
 | --- | --- | --- |
 | `key` (default) | Reads one credential from standard input | An API key, or an access token you obtained elsewhere |
+| `keypair` | Signs each request with a private key on this machine | A scheduled job, or anywhere a stored credential is one too many |
 | `interactive` | Opens a browser here and catches the redirect | You are at the machine you are administering from |
 | `device` | Prints a code to enter on another device | A jump host, or anything without a browser |
 
@@ -244,6 +250,41 @@ history, the process list, and any log of either. A script pipes it in instead:
 ```console
 $ printf '%s' "$MAILFATHOM_KEY" | mfctl login --endpoint https://mail.example.test:8443
 ```
+
+### With a key pair
+
+Generate a pair on the machine that will run the command, and give the deployment the public half only:
+
+```console
+$ openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out ~/.config/MailFathom/production.key
+$ chmod 600 ~/.config/MailFathom/production.key
+$ openssl pkey -in ~/.config/MailFathom/production.key -pubout
+```
+
+Register that public key under `AdminEndpoint:Authentication` as a `PublicKey` entry — see
+[Key pairs](mcp-endpoint.md#key-pairs) for the block and what it accepts — then sign in:
+
+```console
+$ mfctl login --endpoint https://mail.example.test:8443 --name production --mode keypair \
+    --private-key ~/.config/MailFathom/production.key
+Signed in to https://mail.example.test:8443 as 'reporting-job' (MailFathom 0.4.0), saved as profile 'production' and selected.
+No credential was stored. Every command signs a short-lived assertion with the key at
+/home/you/.config/MailFathom/production.key, so keep that file readable by this account alone and the sign-in lasts as
+long as the deployment accepts its public half.
+```
+
+**Nothing presentable is written down.** The profile records where the key lives and no credential at all, and every
+later command reads that key and signs a fresh assertion that expires within the minute. A credentials file that leaves
+this machine — in a backup, a synced folder, a support bundle — therefore carries nothing anyone could present, which is
+the difference from every other mode. The key itself is never copied into the store: it stays where you generated it,
+under the permissions you gave it.
+
+The path is made absolute when it is stored, because a scheduled job rarely runs from the directory you signed in from.
+Move the key and sign in again; there is nothing to revoke in between, because nothing was issued.
+
+This mode needs no browser, no authorization server, and no interactive step, so it is the one to reach for in a cron
+entry or a systemd timer. Signing in is still verified against the deployment, which is what proves it holds the matching
+public half before the first real command runs.
 
 ### With OAuth
 
@@ -387,6 +428,11 @@ resource, the scopes, and when the access token expires. They are recorded rathe
 happens on a command somebody is waiting on, and re-reading two discovery documents to spend a refresh token would put
 two more round trips in front of every expired session. A deployment that moves one of them is answered by signing in
 again.
+
+**A key-pair profile stores no credential at all.** It records the absolute path of the private key and nothing else, so
+there is no sealed token in the file and nothing an attacker could present even if the key file's protection failed. The
+path is not a secret and is stored in clear; what it names is, and it is protected by that file's own permissions rather
+than by anything here.
 
 Be clear about what that buys. A credentials file that leaves the machine — in a backup, a synced folder, a support
 bundle, a screenshot of a directory listing — discloses nothing on its own. Someone already able to read your files on

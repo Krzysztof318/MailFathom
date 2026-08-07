@@ -4,6 +4,7 @@
 
 using System.Security.Claims;
 using MailFathom.Host.Security.ApiKeys;
+using MailFathom.Host.Security.ClientAssertions;
 using MailFathom.Infrastructure.Security.OAuth;
 
 namespace MailFathom.Host.Security.Transport;
@@ -23,10 +24,11 @@ namespace MailFathom.Host.Security.Transport;
 /// definitions of what an authorized caller is.
 /// </para>
 /// <para>
-/// Neither an authorized subject nor a required scope is ever asked of an API key. A key is a credential the operator
-/// provisioned by writing it into this deployment's configuration, so the authorization it carries is that decision; a
-/// token is issued by a server that decides for itself who receives one, which is what makes both worth checking.
-/// Asking either of a key would mean asking a credential for something nothing can ever put in it.
+/// Neither an authorized subject nor a required scope is ever asked of a credential the operator configured — an API
+/// key, or a client public key an assertion was verified against. Such a credential exists because somebody wrote it
+/// into this deployment's configuration, so the authorization it carries is that decision; a token is issued by a server
+/// that decides for itself who receives one, which is what makes both worth checking. Asking either of a configured
+/// credential would mean asking it for something nothing can ever put in it.
 /// </para>
 /// </remarks>
 internal static class TransportAccessPolicy
@@ -61,7 +63,7 @@ internal static class TransportAccessPolicy
             return false;
         }
 
-        if (AuthenticatedWithAnApiKey(principal))
+        if (AuthenticatedWithAConfiguredCredential(principal))
         {
             return true;
         }
@@ -87,7 +89,10 @@ internal static class TransportAccessPolicy
     private static bool NamesAnAuthorizedSubject(ClaimsPrincipal principal, IReadOnlySet<string> authorizedIdentities) =>
         OAuthIdentity.IdentityCarriedBy(principal) is { } identity && authorizedIdentities.Contains(identity);
 
-    /// <summary>Reports whether an API key produced this principal, judged by what the principal carries rather than by which scheme named it.</summary>
-    private static bool AuthenticatedWithAnApiKey(ClaimsPrincipal principal) =>
-        principal.HasClaim(claim => claim.Type == ApiKeyAuthentication.ApiKeyNameClaimType);
+    /// <summary>Reports whether a credential this deployment's own configuration named produced this principal, judged by what the principal carries rather than by which scheme named it.</summary>
+    /// <remarks>Both claim types are read here rather than one of them standing for the other, because each names a different kind of configured credential and a principal carrying neither has to fall through to the token rules.</remarks>
+    private static bool AuthenticatedWithAConfiguredCredential(ClaimsPrincipal principal) =>
+        principal.HasClaim(claim =>
+            claim.Type == ApiKeyAuthentication.ApiKeyNameClaimType
+            || claim.Type == ClientAssertionAuthentication.KeyNameClaimType);
 }

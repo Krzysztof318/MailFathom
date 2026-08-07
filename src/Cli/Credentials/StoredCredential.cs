@@ -11,22 +11,45 @@ namespace MailFathom.Cli.Credentials;
 /// <param name="Token">The bearer credential, encrypted; see <see cref="TokenProtector" />.</param>
 /// <param name="Credential">The name the deployment reported for the credential, kept so the command can say who it is signed in as without asking again.</param>
 /// <param name="Session">What an OAuth sign-in left behind, absent from a profile holding an API key or a pasted token.</param>
+/// <param name="KeyPair">Where a key-pair profile's private key lives, absent from every other kind of profile.</param>
 /// <remarks>
-/// The two ways of signing in leave different amounts behind, and the difference is one nullable member rather than two
+/// <para>
+/// The ways of signing in leave different amounts behind, and the difference is two nullable members rather than three
 /// kinds of profile. An API key is a credential that stays valid until the deployment stops accepting it, so there is
 /// nothing to remember beside it; an OAuth sign-in issues a token that expires within the hour, so what has to be kept
 /// is whatever renews it without the operator present.
+/// </para>
+/// <para>
+/// A key-pair profile is the one that stores no credential at all. <see cref="Token" /> is sealed empty for it and every
+/// command mints a fresh assertion from the key named here, which is why the two members are never both present: one
+/// says how a stored credential is renewed and the other says that there is none to renew.
+/// </para>
 /// </remarks>
 internal sealed record StoredCredential(
     [property: JsonPropertyName("endpoint")] string Endpoint,
     [property: JsonPropertyName("token")] string Token,
     [property: JsonPropertyName("credential")] string Credential,
-    [property: JsonPropertyName("session")] StoredOAuthSession? Session = null)
+    [property: JsonPropertyName("session")] StoredOAuthSession? Session = null,
+    [property: JsonPropertyName("keyPair")] StoredKeyPair? KeyPair = null)
 {
     /// <inheritdoc />
     /// <remarks>Redacted, so no diagnostic or exception message prints the token by formatting the record it lives in — even encrypted, which is a value worth not scattering.</remarks>
     public override string ToString() => $"{nameof(StoredCredential)} {{ {this.Endpoint}, {this.Credential} }}";
 }
+
+/// <summary>Where a key-pair profile's private key lives, so every command can mint the credential it presents.</summary>
+/// <param name="PrivateKeyPath">The absolute path of the operator's private key.</param>
+/// <remarks>
+/// A path rather than the key itself, deliberately and in both directions. The key stays wherever the operator generated
+/// it, under whatever protection they gave that file, and the credential store gains nothing worth stealing by
+/// remembering a profile; copying the key into the store would undo the property the method exists for at the one place
+/// this command could have preserved it.
+/// <para>
+/// It is not a secret and is stored in clear, like the endpoint and the issuer beside it. What it names is.
+/// </para>
+/// </remarks>
+internal sealed record StoredKeyPair(
+    [property: JsonPropertyName("privateKeyPath")] string PrivateKeyPath);
 
 /// <summary>What an OAuth sign-in has to remember so the next command does not ask the operator to sign in again.</summary>
 /// <param name="RefreshToken">The credential a spent access token is exchanged for a new one with, encrypted; see <see cref="TokenProtector" />.</param>
