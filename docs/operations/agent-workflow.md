@@ -932,12 +932,9 @@ makes a review of the pull request a statement about that issue's lifecycle.
 The first write happens as the review starts, beside the reviewing job rather
 than before it, and it writes `In review`. A review takes minutes, and without it
 the column says whatever the last event left there for that whole time — usually
-`In progress`, the state the work was in before the pull request existed. It
-preserves nothing: a review that has started is a fact about the present, true
-whatever the item was doing before it, and a re-review asked for on a merged or
-blocked item is exactly the case where the board saying so is worth more than the
-value it replaces. Nothing in the review depends on that write, which is why it
-runs in parallel: a project API failure must not delay or skip a review.
+`In progress`, the state the work was in before the pull request existed. Nothing
+in the review depends on that write, which is why it runs in parallel: a project
+API failure must not delay or skip a review.
 
 The last write is the verdict: `Changes requested` where the review carried
 findings, `Ready to merge` where it approved. A run that publishes no verdict
@@ -947,7 +944,8 @@ was asked for and produced nothing.
 Both writes are one script, `write-board-status.sh`. The walk is identical — read
 the body, collect what it closes, resolve the field and the option by name, find
 the item on this board, mutate it — and the two callers differ only in the value
-they pass and in which values they refuse to overwrite.
+they pass. Which values they refuse to overwrite is an argument too, so that the
+decision stays with the caller, but both currently name the same pair.
 
 It exists because that half of the field had no writer at all. The board's
 built-in `Code changes requested` and `Code review approved` workflows fire on a
@@ -966,13 +964,12 @@ references come from `collect-closing-references.sh`, the same script the
 collection step runs, so which keywords close an issue is one decision rather
 than two that drift.
 
-Two statuses are never written over by the verdict. `Done` is the merge and the
-close, so a verdict arriving after one must not drag a finished item back into
-review. `Blocked` is the one status a hand writes, and it says the issue waits on
-something outside the project — a question a review verdict does not answer, so
-a verdict does not get to erase the answer. Neither is protected from the
-announcement, for the reason the paragraph above gives: they answer a question
-about the work, and the announcement answers one about right now.
+Two statuses are never written over, by either end of the review. `Done` is the
+merge and the close, so a verdict arriving after one must not drag a finished
+item back into review, and a review starting on one must not either. `Blocked` is
+the one status a hand writes, and it says the issue waits on something outside the
+project — a question neither a verdict nor a review in flight answers, so neither
+gets to erase the answer.
 
 Each write is a job of its own for the credential. Writing a field on a
 user-owned project needs a classic token with the `project` scope: no GitHub App
@@ -991,9 +988,8 @@ so one that is missing has something wrong with it rather than nothing.
 
 `scripts/test-agent-workflow.sh` runs both steps against a fake `gh` the way it
 runs the gate, the settle loop, and the submission: it asserts which option each
-verdict writes, that a verdict leaves `Done` and `Blocked` alone, that the
-announcement writes `In review` over every previous status including those two,
-and that a run without the token writes nothing.
+verdict writes, that the announcement writes `In review`, that both leave `Done`
+and `Blocked` alone, and that a run without the token writes nothing.
 
 ### Who publishes it
 

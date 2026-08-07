@@ -1690,6 +1690,7 @@ run_fathom_review_announcement() {
   (
     export_fathom_review_board_environment "$board_token"
     export IN_REVIEW_STATUS='In review'
+    export PRESERVED_STATUSES='Done,Blocked'
     bash "$step_script"
   ) > "$output_file" 2>&1
   board_status=$?
@@ -1726,7 +1727,7 @@ fathom_review_leaves_a_finished_item_alone() {
 
   ((board_status == 0))
   [[ ! -s "$board_mutations_file" ]]
-  assert_contains 'which a review verdict does not overwrite' "$output_file"
+  assert_contains 'which a review does not overwrite' "$output_file"
 }
 
 fathom_review_leaves_a_blocked_item_alone() {
@@ -1766,15 +1767,31 @@ fathom_review_announces_a_started_review() {
   assert_contains 'Issue 12 moved from In progress to In review' "$output_file"
 }
 
-# Unlike a verdict, which answers a question `Done` and `Blocked` have already answered differently,
-# a review that is running is a fact about the present. The two statuses a verdict preserves are the
-# case where saying so is worth most: a re-review asked for on a merged or blocked item is asked for
-# deliberately, and the board reporting the state it left behind hides it.
-fathom_review_announces_over_every_previous_status() {
+# The two statuses a review does not get to erase are the same at both ends of it. `Done` is the
+# merge and the close and `Blocked` is the one status a hand writes about something outside the
+# project, and a review starting is no more a statement about either than a verdict is.
+fathom_review_announces_nothing_over_a_finished_or_blocked_item() {
   local output_file
   local previous_status
 
-  for previous_status in Done Blocked Todo '' ; do
+  for previous_status in Done Blocked; do
+    output_file="$test_directory/fathom-review-announce-over-${previous_status}-output"
+
+    run_fathom_review_announcement 'Closes #12' "$previous_status" "$output_file"
+
+    ((board_status == 0))
+    [[ ! -s "$board_mutations_file" ]]
+    assert_contains "Issue 12 is ${previous_status}" "$output_file"
+  done
+}
+
+# Everything else is written over, including an item carrying no status at all: what the board said
+# before the review started is what the review has now replaced.
+fathom_review_announces_over_every_other_status() {
+  local output_file
+  local previous_status
+
+  for previous_status in Todo 'Ready to merge' '' ; do
     output_file="$test_directory/fathom-review-announce-over-${previous_status:-none}-output"
 
     run_fathom_review_announcement 'Closes #12' "$previous_status" "$output_file"
@@ -3522,7 +3539,8 @@ run_test fathom_review_leaves_a_finished_item_alone
 run_test fathom_review_leaves_a_blocked_item_alone
 run_test fathom_review_moves_nothing_for_a_pull_request_that_closes_no_issue
 run_test fathom_review_announces_a_started_review
-run_test fathom_review_announces_over_every_previous_status
+run_test fathom_review_announces_nothing_over_a_finished_or_blocked_item
+run_test fathom_review_announces_over_every_other_status
 run_test fathom_review_writes_no_status_without_the_board_token
 run_test every_documentation_page_declares_what_it_describes
 run_test every_describes_pattern_matches_something_that_exists

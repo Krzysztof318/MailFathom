@@ -6,15 +6,15 @@
 # Write one `Status` value on the roadmap board, on every issue a pull request's body closes.
 #
 # `Fathom review` writes the board twice — once when the review starts and once when it concludes —
-# and the two writes differ in exactly two things: which value they write, and which values they
-# refuse to write over. Everything else is the same walk: read the body, collect what it closes,
-# resolve the field and its option by name, find the item on *this* board, and mutate it. That is
-# why it lives here rather than twice in the workflow, where the second copy would be the one that
-# stops matching the first.
+# and the two writes differ in exactly one thing: which value they write. Everything else is the
+# same walk: read the body, collect what it closes, resolve the field and its option by name, find
+# the item on *this* board, and mutate it. That is why it lives here rather than twice in the
+# workflow, where the second copy would be the one that stops matching the first.
 #
-# The value and the preserved list are arguments because they are the caller's decision. A verdict
-# must not drag a merged item back into review, so it names `Done,Blocked`; the write that announces
-# a review is running says something true of any prior state, so it names nothing.
+# The value and the preserved list are arguments because they are the caller's decision, even where
+# both callers currently decide the same thing: `Done` is the merge and the close and `Blocked` is
+# the one status a hand writes, and neither is a statement a review gets to erase from either end
+# of itself.
 #
 # Failures are graded the way the workflow they run in is: it gates nothing, so a red run over a
 # board a hand can correct is noise. A missing field or a renamed option is loud, because it is a
@@ -163,7 +163,7 @@ while IFS= read -r issue_number; do
   current_status="${entry#* }"
 
   if [[ -n "$preserved_statuses" && ",${preserved_statuses}," == *",${current_status},"* ]]; then
-    printf '::notice::Issue %s is %s, which a review verdict does not overwrite.\n' \
+    printf '::notice::Issue %s is %s, which a review does not overwrite.\n' \
       "$issue_number" "$current_status"
     continue
   fi

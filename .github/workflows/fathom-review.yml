@@ -311,13 +311,11 @@ jobs:
   # the pull request existed at all. The verdict job below then answers the same question the other
   # way round, so between them the field never describes a moment that has passed.
   #
-  # It preserves nothing, unlike the verdict. `Done` and `Blocked` are protected against a *verdict*
-  # because a verdict says nothing about a merge or about something outside the project — but a
-  # review that has started is a fact about right now, true whatever the item was doing before it,
-  # and a re-review asked for on a merged or blocked item is exactly the case where the board saying
-  # so is worth more than the value it replaces. The verdict then writes over it a few minutes
-  # later, and a run that publishes none leaves the item where a reader can see a review was asked
-  # for and produced nothing.
+  # It preserves the same two statuses the verdict does, and for the same reason: `Done` is the
+  # merge and the close, `Blocked` is the one status a hand writes about something outside the
+  # project, and a review that starts on either says nothing that entitles it to erase them. The
+  # verdict then writes over this value a few minutes later, and a run that publishes none leaves
+  # the item where a reader can see a review was asked for and produced nothing.
   #
   # It runs beside the reviewer rather than before it, because nothing in the review depends on the
   # board: making it a dependency would let a project API failure delay or skip a review.
@@ -355,10 +353,11 @@ jobs:
           CLOSING_REFERENCE_LIMIT: '5'
           BOARD_STATUS_SCRIPT: ${{ github.workspace }}/.github/fathom-review/write-board-status.sh
           IN_REVIEW_STATUS: In review
+          PRESERVED_STATUSES: Done,Blocked
         run: |
           set -euo pipefail
 
-          "$BOARD_STATUS_SCRIPT" "$IN_REVIEW_STATUS"
+          "$BOARD_STATUS_SCRIPT" "$IN_REVIEW_STATUS" "$PRESERVED_STATUSES"
 
   fathom-review:
     name: Fathom review
