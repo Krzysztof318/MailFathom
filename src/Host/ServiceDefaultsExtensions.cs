@@ -17,9 +17,6 @@ namespace MailFathom.Host;
 /// </summary>
 internal static class ServiceDefaultsExtensions
 {
-    /// <summary>The meter Polly's telemetry publishes every resilience event to.</summary>
-    private const string PollyMeterName = "Polly";
-
     /// <summary>
     /// Adds observability, service discovery, HTTP resilience, and health-check defaults.
     /// </summary>
@@ -64,15 +61,13 @@ internal static class ServiceDefaultsExtensions
                 metrics.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation()
-                    // The outbound resilience pipelines report attempts, outcomes, and durations to Polly's meter.
-                    // Emitting them is not exporting them: without this subscription the instruments exist and
-                    // nothing collects them.
-                    .AddMeter(PollyMeterName)
+                    .AddLibraryMeters()
                     .AddMailFathomMeters();
             })
             .WithTracing(tracing =>
             {
                 tracing.AddMailFathomActivitySources()
+                    .AddLibraryActivitySources()
                     // A probe arrives every few seconds for the lifetime of the process and says the same thing every
                     // time, so tracing it would fill a trace store with the polling rather than with the work.
                     .AddAspNetCoreInstrumentation(tracingOptions =>

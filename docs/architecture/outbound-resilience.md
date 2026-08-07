@@ -159,11 +159,12 @@ is the layer rather than something MailFathom re-implements:
 
 Polly's metrics stay on and carry the dependency class as the pipeline name, the remote instance as the pipeline
 instance, the event, the attempt number, the outcome, and the duration. Emitting them is not exporting them: the host
-subscribes OpenTelemetry to Polly's meter in `ServiceDefaultsExtensions`, without which the instruments would exist and
-nothing would collect them. Its *logging* is replaced: Polly renders the outcome exception in full, and a mail server
-puts the rejected recipient into its error text. `OutboundResilienceEvents` therefore records a retry, a circuit
-opening, and a circuit closing with the dependency class, the instance, the operation, the failure's type name, the
-attempt number, and the delay — never a message, an address, an identifier, or a payload.
+subscribes OpenTelemetry to Polly's meter in `TelemetrySubscriptionExtensions`, beside every other meter a library
+publishes under its own name, without which the instruments would exist and nothing would collect them. Its *logging*
+is replaced: Polly renders the outcome exception in full, and a mail server puts the rejected recipient into its error
+text. `OutboundResilienceEvents` therefore records a retry, a circuit opening, and a circuit closing with the dependency
+class, the instance, the operation, the failure's type name, the attempt number, and the delay — never a message, an
+address, an identifier, or a payload.
 
 The instance is the configured account identifier and the operation is the folder alias, or the fixed name
 `folder-discovery` for a connection that pins no folder, both carried into the callbacks by the pipeline key and by

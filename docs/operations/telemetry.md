@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Infrastructure/Observability/**, src/AppHost/** -->
+<!-- describes: src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Infrastructure/Observability/**, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/AppHost/** -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -15,16 +15,39 @@ credentials, tokens, message bodies, attachment content, or raw MIME; a tool cal
 and a duration, never as what was searched for. [What the endpoint records](mcp-endpoint.md#what-the-endpoint-records)
 states that boundary precisely.
 
-**Metrics** cover the request pipeline (ASP.NET Core), outbound HTTP (`HttpClient`), the .NET runtime, PostgreSQL
-through the Npgsql instrumentation, and the `Polly` meter, which is where every outbound-resilience pipeline reports
-its attempts, outcomes, timeouts, and circuit-breaker state transitions.
-[Outbound resilience](../architecture/outbound-resilience.md#telemetry-and-privacy) records which tags those events
-carry and which they never do.
+**Metrics** cover the request pipeline (ASP.NET Core), outbound HTTP (`HttpClient`), and the .NET runtime through their
+instrumentation packages, and four meters that the libraries publishing them name themselves:
 
-**Traces** cover incoming requests, outbound HTTP, and database commands, correlated end to end: the trace a request
-arrives with is the trace its log records and its failure diagnostics carry. One filter is deliberate: requests to the
-health-probe paths are not traced at all, because a probe arrives every few seconds for the life of the process and
-says the same thing every time — tracing it would fill a trace store with polling instead of work.
+| Meter | What it reports | Subscribed by |
+| --- | --- | --- |
+| `Npgsql` | Connection-pool state, command durations, and command counts against PostgreSQL | The Aspire PostgreSQL enrichment |
+| `Microsoft.EntityFrameworkCore` | Active contexts, queries, save operations, compiled-query cache hits and misses, execution-strategy failures, and optimistic-concurrency failures | The host |
+| `Experimental.ModelContextProtocol` | MCP session duration, and per-operation duration broken down by protocol method and — for a tool call — tool name | The host |
+| `Polly` | Every outbound-resilience pipeline's attempts, outcomes, timeouts, and circuit-breaker state transitions | The host |
+
+The split in the last column is where a meter is registered, not how important it is: the Aspire enrichment that gives
+the EF Core context its health check and its database tracing subscribes `Npgsql` as part of the same call, and the
+host subscribes the three it leaves out. Nothing is subscribed twice.
+[Outbound resilience](../architecture/outbound-resilience.md#telemetry-and-privacy) records which tags the `Polly`
+events carry and which they never do; the optimistic-concurrency counter is the aggregate view of the same conflicts
+that surface individually as a persistence conflict failure.
+
+**Traces** cover incoming requests, outbound HTTP, database commands, and MCP protocol operations, correlated end to
+end: the trace a request arrives with is the trace its log records and its failure diagnostics carry. The MCP spans
+come from the SDK's own `Experimental.ModelContextProtocol` activity source and carry the protocol method, the
+negotiated protocol version, the transport, the session identifier, the JSON-RPC request identifier, and the tool name
+for a tool call — which is what makes a slow call attributable to a tool before anything inside the tool is
+instrumented. Database commands are spanned by the `Npgsql` source rather than by EF Core, which reports through
+`DiagnosticSource` and would need a bridging package to span the same commands a second time.
+
+One filter is deliberate: requests to the health-probe paths are not traced at all, because a probe arrives every few
+seconds for the life of the process and says the same thing every time — tracing it would fill a trace store with
+polling instead of work.
+
+Every tag on the metrics above is a bounded set — a protocol method, a transport kind, a negotiated version, one of the
+three tool names, an outcome — so none of them opens a time series per message or per person. The MCP SDK does tag a
+metric with a resource URI, but only for the protocol's resource methods, and MailFathom's server publishes tools
+alone: no resources and no prompts, so the tag never arises.
 
 ## What MailFathom publishes under its own name
 
