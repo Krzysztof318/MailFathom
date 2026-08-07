@@ -32,7 +32,7 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
     : IMailboxMutationReconciliationStore
 {
     /// <inheritdoc />
-    public async Task<IReadOnlyList<MailboxMutationRecord>> ReadRelocationsPlacedAtAsync(
+    public async Task<IReadOnlyList<MailboxMutationRecord>> ReadPlacementsAtAsync(
         MailAccountId accountId,
         RemoteFolderPath destinationPath,
         ImapUidValidity uidValidity,
@@ -49,7 +49,7 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
         var accountValue = accountId.Value;
         var destinationValue = destinationPath.Value;
         var uidValidityValue = uidValidity.Value;
-        var relocateName = MailboxMutation.Relocate.Name;
+        string[] placingMutations = [MailboxMutation.Relocate.Name, MailboxMutation.Copy.Name];
 
         // Nullable so the comparison is against the column as it is stored: a record whose server named no placement
         // holds null there and must match nothing, rather than being coerced into a UID it never reported.
@@ -59,12 +59,52 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
             .AsNoTracking()
             .Include(mutation => mutation.MailFolder)
             .Where(mutation => mutation.MailboxAccountId == accountValue
-                && mutation.Mutation == relocateName
+                && placingMutations.Contains(mutation.Mutation)
                 && mutation.Stage == MailboxMutationStage.Completed
                 && mutation.PlacementObservedAt == null
                 && mutation.DestinationFolderPath == destinationValue
                 && mutation.PlacementUidValidity == uidValidityValue
                 && placedUids.Contains(mutation.PlacementUid))
+            .OrderBy(mutation => mutation.RecordedAt)
+            .ThenBy(mutation => mutation.Id)
+            .ToArrayAsync(cancellationToken);
+
+        return [.. entities.Select(static entity => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder))];
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<MailboxMutationRecord>> ReadSeenStateChangesOnAsync(
+        MailAccountId accountId,
+        MailFolderResolutionId folderResolutionId,
+        ImapUidValidity uidValidity,
+        IReadOnlyCollection<ImapUid> uids,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(uids);
+
+        if (uids.Count == 0)
+        {
+            return [];
+        }
+
+        var accountValue = accountId.Value;
+        var alias = folderResolutionId.Alias.Value;
+        var generation = folderResolutionId.Generation.Value;
+        var uidValidityValue = uidValidity.Value;
+        var setSeenName = MailboxMutation.SetSeen.Name;
+        uint[] changedUids = [.. uids.Select(static uid => uid.Value)];
+
+        // Reached through the prefix of the identity index — folder, UIDVALIDITY, UID — which is why this question needs
+        // no index of its own, exactly as reading a disappearance back does not.
+        var entities = await readContext.MailboxMutations
+            .AsNoTracking()
+            .Include(mutation => mutation.MailFolder)
+            .Where(mutation => mutation.MailboxAccountId == accountValue
+                && mutation.MailFolder.Alias == alias
+                && mutation.MailFolder.ResolutionGeneration == generation
+                && mutation.UidValidity == uidValidityValue
+                && changedUids.Contains(mutation.Uid)
+                && mutation.Mutation == setSeenName)
             .OrderBy(mutation => mutation.RecordedAt)
             .ThenBy(mutation => mutation.Id)
             .ToArrayAsync(cancellationToken);
@@ -123,8 +163,12 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
 
         // The row has just left the source folder, so no later window can select it there and observe the disappearance
         // this record would otherwise keep waiting for. The stage that got here is the server's own statement that the
-        // source occurrence is already gone.
-        entity.SourceRemovalObservedAt ??= observedAt;
+        // source occurrence is already gone. A copy takes nothing out of its source folder, so it settles nothing there
+        // and a column written for it would say a disappearance had been accounted for that never happens.
+        if (entity.Mutation == MailboxMutation.Relocate.Name)
+        {
+            entity.SourceRemovalObservedAt ??= observedAt;
+        }
     }
 
     /// <inheritdoc />

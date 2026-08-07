@@ -29,6 +29,14 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
 {
     private readonly Dictionary<MailboxMutationRecordId, MailboxMutationRecord> recordsById = [];
 
+    /// <summary>Gets how many times a caller asked which <c>\Seen</c> changes were MailFathom's own.</summary>
+    /// <remarks>
+    /// A window over a mailbox nobody has touched must ask nothing, which is a cost guarantee no assertion about the
+    /// answer can express: a store that returned nothing would satisfy every other test while still costing a query on
+    /// every run of every folder.
+    /// </remarks>
+    internal int SeenStateChangeReadCount { get; private set; }
+
     /// <summary>Puts a record into the state a completed mutation would have left.</summary>
     internal void Add(MailboxMutationRecord record) => this.recordsById[record.Id] = record;
 
@@ -36,7 +44,7 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
     internal MailboxMutationRecord RecordOf(MailboxMutationRecordId recordId) => this.recordsById[recordId];
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<MailboxMutationRecord>> ReadRelocationsPlacedAtAsync(
+    public Task<IReadOnlyList<MailboxMutationRecord>> ReadPlacementsAtAsync(
         MailAccountId accountId,
         RemoteFolderPath destinationPath,
         ImapUidValidity uidValidity,
@@ -49,7 +57,8 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
         [
             .. this.recordsById.Values
                 .Where(record => record.Request.Occurrence.AccountId == accountId
-                    && record.Request.Mutation == MailboxMutation.Relocate
+                    && (record.Request.Mutation == MailboxMutation.Relocate
+                        || record.Request.Mutation == MailboxMutation.Copy)
                     && record.Stage == MailboxMutationStage.Completed
                     && record.PlacementObservedAt is null
                     && record.Request.DestinationPath?.Value == destinationPath.Value
@@ -61,6 +70,33 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
         ];
 
         return Task.FromResult(placed);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<MailboxMutationRecord>> ReadSeenStateChangesOnAsync(
+        MailAccountId accountId,
+        MailFolderResolutionId folderResolutionId,
+        ImapUidValidity uidValidity,
+        IReadOnlyCollection<ImapUid> uids,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(uids);
+
+        this.SeenStateChangeReadCount++;
+
+        IReadOnlyList<MailboxMutationRecord> setting =
+        [
+            .. this.recordsById.Values
+                .Where(record => record.Request.Occurrence.AccountId == accountId
+                    && record.Request.Occurrence.FolderResolutionId == folderResolutionId
+                    && record.Request.Occurrence.UidValidity == uidValidity
+                    && uids.Contains(record.Request.Occurrence.Uid)
+                    && record.Request.Mutation == MailboxMutation.SetSeen)
+                .OrderBy(record => record.RecordedAt)
+                .ThenBy(record => record.Id.Value),
+        ];
+
+        return Task.FromResult(setting);
     }
 
     /// <inheritdoc />
@@ -101,7 +137,12 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
         this.recordsById[recordId] = record with
         {
             PlacementObservedAt = record.PlacementObservedAt ?? observedAt,
-            SourceRemovalObservedAt = record.SourceRemovalObservedAt ?? observedAt,
+
+            // A copy takes nothing out of its source folder, so the real store settles no removal for one and a fake
+            // that did would let a test pass against a record production never writes.
+            SourceRemovalObservedAt = record.Request.Mutation == MailboxMutation.Relocate
+                ? record.SourceRemovalObservedAt ?? observedAt
+                : record.SourceRemovalObservedAt,
         };
 
         return Task.CompletedTask;

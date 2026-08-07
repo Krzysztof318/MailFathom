@@ -11,6 +11,7 @@ using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
 
@@ -326,7 +327,36 @@ internal sealed partial class AccountSynchronizationSupervisor
                 result.Reconciliation.OwnMutationCompletedEmailCount);
         }
 
+        this.ReportSuppressedChanges(folderAlias, result.SuppressedChanges);
         this.ReportReconciliation(folderAlias, remotelyDeletedEmailDisposition, result.Reconciliation);
+    }
+
+    /// <summary>Emits what the run withheld from rule evaluation, so a rule that appears not to have fired can be explained.</summary>
+    /// <remarks>
+    /// The count is stated once at information level and each withheld change once at debug, because the two answer
+    /// different questions: whether MailFathom is acting on its own mailbox at all, and why one particular message did
+    /// not set a rule off. Only identities MailFathom owns appear — a local email identifier, a record identifier, and
+    /// the mutation's own name — never anything derived from the message.
+    /// </remarks>
+    private void ReportSuppressedChanges(string folderAlias, IReadOnlyList<SuppressedMailboxChange> suppressedChanges)
+    {
+        if (suppressedChanges.Count == 0)
+        {
+            return;
+        }
+
+        this.LogChangesSuppressed(this.accountId.Value, folderAlias, suppressedChanges.Count);
+
+        foreach (var suppressed in suppressedChanges)
+        {
+            this.LogChangeSuppressed(
+                this.accountId.Value,
+                folderAlias,
+                suppressed.Kind,
+                suppressed.Mutation.Name,
+                suppressed.StoredEmailId.Value,
+                suppressed.MutationRecordId.Value);
+        }
     }
 
     /// <summary>Emits the audit line for the backward pass, and emits it only when the pass found something to record.</summary>
@@ -348,6 +378,14 @@ internal sealed partial class AccountSynchronizationSupervisor
                 folderAlias,
                 reconciliation.RemotelyDeletedEmailCount,
                 remotelyDeletedEmailDisposition);
+        }
+
+        if (reconciliation.SeenStateChangedEmailCount > 0)
+        {
+            this.LogSeenStateChangesObserved(
+                this.accountId.Value,
+                folderAlias,
+                reconciliation.SeenStateChangedEmailCount);
         }
 
         if (reconciliation.ObservedEmailCount > 0)
@@ -431,6 +469,38 @@ internal sealed partial class AccountSynchronizationSupervisor
         string folderAlias,
         int relocatedEmailCount,
         int ownMutationCompletedEmailCount);
+
+    /// <summary>States how much of what the run discovered was MailFathom's own and was therefore not raised as a change to react to.</summary>
+    /// <remarks>
+    /// A folder that MailFathom never writes to never emits this line. Where it does appear, it is the difference
+    /// between a rule engine that files a message once and one that files it every interval for as long as the mailbox
+    /// is watched, so the count is worth an operator's attention rather than only a debugging session's.
+    /// </remarks>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Withheld {SuppressedChangeCount} changes in {AccountId}/{FolderAlias} from rule evaluation, because a durable mutation record says MailFathom itself made them.")]
+    private partial void LogChangesSuppressed(string accountId, string folderAlias, int suppressedChangeCount);
+
+    /// <summary>Names one withheld change and the record that accounted for it, which is what a support question about a rule that did not fire is answered from.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Withheld a {MailboxChangeKind} in {AccountId}/{FolderAlias} for stored email {StoredEmailId}; the {Mutation} recorded as {MutationRecordId} accounts for it.")]
+    private partial void LogChangeSuppressed(
+        string accountId,
+        string folderAlias,
+        MailboxChangeKind mailboxChangeKind,
+        string mutation,
+        Guid storedEmailId,
+        Guid mutationRecordId);
+
+    /// <summary>Reports the flag changes the mailbox owner made, which stay changes to react to however many of MailFathom's own were withheld beside them.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Mail server reports a moved \\Seen flag on {SeenStateChangedEmailCount} messages stored for {AccountId}/{FolderAlias} that no change of MailFathom's accounts for.")]
+    private partial void LogSeenStateChangesObserved(
+        string accountId,
+        string folderAlias,
+        int seenStateChangedEmailCount);
 
     /// <summary>Records mail leaving the local copy, which is the one reconciliation outcome an operator has to be able to find afterwards.</summary>
     /// <remarks>

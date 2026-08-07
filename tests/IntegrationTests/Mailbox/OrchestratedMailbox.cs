@@ -139,6 +139,38 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
         await client.DisconnectAsync(quit: true, cancellationToken);
     }
 
+    /// <summary>Moves one message between folders over a connection MailFathom knows nothing about.</summary>
+    /// <param name="sourceFolderPath">The folder holding the message.</param>
+    /// <param name="destinationFolderPath">The folder to move it into.</param>
+    /// <param name="uid">The message to move.</param>
+    /// <param name="cancellationToken">Cancels the move.</param>
+    /// <returns>The UID the destination folder reports for the message, where the server named one.</returns>
+    /// <remarks>
+    /// This is the mailbox owner doing by hand exactly what a rule would ask MailFathom to do, and it is the control the
+    /// suppression is only meaningful against: the two produce the same two events in the same two folders, and the only
+    /// thing that separates them is whether MailFathom wrote a record before the command went out. A suppression that
+    /// silenced this one would silence the owner's own mailbox.
+    /// </remarks>
+    internal async Task<ImapUid?> MoveAsync(
+        string sourceFolderPath,
+        string destinationFolderPath,
+        ImapUid uid,
+        CancellationToken cancellationToken)
+    {
+        using var client = await this.ConnectAndAuthenticateAsync(cancellationToken);
+
+        var source = await client.GetFolderAsync(sourceFolderPath, cancellationToken);
+        var destination = await client.GetFolderAsync(destinationFolderPath, cancellationToken);
+        await source.OpenAsync(FolderAccess.ReadWrite, cancellationToken);
+
+        var placed = await source.MoveToAsync(new UniqueId(uid.Value), destination, cancellationToken);
+
+        await source.CloseAsync(expunge: false, cancellationToken);
+        await client.DisconnectAsync(quit: true, cancellationToken);
+
+        return placed is { } placement ? ImapUid.Create(placement.Id) : null;
+    }
+
     /// <summary>Flags one message <c>\Deleted</c> without expunging it, the way another mail client would.</summary>
     /// <param name="folderPath">The folder holding the message.</param>
     /// <param name="uid">The message to flag.</param>

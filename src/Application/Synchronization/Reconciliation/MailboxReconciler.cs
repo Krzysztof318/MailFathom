@@ -35,6 +35,13 @@ namespace MailFathom.Application.Synchronization.Reconciliation;
 /// the occurrence leaving its folder is those changes completing rather than a remote deletion to react to. The durable
 /// mutation record is what tells the two apart, so the pass reads it before the disposition is reached.
 /// </para>
+/// <para>
+/// The same holds of a <c>\Seen</c> flag that has moved, and there it is the whole difficulty. A flag change arrives as
+/// a changed modification sequence, which is the identical signal a person marking mail read in their own client
+/// produces, so a rule conditioned on unread mail that marks mail read would re-evaluate everything it had just acted
+/// on. The record answers it, and both halves of that answer are recorded in the window's own transaction so a change
+/// can never be marked accounted for by a window whose reading of it was rolled back.
+/// </para>
 /// </remarks>
 public sealed class MailboxReconciler
 {
@@ -141,6 +148,12 @@ public sealed class MailboxReconciler
             folder.Id,
             uidValidity,
             cancellationToken);
+        var seenStateChanges = await this.AttributeSeenStateChangesAsync(
+            classification,
+            accountId,
+            folder.Id,
+            uidValidity,
+            cancellationToken);
 
         await this.concurrencyRetryPolicy.CommitAsync(
             async (persistenceSession, attemptCancellationToken) =>
@@ -150,8 +163,8 @@ public sealed class MailboxReconciler
                     outcome,
                     attemptCancellationToken);
 
-                // Written in the window's own transaction, so a record can never say a disappearance was accounted for
-                // by a window whose observation of it was rolled back.
+                // Written in the window's own transaction, so a record can never say a change was accounted for by a
+                // window whose observation of it was rolled back.
                 foreach (var attributed in outcome.RemovedByOwnMutation)
                 {
                     await this.mutationStore.RecordSourceRemovalObservedAsync(
@@ -160,6 +173,7 @@ public sealed class MailboxReconciler
                         outcome.ObservedAt,
                         attemptCancellationToken);
                 }
+
             },
             cancellationToken);
 
@@ -169,8 +183,17 @@ public sealed class MailboxReconciler
             outcome.StillPresent.Count + outcome.ConfirmedUnchanged.Count,
             outcome.Disappeared.Count,
             outcome.RemovedByOwnMutation.Count,
+            seenStateChanges.ExternalCount,
             emailsRemain,
-            emailsRemain ? null : observation.FolderHighestModSeq);
+            emailsRemain ? null : observation.FolderHighestModSeq,
+            [
+                .. outcome.RemovedByOwnMutation.Select(static attributed => new SuppressedMailboxChange(
+                    MailboxChangeKind.EmailLeftFolder,
+                    attributed.Mutation,
+                    attributed.StoredEmailId,
+                    attributed.MutationRecordId)),
+                .. seenStateChanges.Suppressed,
+            ]);
     }
 
     /// <summary>Separates the disappearances MailFathom caused from the ones the disposition answers for.</summary>
@@ -198,7 +221,7 @@ public sealed class MailboxReconciler
         if (classification.Disappeared.Count == 0)
         {
             return new ReconciledFolderOutcome(
-                classification.StillPresent,
+                classification.ObservedFlags,
                 classification.ConfirmedUnchanged,
                 [],
                 [],
@@ -222,7 +245,7 @@ public sealed class MailboxReconciler
             .ToArray();
 
         return new ReconciledFolderOutcome(
-            classification.StillPresent,
+            classification.ObservedFlags,
             classification.ConfirmedUnchanged,
             [.. attributions.Where(static attribution => attribution.Record is null).Select(static attribution => attribution.StoredEmailId)],
             [
@@ -230,10 +253,76 @@ public sealed class MailboxReconciler
                     .Where(static attribution => attribution.Record is not null)
                     .Select(static attribution => new MutationAttributedDisappearance(
                         attribution.StoredEmailId,
-                        attribution.Record!.Id)),
+                        attribution.Record!.Id,
+                        attribution.Record.Request.Mutation)),
             ],
             disposition,
             observedAt);
+    }
+
+    /// <summary>Separates the <c>\Seen</c> flags MailFathom moved from the ones the mailbox owner moved.</summary>
+    /// <remarks>
+    /// <para>
+    /// Only an occurrence whose flag actually stands somewhere new is asked about, so a window over a mailbox nobody has
+    /// touched reads no records at all. An occurrence nobody had observed before has no previous value to differ from,
+    /// so its first flag reading is the initial observation rather than a change — and treating it as one would raise a
+    /// trigger for every message the forward pass had just stored.
+    /// </para>
+    /// <para>
+    /// A change with no record is the mailbox owner's own act and is counted rather than suppressed, which is what keeps
+    /// this about provenance instead of about which field moved.
+    /// </para>
+    /// <para>
+    /// Nothing is written back to the record here, and it needs nothing: a store answers only for a reading taken before
+    /// the occurrence was next observed, and applying this window's outcome is what moves that observation forward. The
+    /// window's own transaction therefore ends the record's answer whether or not anything matched, which is the case a
+    /// mark on the row would miss — an owner who reverted the flag before the first reading would leave such a mark
+    /// unwritten and have their own later change silenced by it.
+    /// </para>
+    /// </remarks>
+    private async Task<ReconciledSeenStateChanges> AttributeSeenStateChangesAsync(
+        ReconciledWindowClassification classification,
+        MailAccountId accountId,
+        MailFolderResolutionId folderResolutionId,
+        ImapUidValidity uidValidity,
+        CancellationToken cancellationToken)
+    {
+        var changed = classification.StillPresent
+            .Where(static observed => observed.SeenStateMoved)
+            .ToArray();
+
+        if (changed.Length == 0)
+        {
+            return ReconciledSeenStateChanges.None;
+        }
+
+        var records = await this.mutationStore.ReadSeenStateChangesOnAsync(
+            accountId,
+            folderResolutionId,
+            uidValidity,
+            [.. changed.Select(static observed => observed.Candidate.Uid)],
+            cancellationToken);
+
+        var attributions = changed
+            .Select(observed => new
+            {
+                observed.Candidate.StoredEmailId,
+                Record = FindRecordSettingSeen(records, observed, accountId, folderResolutionId, uidValidity),
+            })
+            .ToArray();
+
+        IReadOnlyList<SuppressedMailboxChange> suppressed =
+        [
+            .. attributions
+                .Where(static attribution => attribution.Record is not null)
+                .Select(static attribution => new SuppressedMailboxChange(
+                    MailboxChangeKind.SeenStateChanged,
+                    attribution.Record!.Request.Mutation,
+                    attribution.StoredEmailId,
+                    attribution.Record.Id)),
+        ];
+
+        return new ReconciledSeenStateChanges(changed.Length - suppressed.Count, suppressed);
     }
 
     private static MailboxMutationRecord? FindRecordRemoving(
@@ -246,6 +335,38 @@ public sealed class MailboxReconciler
         var occurrence = EmailOccurrenceId.Create(accountId, folderResolutionId, uidValidity, uid);
 
         return records.FirstOrDefault(record => record.AccountsForRemovalOf(occurrence));
+    }
+
+    /// <summary>Finds the <c>\Seen</c> store that put the flag where the server has just reported it, if one did.</summary>
+    /// <remarks>
+    /// The first match is taken, as it is for a disappearance: one occurrence can carry a record per requester, and
+    /// which of them is credited changes nothing about the local row — what matters is that the change does not reach
+    /// evaluation as somebody else's.
+    /// </remarks>
+    private static MailboxMutationRecord? FindRecordSettingSeen(
+        IReadOnlyList<MailboxMutationRecord> records,
+        ObservedWindowCandidate observed,
+        MailAccountId accountId,
+        MailFolderResolutionId folderResolutionId,
+        ImapUidValidity uidValidity)
+    {
+        // A moved flag means the occurrence was observed before, so the window entry carries that reading and this is
+        // never reached without one.
+        if (observed.Candidate.LastObservation is not { } lastObservation)
+        {
+            return null;
+        }
+
+        var occurrence = EmailOccurrenceId.Create(
+            accountId,
+            folderResolutionId,
+            uidValidity,
+            observed.Candidate.Uid);
+
+        return records.FirstOrDefault(record => record.AccountsForSeenStateOf(
+            occurrence,
+            observed.Snapshot.IsSeen,
+            lastObservation.ObservedAt));
     }
 
     /// <summary>Sorts the window into the occurrences the server described, the ones it confirmed, and the ones it accounted for in neither.</summary>
@@ -280,7 +401,7 @@ public sealed class MailboxReconciler
 
         var stillPresent = window
             .Where(candidate => snapshotsByUid.ContainsKey(candidate.Uid))
-            .Select(candidate => new ObservedEmailFlags(candidate.StoredEmailId, snapshotsByUid[candidate.Uid]))
+            .Select(candidate => new ObservedWindowCandidate(candidate, snapshotsByUid[candidate.Uid]))
             .ToArray();
         var confirmedUnchanged = window
             .Where(candidate => !snapshotsByUid.ContainsKey(candidate.Uid) && unchangedUids.Contains(candidate.Uid))
@@ -294,16 +415,51 @@ public sealed class MailboxReconciler
     }
 
     /// <summary>What the server's answer alone says about one window, before anything MailFathom did is taken into account.</summary>
-    /// <param name="StillPresent">The occurrences the server described.</param>
+    /// <param name="StillPresent">The occurrences the server described, each beside the stored state it is compared against.</param>
     /// <param name="ConfirmedUnchanged">The occurrences the server confirmed without describing.</param>
     /// <param name="Disappeared">
     /// The occurrences the folder no longer holds, still carrying their UIDs because that is what a mutation record is
     /// matched against.
     /// </param>
     private sealed record ReconciledWindowClassification(
-        IReadOnlyList<ObservedEmailFlags> StillPresent,
+        IReadOnlyList<ObservedWindowCandidate> StillPresent,
         IReadOnlyList<StoredEmailId> ConfirmedUnchanged,
-        IReadOnlyList<StoredEmailAwaitingReconciliation> Disappeared);
+        IReadOnlyList<StoredEmailAwaitingReconciliation> Disappeared)
+    {
+        /// <summary>Gets the flags to write, which is all the store applying the outcome needs of a described occurrence.</summary>
+        internal IReadOnlyList<ObservedEmailFlags> ObservedFlags =>
+        [
+            .. this.StillPresent.Select(static observed =>
+                new ObservedEmailFlags(observed.Candidate.StoredEmailId, observed.Snapshot)),
+        ];
+    }
+
+    /// <summary>One occurrence the server described, paired with what the last observation of it had recorded.</summary>
+    /// <param name="Candidate">The window entry, which carries the local identity and the previously observed flag.</param>
+    /// <param name="Snapshot">What the server has now reported.</param>
+    private sealed record ObservedWindowCandidate(
+        StoredEmailAwaitingReconciliation Candidate,
+        RemoteEmailFlagSnapshot Snapshot)
+    {
+        /// <summary>Gets whether the remote <c>\Seen</c> flag stands somewhere other than where it was last seen.</summary>
+        /// <remarks>
+        /// An occurrence with no previous reading reports no movement. Nothing changed for it — this is the first time
+        /// anybody looked — and calling that a change would raise a trigger for every message a backfill stores.
+        /// </remarks>
+        internal bool SeenStateMoved =>
+            this.Candidate.LastObservation is { } lastObservation && lastObservation.IsSeen != this.Snapshot.IsSeen;
+    }
+
+    /// <summary>What one window's moved <c>\Seen</c> flags split into once the mutation record has answered for them.</summary>
+    /// <param name="ExternalCount">How many the record accounts for nothing of, which are the mailbox owner's own.</param>
+    /// <param name="Suppressed">The ones MailFathom set itself, each named with the record that says so.</param>
+    private sealed record ReconciledSeenStateChanges(
+        int ExternalCount,
+        IReadOnlyList<SuppressedMailboxChange> Suppressed)
+    {
+        /// <summary>Gets the split of a window in which no flag moved at all.</summary>
+        internal static ReconciledSeenStateChanges None { get; } = new(ExternalCount: 0, Suppressed: []);
+    }
 }
 
 /// <summary>Summarizes one bounded reconciliation window.</summary>
@@ -314,21 +470,33 @@ public sealed class MailboxReconciler
 /// the remotely deleted ones because they are the opposite finding: a change of the owner's own that has come back
 /// through synchronization, rather than one to react to.
 /// </param>
+/// <param name="SeenStateChangedEmailCount">
+/// How many stored emails the server reported a moved <c>\Seen</c> flag for that no mutation of MailFathom's accounts
+/// for. Those are the mailbox owner's own act — read in their client, or marked read there — and they stay a change to
+/// react to, which is what keeps the suppression beside them about provenance rather than about the flag.
+/// </param>
 /// <param name="EmailsRemain">Whether occurrences still await reconciliation after this window.</param>
 /// <param name="ReconciledThroughModSeq">
 /// The folder modification sequence this pass covered the whole folder through, or <see langword="null" /> when the
 /// pass was partial or the server reports no sequence. A caller records it on the folder's checkpoint.
 /// </param>
+/// <param name="SuppressedChanges">
+/// The changes this window found and did not raise, because MailFathom itself had made them. The list is bounded by the
+/// mutations MailFathom has in flight rather than by the size of the window, so it is a handful on the runs that have
+/// any and empty on every run of a mailbox nobody writes to.
+/// </param>
 /// <remarks>
-/// Every field is a count or a sequence number. Nothing derived from a message belongs in a result a worker logs, which
-/// is what makes the audit line this becomes safe to emit for a mailbox nobody may read.
+/// Every field is a count, a sequence number, or an identity MailFathom owns. Nothing derived from a message belongs in
+/// a result a worker logs, which is what makes the audit line this becomes safe to emit for a mailbox nobody may read.
 /// </remarks>
 public sealed record MailboxReconciliationResult(
     int ObservedEmailCount,
     int RemotelyDeletedEmailCount,
     int OwnMutationCompletedEmailCount,
+    int SeenStateChangedEmailCount,
     bool EmailsRemain,
-    ulong? ReconciledThroughModSeq)
+    ulong? ReconciledThroughModSeq,
+    IReadOnlyList<SuppressedMailboxChange> SuppressedChanges)
 {
     /// <summary>Gets the result of a run whose folder had nothing awaiting reconciliation.</summary>
     /// <remarks>
@@ -340,6 +508,8 @@ public sealed record MailboxReconciliationResult(
         ObservedEmailCount: 0,
         RemotelyDeletedEmailCount: 0,
         OwnMutationCompletedEmailCount: 0,
+        SeenStateChangedEmailCount: 0,
         EmailsRemain: false,
-        ReconciledThroughModSeq: null);
+        ReconciledThroughModSeq: null,
+        SuppressedChanges: []);
 }

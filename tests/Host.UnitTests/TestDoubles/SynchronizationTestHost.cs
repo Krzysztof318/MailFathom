@@ -225,13 +225,13 @@ internal static class SynchronizationTestHost
     /// <summary>Builds a store holding no mutations, so nothing a run discovers is one MailFathom itself made.</summary>
     /// <remarks>
     /// These tests are about how a supervisor schedules and isolates folder work units. An unconfigured substitute would
-    /// answer both reads with a null task the run then faults on, which surfaces as a supervision that never signals.
+    /// answer every read with a null task the run then faults on, which surfaces as a supervision that never signals.
     /// </remarks>
     private static IMailboxMutationReconciliationStore CreateMutationStoreWithNothingRecorded()
     {
         var mutationStore = Substitute.For<IMailboxMutationReconciliationStore>();
         mutationStore
-            .ReadRelocationsPlacedAtAsync(
+            .ReadPlacementsAtAsync(
                 Arg.Any<MailAccountId>(),
                 Arg.Any<RemoteFolderPath>(),
                 Arg.Any<ImapUidValidity>(),
@@ -240,6 +240,14 @@ internal static class SynchronizationTestHost
             .Returns(Task.FromResult<IReadOnlyList<MailboxMutationRecord>>([]));
         mutationStore
             .ReadMutationsRemovingAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolutionId>(),
+                Arg.Any<ImapUidValidity>(),
+                Arg.Any<IReadOnlyCollection<ImapUid>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<MailboxMutationRecord>>([]));
+        mutationStore
+            .ReadSeenStateChangesOnAsync(
                 Arg.Any<MailAccountId>(),
                 Arg.Any<MailFolderResolutionId>(),
                 Arg.Any<ImapUidValidity>(),

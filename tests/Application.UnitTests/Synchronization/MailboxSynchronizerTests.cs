@@ -163,6 +163,121 @@ public sealed class MailboxSynchronizerTests
         var observed = mutationStore.RecordOf(record.Id);
         Assert.Equal(clock.GetUtcNow(), observed.PlacementObservedAt);
         Assert.True(observed.IsReconciled);
+
+        // The arrival is MailFathom's own, so it is withheld rather than raised. Without this a rule matching on folder
+        // would match the message it has just filed, and two such rules would bounce it between folders indefinitely.
+        var suppressed = Assert.Single(result.SuppressedChanges);
+        Assert.Equal(MailboxChangeKind.EmailAppearedInFolder, suppressed.Kind);
+        Assert.Equal(MailboxMutation.Relocate, suppressed.Mutation);
+        Assert.Equal(relocatedEmailId, suppressed.StoredEmailId);
+        Assert.Equal(record.Id, suppressed.MutationRecordId);
+    }
+
+    /// <summary>A message MailFathom copied is stored like any other discovery, and its arrival is still MailFathom's own act.</summary>
+    /// <remarks>
+    /// A copy leaves the email where it was, so nothing is carried across and whether the second live occurrence is one
+    /// local row or two stays the copy action's decision. What it must not do is set a rule off, which is a question
+    /// about provenance rather than about rows.
+    /// </remarks>
+    [Fact]
+    public async Task SynchronizeAsync_DiscoversTheOccurrenceACopyPlaced_StoresItAndWithholdsTheArrival()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var uid = ImapUid.Create(10);
+        var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, uid);
+        var copiedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
+        var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        var record = CopyPlacedInInbox(accountId, copiedEmailId, uidValidity, uid);
+        mutationStore.Add(record);
+        var metadataRepository = Substitute.For<IEmailMetadataRepository>();
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+        sessionScopeFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(persistenceSession);
+        persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
+        metadataRepository
+            .UpsertMetadataAsync(
+                persistenceSession,
+                Arg.Any<RemoteEmailMetadata>(),
+                Arg.Any<ExtractedEmailMetadata?>(),
+                Arg.Any<StoredEmailContentAvailability>(),
+                Arg.Any<CancellationToken>())
+            .Returns(storedEmailId);
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 7, 12, 0, 0, TimeSpan.Zero));
+        await using var session = CreateSessionDiscovering(occurrence, uidValidity);
+        session
+            .FetchEmailContentWithoutSettingSeenAsync(occurrence, Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(RemoteEmailContentFetchResult.Retrieved(
+                new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]))));
+        var synchronizer = CreateSynchronizer(
+            CreateSessionFactoryFor(accountId, session),
+            CreateCheckpointStoreAt(accountId, uidValidity),
+            sessionScopeFactory,
+            metadataRepository,
+            contentStore: Substitute.For<IEmailContentStore>(),
+            clock,
+            new MailboxSynchronizationOptions(),
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(0, result.RelocatedEmailCount);
+        await metadataRepository.DidNotReceiveWithAnyArgs().TryCarryToOccurrenceAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<StoredEmailId>(),
+            Arg.Any<EmailOccurrenceId>(),
+            Arg.Any<CancellationToken>());
+
+        var suppressed = Assert.Single(result.SuppressedChanges);
+        Assert.Equal(MailboxChangeKind.EmailAppearedInFolder, suppressed.Kind);
+        Assert.Equal(MailboxMutation.Copy, suppressed.Mutation);
+        Assert.Equal(storedEmailId, suppressed.StoredEmailId);
+
+        // The placement is spent, so a folder later renumbered onto the same UID is not attributed to this copy. The
+        // source removal stays unwritten, because a copy takes nothing out of the folder it read from.
+        var observed = mutationStore.RecordOf(record.Id);
+        Assert.Equal(clock.GetUtcNow(), observed.PlacementObservedAt);
+        Assert.Null(observed.SourceRemovalObservedAt);
+    }
+
+    /// <summary>Mail that arrives on its own is what rules exist for, so a discovery no record accounts for is withheld from nothing.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_MessageNoMutationAccountsFor_WithholdsNothing()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(10));
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+        sessionScopeFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(persistenceSession);
+        persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
+        await using var session = CreateSessionDiscovering(occurrence, uidValidity);
+        session
+            .FetchEmailContentWithoutSettingSeenAsync(occurrence, Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(RemoteEmailContentFetchResult.Retrieved(
+                new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]))));
+        var synchronizer = CreateSynchronizer(
+            CreateSessionFactoryFor(accountId, session),
+            CreateCheckpointStoreAt(accountId, uidValidity),
+            sessionScopeFactory,
+            metadataRepository: Substitute.For<IEmailMetadataRepository>(),
+            contentStore: Substitute.For<IEmailContentStore>(),
+            new FakeTimeProvider(new DateTimeOffset(2026, 8, 7, 12, 0, 0, TimeSpan.Zero)),
+            new MailboxSynchronizationOptions(),
+            mutationStore: new InMemoryMailboxMutationReconciliationStore());
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        Assert.Empty(result.SuppressedChanges);
     }
 
     /// <summary>An occurrence another local email already occupies is stored rather than carried, because only the mailbox could say which of the two is right.</summary>
@@ -1558,7 +1673,7 @@ public sealed class MailboxSynchronizerTests
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 31, 12, 0, 0, TimeSpan.Zero));
         var reconciliationStore = Substitute.For<IStoredEmailReconciliationStore>();
         IReadOnlyList<StoredEmailAwaitingReconciliation> window =
-            [new StoredEmailAwaitingReconciliation(storedEmailId, ImapUid.Create(10))];
+            [new StoredEmailAwaitingReconciliation(storedEmailId, ImapUid.Create(10), LastObservation: null)];
         reconciliationStore
             .GetReconciliationWindowAsync(accountId, folder.Id, uidValidity, Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(window));
@@ -1715,7 +1830,7 @@ public sealed class MailboxSynchronizerTests
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var reconciliationStore = Substitute.For<IStoredEmailReconciliationStore>();
         IReadOnlyList<StoredEmailAwaitingReconciliation> window =
-            [new StoredEmailAwaitingReconciliation(StoredEmailId.Create(Guid.CreateVersion7()), ImapUid.Create(10))];
+            [new StoredEmailAwaitingReconciliation(StoredEmailId.Create(Guid.CreateVersion7()), ImapUid.Create(10), LastObservation: null)];
         reconciliationStore
             .GetReconciliationWindowAsync(accountId, InboxFolder.Id, uidValidity, Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(window));
@@ -1797,6 +1912,26 @@ public sealed class MailboxSynchronizerTests
             LastFailure = null,
             PlacementObservedAt = null,
             SourceRemovalObservedAt = null,
+        };
+    }
+
+    /// <summary>Builds the record a copy into the folder under synchronization would have left, with the placement the server named.</summary>
+    private static MailboxMutationRecord CopyPlacedInInbox(
+        MailAccountId accountId,
+        StoredEmailId copiedEmailId,
+        ImapUidValidity placedUidValidity,
+        ImapUid placedUid)
+    {
+        var record = RelocationPlacedInInbox(accountId, copiedEmailId, placedUidValidity, placedUid);
+
+        return record with
+        {
+            Request = MailboxMutationRequest.Copy(
+                copiedEmailId,
+                record.Request.Occurrence,
+                record.Request.Requester,
+                InboxFolder.RemotePath),
+            RequiresSourceRemoval = false,
         };
     }
 

@@ -41,19 +41,34 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
 
         // Read first so the never-observed budget can be computed from how many previously observed emails actually
         // exist: a folder that has none must still fill its whole window with new mail rather than leave it empty.
+        // The previous reading of the \Seen flag travels with the candidate because a flag change is a comparison rather
+        // than a reading: the server reports what the flag is now, and only the earlier value and the moment it was
+        // taken say whether anybody moved it and whether a change MailFathom made could still be why.
         var previouslyObserved = await eligible
             .Where(email => email.RemoteFlagsObservedAt != null)
             .OrderBy(email => email.RemoteFlagsObservedAt)
             .ThenBy(email => email.Uid)
             .Take(maxEmailCount)
-            .Select(email => new { email.Id, email.Uid })
+            .Select(email => new
+            {
+                email.Id,
+                email.Uid,
+                ObservedAt = email.RemoteFlagsObservedAt,
+                email.IsRemotelySeen,
+            })
             .ToArrayAsync(cancellationToken);
 
         var neverObserved = await eligible
             .Where(email => email.RemoteFlagsObservedAt == null)
             .OrderBy(email => email.Uid)
             .Take(ReconciliationWindowBudget.NeverObservedShareOf(maxEmailCount, previouslyObserved.Length))
-            .Select(email => new { email.Id, email.Uid })
+            .Select(email => new
+            {
+                email.Id,
+                email.Uid,
+                ObservedAt = (DateTimeOffset?)null,
+                email.IsRemotelySeen,
+            })
             .ToArrayAsync(cancellationToken);
 
         return
@@ -62,7 +77,10 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
                 .Concat(previouslyObserved.Take(maxEmailCount - neverObserved.Length))
                 .Select(static candidate => new StoredEmailAwaitingReconciliation(
                     StoredEmailId.Create(candidate.Id),
-                    ImapUid.Create(candidate.Uid))),
+                    ImapUid.Create(candidate.Uid),
+                    candidate.ObservedAt is { } observedAt
+                        ? new RemoteSeenStateObservation(observedAt, candidate.IsRemotelySeen)
+                        : null)),
         ];
     }
 
