@@ -100,6 +100,9 @@ internal sealed class McpEndpointOptions
     /// <summary>Gets whether a client may authenticate with an access token from one of the configured authorization servers.</summary>
     public bool AllowsOAuth => this.OAuthMethods().Count > 0;
 
+    /// <summary>Gets whether a client may authenticate with an assertion signed by one of the configured public keys.</summary>
+    public bool AllowsClientAssertion => this.PublicKeys().Count > 0;
+
     /// <summary>Gets whether a request must present a credential naming who is calling.</summary>
     /// <remarks>
     /// A client certificate profile is not one of these. A certificate names the application making the request, which
@@ -170,6 +173,12 @@ internal sealed class McpEndpointOptions
     /// </remarks>
     public IReadOnlyList<ConfiguredSecret> ApiKeys() =>
         TransportAuthenticationConfiguration.ApiKeysIn(this.Authentication);
+
+    /// <summary>Reports every client public key a signed assertion may be verified against, in configuration order.</summary>
+    /// <returns>The configured public keys, empty when the endpoint accepts no assertion.</returns>
+    /// <remarks>A method rather than a property, for the reason <see cref="ApiKeys" /> is one.</remarks>
+    public IReadOnlyList<ConfiguredSecret> PublicKeys() =>
+        TransportAuthenticationConfiguration.PublicKeysIn(this.Authentication);
 
     /// <summary>Reports what an access token must prove, once per entry that states OAuth.</summary>
     /// <returns>The configured OAuth blocks, empty when the endpoint accepts no token.</returns>

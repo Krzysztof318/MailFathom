@@ -111,7 +111,8 @@ internal sealed class CredentialStore
             new Uri(credential.Endpoint, UriKind.Absolute),
             this.protector.Unprotect(credential.Token, credential.Endpoint),
             credential.Credential,
-            this.OpenSession(credential));
+            this.OpenSession(credential),
+            credential.KeyPair);
     }
 
     /// <summary>Settles which profile a command acts on, without opening its token.</summary>
@@ -152,10 +153,24 @@ internal sealed class CredentialStore
     /// <param name="token">The bearer credential, which is sealed before it is written.</param>
     /// <param name="credentialName">The name the deployment reported for the credential.</param>
     /// <param name="session">What an OAuth sign-in left behind, whose refresh token is sealed alongside the access token, or <see langword="null" /> for a presented credential.</param>
-    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <param name="keyPair">Where a key-pair profile's private key lives, or <see langword="null" /> when the profile stores a credential of its own.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="session" /> or <paramref name="keyPair" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the store cannot be written.</exception>
-    /// <remarks>Signing in makes the new profile the default, because it is the deployment the operator just chose to work with; <c>switch</c> is how that is changed without signing in again.</remarks>
-    internal void Save(string name, Uri endpoint, string token, string credentialName, OAuthSession? session = null)
+    /// <remarks>
+    /// Signing in makes the new profile the default, because it is the deployment the operator just chose to work with;
+    /// <c>switch</c> is how that is changed without signing in again.
+    /// <para>
+    /// A key-pair profile passes an empty token and it is sealed like any other, rather than left out of the envelope.
+    /// The file then has one shape whatever a profile holds, and reading one back needs no branch on which kind it is.
+    /// </para>
+    /// </remarks>
+    internal void Save(
+        string name,
+        Uri endpoint,
+        string token,
+        string credentialName,
+        OAuthSession? session = null,
+        StoredKeyPair? keyPair = null)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(endpoint);
@@ -169,7 +184,8 @@ internal sealed class CredentialStore
             address,
             this.protector.Protect(token, address),
             credentialName,
-            this.Seal(session, address));
+            this.Seal(session, address),
+            keyPair);
 
         this.Write(stored with { Default = name });
     }

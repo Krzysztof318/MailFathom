@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Common.ClientAssertions;
 using MailFathom.Common.OAuth;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.DataEncryption;
@@ -266,9 +267,134 @@ internal sealed partial class SecretConfigurationValidator
 
         errors.AddRange(await this.FindClientCertificateTrustAnchorErrorsAsync(candidate, cancellationToken));
         errors.AddRange(await this.FindUnreachableApiKeyErrorsAsync(candidate, cancellationToken));
+        errors.AddRange(await this.FindClientPublicKeyErrorsAsync(
+            McpEndpointOptions.SectionName,
+            candidate.Authentication,
+            cancellationToken));
 
         return errors;
     }
+
+    /// <summary>Finds everything an operator must fix before the administrative endpoint's secrets can be used.</summary>
+    /// <param name="candidate">The bound endpoint settings, which are read once during composition.</param>
+    /// <param name="cancellationToken">Cancels the resolution.</param>
+    /// <returns>One message per unusable setting, empty when the section's secrets are all usable.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A disabled endpoint configures no credentials worth proving, and validating them anyway would fail a host over
+    /// one nothing was going to read. The structural rules of the section are its own and run during composition; this
+    /// covers the secrets it carries, on exactly the terms every other section's secrets are covered.
+    /// </remarks>
+    internal async Task<IReadOnlyList<string>> FindAdminEndpointConfigurationErrorsAsync(
+        AdminEndpointOptions candidate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        if (!candidate.Enabled)
+        {
+            return [];
+        }
+
+        var errors = new List<string>(
+            await this.FindSecretReferenceErrorsAsync(AdminEndpointOptions.SectionName, candidate, cancellationToken));
+
+        errors.AddRange(await this.FindClientPublicKeyErrorsAsync(
+            AdminEndpointOptions.SectionName,
+            candidate.Authentication,
+            cancellationToken));
+
+        return errors;
+    }
+
+    /// <summary>Reads every configured client public key and reports the material no assertion could be verified against.</summary>
+    /// <remarks>
+    /// <para>
+    /// Resolving the reference is not enough, for the reason a trust anchor is loaded rather than merely resolved:
+    /// material that resolves but is not a public key would pass a reference check and then refuse every client the
+    /// entry exists to serve, which is exactly the failure startup validation exists to move forward.
+    /// </para>
+    /// <para>
+    /// One of the faults is worth more than an operator's time. Material carrying a private key parses cleanly and would
+    /// verify signatures correctly, so nothing about a running deployment would ever report it — while the host held the
+    /// one thing key-pair authentication exists to keep off it. That is the case this refusal is written for, and it is
+    /// named separately from every other kind of unusable material.
+    /// </para>
+    /// <para>
+    /// The key is named by its configuration position and by nothing else. The material never appears, and neither does
+    /// the name the operator gave it, because a message that named a key would be a message an unusable configuration
+    /// prints about a credential.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<string>> FindClientPublicKeyErrorsAsync(
+        string sectionName,
+        IList<TransportAuthenticationOptions> authentication,
+        CancellationToken cancellationToken)
+    {
+        var errors = new List<string>();
+
+        // The loop stays because each step awaits a retrieval, and the position is part of the reported path.
+        foreach (var (entryIndex, configuredKey) in authentication
+            .Index()
+            .Where(entry => entry.Item.PublicKey is not null)
+            .Select(entry => (entry.Index, Key: entry.Item.PublicKey!)))
+        {
+            var configurationPath =
+                $"{sectionName}:{TransportAuthenticationConfiguration.SettingName}:{entryIndex}:{nameof(TransportAuthenticationOptions.PublicKey)}";
+
+            var resolution = await this.secretReferenceResolver.ResolveAsync(
+                configuredKey.SecretReference,
+                cancellationToken);
+
+            // A reference that does not resolve is already reported by the reference check, which every section runs.
+            if (resolution.Secret is not { } material)
+            {
+                continue;
+            }
+
+            using (material)
+            {
+                if (DescribeUnusablePublicKey(material) is { } fault)
+                {
+                    errors.Add($"{configurationPath} — {fault}");
+                }
+            }
+        }
+
+        return errors;
+    }
+
+    /// <summary>Reports what is wrong with resolved public key material, or nothing when it is usable.</summary>
+    /// <remarks>The material is revealed into a pinned buffer and cleared here, on the same terms as every other reading of provisioned material in this process — which matters more than usual for the one case where what was provisioned turns out to be a private key.</remarks>
+    private static string? DescribeUnusablePublicKey(ResolvedSecret material)
+    {
+        var revealedText = GC.AllocateArray<char>(material.TextLength, pinned: true);
+
+        try
+        {
+            material.RevealTextInto(revealedText);
+
+            using var publicKey = ClientAssertionKeyMaterial.ReadPublicKey(revealedText, out var fault);
+
+            return publicKey is null ? DescribeKeyFault(fault) : null;
+        }
+        finally
+        {
+            revealedText.AsSpan().Clear();
+        }
+    }
+
+    private static string DescribeKeyFault(ClientAssertionKeyFault fault) => fault switch
+    {
+        ClientAssertionKeyFault.WrongHalf =>
+            "the material is a private key. This setting registers the public half of a client's key pair, and holding the private half is exactly what this deployment must not do; write the output of 'openssl pkey -in <key> -pubout' and keep the key itself on the client.",
+        ClientAssertionKeyFault.ModulusTooShort =>
+            $"the material is an RSA public key shorter than {ClientAssertionKeyMaterial.ShortestRsaModulusInBits} bits, which is not a signature this deployment accepts; generate the client a new key pair.",
+        ClientAssertionKeyFault.UnsupportedAlgorithm =>
+            "the material is a public key of a kind no permitted signature algorithm covers; generate the client an RSA or an elliptic-curve key pair over P-256, P-384, or P-521.",
+        _ =>
+            "the material is not a PEM public key; write the output of 'openssl pkey -in <key> -pubout', including its BEGIN and END lines.",
+    };
 
     /// <summary>Reports every configured API key that no request could ever authenticate with.</summary>
     /// <remarks>

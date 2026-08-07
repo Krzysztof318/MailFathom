@@ -77,16 +77,15 @@ internal static class McpTransportSecurityExtensions
         // A challenge is answered by one scheme whichever credential was presented, because a request that has nothing
         // to authenticate with has told us nothing about which kind of credential it was going to use. With OAuth turned
         // on that is the MCP scheme, whose challenge carries the metadata document a client needs to begin authorizing;
-        // otherwise it is the API key scheme's bare bearer challenge.
-        var challengeSchemeName = endpointSettings.AllowsOAuth
-            ? McpAuthenticationDefaults.AuthenticationScheme
-            : TransportSurface.Mcp.ApiKeySchemeName;
+        // otherwise it is a bare bearer challenge, from whichever of the two remaining schemes this endpoint registered.
+        var challengeSchemeName = ChallengeSchemeFor(endpointSettings);
 
         var oauthMethods = endpointSettings.OAuthMethods();
 
         var authentication = services.AddTransportAuthentication(
             TransportSurface.Mcp,
             endpointSettings.ApiKeys(),
+            endpointSettings.PublicKeys(),
             oauthMethods,
             challengeSchemeName);
 
@@ -97,6 +96,20 @@ internal static class McpTransportSecurityExtensions
         }
 
         return services;
+    }
+
+    /// <summary>Names the registered scheme that answers a request presenting no credential at all.</summary>
+    /// <remarks>It has to be a scheme this endpoint actually registered, or the challenge forwards to nothing. All three challenge with a bearer scheme, so which one answers decides what a client is told only in the OAuth case, where the challenge carries the metadata document.</remarks>
+    private static string ChallengeSchemeFor(McpEndpointOptions endpointSettings)
+    {
+        if (endpointSettings.AllowsOAuth)
+        {
+            return McpAuthenticationDefaults.AuthenticationScheme;
+        }
+
+        return endpointSettings.AllowsApiKey
+            ? TransportSurface.Mcp.ApiKeySchemeName
+            : TransportSurface.Mcp.ClientAssertionSchemeName;
     }
 
     /// <summary>Registers the scheme publishing the RFC 9728 document an MCP client discovers its authorization server through.</summary>

@@ -4,6 +4,7 @@
 
 using System.Security.Claims;
 using MailFathom.Host.Security.ApiKeys;
+using MailFathom.Host.Security.ClientAssertions;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Security.OAuth;
 using Xunit;
@@ -123,6 +124,21 @@ public sealed class TransportAccessPolicyTests
         Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ScopesRequiredOfTheIssuer()));
     }
 
+    /// <summary>
+    /// A client public key is a configured credential exactly as a key is: the operator registered it, and that
+    /// registration is the authorization. An assertion carries no scope and names no subject an authorization server
+    /// vouched for, so asking either of it would refuse every scheduled job the method exists to serve.
+    /// </summary>
+    [Fact]
+    public void IsAuthorized_AClientAssertionWhereScopesAndSubjectsAreRequired_IsAllowed()
+    {
+        // Arrange
+        var caller = ClientAssertionPrincipal("nightly-digest");
+
+        // Act, Assert
+        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ScopesRequiredOfTheIssuer("mailfathom.read")));
+    }
+
     /// <summary>The bypass follows what the principal carries rather than which scheme named it, so a token cannot claim it by naming a scheme.</summary>
     [Fact]
     public void IsAuthorized_ATokenAuthenticatedUnderTheApiKeySchemeName_StillHasItsScopesChecked()
@@ -168,4 +184,11 @@ public sealed class TransportAccessPolicyTests
             TransportSurface.Mcp.ApiKeySchemeName,
             ApiKeyAuthentication.ApiKeyNameClaimType,
             roleType: string.Empty));
+
+    private static ClaimsPrincipal ClientAssertionPrincipal(string publicKeyName) => new(
+        new ClaimsIdentity(
+            [new Claim(ClientAssertionAuthentication.KeyNameClaimType, publicKeyName)],
+            TransportSurface.Mcp.ClientAssertionSchemeName,
+            ClientAssertionAuthentication.KeyNameClaimType,
+            ClientAssertionAuthentication.RoleClaimType));
 }

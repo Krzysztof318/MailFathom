@@ -18,11 +18,14 @@ namespace MailFathom.Cli.Commands;
 /// which is the difference between signing in and writing a file. That holds whichever way the credential was obtained.
 /// </para>
 /// <para>
-/// Three modes, and which one runs is stated rather than guessed. <see cref="SignInMode.Key" /> reads one opaque
+/// Four modes, and which one runs is stated rather than guessed. <see cref="SignInMode.Key" /> reads one opaque
 /// credential from standard input, which is how an API key is presented and how a script signs in.
-/// <see cref="SignInMode.Interactive" /> and <see cref="SignInMode.Device" /> are OAuth: the command discovers where to
-/// authorize from the deployment itself, drives an authorization-code or device-code grant, and stores the session the
-/// server issued. Guessing between them would mean a machine with no browser sitting on a redirect that cannot arrive.
+/// <see cref="SignInMode.KeyPair" /> names a private key on this machine and stores no credential at all: every later
+/// command signs a fresh short-lived assertion with it, which is the mode a scheduled job wants, since the deployment
+/// then holds only the public half. <see cref="SignInMode.Interactive" /> and <see cref="SignInMode.Device" /> are
+/// OAuth: the command discovers where to authorize from the deployment itself, drives an authorization-code or
+/// device-code grant, and stores the session the server issued. Guessing between them would mean a machine with no
+/// browser sitting on a redirect that cannot arrive.
 /// </para>
 /// <para>
 /// Signing in makes the new profile the default, because it is the deployment the operator just chose to work with.
@@ -50,6 +53,9 @@ internal static class LoginCommand
 
         /// <summary>An OAuth sign-in the person completes on another device, needing no browser on this machine.</summary>
         Device = 2,
+
+        /// <summary>A private key on this machine, which every command signs a short-lived assertion with rather than presenting a stored credential.</summary>
+        KeyPair = 3,
     }
 
     /// <summary>Builds the <c>login</c> command.</summary>
@@ -65,8 +71,13 @@ internal static class LoginCommand
 
         Option<SignInMode> modeOption = new("--mode")
         {
-            Description = "How to sign in. Key reads an API key or an access token from standard input; interactive opens a browser here and catches the redirect; device prints a code to enter on another device.",
+            Description = "How to sign in. Key reads an API key or an access token from standard input; key-pair signs each request with a private key on this machine; interactive opens a browser here and catches the redirect; device prints a code to enter on another device.",
             DefaultValueFactory = _ => SignInMode.Key,
+        };
+
+        Option<string> privateKeyOption = new("--private-key")
+        {
+            Description = "The private key the key-pair mode signs with, whose public half the deployment registers. The key is not copied into the credential store; its path is remembered and it is read on every command.",
         };
 
         Option<string> clientIdOption = new("--client-id")
@@ -92,6 +103,7 @@ internal static class LoginCommand
             endpointOption,
             nameOption,
             modeOption,
+            privateKeyOption,
             clientIdOption,
             issuerOption,
             redirectUriOption,
@@ -103,6 +115,7 @@ internal static class LoginCommand
             result.GetValue(nameOption),
             new SignInRequest(
                 result.GetValue(modeOption),
+                result.GetValue(privateKeyOption),
                 result.GetValue(clientIdOption),
                 result.GetValue(issuerOption),
                 result.GetValue(redirectUriOption)),
@@ -122,16 +135,23 @@ internal static class LoginCommand
 
         using var transport = context.OpenTransport(endpoint);
 
-        var (token, session) = request.Mode == SignInMode.Key
-            ? (ReadPresentedCredential(context), null)
-            : await AuthorizeAsync(context, transport, request, cancellationToken);
+        var (token, session, keyPair) = await ProduceCredentialAsync(context, transport, request, cancellationToken);
 
         // Whichever way the credential arrived, the deployment is what decides it is usable. Storing one it has not
-        // accepted would turn a wrong client registration or a narrow scope into a failure at some later command.
+        // accepted would turn a wrong client registration or a narrow scope into a failure at some later command. For a
+        // key pair it also proves the deployment holds the matching public key, which nothing else on this machine can.
         var deploymentSession = await new AdminApiClient(transport).ReadSessionAsync(token, cancellationToken);
         var credentialName = deploymentSession.Credential ?? "unnamed";
 
-        context.Store.Save(profileName, endpoint, token, credentialName, session);
+        // The minted assertion is deliberately not the stored token: it is spent within the minute and every later
+        // command signs its own. What is stored for such a profile is where the key lives and nothing else.
+        context.Store.Save(
+            profileName,
+            endpoint,
+            keyPair is null ? token : string.Empty,
+            credentialName,
+            session,
+            keyPair);
 
         context.Console.WriteLine(
             $"Signed in to {endpoint.GetLeftPart(UriPartial.Authority)} as '{credentialName}' (MailFathom {deploymentSession.Version}), saved as profile '{profileName}' and selected.");
@@ -142,7 +162,58 @@ internal static class LoginCommand
                 "The access token is renewed for you until the refresh token expires or is revoked, and the sign-in ends when it does.");
         }
 
+        if (keyPair is not null)
+        {
+            context.Console.WriteError(
+                $"No credential was stored. Every command signs a short-lived assertion with the key at {keyPair.PrivateKeyPath}, so keep that file readable by this account alone and the sign-in lasts as long as the deployment accepts its public half.");
+        }
+
         return CliExitCode.Success;
+    }
+
+    /// <summary>Produces the credential this sign-in verifies, in whichever of the four ways the operator asked for.</summary>
+    /// <remarks>A key-pair sign-in returns both a credential to verify with and the key that produced it, because the two answer different questions: one proves the deployment accepts this client now, the other is what every later command will use.</remarks>
+    private static async Task<(string Token, OAuthSession? Session, StoredKeyPair? KeyPair)> ProduceCredentialAsync(
+        CliContext context,
+        HttpClient transport,
+        SignInRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Mode == SignInMode.Key)
+        {
+            return (ReadPresentedCredential(context), null, null);
+        }
+
+        if (request.Mode == SignInMode.KeyPair)
+        {
+            var keyPair = ReadKeyPair(request.PrivateKeyPath);
+
+            return (
+                ClientAssertionCredential.MintFor(keyPair.PrivateKeyPath, context.Clock.GetUtcNow()),
+                null,
+                keyPair);
+        }
+
+        var (token, session) = await AuthorizeAsync(context, transport, request, cancellationToken);
+
+        return (token, session, null);
+    }
+
+    /// <summary>Settles which private key a key-pair profile signs with.</summary>
+    /// <remarks>
+    /// The path is made absolute before it is stored, because a profile is used from whatever directory a later command
+    /// runs in — including a scheduled job's, which is rarely the one the operator signed in from. A relative path that
+    /// worked once would then fail with the key apparently missing.
+    /// </remarks>
+    private static StoredKeyPair ReadKeyPair(string? privateKeyPath)
+    {
+        if (privateKeyPath is not { Length: > 0 } path)
+        {
+            throw new CliFailure(
+                "A key-pair sign-in needs the private key to sign with. Pass --private-key <path>, whose public half the deployment registers.");
+        }
+
+        return new StoredKeyPair(Path.GetFullPath(path));
     }
 
     /// <summary>Reads the credential an operator presents directly.</summary>
@@ -347,11 +418,13 @@ internal static class LoginCommand
 
     /// <summary>What the operator asked of one sign-in, beyond which deployment it is against.</summary>
     /// <param name="Mode">How the credential is produced.</param>
+    /// <param name="PrivateKeyPath">The key a key-pair sign-in signs with, absent from every other mode.</param>
     /// <param name="ClientId">The client identifier for an OAuth sign-in, absent from a presented credential.</param>
     /// <param name="Issuer">Which authorization server to use, absent unless the deployment accepts several.</param>
     /// <param name="RedirectAddress">Where an interactive sign-in catches the redirect, absent to use the default.</param>
     private sealed record SignInRequest(
         SignInMode Mode,
+        string? PrivateKeyPath,
         string? ClientId,
         string? Issuer,
         string? RedirectAddress);

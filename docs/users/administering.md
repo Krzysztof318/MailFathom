@@ -95,7 +95,20 @@ token is then renewed for you until the sign-in genuinely ends, and how long tha
 [how long an OAuth sign-in lasts](../operations/admin-endpoint.md#how-long-an-oauth-sign-in-lasts) states the rule and
 the one setting that shortens it.
 
-What is stored afterwards is one small file per user, with the tokens encrypted and the key beside it;
+For a scheduled job there is a third way, and it is the one to prefer there. Generate a key pair, give the deployment
+the public half only, and sign in with the private one:
+
+```console
+$ mfctl login --endpoint https://mail.example.test:8443 --mode keypair --private-key ~/.config/MailFathom/production.key
+```
+
+Nothing reusable is stored and nothing reusable reaches the deployment: the command signs a fresh credential per
+request, each good for about a minute, and the only thing the service holds is a public key.
+[Signing in with a key pair](../operations/admin-endpoint.md#with-a-key-pair) has the `openssl` commands and the entry
+to add.
+
+What is stored afterwards is one small file per user, with the tokens encrypted and the key beside it — and for a
+key-pair profile, no credential at all;
 [where the credential is kept](../operations/admin-endpoint.md#where-the-credential-is-kept) states the paths, what
 the encryption does protect, and what it does not.
 

@@ -384,13 +384,14 @@ routing and listeners — while key and certificate material is read per request
 ### The accepted credentials — `McpEndpoint:Authentication:<n>`
 
 Each entry carries the block of whichever method judges it, and the block's presence is what selects that method — there
-is no separate setting naming it. As many entries may state either method as a deployment needs, and one entry may carry
-both blocks; the only entry that fails startup is one carrying neither, named by its position. Both endpoints take the
+is no separate setting naming it. As many entries may state any method as a deployment needs, and one entry may carry
+several blocks; the only entry that fails startup is one carrying none, named by its position. Both endpoints take the
 same entries; the administrative one adds a single rule, stated with it below.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `…:<n>:ApiKey` | secret block | — | One [named secret](secret-provisioning.md#the-secret-block) with its own `Lifetime`; a second key is a second entry | restart; material per request |
+| `…:<n>:PublicKey` | secret block | — | One [named secret](secret-provisioning.md#the-secret-block) with its own `Lifetime`, resolving to one client's PEM public key. Startup refuses material that is not one, an RSA key below 2048 bits, and — explicitly — material carrying a private key | restart; material per request |
 | `…:<n>:OAuth:Resource` | string | — | Required; the canonical `https` URL clients reach this endpoint at — behind a proxy, the proxy's public URL. Every OAuth entry names the same one, because the endpoint publishes one metadata document at an address derived from it | restart |
 | `…:<n>:OAuth:RequiredScopes` | string list | empty | Scopes a token from *this entry's* servers must carry; empty accepts any token they issued for this resource | restart |
 | `…:<n>:OAuth:AuthorizationServers:<m>:Name` | string | — | Required; the identity diagnostics use, and unique across every entry because it composes the scheme its validator registers under | restart |
@@ -399,8 +400,10 @@ same entries; the administrative one adds a single rule, stated with it below.
 | `…:<n>:OAuth:AuthorizationServers:<m>:AuthorizedSubjects` | string list | — | At least one; a token whose `sub` is not listed is refused, so every user the server can sign in does not automatically read this mailbox | restart |
 
 MailFathom is a protected resource only; an external authorization server signs users in.
-[`OAuth`](mcp-endpoint.md#oauth) records what a token must prove, and
-[API keys](mcp-endpoint.md#api-keys) what a key is compared against.
+[`OAuth`](mcp-endpoint.md#oauth) records what a token must prove,
+[API keys](mcp-endpoint.md#api-keys) what a key is compared against, and
+[Key pairs](mcp-endpoint.md#key-pairs) what a client signs and what the deployment verifies — including the audience,
+expiry, and replay identifier an assertion carries, none of which is a setting.
 
 ### Browser origins — `McpEndpoint:Cors`
 
@@ -495,7 +498,7 @@ request or per handshake. [Administering a deployment](admin-endpoint.md) is the
 | `AdminEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; binds the clear-text socket, which `HttpsOnly` does not open | restart |
 | `AdminEndpoint:Port` | int | `8080` | 1–65535. The MCP endpoint's default as well, so enabling both without stating a port publishes one shared socket — see [sharing a socket](#sharing-a-socket) | restart |
 | `AdminEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — the same setting the MCP endpoint carries, read the same way | restart |
-| `AdminEndpoint:Authentication` | list of credentials | empty | Same shape and rules as [`McpEndpoint:Authentication:<n>`](#the-accepted-credentials--mcpendpointauthenticationn), with one addition: every `OAuth` block's `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document | restart; material per request |
+| `AdminEndpoint:Authentication` | list of credentials | empty | Same shape and rules as [`McpEndpoint:Authentication:<n>`](#the-accepted-credentials--mcpendpointauthenticationn), with two additions: every `OAuth` block's `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document; and a client assertion presented here names the audience `urn:mailfathom:admin` rather than `urn:mailfathom:mcp` | restart; material per request |
 | `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`, read under the two `Transport` modes that terminate TLS | restart; material per handshake |
 | `AdminEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port`, so terminating TLS on both surfaces opens two clear-text ports that do not collide | restart |
 | `AdminEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as `McpEndpoint:RateLimiting` above; applied whether or not it is written | restart |

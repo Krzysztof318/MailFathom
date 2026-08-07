@@ -82,7 +82,8 @@ internal sealed partial class McpTransportAuthenticationWarning : IHostedService
         Level = LogLevel.Warning,
         Message = "The MCP endpoint is enabled on {McpEndpointPath} with no authentication method configured, so anything "
             + "that can reach this address can read the synchronized mailboxes. Add an entry to McpEndpoint:Authentication "
-            + "carrying an ApiKey block, an OAuth block, or one of each, unless the address is reachable only from this "
+            + "carrying an ApiKey block, a PublicKey block, an OAuth block, or any combination of them, unless the "
+            + "address is reachable only from this "
             + "machine or from a network you control. Neither an origin policy nor a client certificate substitutes for "
             + "this: the first restricts which page a browser will let call, the second names the application calling, and "
             + "neither identifies the person whose mail is served.")]

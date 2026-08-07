@@ -19,6 +19,12 @@ namespace MailFathom.Cli.Administration;
 /// An API key profile passes through untouched. Its credential has no expiry the command knows about — the deployment
 /// decides when a key stops working, and asks nothing of the command in the meantime.
 /// </para>
+/// <para>
+/// A key-pair profile is the opposite case and lands on the same seam: it stores no credential at all, so one is minted
+/// here from the private key it names, spent on this command's request, and forgotten. Doing it here rather than in each
+/// command is what keeps the difference invisible above this point — every command holds a profile with a usable token,
+/// whichever of the three ways it came by one.
+/// </para>
 /// </remarks>
 internal sealed class DeploymentAccess
 {
@@ -46,10 +52,20 @@ internal sealed class DeploymentAccess
     /// <param name="requestedDeployment">A profile name, an absolute address, or <see langword="null" /> to use the default.</param>
     /// <param name="cancellationToken">Cancels a renewal.</param>
     /// <returns>The profile, carrying a credential that has not expired.</returns>
-    /// <exception cref="CliFailure">Thrown when the operator is not signed in to what they named, or when the sign-in has ended.</exception>
+    /// <exception cref="CliFailure">Thrown when the operator is not signed in to what they named, when the sign-in has ended, or when a key-pair profile's private key is unreadable.</exception>
     internal async Task<SignedInProfile> ReachAsync(string? requestedDeployment, CancellationToken cancellationToken)
     {
         var profile = this.store.Resolve(requestedDeployment);
+
+        if (profile.KeyPair is { } keyPair)
+        {
+            return profile with
+            {
+                Token = ClientAssertionCredential.MintFor(
+                    keyPair.PrivateKeyPath,
+                    this.timeProvider.GetUtcNow()),
+            };
+        }
 
         return profile.Session is { } session && this.IsSpent(session)
             ? await this.RenewAsync(profile, session, cancellationToken)
