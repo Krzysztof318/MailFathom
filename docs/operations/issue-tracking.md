@@ -70,6 +70,16 @@ Several changes match more than one description — a defect in database wiring,
 
 The remaining labels are flags, applied only when they are true: `blocked` when an issue waits on something outside itself, `security` when a change needs a security review before it merges, `parent` on an issue whose sub-issues deliver one feature between them, `cross-milestone` on a parent issue whose children are spread across releases, for the reason the **Milestones** rules give, and `good first issue` or `help wanted` on work the project would rather someone else took. `shipped` is historical, marking the six issues written retrospectively for work that predates the roadmap; never apply it to new work.
 
+### `agent:claimed`
+
+`agent:claimed` says a session has this issue in hand. It is the one label that describes the session rather than the work, and it is applied at the moment work on the issue genuinely begins — the worktree is being made for it, the implementation is starting — by `$start-task`, at the step named there. Reading an issue is not taking it, so triage does not apply it, and neither does planning, estimating, or answering a question about one; a marker that meant *somebody looked at this* would be worth nothing to the reader it exists for.
+
+It is never removed. A session that ended is not a reason to clear it, and it stays through the close, so it reads as *a session has had this in hand* rather than as *a session is running now*. That is the weaker of the two claims and deliberately so: a label meaning the stronger one would be wrong from every session that stopped without clearing it, and nothing here would notice, whereas the weaker claim cannot go stale because what it records already happened.
+
+It answers none of the four questions above, which is what lets it stand beside them rather than duplicating one. `Status` is the lifecycle fact, the built-in workflows own it, and it moves when a pull request does; this moves hours earlier, when the work starts. The board is also private, so `Status` answers *where is this* for one reader while the label answers *is anyone on this* on a public issue list, without opening the issue and without the board. Nothing reads it in return — no workflow, script, or skill branches on it — so applying it by hand starts nothing and removing it stops nothing.
+
+Writing a label is write access to this repository, so this belongs to the owner's checkout with the `type:*` label and the milestone. An agent working from a fork does not apply it and nothing is missing when it does not: the session that eventually picks the issue up is the one that claims it.
+
 ## Milestones
 
 A milestone answers which release an issue ships in, and nothing else. Its name is a version number, so a milestone is never opened for a feature, a theme, or a date, and a body of work that spans releases is a parent issue rather than a milestone of its own. An issue with no milestone is deliberately outside the current release rather than merely unsorted, which is what makes the absence of one meaningful. The parent issue below is the one exception, and it carries the `cross-milestone` label so that it reads as one.

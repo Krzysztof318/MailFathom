@@ -189,13 +189,13 @@ worded as *does not exist* and is read as neither. One call, and the answer a
 
 What differs is narrow and is listed in both skills at the step it applies to,
 and it splits along those two facts. The repository decides the branch name and
-the linked worktree, the issue's label and milestone, and which remote is pushed
-to; the board probe decides the `Area`, `Queue`, and `Size` fields and the
-`Queue: Next` write when the pull request opens. A contributor the owner granted
-board write therefore places an issue exactly as the owner's checkout does while
-still not labelling it, which is the point of separating them. What does not
-differ is everything else, including both verification scripts, every gate, the
-pull request, and the `Closes #<issue>` reference.
+the linked worktree, every label the issue carries and its milestone, and which
+remote is pushed to; the board probe decides the `Area`, `Queue`, and `Size`
+fields and the `Queue: Next` write when the pull request opens. A contributor the
+owner granted board write therefore places an issue exactly as the owner's
+checkout does while still not labelling it, which is the point of separating
+them. What does not differ is everything else, including both verification
+scripts, every gate, the pull request, and the `Closes #<issue>` reference.
 
 The board write is the one that has to be reported carefully. Without write
 access it is not a gate that was skipped — a grant on the owner's board is theirs
@@ -270,8 +270,8 @@ The canonical skills are:
   installation to perform while nobody is looking;
 - `start-task` requires a clean workspace or an explicitly approved inventory
   and preservation plan, identifies or creates the GitHub issue that governs the
-  task and places it on the board, then loads the applicable specification,
-  documentation, and ADR context before edits;
+  task, places it on the board and claims it with `agent:claimed`, then loads the
+  applicable specification, documentation, and ADR context before edits;
 - `review-change` performs a findings-first diff review and records verification
   status and residual risks, and reruns the fast loop only when something has
   invalidated its last green run;
@@ -298,13 +298,14 @@ The canonical skills are:
 
 [Issue tracking and the roadmap board](issue-tracking.md) holds the issue rules
 themselves: which work needs an issue, what an issue body contains, the `type:*`
-label it carries, the `Area`, `Queue` and `Size` fields that place it on the
-board, the milestone that scopes it to a release, and which board transitions
-belong to the project automation rather than to an agent. It sits there rather
-than in root `AGENTS.md` because it is acted on twice per task and read by
-nothing else, so an always-loaded copy would cost every session that touches no
-issue. `start-task` and `finish-change` each name it at the step that writes the
-board. Placing an issue is part of opening it, because the built-in workflows set
+label it carries, the `agent:claimed` marker a session applies when it takes one,
+the `Area`, `Queue` and `Size` fields that place it on the board, the milestone
+that scopes it to a release, and which board transitions belong to the project
+automation rather than to an agent. It sits there rather than in root
+`AGENTS.md` because it is acted on twice per task and read by nothing else, so
+an always-loaded copy would cost every session that touches no issue.
+`start-task` and `finish-change` each name it at the step that writes the board.
+Placing an issue is part of opening it, because the built-in workflows set
 `Status` and nothing else.
 
 That same limit is why `Queue: Next` is written by a skill rather than by an
