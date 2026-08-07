@@ -59,7 +59,7 @@ public sealed class InsufficientScopeResultHandlerTests
 
     /// <summary>The other half of the same guarantee: a caller from the second entry reads that entry's scopes rather than the first's.</summary>
     [Fact]
-    public async Task HandleAsync_ATokenFromTheOtherIssuer_NamesTheOtherEntrysScopes()
+    public async Task HandleAsync_ATokenFromTheOtherIssuer_NamesTheScopesOfThatEntry()
     {
         // Arrange
         var handler = HandlerForTwoIssuers();
