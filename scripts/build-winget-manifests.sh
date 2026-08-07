@@ -110,17 +110,24 @@ YAML
 
 # `ManifestType: defaultLocale` — everything `winget show` renders. The URLs point at the documentation site rather than
 # at the repository, because somebody reading a package listing wants the readable form.
+#
+# `PackageName` is the name `winget search` and `winget list` print in their `Name` column, so it carries the product
+# rather than the command: a row reading `mfctl` tells somebody scanning a listing nothing about what they found. The
+# command name reaches them by the two routes winget has for it — `Moniker`, which is what `winget install mfctl`
+# resolves, and `Commands` in the installer manifest, which is what puts `mfctl` on the `PATH`. `Publisher` names the
+# project rather than the person for the same reason the identifier's first segment does: winget's convention is
+# `Publisher.Package`, and the two are read together. `Author` is where the person stays.
 cat > "$package_directory/$package_identifier.locale.en-US.yaml" << YAML
 # yaml-language-server: \$schema=https://aka.ms/winget-manifest.defaultLocale.$manifest_schema_version.schema.json
 
 PackageIdentifier: $package_identifier
 PackageVersion: $package_version
 PackageLocale: en-US
-Publisher: Krzysztof Kasprowicz
-PublisherUrl: https://github.com/Krzysztof318
+Publisher: MailFathom
+PublisherUrl: https://krzysztof318.github.io/MailFathom/
 PublisherSupportUrl: https://github.com/Krzysztof318/MailFathom/issues
 Author: Krzysztof Kasprowicz
-PackageName: mfctl
+PackageName: MailFathom CLI
 PackageUrl: https://github.com/Krzysztof318/MailFathom
 License: Apache-2.0
 LicenseUrl: https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE

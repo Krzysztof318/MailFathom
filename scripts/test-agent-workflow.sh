@@ -2618,6 +2618,33 @@ winget_manifests_name_the_release_assets_they_hash() {
   fi
 }
 
+# What a Windows operator sees before they install anything: `winget search` prints `PackageName` in its `Name` column
+# and the identifier beside it, so the name has to carry the product while the command reaches them through `Moniker`
+# and `Commands`. Naming the command in both places instead would leave a listing that says `mfctl` and nothing else.
+winget_manifest_names_the_product_and_the_command() {
+  local binaries_directory="$test_directory/winget-listing-binaries"
+  local output_directory="$test_directory/winget-listing-output"
+  local package_directory="$output_directory/manifests/m/MailFathom/mfctl/9.9.9"
+  local locale_manifest="$package_directory/MailFathom.mfctl.locale.en-US.yaml"
+
+  mkdir -p "$binaries_directory"
+  printf 'x64 bytes' > "$binaries_directory/mfctl-9.9.9-win-x64.exe"
+  printf 'arm64 bytes' > "$binaries_directory/mfctl-9.9.9-win-arm64.exe"
+
+  (
+    cd "$source_repository_root"
+    bash scripts/build-winget-manifests.sh "$binaries_directory" "$output_directory" '9.9.9' '2026-01-02'
+  ) > /dev/null 2>&1
+
+  assert_contains 'PackageName: MailFathom CLI' "$locale_manifest"
+  assert_contains 'Moniker: mfctl' "$locale_manifest"
+
+  # winget's own convention is `Publisher.Package`, and a submission whose `Publisher` disagrees with the identifier it
+  # is filed under is a question somebody else's reviewer asks days later.
+  assert_contains 'PackageIdentifier: MailFathom.mfctl' "$locale_manifest"
+  assert_contains 'Publisher: MailFathom' "$locale_manifest"
+}
+
 # A manifest naming a download that does not exist is refused by winget's validation days later, in a pull request
 # nobody is watching. Failing while the release run is still on screen is the difference worth having.
 winget_manifests_refuse_a_missing_windows_binary() {
@@ -3253,6 +3280,7 @@ run_test release_tag_assertion_refuses_a_version_already_released_on_its_line
 run_test release_tag_assertion_refuses_an_empty_changelog_section
 run_test changelog_section_reading_returns_only_the_requested_release
 run_test winget_manifests_name_the_release_assets_they_hash
+run_test winget_manifest_names_the_product_and_the_command
 run_test winget_manifests_refuse_a_missing_windows_binary
 run_test every_external_action_names_an_approved_owner
 run_test every_workflow_job_declares_its_permissions
