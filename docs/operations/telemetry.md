@@ -28,36 +28,23 @@ says the same thing every time — tracing it would fill a trace store with poll
 
 ## What MailFathom publishes under its own name
 
-Everything above arrives from a library. MailFathom also owns a set of names of its own, one per subsystem, and the
-same name serves as both an activity source and a meter — the two are separate registries to OpenTelemetry and cannot
-collide, so a subsystem that publishes spans and instruments does so under one string rather than two that could drift
-apart:
+Everything above arrives from a library. MailFathom publishes under a name of its own, and there is exactly one of
+them: **`MailFathom`**. It serves as both an activity source and a meter — the two are separate registries to
+OpenTelemetry and cannot collide, so spans and instruments go under one string rather than two that could drift apart.
 
-| Name | The subsystem it describes |
-| --- | --- |
-| `MailFathom.Mail` | Mailbox work: IMAP sessions, folder reconciliation, synchronization runs, and mutations |
-| `MailFathom.Mcp` | The MCP surface: tool calls and the protocol boundary that serves them |
-| `MailFathom.Persistence` | Local storage: the email content store and the write sessions around it |
-| `MailFathom.Extraction` | Mail text extraction and the backfill that reprocesses what earlier runs left |
+One name is what an operator filters a dashboard on to see everything this process owns and nothing a library emits. No
+subsystem has a name of its own, and none gets one until there is something a name is the right way to tell apart:
+which subsystem a signal came from is already carried by the span or instrument name and by its tags, and a distinction
+added there costs an operator nothing, while a second registration is one more thing to subscribe to before anything is
+collected. The host subscribes the declared name and only that name, so a publisher that invented one of its own would
+be collected by nothing — which is a failing test here rather than a silently empty stream.
 
-The name is decided by the subsystem, never by the feature that happens to emit first and never by the assembly the
-code sits in — that is what an operator filters a dashboard on, and what survives a type moving between projects. The
-shared `MailFathom.` prefix is what lets one filter select everything this process owns and nothing a library emits.
-All four are subscribed by the host together, from one declaration, so a name that exists without being collected is a
-failing test rather than a silently empty stream. Instruments that are collected in aggregate come from the meter
-factory the owning service is given, rather than from a process-wide instance, which is what keeps them observable in a
-test.
-
-The names are the contract; what publishes to each one is documented with the subsystem that does it. The first-party
-spans and instruments are being added subsystem by subsystem, so a dashboard filtered to `MailFathom.` shows only what
-has been instrumented so far, and three of the four names are still quiet.
-
-`MailFathom.Mail` is the one that carries something today: every change MailFathom makes to a remote mailbox opens a
-span named after the mutation, and is counted along with how long it took, broken down by the mutation, the account,
-the folder alias, and whether it succeeded. It is deliberately **not** broken down by which IMAP commands carried the
-change — a relocation is one operation whether the server offered RFC 6851 `MOVE` or the copy-flag-expunge sequence was
-used instead, and a dimension telling the two apart is exactly what would make a missing server extension look like a
-different operation on a dashboard. Which path ran is in the debug log.
+What publishes to that name is documented with the subsystem that does it, and today one subsystem does. Every change
+MailFathom makes to a remote mailbox opens a span named after the mutation, and is counted along with how long it took,
+broken down by the mutation, the account, the folder alias, and whether it succeeded. It is deliberately **not** broken
+down by which IMAP commands carried the change — a relocation is one operation whether the server offered RFC 6851
+`MOVE` or the copy-flag-expunge sequence was used instead, and a dimension telling the two apart is exactly what would
+make a missing server extension look like a different operation on a dashboard. Which path ran is in the debug log.
 
 What such a signal may carry is bounded by the same rule that governs the log lines, and it is a cardinality rule as
 much as a privacy one. Counts, sizes, durations, outcomes, error codes, and MailFathom's own configured account and

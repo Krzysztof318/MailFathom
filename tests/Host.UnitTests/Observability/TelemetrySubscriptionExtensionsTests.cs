@@ -9,16 +9,16 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Observability;
 
-/// <summary>Covers that every name MailFathom declares for itself is actually collected.</summary>
+/// <summary>Covers that the name MailFathom declares for itself is actually collected.</summary>
 /// <remarks>
 /// The failure this guards against is silent in production: a subsystem publishes spans to a source nothing subscribed,
-/// the code looks instrumented, and the trace store holds nothing. Asserting the subscribed set against the declaration
-/// is what makes a name added to one and forgotten in the other a failing test rather than a quiet gap.
+/// the code looks instrumented, and the trace store holds nothing. Asserting the subscribed name against the
+/// declaration is what makes the host and the publishers disagreeing a failing test rather than a quiet gap.
 /// </remarks>
 public sealed class TelemetrySubscriptionExtensionsTests
 {
     [Fact]
-    public void AddMailFathomActivitySources_SubscribesEveryDeclaredName()
+    public void AddMailFathomActivitySources_SubscribesTheDeclaredName()
     {
         // Arrange
         var tracing = new RecordingTracerProviderBuilder();
@@ -27,11 +27,11 @@ public sealed class TelemetrySubscriptionExtensionsTests
         tracing.AddMailFathomActivitySources();
 
         // Assert
-        Assert.Equal(MailFathomTelemetry.All, tracing.SubscribedSources);
+        Assert.Equal([MailFathomTelemetry.Name], tracing.SubscribedSources);
     }
 
     [Fact]
-    public void AddMailFathomMeters_SubscribesEveryDeclaredName()
+    public void AddMailFathomMeters_SubscribesTheDeclaredName()
     {
         // Arrange
         var metrics = new RecordingMeterProviderBuilder();
@@ -40,7 +40,7 @@ public sealed class TelemetrySubscriptionExtensionsTests
         metrics.AddMailFathomMeters();
 
         // Assert
-        Assert.Equal(MailFathomTelemetry.All, metrics.SubscribedMeters);
+        Assert.Equal([MailFathomTelemetry.Name], metrics.SubscribedMeters);
     }
 
     [Fact]

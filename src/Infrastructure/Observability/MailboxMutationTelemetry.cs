@@ -39,15 +39,15 @@ public sealed partial class MailboxMutationTelemetry : IDisposable
 {
     /// <summary>The meter the mutation counts and durations are published to.</summary>
     /// <remarks>
-    /// A mutation is mailbox work, so it publishes under the name the mailbox subsystem already has rather than under
-    /// one of its own. Which mutation ran is a tag, not a second name: an operator watching mail work should not have
-    /// to know that relocations were instrumented before synchronization was in order to see them.
+    /// The application's one name rather than a name for this feature. Which mutation ran, and where, is already
+    /// carried by the span name and the tags below, so a second registration would only split what an operator has to
+    /// subscribe to without telling them anything the signal does not already say.
     /// </remarks>
-    public const string MeterName = MailFathomTelemetry.Mail;
+    public const string MeterName = MailFathomTelemetry.Name;
 
     /// <summary>The activity source the mutation spans are published to.</summary>
     /// <remarks>Shares <see cref="MeterName" />'s name, because the two registries cannot collide.</remarks>
-    public const string ActivitySourceName = MailFathomTelemetry.Mail;
+    public const string ActivitySourceName = MailFathomTelemetry.Name;
 
     private const string MutationTagName = "mailfathom.mailbox.mutation";
     private const string AccountTagName = "mailfathom.mail.account";
