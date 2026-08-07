@@ -42,13 +42,6 @@ internal static class AdminProtectedResourceMetadataEndpoint
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentNullException.ThrowIfNull(oauthMethods);
 
-        if (oauthMethods.Count == 0)
-        {
-            throw new ArgumentException(
-                "A protected resource metadata document describes the configured OAuth methods, and none was configured.",
-                nameof(oauthMethods));
-        }
-
         var document = ProtectedResourceMetadataDocument.For(oauthMethods);
 
         endpoints.MapGet(
@@ -81,23 +74,19 @@ internal sealed record ProtectedResourceMetadataDocument(
     /// <returns>The document.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="oauthMethods" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// One document however many entries are configured, because it describes one protected resource and is published at
-    /// an address derived from that resource's identifier. Every entry names the same resource, which configuration
-    /// validation is what guarantees, so the resource comes from the first and the two lists carry what all of them
-    /// accept: every configured issuer, and every scope any entry asks for.
+    /// What the entries publish between them is <see cref="PublishedOAuthMetadata" />'s to decide, because the MCP
+    /// endpoint publishes the same document through the protocol SDK's own type and the two must not answer differently
+    /// from one configuration. What is this record's own is the wire shape: the JSON names RFC 9728 fixes, and the
+    /// bearer method and resource name that are constants rather than settings.
     /// </remarks>
     internal static ProtectedResourceMetadataDocument For(IReadOnlyList<OAuthValidationOptions> oauthMethods)
     {
-        ArgumentNullException.ThrowIfNull(oauthMethods);
+        var published = PublishedOAuthMetadata.For(oauthMethods);
 
         return new ProtectedResourceMetadataDocument(
-            oauthMethods[0].CanonicalResource(),
-            [
-                .. oauthMethods
-                    .SelectMany(oauthMethod => oauthMethod.AuthorizationServers)
-                    .Select(authorizationServer => authorizationServer.ValidatedIssuer()),
-            ],
-            [.. oauthMethods.SelectMany(oauthMethod => oauthMethod.RequiredScopes).Distinct(StringComparer.Ordinal)],
+            published.Resource,
+            published.AuthorizationServers,
+            published.ScopesSupported,
             ["header"],
             "MailFathom");
     }

@@ -101,39 +101,32 @@ internal static class McpTransportSecurityExtensions
 
     /// <summary>Registers the scheme publishing the RFC 9728 document an MCP client discovers its authorization server through.</summary>
     /// <remarks>
-    /// One document however many entries are configured, because the document describes one protected resource and is
-    /// published at an address derived from that resource's identifier. Every entry names the same resource, which
-    /// configuration validation is what guarantees, so the document composes from the first and lists what all of them
-    /// accept: every configured issuer, and every scope any entry asks for.
+    /// What the configured entries publish between them is <see cref="PublishedOAuthMetadata" />'s to decide, because
+    /// the administrative endpoint publishes the same document through a record of this repository's own and the two
+    /// must not answer differently from one configuration. What is the SDK's own is the type this fills in.
     /// </remarks>
     private static void AddProtectedResourceMetadataScheme(
         AuthenticationBuilder authentication,
-        IReadOnlyList<OAuthValidationOptions> oauthMethods) =>
+        IReadOnlyList<OAuthValidationOptions> oauthMethods)
+    {
+        var published = PublishedOAuthMetadata.For(oauthMethods);
+
         authentication.AddMcp(mcpOptions =>
         {
-            var resource = oauthMethods[0].CanonicalResource();
-
             // Absolute and configured, never derived from the request. Left unset, the SDK composes both this address
             // and the resource it advertises from the request's scheme and Host header, so a deployment behind a proxy
             // would tell each client to authenticate for whichever name that client arrived under.
-            mcpOptions.ResourceMetadataUri = new Uri(ProtectedResourceMetadataAddress.AddressFor(resource));
+            mcpOptions.ResourceMetadataUri = new Uri(ProtectedResourceMetadataAddress.AddressFor(published.Resource));
             mcpOptions.ResourceMetadata = new ProtectedResourceMetadata
             {
-                Resource = resource,
-                AuthorizationServers =
-                [
-                    .. oauthMethods
-                        .SelectMany(oauthMethod => oauthMethod.AuthorizationServers)
-                        .Select(server => server.ValidatedIssuer()),
-                ],
-                ScopesSupported =
-                [
-                    .. oauthMethods.SelectMany(oauthMethod => oauthMethod.RequiredScopes).Distinct(StringComparer.Ordinal),
-                ],
+                Resource = published.Resource,
+                AuthorizationServers = [.. published.AuthorizationServers],
+                ScopesSupported = [.. published.ScopesSupported],
                 BearerMethodsSupported = ["header"],
                 ResourceName = "MailFathom",
             };
         });
+    }
 
     /// <summary>Registers the refusal that names the scope an authenticated token was missing.</summary>
     /// <remarks>
