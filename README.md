@@ -6,13 +6,33 @@
 
 **A brain for your mail — self-hosted, AI-native, and yours alone.**
 
-A mailbox is the largest archive most people own and the least usable one. Contracts, decisions, invoices, threads that ended without a conclusion, attachments nobody will ever find again: all of it is in there, and none of it is reachable except by scrolling. Mail clients are built to show you the newest of it, one message at a time. After twenty years of accumulation, that is the wrong shape entirely.
+MailFathom synchronizes your IMAP accounts into a PostgreSQL database you run, indexes that copy, and serves it to AI agents as read-only tools over the [Model Context Protocol](https://modelcontextprotocol.io/). Reading answers from your copy rather than from a mail server, and nothing is ever marked read on the server.
 
-MailFathom is being built to change what mail *is* to software. It synchronizes your IMAP accounts into a PostgreSQL database you run, keeps that copy current, indexes it so the whole of it is reachable rather than only its most recent slice, and serves it to AI agents as tools over the [Model Context Protocol](https://modelcontextprotocol.io/). The destination is a mail brain: something an agent can put a question to and get an answer from, working across years of mail, on infrastructure that belongs to you.
+![A chat client asked to show the latest mail, answered with a table of the ten most recent messages, their receipt times, and the moment the local copy was last synchronized](https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/mcp-tools/list-recent-emails.png)
 
-MCP is how agents reach MailFathom; it is not what MailFathom is. The protocol surface is deliberately thin, and the project is building what sits behind it — continuous synchronization, extracted and indexed content, lexical search today, semantic retrieval and question answering next, and eventually the ability to act on your mail rather than only read it. [Where it is going](https://github.com/Krzysztof318/MailFathom#where-it-is-going) is the current direction in full.
+*One question, answered from the local copy in an ordinary chat client. The `***` in these screenshots were blacked out by hand before the files entered a public repository — MailFathom redacts nothing on its way to a client.*
 
-None of it depends on somebody else's service. The copy is yours, the database is yours, the deployment is yours, and the AI capabilities on the roadmap arrive as providers you choose and point at rather than as ones compiled into the product.
+## Install
+
+**Docker Compose is the recommended first installation.** It is the only shape that provisions PostgreSQL for you, and its defaults publish both ports on loopback, so nothing is reachable from another machine until you decide it should be.
+
+```bash
+git clone https://github.com/Krzysztof318/MailFathom.git
+cd MailFathom
+```
+
+From there, [installing MailFathom](https://krzysztof318.github.io/MailFathom/users/installation.html) covers what every shape needs — Linux, PostgreSQL with the `vector` extension, an IMAP account, an explicit schema step — and routes you to the guide for Compose, Kubernetes, or a native systemd process. [Getting started](https://krzysztof318.github.io/MailFathom/users/getting-started.html) then walks from an installed instance to a first successful tool call: provisioning the secrets, configuring a mailbox, applying the schema, verifying health, enabling the MCP endpoint, and connecting a client.
+
+To evaluate MailFathom from the checkout instead of deploying it, the local Aspire orchestration provisions PostgreSQL and applies the schema on its own. [Local development](https://krzysztof318.github.io/MailFathom/operations/local-development.html#running-locally-with-aspire) has that path.
+
+## Start here
+
+| You are | Start at |
+| --- | --- |
+| Deciding whether MailFathom is for you | [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) below, then [the user guide](https://krzysztof318.github.io/MailFathom/users/README.html) |
+| Installing or operating it | [Installing MailFathom](https://krzysztof318.github.io/MailFathom/users/installation.html), then [getting started](https://krzysztof318.github.io/MailFathom/users/getting-started.html) |
+| Connecting an agent to a running instance | [Using the tools](https://krzysztof318.github.io/MailFathom/users/usage.html) |
+| Contributing | [CONTRIBUTING.md](https://github.com/Krzysztof318/MailFathom/blob/main/CONTRIBUTING.md) |
 
 ## What exists today
 
@@ -31,55 +51,24 @@ What an agent gets is three tools, and they are the whole surface:
 | `search_emails` | Ranked matches for a text query across subjects, participants, and body text, each with short extracts around what matched |
 | `get_email_content` | Up to ten messages in full: normalized headers, plain-text body, optionally sanitized HTML, and attachment names, types, and sizes — never attachment bytes |
 
+The screenshot at the top of this page is `list_emails`. The other two tools, answering the same client over the same mailbox:
+
+![A search for the word confirmation, answered with three ranked matches, each carrying the fragment of the message that matched](https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/mcp-tools/search-emails.png)
+
+![One message opened by subject, answered with its sender, recipient, timestamps, folder, attachment state, and full plain-text body](https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/mcp-tools/read-email-content.png)
+
 A connected agent can list, read, and search your mail. It cannot send, delete, move, or mark anything, because no such tool exists on the surface. That describes this stage rather than a permanent limit: writing is on the roadmap, starting with sending, and each write capability will arrive as its own tool behind a reviewed authorization and confirmation flow — never as a setting that loosens a tool you already trust.
-
-## Start here
-
-| You are | Start at |
-| --- | --- |
-| Deciding whether MailFathom is for you | [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) below, then [the user guide](https://krzysztof318.github.io/MailFathom/users/README.html) |
-| Installing or operating it | [Installing MailFathom](https://krzysztof318.github.io/MailFathom/users/installation.html), then [getting started](https://krzysztof318.github.io/MailFathom/users/getting-started.html) |
-| Connecting an agent to a running instance | [Using the tools](https://krzysztof318.github.io/MailFathom/users/usage.html) |
-| Contributing | [CONTRIBUTING.md](https://github.com/Krzysztof318/MailFathom/blob/main/CONTRIBUTING.md) |
 
 ## Project status
 
-`0.3.0` is the current release. It builds on `0.2.0` — OAuth mailbox authentication, push synchronization, and the administrative endpoint an operator reaches with the `mfctl` command — with the things that stand in front of the service: a trusted reverse proxy the public scheme and host are read from, a clear-text listener that redirects to HTTPS on both endpoints, and rate limiting on the administrative surface. Its database schema is `0.2.0`'s, so upgrading from `0.2.0` is a new image and no schema step. It ships as a container image, a Helm chart, the SQL script that creates the schema it expects, and an `mfctl` binary per platform — [where the artifacts are published](https://github.com/Krzysztof318/MailFathom#where-the-artifacts-are-published) has the references. There is no binary artifact for the service itself, so a native installation starts from a checkout of this repository. [The changelog](https://krzysztof318.github.io/MailFathom/CHANGELOG.html) states what the release promises across the MCP tool contract, the configuration schema, the database schema, and the deployment contract.
+`0.3.0` is the current release, and it builds on `0.2.0` — OAuth mailbox authentication, push synchronization, and the administrative endpoint an operator reaches with the `mfctl` command.
+
+- **What it adds** is what stands in front of the service: a trusted reverse proxy the public scheme and host are read from, a clear-text listener that redirects to HTTPS on both endpoints, and rate limiting on the administrative surface.
+- **Upgrading from `0.2.0`** is a new image and no schema step, because its database schema is `0.2.0`'s.
+- **What it ships** is a container image, a Helm chart, the SQL script that creates the schema it expects, and an `mfctl` binary per platform — [where the artifacts are published](https://github.com/Krzysztof318/MailFathom#where-the-artifacts-are-published) has the references. There is no binary artifact for the service itself, so a native installation starts from a checkout of this repository.
+- **What it promises** across the MCP tool contract, the configuration schema, the database schema, and the deployment contract is stated in [the changelog](https://krzysztof318.github.io/MailFathom/CHANGELOG.html).
 
 Nightly images are built from `main` and published to both registries alongside the releases. A nightly is not a release: its schema can be ahead of any published migration, it has no upgrade path in either direction, and it is deleted once newer ones accumulate. [What a nightly build risks](https://krzysztof318.github.io/MailFathom/operations/container-image.html#what-a-nightly-build-risks) states the whole of it before you choose one.
-
-## What it does well
-
-MailFathom is built as an enterprise-grade system from the first line, even while its feature scope is still small. Every claim below is a property of the code and the deployment assets today, and each links to the page that documents it.
-
-**Nothing on the surface writes, and no setting changes that.** The MCP surface is three tools — `list_emails`, `get_email_content`, `search_emails` — and that is all of it. There is no write tool to enable, and synchronization is incapable of marking remote mail as read. Attachment bytes are never returned; a content read reports names, types, and sizes. → [MCP tools](https://krzysztof318.github.io/MailFathom/features/mcp-tools.html)
-
-**Secure by default, and explicit about every weakening.** The MCP endpoint is off until you enable it, and enabling it means stating whether it requires an API key or nothing at all; the unauthenticated posture is legal, announced with a startup warning, and never the default. Client certificates and per-client rate limits are part of the endpoint rather than something a proxy has to add. IMAP is TLS-on-connect by default, a private certificate authority is trusted rather than validation disabled, and a configuration that weakens the transport or sends a clear-text credential fails startup unless it says so explicitly. → [The MCP endpoint](https://krzysztof318.github.io/MailFathom/operations/mcp-endpoint.html), [transport security](https://krzysztof318.github.io/MailFathom/features/imap-synchronization.html#transport-security)
-
-**Credentials never live in configuration.** A secret-bearing setting holds a *reference* — a file path, a systemd credential, an environment variable — and the material lives wherever the deployment provisions it. A configuration file is therefore safe to review, diff, and back up: leaking it leaks paths, not passwords. → [Secret provisioning](https://krzysztof318.github.io/MailFathom/operations/secret-provisioning.html), [rotation](https://krzysztof318.github.io/MailFathom/operations/secret-rotation.html)
-
-**Mail is handled as personal data by the code that touches it.** Content, metadata, extracted text, and search extracts are never written to a log, never carried in an error message, and bounded per call — at most 100 summaries in a page, 50 ranked matches in a search, a configured character bound on a body — so a deployment can decide how much mail a single call may draw out. That is the part software can settle. Whether a deployment satisfies GDPR depends on how you run it: where the database sits, who reaches it, how long you keep mail, and which model an agent hands a result to. What MailFathom offers is an architecture that keeps those choices open rather than one that has already made them badly, including explicit seams for the data-subject workflows a later release implements. → [Using the tools](https://krzysztof318.github.io/MailFathom/users/usage.html)
-
-**It fails fast and says why.** Startup resolves every secret reference and verifies the database schema before the process serves anything, and a refusal names the configuration key or the pending migration that caused it. Migrations are never applied while starting, in any environment — applying is a step you take, with a backup first. Three probes answer on a listener of their own, and telemetry is OpenTelemetry, exported only where you point it. → [Health endpoints](https://krzysztof318.github.io/MailFathom/operations/health-endpoints.html), [configuration reference](https://krzysztof318.github.io/MailFathom/operations/configuration-reference.html), [telemetry](https://krzysztof318.github.io/MailFathom/operations/telemetry.html)
-
-**The deployment assets are hardened, not illustrative.** The image is chiseled — no shell, no package manager, no HTTP client — runs as an unprivileged user on a read-only root filesystem with every Linux capability dropped, creates no diagnostic socket, and carries no tool that could apply a migration. Docker Compose and the Helm chart both ship that posture by default, and the chart meets the Restricted Pod Security Standard. → [The container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html), [Compose](https://krzysztof318.github.io/MailFathom/operations/deployment-compose.html), [Kubernetes](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html)
-
-**The supply chain is verifiable.** Images are multi-architecture, built from base images pinned to an exact patch version, scanned before publication, and accompanied by signed build provenance that ties a digest to the commit and workflow that produced it. Package versions are pinned centrally with committed lock files, and every third-party component is reviewed against a licensing policy that keeps the project commercially redistributable. → [Verification](https://krzysztof318.github.io/MailFathom/operations/container-image.html#verification), [THIRD_PARTY_LICENSES.md](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md)
-
-**It is built to be maintained.** A .NET 10 clean-architecture modular monolith with enforced boundaries between domain, application, infrastructure, protocol, and host; compiler and analyzer diagnostics are errors; every behavior change ships with tests; and the decisions that shape the system are recorded as ADRs rather than remembered. → [Solution structure](https://krzysztof318.github.io/MailFathom/architecture/solution-structure.html), [decisions](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/README.md)
-
-## Getting started
-
-The recommended first installation is **Docker Compose**. It is the only shape that provisions PostgreSQL for you, and its defaults publish both ports on loopback, so nothing is reachable from another machine until you decide it should be.
-
-```bash
-git clone https://github.com/Krzysztof318/MailFathom.git
-cd MailFathom
-```
-
-From there, [installing MailFathom](https://krzysztof318.github.io/MailFathom/users/installation.html) covers what every shape needs — Linux, PostgreSQL with the `vector` extension, an IMAP account, an explicit schema step — and routes you to the guide for Compose, Kubernetes, or a native systemd process. [Getting started](https://krzysztof318.github.io/MailFathom/users/getting-started.html) then walks from an installed instance to a first successful tool call: provisioning the secrets, configuring a mailbox, applying the schema, verifying health, enabling the MCP endpoint, and connecting a client.
-
-To evaluate MailFathom from the checkout instead of deploying it, the local Aspire orchestration provisions PostgreSQL and applies the schema on its own. [Local development](https://krzysztof318.github.io/MailFathom/operations/local-development.html#running-locally-with-aspire) has that path.
 
 ### Where the artifacts are published
 
@@ -91,6 +80,71 @@ To evaluate MailFathom from the checkout instead of deploying it, the local Aspi
 | `mfctl`, the administrative command | attached to each [release](https://github.com/Krzysztof318/MailFathom/releases), one self-contained binary per platform, verified by the checksum file beside them, and on Windows also submitted to the [Windows Package Manager](https://krzysztof318.github.io/MailFathom/operations/admin-endpoint.html#on-windows-through-winget) as `MailFathom.mfctl` |
 
 Both registries carry the same manifest list under the same digest, so the one to pull from is whichever your environment already reaches. The image and the chart each carry a signed provenance statement; [the container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html#published-images) records what each tag means and how to verify one.
+
+## What it does well
+
+MailFathom is built as an enterprise-grade system from the first line, even while its feature scope is still small. Every claim below is a property of the code and the deployment assets today, and each links to the page that documents it.
+
+### Nothing on the surface writes, and no setting changes that
+
+- The MCP surface is three tools — `list_emails`, `get_email_content`, `search_emails` — and that is all of it. There is no write tool to enable.
+- Synchronization is incapable of marking remote mail as read.
+- Attachment bytes are never returned; a content read reports names, types, and sizes.
+
+→ [MCP tools](https://krzysztof318.github.io/MailFathom/features/mcp-tools.html)
+
+### Secure by default, and explicit about every weakening
+
+- The MCP endpoint is off until you enable it, and enabling it means stating whether it requires an API key or nothing at all. The unauthenticated posture is legal, announced with a startup warning, and never the default.
+- Client certificates and per-client rate limits are part of the endpoint rather than something a proxy has to add.
+- IMAP is TLS-on-connect by default, and a private certificate authority is trusted rather than validation disabled. A configuration that weakens the transport or sends a clear-text credential fails startup unless it says so explicitly.
+
+→ [The MCP endpoint](https://krzysztof318.github.io/MailFathom/operations/mcp-endpoint.html), [transport security](https://krzysztof318.github.io/MailFathom/features/imap-synchronization.html#transport-security)
+
+### Credentials never live in configuration
+
+- A secret-bearing setting holds a *reference* — a file path, a systemd credential, an environment variable — and the material lives wherever the deployment provisions it.
+- A configuration file is therefore safe to review, diff, and back up: leaking it leaks paths, not passwords.
+
+→ [Secret provisioning](https://krzysztof318.github.io/MailFathom/operations/secret-provisioning.html), [rotation](https://krzysztof318.github.io/MailFathom/operations/secret-rotation.html)
+
+### Mail is handled as personal data by the code that touches it
+
+- Content, metadata, extracted text, and search extracts are never written to a log and never carried in an error message.
+- Every call is bounded — at most 100 summaries in a page, 50 ranked matches in a search, a configured character bound on a body — so a deployment can decide how much mail a single call may draw out.
+- That is the part software can settle. Whether a deployment satisfies GDPR depends on how you run it: where the database sits, who reaches it, how long you keep mail, and which model an agent hands a result to. What MailFathom offers is an architecture that keeps those choices open rather than one that has already made them badly, including explicit seams for the data-subject workflows a later release implements.
+
+→ [Using the tools](https://krzysztof318.github.io/MailFathom/users/usage.html)
+
+### It fails fast and says why
+
+- Startup resolves every secret reference and verifies the database schema before the process serves anything, and a refusal names the configuration key or the pending migration that caused it.
+- Migrations are never applied while starting, in any environment — applying is a step you take, with a backup first.
+- Three probes answer on a listener of their own, and telemetry is OpenTelemetry, exported only where you point it.
+
+→ [Health endpoints](https://krzysztof318.github.io/MailFathom/operations/health-endpoints.html), [configuration reference](https://krzysztof318.github.io/MailFathom/operations/configuration-reference.html), [telemetry](https://krzysztof318.github.io/MailFathom/operations/telemetry.html)
+
+### The deployment assets are hardened, not illustrative
+
+- The image is chiseled — no shell, no package manager, no HTTP client — runs as an unprivileged user on a read-only root filesystem with every Linux capability dropped, creates no diagnostic socket, and carries no tool that could apply a migration.
+- Docker Compose and the Helm chart both ship that posture by default, and the chart meets the Restricted Pod Security Standard.
+
+→ [The container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html), [Compose](https://krzysztof318.github.io/MailFathom/operations/deployment-compose.html), [Kubernetes](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html)
+
+### The supply chain is verifiable
+
+- Images are multi-architecture, built from base images pinned to an exact patch version, scanned before publication, and accompanied by signed build provenance that ties a digest to the commit and workflow that produced it.
+- Package versions are pinned centrally with committed lock files, and every third-party component is reviewed against a licensing policy that keeps the project commercially redistributable.
+
+→ [Verification](https://krzysztof318.github.io/MailFathom/operations/container-image.html#verification), [THIRD_PARTY_LICENSES.md](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md)
+
+### It is built to be maintained
+
+- A .NET 10 clean-architecture modular monolith, with enforced boundaries between domain, application, infrastructure, protocol, and host.
+- Compiler and analyzer diagnostics are errors, and every behavior change ships with tests.
+- The decisions that shape the system are recorded as ADRs rather than remembered.
+
+→ [Solution structure](https://krzysztof318.github.io/MailFathom/architecture/solution-structure.html), [decisions](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/README.md)
 
 ## Documentation
 
@@ -112,6 +166,16 @@ in the repository instead. The ones you are most likely to want first:
 | [Decisions](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/README.md) | The ADRs, and the workflow that produces them |
 
 Documentation under `docs/` describes behavior that exists. Where something is planned, it is tracked as an issue rather than written up as though it worked.
+
+## Why it exists
+
+A mailbox is the largest archive most people own and the least usable one. Contracts, decisions, invoices, threads that ended without a conclusion, attachments nobody will ever find again: all of it is in there, and none of it is reachable except by scrolling. Mail clients are built to show you the newest of it, one message at a time. After twenty years of accumulation, that is the wrong shape entirely.
+
+MailFathom is being built to change what mail *is* to software. It keeps the local copy current, indexes it so the whole of it is reachable rather than only its most recent slice, and serves it to agents as tools. The destination is a mail brain: something an agent can put a question to and get an answer from, working across years of mail, on infrastructure that belongs to you.
+
+MCP is how agents reach MailFathom; it is not what MailFathom is. The protocol surface is deliberately thin, and the project is building what sits behind it — continuous synchronization, extracted and indexed content, lexical search today, semantic retrieval and question answering next, and eventually the ability to act on your mail rather than only read it.
+
+None of it depends on somebody else's service. The copy is yours, the database is yours, the deployment is yours, and the AI capabilities on the roadmap arrive as providers you choose and point at rather than as ones compiled into the product.
 
 ## Where it is going
 
