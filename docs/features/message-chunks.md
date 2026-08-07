@@ -117,5 +117,4 @@ from markup and read from a plain-text part are worth different amounts, so they
 
 ## What is not here
 
-Embeddings, vectors, and any index over them. Ranking of any kind, and any change to what `search_emails` returns.
-Chunking attachment payloads, which extraction never opens in the first place.
+Producing an embedding of any kind. The table a vector hangs on exists — [Stored vectors](../architecture/stored-email-schema.md#stored-vectors) describes it, and a vector is keyed on the chunk it was produced for — but nothing fills it, no index is built over it, and no embedding provider is reached. Ranking of any kind, and any change to what `search_emails` returns. Chunking attachment payloads, which extraction never opens in the first place.

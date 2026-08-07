@@ -19,7 +19,7 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// <para>
 /// The text is mail content and inherits the source message's classification, retention, export, and erasure
 /// obligations whole. The cascade from the stored email is what keeps a deletion of the message a deletion of every
-/// passage derived from it, and it is the path a later vector row inherits in turn.
+/// passage derived from it, and <see cref="EmailEmbeddingEntity" /> inherits that path in turn.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
@@ -70,4 +70,7 @@ internal sealed class EmailChunkEntity
 
     /// <summary>Gets or sets when this passage was cut, which tells a re-cut from an original one apart.</summary>
     public DateTimeOffset DerivedAt { get; set; }
+
+    /// <summary>Gets the vectors produced for this passage, at most one per embedding profile.</summary>
+    public ICollection<EmailEmbeddingEntity> Embeddings { get; } = [];
 }
