@@ -224,7 +224,25 @@ assembled at the failure site.
 
 The recipient and search-vector indexes are GIN rather than B-tree because both serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 
-Two indexes the architecture draft lists are still deliberately absent. The partial indexes excluding remotely deleted messages wait for specification 10, which introduces the state they would filter on. The per-profile HNSW index over the vector column is not created by any migration at all: it is tied to one profile's dimension, so it is built when that profile is activated and dropped when the generation it serves is removed.
+The partial indexes over remotely deleted messages that the architecture draft lists are still deliberately absent; they wait for specification 10, which introduces the state they would filter on. The per-profile HNSW index is absent from the migrations for a different reason, and permanently.
+
+### The index no migration creates
+
+An approximate index over `Embedding` covers one width and one generation, and neither is known when a migration runs. So `email_embeddings` carries one per profile, built and removed as a profile's lifecycle asks rather than when the table is created:
+
+```sql
+CREATE INDEX IF NOT EXISTS "ix_email_embeddings_hnsw_0198f3d24b6a7c1e9f042a5b8c7d6e10"
+ON email_embeddings USING hnsw (("Embedding"::vector(1536)) vector_cosine_ops)
+WHERE "EmbeddingProfileId" = '0198f3d2-4b6a-7c1e-9f04-2a5b8c7d6e10'::uuid
+```
+
+Both unusual halves follow from the dimensionless column. The cast is what gives HNSW a width to index; the predicate is what keeps this index over the rows that have that width, so a second generation is served by an index of its own instead of colliding with this one. The operator class follows the profile's metric — `vector_cosine_ops`, `vector_ip_ops`, or `vector_l2_ops` — because a space indexed under a distance it was not built for returns a plausible number rather than an error.
+
+The name is the profile's identifier written as thirty-two hexadecimal digits, which does two things. It keeps the whole name inside the sixty-three bytes PostgreSQL keeps of an identifier, where truncation would let two profiles share one index. And because a profile's identity is immutable, an index already carrying the name *is* the index a repeated build would have produced — which is what makes `IF NOT EXISTS` safe here, given that PostgreSQL does not compare an existing index against the one asked for.
+
+**Nothing in either statement comes from a caller.** PostgreSQL accepts no parameter in a utility statement, so the width, the operator class, the predicate value, and the name are all part of the text; each is read from the registered profile's own immutable columns or chosen by a closed mapping over an enum. The provider and model names a profile carries never enter it at all.
+
+Building one is therefore an administrative act rather than a schema migration, and it is the one place MailFathom changes the schema outside the artifact an operator applies. [Applying the database schema](../operations/database-schema.md#the-one-index-mailfathom-creates-itself) states what that costs a deployment that separates its migrating role from its serving one. Before an index exists, a vector search over that profile is exact — correct, and linear in the number of vectors — which is what makes a failure to build one a performance finding rather than a wrong answer.
 
 ## The timeline ordering contract
 

@@ -8,6 +8,7 @@ using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.ListEmails;
@@ -182,6 +183,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<EmailEmbeddingTelemetry>();
         services.AddScoped<IActiveEmbeddingProfileReader, ActiveEmbeddingProfileReader>();
         services.AddScoped<IEmailEmbeddingStore, EmailEmbeddingStore>();
+        // The only registration here that changes the schema. It is scoped like every other store so that a caller
+        // which has opened a persistence session gets its statement inside that session's transaction rather than
+        // beside it.
+        services.AddScoped<IEmbeddingProfileVectorIndex, EmbeddingProfileVectorIndex>();
         // Registered here beside the store it writes through, for the reason the chunk writer above is: its
         // `ITextEmbeddingGenerator` comes from the AI boundary, which this project may not reference, so a composition
         // root that registers persistence without an embedding provider resolves nothing — which is correct, because
