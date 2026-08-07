@@ -253,6 +253,9 @@ public static class ServiceCollectionExtensions
         // The record is written before the session that acts on it is opened, so the store is registered beside the
         // other repositories that take a persistence session rather than with the mail adapters above.
         services.AddScoped<IMailboxMutationRecordStore, MailboxMutationRecordStore>();
+        // Read by synchronization rather than by the performer, so that a relocation coming back through an ordinary
+        // run is recognized as MailFathom's own instead of being stored as a second email.
+        services.AddScoped<IMailboxMutationReconciliationStore, MailboxMutationReconciliationStore>();
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         services.AddScoped<IRemoteFolderCatalog>(provider => new MailKitRemoteFolderCatalog(
             static () => new ImapClient(),

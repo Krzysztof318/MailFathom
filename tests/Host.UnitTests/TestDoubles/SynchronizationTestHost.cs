@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -15,6 +16,7 @@ using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
@@ -89,6 +91,7 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<IEmailContentStore>());
         services.AddSingleton(CreateMimeReaderThatExtractsEverything());
         services.AddSingleton(CreateReconciliationStoreWithNothingToDo());
+        services.AddSingleton(CreateMutationStoreWithNothingRecorded());
         services.AddSingleton(new PersistenceConcurrencyOptions());
         services.AddSingleton(new MailboxSynchronizationOptions());
         services.AddSingleton(timeProvider);
@@ -217,6 +220,34 @@ internal static class SynchronizationTestHost
             .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingReconciliation>>([]));
 
         return reconciliationStore;
+    }
+
+    /// <summary>Builds a store holding no mutations, so nothing a run discovers is one MailFathom itself made.</summary>
+    /// <remarks>
+    /// These tests are about how a supervisor schedules and isolates folder work units. An unconfigured substitute would
+    /// answer both reads with a null task the run then faults on, which surfaces as a supervision that never signals.
+    /// </remarks>
+    private static IMailboxMutationReconciliationStore CreateMutationStoreWithNothingRecorded()
+    {
+        var mutationStore = Substitute.For<IMailboxMutationReconciliationStore>();
+        mutationStore
+            .ReadRelocationsPlacedAtAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<RemoteFolderPath>(),
+                Arg.Any<ImapUidValidity>(),
+                Arg.Any<IReadOnlyCollection<ImapUid>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<MailboxMutationRecord>>([]));
+        mutationStore
+            .ReadMutationsRemovingAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolutionId>(),
+                Arg.Any<ImapUidValidity>(),
+                Arg.Any<IReadOnlyCollection<ImapUid>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<MailboxMutationRecord>>([]));
+
+        return mutationStore;
     }
 
     /// <summary>Builds a reader whose messages all parse, because these tests are about how a supervisor isolates folders.</summary>

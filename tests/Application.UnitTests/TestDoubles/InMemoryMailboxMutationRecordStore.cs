@@ -49,6 +49,8 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
             RecordedAt = this.now,
             StageChangedAt = this.now,
             LastFailure = null,
+            PlacementObservedAt = null,
+            SourceRemovalObservedAt = null,
         };
 
         this.identities[identity] = record.Id;

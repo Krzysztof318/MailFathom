@@ -79,6 +79,18 @@ internal sealed class MailboxMutationEntity
     /// <summary>Gets or sets the UID a <c>COPYUID</c> response named, where the server supplied one.</summary>
     public uint? PlacementUid { get; set; }
 
+    /// <summary>Gets or sets when synchronization recognized the occurrence this mutation created, and <see langword="null" /> while it has not.</summary>
+    /// <remarks>
+    /// It is a separate fact from <see cref="Stage" /> because the two are recorded by different runs from different
+    /// answers. The stage says what the server acknowledged when the command was issued; this says that an ordinary
+    /// synchronization run has since discovered the message in the destination folder and joined it to the email it
+    /// already had.
+    /// </remarks>
+    public DateTimeOffset? PlacementObservedAt { get; set; }
+
+    /// <summary>Gets or sets when synchronization saw the source occurrence leave its folder, and <see langword="null" /> while it has not.</summary>
+    public DateTimeOffset? SourceRemovalObservedAt { get; set; }
+
     public int AttemptCount { get; set; }
 
     public DateTimeOffset RecordedAt { get; set; }

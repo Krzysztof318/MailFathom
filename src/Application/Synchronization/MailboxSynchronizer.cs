@@ -6,6 +6,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -13,6 +14,7 @@ using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
 
@@ -30,6 +32,7 @@ public sealed class MailboxSynchronizer
     private readonly IEmailMetadataRepository metadataRepository;
     private readonly IEmailContentStore contentStore;
     private readonly IEmailMimeReader mimeReader;
+    private readonly IMailboxMutationReconciliationStore mutationStore;
     private readonly MailboxReconciler reconciler;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly TimeProvider timeProvider;
@@ -46,6 +49,7 @@ public sealed class MailboxSynchronizer
         IEmailMetadataRepository metadataRepository,
         IEmailContentStore contentStore,
         IEmailMimeReader mimeReader,
+        IMailboxMutationReconciliationStore mutationStore,
         MailboxReconciler reconciler,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         TimeProvider timeProvider,
@@ -60,6 +64,7 @@ public sealed class MailboxSynchronizer
         this.metadataRepository = metadataRepository;
         this.contentStore = contentStore;
         this.mimeReader = mimeReader;
+        this.mutationStore = mutationStore;
         this.reconciler = reconciler;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.timeProvider = timeProvider;
@@ -152,6 +157,7 @@ public sealed class MailboxSynchronizer
         var storedCount = 0;
         var skippedOversizedCount = 0;
         var unreadableMimeCount = 0;
+        var relocatedCount = 0;
         var hasMore = true;
         var inspectedBatchCount = 0;
 
@@ -164,8 +170,22 @@ public sealed class MailboxSynchronizer
                 this.options.MaxMetadataBatchSize,
                 synchronizationWindow,
                 cancellationToken);
+            var relocations = await this.ReadRelocationsPlacedInBatchAsync(
+                accountId,
+                folder,
+                uidValidity,
+                batch,
+                cancellationToken);
+
             foreach (var metadata in batch.Emails.OrderBy(email => email.OccurrenceId.Uid.Value))
             {
+                if (await this.TryCarryRelocatedEmailAsync(relocations, folder, metadata, cancellationToken))
+                {
+                    relocatedCount++;
+
+                    continue;
+                }
+
                 var occurrence = await this.StoreOccurrenceAsync(mailboxSession, metadata, cancellationToken);
                 if (occurrence.Availability == StoredEmailContentAvailability.Available)
                 {
@@ -224,9 +244,89 @@ public sealed class MailboxSynchronizer
             storedCount,
             skippedOversizedCount,
             unreadableMimeCount,
+            relocatedCount,
             hasMore,
             checkpoint,
             reconciliation);
+    }
+
+    /// <summary>Reads the relocations whose destination is this folder and whose placement is one of the UIDs this batch discovered.</summary>
+    /// <remarks>
+    /// A batch that discovered nothing asks nothing. The read is otherwise made once for the whole batch, so recognizing
+    /// MailFathom's own work costs one query per batch on a folder nobody relocates into and never one per message.
+    /// </remarks>
+    private async Task<IReadOnlyList<MailboxMutationRecord>> ReadRelocationsPlacedInBatchAsync(
+        MailAccountId accountId,
+        MailFolderResolution folder,
+        ImapUidValidity uidValidity,
+        RemoteEmailMetadataBatch batch,
+        CancellationToken cancellationToken)
+    {
+        if (batch.Emails.Count == 0)
+        {
+            return [];
+        }
+
+        return await this.mutationStore.ReadRelocationsPlacedAtAsync(
+            accountId,
+            folder.RemotePath,
+            uidValidity,
+            [.. batch.Emails.Select(static email => email.OccurrenceId.Uid)],
+            cancellationToken);
+    }
+
+    /// <summary>Carries the local email a relocation moved onto the occurrence it was discovered at, rather than storing a second one.</summary>
+    /// <returns><see langword="true" /> when the discovery was this mutation's own and needs nothing further; otherwise, <see langword="false" />.</returns>
+    /// <remarks>
+    /// <para>
+    /// It runs before the payload is fetched, so recognizing a relocation costs no <c>FETCH</c> and no MIME read: the
+    /// message is the one already stored, and everything derived from it is keyed by the local identity that is being
+    /// carried across rather than by the occurrence it sits at.
+    /// </para>
+    /// <para>
+    /// A discovery that matches nothing, and one whose destination occurrence another row already occupies, both fall
+    /// through to the ordinary path. That is the same treatment mail a person moved in their own client gets, which is
+    /// what keeps this change invisible to every mailbox MailFathom is not writing to.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> TryCarryRelocatedEmailAsync(
+        IReadOnlyList<MailboxMutationRecord> relocations,
+        MailFolderResolution folder,
+        RemoteEmailMetadata metadata,
+        CancellationToken cancellationToken)
+    {
+        var occurrenceId = metadata.OccurrenceId;
+        var record = relocations.FirstOrDefault(candidate =>
+            candidate.IsPlacementOf(folder.RemotePath, occurrenceId.UidValidity, occurrenceId.Uid));
+
+        if (record is null)
+        {
+            return false;
+        }
+
+        var carried = false;
+
+        await this.concurrencyRetryPolicy.CommitAsync(
+            async (persistenceSession, attemptCancellationToken) =>
+            {
+                carried = await this.metadataRepository.TryCarryToOccurrenceAsync(
+                    persistenceSession,
+                    record.Request.StoredEmailId,
+                    occurrenceId,
+                    attemptCancellationToken);
+
+                if (carried)
+                {
+                    await this.mutationStore.RecordPlacementObservedAsync(
+                        persistenceSession,
+                        record.Id,
+                        this.timeProvider.GetUtcNow(),
+                        attemptCancellationToken);
+                }
+            },
+            cancellationToken);
+
+        return carried;
     }
 
     /// <summary>Commits the modification sequence a completed backward pass reached, and leaves the checkpoint alone otherwise.</summary>
@@ -387,6 +487,11 @@ public enum MailboxSynchronizationOutcome
 /// <param name="StoredEmailCount">How many occurrences were stored with their content.</param>
 /// <param name="SkippedOversizedEmailCount">How many occurrences were stored as metadata only.</param>
 /// <param name="UnreadableMimeEmailCount">How many stored occurrences carried MIME that enrichment could not read.</param>
+/// <param name="RelocatedEmailCount">
+/// How many discovered occurrences were an email MailFathom had relocated into this folder, and so carried the existing
+/// local email across instead of storing a second one. They are counted apart from the stored ones because no mail
+/// arrived: the mailbox holds exactly what it held before the run.
+/// </param>
 /// <param name="HasMoreEmails">Whether the folder still held unprocessed emails when the run's batch budget ran out.</param>
 /// <param name="Checkpoint">The progress the run ended on, which is present exactly when <paramref name="Outcome" /> is <see cref="MailboxSynchronizationOutcome.Synchronized" />.</param>
 /// <param name="Reconciliation">What the run's backward pass found among the emails already stored for this folder.</param>
@@ -402,6 +507,7 @@ public sealed record MailboxSynchronizationResult(
     int StoredEmailCount,
     int SkippedOversizedEmailCount,
     int UnreadableMimeEmailCount,
+    int RelocatedEmailCount,
     bool HasMoreEmails,
     SynchronizationCheckpoint? Checkpoint,
     MailboxReconciliationResult Reconciliation)
@@ -411,6 +517,7 @@ public sealed record MailboxSynchronizationResult(
     /// <param name="storedEmailCount">How many occurrences were stored with their content.</param>
     /// <param name="skippedOversizedEmailCount">How many occurrences were stored as metadata only.</param>
     /// <param name="unreadableMimeEmailCount">How many stored occurrences carried unreadable MIME.</param>
+    /// <param name="relocatedEmailCount">How many discovered occurrences carried an existing local email across.</param>
     /// <param name="hasMoreEmails">Whether unprocessed emails remain.</param>
     /// <param name="checkpoint">The progress the run ended on.</param>
     /// <param name="reconciliation">What the run's backward pass found.</param>
@@ -421,6 +528,7 @@ public sealed record MailboxSynchronizationResult(
         int storedEmailCount,
         int skippedOversizedEmailCount,
         int unreadableMimeEmailCount,
+        int relocatedEmailCount,
         bool hasMoreEmails,
         SynchronizationCheckpoint checkpoint,
         MailboxReconciliationResult reconciliation)
@@ -433,6 +541,7 @@ public sealed record MailboxSynchronizationResult(
             storedEmailCount,
             skippedOversizedEmailCount,
             unreadableMimeEmailCount,
+            relocatedEmailCount,
             hasMoreEmails,
             checkpoint,
             reconciliation);
@@ -461,6 +570,7 @@ public sealed record MailboxSynchronizationResult(
         return new MailboxSynchronizationResult(
             outcome,
             Folder: null,
+            0,
             0,
             0,
             0,

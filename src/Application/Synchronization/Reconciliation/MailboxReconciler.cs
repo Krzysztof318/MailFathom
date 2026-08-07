@@ -2,11 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 
 namespace MailFathom.Application.Synchronization.Reconciliation;
 
@@ -28,10 +30,16 @@ namespace MailFathom.Application.Synchronization.Reconciliation;
 /// <c>\Seen</c> flag, and it holds no port that could write one back — which is the structural form of the invariant
 /// this pass is the riskiest place in the system for.
 /// </para>
+/// <para>
+/// A disappearance is not by itself somebody else's act. MailFathom relocates and deletes mail on the server too, and
+/// the occurrence leaving its folder is those changes completing rather than a remote deletion to react to. The durable
+/// mutation record is what tells the two apart, so the pass reads it before the disposition is reached.
+/// </para>
 /// </remarks>
 public sealed class MailboxReconciler
 {
     private readonly IStoredEmailReconciliationStore reconciliationStore;
+    private readonly IMailboxMutationReconciliationStore mutationStore;
     private readonly IRemotelyDeletedEmailDispositionReader dispositionReader;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly TimeProvider timeProvider;
@@ -39,6 +47,7 @@ public sealed class MailboxReconciler
 
     /// <summary>Initializes a new mailbox reconciler.</summary>
     /// <param name="reconciliationStore">Chooses the window and records what the server answered.</param>
+    /// <param name="mutationStore">Says which of the disappearances are changes MailFathom itself made.</param>
     /// <param name="dispositionReader">Answers what the account being reconciled does with an email its server no longer holds.</param>
     /// <param name="concurrencyRetryPolicy">Commits one window's outcome, retrying a conflict with a competing writer.</param>
     /// <param name="timeProvider">Stamps the observation, which is what advances the window across runs.</param>
@@ -46,18 +55,21 @@ public sealed class MailboxReconciler
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxReconciler(
         IStoredEmailReconciliationStore reconciliationStore,
+        IMailboxMutationReconciliationStore mutationStore,
         IRemotelyDeletedEmailDispositionReader dispositionReader,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options)
     {
         ArgumentNullException.ThrowIfNull(reconciliationStore);
+        ArgumentNullException.ThrowIfNull(mutationStore);
         ArgumentNullException.ThrowIfNull(dispositionReader);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(options);
 
         this.reconciliationStore = reconciliationStore;
+        this.mutationStore = mutationStore;
         this.dispositionReader = dispositionReader;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.timeProvider = timeProvider;
@@ -122,18 +134,33 @@ public sealed class MailboxReconciler
             reconciledThroughModSeq,
             cancellationToken);
 
-        var outcome = ClassifyWindow(
-            window,
-            observation,
-            this.dispositionReader.GetDisposition(accountId),
-            this.timeProvider.GetUtcNow());
+        var classification = ClassifyWindow(window, observation);
+        var outcome = await this.AttributeDisappearancesAsync(
+            classification,
+            accountId,
+            folder.Id,
+            uidValidity,
+            cancellationToken);
 
         await this.concurrencyRetryPolicy.CommitAsync(
-            (persistenceSession, attemptCancellationToken) =>
-                this.reconciliationStore.ApplyReconciliationOutcomeAsync(
+            async (persistenceSession, attemptCancellationToken) =>
+            {
+                await this.reconciliationStore.ApplyReconciliationOutcomeAsync(
                     persistenceSession,
                     outcome,
-                    attemptCancellationToken),
+                    attemptCancellationToken);
+
+                // Written in the window's own transaction, so a record can never say a disappearance was accounted for
+                // by a window whose observation of it was rolled back.
+                foreach (var attributed in outcome.RemovedByOwnMutation)
+                {
+                    await this.mutationStore.RecordSourceRemovalObservedAsync(
+                        persistenceSession,
+                        attributed.MutationRecordId,
+                        outcome.ObservedAt,
+                        attemptCancellationToken);
+                }
+            },
             cancellationToken);
 
         var emailsRemain = window.Count == this.options.MaxReconciledEmailsPerRun;
@@ -141,8 +168,84 @@ public sealed class MailboxReconciler
         return new MailboxReconciliationResult(
             outcome.StillPresent.Count + outcome.ConfirmedUnchanged.Count,
             outcome.Disappeared.Count,
+            outcome.RemovedByOwnMutation.Count,
             emailsRemain,
             emailsRemain ? null : observation.FolderHighestModSeq);
+    }
+
+    /// <summary>Separates the disappearances MailFathom caused from the ones the disposition answers for.</summary>
+    /// <remarks>
+    /// <para>
+    /// The whole window's gone UIDs are asked about in one read rather than one per email, and a window that found none
+    /// asks nothing at all — which is every window on a mailbox nobody is changing through MailFathom.
+    /// </para>
+    /// <para>
+    /// An occurrence matched by more than one record is attributed once, to the oldest, because the read is ordered and
+    /// the first match is taken. Which record is credited changes nothing about the local row; what matters is that the
+    /// disappearance does not reach the remote-deletion path.
+    /// </para>
+    /// </remarks>
+    private async Task<ReconciledFolderOutcome> AttributeDisappearancesAsync(
+        ReconciledWindowClassification classification,
+        MailAccountId accountId,
+        MailFolderResolutionId folderResolutionId,
+        ImapUidValidity uidValidity,
+        CancellationToken cancellationToken)
+    {
+        var disposition = this.dispositionReader.GetDisposition(accountId);
+        var observedAt = this.timeProvider.GetUtcNow();
+
+        if (classification.Disappeared.Count == 0)
+        {
+            return new ReconciledFolderOutcome(
+                classification.StillPresent,
+                classification.ConfirmedUnchanged,
+                [],
+                [],
+                disposition,
+                observedAt);
+        }
+
+        var records = await this.mutationStore.ReadMutationsRemovingAsync(
+            accountId,
+            folderResolutionId,
+            uidValidity,
+            [.. classification.Disappeared.Select(static candidate => candidate.Uid)],
+            cancellationToken);
+
+        var attributions = classification.Disappeared
+            .Select(candidate => new
+            {
+                candidate.StoredEmailId,
+                Record = FindRecordRemoving(records, accountId, folderResolutionId, uidValidity, candidate.Uid),
+            })
+            .ToArray();
+
+        return new ReconciledFolderOutcome(
+            classification.StillPresent,
+            classification.ConfirmedUnchanged,
+            [.. attributions.Where(static attribution => attribution.Record is null).Select(static attribution => attribution.StoredEmailId)],
+            [
+                .. attributions
+                    .Where(static attribution => attribution.Record is not null)
+                    .Select(static attribution => new MutationAttributedDisappearance(
+                        attribution.StoredEmailId,
+                        attribution.Record!.Id)),
+            ],
+            disposition,
+            observedAt);
+    }
+
+    private static MailboxMutationRecord? FindRecordRemoving(
+        IReadOnlyList<MailboxMutationRecord> records,
+        MailAccountId accountId,
+        MailFolderResolutionId folderResolutionId,
+        ImapUidValidity uidValidity,
+        ImapUid uid)
+    {
+        var occurrence = EmailOccurrenceId.Create(accountId, folderResolutionId, uidValidity, uid);
+
+        return records.FirstOrDefault(record => record.AccountsForRemovalOf(occurrence));
     }
 
     /// <summary>Sorts the window into the occurrences the server described, the ones it confirmed, and the ones it accounted for in neither.</summary>
@@ -164,11 +267,9 @@ public sealed class MailboxReconciler
     /// that repeats one has said the message exists, which is the only thing this classification reads out of it.
     /// </para>
     /// </remarks>
-    private static ReconciledFolderOutcome ClassifyWindow(
+    private static ReconciledWindowClassification ClassifyWindow(
         IReadOnlyList<StoredEmailAwaitingReconciliation> window,
-        RemoteFolderWindowObservation observation,
-        RemotelyDeletedEmailDisposition disposition,
-        DateTimeOffset observedAt)
+        RemoteFolderWindowObservation observation)
     {
         var snapshotsByUid = observation.Observations
             .DistinctBy(static describedOccurrence => describedOccurrence.Uid)
@@ -187,16 +288,32 @@ public sealed class MailboxReconciler
             .ToArray();
         var disappeared = window
             .Where(candidate => !snapshotsByUid.ContainsKey(candidate.Uid) && !unchangedUids.Contains(candidate.Uid))
-            .Select(static candidate => candidate.StoredEmailId)
             .ToArray();
 
-        return new ReconciledFolderOutcome(stillPresent, confirmedUnchanged, disappeared, disposition, observedAt);
+        return new ReconciledWindowClassification(stillPresent, confirmedUnchanged, disappeared);
     }
+
+    /// <summary>What the server's answer alone says about one window, before anything MailFathom did is taken into account.</summary>
+    /// <param name="StillPresent">The occurrences the server described.</param>
+    /// <param name="ConfirmedUnchanged">The occurrences the server confirmed without describing.</param>
+    /// <param name="Disappeared">
+    /// The occurrences the folder no longer holds, still carrying their UIDs because that is what a mutation record is
+    /// matched against.
+    /// </param>
+    private sealed record ReconciledWindowClassification(
+        IReadOnlyList<ObservedEmailFlags> StillPresent,
+        IReadOnlyList<StoredEmailId> ConfirmedUnchanged,
+        IReadOnlyList<StoredEmailAwaitingReconciliation> Disappeared);
 }
 
 /// <summary>Summarizes one bounded reconciliation window.</summary>
 /// <param name="ObservedEmailCount">How many stored occurrences the server still holds, whether it described them or only confirmed them.</param>
-/// <param name="RemotelyDeletedEmailCount">How many stored occurrences the folder no longer holds.</param>
+/// <param name="RemotelyDeletedEmailCount">How many stored occurrences the folder no longer holds and nothing MailFathom did accounts for.</param>
+/// <param name="OwnMutationCompletedEmailCount">
+/// How many stored occurrences left the folder because MailFathom relocated or deleted them. They are counted apart from
+/// the remotely deleted ones because they are the opposite finding: a change of the owner's own that has come back
+/// through synchronization, rather than one to react to.
+/// </param>
 /// <param name="EmailsRemain">Whether occurrences still await reconciliation after this window.</param>
 /// <param name="ReconciledThroughModSeq">
 /// The folder modification sequence this pass covered the whole folder through, or <see langword="null" /> when the
@@ -209,6 +326,7 @@ public sealed class MailboxReconciler
 public sealed record MailboxReconciliationResult(
     int ObservedEmailCount,
     int RemotelyDeletedEmailCount,
+    int OwnMutationCompletedEmailCount,
     bool EmailsRemain,
     ulong? ReconciledThroughModSeq)
 {
@@ -221,6 +339,7 @@ public sealed record MailboxReconciliationResult(
     public static MailboxReconciliationResult NothingToReconcile { get; } = new(
         ObservedEmailCount: 0,
         RemotelyDeletedEmailCount: 0,
+        OwnMutationCompletedEmailCount: 0,
         EmailsRemain: false,
         ReconciledThroughModSeq: null);
 }

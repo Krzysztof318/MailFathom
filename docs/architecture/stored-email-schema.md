@@ -169,6 +169,26 @@ process count against `MailSynchronization:MaxMutationAttempts`. Spending that b
 row that is not `Completed` stays in the answer an operator reads — being given up on is what stops a change being
 retried, and it would be worth nothing if it also stopped the change being seen.
 
+`PlacementObservedAt` and `SourceRemovalObservedAt` are what synchronization has since seen come back, and they are
+separate facts from `Stage` because they answer a different question and are written by a different run. The stage says
+what the server acknowledged when the command went out; these say that an ordinary synchronization run has met the
+occurrences the change moved and recognized them as this record's own. A relocation reaching `Completed` still arrives
+in the destination folder later as a discovery something has to join to the email already stored, and its source
+occurrence still vanishes from the folder it left — and left alone, that pair is a new message and a deleted one.
+
+The join is the server's own `COPYUID` answer for the placement and the record's own source occurrence for the
+disappearance. A relocation whose server named no placement matches no discovery at all, and `PlacementObservedAt` stays
+null instead: finding the message by searching the destination folder for something that looks like it would replace a
+fact with a guess, and a header a provider rewrote on copy or a `Message-ID` that legitimately appears twice is wrong in
+both directions. The disappearance needs no `COPYUID`, because the source occurrence was written down before the first
+command was issued.
+
+The source half is settled by carrying the row across where nothing has settled it already, because that is what takes
+the email out of the source folder locally: no later reconciliation window can select it there, so no later run could
+observe the disappearance the record would otherwise keep waiting for. A row whose halves are both accounted for leaves
+the candidates a later discovery is matched against; a relocation still owing one is where an operator looks when a
+message moved and the local mailbox has not caught up.
+
 No mail content is here. A folder path, a UID, a mutation name, and a requester identity are the server's own or
 MailFathom's own names for things, and a failure is kept as its five-digit code rather than as the message text
 assembled at the failure site.
@@ -190,6 +210,7 @@ assembled at the failure site.
 | `ix_email_embeddings_profile` | `(EmbeddingProfileId, Dimension)` | Reading a whole generation, which is how a superseded one is removed |
 | `ix_mailbox_mutations_identity` | `(MailFolderId, UidValidity, Uid, RequesterOrigin, RequesterIdentity, Mutation)`, unique | A mutation's idempotency identity, which is what makes the same request twice perform one change |
 | `ix_mailbox_mutations_outstanding` | `(MailboxAccountId, RecordedAt)` where the stage is not `Completed` | The changes an operator asks about: those in flight and those given up on |
+| `ix_mailbox_mutations_placement` | `(MailboxAccountId, DestinationFolderPath, PlacementUidValidity, PlacementUid)` where `PlacementObservedAt` is null | The question the forward pass asks of every batch it discovers: is one of these UIDs where a relocation put an email |
 
 The recipient and search-vector indexes are GIN rather than B-tree because both serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 

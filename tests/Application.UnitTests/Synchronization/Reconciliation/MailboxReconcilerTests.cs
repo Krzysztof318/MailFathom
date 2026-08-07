@@ -6,9 +6,11 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
+using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -75,6 +77,81 @@ public sealed class MailboxReconcilerTests
         Assert.Equal(1, result.RemotelyDeletedEmailCount);
         Assert.Equal([11U], store.RemovedUids);
         Assert.Empty(store.TombstonedUids);
+    }
+
+    /// <summary>An occurrence MailFathom moved or deleted itself left the folder because of that, not because somebody else deleted it.</summary>
+    /// <remarks>
+    /// The account erases local copies, which is the setting that makes the difference visible: without the record the
+    /// row would be destroyed here, and for a relocation that would erase the local copy of mail that still exists in
+    /// another folder.
+    /// </remarks>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ReconcileAsync_OccurrenceRemovedByAMutationMailFathomMade_AttributesItInsteadOfErasingTheLocalCopy(
+        bool isRelocation)
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10, 11));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        var record = MutationRemoving(store.StoredEmailIdOf(11), uid: 11, isRelocation);
+        mutationStore.Add(record);
+        await using var mailboxSession = CreateSessionHolding(10);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.EraseLocalCopy,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.RemotelyDeletedEmailCount);
+        Assert.Equal(1, result.OwnMutationCompletedEmailCount);
+        Assert.Empty(store.RemovedUids);
+        Assert.Empty(store.TombstonedUids);
+        Assert.Equal(RunInstant, mutationStore.RecordOf(record.Id).SourceRemovalObservedAt);
+
+        // The observation moves so the window reaches further into the folder on the next run rather than selecting
+        // the same occurrence forever.
+        Assert.Equal(RunInstant, store.RowOf(11).ObservedAt);
+    }
+
+    /// <summary>A disappearance seen before the destination folder is synchronized settles one half and leaves the other owing.</summary>
+    [Fact]
+    public async Task ReconcileAsync_RelocationSourceSeenBeforeItsPlacement_LeavesThePlacementStillAwaited()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(11));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        var record = MutationRemoving(store.StoredEmailIdOf(11), uid: 11, isRelocation: true);
+        mutationStore.Add(record);
+        await using var mailboxSession = CreateSessionHolding();
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        var observed = mutationStore.RecordOf(record.Id);
+        Assert.Equal(RunInstant, observed.SourceRemovalObservedAt);
+        Assert.Null(observed.PlacementObservedAt);
+        Assert.False(observed.IsReconciled);
     }
 
     /// <summary>A message read on another client changes its flags, and the stored snapshot has to follow.</summary>
@@ -587,7 +664,8 @@ public sealed class MailboxReconcilerTests
         FakeReconciliationStore store,
         RemotelyDeletedEmailDisposition disposition,
         int maxReconciledEmailsPerRun = 100,
-        FakeTimeProvider? timeProvider = null)
+        FakeTimeProvider? timeProvider = null,
+        InMemoryMailboxMutationReconciliationStore? mutationStore = null)
     {
         var clock = timeProvider ?? new FakeTimeProvider(RunInstant);
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -598,10 +676,41 @@ public sealed class MailboxReconcilerTests
 
         return new MailboxReconciler(
             store,
+            mutationStore ?? new InMemoryMailboxMutationReconciliationStore(),
             dispositionReader,
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), clock),
             clock,
             new MailboxSynchronizationOptions { MaxReconciledEmailsPerRun = maxReconciledEmailsPerRun });
+    }
+
+    /// <summary>Builds the record a completed relocation or delete of one stored occurrence would have left behind.</summary>
+    private static MailboxMutationRecord MutationRemoving(StoredEmailId storedEmailId, uint uid, bool isRelocation)
+    {
+        var occurrence = EmailOccurrenceId.Create(Account, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid));
+        var requester = MailboxMutationRequester.Rule("file-newsletters", 1);
+
+        return new MailboxMutationRecord
+        {
+            Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(RunInstant)),
+            Request = isRelocation
+                ? MailboxMutationRequest.Relocate(
+                    storedEmailId,
+                    occurrence,
+                    requester,
+                    RemoteFolderPath.Create("Archive", '/'))
+                : MailboxMutationRequest.Delete(storedEmailId, occurrence, requester),
+            Stage = MailboxMutationStage.Completed,
+            RequiresSourceRemoval = isRelocation,
+            Placement = isRelocation
+                ? RemoteEmailPlacement.Reported(ImapUidValidity.Create(99), ImapUid.Create(4))
+                : RemoteEmailPlacement.NotReported(),
+            AttemptCount = 1,
+            RecordedAt = RunInstant,
+            StageChangedAt = RunInstant,
+            LastFailure = null,
+            PlacementObservedAt = null,
+            SourceRemovalObservedAt = null,
+        };
     }
 
     private static IReadOnlyList<StoredOccurrence> StoredOccurrences(params uint[] uids) =>
@@ -647,6 +756,9 @@ public sealed class MailboxReconcilerTests
         private readonly List<uint> removedUids = [];
 
         public ReconciledRow RowOf(uint uid) => this.rowsById.Values.Single(row => row.Uid == uid);
+
+        public StoredEmailId StoredEmailIdOf(uint uid) =>
+            this.rowsById.Single(entry => entry.Value.Uid == uid).Key;
 
         public Task<IReadOnlyList<StoredEmailAwaitingReconciliation>> GetReconciliationWindowAsync(
             MailAccountId accountId,
@@ -715,6 +827,15 @@ public sealed class MailboxReconcilerTests
                     && !HasNewerObservationThan(confirmedRow, outcome.ObservedAt))
                 {
                     confirmedRow.ObservedAt = outcome.ObservedAt;
+                }
+            }
+
+            foreach (var attributed in outcome.RemovedByOwnMutation)
+            {
+                if (this.rowsById.TryGetValue(attributed.StoredEmailId, out var attributedRow)
+                    && !HasNewerObservationThan(attributedRow, outcome.ObservedAt))
+                {
+                    attributedRow.ObservedAt = outcome.ObservedAt;
                 }
             }
 

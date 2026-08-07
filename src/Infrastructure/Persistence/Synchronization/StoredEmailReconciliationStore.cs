@@ -98,6 +98,18 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
             }
         }
 
+        // A disappearance MailFathom itself caused moves the queue timestamp and nothing else. The row is on its way
+        // into another folder, or it is the local copy of a message the owner deleted on the server and what becomes of
+        // it is the delete action's own decision; neither is the remote deletion the disposition below answers for.
+        foreach (var attributed in outcome.RemovedByOwnMutation)
+        {
+            if (rowsById.TryGetValue(attributed.StoredEmailId.Value, out var row)
+                && !HasNewerObservationThan(row, outcome.ObservedAt))
+            {
+                row.RemoteFlagsObservedAt = outcome.ObservedAt;
+            }
+        }
+
         var disappeared = outcome.Disappeared
             .Select(storedEmailId => rowsById.GetValueOrDefault(storedEmailId.Value))
             .OfType<StoredEmailEntity>()
@@ -158,6 +170,7 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
             .Select(static observed => observed.StoredEmailId.Value)
             .Concat(outcome.ConfirmedUnchanged.Select(static storedEmailId => storedEmailId.Value))
             .Concat(outcome.Disappeared.Select(static storedEmailId => storedEmailId.Value))
+            .Concat(outcome.RemovedByOwnMutation.Select(static attributed => attributed.StoredEmailId.Value))
             .ToArray();
 
         var rows = await sessionContext.StoredEmails
