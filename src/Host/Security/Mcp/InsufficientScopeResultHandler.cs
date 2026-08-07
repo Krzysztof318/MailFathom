@@ -21,8 +21,8 @@ namespace MailFathom.Host.Security.Mcp;
 /// <para>
 /// The scopes are safe to write into a header because they were validated as scope tokens at startup: a value carrying a
 /// space, a quotation mark, or a backslash is refused there, so nothing configured here can split the parameter or end
-/// it early. Nothing about the caller, the token, or which scope was missing appears; the challenge states what this
-/// resource requires, which is the same for everyone.
+/// it early. Nothing about the caller, the token, or which scope was missing appears; what the challenge states is what
+/// the caller's own authorization server could have issued, which is the same for everyone that server signed in.
 /// </para>
 /// <para>
 /// The handler is registered globally because that is the seam the authorization middleware offers, but it only replaces

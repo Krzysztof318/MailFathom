@@ -221,12 +221,6 @@ internal sealed class AdminEndpointOptions
     }
 
 
-    /// <summary>Reports the one thing this endpoint requires of an OAuth resource that no other surface does.</summary>
-    /// <remarks>
-    /// Run only once the shared rules have found nothing, because a resource this reads has to be one that parsed. What
-    /// it adds is the prefix, which belongs here rather than in the block itself: every other surface names a resource
-    /// freely, and only these routes are discovered by appending a path to the address a client was handed.
-    /// </remarks>
     /// <summary>Reports the OAuth entries whose resource does not name the path these routes answer at.</summary>
     /// <remarks>
     /// A resource identifier is a name rather than an address to fetch, so nothing about OAuth requires it to match a
@@ -234,7 +228,9 @@ internal sealed class AdminEndpointOptions
     /// resource metadata document before it has read anything at all, which it can only do by appending the prefix it is
     /// about to call. That composition reaches the document's RFC 9728 location exactly when the resource names the same
     /// prefix, so a deployment whose resource says something else would publish a document nothing could find. Refused at
-    /// startup rather than discovered by an operator whose sign-in reports that a deployment serves no metadata.
+    /// startup rather than discovered by an operator whose sign-in reports that a deployment serves no metadata. It is
+    /// the one thing this endpoint asks of a resource that no other surface does, which is why it belongs here rather
+    /// than in the block itself.
     /// <para>
     /// Read only once the shared rules have found nothing, because a resource this reads has to be one that parsed.
     /// </para>
