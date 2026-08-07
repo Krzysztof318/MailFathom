@@ -9,10 +9,18 @@ namespace MailFathom.Common.ClientAssertions;
 /// <summary>Which algorithm a client signs an assertion with, given the key it holds.</summary>
 /// <remarks>
 /// <para>
-/// The client chooses nothing here. An RSA key signs with <c>RS256</c> and an elliptic-curve key signs with the digest
-/// its own curve was sized for, so the algorithm follows from the key pair the operator generated rather than from a
-/// setting either side could get wrong. Every value this produces is inside the asymmetric allow-list the endpoint
-/// already applies to a signed credential, which is what makes minting and verifying one decision instead of two.
+/// The client chooses nothing here. An RSA key signs with <c>RS256</c> and an elliptic-curve key signs with the
+/// algorithm defined over its own curve, so the algorithm follows from the key pair the operator generated rather than
+/// from a setting either side could get wrong. Every value this produces is inside the asymmetric allow-list the
+/// endpoint already applies to a signed credential, which is what makes minting and verifying one decision instead of
+/// two.
+/// </para>
+/// <para>
+/// A curve is recognized by its object identifier and never by the size of its field. RFC 7518 section 3.4 defines
+/// <c>ES256</c>, <c>ES384</c>, and <c>ES512</c> over the three NIST curves and over nothing else, while
+/// <c>secp256k1</c> and the Brainpool curves are the same sizes — so admitting a key by its length would trust a curve
+/// the allow-list was written to exclude and then label its signatures with an algorithm name that does not describe
+/// them.
 /// </para>
 /// <para>
 /// Only the algorithms a client needs to <em>produce</em> are here. The endpoint verifies a wider set, because what it
@@ -25,8 +33,20 @@ public static class ClientAssertionSignature
     /// <remarks>PKCS#1 v1.5 over SHA-256 rather than a probabilistic padding, because it is what every JSON Web Token implementation reads and the endpoint accepts both; a client minting one has nothing to gain from the difference.</remarks>
     public const string RsaAlgorithmName = "RS256";
 
+    /// <summary>The curves a signature is accepted over, and what each one is signed and named as.</summary>
+    /// <remarks>
+    /// Identified by object identifier, which is what the key itself carries and what survives the platform naming the
+    /// same curve <c>ECDSA_P256</c>, <c>nistP256</c>, or <c>prime256v1</c> depending on where it came from.
+    /// </remarks>
+    private static readonly PermittedCurve[] PermittedCurves =
+    [
+        new("1.2.840.10045.3.1.7", "ES256", HashAlgorithmName.SHA256),
+        new("1.3.132.0.34", "ES384", HashAlgorithmName.SHA384),
+        new("1.3.132.0.35", "ES512", HashAlgorithmName.SHA512),
+    ];
+
     /// <summary>Names the algorithm one key signs with.</summary>
-    /// <param name="signingKey">The private key an assertion is signed with.</param>
+    /// <param name="signingKey">The key an assertion is signed with, or verified against.</param>
     /// <returns>The JSON Web Algorithm name, or <see langword="null" /> when the key is of a kind no permitted algorithm covers.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="signingKey" /> is <see langword="null" />.</exception>
     public static string? AlgorithmFor(AsymmetricAlgorithm signingKey)
@@ -36,22 +56,21 @@ public static class ClientAssertionSignature
         return signingKey switch
         {
             RSA rsa when rsa.KeySize >= ClientAssertionKeyMaterial.ShortestRsaModulusInBits => RsaAlgorithmName,
-            ECDsa ecdsa => EllipticCurveAlgorithmFor(ecdsa.KeySize),
+            ECDsa ecdsa => PermittedCurveOf(ecdsa)?.AlgorithmName,
             _ => null,
         };
     }
 
-    /// <summary>Names the algorithm an elliptic-curve key of one size signs with.</summary>
-    /// <param name="keySizeInBits">The curve's field size, as the key reports it.</param>
-    /// <returns>The JSON Web Algorithm name, or <see langword="null" /> when no permitted algorithm is defined over a curve that size.</returns>
-    /// <remarks>The three sizes are the ones RFC 7518 defines an algorithm for. P-521 reports 521 rather than 512, which is the curve's actual field size and the reason this is a lookup rather than arithmetic.</remarks>
-    public static string? EllipticCurveAlgorithmFor(int keySizeInBits) => keySizeInBits switch
+    /// <summary>Reports whether a permitted algorithm is defined over the curve a key was generated on.</summary>
+    /// <param name="signingKey">The elliptic-curve key.</param>
+    /// <returns><see langword="true" /> when the curve is one of the three; otherwise <see langword="false" />.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="signingKey" /> is <see langword="null" />.</exception>
+    public static bool IsOverAPermittedCurve(ECDsa signingKey)
     {
-        256 => "ES256",
-        384 => "ES384",
-        521 => "ES512",
-        _ => null,
-    };
+        ArgumentNullException.ThrowIfNull(signingKey);
+
+        return PermittedCurveOf(signingKey) is not null;
+    }
 
     /// <summary>Signs the assertion's signing input with the key that mints it.</summary>
     /// <param name="signingKey">The private key.</param>
@@ -73,17 +92,44 @@ public static class ClientAssertionSignature
             RSA rsa => rsa.SignData(signingInput, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1),
             ECDsa ecdsa => ecdsa.SignData(
                 signingInput,
-                EllipticCurveDigestFor(ecdsa.KeySize),
+                DigestOf(ecdsa),
                 DSASignatureFormat.IeeeP1363FixedFieldConcatenation),
             _ => throw new NotSupportedException("The key is of a kind no permitted signature algorithm covers."),
         };
     }
 
-    private static HashAlgorithmName EllipticCurveDigestFor(int keySizeInBits) => keySizeInBits switch
+    private static HashAlgorithmName DigestOf(ECDsa signingKey) =>
+        PermittedCurveOf(signingKey)?.Digest
+        ?? throw new NotSupportedException("No permitted signature algorithm is defined over that key's curve.");
+
+    /// <summary>Finds the entry for the curve a key was generated on.</summary>
+    /// <remarks>
+    /// A curve given as explicit parameters rather than as a name matches nothing and is refused, because a key that
+    /// declines to say which curve it is on is not one this deployment can hold to a named allow-list.
+    /// </remarks>
+    private static PermittedCurve? PermittedCurveOf(ECDsa signingKey)
     {
-        256 => HashAlgorithmName.SHA256,
-        384 => HashAlgorithmName.SHA384,
-        521 => HashAlgorithmName.SHA512,
-        _ => throw new NotSupportedException("No permitted signature algorithm is defined over a curve of that size."),
-    };
+        var curve = signingKey.ExportParameters(includePrivateParameters: false).Curve;
+
+        if (!curve.IsNamed || curve.Oid.Value is not { Length: > 0 } curveIdentifier)
+        {
+            return null;
+        }
+
+        return Array.Find(
+            PermittedCurves,
+            permitted => string.Equals(permitted.Oid, curveIdentifier, StringComparison.Ordinal));
+    }
+
+    /// <summary>One curve a signature is accepted over.</summary>
+    /// <param name="Oid">The curve's object identifier, which is how a key names it.</param>
+    /// <param name="AlgorithmName">The JSON Web Algorithm defined over it.</param>
+    /// <param name="Digest">The digest that algorithm signs with.</param>
+    /// <remarks>
+    /// A reference type rather than a struct, because the lookup below reports "no permitted curve" as
+    /// <see langword="null" /> and a search over a value-type sequence cannot: it answers with the type's default, which
+    /// here would be an entry carrying no object identifier and a nameless algorithm — and every unpermitted curve
+    /// would be admitted under it.
+    /// </remarks>
+    private sealed record PermittedCurve(string Oid, string AlgorithmName, HashAlgorithmName Digest);
 }

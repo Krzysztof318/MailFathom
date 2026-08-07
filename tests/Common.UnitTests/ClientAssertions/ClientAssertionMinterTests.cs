@@ -149,6 +149,22 @@ public sealed class ClientAssertionMinterTests
             DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
     }
 
+    /// <summary>
+    /// The algorithm is looked up from the curve rather than from its size, so a key on a curve of a permitted size but
+    /// an unpermitted identity has no algorithm at all — and minting refuses rather than emitting an assertion labelled
+    /// with one that does not describe its signature.
+    /// </summary>
+    [Fact]
+    public void Mint_AKeyOnAnUnpermittedCurveOfAPermittedSize_IsRefused()
+    {
+        // Arrange
+        using var signingKey = ECDsa.Create(ECCurve.CreateFromFriendlyName("secP256k1"));
+
+        // Act, Assert
+        Assert.Throws<NotSupportedException>(() =>
+            ClientAssertionMinter.Mint(signingKey, ClientAssertion.AdminAudience, MintedAt));
+    }
+
     private static ECCurve CurveOf(int curveSize) => curveSize switch
     {
         256 => ECCurve.NamedCurves.nistP256,

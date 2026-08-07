@@ -132,8 +132,7 @@ public static class ClientAssertionKeyMaterial
 
         var ecdsa = ECDsa.Create();
 
-        if (TryImportFromPem(ecdsa, material)
-            && ClientAssertionSignature.EllipticCurveAlgorithmFor(ecdsa.KeySize) is not null)
+        if (TryImportFromPem(ecdsa, material) && ClientAssertionSignature.IsOverAPermittedCurve(ecdsa))
         {
             fault = default;
 

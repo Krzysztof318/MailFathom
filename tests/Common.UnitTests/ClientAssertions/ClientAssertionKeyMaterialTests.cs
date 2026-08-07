@@ -104,6 +104,45 @@ public sealed class ClientAssertionKeyMaterialTests
         Assert.Equal(ClientAssertionKeyFault.ModulusTooShort, fault);
     }
 
+    /// <summary>
+    /// The allow-list is over three named curves, and a curve is recognized by its identifier rather than by its size.
+    /// <c>secp256k1</c> and the Brainpool curves have exactly the sizes the three NIST curves do, so a key admitted on
+    /// its length would be trusted over a curve RFC 7518 defines no algorithm for, and its signatures would be labelled
+    /// <c>ES256</c> or <c>ES384</c> anyway — an algorithm name that does not describe them.
+    /// </summary>
+    [Theory]
+    [InlineData("secP256k1")]
+    [InlineData("brainpoolP256r1")]
+    [InlineData("brainpoolP384r1")]
+    public void ReadPublicKey_ACurveOfAPermittedSizeButNotAPermittedIdentity_ReportsAnUnsupportedAlgorithm(
+        string curveName)
+    {
+        // Arrange
+        using var pair = ECDsa.Create(ECCurve.CreateFromFriendlyName(curveName));
+
+        // Act
+        using var publicKey = ClientAssertionKeyMaterial.ReadPublicKey(pair.ExportSubjectPublicKeyInfoPem(), out var fault);
+
+        // Assert
+        Assert.Null(publicKey);
+        Assert.Equal(ClientAssertionKeyFault.UnsupportedAlgorithm, fault);
+    }
+
+    /// <summary>The same rule reaches the private half, so the command refuses to mint under a curve the deployment would refuse.</summary>
+    [Fact]
+    public void ReadPrivateKey_ACurveOfAPermittedSizeButNotAPermittedIdentity_ReportsAnUnsupportedAlgorithm()
+    {
+        // Arrange
+        using var pair = ECDsa.Create(ECCurve.CreateFromFriendlyName("secP256k1"));
+
+        // Act
+        using var privateKey = ClientAssertionKeyMaterial.ReadPrivateKey(pair.ExportPkcs8PrivateKeyPem(), out var fault);
+
+        // Assert
+        Assert.Null(privateKey);
+        Assert.Equal(ClientAssertionKeyFault.UnsupportedAlgorithm, fault);
+    }
+
     /// <summary>A key of a kind no permitted algorithm is defined over is refused rather than accepted with no algorithm to verify it by.</summary>
     [Fact]
     public void ReadPublicKey_AKeyNoPermittedAlgorithmCovers_ReportsAnUnsupportedAlgorithm()

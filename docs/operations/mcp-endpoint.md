@@ -220,7 +220,9 @@ $ openssl pkey -in reporting-job.key -pubout -out reporting-job.pub
 ```
 
 Give the deployment `reporting-job.pub`. RSA works too — `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072` —
-with a modulus of at least 2048 bits; elliptic curves P-256, P-384, and P-521 are accepted. The signature algorithm
+with a modulus of at least 2048 bits; elliptic curves P-256, P-384, and P-521 are accepted and no others, because those
+are the three RFC 7518 defines a signature algorithm over. A curve is recognized by its identifier rather than by its
+size, so `secp256k1` and the Brainpool curves are refused although they are the same lengths. The signature algorithm
 follows from the key, so there is nothing to agree on and nothing to configure. The permitted algorithms are the same
 asymmetric allow-list an access token is judged by: nothing symmetric, and no `none`.
 
