@@ -11,17 +11,15 @@ using static MailFathom.Infrastructure.UnitTests.TestDoubles.MailKitImapSessionT
 
 namespace MailFathom.Infrastructure.UnitTests.TestDoubles;
 
-/// <summary>Owns the pool and the telemetry a write-session test runs against, and releases both with the test.</summary>
+/// <summary>Owns the pool a write-session test runs against, and releases it with the test.</summary>
 /// <remarks>
-/// The pool holds live connections and an expiry timer, and the telemetry holds a meter and an activity source. A test
-/// that let either outlive it would leave a timer running against a disposed connection and an instrument published
-/// under a name the next test also publishes, so the harness is what a test <c>await using</c>s rather than the
-/// factory.
+/// The pool holds live connections and an expiry timer, and a test that let it outlive the test would leave a timer
+/// running against a disposed connection, so the harness is what a test <c>await using</c>s rather than the factory.
+/// The telemetry needs no release of its own: it reports through the application's one activity source and meter,
+/// which live for the process rather than for a test.
 /// </remarks>
 internal sealed class MailboxWriteHarness : IAsyncDisposable
 {
-    private readonly MailboxMutationTelemetry telemetry;
-
     internal MailboxWriteHarness(
         MailboxWriteConnectionPool pool,
         MailboxMutationTelemetry telemetry,
@@ -29,7 +27,6 @@ internal sealed class MailboxWriteHarness : IAsyncDisposable
         MailKitImapWriteSessionTestContext.ScopeDisposalCounter scopeDisposals)
     {
         this.Pool = pool;
-        this.telemetry = telemetry;
         this.RecordedLogs = recordedLogs;
         this.ScopeDisposals = scopeDisposals;
         this.Factory = new MailKitImapWriteSessionFactory(pool, telemetry);
@@ -59,9 +56,5 @@ internal sealed class MailboxWriteHarness : IAsyncDisposable
             CancellationToken.None);
 
     /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        await this.Pool.DisposeAsync();
-        this.telemetry.Dispose();
-    }
+    public ValueTask DisposeAsync() => this.Pool.DisposeAsync();
 }

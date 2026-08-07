@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: src/Host/Observability/**, src/Infrastructure/Observability/**, src/AppHost/** -->
+<!-- describes: src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Infrastructure/Observability/**, src/AppHost/** -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -21,19 +21,41 @@ its attempts, outcomes, timeouts, and circuit-breaker state transitions.
 [Outbound resilience](../architecture/outbound-resilience.md#telemetry-and-privacy) records which tags those events
 carry and which they never do.
 
-One meter is MailFathom's own: `MailFathom.Mailbox.Mutations` counts every change made to a remote mailbox and how
-long it took, broken down by the mutation, the account, the folder alias, and whether it succeeded. It is deliberately
-**not** broken down by which IMAP commands carried the change — a relocation is one operation whether the server
-offered RFC 6851 `MOVE` or the copy-flag-expunge sequence was used instead, and a dimension telling the two apart is
-exactly what would make a missing server extension look like a different operation on a dashboard. Which path ran is in
-the debug log.
-
 **Traces** cover incoming requests, outbound HTTP, and database commands, correlated end to end: the trace a request
 arrives with is the trace its log records and its failure diagnostics carry. One filter is deliberate: requests to the
 health-probe paths are not traced at all, because a probe arrives every few seconds for the life of the process and
-says the same thing every time — tracing it would fill a trace store with polling instead of work. One first-party source joins them: `MailFathom.Mailbox.Mutations` opens a
-span per change to a remote mailbox, named after the mutation and carrying the same account and folder-alias tags the
-meter does. No mail content, remote folder path, UID, or credential reaches any of it.
+says the same thing every time — tracing it would fill a trace store with polling instead of work.
+
+## What MailFathom publishes under its own name
+
+Everything above arrives from a library. MailFathom publishes under a name of its own, and there is exactly one of
+them: **`MailFathom`**. It serves as both an activity source and a meter — the two are separate registries to
+OpenTelemetry and cannot collide, so spans and instruments go under one string rather than two that could drift apart.
+
+One name is what an operator filters a dashboard on to see everything this process owns and nothing a library emits. No
+subsystem has a name of its own, and none gets one until there is something a name is the right way to tell apart:
+which subsystem a signal came from is already carried by the span or instrument name and by its tags, and a distinction
+added there costs an operator nothing, while a second registration is one more thing to subscribe to before anything is
+collected.
+
+There is also one instance of each registry, held for the lifetime of the process, and a subsystem starts its spans and
+creates its instruments on those rather than constructing its own. That is what makes a name invented for a feature
+impossible rather than merely discouraged: there is no second source to give a different name to. Neither is disposed,
+because disposing a shared source would silence every other publisher, so a type that reports through them implements
+no disposal on their account.
+
+What publishes to that name is documented with the subsystem that does it, and today one subsystem does. Every change
+MailFathom makes to a remote mailbox opens a span named after the mutation, and is counted along with how long it took,
+broken down by the mutation, the account, the folder alias, and whether it succeeded. It is deliberately **not** broken
+down by which IMAP commands carried the change — a relocation is one operation whether the server offered RFC 6851
+`MOVE` or the copy-flag-expunge sequence was used instead, and a dimension telling the two apart is exactly what would
+make a missing server extension look like a different operation on a dashboard. Which path ran is in the debug log.
+
+What such a signal may carry is bounded by the same rule that governs the log lines, and it is a cardinality rule as
+much as a privacy one. Counts, sizes, durations, outcomes, error codes, and MailFathom's own configured account and
+folder aliases are permitted. Mail content, an address, a subject, a remote folder path, a message identifier, a UID, a
+search term, a credential, and model prompt or completion text are not — every one of them would open a time series per
+message or per person, quite apart from putting personal data in a span store.
 
 ## The one switch: `OTEL_EXPORTER_OTLP_ENDPOINT`
 

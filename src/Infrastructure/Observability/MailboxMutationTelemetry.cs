@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using MailFathom.Common.Observability;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
@@ -34,14 +35,8 @@ namespace MailFathom.Infrastructure.Observability;
 /// credential reaches a log, a span, or an exporter.
 /// </para>
 /// </remarks>
-public sealed partial class MailboxMutationTelemetry : IDisposable
+public sealed partial class MailboxMutationTelemetry
 {
-    /// <summary>The meter a host subscribes to in order to collect mutation counts and durations.</summary>
-    public const string MeterName = "MailFathom.Mailbox.Mutations";
-
-    /// <summary>The activity source a host subscribes to in order to collect mutation spans.</summary>
-    public const string ActivitySourceName = "MailFathom.Mailbox.Mutations";
-
     private const string MutationTagName = "mailfathom.mailbox.mutation";
     private const string AccountTagName = "mailfathom.mail.account";
     private const string FolderAliasTagName = "mailfathom.mail.folder_alias";
@@ -49,8 +44,6 @@ public sealed partial class MailboxMutationTelemetry : IDisposable
 
     private readonly ILogger<MailboxMutationTelemetry> logger;
     private readonly TimeProvider timeProvider;
-    private readonly Meter meter;
-    private readonly ActivitySource activitySource;
     private readonly Counter<long> mutationCount;
     private readonly Histogram<double> mutationDuration;
 
@@ -65,13 +58,11 @@ public sealed partial class MailboxMutationTelemetry : IDisposable
 
         this.logger = logger;
         this.timeProvider = timeProvider;
-        this.meter = new Meter(MeterName);
-        this.activitySource = new ActivitySource(ActivitySourceName);
-        this.mutationCount = this.meter.CreateCounter<long>(
+        this.mutationCount = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.mailbox.mutations",
             unit: "{mutation}",
             description: "Changes MailFathom made to a remote mailbox, by mutation and outcome.");
-        this.mutationDuration = this.meter.CreateHistogram<double>(
+        this.mutationDuration = Telemetry.Meter.CreateHistogram<double>(
             "mailfathom.mailbox.mutation.duration",
             unit: "s",
             description: "How long a change to a remote mailbox took, by mutation and outcome.");
@@ -84,7 +75,7 @@ public sealed partial class MailboxMutationTelemetry : IDisposable
     /// <returns>The scope, which the caller must dispose; a scope disposed without <see cref="MailboxMutationScope.Completed" /> reports a failure.</returns>
     internal MailboxMutationScope Begin(MailboxMutation mutation, MailAccountId accountId, MailFolderAlias folderAlias)
     {
-        var activity = this.activitySource.StartActivity(mutation.Name, ActivityKind.Client);
+        var activity = Telemetry.ActivitySource.StartActivity(mutation.Name, ActivityKind.Client);
         activity?.SetTag(MutationTagName, mutation.Name);
         activity?.SetTag(AccountTagName, accountId.Value);
         activity?.SetTag(FolderAliasTagName, folderAlias.Value);
@@ -92,13 +83,6 @@ public sealed partial class MailboxMutationTelemetry : IDisposable
         this.LogMutationStarted(mutation.Name, accountId.Value, folderAlias.Value);
 
         return new MailboxMutationScope(this, mutation, accountId, folderAlias, activity, this.timeProvider.GetTimestamp());
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        this.meter.Dispose();
-        this.activitySource.Dispose();
     }
 
     [LoggerMessage(

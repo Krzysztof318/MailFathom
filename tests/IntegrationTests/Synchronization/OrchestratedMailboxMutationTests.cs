@@ -207,7 +207,7 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
             new MailboxWriteSessionOptions(),
             TimeProvider.System,
             NullLogger<MailboxWriteConnectionPool>.Instance);
-        using var telemetry = new MailboxMutationTelemetry(
+        var telemetry = new MailboxMutationTelemetry(
             NullLogger<MailboxMutationTelemetry>.Instance,
             TimeProvider.System);
 

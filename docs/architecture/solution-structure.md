@@ -22,6 +22,7 @@ flowchart TD
     Host --> Infrastructure
     Host --> AI
     Host --> Application
+    Host --> Common
     Cli --> Common
     Mcp --> Application
     Infrastructure --> Application
@@ -50,11 +51,14 @@ sections below say what each project is for and why two of them are shaped again
   boundary, because the published file is something an operator types repeatedly; the project, its directory, and its
   namespace stay `Cli`.
 - `Common` is cross-cutting code that belongs to no boundary and depends on nothing but the base class library and
-  `Domain`. It is not a layer and has no place in the dependency ordering above: `Cli` and `Infrastructure` reach it,
-  and it reaches only the innermost project, so that a failure it raises derives from `MailFathomException` like every
-  other. Admission is narrow on purpose — code arrives when a second boundary genuinely needs it, and lives with its one
-  consumer until then — because a project defined by what it is not becomes the drawer everything ends up in. Two things
-  have earned it: the AES-GCM envelope, and the mailbox OAuth exchange under `MailboxOAuth/`.
+  `Domain`. It is not a layer and has no place in the dependency ordering above: `Cli`, `Infrastructure`, and `Host`
+  reach it, and it reaches only the innermost project, so that a failure it raises derives from `MailFathomException`
+  like every other. Admission is narrow on purpose — code arrives when a second boundary genuinely needs it, and lives
+  with its one consumer until then — because a project defined by what it is not becomes the drawer everything ends up
+  in. Three things have earned it: the AES-GCM envelope, the mailbox OAuth exchange under `MailboxOAuth/`, and the
+  telemetry name under `Observability/`, with the one activity source and the one meter carrying it, which every
+  subsystem that emits a signal publishes through and the host subscribes, so that no boundary chooses what it is
+  called.
 - `AppHost` is the Aspire local-development orchestration host.
 
 `Cli` also authorizes a mailbox, because one thing a headless service structurally cannot do is ask a person to sign

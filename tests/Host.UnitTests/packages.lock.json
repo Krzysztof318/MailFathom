@@ -749,6 +749,7 @@
         "dependencies": {
           "MailFathom.AI": "[0.4.0, )",
           "MailFathom.Application": "[0.4.0, )",
+          "MailFathom.Common": "[0.4.0, )",
           "MailFathom.Domain": "[0.4.0, )",
           "MailFathom.Infrastructure": "[0.4.0, )",
           "MailFathom.Mcp": "[0.4.0, )",
