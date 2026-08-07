@@ -153,8 +153,8 @@ gh api -X PATCH "repos/Krzysztof318/MailFathom/milestones/<old>" -f state=closed
 ```
 
 The new issue is placed like any other, through the calls `docs/operations/issue-tracking.md` § *Board fields* holds:
-`Area: Release`, `Queue: Later` — the owner decides when a release becomes `Next`, and `$finish-change` writes it when
-the pull requests exist — and `Size: S`, because both diffs together are a changelog section, three prose files, one
+`Area: Release`, `Queue: Later` — it names a release nobody is cutting yet, and step 6 is what moves it to `Next` when
+its pull requests exist — and `Size: S`, because both diffs together are a changelog section, three prose files, one
 property, and the lock files.
 
 #### What the tracking issue says
@@ -383,6 +383,23 @@ Step 4 owns them.
 Each body names the other by number, so neither is merged alone by accident. Both name the issue that tracks this
 release in their titles, and the version-bump one carries the `Closes #<issue>` line, so the issue stays open across
 the tag and closes when the release is actually finished.
+
+**Then set `Queue: Next` on the tracking issue.** `docs/operations/issue-tracking.md` § *Linking a pull request to its
+issue* makes that write part of opening a pull request, and it is this skill's to perform: `$finish-change` is what
+writes it everywhere else, and no step here invokes it. Without the write the release is the one piece of work in
+flight that the board's `Now` view cannot see, for exactly the weeks it is being cut. It sits outside the owner's
+five-slot cap, as every write triggered by a pull request does.
+
+```bash
+gh project field-list 4 --owner Krzysztof318 --format json   # field ids and option ids
+gh project item-list  4 --owner Krzysztof318 --format json   # item id for the tracking issue
+gh project item-edit --project-id <project-id> --id <item-id> \
+  --field-id <Queue field-id> --single-select-option-id <Next option-id>
+```
+
+Confirm the value landed, as that page requires: nothing else writes the field, so one that did not land is an
+incomplete step rather than a detail. Where the board probe returned read access this write does not exist; say so
+rather than reporting it as skipped.
 
 ### 7. Print the ordering, and stop
 
