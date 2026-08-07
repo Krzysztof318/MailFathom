@@ -919,6 +919,54 @@ owner's approval is still required and this one sits beside it as a signal.
 status check and gates nothing must not be able to block a merge either, which is
 why `NEEDS CHANGES` is a heading in a body and never a review state.
 
+### What the verdict moves on the board
+
+A last job writes the verdict to the roadmap board's `Status` field: `Changes
+requested` where the review carried findings, `Ready to merge` where it approved.
+It writes it on every issue the pull request's body closes and on nothing else,
+because closing an issue is what makes a review of the pull request a statement
+about that issue's lifecycle.
+
+It exists because that half of the field had no writer at all. The board's
+built-in `Code changes requested` and `Code review approved` workflows fire on a
+review's *state*, and the two states they read are produced by nobody here:
+`REQUEST_CHANGES` is refused for the reason the section above gives, and GitHub
+does not let the author of a pull request approve or request changes on their own
+— which is every pull request in this repository. So the column that says whether
+a change is waiting on the owner's merge or on the agent answering its findings
+was decided by a run whose conclusion reached the board through no mechanism.
+
+The verdict is a job output rather than a second reading of the pull request. The
+submission step states it in the one branch that posted a review, so a run that
+ended for any of the other reasons it returns on moves nothing, and a verdict
+that exists always names a review a reader can go and look at. The closing
+references come from `collect-closing-references.sh`, the same script the
+collection step runs, so which keywords close an issue is one decision rather
+than two that drift.
+
+Two statuses are never written over. `Done` is the merge and the close, so a
+verdict arriving after one must not drag a finished item back into review.
+`Blocked` is the one status a hand writes, and it says the issue waits on
+something outside the project — a question a review verdict does not answer, so
+a verdict does not get to erase the answer.
+
+It is a separate job for the credential. Writing a field on a user-owned project
+needs a classic token with the `project` scope: no GitHub App permission covers
+one and no fine-grained token carries the scope, which
+[Issue tracking and the roadmap board](issue-tracking.md#status-transitions)
+records along with what that costs. The job checks out only the base commit, runs
+no model, and receives the verdict as a string, so the account-wide credential
+never shares a runner with the reviewer session — the same separation that keeps
+the App's token in the one step that makes no model call. Where the secret is
+absent the job says so and ends green: this workflow gates nothing, and a missing
+credential must not turn a review red. A pull request that closes no issue and a
+board item that is not on the project end the same way, with a notice.
+
+`scripts/test-agent-workflow.sh` runs the step against a fake `gh` the way it
+runs the gate, the settle loop, and the submission: it asserts which option each
+verdict writes, that `Done` and `Blocked` are left alone, and that a run without
+the token writes nothing.
+
 ### Who publishes it
 
 Not `github-actions`. The submission step authenticates as the owner's
@@ -1008,6 +1056,17 @@ else; publishing is the App's, and the two credentials are never held by the sam
 step. `THIRD_PARTY_LICENSES.md` records exactly what the run sends and under
 whose terms, including the consumer-plan data-training setting that decides
 whether what is submitted this way trains future models.
+
+The board write is a third credential, `BOARD_PROJECT_TOKEN`, and it is optional:
+without it the review is published exactly as before and only the `Status` write
+is skipped. It is a **classic** personal access token with the `project` scope and
+no other, created at <https://github.com/settings/tokens>, because that is the
+only kind of credential that reaches a user-owned project — the App above cannot
+be granted one and a fine-grained token has no such scope. Give it an expiry and
+replace it there when it lapses: a token the board refuses fails that job and
+says so, rather than leaving the board quietly behind. Nothing else reads it,
+and it is held by a job that runs no model and checks out nothing from the branch
+under review.
 
 ## Dependency update pull requests
 
