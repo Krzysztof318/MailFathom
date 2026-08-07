@@ -74,6 +74,28 @@ public sealed class EmailVectorSearchIndexReaderCommandTests
         Assert.Contains("LIMIT", statement, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Distance alone is not a total order. Near-duplicate mail — and any deterministic generator — ties, and an
+    /// unbroken tie leaves the server free to return either order, so two identical searches would disagree about what
+    /// the nearest results were and the fused order built on top of them would inherit that. The window is therefore cut
+    /// by the same timeline key the lexical ranking appends.
+    /// </summary>
+    [Fact]
+    public void NearestHitsQuery_DistanceTies_AreBrokenByTheTimelineKeyBeforeTheWindowIsCut()
+    {
+        // Act
+        var ordering = WindowOrdering(CommandBody(GeneratedCommand(EmbeddingDistanceMetric.Cosine)));
+
+        // Assert
+        Assert.Contains("<=>", ordering, StringComparison.Ordinal);
+        Assert.Contains(nameof(StoredEmailEntity.ReceivedAt), ordering, StringComparison.Ordinal);
+        Assert.Contains(nameof(StoredEmailEntity.Id), ordering, StringComparison.Ordinal);
+        Assert.True(
+            ordering.IndexOf("<=>", StringComparison.Ordinal)
+            < ordering.IndexOf(nameof(StoredEmailEntity.ReceivedAt), StringComparison.Ordinal),
+            "The distance ranks the window and the timeline key only breaks its ties, so it has to be ordered on first.");
+    }
+
     /// <summary>The structured filters join the ranking, so mail outside the caller's scope never takes part in it.</summary>
     [Fact]
     public void NearestHitsQuery_StructuralFilters_NarrowTheQueryBeforeAnyDistanceIsMeasured()
@@ -134,6 +156,23 @@ public sealed class EmailVectorSearchIndexReaderCommandTests
             dimension: 8,
             distanceMetric,
             EmbeddingInputPreparation.Create(2_000, passageInstruction: null, normalizesVector: true));
+
+    /// <summary>Takes the ordering clause the window is actually cut by, which is the one the row limit follows.</summary>
+    /// <remarks>
+    /// Located from the limit backwards rather than by counting clauses, because the provider is free to nest the
+    /// ranking in a subquery and repeat the ordering outside it. The clause that decides which rows survive is the one
+    /// immediately before <c>LIMIT</c> whatever shape the rest of the statement takes.
+    /// </remarks>
+    private static string WindowOrdering(string statement)
+    {
+        var limitAt = statement.IndexOf("LIMIT", StringComparison.Ordinal);
+        Assert.True(limitAt > 0, "The window is closed by a row limit.");
+
+        var orderingAt = statement.LastIndexOf("ORDER BY", limitAt, StringComparison.Ordinal);
+        Assert.True(orderingAt > 0, "The window the limit cuts is ordered before it is cut.");
+
+        return statement[orderingAt..limitAt];
+    }
 
     /// <summary>Drops the parameter declarations EF Core prefixes, leaving the statement those parameters are read by.</summary>
     private static string CommandBody(string command)
