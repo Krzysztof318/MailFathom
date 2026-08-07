@@ -162,7 +162,10 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
             this.LogCallBudgetExhausted(result.CallBudgetExhaustedEmailCount);
         }
 
-        if (result.ChunkedEmailCount > 0 || result.EmbeddedEmailCount > 0)
+        // Every one of the three is asked about, because a run can move the third alone: a message that spends its whole
+        // call budget mid-way is neither cut nor brought up to date, and the hundreds of vectors it did write would go
+        // unreported by a line that only counted whole messages — while the meter recorded them either way.
+        if (result.ChunkedEmailCount > 0 || result.EmbeddedEmailCount > 0 || result.EmbeddedChunkCount > 0)
         {
             this.LogBackfillProgressed(
                 result.ChunkedEmailCount,

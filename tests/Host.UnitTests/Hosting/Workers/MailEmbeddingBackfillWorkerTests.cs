@@ -126,6 +126,12 @@ public sealed class MailEmbeddingBackfillWorkerTests
         Assert.Contains(
             world.Logger.Messages,
             message => message.Contains("MaxPassagesPerRequest", StringComparison.Ordinal));
+
+        // The run's only work was that one message, so it was neither cut nor brought up to date — and it still wrote
+        // every vector its budget bought. A progress line that counted whole messages alone would report none of them.
+        Assert.Contains(
+            world.Logger.Messages,
+            message => message.Contains("gave 0 messages 512 vectors", StringComparison.Ordinal));
     }
 
     /// <summary>A failed run says nothing about whether messages remain, so the worker stays alive to resume next interval.</summary>
