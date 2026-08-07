@@ -4,6 +4,7 @@
 
 using MailFathom.AI;
 using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
@@ -48,6 +49,13 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// <remarks>A literal under the same restriction as the orchestrated mailbox's password: it protects synthetic data in a database created and destroyed by one run, and it unlocks nothing anything else holds.</remarks>
     internal const string DataEncryptionKeyMaterial = "bWFpbGZhdGhvbS1pbnRlZ3JhdGlvbnRlc3RzLWtleSE=";
 
+    /// <summary>The width of the space the deterministic generator produces vectors in for this suite.</summary>
+    /// <remarks>Deliberately narrow. Nothing here measures a distance, so a wider space would only make every stored row larger.</remarks>
+    internal const int DeterministicEmbeddingDimension = 8;
+
+    /// <summary>The width a passage is cut to before the deterministic generator hashes it.</summary>
+    internal const int DeterministicEmbeddingInputCharacterLimit = 8_000;
+
     private readonly IHost host;
 
     private OrchestratedMailFathomServices(IHost host) => this.host = host;
@@ -89,10 +97,19 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddSingleton(new MailboxWriteSessionOptions());
         builder.Services.AddSingleton(new MailboxMutationOptions());
         builder.Services.AddSingleton(new PersistenceConcurrencyOptions { MaximumCommitAttempts = 3 });
+        // The bound a composition root reads from the Embeddings section. The backlog itself is registered by
+        // AddInfrastructure, because every committed message is offered into it whether or not this deployment embeds.
+        builder.Services.AddSingleton(new EmailEmbeddingBacklogOptions());
 
         // Registered by a composition root rather than by AddInfrastructure, because persistence writes what the AI
         // boundary derives and may not reference it. Without this the chunk writer resolves nothing.
         builder.Services.AddLocalTextDerivations();
+        // The generator ADR 0006 requires to exist so that everything downstream of the provider boundary — the
+        // schema, the worker, the backfill, the generation switch — is provable against a real database at zero
+        // provider cost. A test that activates a profile built from its identity embeds for nothing.
+        builder.Services.AddDeterministicTextEmbeddings(
+            DeterministicEmbeddingDimension,
+            DeterministicEmbeddingInputCharacterLimit);
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),
             PostgresTextSearchConfiguration.Default);

@@ -686,6 +686,18 @@ Each batch commits its extractions together with the position it reached, so a c
 
 The walk reaches no mail server — every byte it reads was fetched and stored by an earlier synchronization run — so it cannot touch a remote `\Seen` flag however long it runs. A run is bounded by `BatchSize` and `MaxBatchesPerRun` and then yields; the worker ends itself once a run finds nothing left, because every message synchronized from then on is extracted as it is written. A failed run keeps the worker alive: the database being briefly unavailable says nothing about whether work remains, and the committed position means the next interval resumes.
 
+### Offering a stored message for embedding
+
+Once a message and the passages derived beside it are committed, the run offers it to the embedding backlog and moves
+on. The offer is deliberately outside the transaction that stored them: a provider call inside it would hold a database
+transaction open for as long as a remote model takes to answer, and a provider outage would stall the mailbox fetch
+behind it. It also never waits — the run is holding an open IMAP session, so a full backlog refuses the offer rather
+than making a mailbox as slow as the provider is.
+
+Nothing about that changes what a run reports or how far it gets. A message the backlog turned away is stored with its
+passages exactly as one it accepted, and an instance that has activated no embedding profile offers into a backlog
+nothing drains. [Automatic embedding](automatic-embedding.md) is what happens on the other side of it.
+
 ## Reconciling against the server
 
 A synchronization run has two halves. The forward pass only ever moves past the checkpoint, so it discovers new mail and

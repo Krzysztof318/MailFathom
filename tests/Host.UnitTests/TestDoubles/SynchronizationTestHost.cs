@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
@@ -95,6 +96,9 @@ internal static class SynchronizationTestHost
         services.AddSingleton(new PersistenceConcurrencyOptions());
         services.AddSingleton(new MailboxSynchronizationOptions());
         services.AddSingleton(timeProvider);
+        // Every committed message is offered for embedding, so a synchronizer cannot be composed without somewhere to
+        // offer it. Nothing here reads the backlog back; these tests are about the run, not about what embeds afterwards.
+        services.AddSingleton<IEmailEmbeddingBacklog>(new ScriptedEmailEmbeddingBacklog());
 
         var (catalog, resolutionStore) = CreateResolvedFolders(options, unadvertisedAliases);
         services.AddSingleton(remoteFolderCatalog ?? catalog);

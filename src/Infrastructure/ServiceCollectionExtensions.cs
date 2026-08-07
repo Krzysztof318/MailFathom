@@ -6,6 +6,8 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.ListEmails;
@@ -23,6 +25,7 @@ using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Embeddings;
 using MailFathom.Infrastructure.Folders;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.MailKit;
@@ -34,6 +37,7 @@ using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Accounts;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Emails;
+using MailFathom.Infrastructure.Persistence.Embeddings;
 using MailFathom.Infrastructure.Persistence.Mutations;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.Infrastructure.Persistence.Synchronization;
@@ -169,6 +173,20 @@ public static class ServiceCollectionExtensions
         // passage rows a message owns. Its `IEmailTextChunker` comes from the AI boundary, which this project may not
         // reference, so a composition root that registers persistence without the local derivations resolves nothing.
         services.AddScoped<EmailChunkWriter>();
+        // The backlog is a singleton because the bound it enforces is one process-wide limit on how much embedding work
+        // is held in memory; a scoped one would hold that bound per scope, and a synchronization run would be offering
+        // into a backlog no worker is reading. Registered whether or not this deployment embeds, because the
+        // synchronization run offers into it either way and an instance that has activated no profile simply has a
+        // worker that finds nothing to do.
+        services.AddSingleton<IEmailEmbeddingBacklog, BoundedEmailEmbeddingBacklog>();
+        services.AddSingleton<EmailEmbeddingTelemetry>();
+        services.AddScoped<IActiveEmbeddingProfileReader, ActiveEmbeddingProfileReader>();
+        services.AddScoped<IEmailEmbeddingStore, EmailEmbeddingStore>();
+        // Registered here beside the store it writes through, for the reason the chunk writer above is: its
+        // `ITextEmbeddingGenerator` comes from the AI boundary, which this project may not reference, so a composition
+        // root that registers persistence without an embedding provider resolves nothing — which is correct, because
+        // such a deployment starts no worker to ask for one.
+        services.AddScoped<StoredEmailEmbeddingGenerator>();
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
         services.AddScoped<IDatabaseSchemaInspector, EfCoreDatabaseSchemaInspector>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();

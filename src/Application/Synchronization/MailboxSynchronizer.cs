@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
@@ -34,6 +35,7 @@ public sealed class MailboxSynchronizer
     private readonly IEmailMimeReader mimeReader;
     private readonly IMailboxMutationReconciliationStore mutationStore;
     private readonly MailboxReconciler reconciler;
+    private readonly IEmailEmbeddingBacklog embeddingBacklog;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly TimeProvider timeProvider;
     private readonly MailboxSynchronizationOptions options;
@@ -51,6 +53,7 @@ public sealed class MailboxSynchronizer
         IEmailMimeReader mimeReader,
         IMailboxMutationReconciliationStore mutationStore,
         MailboxReconciler reconciler,
+        IEmailEmbeddingBacklog embeddingBacklog,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options)
@@ -66,6 +69,7 @@ public sealed class MailboxSynchronizer
         this.mimeReader = mimeReader;
         this.mutationStore = mutationStore;
         this.reconciler = reconciler;
+        this.embeddingBacklog = embeddingBacklog;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.timeProvider = timeProvider;
         this.options = options;
@@ -444,6 +448,13 @@ public sealed class MailboxSynchronizer
                 await this.ObservePlacementAsync(persistenceSession, placement, attemptCancellationToken);
             },
             cancellationToken);
+
+        // Offered after the commit and never inside it, which is what keeps a provider outage out of this run: the
+        // message and the passages the chunk writer derived beside it are durable by now, so the worker consumes
+        // committed state and nothing it does can extend or fail the transaction that produced it. A refusal by a full
+        // backlog is deliberately not an error here — the message is stored, and the backfill is what reaches mail the
+        // live path did not. The identity is the one the commit resolved, which is the same value this outcome reports.
+        this.embeddingBacklog.TryEnqueue(storedEmailId);
 
         return new OccurrenceSynchronizationOutcome(
             storedEmailId,

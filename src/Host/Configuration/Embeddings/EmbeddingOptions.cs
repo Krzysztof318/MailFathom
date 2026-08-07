@@ -5,6 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.AI.Embeddings;
+using MailFathom.Application.Emails.Embeddings.Generation;
 
 namespace MailFathom.Host.Configuration.Embeddings;
 
@@ -50,6 +51,17 @@ internal sealed class EmbeddingOptions : IValidatableObject
 
     /// <summary>Gets or sets the time one request to one endpoint may take before it is abandoned.</summary>
     public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>Gets or sets how many newly synchronized messages may wait to be embedded at once.</summary>
+    /// <remarks>
+    /// The bound is expressed rather than absorbed: a synchronization run that finds the backlog full stores the message
+    /// and moves on instead of waiting, because it is holding an open mailbox session and a slow provider must not
+    /// become a slow mailbox. Nothing is lost by that — the message and its passages are durable, and the backfill is
+    /// what reaches mail the live path did not. Raising it buys a longer burst before that happens and costs memory
+    /// proportional to the number of identifiers held, nothing more.
+    /// </remarks>
+    [Range(1, 1_000_000)]
+    public int MaxQueuedEmails { get; set; } = EmailEmbeddingBacklogOptions.DefaultCapacity;
 
     /// <summary>Gets whether the deployment declared an embedding provider at all.</summary>
     public bool IsConfigured => this.Endpoints.Count > 0;

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
@@ -400,6 +401,49 @@ public sealed class MailboxSynchronizerTests
             StoredEmailContentAvailability.Available,
             Arg.Any<CancellationToken>());
         Assert.Null(mutationStore.RecordOf(record.Id).PlacementObservedAt);
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_NewMessage_OffersTheCommittedMessageForEmbedding()
+    {
+        // Arrange
+        var backlog = new RecordingEmailEmbeddingBacklog();
+        var arrangement = ArrangeOneStoredMessage(backlog);
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(
+            arrangement.AccountId,
+            InboxMapping,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal([arrangement.StoredEmailId], backlog.Accepted);
+        Assert.Equal(0, backlog.RefusedCount);
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_EmbeddingBacklogIsFull_StoresTheMessageAndReportsItSynchronized()
+    {
+        // Arrange
+        var backlog = new RecordingEmailEmbeddingBacklog { Capacity = 0 };
+        var arrangement = ArrangeOneStoredMessage(backlog);
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(
+            arrangement.AccountId,
+            InboxMapping,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        Assert.Empty(backlog.Accepted);
+        Assert.Equal(1, backlog.RefusedCount);
+        await arrangement.ContentStore.Received(1).SaveContentAsync(
+            arrangement.PersistenceSession,
+            arrangement.StoredEmailId,
+            Arg.Any<RemoteEmailContent>(),
+            CancellationToken.None);
     }
 
     [Fact]
@@ -1986,6 +2030,61 @@ public sealed class MailboxSynchronizerTests
         return checkpointStore;
     }
 
+    /// <summary>Composes a run that stores exactly one message, which is the shape both embedding tests assert about.</summary>
+    private static OneStoredMessageArrangement ArrangeOneStoredMessage(IEmailEmbeddingBacklog embeddingBacklog)
+    {
+        var accountId = MailAccountId.Create("primary");
+        var folder = InboxFolder;
+        var uidValidity = ImapUidValidity.Create(5);
+        var uid = ImapUid.Create(10);
+        var occurrence = EmailOccurrenceId.Create(accountId, folder.Id, uidValidity, uid);
+        var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
+        var metadataRepository = Substitute.For<IEmailMetadataRepository>();
+        var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
+        var contentStore = Substitute.For<IEmailContentStore>();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var session = Substitute.For<IMailboxSession>();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 128);
+        var content = new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
+        var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
+
+        checkpointStore.GetCheckpointAsync(accountId, folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
+        sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
+        session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        session.GetEmailBatchAfterAsync(null, 25, MailSynchronizationWindow.Unbounded, CancellationToken.None).Returns(new RemoteEmailMetadataBatch([metadata], uid, HasMore: false));
+        session.FetchEmailContentWithoutSettingSeenAsync(occurrence, 1024, CancellationToken.None).Returns(RemoteEmailContentFetchResult.Retrieved(content));
+        metadataRepository.UpsertMetadataAsync(persistenceSession, metadata, Arg.Any<ExtractedEmailMetadata?>(), StoredEmailContentAvailability.Available, CancellationToken.None).Returns(storedEmailId);
+
+        var synchronizer = CreateSynchronizer(
+            sessionFactory,
+            checkpointStore,
+            sessionScopeFactory,
+            metadataRepository,
+            contentStore,
+            clock,
+            options,
+            embeddingBacklog: embeddingBacklog);
+
+        return new OneStoredMessageArrangement(
+            synchronizer,
+            accountId,
+            storedEmailId,
+            contentStore,
+            persistenceSession);
+    }
+
+    /// <summary>The parts of a one-message run the embedding assertions read back.</summary>
+    private sealed record OneStoredMessageArrangement(
+        MailboxSynchronizer Synchronizer,
+        MailAccountId AccountId,
+        StoredEmailId StoredEmailId,
+        IEmailContentStore ContentStore,
+        IPersistenceSession PersistenceSession);
+
     private static MailboxSynchronizer CreateSynchronizer(
         IMailboxSessionFactory mailboxSessionFactory,
         ISynchronizationCheckpointStore checkpointStore,
@@ -1999,7 +2098,8 @@ public sealed class MailboxSynchronizerTests
         IEmailMimeReader? mimeReader = null,
         MailSynchronizationWindow synchronizationWindow = default,
         IStoredEmailReconciliationStore? reconciliationStore = null,
-        InMemoryMailboxMutationReconciliationStore? mutationStore = null)
+        InMemoryMailboxMutationReconciliationStore? mutationStore = null,
+        IEmailEmbeddingBacklog? embeddingBacklog = null)
     {
         var concurrencyRetryPolicy = new OptimisticConcurrencyRetryPolicy(
             persistenceSessionFactory,
@@ -2025,6 +2125,7 @@ public sealed class MailboxSynchronizerTests
                 concurrencyRetryPolicy,
                 timeProvider,
                 options),
+            embeddingBacklog ?? new RecordingEmailEmbeddingBacklog(),
             concurrencyRetryPolicy,
             timeProvider,
             options);
