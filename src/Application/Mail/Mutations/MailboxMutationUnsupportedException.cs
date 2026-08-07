@@ -29,7 +29,7 @@ namespace MailFathom.Application.Mail.Mutations;
 /// MailFathom's own configured or protocol-registered names, and none of them is mail content or a remote path.
 /// </para>
 /// </remarks>
-public sealed class MailboxMutationUnsupportedException : MailFathomException
+public sealed class MailboxMutationUnsupportedException : MailboxMutationRefusedException
 {
     /// <summary>Initializes a new refusal naming the mutation and the extension the server does not advertise.</summary>
     /// <param name="accountId">The account whose mail server advertises no way to carry the mutation.</param>

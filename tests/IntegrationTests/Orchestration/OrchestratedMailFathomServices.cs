@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -96,6 +97,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // to resolve here for the same reason every bound setting above is supplied: the suite does not start the host.
         builder.Services.AddSingleton(new MailboxWriteSessionOptions());
         builder.Services.AddSingleton(new MailboxMutationOptions());
+        builder.Services.AddSingleton(new MailboxConvergenceOptions());
         builder.Services.AddSingleton(new PersistenceConcurrencyOptions { MaximumCommitAttempts = 3 });
         // The bound a composition root reads from the Embeddings section. The backlog itself is registered by
         // AddInfrastructure, because every committed message is offered into it whether or not this deployment embeds.

@@ -77,4 +77,24 @@ internal static class MailFolderEntityResolver
 
         return folder;
     }
+
+    /// <summary>Rebuilds the alias binding one row states.</summary>
+    /// <param name="entity">The binding row.</param>
+    /// <returns>The resolution that row describes, including the remote path a session selects.</returns>
+    /// <remarks>
+    /// It is the exact inverse of what <see cref="AddAsync" /> writes, and it lives beside it so the two cannot drift:
+    /// the delimiter in particular is stored as text and read back as the one character it holds, and a second reading
+    /// of that would be a second chance to disagree about an empty string.
+    /// </remarks>
+    public static MailFolderResolution ToResolution(MailFolderEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new MailFolderResolution(
+            MailFolderAlias.Create(entity.Alias),
+            MailFolderResolutionGeneration.Create(entity.ResolutionGeneration),
+            RemoteFolderPath.Create(
+                entity.RemotePath,
+                entity.HierarchyDelimiter is { Length: > 0 } delimiter ? delimiter[0] : null));
+    }
 }

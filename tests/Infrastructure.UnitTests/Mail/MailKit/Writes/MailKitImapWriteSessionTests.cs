@@ -130,6 +130,45 @@ public sealed class MailKitImapWriteSessionTests
     }
 
     /// <summary>
+    /// A destination folder the server does not have arrives from MailKit as a plain exception carrying a remote path
+    /// and nothing about what was being attempted. Translating it is what lets the change be given up on at once, and
+    /// it is what keeps that path out of a message an operator reads.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PlacingMutations_DestinationFolderTheServerDoesNotHave_AreRefusedBeforeAnythingIsIssued(bool isCopy)
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move | ImapCapabilities.UidPlus };
+        client.AbsentFolderPaths.Add(ArchivePath);
+        var openFolder = CreateWritableFolder();
+        var journal = new RecordingMailboxMutationJournal();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailboxDestinationFolderMissingException>(
+            () => isCopy
+                ? session.CopyAsync(CreateOccurrenceId(42U), Archive, journal, CancellationToken.None)
+                : session.RelocateAsync(CreateOccurrenceId(42U), Archive, journal, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailboxMutationDestinationMissing, refusal.ErrorCode);
+        Assert.DoesNotContain(ArchivePath, refusal.Message, StringComparison.Ordinal);
+        Assert.Equal(MailboxMutationStage.Recorded, journal.Stage);
+        await openFolder.DidNotReceive().CopyToAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IMailFolder>(),
+            Arg.Any<CancellationToken>());
+        await openFolder.DidNotReceive().MoveToAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IMailFolder>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
     /// Both halves of the placement come out of the <c>COPYUID</c> response, which is the only place the destination's
     /// UIDVALIDITY is available: the folder was resolved by path and never selected, so it reports zero. Reading it
     /// there would raise a failure while describing a relocation that had already moved the message — the worst

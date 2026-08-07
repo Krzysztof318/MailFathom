@@ -175,11 +175,12 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
 
             return new MailboxMutationOutcome(journal.RecordId, MailboxMutationStatus.Performed, placement);
         }
-        catch (MailboxMutationUnsupportedException unsupported)
+        catch (MailboxMutationRefusedException refusal)
         {
-            // A server that advertises no way to carry the change safely will advertise none tomorrow either, so this
-            // is terminal on its first occurrence rather than after the attempt bound is spent on it.
-            await journal.AbandonAsync(unsupported.ErrorCode, cancellationToken);
+            // A server that advertises no way to carry the change safely will advertise none tomorrow either, and a
+            // folder it does not have is not one it is about to grow, so both are terminal on their first occurrence
+            // rather than after the attempt bound has been spent finding that out one login at a time.
+            await journal.AbandonAsync(refusal.ErrorCode, cancellationToken);
 
             throw;
         }

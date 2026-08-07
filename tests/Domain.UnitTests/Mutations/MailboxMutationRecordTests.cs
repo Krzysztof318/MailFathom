@@ -390,6 +390,104 @@ public sealed class MailboxMutationRecordTests
         Assert.True(setSeen.IsReconciled);
     }
 
+    /// <summary>The lifecycle is what somebody watching a deployment reads, and the three converging stages are one answer to them.</summary>
+    [Theory]
+    [InlineData(MailboxMutationStage.Recorded)]
+    [InlineData(MailboxMutationStage.PlacementIssued)]
+    [InlineData(MailboxMutationStage.PlacementConfirmed)]
+    [InlineData(MailboxMutationStage.SourceFlaggedDeleted)]
+    [InlineData(MailboxMutationStage.Completed)]
+    [InlineData(MailboxMutationStage.Abandoned)]
+    public void Lifecycle_AnyStage_ReadsTheStageTheRecordCarries(MailboxMutationStage stage)
+    {
+        // Arrange
+        var record = CompletedRelocation() with { Stage = stage };
+
+        // Act
+        var lifecycle = record.Lifecycle;
+
+        // Assert
+        Assert.Equal(MailboxMutationLifecycle.Of(stage), lifecycle);
+    }
+
+    /// <summary>The one stage a retry may not act on is the one convergence has to recognize before it does anything.</summary>
+    [Theory]
+    [InlineData(MailboxMutationStage.Recorded, false)]
+    [InlineData(MailboxMutationStage.PlacementIssued, true)]
+    [InlineData(MailboxMutationStage.PlacementConfirmed, false)]
+    [InlineData(MailboxMutationStage.SourceFlaggedDeleted, false)]
+    [InlineData(MailboxMutationStage.Completed, false)]
+    [InlineData(MailboxMutationStage.Abandoned, false)]
+    public void HasUnknownOutcome_AnyStage_IsTrueOnlyWhileThePlacementIsUnacknowledged(
+        MailboxMutationStage stage,
+        bool expected)
+    {
+        // Arrange
+        var record = CompletedRelocation() with { Stage = stage };
+
+        // Act
+        var hasUnknownOutcome = record.HasUnknownOutcome;
+
+        // Assert
+        Assert.Equal(expected, hasUnknownOutcome);
+    }
+
+    /// <summary>
+    /// A relocation carried by <c>MOVE</c> removes the source itself, so the source having gone is the server's own
+    /// statement that the command ran — which is what settles an outcome nothing may ask the server about twice.
+    /// </summary>
+    [Fact]
+    public void IsUnknownPlacementSettledBySourceRemoval_ANativeRelocationWhoseSourceHasGone_IsSettled()
+    {
+        // Arrange
+        var unacknowledged = UnacknowledgedNativeRelocation();
+
+        // Act
+        var settled = unacknowledged with { SourceRemovalObservedAt = RecordedAt.AddMinutes(5) };
+
+        // Assert
+        Assert.False(unacknowledged.IsUnknownPlacementSettledBySourceRemoval);
+        Assert.True(settled.IsUnknownPlacementSettledBySourceRemoval);
+    }
+
+    /// <summary>
+    /// A copy and a fallback relocation both leave the source where it was, so nothing about it distinguishes a command
+    /// that landed from one that never arrived. Settling either from a disappearance would be a guess.
+    /// </summary>
+    [Fact]
+    public void IsUnknownPlacementSettledBySourceRemoval_ASequenceThatLeavesTheSource_IsNeverSettledByIt()
+    {
+        // Arrange
+        var observedAt = RecordedAt.AddMinutes(5);
+        var fallbackRelocation = UnacknowledgedNativeRelocation() with
+        {
+            RequiresSourceRemoval = true,
+            SourceRemovalObservedAt = observedAt,
+        };
+        var copy = UnacknowledgedNativeRelocation() with
+        {
+            Request = MailboxMutationRequest.Copy(LocalEmail, SourceOccurrence(), Requester, Archive),
+            SourceRemovalObservedAt = observedAt,
+        };
+
+        // Act
+        var settledStates = new[]
+        {
+            fallbackRelocation.IsUnknownPlacementSettledBySourceRemoval,
+            copy.IsUnknownPlacementSettledBySourceRemoval,
+        };
+
+        // Assert
+        Assert.Equal([false, false], settledStates);
+    }
+
+    private static MailboxMutationRecord UnacknowledgedNativeRelocation() => CompletedRelocation() with
+    {
+        Stage = MailboxMutationStage.PlacementIssued,
+        RequiresSourceRemoval = false,
+        Placement = RemoteEmailPlacement.NotReported(),
+    };
+
     private static MailFolderResolutionId InboxBinding =>
         new(MailFolderAlias.Create(Inbox.Value), MailFolderResolutionGeneration.First);
 

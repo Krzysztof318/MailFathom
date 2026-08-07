@@ -98,9 +98,9 @@ internal sealed class MailSynchronizationOptions
     /// <remarks>
     /// <para>
     /// A change MailFathom is asked to make is written down before it is issued and attempted again from that record
-    /// until it succeeds. This is where that stops. A mail server that is refusing, a destination folder somebody
-    /// deleted, and a message another client already removed all fail identically on the next run, and repeating them
-    /// costs a login and a round trip each time while hiding the problem behind an operation that always looks busy.
+    /// until it succeeds. This is where that stops. A mail server that is refusing and a message another client already
+    /// removed fail identically on the next run, and repeating them costs a login and a round trip each time while
+    /// hiding the problem behind an operation that always looks busy.
     /// </para>
     /// <para>
     /// It bounds attempts of the whole change rather than retries inside one, which the account's resilience pipeline
@@ -108,9 +108,42 @@ internal sealed class MailSynchronizationOptions
     /// and stays visible as stuck rather than disappearing, so raising this buys patience with a failing server and
     /// lowering it surfaces a broken one sooner.
     /// </para>
+    /// <para>
+    /// Not every refusal waits for it. A server that advertises no way to carry the change safely, and one that answers
+    /// that the destination folder is not there, have both already given the answer every later attempt would receive,
+    /// so those are given up on at the first refusal whatever this is set to.
+    /// </para>
     /// </remarks>
     [Range(1, 100)]
     public int MaxMutationAttempts { get; set; } = 5;
+
+    /// <summary>Gets or sets how many outstanding changes one account converges per synchronization run.</summary>
+    /// <remarks>
+    /// Every run begins by taking the account's unfinished changes in hand — a filing interrupted by a restart, a change
+    /// recorded while the server was unreachable — and finishing them or giving up on them. The bound is what keeps a
+    /// backlog from turning one run into an unbounded sequence of mail-server round trips while the folders behind it
+    /// wait; what it leaves is picked up by the next run, oldest first. Each one is a write to a mail server rather than
+    /// a row to process, so the useful values are small.
+    /// </remarks>
+    [Range(1, 1000)]
+    public int MaxMutationsPerConvergencePass { get; set; } = 50;
+
+    /// <summary>Gets or sets how long a change whose outcome is unknown waits to be settled before it is given up on.</summary>
+    /// <remarks>
+    /// <para>
+    /// A command that puts a message in another folder is never issued twice, because a second one is a second message
+    /// rather than a repeat of the first. When such a command goes out and its answer never arrives, the only thing that
+    /// can still settle it is the mailbox itself coming back through an ordinary run, which takes as long as this
+    /// account's folders take to come round again — so this is a period rather than a number of attempts.
+    /// </para>
+    /// <para>
+    /// When it elapses the change is given up on and stays visible as dead-lettered, because a change that looks busy
+    /// forever is worse than one that says it stopped. Set it comfortably above the interval, so an ordinary run has
+    /// several chances to settle the change before the deadline is reached.
+    /// </para>
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:01:00", "7.00:00:00")]
+    public TimeSpan UnknownMutationOutcomeGrace { get; set; } = TimeSpan.FromHours(6);
 
     /// <summary>Gets or sets how long shutdown waits for the work units already under way before cancelling them.</summary>
     /// <remarks>

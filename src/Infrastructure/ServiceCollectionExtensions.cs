@@ -18,6 +18,7 @@ using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Synchronization;
@@ -280,6 +281,10 @@ public static class ServiceCollectionExtensions
         // run is recognized as MailFathom's own instead of being stored as a second email.
         services.AddScoped<IMailboxMutationReconciliationStore, MailboxMutationReconciliationStore>();
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
+        // A singleton, because the gauges it publishes are the process's and the account snapshots behind them outlive
+        // any one run; the pass that fills them is scoped like everything else that reaches a mail server.
+        services.AddSingleton<MailboxConvergenceTelemetry>();
+        services.AddScoped<MailboxMutationConverger>();
         services.AddScoped<IRemoteFolderCatalog>(provider => new MailKitRemoteFolderCatalog(
             static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),

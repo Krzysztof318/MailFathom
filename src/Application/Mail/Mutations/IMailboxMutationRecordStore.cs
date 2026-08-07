@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
@@ -99,7 +100,7 @@ public interface IMailboxMutationRecordStore
         MailFathomErrorCode failure,
         CancellationToken cancellationToken);
 
-    /// <summary>Reads the mutations of one account that have not completed.</summary>
+    /// <summary>Reads the mutations of one account that have not completed, with the folder binding each was recorded against.</summary>
     /// <param name="accountId">The account whose mutations are read.</param>
     /// <param name="limit">The greatest number of records to return.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
@@ -114,11 +115,30 @@ public interface IMailboxMutationRecordStore
     /// </para>
     /// <para>
     /// Oldest first, because the answer starts with whatever has been outstanding longest. It is bounded like every
-    /// other public query.
+    /// other public query, and convergence treats the bound as a page it comes back for rather than as a cut.
     /// </para>
     /// </remarks>
-    Task<IReadOnlyList<MailboxMutationRecord>> ReadOutstandingAsync(
+    Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
         MailAccountId accountId,
         int limit,
+        CancellationToken cancellationToken);
+
+    /// <summary>Counts one account's uncompleted mutations by kind and by where in its lifecycle each one stands.</summary>
+    /// <param name="accountId">The account whose mutations are counted.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>One entry per kind and lifecycle that has at least one record, in no particular order.</returns>
+    /// <remarks>
+    /// <para>
+    /// It is an aggregate rather than a count of what <see cref="ReadOutstandingAsync" /> returned, because that read is
+    /// bounded and a bounded count is wrong exactly when it matters — the moment an account has more stuck changes than
+    /// one pass looks at is the moment somebody needs the real number.
+    /// </para>
+    /// <para>
+    /// The database groups and counts, so the answer is a handful of rows however many mutations the account has: at
+    /// most one per permitted mutation per lifecycle. Nothing derived from a message takes part in it.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<MailboxMutationLifecycleCount>> ReadLifecycleCountsAsync(
+        MailAccountId accountId,
         CancellationToken cancellationToken);
 }

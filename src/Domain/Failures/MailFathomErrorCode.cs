@@ -104,6 +104,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode MailboxMutationFailedUnexpectedly { get; } = new(25004);
 
+    /// <summary>Gets subcategory 5, mutation support: the folder a relocation or a copy names as its destination does not exist on the server.</summary>
+    /// <remarks>
+    /// It sits beside <see cref="MailboxMutationUnsupported" /> rather than among the availability failures for the same
+    /// reason that one does: a folder the server does not have is not a round trip that went badly, and asking again
+    /// every interval would spend a login apiece to be told the same thing. The remedy is an operator's — recreate the
+    /// folder, or correct whatever asked for that path — so the mutation is given up on visibly at the first refusal
+    /// instead of after its attempt bound.
+    /// </remarks>
+    public static MailFathomErrorCode MailboxMutationDestinationMissing { get; } = new(25005);
+
     #endregion
 
     #region Category 3 — Persistence
@@ -254,6 +264,7 @@ public readonly record struct MailFathomErrorCode
         MailboxMutationOutcomeUnknown,
         MailboxMutationAttemptsExhausted,
         MailboxMutationFailedUnexpectedly,
+        MailboxMutationDestinationMissing,
         PersistenceConcurrencyConflict,
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,

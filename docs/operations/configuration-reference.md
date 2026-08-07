@@ -81,6 +81,8 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `MailSynchronization:MaxConcurrentFoldersPerAccount` | int | `1` | 1 – 20 | reload |
 | `MailSynchronization:WriteConnectionIdlePeriod` | TimeSpan | `00:02:00` | 5 s – 30 min; how long an account's single write connection keeps its slot after the last change it carried | restart |
 | `MailSynchronization:MaxMutationAttempts` | int | `5` | 1 – 100; how many attempts one recorded change to a mailbox may spend before it is given up on and left visible as stuck | restart |
+| `MailSynchronization:MaxMutationsPerConvergencePass` | int | `50` | 1 – 1000; how many unfinished changes one account run takes in hand before the rest wait for the next run | reload |
+| `MailSynchronization:UnknownMutationOutcomeGrace` | TimeSpan | `06:00:00` | 1 min – 7 days; how long a change whose placement was never acknowledged waits to be settled by observation before it is given up on | reload |
 | `MailSynchronization:ShutdownDrainTimeout` | TimeSpan | `00:00:10` | 0 – 2 min | restart |
 | `MailSynchronization:MaxMetadataBatchSize` | int | `100` | 1 – 1000 | reload |
 | `MailSynchronization:MaxRawMimeBytes` | long | `26214400` (25 MiB) | 1024 – 104857600; larger messages are stored without content | reload |

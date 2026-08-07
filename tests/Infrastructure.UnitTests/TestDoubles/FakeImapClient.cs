@@ -111,6 +111,10 @@ internal sealed class FakeImapClient
 
     internal List<string> RequestedFolderPaths { get; } = [];
 
+    /// <summary>Gets the paths this server answers for the way MailKit reports a folder that is not there.</summary>
+    /// <remarks>A folder somebody deleted between a change being decided on and being issued is an ordinary case, and this is how a test models it.</remarks>
+    internal HashSet<string> AbsentFolderPaths { get; } = new(StringComparer.Ordinal);
+
     internal SecureSocketOptions? ConnectSocketOptions { get; private set; }
 
     internal RemoteCertificateValidationCallback? ValidationCallbackWhenConnected { get; private set; }
@@ -235,6 +239,11 @@ internal sealed class FakeImapClient
                 var requestedPath = call.Arg<string>()!;
                 this.GetFolderAsyncCount++;
                 this.RequestedFolderPaths.Add(requestedPath);
+
+                if (this.AbsentFolderPaths.Contains(requestedPath))
+                {
+                    throw new FolderNotFoundException(requestedPath);
+                }
 
                 if (this.foldersByPath.TryGetValue(requestedPath, out var folderAtPath))
                 {

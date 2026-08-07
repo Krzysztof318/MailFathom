@@ -160,7 +160,7 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
             (scope, token) => scope.GetRequiredService<IMailboxMutationRecordStore>()
                 .ReadOutstandingAsync(SyntheticMailAccount.AccountId, limit: 100, token),
             cancellationToken);
-        Assert.Single(outstanding, record => record.Request.Occurrence == occurrence);
+        Assert.Single(outstanding, candidate => candidate.Record.Request.Occurrence == occurrence);
     }
 
     /// <summary>Issues the copy half of a relocation and stops, leaving the record exactly where a crash would.</summary>

@@ -277,6 +277,33 @@ public sealed class MailboxMutationPerformerTests
         Assert.Equal(MailFathomErrorCode.MailboxMutationUnsupported, record.LastFailure);
     }
 
+    /// <summary>
+    /// A destination folder the server does not have is an answer rather than a bad moment, so the change is given up
+    /// on at once instead of spending a login per attempt to be told the same thing five times.
+    /// </summary>
+    [Fact]
+    public async Task PerformAsync_WhenTheDestinationFolderIsMissing_AbandonsOnTheFirstAttempt()
+    {
+        // Arrange
+        var context = new PerformerContext(maximumAttempts: 5);
+        var request = RelocationRequest();
+        context.FailRelocationWith(new MailboxDestinationFolderMissingException(
+            Account,
+            InboxFolder.Alias,
+            MailboxMutation.Relocate,
+            new InvalidOperationException("The folder could not be found.")));
+
+        // Act
+        await Assert.ThrowsAsync<MailboxDestinationFolderMissingException>(
+            () => context.Performer.PerformAsync(request, InboxFolder, TransportPolicy, CancellationToken.None));
+
+        // Assert
+        var record = context.Store.RecordOf(request);
+        Assert.Equal(MailboxMutationStage.Abandoned, record.Stage);
+        Assert.Equal(1, record.AttemptCount);
+        Assert.Equal(MailFathomErrorCode.MailboxMutationDestinationMissing, record.LastFailure);
+    }
+
     /// <summary>A failure MailFathom did not raise itself still has to leave a code on the record an operator can read.</summary>
     [Fact]
     public async Task PerformAsync_WhenTheAttemptFailsUnexpectedly_RecordsTheUnclassifiedCode()

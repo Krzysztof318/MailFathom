@@ -3,9 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
@@ -20,6 +22,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 {
     private readonly Dictionary<MailboxMutationRecordId, MailboxMutationRecord> recordsById = [];
     private readonly Dictionary<string, MailboxMutationRecordId> identities = [];
+    private readonly Dictionary<MailFolderResolutionId, MailFolderResolution> folderBindings = [];
     private DateTimeOffset now = new(2026, 8, 7, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>Gets how many requests were written down, which is one per idempotency identity however often it was asked.</summary>
@@ -136,24 +139,50 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<MailboxMutationRecord>> ReadOutstandingAsync(
+    public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
         MailAccountId accountId,
         int limit,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        IReadOnlyList<MailboxMutationRecord> outstanding =
+        IReadOnlyList<OutstandingMailboxMutation> outstanding =
         [
-            .. this.recordsById.Values
-                .Where(record => record.Request.Occurrence.AccountId == accountId &&
-                    record.Stage != MailboxMutationStage.Completed)
+            .. this.OutstandingOf(accountId)
                 .OrderBy(record => record.RecordedAt)
-                .Take(limit),
+                .Take(limit)
+                .Select(record => new OutstandingMailboxMutation(record, this.BindingOf(record))),
         ];
 
         return Task.FromResult(outstanding);
     }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<MailboxMutationLifecycleCount>> ReadLifecycleCountsAsync(
+        MailAccountId accountId,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<MailboxMutationLifecycleCount> counts =
+        [
+            .. this.OutstandingOf(accountId)
+                .GroupBy(record => new { record.Request.Mutation, record.Lifecycle })
+                .Select(group => new MailboxMutationLifecycleCount(
+                    group.Key.Mutation,
+                    group.Key.Lifecycle,
+                    group.Count(),
+                    group.Min(record => record.RecordedAt))),
+        ];
+
+        return Task.FromResult(counts);
+    }
+
+    /// <summary>States the remote folder one alias binding names, for the records read back through it.</summary>
+    /// <remarks>
+    /// The real store joins the binding row; there is none here, so a test that cares which folder a resumed mutation
+    /// selects says so. Everything else takes the alias itself as the path, which is the shape most fixtures use.
+    /// </remarks>
+    internal void BindFolder(MailFolderResolution resolution) =>
+        this.folderBindings[resolution.Id] = resolution;
 
     /// <summary>Reads back the one record written for a request, as a test asserts against it.</summary>
     internal MailboxMutationRecord RecordOf(MailboxMutationRequest request) =>
@@ -174,6 +203,22 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
         request.Requester.Origin,
         request.Requester.Identity,
         request.Mutation.Name);
+
+    private IEnumerable<MailboxMutationRecord> OutstandingOf(MailAccountId accountId) =>
+        this.recordsById.Values.Where(record => record.Request.Occurrence.AccountId == accountId &&
+            record.Stage != MailboxMutationStage.Completed);
+
+    private MailFolderResolution BindingOf(MailboxMutationRecord record)
+    {
+        var folderResolutionId = record.Request.Occurrence.FolderResolutionId;
+
+        return this.folderBindings.TryGetValue(folderResolutionId, out var binding)
+            ? binding
+            : new MailFolderResolution(
+                folderResolutionId.Alias,
+                folderResolutionId.Generation,
+                RemoteFolderPath.Create(folderResolutionId.Alias.Value, hierarchyDelimiter: null));
+    }
 
     private MailboxMutationRecord Require(MailboxMutationRecordId recordId) =>
         this.recordsById.TryGetValue(recordId, out var record)

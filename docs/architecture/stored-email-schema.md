@@ -167,7 +167,14 @@ requires.
 `AttemptCount` is written before each attempt rather than after it, which is what makes an attempt that kills the
 process count against `MailSynchronization:MaxMutationAttempts`. Spending that bound moves the row to `Abandoned`, and a
 row that is not `Completed` stays in the answer an operator reads — being given up on is what stops a change being
-retried, and it would be worth nothing if it also stopped the change being seen.
+retried, and it would be worth nothing if it also stopped the change being seen. Two other things reach `Abandoned`
+without spending the bound: a refusal the server has already given once and will give again, and an unacknowledged
+placement that outlasts `MailSynchronization:UnknownMutationOutcomeGrace` without the mailbox settling it.
+
+Every row that is not `Completed` is read once per account run, oldest first and bounded by
+`MailSynchronization:MaxMutationsPerConvergencePass`, and each is carried further or given up on. The same rows are
+counted by stage in one grouped query per run, which is what the outstanding-mutation gauges report; the partial index
+below is what makes both cheap, because it holds what is outstanding rather than the mailbox's whole mutation history.
 
 `PlacementObservedAt` and `SourceRemovalObservedAt` are what synchronization has since seen come back, and they are
 separate facts from `Stage` because they answer a different question and are written by a different run. The stage says

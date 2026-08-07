@@ -4,6 +4,7 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -14,6 +15,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Infrastructure.Observability;
 
 namespace MailFathom.Host.Hosting.Workers;
 
@@ -179,6 +181,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         var scheduledFolders = account.EffectiveFolders;
         var resolvedFolders = new ConcurrentBag<MailFolderResolution>();
         var failedFolderCount = 0;
+        var convergenceFailed = false;
 
         await this.accountRunSlots.WaitAsync(schedulingToken);
 
@@ -186,6 +189,15 @@ internal sealed partial class AccountSynchronizationSupervisor
 
         try
         {
+            // Convergence comes before the folders, and inside the account's slot, for two reasons that point the same
+            // way. A change the previous process left half-made is finished before this run reads the mailbox, so the
+            // run observes a mailbox that has stopped moving; and the account's one write connection is taken and given
+            // back before the folder connections are opened, rather than beside them.
+            if (!schedulingToken.IsCancellationRequested)
+            {
+                convergenceFailed = await this.ConvergeOutstandingMutationsAsync(runSettings, workUnitToken);
+            }
+
             await Parallel.ForEachAsync(
                 scheduledFolders,
                 new ParallelOptions
@@ -230,7 +242,53 @@ internal sealed partial class AccountSynchronizationSupervisor
             failedFolderCount,
             runDuration);
 
-        return new AccountRunOutcome(failedFolderCount > 0, [.. resolvedFolders]);
+        return new AccountRunOutcome(failedFolderCount > 0 || convergenceFailed, [.. resolvedFolders]);
+    }
+
+    /// <summary>Finishes or gives up on the changes this account asked a mail server for and has not seen completed.</summary>
+    /// <returns><see langword="true" /> when at least one change failed, which puts the account into backoff.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is what makes a change survive a restart without anybody noticing it had to. The record was written before
+    /// the first IMAP command, so a process that stopped halfway through a filing left a statement of what it was doing
+    /// and how far it got, and the first run after the restart reads that statement and carries it the rest of the way.
+    /// Nothing here has to be scheduled separately, because an account already has a loop that runs it.
+    /// </para>
+    /// <para>
+    /// A failed pass fails the run rather than being logged and passed over, which is the whole of the backoff story: an
+    /// unreachable mail server defers the account's next run through the same jittered delay a failed folder does, so a
+    /// change waiting on that server is approached less often instead of once per interval forever. What bounds the
+    /// change itself is its own attempt count, which is written before each attempt and therefore survives a crash.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A convergence pass that ended unexpectedly defers this account's next run and leaves its folders to synchronize; every mutation's own record already carries how far it got.")]
+    private async Task<bool> ConvergeOutstandingMutationsAsync(
+        MailSynchronizationOptions runSettings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
+
+            var converger = scope.ServiceProvider.GetRequiredService<MailboxMutationConverger>();
+            var report = await converger.ConvergeAsync(this.accountId, cancellationToken);
+
+            scope.ServiceProvider.GetRequiredService<MailboxConvergenceTelemetry>().Report(this.accountId, report);
+
+            return report.FailedCount > 0;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            this.LogMutationConvergenceFailed(exception, this.accountId.Value);
+
+            return true;
+        }
     }
 
     /// <summary>Synchronizes one folder in a scope of its own and reports whether it completed and what it resolved to.</summary>
@@ -532,6 +590,12 @@ internal sealed partial class AccountSynchronizationSupervisor
     private partial void LogFolderAliasAmbiguous(
         string accountId,
         string folderAlias);
+
+    /// <summary>Separates a convergence pass that ended unexpectedly from the ordinary case of one change failing, which the pass itself absorbs.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Converging the outstanding mailbox mutations of account {AccountId} ended unexpectedly; its folders still synchronized and its next run is backed off, and every change keeps the record of how far it got.")]
+    private partial void LogMutationConvergenceFailed(Exception exception, string accountId);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

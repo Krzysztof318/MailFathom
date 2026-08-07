@@ -1,0 +1,350 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Application.Folders;
+using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Convergence;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Resilience;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
+using MailFathom.Infrastructure.Mail.MailKit.Writes;
+using MailFathom.Infrastructure.Observability;
+using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Resilience;
+using MailFathom.IntegrationTests.Mailbox;
+using MailFathom.IntegrationTests.Orchestration;
+using MailFathom.IntegrationTests.Persistence;
+using MailKit.Net.Imap;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Xunit;
+
+namespace MailFathom.IntegrationTests.Synchronization;
+
+/// <summary>Proves that a change nobody finished converges by itself, against a real mail server and a real database.</summary>
+/// <remarks>
+/// <para>
+/// Two tests, because there are two claims no substitute can establish. The first is that a mutation a stopped process
+/// left in a non-final state completes on the next start with no operator action, which needs a server that really
+/// copied a message, a database that really kept the stage across the stop, and the production convergence pass reading
+/// both. The second is that a change whose destination folder was removed stops instead of being attempted again —
+/// which needs a server that really answers that the folder is not there, since the whole point of the translation is
+/// what a real mail library raises.
+/// </para>
+/// <para>
+/// Everything else about convergence — the grace period, the counts, which stage a resumed sequence continues from — is
+/// a rule the unit suite already exercises against substitutes and buys nothing here.
+/// </para>
+/// </remarks>
+[Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
+public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationFixture orchestration)
+{
+    private const string ArchiveFolderName = "ConvergenceArchive";
+
+    private const string RemovedFolderName = "ConvergenceRemovedTarget";
+
+    /// <summary>The alias this class owns, bound to the real inbox so a write session selects it.</summary>
+    private static readonly MailFolderResolution Inbox = MailFolderResolution.FirstBindingOf(
+        MailFolderAlias.Create("convergence-inbox"),
+        RemoteFolderPath.Create(OrchestratedMailbox.InboxPath, hierarchyDelimiter: '.'));
+
+    private static readonly RemoteFolderPath ArchivePath =
+        RemoteFolderPath.Create(ArchiveFolderName, hierarchyDelimiter: '.');
+
+    private static readonly RemoteFolderPath RemovedPath =
+        RemoteFolderPath.Create(RemovedFolderName, hierarchyDelimiter: '.');
+
+    private static readonly MailboxMutationRequester Requester =
+        MailboxMutationRequester.Rule("converge-to-archive", 1);
+
+    /// <summary>
+    /// The restart case the whole design exists for. A process stopped between the copy and the expunge left the
+    /// message in both folders and a record saying so; the next process runs a convergence pass, which nobody asked for,
+    /// and the mailbox ends in the state that was requested.
+    /// </summary>
+    [Fact]
+    public async Task ConvergeAsync_AMutationAStoppedProcessLeftUnfinished_CompletesWithNoOperatorAction()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var mailbox = new OrchestratedMailbox(orchestration.MailServer);
+        await mailbox.RecreateFolderAsync(ArchiveFolderName, cancellationToken);
+
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await CommitInboxBindingAsync(services, cancellationToken);
+
+        var subject = $"converge-relocate-{Guid.NewGuid():N}";
+        var occurrence = await DeliverAndLocateAsync(mailbox, subject, cancellationToken);
+        var storedEmailId = await StoreMetadataAsync(services, occurrence, subject, cancellationToken);
+        var request = MailboxMutationRequest.Relocate(storedEmailId, occurrence, Requester, ArchivePath);
+
+        await StopAfterTheCopyAsync(services, request, occurrence, cancellationToken);
+
+        // The state a stopped process leaves: the copy landed, the source is still there, and the record is the only
+        // thing that knows the two are one relocation.
+        Assert.Contains(
+            await mailbox.ReadAsync(OrchestratedMailbox.InboxPath, cancellationToken),
+            email => email.Subject == subject);
+        Assert.Equal(
+            MailboxMutationStage.PlacementConfirmed,
+            (await ReadRecordRowAsync(services, occurrence, cancellationToken)).Stage);
+
+        // Act
+        var report = await services.InScopeAsync(
+            (scope, token) => ConvergeWithoutMoveExtensionAsync(scope, token),
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.CompletedCount);
+        Assert.DoesNotContain(
+            await mailbox.ReadAsync(OrchestratedMailbox.InboxPath, cancellationToken),
+            email => email.Subject == subject);
+        Assert.Single(
+            await mailbox.ReadAsync(ArchiveFolderName, cancellationToken),
+            email => email.Subject == subject);
+        Assert.Equal(
+            MailboxMutationStage.Completed,
+            (await ReadRecordRowAsync(services, occurrence, cancellationToken)).Stage);
+    }
+
+    /// <summary>
+    /// A destination folder somebody removed is an answer the server has already given, so the change reaches its
+    /// terminal visible stage on the first pass rather than being attempted once per run until its bound is spent.
+    /// </summary>
+    [Fact]
+    public async Task ConvergeAsync_AMutationWhoseTargetFolderWasRemoved_StopsVisiblyInsteadOfRetrying()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var mailbox = new OrchestratedMailbox(orchestration.MailServer);
+        await mailbox.RecreateFolderAsync(RemovedFolderName, cancellationToken);
+        await mailbox.DeleteFolderAsync(RemovedFolderName, cancellationToken);
+
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await CommitInboxBindingAsync(services, cancellationToken);
+
+        var subject = $"converge-missing-target-{Guid.NewGuid():N}";
+        var occurrence = await DeliverAndLocateAsync(mailbox, subject, cancellationToken);
+        var storedEmailId = await StoreMetadataAsync(services, occurrence, subject, cancellationToken);
+        var request = MailboxMutationRequest.Relocate(storedEmailId, occurrence, Requester, RemovedPath);
+        await RecordIntentAsync(services, request, cancellationToken);
+
+        // Act
+        var report = await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailboxMutationConverger>()
+                .ConvergeAsync(SyntheticMailAccount.AccountId, token),
+            cancellationToken);
+
+        // Assert
+        var row = await ReadRecordRowAsync(services, occurrence, cancellationToken);
+        Assert.Equal(MailboxMutationStage.Abandoned, row.Stage);
+        Assert.Equal(1, row.AttemptCount);
+        Assert.Equal(MailFathomErrorCode.MailboxMutationDestinationMissing.Value, row.LastFailureCode);
+        Assert.Contains(
+            report.Outstanding,
+            group => group.Lifecycle == MailboxMutationLifecycle.DeadLettered
+                && group.Mutation == MailboxMutation.Relocate);
+
+        // The message is where it was: a refusal that had copied first would have left one in a folder nobody can name.
+        Assert.Contains(
+            await mailbox.ReadAsync(OrchestratedMailbox.InboxPath, cancellationToken),
+            email => email.Subject == subject);
+    }
+
+    /// <summary>Runs the production convergence pass over a connection whose server advertises no <c>MOVE</c>.</summary>
+    /// <remarks>
+    /// Only the client factory is substituted, for the reason the sibling class states: the capability mask is what a
+    /// test has to control, and a relocation resumed on the native path would have nothing left to do. The store, the
+    /// commit policy, the performer, and the converger itself are the production ones.
+    /// </remarks>
+    private static async Task<MailboxConvergenceReport> ConvergeWithoutMoveExtensionAsync(
+        IServiceProvider scope,
+        CancellationToken cancellationToken)
+    {
+        await using var pool = CreateMoveMaskedPool(scope);
+        var commitPolicy = scope.GetRequiredService<OptimisticConcurrencyRetryPolicy>();
+        var store = scope.GetRequiredService<IMailboxMutationRecordStore>();
+        var converger = new MailboxMutationConverger(
+            store,
+            new MailboxMutationPerformer(
+                store,
+                new MailKitImapWriteSessionFactory(pool, CreateTelemetry()),
+                commitPolicy,
+                new MailboxMutationOptions()),
+            scope.GetRequiredService<IMailTransportSecurityPolicyReader>(),
+            commitPolicy,
+            new MailboxConvergenceOptions(),
+            TimeProvider.System);
+
+        return await converger.ConvergeAsync(SyntheticMailAccount.AccountId, cancellationToken);
+    }
+
+    /// <summary>Issues the copy half of a relocation and stops, leaving the record exactly where a crash would.</summary>
+    private static async Task StopAfterTheCopyAsync(
+        OrchestratedMailFathomServices services,
+        MailboxMutationRequest request,
+        EmailOccurrenceId occurrence,
+        CancellationToken cancellationToken)
+    {
+        var recordId = await RecordIntentAsync(services, request, cancellationToken);
+
+        var placement = await services.InScopeAsync(
+            async (scope, token) =>
+            {
+                await using var pool = CreateMoveMaskedPool(scope);
+                var factory = new MailKitImapWriteSessionFactory(pool, CreateTelemetry());
+                await using var session = await factory.OpenForWritingAsync(
+                    SyntheticMailAccount.AccountId,
+                    Inbox,
+                    scope.GetRequiredService<IMailTransportSecurityPolicyReader>()
+                        .GetPolicy(SyntheticMailAccount.AccountId),
+                    token);
+
+                return await session.CopyAsync(
+                    occurrence,
+                    ArchivePath,
+                    new InMemoryMailboxMutationJournal(),
+                    token);
+            },
+            cancellationToken);
+
+        Assert.Equal(
+            PersistenceCommitResult.Committed,
+            await services.CommitAsync(
+                async (scope, session, token) =>
+                {
+                    var store = scope.GetRequiredService<IMailboxMutationRecordStore>();
+                    await store.CountAttemptAsync(session, recordId, token);
+                    await store.RecordPlacementIssuedAsync(session, recordId, requiresSourceRemoval: true, token);
+                    await store.AdvanceAsync(
+                        session,
+                        recordId,
+                        MailboxMutationStage.PlacementConfirmed,
+                        placement,
+                        token);
+                },
+                cancellationToken));
+    }
+
+    private static Task<MailboxMutationRecordId> RecordIntentAsync(
+        OrchestratedMailFathomServices services,
+        MailboxMutationRequest request,
+        CancellationToken cancellationToken) => CommitForAsync(
+            services,
+            async (scope, session, token) => (await scope.GetRequiredService<IMailboxMutationRecordStore>()
+                .OpenAsync(session, request, token)).Id,
+            cancellationToken);
+
+    private static MailboxWriteConnectionPool CreateMoveMaskedPool(IServiceProvider scope) => new(
+        () => CapabilityMaskedImapClient.HidingCapabilities(ImapCapabilities.Move),
+        scope.GetRequiredService<IServiceScopeFactory>(),
+        scope.GetRequiredService<OutboundOperationExecutor>(),
+        scope.GetRequiredService<ITransientFailureClassifier>(),
+        new MailboxWriteSessionOptions(),
+        TimeProvider.System,
+        NullLogger<MailboxWriteConnectionPool>.Instance);
+
+    private static MailboxMutationTelemetry CreateTelemetry() =>
+        new(NullLogger<MailboxMutationTelemetry>.Instance, TimeProvider.System);
+
+    /// <summary>Reads the one recorded mutation for an occurrence straight out of its table.</summary>
+    /// <remarks>
+    /// Read from the row rather than through the port, because a completed mutation has left the outstanding answer by
+    /// design and what is asserted here is the completion itself.
+    /// </remarks>
+    private static Task<MailboxMutationRow> ReadRecordRowAsync(
+        OrchestratedMailFathomServices services,
+        EmailOccurrenceId occurrence,
+        CancellationToken cancellationToken)
+    {
+        var alias = occurrence.FolderResolutionId.Alias.Value;
+        var generation = occurrence.FolderResolutionId.Generation.Value;
+        var uid = occurrence.Uid.Value;
+
+        return services.InScopeAsync(
+            async (scope, token) => await scope
+                .GetRequiredService<MailFathomDbContext>()
+                .MailboxMutations
+                .AsNoTracking()
+                .Where(mutation => mutation.MailFolder.Alias == alias
+                    && mutation.MailFolder.ResolutionGeneration == generation
+                    && mutation.Uid == uid)
+                .Select(mutation => new MailboxMutationRow(
+                    mutation.Stage,
+                    mutation.AttemptCount,
+                    mutation.LastFailureCode))
+                .SingleAsync(token),
+            cancellationToken);
+    }
+
+    private static async Task CommitInboxBindingAsync(
+        OrchestratedMailFathomServices services,
+        CancellationToken cancellationToken) =>
+        Assert.Equal(
+            PersistenceCommitResult.Committed,
+            await services.CommitAsync(
+                (scope, session, token) => scope.GetRequiredService<IMailFolderResolutionStore>().SaveResolutionAsync(
+                    session,
+                    SyntheticMailAccount.AccountId,
+                    Inbox,
+                    token),
+                cancellationToken));
+
+    private static Task<StoredEmailId> StoreMetadataAsync(
+        OrchestratedMailFathomServices services,
+        EmailOccurrenceId occurrence,
+        string subject,
+        CancellationToken cancellationToken) => CommitForAsync(
+            services,
+            (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
+                session,
+                SyntheticEmail.RemoteMetadataOf(occurrence, subject),
+                extractedMetadata: null,
+                StoredEmailContentAvailability.ExceededSizeLimit,
+                token),
+            cancellationToken);
+
+    private static Task<TResult> CommitForAsync<TResult>(
+        OrchestratedMailFathomServices services,
+        Func<IServiceProvider, IPersistenceSession, CancellationToken, Task<TResult>> write,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            async (scope, token) =>
+            {
+                await using var session = await scope.GetRequiredService<IPersistenceSessionFactory>()
+                    .BeginSessionAsync(token);
+
+                var produced = await write(scope, session, token);
+
+                Assert.Equal(PersistenceCommitResult.Committed, await session.CommitAsync(token));
+
+                return produced;
+            },
+            cancellationToken);
+
+    private static async Task<EmailOccurrenceId> DeliverAndLocateAsync(
+        OrchestratedMailbox mailbox,
+        string subject,
+        CancellationToken cancellationToken)
+    {
+        await mailbox.DeliverAsync(subject, cancellationToken);
+
+        var inbox = await mailbox.ReadAsync(OrchestratedMailbox.InboxPath, cancellationToken);
+        var delivered = Assert.Single(inbox, email => email.Subject == subject);
+
+        return EmailOccurrenceId.Create(
+            SyntheticMailAccount.AccountId,
+            Inbox.Id,
+            await mailbox.ReadUidValidityAsync(OrchestratedMailbox.InboxPath, cancellationToken),
+            delivered.Uid);
+    }
+
+    /// <summary>The columns of one mutation record a test reads back.</summary>
+    private sealed record MailboxMutationRow(MailboxMutationStage Stage, int AttemptCount, int? LastFailureCode);
+}

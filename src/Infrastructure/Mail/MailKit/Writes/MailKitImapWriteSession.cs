@@ -179,7 +179,11 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
                     return journal.Placement;
                 }
 
-                var destination = await client.GetFolderAsync(destinationPath.Value, attemptToken);
+                var destination = await this.GetDestinationFolderAsync(
+                    client,
+                    destinationPath,
+                    MailboxMutation.Copy,
+                    attemptToken);
 
                 // A copy owes no source removal: leaving the source exactly where it is *is* the operation.
                 await journal.PlacementIssuedAsync(requiresSourceRemoval: false, attemptToken);
@@ -223,6 +227,40 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
                 ImapUidValidity.Create(placedUid.Validity),
                 ImapUid.Create(placedUid.Id))
             : RemoteEmailPlacement.NotReported();
+
+    /// <summary>Resolves the folder a relocation or a copy names, and reports its absence as the settled answer it is.</summary>
+    /// <remarks>
+    /// <para>
+    /// MailKit raises <see cref="FolderNotFoundException" /> here, which is a plain exception carrying a remote path and
+    /// nothing else about what was being attempted. Left alone it would reach the record as an unclassified failure and
+    /// be attempted once per run until the mutation's attempt bound was spent, which buys a login per attempt to be told
+    /// the same thing. Translating it is what lets the change be given up on at once and stand visible for the operator
+    /// whose folder it is.
+    /// </para>
+    /// <para>
+    /// The resolution happens before the journal is advanced, on both paths, so a missing destination leaves the record
+    /// exactly where it was and nothing has to be undone.
+    /// </para>
+    /// </remarks>
+    private async Task<IMailFolder> GetDestinationFolderAsync(
+        IImapClient client,
+        RemoteFolderPath destinationPath,
+        MailboxMutation mutation,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await client.GetFolderAsync(destinationPath.Value, cancellationToken);
+        }
+        catch (FolderNotFoundException absent)
+        {
+            throw new MailboxDestinationFolderMissingException(
+                this.SessionAccountId,
+                this.folder.Alias,
+                mutation,
+                absent);
+        }
+    }
 
     private static void RequireCapability(
         IImapClient client,
@@ -290,7 +328,11 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
             return journal.Placement;
         }
 
-        var destination = await client.GetFolderAsync(destinationPath.Value, cancellationToken);
+        var destination = await this.GetDestinationFolderAsync(
+            client,
+            destinationPath,
+            MailboxMutation.Relocate,
+            cancellationToken);
         var sourceUid = new UniqueId(occurrenceId.Uid.Value);
 
         if (client.Capabilities.HasFlag(ImapCapabilities.Move))
