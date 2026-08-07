@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Resilience;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using xRetry.v3;
 using Xunit;
 
 namespace MailFathom.IntegrationTests.Embeddings;
@@ -33,15 +34,38 @@ namespace MailFathom.IntegrationTests.Embeddings;
 /// The class joins no collection. It needs neither the orchestrated database nor the orchestrated mailbox, so
 /// serializing it against them would make an already expensive suite slower for nothing.
 /// </para>
+/// <para>
+/// Each test is retried, which is a licence this suite grants nowhere else and which `tests/AGENTS.md` states as a
+/// rule. What it answers here is that a `429` or a `529` from the provider says nothing about any of the four claims
+/// above, so reporting one as a failure would say the adapter is wrong when the provider was busy.
+/// </para>
 /// </remarks>
 public sealed class EmbeddingProviderContractTests
 {
+    /// <summary>How many times a test is run before its failure is reported.</summary>
+    /// <remarks>
+    /// Attempts rather than retries, despite the parameter's name: the runner counts the first run among them, so three
+    /// here is one call and two more after a transient answer.
+    /// </remarks>
+    private const int MaxAttempts = 3;
+
+    /// <summary>How long to wait before running a test again.</summary>
+    /// <remarks>
+    /// A rate limit clears on the provider's own schedule rather than on the caller's, so an immediate second attempt
+    /// mostly buys a second refusal. This is sized for the two answers that clear on their own within seconds — a
+    /// concurrency or burst limit, and a momentary overload — and deliberately not for a per-minute quota that is
+    /// genuinely exhausted, which no wait this suite should hold would outlast.
+    /// </remarks>
+    private const int DelayBetweenAttemptsMs = 5000;
+
     /// <summary>Gets whether a provider-contract run was explicitly asked for.</summary>
     /// <remarks>Public and static because that is the shape xUnit reads a skip condition from.</remarks>
     public static bool ProviderContractTestsRequested =>
         EmbeddingProviderContractSettings.ProviderContractTestsRequested;
 
-    [Fact(
+    [RetryFact(
+        MaxAttempts,
+        DelayBetweenAttemptsMs,
         Skip = EmbeddingProviderContractSettings.SkipReason,
         SkipUnless = nameof(ProviderContractTestsRequested))]
     public async Task GenerateAsync_AgainstTheRealProvider_AnswersInTheDeclaredSpace()
@@ -65,7 +89,9 @@ public sealed class EmbeddingProviderContractTests
     /// The one failure worth a paid call to prove: the classification the adapter derives has to match what the
     /// provider actually answers to a credential it does not accept, and no unit test can establish that.
     /// </summary>
-    [Fact(
+    [RetryFact(
+        MaxAttempts,
+        DelayBetweenAttemptsMs,
         Skip = EmbeddingProviderContractSettings.SkipReason,
         SkipUnless = nameof(ProviderContractTestsRequested))]
     public async Task GenerateAsync_WithACredentialTheProviderRefuses_IsClassifiedAsSuch()
@@ -98,6 +124,11 @@ public sealed class EmbeddingProviderContractTests
     /// A pass-through runner rather than the configured pipeline, because what a pipeline adds — bounded attempts,
     /// a circuit, a concurrency limit — is covered where it is implemented, and wrapping one here would turn a refused
     /// credential into several paid attempts of the same refusal.
+    /// <para>
+    /// The retry on each test is not that pipeline arriving by another route. It sits above the assertion rather than
+    /// under it, so a test that passes still makes exactly one call and the classification is still read from the
+    /// provider's first answer; only a test that already failed is run again.
+    /// </para>
     /// </remarks>
     private static ProviderTextEmbeddingGenerator GeneratorOver(
         EmbeddingGenerationPlan plan,
