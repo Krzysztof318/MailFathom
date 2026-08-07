@@ -39,7 +39,7 @@ behind a configured certificate reference is the exception the [secret machinery
 rotating what a reference points at needs no configuration change, though this listener reads its certificate once,
 while starting.
 
-**The probe listener is never the MCP endpoint's.** A probe path asked on the port that serves `/` and `/mcp` is
+**The probe listener is never the MCP endpoint's.** A probe path asked on the port that serves `/mcp` is
 answered with `404`, and `/mcp` asked on the probe port is answered with `404` as well. The decision is taken from the
 port the connection arrived at — a property of the socket the operating system accepted it on, not a header the caller
 wrote — so publishing the probe port to an orchestrator's network does not publish the mailbox to it, and publishing the

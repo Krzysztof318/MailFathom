@@ -80,7 +80,7 @@ docker compose up -d
 | Base | `mcr.microsoft.com/dotnet/aspnet:10.0.10-noble-chiseled-extra`, pinned to an exact patch version |
 | Platforms | `linux/amd64` and `linux/arm64` |
 | User | `1654`, the unprivileged `app` account — never root |
-| Ports | `8080` for `/` and `/mcp`; `8081` for the probes, on a listener of its own |
+| Ports | `8080` for `/mcp`, which `McpEndpoint:Port` moves; `8081` for the probes, on a listener of its own |
 | Writable paths | `/tmp` only, which a deployment supplies as a tmpfs or an `emptyDir` |
 | Entrypoint | `dotnet /app/MailFathom.Host.dll` |
 | Health check | None in the image. Startup, readiness, and liveness probes answer on `8081`. |
