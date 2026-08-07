@@ -79,6 +79,7 @@ public sealed class ServiceCollectionExtensionsTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton(TimeProvider.System);
         services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
         services.AddInfrastructure(_ => new PostgresConnectionSettings(
             "Host=localhost;Database=mailfathom;Username=mailfathom",

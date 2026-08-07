@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics;
 using System.Text;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.Secrets.Sources;
@@ -29,6 +30,7 @@ public sealed class SecretMaterialReaderTests : IDisposable
     private const string ProvisionedMaterial = "orchestrated-secret-material";
 
     private readonly string secretDirectory;
+    private readonly FileSystemSecretFileReader reader = new(TimeProvider.System);
 
     public SecretMaterialReaderTests()
     {
@@ -47,7 +49,7 @@ public sealed class SecretMaterialReaderTests : IDisposable
         await File.WriteAllTextAsync(path, fileContent, cancellationToken);
 
         // Act
-        var result = await new FileSystemSecretFileReader().ReadAsync(
+        var result = await this.reader.ReadAsync(
             path,
             SecretMaterialLimits.MaximumMaterialByteCount,
             cancellationToken);
@@ -87,7 +89,7 @@ public sealed class SecretMaterialReaderTests : IDisposable
         var results = new List<SecretResolutionResult>();
         foreach (var refusedTarget in refusedTargets)
         {
-            results.Add(await new FileSystemSecretFileReader().ReadAsync(
+            results.Add(await this.reader.ReadAsync(
                 refusedTarget,
                 SecretMaterialLimits.MaximumMaterialByteCount,
                 cancellationToken));
@@ -112,12 +114,77 @@ public sealed class SecretMaterialReaderTests : IDisposable
         await File.WriteAllTextAsync(path, new string('m', 64), cancellationToken);
 
         // Act
-        var result = await new FileSystemSecretFileReader().ReadAsync(path, maximumByteCount: 8, cancellationToken);
+        var result = await this.reader.ReadAsync(path, maximumByteCount: 8, cancellationToken);
 
         // Assert
         Assert.False(result.Succeeded);
         Assert.Equal(SecretResolutionFailure.MaterialTooLarge, result.Failure);
         Assert.Null(result.Secret);
+    }
+
+    /// <summary>Proves a device-backed pseudo-file is reported as the target it is rather than as an oversized secret.</summary>
+    /// <remarks>
+    /// Only the real platform establishes this. .NET publishes no portable file type, so what separates a regular file
+    /// from a character device is what an opened handle reports and yields, and a substitute asserting that would only
+    /// be asserting its own arrangement.
+    /// </remarks>
+    [Fact]
+    public async Task ReadAsync_ForACharacterDevice_ReportsTargetNotRegularFile()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        // Act
+        var result = await this.reader.ReadAsync(
+            "/dev/zero",
+            SecretMaterialLimits.MaximumMaterialByteCount,
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(SecretResolutionFailure.TargetNotRegularFile, result.Failure);
+        Assert.Null(result.Secret);
+    }
+
+    /// <summary>Proves the defect this deadline exists for: an open the kernel never returns from fails rather than hangs.</summary>
+    /// <remarks>
+    /// A FIFO with no writer is the one target no unit test can reproduce, because what makes it dangerous is that the
+    /// blocking happens below every cancellation token .NET has. The test pays the deadline in real time once, which
+    /// is the price of proving that startup reports this rather than waiting for it forever.
+    /// </remarks>
+    [Fact]
+    public async Task ReadAsync_ForAFifoNoWriterHasOpened_ReportsRetrievalTimedOutRatherThanBlocking()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var path = Path.Combine(this.secretDirectory, "fifo");
+        using (var mkfifo = Process.Start("mkfifo", path))
+        {
+            await mkfifo.WaitForExitAsync(cancellationToken);
+
+            Assert.Equal(0, mkfifo.ExitCode);
+        }
+
+        // Act
+        var result = await this.reader.ReadAsync(
+            path,
+            SecretMaterialLimits.MaximumMaterialByteCount,
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(SecretResolutionFailure.RetrievalTimedOut, result.Failure);
+        Assert.Null(result.Secret);
+
+        // Release the thread the abandoned open left in the kernel. A FIFO's reader returns the moment a writer
+        // arrives, and leaving one blocked for the rest of the run is the accumulation the retrieval bound exists to
+        // cap rather than something a test should contribute to.
+        var openTheWriteEnd = Task.Run(
+            () =>
+            {
+                using var writeEnd = new FileStream(path, FileMode.Open, FileAccess.Write);
+            },
+            cancellationToken);
+
+        await openTheWriteEnd.WaitAsync(TimeSpan.FromMinutes(1), cancellationToken);
     }
 
     [Fact]
@@ -155,5 +222,10 @@ public sealed class SecretMaterialReaderTests : IDisposable
     }
 
     /// <inheritdoc />
-    public void Dispose() => Directory.Delete(this.secretDirectory, recursive: true);
+    public void Dispose()
+    {
+        this.reader.Dispose();
+
+        Directory.Delete(this.secretDirectory, recursive: true);
+    }
 }

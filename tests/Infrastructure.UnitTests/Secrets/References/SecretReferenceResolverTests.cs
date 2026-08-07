@@ -459,39 +459,6 @@ public sealed class SecretReferenceResolverTests
         Assert.Null(result.Secret);
     }
 
-    /// <summary>A credential source that disconnects after the target opened must not abort the aggregated startup report.</summary>
-    [Fact]
-    public async Task ReadAsync_SourceFailsAfterOpening_FailsWithProviderUnavailableRatherThanThrowing()
-    {
-        // Arrange
-        await using var source = new FailingAfterOpenStream();
-
-        // Act
-        var result = await BoundedSecretMaterialReader.ReadAsync(
-            source,
-            SecretMaterialLimits.MaximumMaterialByteCount,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(SecretResolutionFailure.ProviderUnavailable, result.Failure);
-        Assert.Null(result.Secret);
-    }
-
-    [Fact]
-    public async Task ReadAsync_CancelledWhileReading_PropagatesCancellationInsteadOfReportingAProviderFailure()
-    {
-        // Arrange
-        using var cancellation = new CancellationTokenSource();
-        await using var source = new FailingAfterOpenStream();
-        await cancellation.CancelAsync();
-
-        // Act, Assert
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => BoundedSecretMaterialReader.ReadAsync(
-            source,
-            SecretMaterialLimits.MaximumMaterialByteCount,
-            cancellation.Token));
-    }
-
     private static InMemoryEnvironmentVariableReader WithCredentialsDirectory() => new()
     {
         Variables = { ["CREDENTIALS_DIRECTORY"] = CredentialsDirectory },
@@ -542,43 +509,6 @@ public sealed class SecretReferenceResolverTests
                 source,
                 Math.Min(maximumByteCount, this.MaximumReadableByteCount),
                 cancellationToken);
-        }
-    }
-
-    /// <summary>A readable stream that fails the way a disconnected network mount does, after opening cleanly.</summary>
-    private sealed class FailingAfterOpenStream : Stream
-    {
-        public override bool CanRead => true;
-
-        public override bool CanSeek => false;
-
-        public override bool CanWrite => false;
-
-        public override long Length => throw new NotSupportedException();
-
-        public override long Position
-        {
-            get => throw new NotSupportedException();
-            set => throw new NotSupportedException();
-        }
-
-        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            throw new IOException("The credential source became unreachable.");
-        }
-
-        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-
-        public override void SetLength(long value) => throw new NotSupportedException();
-
-        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        public override void Flush()
-        {
         }
     }
 

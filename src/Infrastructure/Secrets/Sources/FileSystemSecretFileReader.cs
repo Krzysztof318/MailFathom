@@ -11,33 +11,36 @@ namespace MailFathom.Infrastructure.Secrets.Sources;
 
 /// <summary>Reads secret material from the real file system.</summary>
 /// <remarks>
-/// The type is deliberately a thin opening of a stream: the bounded, erasing read it delegates to lives in
-/// <see cref="BoundedSecretMaterialReader" />, which unit tests exercise without touching a file. Every expected
-/// file-system failure is mapped onto <see cref="SecretResolutionFailure.MaterialNotFound" /> rather than escaping.
-/// Catching fewer of them would let a malformed target — a path containing a NUL character throws
-/// <see cref="ArgumentException" /> — travel past the result boundary into an unhandled startup exception whose message
-/// quotes the path, defeating both fail-fast aggregation and the guarantee that no diagnostic carries a target. A failure that
-/// only appears after the file opened is translated by <see cref="BoundedSecretMaterialReader" />, which owns the read.
+/// The type is deliberately the platform call and nothing else. Both bounds around it are unit-testable without a file:
+/// <see cref="BoundedSecretFileRetrieval" /> owns the deadline and the limit on how many opens may be in flight, and
+/// <see cref="BoundedSecretMaterialReader" /> owns the erasing read, the size ceiling, and the rejection of a target
+/// that is not a regular file. Every expected file-system failure is mapped onto
+/// <see cref="SecretResolutionFailure.MaterialNotFound" /> rather than escaping. Catching fewer of them would let a
+/// malformed target — a path containing a NUL character throws <see cref="ArgumentException" /> — travel past the
+/// result boundary into an unhandled startup exception whose message quotes the path, defeating both fail-fast
+/// aggregation and the guarantee that no diagnostic carries a target.
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class FileSystemSecretFileReader : ISecretFileReader
+internal sealed class FileSystemSecretFileReader(TimeProvider timeProvider) : ISecretFileReader, IDisposable
 {
+    private readonly BoundedSecretFileRetrieval retrieval = new(timeProvider);
+
     /// <inheritdoc />
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Every expected file-system failure is translated into one result identity so no target path escapes through an exception message.")]
-    public async Task<SecretResolutionResult> ReadAsync(
+    public Task<SecretResolutionResult> ReadAsync(
         string path,
         int maximumByteCount,
-        CancellationToken cancellationToken)
-    {
-        await using var stream = TryOpenForReading(path);
+        CancellationToken cancellationToken) =>
+        this.retrieval.ReadAsync(() => TryOpenForReading(path), maximumByteCount, cancellationToken);
 
-        return stream is null
-            ? SecretResolutionResult.Failed(SecretResolutionFailure.MaterialNotFound)
-            : await BoundedSecretMaterialReader.ReadAsync(stream, maximumByteCount, cancellationToken);
-    }
+    /// <inheritdoc />
+    public void Dispose() => this.retrieval.Dispose();
 
     /// <summary>Opens the provisioned file, translating every expected failure into an absent stream.</summary>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership transfers to the caller, which disposes the stream through an await using block.")]
+    /// <remarks>
+    /// This runs on a thread the retrieval may stop waiting for, so it opens synchronously and reports through its
+    /// return value: a token would reach neither the kernel call nor the caller that has already given up on it.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership transfers to the retrieval, which disposes the stream whether or not it is still waiting for it.")]
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Every expected file-system failure is translated into one result identity so no target path escapes through an exception message.")]
     private static FileStream? TryOpenForReading(string path)
     {

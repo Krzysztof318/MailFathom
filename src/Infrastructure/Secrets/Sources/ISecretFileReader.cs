@@ -11,7 +11,9 @@ namespace MailFathom.Infrastructure.Secrets.Sources;
 /// The port exists so scheme adapters are unit-testable without touching the real file system. It hands ownership of
 /// the material to the caller and retains no copy: an implementation that returned the raw bytes instead would leave an
 /// un-erasable intermediate array behind for exactly the two schemes production uses. It is asynchronous and takes the
-/// caller's token because a synchronous read blocks a thread on a stalled network-mounted secret path.
+/// caller's token so that a read of a stalled network-mounted secret path is a request the caller can withdraw from.
+/// The token is not what protects against such a path, because the open beneath it reaches no token; the implementation
+/// states what does.
 /// </remarks>
 internal interface ISecretFileReader
 {
