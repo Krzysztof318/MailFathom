@@ -2574,6 +2574,98 @@ changelog_section_reading_returns_only_the_requested_release() {
   assert_excludes 'The first release.' "$output_file"
 }
 
+# The winget manifest is the one thing this repository produces whose correctness is judged in somebody else's pull
+# request, days after the release that submitted it. What is asserted here is what a Windows install actually depends
+# on: that `portable` with `Commands` is what makes the binary reachable as `mfctl` rather than under the versioned
+# file name a release attaches it as, and that each hash is taken over the bytes this pipeline built. The schema is
+# validated by the community repository against a document only it publishes, so nothing here fetches one.
+winget_manifests_name_the_release_assets_they_hash() {
+  local binaries_directory="$test_directory/winget-binaries"
+  local output_directory="$test_directory/winget-output"
+  local package_directory="$output_directory/manifests/m/MailFathom/mfctl/9.9.9"
+  local installer_manifest="$package_directory/MailFathom.mfctl.installer.yaml"
+  local expected_checksum
+  local rendered_count
+
+  mkdir -p "$binaries_directory"
+  printf 'x64 bytes' > "$binaries_directory/mfctl-9.9.9-win-x64.exe"
+  printf 'arm64 bytes' > "$binaries_directory/mfctl-9.9.9-win-arm64.exe"
+
+  (
+    cd "$source_repository_root"
+    bash scripts/build-winget-manifests.sh "$binaries_directory" "$output_directory" '9.9.9' '2026-01-02'
+  ) > /dev/null 2>&1
+
+  expected_checksum="$(sha256sum "$binaries_directory/mfctl-9.9.9-win-x64.exe" |
+    cut --delimiter=' ' --fields=1 | tr '[:lower:]' '[:upper:]')"
+
+  assert_contains 'InstallerType: portable' "$installer_manifest"
+  assert_contains '- mfctl' "$installer_manifest"
+  assert_contains 'ReleaseDate: 2026-01-02' "$installer_manifest"
+  assert_contains 'Architecture: arm64' "$installer_manifest"
+  assert_contains "InstallerSha256: $expected_checksum" "$installer_manifest"
+  assert_contains \
+    'InstallerUrl: https://github.com/Krzysztof318/MailFathom/releases/download/v9.9.9/mfctl-9.9.9-win-x64.exe' \
+    "$installer_manifest"
+
+  # Three files and no more. The community repository takes one package version per pull request as a multi-file set,
+  # so a fourth file here would be a submission it refuses rather than a manifest with something extra in it.
+  rendered_count="$(find "$package_directory" -type f | wc -l)"
+
+  if ((rendered_count != 3)); then
+    printf 'The manifest set is three files; %s were rendered.\n' "$rendered_count" >&2
+    return 1
+  fi
+}
+
+# What a Windows operator sees before they install anything: `winget search` prints `PackageName` in its `Name` column
+# and the identifier beside it, so the name has to carry the product while the command reaches them through `Moniker`
+# and `Commands`. Naming the command in both places instead would leave a listing that says `mfctl` and nothing else.
+winget_manifest_names_the_product_and_the_command() {
+  local binaries_directory="$test_directory/winget-listing-binaries"
+  local output_directory="$test_directory/winget-listing-output"
+  local package_directory="$output_directory/manifests/m/MailFathom/mfctl/9.9.9"
+  local locale_manifest="$package_directory/MailFathom.mfctl.locale.en-US.yaml"
+
+  mkdir -p "$binaries_directory"
+  printf 'x64 bytes' > "$binaries_directory/mfctl-9.9.9-win-x64.exe"
+  printf 'arm64 bytes' > "$binaries_directory/mfctl-9.9.9-win-arm64.exe"
+
+  (
+    cd "$source_repository_root"
+    bash scripts/build-winget-manifests.sh "$binaries_directory" "$output_directory" '9.9.9' '2026-01-02'
+  ) > /dev/null 2>&1
+
+  assert_contains 'PackageName: MailFathom CLI' "$locale_manifest"
+  assert_contains 'Moniker: mfctl' "$locale_manifest"
+
+  # winget's own convention is `Publisher.Package`, and a submission whose `Publisher` disagrees with the identifier it
+  # is filed under is a question somebody else's reviewer asks days later.
+  assert_contains 'PackageIdentifier: MailFathom.mfctl' "$locale_manifest"
+  assert_contains 'Publisher: MailFathom' "$locale_manifest"
+}
+
+# A manifest naming a download that does not exist is refused by winget's validation days later, in a pull request
+# nobody is watching. Failing while the release run is still on screen is the difference worth having.
+winget_manifests_refuse_a_missing_windows_binary() {
+  local binaries_directory="$test_directory/winget-incomplete-binaries"
+  local output_directory="$test_directory/winget-incomplete-output"
+  local output_file="$test_directory/winget-incomplete-log"
+
+  mkdir -p "$binaries_directory"
+  printf 'x64 bytes' > "$binaries_directory/mfctl-9.9.9-win-x64.exe"
+
+  if (
+    cd "$source_repository_root"
+    bash scripts/build-winget-manifests.sh "$binaries_directory" "$output_directory" '9.9.9' '2026-01-02'
+  ) > "$output_file" 2>&1; then
+    printf 'The manifest set was rendered against binaries the release does not attach\n' >&2
+    return 1
+  fi
+
+  assert_contains 'mfctl-9.9.9-win-arm64.exe' "$output_file"
+}
+
 # The Actions policy, as far as a committed file can state it. Half of that policy lives in GitHub's
 # repository settings — which action owners are allowed at all, whether a mutable `uses:` is
 # accepted, how long an artifact is kept — and settings do not fail a pull request. These five
@@ -3187,6 +3279,9 @@ run_test release_tag_assertion_accepts_a_patch_from_a_release_branch
 run_test release_tag_assertion_refuses_a_version_already_released_on_its_line
 run_test release_tag_assertion_refuses_an_empty_changelog_section
 run_test changelog_section_reading_returns_only_the_requested_release
+run_test winget_manifests_name_the_release_assets_they_hash
+run_test winget_manifest_names_the_product_and_the_command
+run_test winget_manifests_refuse_a_missing_windows_binary
 run_test every_external_action_names_an_approved_owner
 run_test every_workflow_job_declares_its_permissions
 run_test every_write_scope_is_one_the_policy_records

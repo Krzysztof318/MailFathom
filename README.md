@@ -88,7 +88,7 @@ To evaluate MailFathom from the checkout instead of deploying it, the local Aspi
 | Container image | `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` |
 | Helm chart | `oci://ghcr.io/krzysztof318/charts/mailfathom` |
 | Database schema script | attached to each [release](https://github.com/Krzysztof318/MailFathom/releases) |
-| `mfctl`, the administrative command | attached to each [release](https://github.com/Krzysztof318/MailFathom/releases), one self-contained binary per platform, verified by the checksum file beside them |
+| `mfctl`, the administrative command | attached to each [release](https://github.com/Krzysztof318/MailFathom/releases), one self-contained binary per platform, verified by the checksum file beside them, and on Windows also submitted to the [Windows Package Manager](https://krzysztof318.github.io/MailFathom/operations/admin-endpoint.html#on-windows-through-winget) as `MailFathom.mfctl` |
 
 Both registries carry the same manifest list under the same digest, so the one to pull from is whichever your environment already reaches. The image and the chart each carry a signed provenance statement; [the container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html#published-images) records what each tag means and how to verify one.
 

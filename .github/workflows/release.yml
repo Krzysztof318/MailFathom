@@ -331,6 +331,9 @@ jobs:
             printf '[Administering a deployment](https://github.com/%s/blob/%s/docs/operations/admin-endpoint.md)' \
               "$REPOSITORY" "$RELEASE_TAG"
             printf ' states what the service has to have enabled before it will answer.\n\n'
+            printf 'On Windows there is a packaged path as well. `winget install MailFathom.mfctl` installs this '
+            printf 'version once the Windows Package Manager community repository has accepted the manifest this '
+            printf 'release submits to it, which is a review by somebody else rather than a step of this pipeline.\n\n'
             printf 'None of the binaries carries a code signature, so Windows warns about an unknown publisher and '
             printf '`mfctl-%s.sha256` is what verifies a download — on every platform.\n' "$VERSION"
           } > "$notes_file"
@@ -354,3 +357,30 @@ jobs:
           if [ -d artifacts/cli ]; then
             gh release upload "$RELEASE_TAG" artifacts/cli/* --clobber
           fi
+
+  # The Windows Package Manager channel, offered from the assets the job above has just attached. It is last because it
+  # has to be: winget's validation downloads the installer the manifest names, and that URL is a release asset which
+  # does not resolve until the release exists.
+  #
+  # It gates nothing, like the build it consumes. A submission that failed leaves every published artifact in place and
+  # costs a Windows operator the packaged path to a command they can still download, which is the same trade the
+  # command build already makes.
+  submit-winget-manifest:
+    name: Submit the winget manifest
+    # No `if`, unlike every other job here that tolerates something. This one tolerates nothing: a manifest is worth
+    # submitting only when the binaries were built and the release that carries them exists, which is exactly what the
+    # default `needs` semantics already say. Writing the same condition out would additionally have to say
+    # `!cancelled()` to be read at all, and that would let a cancelled release submit a manifest anyway.
+    needs:
+      - assert
+      - cli-binaries
+      - announce
+    permissions:
+      contents: read
+    uses: ./.github/workflows/submit-winget-manifest.yml
+    with:
+      ref: ${{ needs.assert.outputs.revision }}
+      version: ${{ needs.assert.outputs.version }}
+      artifact: ${{ needs.cli-binaries.outputs.artifact }}
+    secrets:
+      WINGET_PKGS_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}

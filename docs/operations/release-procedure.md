@@ -1,6 +1,6 @@
 # The release procedure
 
-<!-- describes: Directory.Build.props, .github/workflows/release.yml, .github/workflows/publish-helm-chart.yml, scripts/assert-release-tag.sh, scripts/read-declared-version.sh, .agents/skills/prepare-release/SKILL.md -->
+<!-- describes: Directory.Build.props, .github/workflows/release.yml, .github/workflows/publish-helm-chart.yml, .github/workflows/submit-winget-manifest.yml, scripts/assert-release-tag.sh, scripts/read-declared-version.sh, scripts/build-winget-manifests.sh, .agents/skills/prepare-release/SKILL.md -->
 
 MailFathom's version number is a compatibility promise over four public surfaces, and it is written in one place. This
 page records how a build acquires that number, where it is observable, and the sequence that turns a commit on a
@@ -198,7 +198,7 @@ Four artifacts leave one run, and a failure in the first three leaves the releas
 | The image | `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` | the schema artifact building |
 | The Helm chart | `ghcr.io/krzysztof318/charts/mailfathom` | the image's digest |
 | `mailfathom-schema-<version>.sql` | the GitHub release's assets | nothing else the release produces |
-| `mfctl-<version>-<rid>` for `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, plus one `.sha256` covering all of them | the GitHub release's assets | nothing else, while signing is switched off |
+| `mfctl-<version>-<rid>` for `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, plus one `.sha256` covering all of them | the GitHub release's assets | nothing else the release produces |
 
 The column names what each artifact needs from the other three. What all four need is the same and comes before any of
 them: the tag assertion, then the build, unit-test, formatting, and migration checks, then the integration suite. **No
@@ -233,7 +233,47 @@ the `DOCKERHUB_TOKEN` repository secret — a personal access token with read, w
 mirror, delete lets the nightly channel prune it, and the repository-overview sync needs all three. The publishing job
 refuses to start when the secret is missing, before it logs in or builds anything, so the failure names the missing
 configuration rather than arriving as a rejected credential half-way through a push. `GHCR_RETENTION_TOKEN` is optional
-and only affects nightly pruning on GHCR; without it that step warns and deletes nothing.
+and only affects nightly pruning on GHCR; without it that step warns and deletes nothing. `WINGET_PKGS_TOKEN` is the
+third, described below; its job refuses to start without it, and its absence costs a release the winget channel and
+nothing else.
+
+### The Windows Package Manager
+
+A release also offers the command through winget, and that is a submission rather than a publication. `Submit the
+winget manifest` opens a pull request against [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs)
+carrying the three manifest files `scripts/build-winget-manifests.sh` renders, and somebody else's review and
+automated validation decide when `MailFathom.mfctl` starts answering. Nothing here can shorten that, which is why the
+release notes say a version reaches winget a little after it reaches the releases page.
+
+It runs last, after `Publish the GitHub release`, and that ordering is a requirement rather than a preference: winget
+downloads the installer from the URL the manifest names, and that URL is a release asset which does not resolve until
+the release exists. Each `InstallerSha256` is computed from the bytes `Build the CLI binaries` produced rather than
+from a download of the published asset, so the hash a Windows machine verifies against is the hash of the file this
+pipeline built. The two agree in every case except the one worth catching.
+
+The submission is idempotent for the reason the registry publications are. A version the community repository already
+carries is reported and skipped, and a re-run whose branch already has an open pull request reports that rather than
+opening a second one — which matters more here than elsewhere, because winget-pkgs allows exactly one pull request per
+package version. The branch itself lives on `Krzysztof318/winget-pkgs`, since nobody can push a branch to
+microsoft/winget-pkgs. That fork is part of the release setup rather than something a run creates: it has to exist
+before the first submission, and each run force-syncs it from upstream before branching, so it stays a staging area
+rather than a repository with state of its own.
+
+**The credential is the part worth reading twice.** `WINGET_PKGS_TOKEN` is a *classic* personal access token with the
+`public_repo` scope, and nothing narrower does this job: a fine-grained token creates the commit on the fork and then
+fails on the pull request, because it cannot be granted a permission on a repository the account does not own. That
+scope is account-wide — write access to every public repository the account has, not to the fork alone — which is the
+same breadth that kept a classic `project` token out of this repository's secrets for writing the roadmap board. It is
+accepted here as a deliberate trade against a manual submission per release, and it is the one credential in this
+pipeline whose reach extends beyond MailFathom's own artifacts. Rotate it accordingly.
+
+microsoft/winget-pkgs also asks a contributor to have signed Microsoft's open-source Contributor License Agreement.
+That is a one-time act by the account the token belongs to, and it says nothing about this repository's own position:
+MailFathom asks for no contributor agreement, and this is somebody else's repository under somebody else's rules.
+
+Until the first submission is accepted, `winget install MailFathom.mfctl` finds nothing. The sentence saying so in
+[administering a deployment](admin-endpoint.md#getting-the-command) is removed by the release that sees the first
+manifest merged, and checking it is part of that release rather than of the next change to this page.
 
 ### When one registry published and the other did not
 
