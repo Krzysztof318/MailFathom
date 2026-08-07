@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI;
+using MailFathom.AI.Embeddings;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.Emails.Extraction;
@@ -17,6 +18,7 @@ using MailFathom.Host;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.DataEncryption;
+using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Persistence;
@@ -120,6 +122,16 @@ try
     builder.Services.AddOptions<EmailContentOptions>()
         .Bind(
             builder.Configuration.GetSection("EmailContent"),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+    // A configuration root of its own, because what a deployment embeds with is a property of that deployment rather
+    // than of its database or its mail accounts, and a root is also what gives its keys their own secret-name
+    // uniqueness scope. An absent section is a deployment that embeds nothing and serves lexical search, which
+    // ADR 0006 makes a supported state rather than a startup failure.
+    builder.Services.AddOptions<EmbeddingOptions>()
+        .Bind(
+            builder.Configuration.GetSection("Embeddings"),
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
@@ -266,6 +278,22 @@ try
 
     // Before persistence, which writes what these derive: the chunk writer resolves the chunker from here.
     builder.Services.AddLocalTextDerivations();
+
+    // Read here rather than resolved, for the reason the text search configuration below is: whether this deployment
+    // embeds at all decides which services exist, and that decision is taken before the container that would resolve
+    // an options snapshot. Only the presence of a chain is read this way — every rule about what the chain declares is
+    // validated on start, where a failure reports every problem at once instead of the first one to be built.
+    var declaredEmbeddings = builder.Configuration.GetSection("Embeddings").Get<EmbeddingOptions>();
+
+    if (declaredEmbeddings?.IsConfigured is true)
+    {
+        builder.Services.AddSingleton<IEmbeddingCredentialSource, ConfiguredEmbeddingCredentialSource>();
+        builder.Services.AddSingleton(provider => EmbeddingGenerationPlanMapper.Map(
+            provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value)
+            ?? throw new InvalidOperationException(
+                "The embedding chain was declared at registration and is absent from the validated configuration."));
+        builder.Services.AddEmbeddingProviderAdapter();
+    }
     builder.Services.AddInfrastructure(
         provider => provider.GetRequiredService<DatabaseConnectionSettingsMapper>()
             .Map(provider.GetRequiredService<ISettingsSnapshot<PersistenceOptions>>().Current),

@@ -15,5 +15,7 @@
   href: email-content.md
 - name: Message chunks
   href: message-chunks.md
+- name: Embedding generation
+  href: embedding-generation.md
 - name: MCP tools
   href: mcp-tools.md

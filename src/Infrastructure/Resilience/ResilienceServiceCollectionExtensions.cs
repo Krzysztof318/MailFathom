@@ -62,6 +62,7 @@ public static class ResilienceServiceCollectionExtensions
         services.AddSingleton<ITransientFailureClassifier, TransientFailureClassifier>();
         services.AddSingleton<IValidateOptions<OutboundDependencyResilienceOptions>, OutboundDependencyResilienceOptionsValidator>();
         services.AddSingleton<OutboundOperationExecutor>();
+        services.AddSingleton<IOutboundOperationRunner, OutboundOperationRunner>();
 
         // Only the dependency class selects a builder, so every instance of a class is built from its one
         // registration. The formatters keep the two halves of the key readable in Polly's own telemetry tags.

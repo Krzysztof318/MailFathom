@@ -5,6 +5,7 @@
 using System.Data.Common;
 using System.Net;
 using System.Net.Sockets;
+using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
 using MailFathom.Infrastructure.Mail;
@@ -209,6 +210,32 @@ public sealed class TransientFailureClassifierTests
 
         // Act
         var isTransient = this.classifier.IsTransientFailure(OutboundDependency.AiProviderInvocation, failure);
+
+        // Assert
+        Assert.Equal(expectedTransient, isTransient);
+    }
+
+    /// <summary>
+    /// The provider adapters surface a refusal as their own classified failure rather than as an HTTP one, because the
+    /// client libraries never raise <see cref="HttpRequestException" /> for a status. Deferring to that verdict is what
+    /// keeps one opinion about repetition rather than two that can disagree.
+    /// </summary>
+    [Theory]
+    [InlineData(EmbeddingGenerationFailure.RateLimited, true)]
+    [InlineData(EmbeddingGenerationFailure.RequestTimedOut, true)]
+    [InlineData(EmbeddingGenerationFailure.TransportFaulted, true)]
+    [InlineData(EmbeddingGenerationFailure.CredentialRejected, false)]
+    [InlineData(EmbeddingGenerationFailure.RequestRefused, false)]
+    [InlineData(EmbeddingGenerationFailure.VectorShapeUnexpected, false)]
+    public void IsTransientFailure_ClassifiedEmbeddingFailure_FollowsTheAdaptersVerdict(
+        EmbeddingGenerationFailure failure,
+        bool expectedTransient)
+    {
+        // Arrange
+        var classified = new EmbeddingGenerationFailedException("primary", failure);
+
+        // Act
+        var isTransient = this.classifier.IsTransientFailure(OutboundDependency.AiProviderInvocation, classified);
 
         // Assert
         Assert.Equal(expectedTransient, isTransient);

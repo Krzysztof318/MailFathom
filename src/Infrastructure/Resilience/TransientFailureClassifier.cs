@@ -5,6 +5,7 @@
 using System.Data.Common;
 using System.Net;
 using System.Net.Sockets;
+using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
 using MailFathom.Infrastructure.Mail;
@@ -101,9 +102,16 @@ internal sealed class TransientFailureClassifier : ITransientFailureClassifier
     };
 
     /// <summary>Classifies a chat or embedding provider failure.</summary>
-    /// <remarks>An HTTP status is the provider's own statement about whether the request may be sent again; a request that never reached a status failed in transport.</remarks>
+    /// <remarks>
+    /// An adapter that has already classified its provider's answer says so, and this defers to it: the provider
+    /// libraries surface a refusal as their own result type rather than as an HTTP failure, and re-deriving the verdict
+    /// from a status this side never sees would produce a second opinion for the pipeline to disagree with. Where no
+    /// adapter classified anything, an HTTP status is the provider's own statement about whether the request may be
+    /// sent again, and a request that never reached a status failed in transport.
+    /// </remarks>
     private static bool IsTransientProviderFailure(Exception failure) => failure switch
     {
+        EmbeddingGenerationFailedException generationFailure => generationFailure.IsWorthRepeating,
         HttpRequestException requestFailure => IsTransientHttpStatus(requestFailure.StatusCode),
         _ => IsTransientTransportFailure(failure),
     };

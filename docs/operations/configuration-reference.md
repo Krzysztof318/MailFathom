@@ -202,6 +202,57 @@ search](../features/lexical-email-search.md) records how snippets are cut.
 | `EmailContent:MaxBodyCharacters` | int | `100000` | 1000 – 1000000; each body representation is truncated to it, explicitly | restart |
 | `EmailContent:MaxCharactersPerRead` | int | `200000` | 2000 – 2000000, and at least twice `MaxBodyCharacters`; the body characters one call returns across every email it names | restart |
 
+## `Embeddings`
+
+What this deployment intends to embed with. Writing nothing is a supported deployment: no vectors are produced,
+semantic search is unavailable, and lexical search serves exactly as before. Declaring a chain does not start
+spending — an activation does. [Embedding generation](../features/embedding-generation.md) records what a declaration
+means and what it costs.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Embeddings:AllowTrimVectors` | bool | `false` | with it off, a declared dimension above 2000 is refused at startup; with it on, a wider answer is cut to the declared width and renormalized | restart |
+| `Embeddings:MaxPassagesPerRequest` | int | `64` | 1 – 2048; the batch bound, applied before the provider sees a request | restart |
+| `Embeddings:RequestTimeout` | TimeSpan | `00:01:00` | positive; one request to one endpoint | restart |
+
+### One endpoint — `Embeddings:Endpoints:<n>`
+
+An ordered chain. Every entry declares the same geometry and reaches the same vector space, so a failing endpoint
+falls through to the next without changing what any stored vector means; startup refuses a chain whose entries
+disagree, naming both aliases and the property.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:Alias` | string | — | required, unique within the chain; what a log line, a metric tag, a resilience circuit, and a failure message call this endpoint | restart |
+| `…:Provider` | string | — | required, at most 64 characters; the vendor whose model defines the space, not the endpoint it is reached at | restart |
+| `…:Model` | string | — | required, at most 128 characters; the vendor's published model identifier | restart |
+| `…:ModelVersion` | string | *(empty)* | at most 64 characters; empty is a vendor that versions nothing, which is the ordinary case | restart |
+| `…:RoutedModelName` | string | *(empty)* | at most 128 characters; what is sent as the model of a request where that differs — a cloud deployment's own name. Empty means it equals `Model` | restart |
+| `…:Dimension` | int | — | 1 – 16000, and 1 – 2000 unless `AllowTrimVectors` is on; the width the stored vectors have and the profile records | restart |
+| `…:DistanceMetric` | enum | `Cosine` | `Cosine`, `InnerProduct`, `EuclideanDistance` | restart |
+| `…:InputCharacterLimit` | int | `8000` | positive; what a passage is cut to before it is sent, which is what the model saw and therefore part of what a vector means | restart |
+| `…:PassageInstruction` | string | *(empty)* | at most 512 characters; empty for a model that requires none. Whitespace is refused, because it would register a second profile for a space identical to one already registered | restart |
+| `…:NormalizeVectors` | bool | `true` | whether the space's vectors are of unit length | restart |
+| `…:Address` | string | *(empty)* | absolute HTTPS; empty uses the provider library's default. A cloud resource's OpenAI-compatible address ends in `/openai/v1/` | restart |
+| `…:SupportsRequestedDimension` | bool | `true` | whether the endpoint honours a requested width, so the narrower space is asked for rather than cut out of a wider answer | restart |
+| `…:ApiKey` | secret block | *(absent)* | the provider key. Exactly one of this and `EntraCredential` is declared | restart, value read per request |
+
+### Microsoft Entra credential — `Embeddings:Endpoints:<n>:EntraCredential`
+
+For an endpoint where no key exists to provision. All four shapes are non-interactive by construction: MailFathom is a
+background service with nobody at a keyboard, and `DefaultAzureCredential` is deliberately not used because its chain
+reaches an interactive browser credential and the developer-tool credentials of whoever is signed in on the host.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:Kind` | enum | `ManagedIdentity` | `ManagedIdentity`, `WorkloadIdentity`, `ClientSecret`, `ClientCertificate`. `ApiKey` is refused here; a key is declared as one | restart |
+| `…:TokenScope` | string | `https://ai.azure.com/.default` | required; the audience an access token is minted for. Declared rather than derived from the address, so a renamed service does not silently mint tokens for the wrong audience | restart |
+| `…:TenantId` | string | *(empty)* | required for `ClientSecret` and `ClientCertificate` | restart |
+| `…:ClientId` | string | *(empty)* | required for `ClientSecret` and `ClientCertificate`; optional for `ManagedIdentity`, where it selects a user-assigned identity | restart |
+| `…:ClientSecret` | secret block | *(absent)* | required for `ClientSecret` | restart |
+| `…:CertificatePath` | string | *(empty)* | required for `ClientCertificate`; a PKCS#12 file the process account can read | restart |
+| `…:CertificatePassword` | secret block | *(absent)* | where the certificate file has one | restart |
+
 ## `MailExtractionBackfill`
 
 The worker that extracts text for messages stored before extraction existed or before a limit was raised.
