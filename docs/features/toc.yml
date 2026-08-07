@@ -19,5 +19,7 @@
   href: embedding-generation.md
 - name: Automatic embedding
   href: automatic-embedding.md
+- name: Embedding backfill
+  href: embedding-backfill.md
 - name: MCP tools
   href: mcp-tools.md

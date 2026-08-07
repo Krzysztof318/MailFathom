@@ -4,6 +4,7 @@
 
 using MailFathom.AI;
 using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail;
@@ -102,6 +103,13 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // The bound a composition root reads from the Embeddings section. The backlog itself is registered by
         // AddInfrastructure, because every committed message is offered into it whether or not this deployment embeds.
         builder.Services.AddSingleton(new EmailEmbeddingBacklogOptions());
+        // The bounds a composition root reads from the EmbeddingBackfill section. Small here on purpose: a test that
+        // proves a walk is bounded needs the bound to be reachable within the mail it stored.
+        builder.Services.AddSingleton(new StoredEmailEmbeddingBackfillOptions
+        {
+            BatchSize = 2,
+            MaxBatchesPerRun = 10,
+        });
 
         // Registered by a composition root rather than by AddInfrastructure, because persistence writes what the AI
         // boundary derives and may not reference it. Without this the chunk writer resolves nothing.

@@ -30,7 +30,7 @@ stored them. Two things follow from that ordering, and both are the reason for i
 The backlog is bounded by `Embeddings:MaxQueuedEmails`, and the bound refuses rather than waits. An initial
 synchronization of a large mailbox produces work faster than any provider will accept it, so a full backlog is the
 expected outcome rather than a fault: the messages it turns away are already stored with their passages, and the
-backfill is what reaches mail the live path did not.
+[embedding backfill](embedding-backfill.md) is what reaches mail the live path did not.
 
 The backlog lives in the process and is deliberately not durable. Losing it at shutdown loses no work, because what is
 outstanding is decided by asking the database which passages have no vector under the active profile — the same
@@ -85,8 +85,9 @@ that is already refusing — the same single-layer rule
 [outbound resilience](../architecture/outbound-resilience.md#the-single-layer-rule) states for every other outbound
 call.
 
-Passages a failed turn did not reach keep having no vector, which is exactly the condition the backfill selects on. So
-nothing is lost by declining to try again here.
+Passages a failed turn did not reach keep having no vector, which is exactly the condition the
+[embedding backfill](embedding-backfill.md#why-it-sweeps-rather-than-finishes) selects on. So nothing is lost by
+declining to try again here.
 
 ## What an operator can see
 
