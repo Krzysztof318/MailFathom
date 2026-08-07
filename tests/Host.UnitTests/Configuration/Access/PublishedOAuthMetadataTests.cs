@@ -23,7 +23,7 @@ public sealed class PublishedOAuthMetadataTests
     private const string PartnerIssuer = "https://sso.partner.test/realms/mailfathom";
 
     [Fact]
-    public void For_OneEntry_PublishesThatEntrysResourceIssuerAndScopes()
+    public void For_OneEntry_PublishesTheResourceIssuerAndScopesOfThatEntry()
     {
         // Arrange
         var workforce = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read");
