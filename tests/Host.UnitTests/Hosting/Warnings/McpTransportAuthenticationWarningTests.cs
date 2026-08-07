@@ -2,10 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting.Warnings;
-using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -69,8 +68,8 @@ public sealed class McpTransportAuthenticationWarningTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var settings = new McpEndpointOptions { Enabled = true, Authentication = TransportAuthenticationMethods.ApiKey };
-        settings.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:a-key" });
+        var settings = new McpEndpointOptions { Enabled = true };
+        settings.Authentication.Add(ConfiguredAuthentication.ApiKey("workstation"));
         var warning = WarningFor(settings, logs);
 
         // Act
@@ -87,7 +86,7 @@ public sealed class McpTransportAuthenticationWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var warning = WarningFor(
-            new McpEndpointOptions { Authentication = TransportAuthenticationMethods.None },
+            new McpEndpointOptions(),
             logs);
 
         // Act
@@ -98,12 +97,12 @@ public sealed class McpTransportAuthenticationWarningTests
     }
 
     /// <summary>
-    /// Turning no method on is the unauthenticated posture rather than an unfinished configuration, so this warning is
-    /// the whole mechanism that keeps it from being silent. An operator who enabled the endpoint and wrote nothing
-    /// beside it reads the same message as one who wrote <c>None</c>, because they have the same deployment.
+    /// An empty list is the unauthenticated posture rather than an unfinished configuration, so this warning is the
+    /// whole mechanism that keeps it from being silent. An operator who enabled the endpoint and configured no method
+    /// beside it reads the same message as one who wrote an empty list, because they have the same deployment.
     /// </summary>
     [Fact]
-    public async Task StartAsync_EnabledEndpointTurningNoMethodOn_WarnsExactlyAsAnExplicitNoneDoes()
+    public async Task StartAsync_EnabledEndpointConfiguringNoMethod_WarnsThatNothingIdentifiesTheCaller()
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
@@ -126,11 +125,8 @@ public sealed class McpTransportAuthenticationWarningTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var settings = new McpEndpointOptions
-        {
-            Enabled = true,
-            Authentication = TransportAuthenticationMethods.OAuth,
-        };
+        var settings = new McpEndpointOptions { Enabled = true };
+        settings.Authentication.Add(ConfiguredAuthentication.OAuthFor("https://mail.example.test/mcp"));
         var warning = WarningFor(settings, logs);
 
         // Act
@@ -146,7 +142,7 @@ public sealed class McpTransportAuthenticationWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var warning = WarningFor(
-            new McpEndpointOptions { Enabled = true, Authentication = TransportAuthenticationMethods.None },
+            new McpEndpointOptions { Enabled = true },
             logs);
 
         // Act
@@ -179,7 +175,6 @@ public sealed class McpTransportAuthenticationWarningTests
     private static McpEndpointOptions Unauthenticated() => new()
     {
         Enabled = true,
-        Authentication = TransportAuthenticationMethods.None,
     };
 
     private static McpTransportAuthenticationWarning WarningFor(McpEndpointOptions settings, RecordingLoggerProvider logs)

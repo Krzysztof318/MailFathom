@@ -82,59 +82,70 @@ internal static class McpTransportSecurityExtensions
             ? McpAuthenticationDefaults.AuthenticationScheme
             : TransportSurface.Mcp.ApiKeySchemeName;
 
+        var oauthMethods = endpointSettings.OAuthMethods();
+
         var authentication = services.AddTransportAuthentication(
             TransportSurface.Mcp,
-            endpointSettings.Authentication,
-            [.. endpointSettings.ApiKeys],
-            endpointSettings.OAuth,
+            endpointSettings.ApiKeys(),
+            oauthMethods,
             challengeSchemeName);
 
-        if (endpointSettings.AllowsOAuth)
+        if (oauthMethods.Count > 0)
         {
-            AddProtectedResourceMetadataScheme(authentication, endpointSettings.OAuth);
-            AddInsufficientScopeRefusal(services, endpointSettings.OAuth);
+            AddProtectedResourceMetadataScheme(authentication, oauthMethods);
+            AddInsufficientScopeRefusal(services, oauthMethods);
         }
 
         return services;
     }
 
     /// <summary>Registers the scheme publishing the RFC 9728 document an MCP client discovers its authorization server through.</summary>
+    /// <remarks>
+    /// What the configured entries publish between them is <see cref="PublishedOAuthMetadata" />'s to decide, because
+    /// the administrative endpoint publishes the same document through a record of this repository's own and the two
+    /// must not answer differently from one configuration. What is the SDK's own is the type this fills in.
+    /// </remarks>
     private static void AddProtectedResourceMetadataScheme(
         AuthenticationBuilder authentication,
-        OAuthValidationOptions oauthSettings) =>
+        IReadOnlyList<OAuthValidationOptions> oauthMethods)
+    {
+        var published = PublishedOAuthMetadata.For(oauthMethods);
+
         authentication.AddMcp(mcpOptions =>
         {
             // Absolute and configured, never derived from the request. Left unset, the SDK composes both this address
             // and the resource it advertises from the request's scheme and Host header, so a deployment behind a proxy
             // would tell each client to authenticate for whichever name that client arrived under.
-            mcpOptions.ResourceMetadataUri = new Uri(
-                ProtectedResourceMetadataAddress.AddressFor(oauthSettings.CanonicalResource()));
+            mcpOptions.ResourceMetadataUri = new Uri(ProtectedResourceMetadataAddress.AddressFor(published.Resource));
             mcpOptions.ResourceMetadata = new ProtectedResourceMetadata
             {
-                Resource = oauthSettings.CanonicalResource(),
-                AuthorizationServers = [.. oauthSettings.AuthorizationServers.Select(server => server.ValidatedIssuer())],
-                ScopesSupported = [.. oauthSettings.RequiredScopes],
+                Resource = published.Resource,
+                AuthorizationServers = [.. published.AuthorizationServers],
+                ScopesSupported = [.. published.ScopesSupported],
                 BearerMethodsSupported = ["header"],
                 ResourceName = "MailFathom",
             };
         });
+    }
 
     /// <summary>Registers the refusal that names the scope an authenticated token was missing.</summary>
     /// <remarks>
     /// Only a required scope can turn an authenticated caller away, so this is registered only where one exists. Without
     /// it the endpoint answers every failure with a challenge, and there would be nothing for this to say.
     /// </remarks>
-    private static void AddInsufficientScopeRefusal(IServiceCollection services, OAuthValidationOptions oauthSettings)
+    private static void AddInsufficientScopeRefusal(
+        IServiceCollection services,
+        IReadOnlyList<OAuthValidationOptions> oauthMethods)
     {
-        if (oauthSettings.RequiredScopes.Count == 0)
+        if (oauthMethods.All(oauthMethod => oauthMethod.RequiredScopes.Count == 0))
         {
             return;
         }
 
         services.AddSingleton<IAuthorizationMiddlewareResultHandler>(
             new InsufficientScopeResultHandler(
-                [.. oauthSettings.RequiredScopes],
-                ProtectedResourceMetadataAddress.AddressFor(oauthSettings.CanonicalResource())));
+                TransportAuthenticationConfiguration.RequiredScopesByIssuer(oauthMethods),
+                ProtectedResourceMetadataAddress.AddressFor(oauthMethods[0].CanonicalResource())));
     }
 
     /// <summary>Builds the CORS policy from the configured origins.</summary>

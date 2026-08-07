@@ -28,9 +28,11 @@ namespace MailFathom.Host.Configuration.Endpoints;
 /// </para>
 /// <para>
 /// The endpoint is disabled by default, so a deployment that configures nothing serves no mailbox over the network. What
-/// guards an enabled one is a set of <see cref="Authentication" /> methods that starts empty, so authentication is
-/// something an operator turns on; leaving it off is announced at startup rather than assumed to be intended, and the
-/// spellings that could have meant to turn it on — a misspelled key, a value naming no method — fail startup instead.
+/// guards an enabled one is the list of <see cref="Authentication" /> methods, which starts empty, so authentication is
+/// something an operator turns on; leaving it off is announced at startup rather than assumed to be intended. Each entry
+/// carries the settings its own method needs, so a method cannot be selected without being configured or configured
+/// without being selected, and the spellings that could have meant to turn one on — a misspelled key, an entry naming no
+/// method, a value written where the list belongs — fail startup instead.
 /// </para>
 /// <para>
 /// The value is read once, while the host is being composed, because whether an endpoint exists and what guards it are
@@ -44,9 +46,6 @@ internal sealed class McpEndpointOptions
 {
     /// <summary>The configuration section the endpoint settings are bound from.</summary>
     public const string SectionName = "McpEndpoint";
-
-    private const TransportAuthenticationMethods KnownAuthenticationMethods =
-        TransportAuthenticationMethods.ApiKey | TransportAuthenticationMethods.OAuth;
 
     /// <summary>Gets or sets whether the MCP endpoint is served at all.</summary>
     /// <remarks>Disabled unless a deployment states otherwise, so reaching a mailbox over MCP is always something an operator turned on.</remarks>
@@ -64,20 +63,12 @@ internal sealed class McpEndpointOptions
     /// <remarks>Clear text unless a deployment states otherwise, which is what local development runs and what a deployment behind a TLS-terminating reverse proxy runs. Startup warns about it either way, because only an operator knows which of the two they have.</remarks>
     public EndpointTransport Transport { get; set; } = EndpointTransport.Http;
 
-    /// <summary>Gets or sets which credentials a client may present, written as a set such as <c>ApiKey, OAuth</c>.</summary>
-    /// <remarks>Empty by default, which is the unauthenticated posture. A request is served when it satisfies any one of the methods named here, because the methods identify different kinds of caller rather than layering checks on one.</remarks>
-    public TransportAuthenticationMethods Authentication { get; set; } = TransportAuthenticationMethods.None;
-
-    /// <summary>Gets the API keys a client may authenticate with, each a named secret with its own lifetime.</summary>
+    /// <summary>Gets the credentials a client may present, one entry per authentication method with that method's own settings.</summary>
     /// <remarks>
-    /// Several entries rather than one, so a key can be replaced by adding its successor, moving clients across, and
-    /// removing the old entry — with both valid in between and no window in which nothing authenticates. An expired
-    /// entry may stay in the list; it authenticates nothing and documents what was retired.
+    /// Empty by default, which is the unauthenticated posture. A request is served when it satisfies any one of the
+    /// entries, because the methods identify different kinds of caller rather than layering checks on one.
     /// </remarks>
-    public IList<ConfiguredSecret> ApiKeys { get; } = [];
-
-    /// <summary>Gets or sets what this deployment is called in OAuth terms, and which authorization servers may speak for it.</summary>
-    public OAuthValidationOptions OAuth { get; set; } = new();
+    public IList<TransportAuthenticationOptions> Authentication { get; } = [];
 
     /// <summary>Gets or sets which browser origins the endpoint answers.</summary>
     public McpCorsOptions Cors { get; set; } = new();
@@ -104,10 +95,10 @@ internal sealed class McpEndpointOptions
     public TransportRateLimitingOptions RateLimiting { get; set; } = new();
 
     /// <summary>Gets whether a client may authenticate with one of the configured API keys.</summary>
-    public bool AllowsApiKey => this.Authentication.HasFlag(TransportAuthenticationMethods.ApiKey);
+    public bool AllowsApiKey => this.ApiKeys().Count > 0;
 
     /// <summary>Gets whether a client may authenticate with an access token from one of the configured authorization servers.</summary>
-    public bool AllowsOAuth => this.Authentication.HasFlag(TransportAuthenticationMethods.OAuth);
+    public bool AllowsOAuth => this.OAuthMethods().Count > 0;
 
     /// <summary>Gets whether a request must present a credential naming who is calling.</summary>
     /// <remarks>
@@ -115,7 +106,7 @@ internal sealed class McpEndpointOptions
     /// is a different question from which person's mail is being served, so a deployment requiring a certificate and no
     /// authentication method still requires nothing in the sense this asks about — and still warns at startup.
     /// </remarks>
-    public bool RequiresAuthentication => this.Authentication != TransportAuthenticationMethods.None;
+    public bool RequiresAuthentication => this.Authentication.Count > 0;
 
     /// <summary>Gets whether Kestrel terminates TLS for this endpoint.</summary>
     public bool TerminatesTls => TransportListenerConfiguration.TerminatesTls(this.Transport);
@@ -169,6 +160,22 @@ internal sealed class McpEndpointOptions
         return settings;
     }
 
+    /// <summary>Reports every key a client may authenticate with, in configuration order.</summary>
+    /// <returns>The configured keys, empty when the endpoint accepts none.</returns>
+    /// <remarks>
+    /// A method rather than a property, as <see cref="OAuthMethods" /> is, because it reads the same objects the list
+    /// already holds. The secret machinery discovers what to resolve by walking this graph's readable properties, and a
+    /// property here would offer it a second path to every configured key — leaving which of the two a refusal names
+    /// decided by the order reflection happens to report them in.
+    /// </remarks>
+    public IReadOnlyList<ConfiguredSecret> ApiKeys() =>
+        TransportAuthenticationConfiguration.ApiKeysIn(this.Authentication);
+
+    /// <summary>Reports what an access token must prove, once per entry that states OAuth.</summary>
+    /// <returns>The configured OAuth blocks, empty when the endpoint accepts no token.</returns>
+    public IReadOnlyList<OAuthValidationOptions> OAuthMethods() =>
+        TransportAuthenticationConfiguration.OAuthMethodsIn(this.Authentication);
+
     /// <summary>Describes every socket this endpoint asks for.</summary>
     /// <returns>One declaration per socket, empty when the endpoint is not served.</returns>
     /// <remarks>Whether another surface asks for one of the same sockets, and whether the two agree about it, is <see cref="ListenerComposition" />'s question rather than this section's.</remarks>
@@ -197,7 +204,9 @@ internal sealed class McpEndpointOptions
             return [];
         }
 
-        var errors = new List<string>(this.FindAuthenticationErrors());
+        var errors = new List<string>(TransportAuthenticationConfiguration.FindConfigurationErrors(
+            SectionName,
+            [.. this.Authentication]));
 
         errors.AddRange(this.Cors.FindConfigurationErrors()
             .Select(error => $"{SectionName}:{nameof(this.Cors)}:{error}"));
@@ -264,61 +273,4 @@ internal sealed class McpEndpointOptions
         }
     }
 
-    private IEnumerable<string> FindAuthenticationErrors()
-    {
-        // The binder accepts any number for an enum, so 'Authentication=4' would bind to a set no member declares. Every
-        // check below asks whether a particular method is among them, and such a value answers no to all of them: it
-        // registers no authentication, requires no credential, and leaves the unauthenticated warning silent because it
-        // is not None either. Refusing it here is what keeps a typo from opening the endpoint instead of closing it.
-        var unknownMethods = this.Authentication & ~KnownAuthenticationMethods;
-        if (unknownMethods != TransportAuthenticationMethods.None)
-        {
-            yield return $"{SectionName}:{nameof(this.Authentication)} — '{(int)unknownMethods}' names no authentication method; write '{nameof(TransportAuthenticationMethods.ApiKey)}', '{nameof(TransportAuthenticationMethods.OAuth)}', both separated by a comma, or '{nameof(TransportAuthenticationMethods.None)}'.";
-
-            yield break;
-        }
-
-        foreach (var error in this.FindApiKeyErrors())
-        {
-            yield return error;
-        }
-
-        foreach (var error in this.FindOAuthErrors())
-        {
-            yield return error;
-        }
-    }
-
-    private IEnumerable<string> FindApiKeyErrors()
-    {
-        if (this.AllowsApiKey && this.ApiKeys.Count == 0)
-        {
-            yield return $"{SectionName}:{nameof(this.ApiKeys)} — '{nameof(TransportAuthenticationMethods.ApiKey)}' authentication is selected and no key is configured, so no client could authenticate with one.";
-        }
-
-        // Configured-but-unchecked is refused rather than ignored in both directions below, because settings nothing
-        // reads are a deployment believing it is protected — which is worse than one that knows it is not.
-        if (!this.AllowsApiKey && this.ApiKeys.Count > 0)
-        {
-            yield return $"{SectionName}:{nameof(this.ApiKeys)} — API keys are configured while '{nameof(TransportAuthenticationMethods.ApiKey)}' is not among the authentication methods, so none of them is checked; add it or remove them.";
-        }
-    }
-
-    private IEnumerable<string> FindOAuthErrors()
-    {
-        if (!this.AllowsOAuth)
-        {
-            if (this.OAuth.IsConfigured)
-            {
-                yield return $"{SectionName}:{nameof(this.OAuth)} — authorization servers are configured while '{nameof(TransportAuthenticationMethods.OAuth)}' is not among the authentication methods, so no token is checked against them; add it or remove the section.";
-            }
-
-            yield break;
-        }
-
-        foreach (var error in this.OAuth.FindConfigurationErrors())
-        {
-            yield return $"{SectionName}:{nameof(this.OAuth)}:{error}";
-        }
-    }
 }

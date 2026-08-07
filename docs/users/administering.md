@@ -37,9 +37,8 @@ service that reads it are different authorities.
     "Enabled": true,
     "BindAddress": "127.0.0.1",
     "Port": 8090,
-    "Authentication": "ApiKey",
-    "ApiKeys": [
-      { "Name": "workstation", "SecretReference": "systemd-credential:admin-workstation-key" }
+    "Authentication": [
+      { "ApiKey": { "Name": "workstation", "SecretReference": "systemd-credential:admin-workstation-key" } }
     ]
   }
 }

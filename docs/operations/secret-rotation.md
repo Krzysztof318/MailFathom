@@ -129,7 +129,7 @@ An anchor that stops loading is recorded at `Error` and skipped, so the rest of 
 
 This is the one secret with a real overlap mechanism, because several keys are configured at once and any of them authenticates.
 
-1. Provision the replacement and add it to `McpEndpoint:ApiKeys` under a **new** `Name`.
+1. Provision the replacement and add it to `McpEndpoint:Authentication` as an entry of its own, under a **new** `Name`.
 2. Restart the host. The endpoint section is read once during composition, so a new entry needs one; the material behind an existing entry does not.
 3. Move each client onto the new key. Both authenticate in between, so nothing is refused while the change is in flight.
 4. Remove the old entry, or give it a `Lifetime` in the past, and restart.

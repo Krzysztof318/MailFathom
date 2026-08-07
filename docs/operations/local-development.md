@@ -181,9 +181,8 @@ interpretation keeps the credential a one-liner:
 
 ```bash
 dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:Enabled" "true"
-dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:Authentication" "ApiKey"
-dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:ApiKeys:0:Name" "dev"
-dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:ApiKeys:0:SecretReference" "plaintext:dev-key"
+dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:Authentication:0:ApiKey:Name" "dev"
+dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:Authentication:0:ApiKey:SecretReference" "plaintext:dev-key"
 ```
 
 A development mailbox served by a mail server whose TLS parameters the platform refuses needs one more thing, and the

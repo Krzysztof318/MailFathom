@@ -29,7 +29,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         var oauthSettings = Configured();
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For(oauthSettings);
+        var document = ProtectedResourceMetadataDocument.For([oauthSettings]);
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -39,12 +39,44 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         Assert.Equal("MailFathom", document.ResourceName);
     }
 
+    /// <summary>
+    /// One document describes one resource, so several configured entries publish what all of them accept between
+    /// them: every issuer a token may come from, and every scope any entry asks for. Reading only the first entry would
+    /// under-publish the second — its clients would discover neither its authorization server nor the scope it requires,
+    /// which is a sign-in that fails against a document that never mentioned them.
+    /// </summary>
+    [Fact]
+    public void For_SeveralEntries_PublishesEveryIssuerAndEveryScopeBetweenThem()
+    {
+        // Arrange
+        var partners = new OAuthValidationOptions { Resource = Resource };
+        partners.RequiredScopes.Add("partners.read");
+
+        // A scope both entries ask for, because the document lists what is supported rather than how often it was asked.
+        partners.RequiredScopes.Add("mailfathom.read");
+        partners.AuthorizationServers.Add(new AuthorizationServerOptions
+        {
+            Name = "partners",
+            Issuer = "https://sso.partner.test/realms/mailfathom",
+        });
+
+        // Act
+        var document = ProtectedResourceMetadataDocument.For([Configured(), partners]);
+
+        // Assert
+        Assert.Equal(Resource, document.Resource);
+        Assert.Equal(
+            ["https://sso.example.test/realms/mailfathom", "https://sso.partner.test/realms/mailfathom"],
+            document.AuthorizationServers);
+        Assert.Equal(["mailfathom.admin", "mailfathom.read", "partners.read"], document.ScopesSupported);
+    }
+
     /// <summary>A credential in a query string reaches every access log on the path, so the header is the only method offered.</summary>
     [Fact]
     public void For_AnySettings_OffersTheHeaderAsTheOnlyWayToPresentAToken()
     {
         // Act
-        var document = ProtectedResourceMetadataDocument.For(Configured());
+        var document = ProtectedResourceMetadataDocument.For([Configured()]);
 
         // Assert
         Assert.Equal(["header"], document.BearerMethodsSupported);
@@ -55,7 +87,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
     public void Serialized_TheDocument_CarriesTheNamesRfc9728Defines()
     {
         // Arrange
-        var document = ProtectedResourceMetadataDocument.For(Configured());
+        var document = ProtectedResourceMetadataDocument.For([Configured()]);
 
         // Act
         using var serialized = JsonDocument.Parse(JsonSerializer.Serialize(document));

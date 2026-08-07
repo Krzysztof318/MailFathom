@@ -19,10 +19,11 @@ namespace MailFathom.Host.Configuration.Endpoints;
 /// </para>
 /// <para>
 /// The endpoint is disabled by default, so a deployment that configures nothing serves no administrative surface at
-/// all. What guards an enabled one is a set of <see cref="Authentication" /> methods that starts empty, so
+/// all. What guards an enabled one is the list of <see cref="Authentication" /> methods, which starts empty, so
 /// authentication is something an operator turns on; leaving it off is announced at startup rather than assumed to be
-/// intended, and the spellings that could have meant to turn it on — a misspelled key, a value naming no method — fail
-/// startup instead.
+/// intended. Each entry carries the settings its own method needs, so a method cannot be selected without being
+/// configured or configured without being selected, and the spellings that could have meant to turn one on — a
+/// misspelled key, an entry naming no method, a value written where the list belongs — fail startup instead.
 /// </para>
 /// <para>
 /// There is no CORS section and no client-certificate profile here, and neither is an omission. The clients are command
@@ -61,9 +62,6 @@ internal sealed class AdminEndpointOptions
     /// </remarks>
     public const string RoutePrefix = "/api/admin";
 
-    private const TransportAuthenticationMethods KnownAuthenticationMethods =
-        TransportAuthenticationMethods.ApiKey | TransportAuthenticationMethods.OAuth;
-
     /// <summary>Gets or sets whether the administrative surface is served at all.</summary>
     /// <remarks>Disabled unless a deployment states otherwise, so administering this service over the network is always something an operator turned on.</remarks>
     public bool Enabled { get; set; }
@@ -80,26 +78,15 @@ internal sealed class AdminEndpointOptions
     /// <remarks>The same setting the MCP endpoint carries, read the same way. Clear text unless a deployment states otherwise, which is the right posture behind a TLS-terminating reverse proxy and wrong anywhere else, so startup warns about it.</remarks>
     public EndpointTransport Transport { get; set; } = EndpointTransport.Http;
 
-    /// <summary>Gets or sets which credentials a client may present, written as a set such as <c>ApiKey, OAuth</c>.</summary>
+    /// <summary>Gets the credentials a client may present, one entry per authentication method with that method's own settings.</summary>
     /// <remarks>
     /// Empty by default, which is the unauthenticated posture. A request is served when it satisfies any one of the
-    /// methods named here, because the methods identify different kinds of caller rather than layering checks on one.
-    /// These are this endpoint's own methods: naming <c>ApiKey</c> here says nothing about the MCP endpoint and consults
-    /// none of its keys.
+    /// entries, because the methods identify different kinds of caller rather than layering checks on one. These are
+    /// this endpoint's own methods, configured separately from the MCP endpoint's even where both name one authorization
+    /// server: an entry here says nothing about that endpoint and consults none of its keys, and the resource a token is
+    /// issued for is what separates administering this service from reading a mailbox through it.
     /// </remarks>
-    public TransportAuthenticationMethods Authentication { get; set; } = TransportAuthenticationMethods.None;
-
-    /// <summary>Gets the API keys a client may authenticate with, each a named secret with its own lifetime.</summary>
-    /// <remarks>
-    /// Several entries rather than one, so a key can be replaced by adding its successor, moving clients across, and
-    /// removing the old entry — with both valid in between and no window in which nothing authenticates. An expired
-    /// entry may stay in the list; it authenticates nothing and documents what was retired.
-    /// </remarks>
-    public IList<ConfiguredSecret> ApiKeys { get; } = [];
-
-    /// <summary>Gets or sets which authorization servers may speak for this endpoint, and what a token must carry.</summary>
-    /// <remarks>Configured separately from the MCP endpoint's even where both name one server, because the resource a token is issued for is what separates administering this service from reading a mailbox through it.</remarks>
-    public OAuthValidationOptions OAuth { get; set; } = new();
+    public IList<TransportAuthenticationOptions> Authentication { get; } = [];
 
     /// <summary>Gets or sets under which domains and certificates Kestrel terminates TLS for this endpoint.</summary>
     /// <remarks>
@@ -120,13 +107,13 @@ internal sealed class AdminEndpointOptions
     public TransportRateLimitingOptions RateLimiting { get; set; } = new();
 
     /// <summary>Gets whether a client may authenticate with one of the configured API keys.</summary>
-    public bool AllowsApiKey => this.Authentication.HasFlag(TransportAuthenticationMethods.ApiKey);
+    public bool AllowsApiKey => this.ApiKeys().Count > 0;
 
     /// <summary>Gets whether a client may authenticate with an access token from one of the configured authorization servers.</summary>
-    public bool AllowsOAuth => this.Authentication.HasFlag(TransportAuthenticationMethods.OAuth);
+    public bool AllowsOAuth => this.OAuthMethods().Count > 0;
 
     /// <summary>Gets whether a request must present a credential naming who is calling.</summary>
-    public bool RequiresAuthentication => this.Authentication != TransportAuthenticationMethods.None;
+    public bool RequiresAuthentication => this.Authentication.Count > 0;
 
     /// <summary>Gets whether Kestrel terminates TLS for this endpoint.</summary>
     public bool TerminatesTls => TransportListenerConfiguration.TerminatesTls(this.Transport);
@@ -166,6 +153,22 @@ internal sealed class AdminEndpointOptions
         return settings;
     }
 
+    /// <summary>Reports every key a client may authenticate with, in configuration order.</summary>
+    /// <returns>The configured keys, empty when the endpoint accepts none.</returns>
+    /// <remarks>
+    /// A method rather than a property, as <see cref="OAuthMethods" /> is, because it reads the same objects the list
+    /// already holds. The secret machinery discovers what to resolve by walking this graph's readable properties, and a
+    /// property here would offer it a second path to every configured key — leaving which of the two a refusal names
+    /// decided by the order reflection happens to report them in.
+    /// </remarks>
+    public IReadOnlyList<ConfiguredSecret> ApiKeys() =>
+        TransportAuthenticationConfiguration.ApiKeysIn(this.Authentication);
+
+    /// <summary>Reports what an access token must prove, once per entry that states OAuth.</summary>
+    /// <returns>The configured OAuth blocks, empty when the endpoint accepts no token.</returns>
+    public IReadOnlyList<OAuthValidationOptions> OAuthMethods() =>
+        TransportAuthenticationConfiguration.OAuthMethodsIn(this.Authentication);
+
     /// <summary>Describes every socket this endpoint asks for.</summary>
     /// <returns>One declaration per socket, empty when the endpoint is not served.</returns>
     /// <remarks>Whether another surface asks for one of the same sockets, and whether the two agree about it, is <see cref="ListenerComposition" />'s question rather than this section's.</remarks>
@@ -189,7 +192,16 @@ internal sealed class AdminEndpointOptions
             return [];
         }
 
-        var errors = new List<string>(this.FindAuthenticationErrors());
+        var authenticationErrors = TransportAuthenticationConfiguration.FindConfigurationErrors(
+            SectionName,
+            [.. this.Authentication]);
+
+        var errors = new List<string>(authenticationErrors);
+
+        if (authenticationErrors.Count == 0)
+        {
+            errors.AddRange(this.FindResourcePrefixErrors());
+        }
 
         errors.AddRange(this.RateLimiting.FindConfigurationErrors()
             .Select(error => $"{SectionName}:{nameof(this.RateLimiting)}:{error}"));
@@ -209,81 +221,34 @@ internal sealed class AdminEndpointOptions
     }
 
 
-    private IEnumerable<string> FindAuthenticationErrors()
-    {
-        // The binder accepts any number for an enum, so 'Authentication=4' would bind to a set no member declares. Every
-        // check below asks whether a particular method is among them, and such a value answers no to all of them: it
-        // registers no authentication, requires no credential, and leaves the unauthenticated warning silent because it
-        // is not None either. Refusing it here is what keeps a typo from opening the endpoint instead of closing it.
-        var unknownMethods = this.Authentication & ~KnownAuthenticationMethods;
-        if (unknownMethods != TransportAuthenticationMethods.None)
-        {
-            yield return $"{SectionName}:{nameof(this.Authentication)} — '{(int)unknownMethods}' names no authentication method; write '{nameof(TransportAuthenticationMethods.ApiKey)}', '{nameof(TransportAuthenticationMethods.OAuth)}', both separated by a comma, or '{nameof(TransportAuthenticationMethods.None)}'.";
-
-            yield break;
-        }
-
-        foreach (var error in this.FindApiKeyErrors())
-        {
-            yield return error;
-        }
-
-        foreach (var error in this.FindOAuthErrors())
-        {
-            yield return error;
-        }
-    }
-
-    private IEnumerable<string> FindApiKeyErrors()
-    {
-        if (this.AllowsApiKey && this.ApiKeys.Count == 0)
-        {
-            yield return $"{SectionName}:{nameof(this.ApiKeys)} — '{nameof(TransportAuthenticationMethods.ApiKey)}' authentication is selected and no key is configured, so no client could authenticate with one.";
-        }
-
-        // Configured-but-unchecked is refused rather than ignored in both directions below, because settings nothing
-        // reads are a deployment believing it is protected — which is worse than one that knows it is not.
-        if (!this.AllowsApiKey && this.ApiKeys.Count > 0)
-        {
-            yield return $"{SectionName}:{nameof(this.ApiKeys)} — API keys are configured while '{nameof(TransportAuthenticationMethods.ApiKey)}' is not among the authentication methods, so none of them is checked; add it or remove them.";
-        }
-    }
-
-    private IEnumerable<string> FindOAuthErrors()
-    {
-        if (!this.AllowsOAuth)
-        {
-            if (this.OAuth.IsConfigured)
-            {
-                yield return $"{SectionName}:{nameof(this.OAuth)} — authorization servers are configured while '{nameof(TransportAuthenticationMethods.OAuth)}' is not among the authentication methods, so no token is checked against them; add it or remove the section.";
-            }
-
-            yield break;
-        }
-
-        var oauthErrors = this.OAuth.FindConfigurationErrors();
-
-        foreach (var error in oauthErrors)
-        {
-            yield return $"{SectionName}:{nameof(this.OAuth)}:{error}";
-        }
-
-        if (oauthErrors.Count == 0 && !this.ResourceNamesTheRoutePrefix())
-        {
-            yield return $"{SectionName}:{nameof(this.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
-        }
-    }
-
-    /// <summary>Reports whether the configured resource identifies the surface these routes are served at.</summary>
+    /// <summary>Reports the OAuth entries whose resource does not name the path these routes answer at.</summary>
     /// <remarks>
     /// A resource identifier is a name rather than an address to fetch, so nothing about OAuth requires it to match a
     /// route. What requires it here is discovery: <c>mfctl</c> is handed a host and a port and has to find the protected
     /// resource metadata document before it has read anything at all, which it can only do by appending the prefix it is
     /// about to call. That composition reaches the document's RFC 9728 location exactly when the resource names the same
     /// prefix, so a deployment whose resource says something else would publish a document nothing could find. Refused at
-    /// startup rather than discovered by an operator whose sign-in reports that a deployment serves no metadata.
+    /// startup rather than discovered by an operator whose sign-in reports that a deployment serves no metadata. It is
+    /// the one thing this endpoint asks of a resource that no other surface does, which is why it belongs here rather
+    /// than in the block itself.
+    /// <para>
+    /// Read only once the shared rules have found nothing, because a resource this reads has to be one that parsed.
+    /// </para>
     /// </remarks>
-    private bool ResourceNamesTheRoutePrefix() =>
-        Uri.TryCreate(this.OAuth.CanonicalResource(), UriKind.Absolute, out var resource)
+    private IEnumerable<string> FindResourcePrefixErrors()
+    {
+        foreach (var (index, method) in this.Authentication.Index())
+        {
+            if (method.OAuth is not { } oauth || NamesTheRoutePrefix(oauth))
+            {
+                continue;
+            }
+
+            yield return $"{SectionName}:{TransportAuthenticationConfiguration.SettingName}:{index}:{nameof(TransportAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
+        }
+    }
+
+    private static bool NamesTheRoutePrefix(OAuthValidationOptions oauth) =>
+        Uri.TryCreate(oauth.CanonicalResource(), UriKind.Absolute, out var resource)
         && string.Equals(resource.AbsolutePath.TrimEnd('/'), RoutePrefix, StringComparison.Ordinal);
 }

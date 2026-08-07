@@ -49,8 +49,10 @@ public sealed class McpEndpointOptionsTests
         var options = new McpEndpointOptions();
 
         // Assert
-        Assert.Equal(TransportAuthenticationMethods.None, options.Authentication);
+        Assert.Empty(options.Authentication);
         Assert.False(options.RequiresAuthentication);
+        Assert.Empty(options.ApiKeys());
+        Assert.Empty(options.OAuthMethods());
     }
 
     /// <summary>
@@ -69,71 +71,53 @@ public sealed class McpEndpointOptionsTests
     }
 
     [Fact]
-    public void FindConfigurationErrors_ApiKeyAuthenticationWithAtLeastOneKey_IsAccepted()
+    public void FindConfigurationErrors_AnApiKeyEntry_IsAccepted()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.ApiKey);
-        options.ApiKeys.Add(Key("workstation"));
+        var options = EnabledWith(ApiKeyMethod("workstation"));
 
         // Act, Assert
         Assert.Empty(options.FindConfigurationErrors());
     }
 
+    /// <summary>An entry is a credential, so rotation is a second entry rather than a nested list with a shape of its own.</summary>
     [Fact]
-    public void FindConfigurationErrors_ApiKeyAuthenticationWithNoKey_IsRefusedBecauseNoClientCouldAuthenticate()
+    public void ApiKeys_SeveralApiKeyEntries_ReadsThemAllInConfigurationOrder()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.ApiKey);
+        var options = EnabledWith(ApiKeyMethod("workstation"), ApiKeyMethod("chatgpt-connector"));
 
-        // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
-
-        // Assert
-        Assert.StartsWith("McpEndpoint:ApiKeys", error, StringComparison.Ordinal);
+        // Act, Assert
+        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Equal(["workstation", "chatgpt-connector"], options.ApiKeys().Select(key => key.Name));
     }
 
     /// <summary>
-    /// The binder turns any number into an enum value, so a section carrying '4' would bind to a set no member declares.
-    /// Every rule below asks whether a particular method is among them, and such a value answers no to all of them: no
-    /// authentication is registered, no credential is required, and the unauthenticated warning stays silent because it
-    /// is not <c>None</c> either. That combination opens the endpoint, which is why it is refused here.
+    /// An entry carrying no block at all is refused rather than skipped, because a list an operator wrote entries into
+    /// reads as an authenticated deployment while an entry stating nothing registers no scheme and requires no
+    /// credential.
     /// </summary>
     [Fact]
-    public void FindConfigurationErrors_AnAuthenticationValueNoMemberDeclares_IsRefusedRatherThanTreatedAsNeither()
+    public void FindConfigurationErrors_AnEntryStatingNoCredential_IsRefusedRatherThanIgnored()
     {
         // Arrange
-        var options = EnabledWith((TransportAuthenticationMethods)4);
+        var options = EnabledWith(new TransportAuthenticationOptions());
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
 
         // Assert
-        Assert.StartsWith("McpEndpoint:Authentication", error, StringComparison.Ordinal);
+        Assert.StartsWith("McpEndpoint:Authentication:0 ", error, StringComparison.Ordinal);
     }
 
-    /// <summary>An unknown bit is refused even beside a method that is real, because the request it would authorize is the same either way.</summary>
+    /// <summary>Nothing about the two methods conflicts, so which entry a block sits in is a matter of how an operator grouped what they wrote.</summary>
     [Fact]
-    public void FindConfigurationErrors_AnUnknownMethodBesideAKnownOne_IsRefused()
+    public void FindConfigurationErrors_OneEntryCarryingBothBlocks_IsAccepted()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.ApiKey | (TransportAuthenticationMethods)8);
-        options.ApiKeys.Add(Key("workstation"));
-
-        // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
-
-        // Assert
-        Assert.StartsWith("McpEndpoint:Authentication", error, StringComparison.Ordinal);
-    }
-
-    /// <summary>The two methods identify different kinds of caller, so a deployment reaching both a person and a scheduled job turns on both.</summary>
-    [Fact]
-    public void FindConfigurationErrors_ApiKeyAndOAuthTogether_IsAccepted()
-    {
-        // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.ApiKey | TransportAuthenticationMethods.OAuth);
-        options.ApiKeys.Add(Key("nightly-digest"));
-        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
+        var entry = ApiKeyMethod("workstation");
+        entry.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
+        var options = EnabledWith(entry);
 
         // Act, Assert
         Assert.Empty(options.FindConfigurationErrors());
@@ -141,33 +125,105 @@ public sealed class McpEndpointOptionsTests
         Assert.True(options.AllowsOAuth);
     }
 
-    /// <summary>The same reasoning as an unchecked key: an authorization server nothing validates against is a trust relationship an operator believes they configured.</summary>
+    /// <summary>The two methods identify different kinds of caller, so a deployment reaching both a person and a scheduled job configures both.</summary>
     [Fact]
-    public void FindConfigurationErrors_AuthorizationServersConfiguredWhileOAuthIsNotAMethod_IsRefused()
+    public void FindConfigurationErrors_ApiKeyAndOAuthTogether_IsAccepted()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.None);
-        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
+        var options = EnabledWith(
+            ApiKeyMethod("nightly-digest"),
+            OAuthMethod(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom")));
+
+        // Act, Assert
+        Assert.Empty(options.FindConfigurationErrors());
+        Assert.True(options.AllowsApiKey);
+        Assert.True(options.AllowsOAuth);
+    }
+
+    /// <summary>Each entry states what it asks of the servers it configures, which is what makes two of them independent.</summary>
+    [Fact]
+    public void FindConfigurationErrors_TwoOAuthEntriesWithTheirOwnScopesAndServers_IsAccepted()
+    {
+        // Arrange
+        var workforce = OAuthMethod(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
+        workforce.OAuth!.RequiredScopes.Add("mailfathom.read");
+        var partners = OAuthMethod(AuthorizationServer("partners", "https://sso.partner.test/realms/mailfathom"));
+        var options = EnabledWith(workforce, partners);
+
+        // Act, Assert
+        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Equal(2, options.OAuthMethods().Count);
+    }
+
+    /// <summary>
+    /// The endpoint publishes one protected resource metadata document, at an address derived from the resource, so two
+    /// entries naming different resources would leave one of them described by a document its clients never see.
+    /// </summary>
+    [Fact]
+    public void FindConfigurationErrors_TwoOAuthEntriesNamingDifferentResources_IsRefused()
+    {
+        // Arrange
+        var workforce = OAuthMethod(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
+        var partners = OAuthMethod(AuthorizationServer("partners", "https://sso.partner.test/realms/mailfathom"));
+        partners.OAuth!.Resource = "https://other.example.test/mcp";
+        var options = EnabledWith(workforce, partners);
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
 
         // Assert
-        Assert.StartsWith("McpEndpoint:OAuth", error, StringComparison.Ordinal);
+        Assert.StartsWith("McpEndpoint:Authentication:1:OAuth:Resource", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>The scheme a server's validator registers under is composed from its name, so two entries naming one server would collide.</summary>
+    [Fact]
+    public void FindConfigurationErrors_TwoOAuthEntriesSharingAnAuthorizationServerName_IsRefused()
+    {
+        // Arrange
+        var options = EnabledWith(
+            OAuthMethod(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom")),
+            OAuthMethod(AuthorizationServer("workforce", "https://sso.partner.test/realms/mailfathom")));
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith(
+            "McpEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Name",
+            error,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>The same rule the entry applies within itself, reaching across two entries that were separately valid.</summary>
+    [Fact]
+    public void FindConfigurationErrors_TwoOAuthEntriesSharingAnIssuer_IsRefused()
+    {
+        // Arrange
+        var options = EnabledWith(
+            OAuthMethod(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom")),
+            OAuthMethod(AuthorizationServer("partners", "https://sso.example.test/realms/mailfathom")));
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith(
+            "McpEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Issuer",
+            error,
+            StringComparison.Ordinal);
     }
 
     [Fact]
     public void FindConfigurationErrors_OAuthWithNoAuthorizationServer_IsRefusedBecauseNoTokenCouldBeValidated()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.OAuth);
-        options.OAuth = new OAuthValidationOptions { Resource = "https://mail.example.test/mcp" };
+        var options = EnabledWith(OAuthMethod());
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
 
         // Assert
-        Assert.StartsWith("McpEndpoint:OAuth:AuthorizationServers", error, StringComparison.Ordinal);
+        Assert.StartsWith("McpEndpoint:Authentication:0:OAuth:AuthorizationServers", error, StringComparison.Ordinal);
     }
 
     /// <summary>The resource is what a token's audience is compared against, so a deployment without one accepts a token issued for any service the same server serves.</summary>
@@ -181,15 +237,15 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AResourceThatIsNotACanonicalUrl_IsRefused(string? resource)
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.OAuth);
-        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
-        options.OAuth.Resource = resource;
+        var oauth = OAuthMethod(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
+        oauth.OAuth!.Resource = resource;
+        var options = EnabledWith(oauth);
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
 
         // Assert
-        Assert.StartsWith("McpEndpoint:OAuth:Resource", error, StringComparison.Ordinal);
+        Assert.StartsWith("McpEndpoint:Authentication:0:OAuth:Resource", error, StringComparison.Ordinal);
     }
 
     /// <summary>Two profiles claiming one issuer would leave the key set a token is trusted against decided by configuration order.</summary>
@@ -197,16 +253,18 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_TwoAuthorizationServersSharingAnIssuer_IsRefused()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.OAuth);
-        options.OAuth = OAuthWith(
+        var options = EnabledWith(OAuthMethod(
             AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"),
-            AuthorizationServer("partners", "https://sso.example.test/realms/mailfathom"));
+            AuthorizationServer("partners", "https://sso.example.test/realms/mailfathom")));
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
 
         // Assert
-        Assert.StartsWith("McpEndpoint:OAuth:AuthorizationServers:1:Issuer", error, StringComparison.Ordinal);
+        Assert.StartsWith(
+            "McpEndpoint:Authentication:0:OAuth:AuthorizationServers:1:Issuer",
+            error,
+            StringComparison.Ordinal);
     }
 
     /// <summary>A scope reaches a client inside a space-separated header parameter, so one carrying a space or a quotation mark would rewrite the challenge around it.</summary>
@@ -218,15 +276,15 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AScopeThatCouldRewriteTheChallenge_IsRefused(string scope)
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.OAuth);
-        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
-        options.OAuth.RequiredScopes.Add(scope);
+        var oauth = OAuthMethod(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
+        oauth.OAuth!.RequiredScopes.Add(scope);
+        var options = EnabledWith(oauth);
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
 
         // Assert
-        Assert.StartsWith("McpEndpoint:OAuth:RequiredScopes:0", error, StringComparison.Ordinal);
+        Assert.StartsWith("McpEndpoint:Authentication:0:OAuth:RequiredScopes:0", error, StringComparison.Ordinal);
     }
 
     /// <summary>Requiring no scope is the coarser boundary a deployment gets by default: any token this resource's servers issued is enough.</summary>
@@ -234,8 +292,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_OAuthWithNoRequiredScope_IsAccepted()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.OAuth);
-        options.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
+        var options = EnabledWith(OAuthMethod(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom")));
 
         // Act, Assert
         Assert.Empty(options.FindConfigurationErrors());
@@ -248,35 +305,10 @@ public sealed class McpEndpointOptionsTests
     /// instead, by <c>McpTransportAuthenticationWarning</c>, which is where that judgement belongs.
     /// </summary>
     [Fact]
-    public void FindConfigurationErrors_ExplicitlyUnauthenticated_IsAccepted()
-    {
-        // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.None);
-
-        // Act, Assert
-        Assert.Empty(options.FindConfigurationErrors());
-    }
-
-    /// <summary>Keys nothing checks are a deployment believing it is protected, which is worse than one knowing it is not.</summary>
-    [Fact]
-    public void FindConfigurationErrors_KeysConfiguredWhileApiKeyIsNotAMethod_IsRefused()
-    {
-        // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.None);
-        options.ApiKeys.Add(Key("workstation"));
-
-        // Act
-        var error = Assert.Single(options.FindConfigurationErrors());
-
-        // Assert
-        Assert.StartsWith("McpEndpoint:ApiKeys", error, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void FindConfigurationErrors_AnUnusableCorsPolicy_IsReportedUnderTheSectionThatCarriesIt()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.None);
+        var options = Enabled();
         options.Cors.ServeEveryBrowserOrigin();
         options.Cors.AllowedOrigins.Add("https://client.example.test");
 
@@ -291,7 +323,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnUnusableRateLimit_IsReportedUnderTheSectionThatCarriesIt()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.None);
+        var options = Enabled();
         options.RateLimiting.MaxConcurrentRequests = 0;
 
         // Act
@@ -309,7 +341,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnEndpointConfiguringNoLimits_ReportsNothing()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.None);
+        var options = Enabled();
 
         // Act
         var errors = options.FindConfigurationErrors();
@@ -323,7 +355,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_SeveralFaults_ReportsThemAllAtOnce()
     {
         // Arrange
-        var options = EnabledWith(TransportAuthenticationMethods.ApiKey);
+        var options = EnabledWith(new TransportAuthenticationOptions());
         options.Cors.AllowedOrigins.Add("not-an-origin");
 
         // Act
@@ -333,22 +365,12 @@ public sealed class McpEndpointOptionsTests
         Assert.Equal(2, errors.Count);
     }
 
-    [Fact]
-    public void ApiKeys_UnconfiguredDeployment_IsEmptyRatherThanNull()
-    {
-        // Arrange, Act
-        var options = new McpEndpointOptions();
-
-        // Assert
-        Assert.Empty(options.ApiKeys);
-    }
-
     /// <summary>Mutual TLS is off unless a profile says otherwise, and it composes with the mode rather than replacing it.</summary>
     [Fact]
     public void ClientCertificateProfiles_UnconfiguredDeployment_IsEmptyRatherThanNull()
     {
         // Arrange, Act
-        var options = EnabledWith(TransportAuthenticationMethods.None);
+        var options = Enabled();
 
         // Assert
         Assert.Empty(options.ClientCertificateProfiles);
@@ -410,7 +432,7 @@ public sealed class McpEndpointOptionsTests
     /// <summary>An endpoint terminating TLS, which is what a client certificate needs before it can be presented at all.</summary>
     private static McpEndpointOptions MutualTlsEndpoint()
     {
-        var options = EnabledWith(TransportAuthenticationMethods.None);
+        var options = Enabled();
         options.Transport = EndpointTransport.HttpsOnly;
         options.Https.Endpoints.Add(new TransportHttpsEndpointOptions
         {
@@ -425,8 +447,27 @@ public sealed class McpEndpointOptionsTests
         return options;
     }
 
-    private static McpEndpointOptions EnabledWith(TransportAuthenticationMethods authentication) =>
-        new() { Enabled = true, Authentication = authentication };
+    private static McpEndpointOptions Enabled() => new() { Enabled = true };
+
+    private static McpEndpointOptions EnabledWith(params TransportAuthenticationOptions[] methods)
+    {
+        var options = Enabled();
+
+        // A loop rather than a projection, because adding to a getter-only collection is a side effect and a pipeline
+        // must never be the place one happens.
+        foreach (var method in methods)
+        {
+            options.Authentication.Add(method);
+        }
+
+        return options;
+    }
+
+    private static TransportAuthenticationOptions ApiKeyMethod(string keyName) =>
+        new() { ApiKey = Key(keyName) };
+
+    private static TransportAuthenticationOptions OAuthMethod(params AuthorizationServerOptions[] authorizationServers) =>
+        new() { OAuth = OAuthWith(authorizationServers) };
 
     private static OAuthValidationOptions OAuthWith(params AuthorizationServerOptions[] authorizationServers)
     {
@@ -466,6 +507,6 @@ public sealed class McpEndpointOptionsTests
     private static ConfiguredSecret Key(string name) => new()
     {
         Name = name,
-        SecretReference = "systemd-credential:mailfathom-mcp-workstation-key",
+        SecretReference = $"systemd-credential:mailfathom-mcp-{name}-key",
     };
 }

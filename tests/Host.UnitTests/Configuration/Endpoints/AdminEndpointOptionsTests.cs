@@ -47,13 +47,18 @@ public sealed class AdminEndpointOptionsTests
     }
 
     [Fact]
-    public void ReadFrom_TheAuthenticationSet_BindsTheSameSpellingsTheMcpEndpointTakes()
+    public void ReadFrom_TheAuthenticationList_BindsTheSameEntriesTheMcpEndpointTakes()
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>
         {
             ["AdminEndpoint:Enabled"] = "true",
-            ["AdminEndpoint:Authentication"] = "ApiKey, OAuth",
+            ["AdminEndpoint:Authentication:0:ApiKey:Name"] = "workstation",
+            ["AdminEndpoint:Authentication:0:ApiKey:SecretReference"] = "systemd-credential:admin-key",
+            ["AdminEndpoint:Authentication:1:OAuth:Resource"] = "https://mail.example.test:8090/api/admin",
+            ["AdminEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Name"] = "workforce",
+            ["AdminEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
+            ["AdminEndpoint:Authentication:1:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "11111111-2222-3333-4444-555555555555",
         });
 
         // Act
@@ -62,46 +67,36 @@ public sealed class AdminEndpointOptionsTests
         // Assert
         Assert.True(settings.AllowsApiKey);
         Assert.True(settings.AllowsOAuth);
+        Assert.Empty(settings.FindConfigurationErrors());
     }
 
+    /// <summary>A value where the list belongs must never read as an unauthenticated deployment, which is what makes the binder raising on it a contract rather than an accident.</summary>
     [Fact]
-    public void FindConfigurationErrors_ApiKeyAuthenticationWithNoKey_IsRefused()
+    public void ReadFrom_AuthenticationWrittenAsAValue_FailsRatherThanReadingAsRequiringNothing()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["AdminEndpoint:Enabled"] = "true",
+            ["AdminEndpoint:Authentication"] = "ApiKey",
+        });
+
+        // Act, Assert
+        Assert.ThrowsAny<InvalidOperationException>(() => AdminEndpointOptions.ReadFrom(configuration));
+    }
+
+    /// <summary>An entry stating nothing registers no scheme, so it is refused rather than left to read as a configured method.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AnEntryStatingNoCredential_IsRefusedRatherThanOpeningTheEndpoint()
     {
         // Arrange
         var settings = EnabledEndpoint();
-        settings.Authentication = TransportAuthenticationMethods.ApiKey;
+        settings.Authentication.Add(new TransportAuthenticationOptions());
 
         // Act, Assert
         Assert.Contains(
             settings.FindConfigurationErrors(),
-            error => error.Contains("no key is configured", StringComparison.Ordinal));
-    }
-
-    /// <summary>Settings nothing reads are a deployment believing it is protected, which is worse than one that knows it is not.</summary>
-    [Fact]
-    public void FindConfigurationErrors_KeysConfiguredWhileApiKeyAuthenticationIsOff_IsRefused()
-    {
-        // Arrange
-        var settings = EnabledEndpoint();
-        settings.ApiKeys.Add(new ConfiguredSecret { Name = "workstation", SecretReference = "systemd-credential:admin-key" });
-
-        // Act, Assert
-        Assert.Contains(
-            settings.FindConfigurationErrors(),
-            error => error.Contains("none of them is checked", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void FindConfigurationErrors_AnAuthenticationValueNamingNoMethod_IsRefusedRatherThanOpeningTheEndpoint()
-    {
-        // Arrange: the binder accepts any number for an enum, and this one answers 'no' to every method check.
-        var settings = EnabledEndpoint();
-        settings.Authentication = (TransportAuthenticationMethods)4;
-
-        // Act, Assert
-        Assert.Contains(
-            settings.FindConfigurationErrors(),
-            error => error.Contains("names no authentication method", StringComparison.Ordinal));
+            error => error.Contains("states no credential", StringComparison.Ordinal));
     }
 
 
@@ -355,20 +350,19 @@ public sealed class AdminEndpointOptionsTests
 
     private static AdminEndpointOptions OAuthEndpoint(string resource)
     {
-        AdminEndpointOptions settings = new()
-        {
-            Enabled = true,
-            Authentication = TransportAuthenticationMethods.OAuth,
-            OAuth = new OAuthValidationOptions { Resource = resource },
-        };
+        AdminEndpointOptions settings = new() { Enabled = true };
 
-        settings.OAuth.AuthorizationServers.Add(new AuthorizationServerOptions
+        var oauth = new OAuthValidationOptions { Resource = resource };
+
+        oauth.AuthorizationServers.Add(new AuthorizationServerOptions
         {
             Name = "workforce",
             Issuer = "https://sso.example.test/realms/mailfathom",
         });
 
-        settings.OAuth.AuthorizationServers[0].AuthorizedSubjects.Add("11111111-2222-3333-4444-555555555555");
+        oauth.AuthorizationServers[0].AuthorizedSubjects.Add("11111111-2222-3333-4444-555555555555");
+
+        settings.Authentication.Add(new TransportAuthenticationOptions { OAuth = oauth });
 
         return settings;
     }

@@ -5,7 +5,7 @@
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting.Warnings;
-using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Security.Transport;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging;
@@ -175,12 +175,10 @@ public sealed class TransportRateLimitingStartupReportTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var mcpEndpointSettings = EnabledMcpEndpoint(new TransportRateLimitingOptions());
-        mcpEndpointSettings.Authentication = TransportAuthenticationMethods.ApiKey;
-        mcpEndpointSettings.ApiKeys.Add(new ConfiguredSecret { Name = "desktop-agent" });
+        mcpEndpointSettings.Authentication.Add(ConfiguredAuthentication.ApiKey("desktop-agent"));
 
         var adminEndpointSettings = EnabledAdminEndpoint(new TransportRateLimitingOptions());
-        adminEndpointSettings.Authentication = TransportAuthenticationMethods.ApiKey;
-        adminEndpointSettings.ApiKeys.Add(new ConfiguredSecret { Name = "operator-laptop" });
+        adminEndpointSettings.Authentication.Add(ConfiguredAuthentication.ApiKey("operator-laptop"));
 
         var report = ReportFor(mcpEndpointSettings, adminEndpointSettings, logs);
 
@@ -217,14 +215,12 @@ public sealed class TransportRateLimitingStartupReportTests
     private static McpEndpointOptions EnabledMcpEndpoint(TransportRateLimitingOptions rateLimitingSettings) => new()
     {
         Enabled = true,
-        Authentication = TransportAuthenticationMethods.None,
         RateLimiting = rateLimitingSettings,
     };
 
     private static AdminEndpointOptions EnabledAdminEndpoint(TransportRateLimitingOptions rateLimitingSettings) => new()
     {
         Enabled = true,
-        Authentication = TransportAuthenticationMethods.None,
         RateLimiting = rateLimitingSettings,
     };
 

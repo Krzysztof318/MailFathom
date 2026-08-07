@@ -160,19 +160,20 @@ The endpoint is off by default, and enabling it means stating how it is authenti
 {
   "McpEndpoint": {
     "Enabled": true,
-    "Authentication": "ApiKey",
-    "ApiKeys": [
+    "Authentication": [
       {
-        "Name": "workstation",
-        "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key"
+        "ApiKey": {
+          "Name": "workstation",
+          "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key"
+        }
       }
     ]
   }
 }
 ```
 
-`Authentication: "None"` is legal — the reverse-proxy-and-loopback deployment is an ordinary one — but it is announced
-with a startup warning, because an unauthenticated endpoint serves your mailbox to whoever can reach its port. Read
+An empty `Authentication` list is legal — the reverse-proxy-and-loopback deployment is an ordinary one — but it is
+announced with a startup warning, because an unauthenticated endpoint serves your mailbox to whoever can reach its port. Read
 [the MCP endpoint](../operations/mcp-endpoint.md) before widening anything: it records the OAuth alternative, browser
 origins, serving your own domain over TLS, client certificates, and the rate limits that apply out of the box.
 

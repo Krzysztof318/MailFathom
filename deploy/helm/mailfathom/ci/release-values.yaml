@@ -27,11 +27,12 @@ config:
       {
         "McpEndpoint": {
           "Enabled": true,
-          "Authentication": "ApiKey",
-          "ApiKeys": [
+          "Authentication": [
             {
-              "Name": "workstation",
-              "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key"
+              "ApiKey": {
+                "Name": "workstation",
+                "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key"
+              }
             }
           ]
         }

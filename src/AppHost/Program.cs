@@ -194,15 +194,18 @@ if (runsIntegrationTests)
         // The endpoint is served under the posture worth proving end to end — a credential is required, and the origins
         // are narrowed. Leaving the permissive origin default would let a suite pass while the check was never wired in.
         .WithEnvironment("McpEndpoint__Enabled", "true")
-        .WithEnvironment("McpEndpoint__Authentication", "ApiKey")
-        .WithEnvironment("McpEndpoint__ApiKeys__0__Name", OrchestrationContract.McpApiKeyName)
-        .WithEnvironment("McpEndpoint__ApiKeys__0__SecretReference", $"plaintext:{OrchestrationContract.McpApiKey}")
+        .WithEnvironment("McpEndpoint__Authentication__0__ApiKey__Name", OrchestrationContract.McpApiKeyName)
+        .WithEnvironment(
+            "McpEndpoint__Authentication__0__ApiKey__SecretReference",
+            $"plaintext:{OrchestrationContract.McpApiKey}")
         // A second key exists to be spent. Rate limits are counted per client, so proving one is enforced means taking a
         // client to zero, and doing that to the key every other test authenticates with would make this suite's results
         // depend on the order it ran in.
-        .WithEnvironment("McpEndpoint__ApiKeys__1__Name", OrchestrationContract.McpExpendableApiKeyName)
         .WithEnvironment(
-            "McpEndpoint__ApiKeys__1__SecretReference",
+            "McpEndpoint__Authentication__1__ApiKey__Name",
+            OrchestrationContract.McpExpendableApiKeyName)
+        .WithEnvironment(
+            "McpEndpoint__Authentication__1__ApiKey__SecretReference",
             $"plaintext:{OrchestrationContract.McpExpendableApiKey}")
         .WithEnvironment("McpEndpoint__Cors__AllowedOrigins__0", OrchestrationContract.McpPermittedOrigin)
         // The administrative surface, served under the posture worth proving end to end: enabled, on a listener of its
@@ -215,10 +218,9 @@ if (runsIntegrationTests)
         .WithEndpoint(name: OrchestrationContract.HostAdminEndpointName, scheme: "tcp", env: "AdminEndpoint__Port")
         .WithEnvironment("AdminEndpoint__Enabled", "true")
         .WithEnvironment("AdminEndpoint__BindAddress", OrchestrationContract.AdminEndpointBindAddress)
-        .WithEnvironment("AdminEndpoint__Authentication", "ApiKey")
-        .WithEnvironment("AdminEndpoint__ApiKeys__0__Name", OrchestrationContract.AdminApiKeyName)
+        .WithEnvironment("AdminEndpoint__Authentication__0__ApiKey__Name", OrchestrationContract.AdminApiKeyName)
         .WithEnvironment(
-            "AdminEndpoint__ApiKeys__0__SecretReference",
+            "AdminEndpoint__Authentication__0__ApiKey__SecretReference",
             $"plaintext:{OrchestrationContract.AdminApiKey}")
         // Narrowed from the product defaults for the same reason the origins are: a burst small enough to exhaust
         // deliberately is what makes the difference between a limiter that is wired in and one that is not observable.
@@ -358,9 +360,9 @@ if (runsIntegrationTests)
         .WithExplicitStart()
         .WithEnvironment("MailSynchronization__Enabled", "false")
         .WithEnvironment("McpEndpoint__Enabled", "true")
-        // Deliberately unauthenticated: what this host exists to prove is which certificate the endpoint judges, and a
-        // credential in front of that would make every refusal answerable by two controls instead of one.
-        .WithEnvironment("McpEndpoint__Authentication", "None")
+        // Deliberately unauthenticated — no authentication entry is configured at all — because what this host exists
+        // to prove is which certificate the endpoint judges, and a credential in front of that would make every refusal
+        // answerable by two controls instead of one.
         // Stated rather than inferred from the profiles below. Terminating TLS is the transport's answer now, and a
         // profile configured under the clear-text default is refused at startup precisely so that a deployment cannot
         // believe it enabled TLS while nothing served it.

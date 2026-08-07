@@ -95,9 +95,10 @@ config:
         },
         "McpEndpoint": {
           "Enabled": true,
-          "Authentication": "ApiKey",
-          "ApiKeys": [
-            { "Name": "workstation", "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key" }
+          "Authentication": [
+            {
+              "ApiKey": { "Name": "workstation", "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key" }
+            }
           ]
         }
       }
@@ -218,7 +219,7 @@ Every one of those is a MailFathom setting rather than a chart value, so turning
 
 | To turn on | Configure | Reference |
 | --- | --- | --- |
-| API keys | `McpEndpoint:Authentication` and `McpEndpoint:ApiKeys` | [Authentication](mcp-endpoint.md#authentication) |
+| API keys | `McpEndpoint:Authentication` | [Authentication](mcp-endpoint.md#authentication) |
 | An `Origin` gate | `McpEndpoint:Cors` | [CORS and the `Origin` header](mcp-endpoint.md#cors-and-the-origin-header) |
 | Reading the public scheme and host from the ingress alone | `ReverseProxy:TrustedProxies` | [Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) |
 | TLS terminated by the pod itself | `McpEndpoint:Https:Endpoints` | [HTTPS and your own domain](mcp-endpoint.md#https-and-your-own-domain) |

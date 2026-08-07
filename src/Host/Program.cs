@@ -622,7 +622,7 @@ try
             // reads that document before it holds any credential, so without the policy applied to its path the one
             // response that says where to authorize is the one a page cannot read.
             var protectedResourceMetadataPath = ProtectedResourceMetadataAddress.PathFor(
-                mcpEndpointSettings.OAuth.CanonicalResource());
+                mcpEndpointSettings.OAuthMethods()[0].CanonicalResource());
 
             app.UseWhen(
                 context => context.Request.Path.Equals(protectedResourceMetadataPath, StringComparison.OrdinalIgnoreCase),
@@ -733,7 +733,7 @@ try
         {
             // Outside the group the requirement was attached to, and deliberately: its reader is a client that has no
             // credential yet and is reading this to find out where to obtain one.
-            app.MapAdminProtectedResourceMetadata(adminEndpointSettings.OAuth);
+            app.MapAdminProtectedResourceMetadata(adminEndpointSettings.OAuthMethods());
         }
     }
 

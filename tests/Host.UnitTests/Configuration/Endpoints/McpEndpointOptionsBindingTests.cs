@@ -36,12 +36,11 @@ public sealed class McpEndpointOptionsBindingTests
         var configuration = ConfigurationFrom(new Dictionary<string, string?>
         {
             ["McpEndpoint:Enabled"] = "true",
-            ["McpEndpoint:Authentication"] = "ApiKey",
-            ["McpEndpoint:ApiKeys:0:Name"] = "workstation",
-            ["McpEndpoint:ApiKeys:0:SecretReference"] = "systemd-credential:mailfathom-mcp-workstation-key",
-            ["McpEndpoint:ApiKeys:1:Name"] = "chatgpt-connector",
-            ["McpEndpoint:ApiKeys:1:SecretReference"] = "file:/run/secrets/mailfathom-mcp-chatgpt-key",
-            ["McpEndpoint:ApiKeys:1:Lifetime"] = "2027-01-31T00:00:00Z",
+            ["McpEndpoint:Authentication:0:ApiKey:Name"] = "workstation",
+            ["McpEndpoint:Authentication:0:ApiKey:SecretReference"] = "systemd-credential:mailfathom-mcp-workstation-key",
+            ["McpEndpoint:Authentication:1:ApiKey:Name"] = "chatgpt-connector",
+            ["McpEndpoint:Authentication:1:ApiKey:SecretReference"] = "file:/run/secrets/mailfathom-mcp-chatgpt-key",
+            ["McpEndpoint:Authentication:1:ApiKey:Lifetime"] = "2027-01-31T00:00:00Z",
             ["McpEndpoint:Cors:AllowedOrigins:0"] = "https://client.example.test",
             ["McpEndpoint:Cors:AllowedOrigins:1"] = "https://console.example.test:8443",
             ["McpEndpoint:RateLimiting:MaxConcurrentRequests"] = "12",
@@ -55,11 +54,12 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         Assert.True(options.Enabled);
-        Assert.Equal(TransportAuthenticationMethods.ApiKey, options.Authentication);
-        Assert.Equal(["workstation", "chatgpt-connector"], options.ApiKeys.Select(key => key.Name));
+        var apiKeys = options.ApiKeys();
+        Assert.Empty(options.OAuthMethods());
+        Assert.Equal(["workstation", "chatgpt-connector"], apiKeys.Select(key => key.Name));
         Assert.Equal(
             [SecretLifetime.NoLimitValue, "2027-01-31T00:00:00Z"],
-            options.ApiKeys.Select(key => key.Lifetime));
+            apiKeys.Select(key => key.Lifetime));
         Assert.Equal(
             ["https://client.example.test", "https://console.example.test:8443"],
             options.Cors.AllowedOrigins);
@@ -81,7 +81,6 @@ public sealed class McpEndpointOptionsBindingTests
         var configuration = ConfigurationFrom(new Dictionary<string, string?>
         {
             ["McpEndpoint:Enabled"] = "true",
-            ["McpEndpoint:Authentication"] = "None",
             ["McpEndpoint:RateLimiting:MaxConcurrentRequests"] = "5",
         });
 
@@ -105,7 +104,6 @@ public sealed class McpEndpointOptionsBindingTests
         var configuration = ConfigurationFrom(new Dictionary<string, string?>
         {
             ["McpEndpoint:Enabled"] = "true",
-            ["McpEndpoint:Authentication"] = "None",
             ["McpEndpoint:Transport"] = "HttpsOnly",
             ["McpEndpoint:Https:Endpoints:0:Name"] = "public",
             ["McpEndpoint:Https:Endpoints:0:Domain"] = "mail.example.test",
@@ -145,31 +143,26 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         Assert.False(options.Enabled);
-        Assert.Equal(TransportAuthenticationMethods.None, options.Authentication);
-        Assert.Empty(options.ApiKeys);
+        Assert.Empty(options.Authentication);
+        Assert.Empty(options.ApiKeys());
         Assert.True(options.Cors.ServesEveryBrowserOrigin);
     }
 
-    /// <summary>
-    /// The reason the set is one scalar value rather than a collection. A single value either binds or fails startup,
-    /// whereas a collection lets a binder drop an element it could not read and leave a shorter list behind — which for
-    /// this setting would mean quietly turning a method off.
-    /// </summary>
+    /// <summary>A surface accepting both kinds of caller carries one entry per method, and each entry binds whole.</summary>
     [Fact]
-    public void ReadFrom_BothMethodsWrittenAsOneValue_ReadsThemAsASet()
+    public void ReadFrom_BothMethodsAsSeparateEntries_ReadsEachWithItsOwnSettings()
     {
         // Arrange
         var configuration = ConfigurationFrom(new Dictionary<string, string?>
         {
             ["McpEndpoint:Enabled"] = "true",
-            ["McpEndpoint:Authentication"] = "ApiKey, OAuth",
-            ["McpEndpoint:ApiKeys:0:Name"] = "nightly-digest",
-            ["McpEndpoint:ApiKeys:0:SecretReference"] = "systemd-credential:mailfathom-mcp-digest-key",
-            ["McpEndpoint:OAuth:Resource"] = "https://mail.example.test/mcp",
-            ["McpEndpoint:OAuth:RequiredScopes:0"] = "mailfathom.read",
-            ["McpEndpoint:OAuth:AuthorizationServers:0:Name"] = "workforce",
-            ["McpEndpoint:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
-            ["McpEndpoint:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "9f2c",
+            ["McpEndpoint:Authentication:0:ApiKey:Name"] = "nightly-digest",
+            ["McpEndpoint:Authentication:0:ApiKey:SecretReference"] = "systemd-credential:mailfathom-mcp-digest-key",
+            ["McpEndpoint:Authentication:1:OAuth:Resource"] = "https://mail.example.test/mcp",
+            ["McpEndpoint:Authentication:1:OAuth:RequiredScopes:0"] = "mailfathom.read",
+            ["McpEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Name"] = "workforce",
+            ["McpEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
+            ["McpEndpoint:Authentication:1:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "9f2c",
         });
 
         // Act
@@ -178,11 +171,32 @@ public sealed class McpEndpointOptionsBindingTests
         // Assert
         Assert.True(options.AllowsApiKey);
         Assert.True(options.AllowsOAuth);
-        Assert.Equal("https://mail.example.test/mcp", options.OAuth.Resource);
-        Assert.Equal(["mailfathom.read"], options.OAuth.RequiredScopes);
-        Assert.Equal(["workforce"], options.OAuth.AuthorizationServers.Select(server => server.Name));
-        Assert.Equal(["9f2c"], options.OAuth.AuthorizationServers.Single().AuthorizedSubjects);
+        var oauth = Assert.Single(options.OAuthMethods());
+        Assert.Equal(["nightly-digest"], options.ApiKeys().Select(key => key.Name));
+        Assert.Equal("https://mail.example.test/mcp", oauth.Resource);
+        Assert.Equal(["mailfathom.read"], oauth.RequiredScopes);
+        Assert.Equal(["workforce"], oauth.AuthorizationServers.Select(server => server.Name));
+        Assert.Equal(["9f2c"], oauth.AuthorizationServers.Single().AuthorizedSubjects);
         Assert.Empty(options.FindConfigurationErrors());
+    }
+
+    /// <summary>
+    /// A value where the list belongs is the one misreading of this setting that could open a surface instead of
+    /// closing it, so it must never bind to the empty list an unauthenticated deployment carries. The binder cannot
+    /// convert one into a list and raises while the section is read, which is why no rule elsewhere restates it.
+    /// </summary>
+    [Fact]
+    public void ReadFrom_AuthenticationWrittenAsAValue_FailsRatherThanBindingToNoMethodAtAll()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+            ["McpEndpoint:Authentication"] = "ApiKey, OAuth",
+        });
+
+        // Act, Assert
+        Assert.ThrowsAny<InvalidOperationException>(() => McpEndpointOptions.ReadFrom(configuration));
     }
 
     /// <summary>A configured list replaces the default rather than being added to it, which a pre-populated collection could not achieve.</summary>
@@ -223,8 +237,10 @@ public sealed class McpEndpointOptionsBindingTests
     /// <summary>A misspelling that bound quietly would leave a security decision reading as one nobody made.</summary>
     [Theory]
     [InlineData("McpEndpoint:Enabeld", "true")]
-    [InlineData("McpEndpoint:Authentication ", "None")]
-    [InlineData("McpEndpoint:ApiKey", "workstation")]
+    [InlineData("McpEndpoint:Authentication:0:ApiKeys:Name", "workstation")]
+    [InlineData("McpEndpoint:Authentication:0:ApiKey:Named", "workstation")]
+    [InlineData("McpEndpoint:ApiKeys:0:Name", "workstation")]
+    [InlineData("McpEndpoint:OAuth:Resource", "https://mail.example.test/mcp")]
     [InlineData("McpEndpoint:Cors:AllowedOrigin", "https://client.example.test")]
     [InlineData("McpEndpoint:RateLimiting:Enabeld", "false")]
     [InlineData("McpEndpoint:RateLimiting:MaxConcurrentRequest", "5")]
@@ -257,17 +273,20 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.ThrowsAny<InvalidOperationException>(() => McpEndpointOptions.ReadFrom(configuration));
     }
 
-    /// <summary>A method name the binder cannot read is a startup failure, never a silent fall back to the unauthenticated posture.</summary>
+    /// <summary>
+    /// A method an entry does not name is a startup failure rather than a silent fall back to the unauthenticated
+    /// posture. The block name is the method, so a misspelling is an unknown key and strict binding is what refuses it.
+    /// </summary>
     [Theory]
-    [InlineData("Nonee")]
-    [InlineData("ApiKey, OAuht")]
-    public void ReadFrom_AnAuthenticationMethodNoMemberNames_Fails(string authentication)
+    [InlineData("McpEndpoint:Authentication:0:ApiKye:Name")]
+    [InlineData("McpEndpoint:Authentication:0:OAtuh:Resource")]
+    public void ReadFrom_AnEntryNamingNoKnownMethod_Fails(string key)
     {
         // Arrange
         var configuration = ConfigurationFrom(new Dictionary<string, string?>
         {
             ["McpEndpoint:Enabled"] = "true",
-            ["McpEndpoint:Authentication"] = authentication,
+            [key] = "workstation",
         });
 
         // Act, Assert
@@ -287,7 +306,6 @@ public sealed class McpEndpointOptionsBindingTests
         var configuration = ConfigurationFrom(new Dictionary<string, string?>
         {
             ["McpEndpoint:Enabled"] = "true",
-            ["McpEndpoint:Authentication"] = "None",
             ["McpEndpoint:Transport"] = "HttpsOnly",
             ["McpEndpoint:Https:Endpoints:0:Name"] = "public",
             ["McpEndpoint:Https:Endpoints:0:Domain"] = "mail.example.test",
@@ -334,7 +352,6 @@ public sealed class McpEndpointOptionsBindingTests
         var configuration = ConfigurationFrom(new Dictionary<string, string?>
         {
             ["McpEndpoint:Enabled"] = "true",
-            ["McpEndpoint:Authentication"] = "None",
             ["McpEndpoint:Https:Endpoints:0:Name"] = "public",
             ["McpEndpoint:Https:Endpoints:0:Domain"] = "mail.example.test",
             ["McpEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:Name"] = "bundle",

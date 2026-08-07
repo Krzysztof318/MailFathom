@@ -300,7 +300,8 @@ internal sealed partial class SecretConfigurationValidator
         // Composed from the profiles that are well formed rather than from all of them, because this runs beside the
         // structural rules rather than after them: a malformed issuer is already being reported by its own check, and
         // asking it for a validated value here would raise instead of adding to that report.
-        var configuredIssuers = candidate.OAuth.AuthorizationServers
+        var configuredIssuers = candidate.OAuthMethods()
+            .SelectMany(oauthMethod => oauthMethod.AuthorizationServers)
             .Where(authorizationServer => OAuthIdentifierUri.IsWellFormed(authorizationServer.Issuer))
             .Select(authorizationServer => authorizationServer.ValidatedIssuer())
             .ToHashSet(StringComparer.Ordinal);
@@ -308,7 +309,10 @@ internal sealed partial class SecretConfigurationValidator
         var errors = new List<string>();
 
         // The loop stays because each step awaits a retrieval, and the position is part of the reported path.
-        foreach (var (keyIndex, configuredKey) in candidate.ApiKeys.Index())
+        foreach (var (entryIndex, configuredKey) in candidate.Authentication
+            .Index()
+            .Where(entry => entry.Item.ApiKey is not null)
+            .Select(entry => (entry.Index, Key: entry.Item.ApiKey!)))
         {
             var resolution = await this.secretReferenceResolver.ResolveAsync(
                 configuredKey.SecretReference,
@@ -325,7 +329,7 @@ internal sealed partial class SecretConfigurationValidator
                 if (NamesAConfiguredIssuer(material, configuredIssuers))
                 {
                     errors.Add(
-                        $"{McpEndpointOptions.SectionName}:{nameof(McpEndpointOptions.ApiKeys)}:{keyIndex} — this key is a JSON Web Token naming one of the configured authorization servers, so every request presenting it is judged as an access token by that server and the key itself is never compared; issue an opaque key instead.");
+                        $"{McpEndpointOptions.SectionName}:{TransportAuthenticationConfiguration.SettingName}:{entryIndex}:{nameof(TransportAuthenticationOptions.ApiKey)} — this key is a JSON Web Token naming one of the configured authorization servers, so every request presenting it is judged as an access token by that server and the key itself is never compared; issue an opaque key instead.");
                 }
             }
         }

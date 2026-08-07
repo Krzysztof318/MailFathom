@@ -34,18 +34,27 @@ internal static class TransportAccessPolicy
     /// <summary>Judges an authenticated principal against the people the deployment serves and the scopes it requires.</summary>
     /// <param name="principal">The principal a validated credential produced.</param>
     /// <param name="authorizedIdentities">The issuer and subject pairs a token may name, taken from the configured authorization servers.</param>
-    /// <param name="requiredScopes">The scopes an access token must carry, empty when any token from an authorized subject suffices.</param>
+    /// <param name="requiredScopesByIssuer">The scopes an access token must carry, keyed by the issuer whose entry asks for them.</param>
     /// <returns><see langword="true" /> when the caller may reach the surface; otherwise <see langword="false" />.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
-    /// <remarks>A token has to satisfy both: a subject the deployment serves and every scope it requires. Neither substitutes for the other, because a scope says what a token was issued for and a subject says whose it is.</remarks>
+    /// <remarks>
+    /// A token has to satisfy both: a subject the deployment serves and every scope it requires. Neither substitutes for
+    /// the other, because a scope says what a token was issued for and a subject says whose it is.
+    /// <para>
+    /// The scopes are looked up by the token's own issuer, because each configured entry states what it asks of the
+    /// servers it configures. A token whose issuer is in no entry is refused rather than admitted with nothing asked of
+    /// it — it cannot arise from a validated token, since only a configured issuer has a validator at all, and treating
+    /// the absence as "no scopes required" is the reading that turns a future gap into an open door.
+    /// </para>
+    /// </remarks>
     internal static bool IsAuthorized(
         ClaimsPrincipal principal,
         IReadOnlySet<string> authorizedIdentities,
-        IReadOnlyCollection<string> requiredScopes)
+        IReadOnlyDictionary<string, IReadOnlyCollection<string>> requiredScopesByIssuer)
     {
         ArgumentNullException.ThrowIfNull(principal);
         ArgumentNullException.ThrowIfNull(authorizedIdentities);
-        ArgumentNullException.ThrowIfNull(requiredScopes);
+        ArgumentNullException.ThrowIfNull(requiredScopesByIssuer);
 
         if (principal.Identity is not { IsAuthenticated: true })
         {
@@ -58,8 +67,16 @@ internal static class TransportAccessPolicy
         }
 
         return NamesAnAuthorizedSubject(principal, authorizedIdentities)
-            && OAuthIdentity.CarriesEveryScope(principal, requiredScopes);
+            && CarriesEveryScopeItsIssuerRequires(principal, requiredScopesByIssuer);
     }
+
+    /// <summary>Reports whether a token carries every scope the entry that trusts its issuer asks for.</summary>
+    private static bool CarriesEveryScopeItsIssuerRequires(
+        ClaimsPrincipal principal,
+        IReadOnlyDictionary<string, IReadOnlyCollection<string>> requiredScopesByIssuer) =>
+        principal.FindFirst(OAuthIdentity.IssuerClaimType)?.Value is { } issuer
+        && requiredScopesByIssuer.TryGetValue(issuer, out var requiredScopes)
+        && OAuthIdentity.CarriesEveryScope(principal, requiredScopes);
 
     /// <summary>Reports whether an authenticated token names one of the people this deployment serves.</summary>
     /// <remarks>
