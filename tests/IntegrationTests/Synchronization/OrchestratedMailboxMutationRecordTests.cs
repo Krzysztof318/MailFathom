@@ -81,6 +81,13 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
 
         await StopAfterTheCopyAsync(services, request, occurrence, cancellationToken);
 
+        // The arrangement is asserted rather than assumed. A record that reached PlacementConfirmed owing no source
+        // removal describes a relocation the placement already finished, and resuming from it would prove nothing
+        // about the window this test exists for — so the row is read back before the act.
+        var stoppedRow = await ReadRecordRowAsync(services, occurrence, cancellationToken);
+        Assert.Equal(MailboxMutationStage.PlacementConfirmed, stoppedRow.Stage);
+        Assert.True(stoppedRow.RequiresSourceRemoval);
+
         // The state a crash leaves: the copy landed and the source is still there, so the message is in both folders.
         Assert.Contains(
             await mailbox.ReadAsync(OrchestratedMailbox.InboxPath, cancellationToken),
@@ -204,7 +211,11 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
                 {
                     var store = scope.GetRequiredService<IMailboxMutationRecordStore>();
                     await store.CountAttemptAsync(session, recordId, token);
-                    await store.AdvanceAsync(session, recordId, MailboxMutationStage.PlacementIssued, null, token);
+
+                    // The same call the fallback path makes, so the row says a source removal is still owed. Reaching
+                    // the stage through the generic advance would leave that false and arrange a relocation the copy
+                    // had already finished — which is not the state this test exists to resume from.
+                    await store.RecordPlacementIssuedAsync(session, recordId, requiresSourceRemoval: true, token);
                     await store.AdvanceAsync(
                         session,
                         recordId,
@@ -278,6 +289,7 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
                     && mutation.Uid == uid)
                 .Select(mutation => new MailboxMutationRow(
                     mutation.Stage,
+                    mutation.RequiresSourceRemoval,
                     mutation.PlacementUidValidity,
                     mutation.PlacementUid,
                     mutation.AttemptCount))
@@ -348,6 +360,7 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
     /// <summary>The columns of one mutation record a test reads back.</summary>
     private sealed record MailboxMutationRow(
         MailboxMutationStage Stage,
+        bool RequiresSourceRemoval,
         uint? PlacementUidValidity,
         uint? PlacementUid,
         int AttemptCount);
