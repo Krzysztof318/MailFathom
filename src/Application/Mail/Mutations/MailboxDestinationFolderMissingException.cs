@@ -29,7 +29,7 @@ namespace MailFathom.Application.Mail.Mutations;
 /// a remote folder path is the mailbox owner's own naming of their mail, which no message an operator reads may carry.
 /// </para>
 /// </remarks>
-public sealed class MailboxDestinationFolderMissingException : MailFathomException
+public sealed class MailboxDestinationFolderMissingException : MailboxMutationRefusedException
 {
     /// <summary>Initializes a new refusal naming the mutation whose destination folder the server does not have.</summary>
     /// <param name="accountId">The account the mutation was requested for.</param>

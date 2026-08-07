@@ -132,20 +132,34 @@ public sealed class MailboxMutationConvergerTests
     }
 
     /// <summary>
-    /// A destination folder somebody removed is an answer the server has already given, so the change stops rather than
-    /// being attempted once per run until its bound is spent.
+    /// A refusal the server has already given is an answer rather than a bad moment, so the change stops at once
+    /// instead of being attempted once per run until its bound is spent — and the pass counts it as given up on rather
+    /// than as failed, because counting it as failed would promise an attempt nobody will make and would back the
+    /// account off from a server that is working.
     /// </summary>
-    [Fact]
-    public async Task ConvergeAsync_WhenTheDestinationFolderIsGone_GivesTheMutationUpVisibly()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConvergeAsync_WhenTheServerRefusesTheChangeOutright_GivesItUpWithoutFailingThePass(
+        bool isUnsupported)
     {
         // Arrange
         var context = new ConvergerContext();
         var request = await context.LeaveOutstandingAsync(RelocationRequest(), record => record);
-        context.FailRelocationWith(new MailboxDestinationFolderMissingException(
-            Account,
-            InboxFolder.Alias,
-            MailboxMutation.Relocate,
-            new InvalidOperationException("The folder could not be found.")));
+        var expectedFailure = isUnsupported
+            ? MailFathomErrorCode.MailboxMutationUnsupported
+            : MailFathomErrorCode.MailboxMutationDestinationMissing;
+        context.FailRelocationWith(isUnsupported
+            ? new MailboxMutationUnsupportedException(
+                Account,
+                InboxFolder.Alias,
+                MailboxMutation.Relocate,
+                "UIDPLUS extension (RFC 4315)")
+            : new MailboxDestinationFolderMissingException(
+                Account,
+                InboxFolder.Alias,
+                MailboxMutation.Relocate,
+                new InvalidOperationException("The folder could not be found.")));
 
         // Act
         var report = await context.Converger.ConvergeAsync(Account, CancellationToken.None);
@@ -154,7 +168,9 @@ public sealed class MailboxMutationConvergerTests
         var record = context.Store.RecordOf(request);
         Assert.Equal(MailboxMutationStage.Abandoned, record.Stage);
         Assert.Equal(1, record.AttemptCount);
-        Assert.Equal(MailFathomErrorCode.MailboxMutationDestinationMissing, record.LastFailure);
+        Assert.Equal(expectedFailure, record.LastFailure);
+        Assert.Equal(1, report.DeadLetteredCount);
+        Assert.Equal(0, report.FailedCount);
         Assert.Contains(
             report.Outstanding,
             group => group.Lifecycle == MailboxMutationLifecycle.DeadLettered && group.Count == 1);

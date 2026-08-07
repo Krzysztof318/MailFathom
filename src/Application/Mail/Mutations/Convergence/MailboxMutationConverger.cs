@@ -170,11 +170,20 @@ public sealed class MailboxMutationConverger
         {
             throw;
         }
+        catch (MailboxMutationRefusedException)
+        {
+            // The server answered, the performer has already moved the record to its terminal stage, and no later
+            // attempt will be made. Counting it as failed would say three untrue things at once: the operator's log
+            // line would promise another attempt, the pass's own report would describe a record its attempt bound is
+            // still going to settle, and the account would back off from a healthy server over a decision somebody has
+            // to change a folder or a configuration to alter.
+            tally.DeadLetteredCount++;
+        }
         catch (Exception)
         {
-            // The performer has already written the failure onto the record, and abandoned it where that failure was
-            // terminal or spent the last attempt, so nothing is lost by swallowing it here. What the count is for is the
-            // caller: a pass that failed is a run that failed, which is what puts the account into backoff.
+            // The performer has already written the failure onto the record, and abandoned it where the last attempt
+            // was spent, so nothing is lost by swallowing it here. What the count is for is the caller: a pass that
+            // failed is a run that failed, which is what puts the account into backoff.
             tally.FailedCount++;
         }
     }
