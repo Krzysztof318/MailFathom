@@ -167,6 +167,57 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         Assert.Equal(2, store.StoredVectors.Count);
     }
 
+    /// <summary>
+    /// A batch size far below what one message carries is a supported configuration, so a message can need more calls
+    /// than a turn is allowed. Reporting that as <see cref="StoredEmailEmbeddingOutcome.Embedded" /> would say the
+    /// message is whole when it is not — a truncated message stays retrievable and simply answers worse, so nothing
+    /// later would notice.
+    /// </summary>
+    [Fact]
+    public async Task EmbedAsync_MoreCallsThanOneTurnAllows_ReportsTheMessageAsUnfinishedRatherThanEmbedded()
+    {
+        // Arrange
+        const int callBudget = 512;
+        var store = new InMemoryEmailEmbeddingStore();
+        store.AddPassages(Message, CreatePassages(callBudget + 5));
+        var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 1);
+        var generator = CreateGenerator(store, CreateProfile(), textEmbeddingGenerator);
+
+        // Act
+        var run = await generator.EmbedAsync(Message, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StoredEmailEmbeddingOutcome.CallBudgetExhausted, run.Outcome);
+        Assert.Equal(callBudget, run.EmbeddedChunkCount);
+        Assert.Equal(callBudget, textEmbeddingGenerator.RequestedBatches.Count);
+
+        // What it did embed stays durable, which is what leaves the rest outstanding for the backfill rather than lost.
+        Assert.Equal(callBudget, store.StoredVectors.Count);
+    }
+
+    /// <summary>
+    /// The last call taking the final passages leaves the loop with nowhere to go rather than with work left, and
+    /// reporting that message as truncated would be a false warning exactly as the opposite is a false success.
+    /// </summary>
+    [Fact]
+    public async Task EmbedAsync_TheLastAllowedCallTakesTheFinalPassages_ReportsTheMessageAsEmbedded()
+    {
+        // Arrange
+        const int callBudget = 512;
+        var store = new InMemoryEmailEmbeddingStore();
+        store.AddPassages(Message, CreatePassages(callBudget));
+        var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 1);
+        var generator = CreateGenerator(store, CreateProfile(), textEmbeddingGenerator);
+
+        // Act
+        var run = await generator.EmbedAsync(Message, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StoredEmailEmbeddingOutcome.Embedded, run.Outcome);
+        Assert.Equal(callBudget, run.EmbeddedChunkCount);
+        Assert.Equal(callBudget, textEmbeddingGenerator.RequestedBatches.Count);
+    }
+
     [Fact]
     public async Task EmbedAsync_CancelledWhileTheProviderIsAnswering_StopsWithoutStartingAnotherCall()
     {

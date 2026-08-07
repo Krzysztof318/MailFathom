@@ -97,8 +97,8 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
     /// <summary>Says what the outcome means for an operator, at the level that outcome deserves.</summary>
     /// <remarks>
     /// A message embedded and a message an instance embeds nothing at all for are both ordinary, so neither is a
-    /// warning. The two conditions that need an operator are: a declaration that disagrees with what was activated, and
-    /// a provider that refused.
+    /// warning. The three conditions that need an operator are: a declaration that disagrees with what was activated, a
+    /// provider that refused, and a message left part-way through because one turn ran out of calls.
     /// </remarks>
     private void Report(StoredEmailEmbeddingRun run)
     {
@@ -116,6 +116,11 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
 
             case StoredEmailEmbeddingOutcome.GeneratorDisagreesWithProfile:
                 this.LogGeneratorDisagreesWithProfile();
+
+                break;
+
+            case StoredEmailEmbeddingOutcome.CallBudgetExhausted:
+                this.LogCallBudgetExhausted(run.EmbeddedChunkCount);
 
                 break;
 
@@ -157,6 +162,11 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "An embedding provider call failed with {Failure} after {EmbeddedChunkCount} passages of this message were committed; the rest stay outstanding for the backfill.")]
     private partial void LogProviderFailed(EmbeddingGenerationFailure failure, int embeddedChunkCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "One message spent every provider call a turn is allowed after {EmbeddedChunkCount} passages and is still not fully embedded; the rest stay outstanding for the backfill. A message needing that many calls means Embeddings:MaxPassagesPerRequest is far below what one message of this length carries.")]
+    private partial void LogCallBudgetExhausted(int embeddedChunkCount);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

@@ -31,12 +31,21 @@ public sealed class StoredEmailEmbeddingGenerator
 {
     /// <summary>How many provider calls one message's turn may make before the turn ends.</summary>
     /// <remarks>
-    /// A message's passages are already bounded by extraction's text ceiling and the chunking rules, so this ceiling is
-    /// not reached by any message a mailbox actually holds. It is here so that a store which reported passages as
-    /// outstanding and then stored nothing for them ends the turn instead of spending against a provider in a loop. A
-    /// constant rather than a setting, because it bounds a defect rather than describing a deployment.
+    /// <para>
+    /// It is here so that a store which reported passages as outstanding and then stored nothing for them ends the turn
+    /// instead of spending against a provider in a loop. A constant rather than a setting, because it bounds a defect
+    /// rather than describing a deployment.
+    /// </para>
+    /// <para>
+    /// It is deliberately not claimed to be unreachable. How many passages one message yields is decided by the
+    /// chunking rules and the extraction ceiling — a chunk may be as short as the rules' minimum, so a long message can
+    /// yield far more passages than a round number here would suggest — and how many of them one call carries is a
+    /// deployment's own <c>MaxPassagesPerRequest</c>. A small batch size against a long message therefore can reach
+    /// this, which is why running out is reported as <see cref="StoredEmailEmbeddingOutcome.CallBudgetExhausted" />
+    /// rather than folded into the outcome that says the message is whole.
+    /// </para>
     /// </remarks>
-    private const int MaximumProviderCallsPerEmail = 64;
+    private const int MaximumProviderCallsPerEmail = 512;
 
     private readonly IActiveEmbeddingProfileReader profileReader;
     private readonly IEmailEmbeddingStore embeddingStore;
@@ -103,9 +112,11 @@ public sealed class StoredEmailEmbeddingGenerator
                 this.textEmbeddingGenerator.MaximumPassagesPerCall,
                 cancellationToken);
 
+            // The one way out that means the message is whole: the store has nothing left to report. Falling out of the
+            // loop instead means the budget ran out with passages still outstanding, which is a different answer.
             if (passages.Count == 0)
             {
-                break;
+                return StoredEmailEmbeddingRun.Embedded(embeddedChunkCount);
             }
 
             IReadOnlyList<EmbeddingVector> vectors;
@@ -125,7 +136,20 @@ public sealed class StoredEmailEmbeddingGenerator
             embeddedChunkCount += passages.Count;
         }
 
-        return StoredEmailEmbeddingRun.Embedded(embeddedChunkCount);
+        // The budget is spent, and that alone does not say the message is unfinished: the last call may have taken the
+        // final passages, leaving the loop with nowhere to go rather than with work left. One more read settles it, and
+        // it is paid for only on the turn that reached the ceiling. Claiming either answer without asking would be
+        // wrong in one direction or the other, and reporting a whole message as truncated is a false warning exactly as
+        // reporting a truncated one as whole is a false success.
+        var outstanding = await this.embeddingStore.GetChunksAwaitingEmbeddingAsync(
+            storedEmailId,
+            profile.Id,
+            maxCount: 1,
+            cancellationToken);
+
+        return outstanding.Count == 0
+            ? StoredEmailEmbeddingRun.Embedded(embeddedChunkCount)
+            : StoredEmailEmbeddingRun.CallBudgetExhausted(embeddedChunkCount);
     }
 
     /// <summary>Commits one call's vectors, so a crash leaves a whole page of passages embedded or none of it.</summary>

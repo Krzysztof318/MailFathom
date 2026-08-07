@@ -28,6 +28,20 @@ public sealed record StoredEmailEmbeddingRun(
         return new StoredEmailEmbeddingRun(StoredEmailEmbeddingOutcome.Embedded, embeddedChunkCount, Failure: null);
     }
 
+    /// <summary>Reports a message whose turn spent every provider call it is allowed with passages still outstanding.</summary>
+    /// <param name="embeddedChunkCount">How many passages the turn did commit a vector for.</param>
+    /// <returns>The result.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the count is negative.</exception>
+    public static StoredEmailEmbeddingRun CallBudgetExhausted(int embeddedChunkCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(embeddedChunkCount);
+
+        return new StoredEmailEmbeddingRun(
+            StoredEmailEmbeddingOutcome.CallBudgetExhausted,
+            embeddedChunkCount,
+            Failure: null);
+    }
+
     /// <summary>Reports an instance that has activated no profile.</summary>
     /// <returns>The result.</returns>
     public static StoredEmailEmbeddingRun NoActiveProfile() =>

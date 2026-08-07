@@ -40,6 +40,7 @@ public sealed class EmailEmbeddingTelemetryTests
             StoredEmailEmbeddingRun.Embedded(3),
             StoredEmailEmbeddingRun.NoActiveProfile(),
             StoredEmailEmbeddingRun.GeneratorDisagreesWithProfile(),
+            StoredEmailEmbeddingRun.CallBudgetExhausted(7),
             .. Enum.GetValues<EmbeddingGenerationFailure>()
                 .Select(failure => StoredEmailEmbeddingRun.ProviderFailed(1, failure)),
         ];
@@ -56,6 +57,7 @@ public sealed class EmailEmbeddingTelemetryTests
                 "embedded/none",
                 "no_active_profile/none",
                 "generator_disagrees_with_profile/none",
+                "call_budget_exhausted/none",
                 "provider_failed/credential_rejected",
                 "provider_failed/rate_limited",
                 "provider_failed/request_timed_out",

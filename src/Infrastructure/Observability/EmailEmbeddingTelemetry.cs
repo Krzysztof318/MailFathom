@@ -78,6 +78,7 @@ public sealed class EmailEmbeddingTelemetry
         StoredEmailEmbeddingOutcome.NoActiveProfile => "no_active_profile",
         StoredEmailEmbeddingOutcome.GeneratorDisagreesWithProfile => "generator_disagrees_with_profile",
         StoredEmailEmbeddingOutcome.ProviderFailed => "provider_failed",
+        StoredEmailEmbeddingOutcome.CallBudgetExhausted => "call_budget_exhausted",
         _ => "unknown",
     };
 

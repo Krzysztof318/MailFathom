@@ -44,11 +44,19 @@ The worker takes one message at a time and, for that message:
 2. refuses to write if the configured model is not the one that was activated — see below;
 3. reads the passages that have no vector under that profile, at most one provider call's worth;
 4. asks the generator for their vectors;
-5. commits those vectors, and repeats from step 3 until nothing is outstanding.
+5. commits those vectors, and repeats from step 3 until nothing is outstanding or the turn's calls run out.
 
 Each call's vectors are committed together, so a crash leaves a whole page of passages embedded or none of it — never a
 message that looks finished and is not. Nothing about the message is remembered between turns, which is what makes
 offering one twice free: a message already current reads no passages, calls no provider, and writes nothing.
+
+One turn is allowed a bounded number of provider calls. The bound exists so that a store reporting passages as
+outstanding and then storing nothing for them ends the turn instead of spending in a loop, and it is not claimed to be
+out of reach: how many passages a message yields is decided by the chunking rules, and how many of them one call
+carries is `Embeddings:MaxPassagesPerRequest`, so a batch size far below what a long message holds can reach it. A turn
+that does is reported as its own outcome and warned about, never as a message that is finished — the passages it did not
+reach stay outstanding, and reporting them as embedded would be invisible afterwards, because a partly embedded message
+is still retrievable and simply answers worse.
 
 One message at a time is a decision. Concurrency here would multiply against the provider's own rate limit and against
 the resilience pipeline's concurrency budget; the bound that decides whether the worker keeps up with arriving mail is
@@ -86,7 +94,7 @@ nothing is lost by declining to try again here.
 | --- | --- |
 | `mailfathom.embedding.backlog.depth` | How far behind embedding is right now |
 | `mailfathom.embedding.backlog.refused` | How many messages the bound turned away, which the backfill will have to reach |
-| `mailfathom.embedding.messages` | Messages taken from the backlog, by outcome — embedded, no active profile, declaration disagrees, provider failed |
+| `mailfathom.embedding.messages` | Messages taken from the backlog, by outcome — embedded, no active profile, declaration disagrees, provider failed, or one turn's calls exhausted |
 | `mailfathom.embedding.message.duration` | How long embedding one message took, by the same outcome |
 | `mailfathom.embedding.passages` | Passages given a vector |
 

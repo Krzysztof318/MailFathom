@@ -6,9 +6,10 @@ namespace MailFathom.Application.Emails.Embeddings.Generation;
 
 /// <summary>How one message's turn at being embedded ended.</summary>
 /// <remarks>
-/// Three of the four are conditions of the instance rather than of the message, and they are apart because they ask an
+/// Three of these are conditions of the instance rather than of the message, and they are apart because they ask an
 /// operator for different things: activate a profile, reconcile a declaration with what was activated, or wait for a
-/// provider. Only <see cref="Embedded" /> says something about the mail.
+/// provider. The other two are about the mail, and they are apart for the same reason: a message that is now whole and
+/// one that was left part-way through are not the same answer.
 /// </remarks>
 public enum StoredEmailEmbeddingOutcome
 {
@@ -31,4 +32,15 @@ public enum StoredEmailEmbeddingOutcome
     /// <summary>A provider call ended without vectors, and <see cref="StoredEmailEmbeddingRun.Failure" /> says how.</summary>
     /// <remarks>Whatever was committed before the failure stays durable; the passages the call was for keep waiting.</remarks>
     ProviderFailed = 3,
+
+    /// <summary>One message's turn spent every provider call it is allowed and passages of it are still outstanding.</summary>
+    /// <remarks>
+    /// Distinct from <see cref="Embedded" /> because the two are opposite statements about the same message, and
+    /// collapsing them would report a truncated message as a complete one — the kind of defect nothing later can
+    /// notice, because a partly embedded message is retrievable and simply answers worse. What was committed stays
+    /// durable and the rest stays outstanding, which is the condition the backfill selects on, so nothing is lost; what
+    /// an operator learns from it is that one message needed more calls than a turn is allowed, which is a batch size
+    /// far below what a message of that length needs.
+    /// </remarks>
+    CallBudgetExhausted = 4,
 }
