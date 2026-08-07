@@ -925,11 +925,29 @@ why `NEEDS CHANGES` is a heading in a body and never a review state.
 
 ### What the verdict moves on the board
 
-A last job writes the verdict to the roadmap board's `Status` field: `Changes
-requested` where the review carried findings, `Ready to merge` where it approved.
-It writes it on every issue the pull request's body closes and on nothing else,
-because closing an issue is what makes a review of the pull request a statement
-about that issue's lifecycle.
+The workflow writes the roadmap board's `Status` field twice, on every issue the
+pull request's body closes and on nothing else — because closing an issue is what
+makes a review of the pull request a statement about that issue's lifecycle.
+
+The first write happens as the review starts, beside the reviewing job rather
+than before it, and it writes `In review`. A review takes minutes, and without it
+the column says whatever the last event left there for that whole time — usually
+`In progress`, the state the work was in before the pull request existed. It
+preserves nothing: a review that has started is a fact about the present, true
+whatever the item was doing before it, and a re-review asked for on a merged or
+blocked item is exactly the case where the board saying so is worth more than the
+value it replaces. Nothing in the review depends on that write, which is why it
+runs in parallel: a project API failure must not delay or skip a review.
+
+The last write is the verdict: `Changes requested` where the review carried
+findings, `Ready to merge` where it approved. A run that publishes no verdict
+writes nothing and leaves `In review` standing, where a reader sees that a review
+was asked for and produced nothing.
+
+Both writes are one script, `write-board-status.sh`. The walk is identical — read
+the body, collect what it closes, resolve the field and the option by name, find
+the item on this board, mutate it — and the two callers differ only in the value
+they pass and in which values they refuse to overwrite.
 
 It exists because that half of the field had no writer at all. The board's
 built-in `Code changes requested` and `Code review approved` workflows fire on a
@@ -948,31 +966,34 @@ references come from `collect-closing-references.sh`, the same script the
 collection step runs, so which keywords close an issue is one decision rather
 than two that drift.
 
-Two statuses are never written over. `Done` is the merge and the close, so a
-verdict arriving after one must not drag a finished item back into review.
-`Blocked` is the one status a hand writes, and it says the issue waits on
+Two statuses are never written over by the verdict. `Done` is the merge and the
+close, so a verdict arriving after one must not drag a finished item back into
+review. `Blocked` is the one status a hand writes, and it says the issue waits on
 something outside the project — a question a review verdict does not answer, so
-a verdict does not get to erase the answer.
+a verdict does not get to erase the answer. Neither is protected from the
+announcement, for the reason the paragraph above gives: they answer a question
+about the work, and the announcement answers one about right now.
 
-It is a separate job for the credential. Writing a field on a user-owned project
-needs a classic token with the `project` scope: no GitHub App permission covers
-one and no fine-grained token carries the scope, which
+Each write is a job of its own for the credential. Writing a field on a
+user-owned project needs a classic token with the `project` scope: no GitHub App
+permission covers one and no fine-grained token carries the scope, which
 [Issue tracking and the roadmap board](issue-tracking.md#status-transitions)
-records along with what that costs. The job checks out only the base commit, runs
-no model, and receives the verdict as a string, so the account-wide credential
+records along with what that costs. Both jobs check out only the base commit, run
+no model, and receive their input as a string, so the account-wide credential
 never shares a runner with the reviewer session — the same separation that keeps
 the App's token in the one step that makes no model call. Where the secret is
-absent the job says so and ends green: this workflow gates nothing, and a missing
+absent a job says so and ends green: this workflow gates nothing, and a missing
 credential must not turn a review red. A pull request that closes no issue ends
 the same way, with a notice, because a change opened without a contract is an
 ordinary shape. An issue that is not on the board ends green too, but as a
 warning: every issue this project opens is placed there by a built-in workflow,
 so one that is missing has something wrong with it rather than nothing.
 
-`scripts/test-agent-workflow.sh` runs the step against a fake `gh` the way it
+`scripts/test-agent-workflow.sh` runs both steps against a fake `gh` the way it
 runs the gate, the settle loop, and the submission: it asserts which option each
-verdict writes, that `Done` and `Blocked` are left alone, and that a run without
-the token writes nothing.
+verdict writes, that a verdict leaves `Done` and `Blocked` alone, that the
+announcement writes `In review` over every previous status including those two,
+and that a run without the token writes nothing.
 
 ### Who publishes it
 

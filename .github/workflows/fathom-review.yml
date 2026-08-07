@@ -305,6 +305,61 @@ jobs:
 
           echo "Review: ${review} (${reason})."
 
+  # The board says a review is running, from the moment it starts rather than when it concludes. A
+  # review takes minutes, and until this job existed the column said whatever the last event left
+  # there for that whole time — most often `In progress`, which is the state the work was in before
+  # the pull request existed at all. The verdict job below then answers the same question the other
+  # way round, so between them the field never describes a moment that has passed.
+  #
+  # It preserves nothing, unlike the verdict. `Done` and `Blocked` are protected against a *verdict*
+  # because a verdict says nothing about a merge or about something outside the project — but a
+  # review that has started is a fact about right now, true whatever the item was doing before it,
+  # and a re-review asked for on a merged or blocked item is exactly the case where the board saying
+  # so is worth more than the value it replaces. The verdict then writes over it a few minutes
+  # later, and a run that publishes none leaves the item where a reader can see a review was asked
+  # for and produced nothing.
+  #
+  # It runs beside the reviewer rather than before it, because nothing in the review depends on the
+  # board: making it a dependency would let a project API failure delay or skip a review.
+  announce:
+    name: Announce the review on the board
+    needs:
+      - decide
+    if: needs.decide.outputs.review == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      # The base commit, for the two scripts below and for the reason every other read of this
+      # repository in this file uses it: the branch under review must not supply the code that
+      # decides which issues its own merge closes.
+      - name: Check out the base commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Move the issues this pull request closes into review
+        id: in-review
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BOARD_TOKEN: ${{ secrets.BOARD_PROJECT_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
+          BOARD_OWNER: Krzysztof318
+          BOARD_NUMBER: '4'
+          STATUS_FIELD: Status
+          CLOSING_REFERENCES_SCRIPT: ${{ github.workspace }}/.github/fathom-review/collect-closing-references.sh
+          CLOSING_REFERENCE_LIMIT: '5'
+          BOARD_STATUS_SCRIPT: ${{ github.workspace }}/.github/fathom-review/write-board-status.sh
+          IN_REVIEW_STATUS: In review
+        run: |
+          set -euo pipefail
+
+          "$BOARD_STATUS_SCRIPT" "$IN_REVIEW_STATUS"
+
   fathom-review:
     name: Fathom review
     needs:
@@ -1232,6 +1287,10 @@ jobs:
           # issue is one decision rather than two that can drift apart.
           CLOSING_REFERENCES_SCRIPT: ${{ github.workspace }}/.github/fathom-review/collect-closing-references.sh
           CLOSING_REFERENCE_LIMIT: '5'
+          # The walk itself — read the body, resolve the field, move each item — is shared with the
+          # job that announces the review, because the two writes differ only in the value and in
+          # what they refuse to overwrite.
+          BOARD_STATUS_SCRIPT: ${{ github.workspace }}/.github/fathom-review/write-board-status.sh
           # The two values a review decides, and the two this job refuses to write over. `Done` is
           # the merge and the close, so a verdict arriving after one must not drag a finished item
           # back into review. `Blocked` is the one status a hand writes: it says the issue is
@@ -1252,155 +1311,4 @@ jobs:
               ;;
           esac
 
-          if [[ -z "$BOARD_TOKEN" ]]; then
-            echo '::notice::BOARD_PROJECT_TOKEN is not set, so no board status was written.'
-            exit 0
-          fi
-
-          body_file="$(mktemp)"
-          issues_file="$(mktemp)"
-
-          gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" --jq '.body // ""' > "$body_file"
-
-          # A pull request that closes nothing moves nothing, which is the ordinary shape of a
-          # release's changelog half and of any change opened without a contract. The reviewer says
-          # so about the contract it could not read; this says so about the board and ends green.
-          "$CLOSING_REFERENCES_SCRIPT" "$body_file" "$REPOSITORY" "$CLOSING_REFERENCE_LIMIT" \
-            > "$issues_file"
-
-          if [[ ! -s "$issues_file" ]]; then
-            echo '::notice::The pull request closes no issue, so there is no board item to move.'
-            exit 0
-          fi
-
-          field_file="$(mktemp)"
-
-          # The field and its options are read once for the whole run rather than per issue, and
-          # they are read by name because a name is what this file can state and an id is not.
-          if ! GH_TOKEN="$BOARD_TOKEN" gh api graphql \
-              -f owner="$BOARD_OWNER" \
-              -F number="$BOARD_NUMBER" \
-              -f field="$STATUS_FIELD" \
-              -f query='
-                query($owner: String!, $number: Int!, $field: String!) {
-                  user(login: $owner) {
-                    projectV2(number: $number) {
-                      id
-                      field(name: $field) {
-                        ... on ProjectV2SingleSelectField { id options { id name } }
-                      }
-                    }
-                  }
-                }' > "$field_file"; then
-            echo '::error::The board could not be read. Check that BOARD_PROJECT_TOKEN still carries the project scope.'
-            exit 1
-          fi
-
-          project_id="$(jq -r '.data.user.projectV2.id // ""' "$field_file")"
-          field_id="$(jq -r '.data.user.projectV2.field.id // ""' "$field_file")"
-          option_id="$(
-            jq -r --arg name "$status" \
-              '[.data.user.projectV2.field.options[]? | select(.name == $name) | .id][0] // ""' \
-              "$field_file"
-          )"
-
-          # A missing field or a renamed option is a configuration defect rather than a transient
-          # failure, so it fails loudly and names the value it looked for. The alternative is a run
-          # that reports success while the column it was added to write stays empty.
-          if [[ -z "$project_id" || -z "$field_id" || -z "$option_id" ]]; then
-            printf '::error::The board has no %s option named %s on project %s.\n' \
-              "$STATUS_FIELD" "$status" "$BOARD_NUMBER"
-            exit 1
-          fi
-
-          moved=0
-
-          while IFS= read -r issue_number; do
-            [[ -n "$issue_number" ]] || continue
-
-            item_file="$(mktemp)"
-
-            # Per-issue failures are warnings rather than errors. This workflow gates nothing, so a
-            # red run over a board that can be corrected by hand is noise a reader has to dismiss,
-            # and the warning still says which issue was not moved.
-            if ! GH_TOKEN="$BOARD_TOKEN" gh api graphql \
-                -f owner="${REPOSITORY%/*}" \
-                -f name="${REPOSITORY#*/}" \
-                -F number="$issue_number" \
-                -f field="$STATUS_FIELD" \
-                -f query='
-                  query($owner: String!, $name: String!, $number: Int!, $field: String!) {
-                    repository(owner: $owner, name: $name) {
-                      issue(number: $number) {
-                        projectItems(first: 20) {
-                          nodes {
-                            id
-                            project { id }
-                            status: fieldValueByName(name: $field) {
-                              ... on ProjectV2ItemFieldSingleSelectValue { name }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }' > "$item_file"; then
-              printf '::warning::Issue %s could not be read from the board.\n' "$issue_number"
-              continue
-            fi
-
-            # The item on *this* board. An issue can sit on several projects, and the status of one
-            # says nothing about the others.
-            entry="$(
-              jq -r --arg project "$project_id" \
-                '[.data.repository.issue.projectItems.nodes[]?
-                  | select(.project.id == $project)
-                  | "\(.id) \(.status.name // "")"][0] // ""' \
-                "$item_file"
-            )"
-
-            if [[ -z "$entry" ]]; then
-              printf '::warning::Issue %s is not on project %s, so nothing was moved.\n' \
-                "$issue_number" "$BOARD_NUMBER"
-              continue
-            fi
-
-            item_id="${entry%% *}"
-            current_status="${entry#* }"
-
-            if [[ ",${PRESERVED_STATUSES}," == *",${current_status},"* ]]; then
-              printf '::notice::Issue %s is %s, which a review verdict does not overwrite.\n' \
-                "$issue_number" "$current_status"
-              continue
-            fi
-
-            if [[ "$current_status" == "$status" ]]; then
-              printf 'Issue %s is already %s.\n' "$issue_number" "$status"
-              continue
-            fi
-
-            if ! GH_TOKEN="$BOARD_TOKEN" gh api graphql \
-                -f project="$project_id" \
-                -f item="$item_id" \
-                -f field="$field_id" \
-                -f option="$option_id" \
-                -f query='
-                  mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
-                    updateProjectV2ItemFieldValue(input: {
-                      projectId: $project
-                      itemId: $item
-                      fieldId: $field
-                      value: {singleSelectOptionId: $option}
-                    }) {
-                      projectV2Item { id }
-                    }
-                  }' --silent; then
-              printf '::warning::Issue %s could not be moved to %s.\n' "$issue_number" "$status"
-              continue
-            fi
-
-            moved=$(( moved + 1 ))
-            printf 'Issue %s moved from %s to %s.\n' \
-              "$issue_number" "${current_status:-no status}" "$status"
-          done < "$issues_file"
-
-          printf 'Moved %s issues to %s.\n' "$moved" "$status"
+          "$BOARD_STATUS_SCRIPT" "$status" "$PRESERVED_STATUSES"
