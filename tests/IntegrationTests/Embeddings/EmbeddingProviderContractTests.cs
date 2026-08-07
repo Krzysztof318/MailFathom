@@ -41,7 +41,9 @@ public sealed class EmbeddingProviderContractTests
     public static bool ProviderContractTestsRequested =>
         EmbeddingProviderContractSettings.ProviderContractTestsRequested;
 
-    [Fact(SkipUnless = nameof(ProviderContractTestsRequested))]
+    [Fact(
+        Skip = EmbeddingProviderContractSettings.SkipReason,
+        SkipUnless = nameof(ProviderContractTestsRequested))]
     public async Task GenerateAsync_AgainstTheRealProvider_AnswersInTheDeclaredSpace()
     {
         // Arrange
@@ -63,7 +65,9 @@ public sealed class EmbeddingProviderContractTests
     /// The one failure worth a paid call to prove: the classification the adapter derives has to match what the
     /// provider actually answers to a credential it does not accept, and no unit test can establish that.
     /// </summary>
-    [Fact(SkipUnless = nameof(ProviderContractTestsRequested))]
+    [Fact(
+        Skip = EmbeddingProviderContractSettings.SkipReason,
+        SkipUnless = nameof(ProviderContractTestsRequested))]
     public async Task GenerateAsync_WithACredentialTheProviderRefuses_IsClassifiedAsSuch()
     {
         // Arrange

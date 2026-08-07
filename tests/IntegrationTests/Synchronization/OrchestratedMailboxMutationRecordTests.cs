@@ -119,9 +119,9 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
     }
 
     /// <summary>
-    /// Two writers asking for the same change at the same moment. Neither can see the other's uncommitted insert, so no
-    /// check either of them could make would help; the unique index is what refuses the second, and the losing commit
-    /// reports the conflict its caller loops on.
+    /// Two writers asking for the same change at the same moment, each in a scope of its own the way two workers are.
+    /// Neither can see the other's uncommitted insert, so no check either of them could make would help; the unique
+    /// index is what refuses the second, and the losing commit reports the conflict its caller loops on.
     /// </summary>
     [Fact]
     public async Task OpenAsync_ForTheSameIdentityInTwoConcurrentSessions_IsRefusedByTheDatabaseAndLeavesOneRecord()
@@ -135,19 +135,18 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
         var request = MailboxMutationRequest.SetSeen(storedEmailId, occurrence, Requester, isSeen: true);
 
         // Act
-        var commits = await services.InScopeAsync(
-            async (scope, token) =>
+        var commits = await services.InTwoScopesAsync(
+            async (firstScope, secondScope, token) =>
             {
-                var store = scope.GetRequiredService<IMailboxMutationRecordStore>();
-                var sessionFactory = scope.GetRequiredService<IPersistenceSessionFactory>();
-
-                await using var first = await sessionFactory.BeginSessionAsync(token);
-                await using var second = await sessionFactory.BeginSessionAsync(token);
+                await using var first = await firstScope.GetRequiredService<IPersistenceSessionFactory>()
+                    .BeginSessionAsync(token);
+                await using var second = await secondScope.GetRequiredService<IPersistenceSessionFactory>()
+                    .BeginSessionAsync(token);
 
                 // Both open before either commits, which is the whole point: neither transaction can see the other's
                 // pending row, so both reach the insert.
-                await store.OpenAsync(first, request, token);
-                await store.OpenAsync(second, request, token);
+                await firstScope.GetRequiredService<IMailboxMutationRecordStore>().OpenAsync(first, request, token);
+                await secondScope.GetRequiredService<IMailboxMutationRecordStore>().OpenAsync(second, request, token);
 
                 return (First: await first.CommitAsync(token), Second: await second.CommitAsync(token));
             },
