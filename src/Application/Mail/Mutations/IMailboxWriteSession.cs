@@ -57,6 +57,7 @@ public interface IMailboxWriteSession : IAsyncDisposable
     /// <exception cref="ArgumentException">Thrown when <paramref name="occurrenceId" /> does not belong to this session.</exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="journal" /> is <see langword="null" />.</exception>
     /// <exception cref="MailboxMutationUnsupportedException">Thrown when the server advertises neither <c>MOVE</c> nor the <c>UIDPLUS</c> the fallback needs to remove only the moved message.</exception>
+    /// <exception cref="MailboxDestinationFolderMissingException">Thrown when the server holds no folder at <paramref name="destinationPath" />, which is settled rather than deferred.</exception>
     /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the relocation within its configured resilience budget.</exception>
     /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
     /// <remarks>
@@ -118,6 +119,7 @@ public interface IMailboxWriteSession : IAsyncDisposable
     /// <returns>Where the destination folder put the email, when the server named it.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="occurrenceId" /> does not belong to this session.</exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="journal" /> is <see langword="null" />.</exception>
+    /// <exception cref="MailboxDestinationFolderMissingException">Thrown when the server holds no folder at <paramref name="destinationPath" />, which is settled rather than deferred.</exception>
     /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the copy within its configured resilience budget.</exception>
     /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
     /// <remarks>

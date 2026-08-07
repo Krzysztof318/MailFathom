@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -22,6 +23,7 @@ using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
@@ -71,6 +73,7 @@ internal static class SynchronizationTestHost
     /// <param name="timeProvider">The clock the scoped graph shares with the code under test.</param>
     /// <param name="notificationSessionFactory">Stands in for the server's push mechanism; a server that advertises none is the default.</param>
     /// <param name="remoteFolderCatalog">Replaces the catalog that advertises exactly the configured folders.</param>
+    /// <param name="mutationRecordStore">Replaces the record store that reports nothing outstanding to converge.</param>
     /// <param name="unadvertisedAliases">Aliases the modelled server does not advertise.</param>
     /// <returns>A provider whose scopes resolve a synchronizer over substituted infrastructure.</returns>
     internal static ServiceProvider BuildServiceProvider(
@@ -80,6 +83,7 @@ internal static class SynchronizationTestHost
         TimeProvider timeProvider,
         IMailboxNotificationSessionFactory? notificationSessionFactory = null,
         IRemoteFolderCatalog? remoteFolderCatalog = null,
+        IMailboxMutationRecordStore? mutationRecordStore = null,
         params string[] unadvertisedAliases)
     {
         var services = new ServiceCollection();
@@ -108,6 +112,18 @@ internal static class SynchronizationTestHost
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<MailboxReconciler>();
+
+        // Every account run begins by converging what the account has asked a mail server for and not seen finished,
+        // so a supervisor resolves these from its scope exactly as it resolves the synchronizer. The record store
+        // answers that there is nothing outstanding, which is the state a test that is about folders wants.
+        services.AddSingleton(mutationRecordStore ?? CreateRecordStoreWithNothingOutstanding());
+        services.AddSingleton(new MailboxMutationOptions());
+        services.AddSingleton(new MailboxConvergenceOptions());
+        services.AddSingleton(Substitute.For<IMailboxWriteSessionFactory>());
+        services.AddSingleton<MailboxConvergenceTelemetry>();
+        services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
+        services.AddScoped<MailboxMutationConverger>();
+        services.AddLogging();
 
         // Each run hands its own snapshot to the scopes it opens, and every per-account reader answers from that
         // snapshot rather than from the one the container was composed with. The host wires it exactly this way, which
@@ -231,6 +247,20 @@ internal static class SynchronizationTestHost
     /// These tests are about how a supervisor schedules and isolates folder work units. An unconfigured substitute would
     /// answer every read with a null task the run then faults on, which surfaces as a supervision that never signals.
     /// </remarks>
+    /// <summary>Answers a convergence pass that the account has asked for nothing that has not finished.</summary>
+    private static IMailboxMutationRecordStore CreateRecordStoreWithNothingOutstanding()
+    {
+        var recordStore = Substitute.For<IMailboxMutationRecordStore>();
+        recordStore
+            .ReadOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<OutstandingMailboxMutation>>([]));
+        recordStore
+            .ReadLifecycleCountsAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<MailboxMutationLifecycleCount>>([]));
+
+        return recordStore;
+    }
+
     private static IMailboxMutationReconciliationStore CreateMutationStoreWithNothingRecorded()
     {
         var mutationStore = Substitute.For<IMailboxMutationReconciliationStore>();

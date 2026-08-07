@@ -11,6 +11,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -200,6 +201,15 @@ try
     {
         MaximumAttempts = provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>()
             .Current.MaxMutationAttempts,
+    });
+    builder.Services.AddScoped(provider =>
+    {
+        var synchronizationSettings = provider.GetRequiredService<MailSynchronizationOptions>();
+        return new MailboxConvergenceOptions
+        {
+            MaxMutationsPerPass = synchronizationSettings.MaxMutationsPerConvergencePass,
+            UnknownOutcomeGrace = synchronizationSettings.UnknownMutationOutcomeGrace,
+        };
     });
     builder.Services.AddScoped(provider =>
     {

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
@@ -151,7 +152,7 @@ internal sealed class MailboxMutationRecordStore(MailFathomDbContext readContext
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<MailboxMutationRecord>> ReadOutstandingAsync(
+    public async Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
         MailAccountId accountId,
         int limit,
         CancellationToken cancellationToken)
@@ -161,7 +162,7 @@ internal sealed class MailboxMutationRecordStore(MailFathomDbContext readContext
         var accountValue = accountId.Value;
 
         // The binding is joined rather than copied onto the row, because it is what turns a folder key back into the
-        // alias and generation an occurrence identity is made of.
+        // alias and generation an occurrence identity is made of, and the remote path a resumed attempt selects.
         var entities = await readContext.MailboxMutations
             .AsNoTracking()
             .Include(mutation => mutation.MailFolder)
@@ -172,8 +173,67 @@ internal sealed class MailboxMutationRecordStore(MailFathomDbContext readContext
             .Take(limit)
             .ToArrayAsync(cancellationToken);
 
-        return [.. entities.Select(entity => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder))];
+        return
+        [
+            .. entities.Select(entity => new OutstandingMailboxMutation(
+                MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder),
+                MailFolderEntityResolver.ToResolution(entity.MailFolder))),
+        ];
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<MailboxMutationLifecycleCount>> ReadLifecycleCountsAsync(
+        MailAccountId accountId,
+        CancellationToken cancellationToken)
+    {
+        var accountValue = accountId.Value;
+
+        // Grouped by the stored stage rather than by the lifecycle, because the lifecycle is derived by a domain method
+        // the provider cannot translate. Collapsing the three converging stages happens once the rows are here, over an
+        // answer that is at most one row per mutation per stage.
+        var groupedStages = await readContext.MailboxMutations
+            .AsNoTracking()
+            .Where(mutation => mutation.MailboxAccountId == accountValue &&
+                mutation.Stage != MailboxMutationStage.Completed)
+            .GroupBy(mutation => new { mutation.Mutation, mutation.Stage })
+            .Select(group => new
+            {
+                group.Key.Mutation,
+                group.Key.Stage,
+                Count = group.Count(),
+                OldestRecordedAt = group.Min(mutation => mutation.RecordedAt),
+            })
+            .ToArrayAsync(cancellationToken);
+
+        return
+        [
+            .. groupedStages
+                .Select(group => new
+                {
+                    Mutation = ParseMutationOrThrow(group.Mutation),
+                    Lifecycle = MailboxMutationLifecycle.Of(group.Stage),
+                    group.Count,
+                    group.OldestRecordedAt,
+                })
+                .GroupBy(group => new { group.Mutation, group.Lifecycle })
+                .Select(group => new MailboxMutationLifecycleCount(
+                    group.Key.Mutation,
+                    group.Key.Lifecycle,
+                    group.Sum(stage => stage.Count),
+                    group.Min(stage => stage.OldestRecordedAt))),
+        ];
+    }
+
+    /// <summary>Reads a stored mutation name back, refusing one this build does not permit.</summary>
+    /// <remarks>
+    /// A name that no longer parses is the same defect here as it is when a whole record is rebuilt, and it is refused
+    /// the same way: a count broken down by a mutation nothing performs would report work that cannot exist.
+    /// </remarks>
+    private static MailboxMutation ParseMutationOrThrow(string mutationName) =>
+        MailboxMutation.TryParseName(mutationName, out var mutation)
+            ? mutation
+            : throw new InvalidOperationException(
+                $"Mailbox mutation records name '{mutationName}', which is not a permitted mutation.");
 
     /// <summary>Refuses a stage that would pull the record backwards or move it out of a terminal one.</summary>
     /// <remarks>

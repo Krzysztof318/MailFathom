@@ -100,6 +100,40 @@ public sealed record MailboxMutationRecord
     /// <summary>Gets whether the record has reached a stage nothing moves it out of.</summary>
     public bool IsTerminal => this.Stage is MailboxMutationStage.Completed or MailboxMutationStage.Abandoned;
 
+    /// <summary>Gets where in its lifecycle the mutation stands, in the reading somebody watching a deployment asks for.</summary>
+    public MailboxMutationLifecycle Lifecycle => MailboxMutationLifecycle.Of(this.Stage);
+
+    /// <summary>Gets whether the one command that may never be issued twice went out and its answer never came back.</summary>
+    /// <remarks>
+    /// A record here is not resumed. Reissuing the placement would put a second message in the destination folder, and
+    /// nothing in that folder afterwards distinguishes a copy MailFathom made from one a person made, so the outcome is
+    /// re-established from what the mailbox now shows or the record is given up on visibly.
+    /// </remarks>
+    public bool HasUnknownOutcome => this.Stage == MailboxMutationStage.PlacementIssued;
+
+    /// <summary>Reports whether an unacknowledged placement has since been settled by the source occurrence leaving its folder.</summary>
+    /// <remarks>
+    /// <para>
+    /// It answers for one shape only, and the narrowness is the point. A relocation carried by <c>MOVE</c> removes the
+    /// source as part of the same command, so a source that has gone is the server's own statement that the command
+    /// ran — a fact about an occurrence the record names exactly, rather than a guess about which message in the
+    /// destination folder is the one that was placed. A copy and a fallback relocation both leave the source where it
+    /// was, so its presence says nothing about either and neither is settled here.
+    /// </para>
+    /// <para>
+    /// The one way this reads wrong is an owner who deleted the source message themselves between the command going out
+    /// and the folder being read again, which would credit the move for a disappearance it did not cause. The mutation
+    /// is completed anyway, deliberately: the email has left the source folder either way, nothing is duplicated by
+    /// saying so, and reissuing a <c>MOVE</c> against a UID the folder no longer holds could only fail. It is the same
+    /// direction <see cref="AccountsForRemovalOf" /> already takes for the same reason.
+    /// </para>
+    /// </remarks>
+    public bool IsUnknownPlacementSettledBySourceRemoval =>
+        this.HasUnknownOutcome
+        && this.Request.Mutation == MailboxMutation.Relocate
+        && !this.RequiresSourceRemoval
+        && this.SourceRemovalObservedAt is not null;
+
     /// <summary>Gets whether this mutation puts the email somewhere synchronization will later discover it.</summary>
     /// <remarks>
     /// A copy places an occurrence exactly as a relocation does, and is included for that reason: the discovery is

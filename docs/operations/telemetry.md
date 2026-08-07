@@ -76,6 +76,16 @@ offered RFC 6851 `MOVE` or the copy-flag-expunge sequence was used instead, and 
 exactly what would make a missing server extension look like a different operation on a dashboard. Which path ran is in
 the debug log.
 
+That counter answers what happened; two gauges beside it answer what has not happened yet, which is the question an
+operator opens a dashboard with. `mailfathom.mailbox.mutations.outstanding` reports how many changes an account has
+asked a mail server for and not seen finished, and `mailfathom.mailbox.mutations.oldest_outstanding_age` reports in
+seconds how long the oldest of them has been waiting. Both carry the account, the mutation, and a lifecycle of
+`pending`, `converging`, or `dead-lettered`; a completed change is not on them, because it is already the counter's
+success outcome and an age is meaningless for it. Each account's values are republished by its own convergence pass and
+replaced whole, so a lifecycle that empties stops being reported instead of reporting its last non-zero value forever.
+A `dead-lettered` count that stops falling is the reading worth alerting on: those are changes nothing will attempt
+again, waiting for somebody to look.
+
 Embedding publishes the depth of its backlog, how many messages the bound turned away, and how many messages and
 passages it embedded and how long that took, broken down by outcome and by the classification of a provider failure.
 [Automatic embedding](../features/automatic-embedding.md#what-an-operator-can-see) names each instrument and what it

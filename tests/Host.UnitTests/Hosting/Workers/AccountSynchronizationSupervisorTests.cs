@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Sessions;
@@ -278,6 +279,87 @@ public sealed class AccountSynchronizationSupervisorTests
             message => message.Contains("Account primary has failed 1 runs in a row", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A change the previous process left half-made is finished by the first run after a restart, with nobody asking
+    /// for it. The account's own loop is what schedules that, which is why no separate worker exists for it.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_EveryRun_ConvergesTheAccountsOutstandingMutationsBeforeItsFolders()
+    {
+        // Arrange
+        var convergedBeforeAnyFolderWasOpened = new TaskCompletionSource<bool>();
+        var recordStore = Substitute.For<IMailboxMutationRecordStore>();
+        var folderWasOpened = 0;
+        recordStore
+            .ReadOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                convergedBeforeAnyFolderWasOpened.TrySetResult(Volatile.Read(ref folderWasOpened) == 0);
+
+                return Task.FromResult<IReadOnlyList<OutstandingMailboxMutation>>([]);
+            });
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Volatile.Write(ref folderWasOpened, 1);
+
+                return Task.FromException<IMailboxSession>(new InvalidOperationException("connect failed"));
+            });
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            sessionFactory,
+            mutationRecordStore: recordStore);
+
+        // Act
+        await harness.SuperviseUntilAsync(convergedBeforeAnyFolderWasOpened.Task);
+
+        // Assert
+        Assert.True(await convergedBeforeAnyFolderWasOpened.Task);
+    }
+
+    /// <summary>
+    /// A convergence pass that could not run defers the account exactly as a failed folder does, so a change waiting on
+    /// an unreachable server is approached less often instead of once per interval forever.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_ConvergencePassFails_DefersTheAccountsNextRun()
+    {
+        // Arrange
+        var passFailed = new TaskCompletionSource();
+        var recordStore = Substitute.For<IMailboxMutationRecordStore>();
+        recordStore
+            .ReadOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns<Task<IReadOnlyList<OutstandingMailboxMutation>>>(_ =>
+            {
+                passFailed.TrySetResult();
+
+                throw new InvalidOperationException("The outstanding mutations could not be read.");
+            });
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            Substitute.For<IMailboxSessionFactory>(),
+            mutationRecordStore: recordStore);
+
+        // Act
+        await harness.SuperviseUntilAsync(passFailed.Task);
+
+        // Assert
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains(
+                "Converging the outstanding mailbox mutations of account primary ended unexpectedly",
+                StringComparison.Ordinal));
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains("runs in a row", StringComparison.Ordinal));
+    }
+
     /// <summary>An alias nobody advertises is fixed by an edit, so waiting longer for it would only slow the folders that work.</summary>
     [Fact]
     public async Task RunAsync_OnlyAnAliasFailedToResolve_DoesNotDeferTheAccount()
@@ -532,6 +614,7 @@ public sealed class AccountSynchronizationSupervisorTests
         IMailboxSessionFactory sessionFactory,
         FakeMailboxNotificationSessionFactory? notificationSessionFactory = null,
         IRemoteFolderCatalog? remoteFolderCatalog = null,
+        IMailboxMutationRecordStore? mutationRecordStore = null,
         params string[] unadvertisedAliases)
     {
         var clock = new FakeTimeProvider();
@@ -543,6 +626,7 @@ public sealed class AccountSynchronizationSupervisorTests
             clock,
             notificationSessionFactory,
             remoteFolderCatalog,
+            mutationRecordStore,
             unadvertisedAliases);
 
         return new SupervisorHarness(

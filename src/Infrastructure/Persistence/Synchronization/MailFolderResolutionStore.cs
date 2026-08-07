@@ -7,7 +7,6 @@ using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
-using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,7 +36,7 @@ internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext)
             .OrderByDescending(folder => folder.ResolutionGeneration)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return entity is null ? null : ToResolution(entity);
+        return entity is null ? null : MailFolderEntityResolver.ToResolution(entity);
     }
 
     /// <inheritdoc />
@@ -68,17 +67,10 @@ internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext)
         // otherwise both proceed: the loser would adopt the winner's row and store its own folder's occurrences and
         // checkpoint under it, so one (alias, generation) would name two remote folders — exactly what the generation
         // exists to make impossible. It is reported as a conflict, and the next run resolves against what is durable.
-        if (ToResolution(existingBinding) != resolution)
+        if (MailFolderEntityResolver.ToResolution(existingBinding) != resolution)
         {
             throw new PersistenceConcurrencyConflictException(
                 $"Folder alias {accountId.Value}/{resolution.Id} was bound to a different remote folder by another writer before this run recorded its own binding.");
         }
     }
-
-    private static MailFolderResolution ToResolution(MailFolderEntity entity) => new(
-        MailFolderAlias.Create(entity.Alias),
-        MailFolderResolutionGeneration.Create(entity.ResolutionGeneration),
-        RemoteFolderPath.Create(
-            entity.RemotePath,
-            entity.HierarchyDelimiter is { Length: > 0 } delimiter ? delimiter[0] : null));
 }

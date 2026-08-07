@@ -252,6 +252,26 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
         return uidValidity;
     }
 
+    /// <summary>Removes one folder from the mailbox, so a test can model a destination somebody deleted.</summary>
+    /// <param name="folderName">The folder to remove; it must exist, because a test that removed nothing proves nothing.</param>
+    /// <param name="cancellationToken">Cancels the connection and the command.</param>
+    /// <returns>A task that completes once the server no longer holds the folder.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the mailbox holds no folder of that name.</exception>
+    internal async Task DeleteFolderAsync(string folderName, CancellationToken cancellationToken)
+    {
+        using var client = await this.ConnectAndAuthenticateAsync(cancellationToken);
+
+        var personalNamespace = await client.GetFolderAsync(client.PersonalNamespaces[0].Path, cancellationToken);
+        var existingFolders = await personalNamespace.GetSubfoldersAsync(subscribedOnly: false, cancellationToken);
+        var folderToRemove = existingFolders.FirstOrDefault(
+            folder => StringComparer.Ordinal.Equals(folder.Name, folderName))
+            ?? throw new InvalidOperationException(
+                $"The mail server holds no folder named '{folderName}', so nothing was removed.");
+
+        await folderToRemove.DeleteAsync(cancellationToken);
+        await client.DisconnectAsync(quit: true, cancellationToken);
+    }
+
     private static Task DelayPastTheNextSecondAsync(CancellationToken cancellationToken)
     {
         var millisecondsIntoTheCurrentSecond = TimeProvider.System.GetUtcNow().Millisecond;

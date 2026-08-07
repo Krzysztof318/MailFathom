@@ -282,7 +282,8 @@ reading and writing closes the window two concurrent writers fall through.
 whose flag landed reissues only the expunge; a `\Seen` change simply repeats, because the store is idempotent on the
 wire. The one case that is never retried is a placement command whose answer was never read: `COPY` issued twice is a
 second message, and nothing in the destination folder afterwards says whether the first attempt landed. Such a mutation
-is reported as an unknown outcome, records that as the reason it is stuck, and stays visible for a person to resolve.
+is reported as an unknown outcome and records that as the reason it is stuck; what becomes of it afterwards is
+[the section below](#a-change-nobody-finished-finishes-by-itself).
 
 What a half-finished relocation still owes is read from the record rather than asked of the server again. `MOVE`
 removes the source itself and a copy does not, so the same stage means opposite things depending on which ran, and the
@@ -292,13 +293,59 @@ folders for good. Which path ran is still invisible above `Debug`: it changes wh
 the operation is called.
 
 **What became of it.** `MaxMutationAttempts` bounds how many attempts one change may spend, counted before each attempt
-so one that kills the process still counts. A change that spends them, or that a server has no safe way to carry, stops
-being attempted and stays readable as stuck rather than looking busy forever.
+so one that kills the process still counts. A change that spends them stops being attempted and stays readable as stuck
+rather than looking busy forever. Two refusals do not wait for that bound at all: a server that advertises no safe way
+to carry the change, and one that answers that the destination folder is not there, have each already given the answer
+every later attempt would receive, so those stop at the first refusal.
 
 The record holds no mail. A folder path, a UID, a mutation name, a requester identity, and a five-digit failure code are
 all it carries, and it is removed with the email it describes — including when the change it recorded was that email's
 deletion. [Stored email schema](../architecture/stored-email-schema.md#recorded-mailbox-mutations) states the columns and
 the stages in full.
+
+### A change nobody finished finishes by itself
+
+Every account run begins by taking that account's unfinished changes in hand, before its folders are touched. Nothing
+has to be scheduled for it and nothing has to be asked for: a service restarted between a copy and an expunge, a change
+recorded while the server was unreachable, and a command whose acknowledgement was lost on the way back all leave a
+durable record in a non-final state, and the first run after the interruption reads it and carries it the rest of the
+way. The mailbox ends in the state that was asked for however the process behaved in between.
+
+A change has exactly two acceptable endings, and *pending forever* is deliberately not one of them, because that is the
+one state that looks like success from every screen an operator reads.
+
+| Where a change is left | What the next run does |
+| --- | --- |
+| Recorded, nothing issued | Issues it, from the beginning |
+| A relocation whose copy the server confirmed | Removes the source; the copy is never repeated |
+| A delete whose `\Deleted` flag landed | Reissues the expunge alone |
+| A placement whose answer never arrived | Never reissues it — see below |
+| Given up on | Nothing; it stays counted and readable |
+
+An unacknowledged placement is the one case that cannot simply be resumed, and how it ends depends on which sequence
+issued it. A relocation the server carried with `MOVE` removes the source as part of the same command, so once
+synchronization has seen that source occurrence leave its folder the server has said the command ran, and the change is
+completed from that observation. A copy and a relocation on a server without `MOVE` both leave the source where it was,
+so nothing about it distinguishes a command that landed from one that never arrived — and finding out by searching the
+destination folder for a message that looks right would replace a fact with a guess, which
+[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+refuses. Those wait `UnknownMutationOutcomeGrace` for an observation that may still settle them, and are then given up
+on so they stand as dead-lettered rather than as changes still apparently happening.
+
+| Bound | Setting | Default | What it decides |
+| --- | --- | --- | --- |
+| Changes per run | `MaxMutationsPerConvergencePass` | 50 | How much of a backlog one run takes on; the rest waits for the next run, oldest first |
+| Unknown outcome | `UnknownMutationOutcomeGrace` | 6 h | How long an unacknowledged placement waits to be settled before it is given up on |
+
+Nothing here retries on a schedule of its own. A change that fails fails the account's run, so the same jittered backoff
+that defers a failing account's folders defers its changes, and one stuck account never delays another — the accounts
+run under the same slot count they always did. What bounds a change that keeps failing is still `MaxMutationAttempts`,
+counted across runs rather than within one.
+
+What is outstanding is readable while it is outstanding: `mailfathom.mailbox.mutations.outstanding` counts the changes
+an account is waiting on, and `mailfathom.mailbox.mutations.oldest_outstanding_age` says how long the oldest has waited.
+Both are broken down by the change and by whether it is *pending*, *converging*, or *dead-lettered*, so a count that
+stops falling is visible without reading a log. [Telemetry](../operations/telemetry.md) lists them with the rest.
 
 ### Renewal
 

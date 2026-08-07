@@ -123,6 +123,15 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
         _ => null,
     };
 
+    /// <summary>Reports whether the mail server has answered in a way no later attempt would improve on.</summary>
+    /// <remarks>
+    /// Both members say the same thing about repeating the work, which is the opposite of what an unavailable mailbox
+    /// says: the server was reached, it answered, and the answer will be the same one until an operator changes
+    /// something. Deferring either would hide a change that needs a person behind an operation that always looks busy.
+    /// </remarks>
+    private static bool IsSettledByTheServer(MailFathomException failure) =>
+        failure is MailboxMutationUnsupportedException or MailboxDestinationFolderMissingException;
+
     /// <summary>Refuses a binding that is not the one the request's occurrence was read under.</summary>
     /// <remarks>
     /// The session would refuse it too, but only after a connection had been opened and a folder selected. Refusing here
@@ -175,11 +184,12 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
 
             return new MailboxMutationOutcome(journal.RecordId, MailboxMutationStatus.Performed, placement);
         }
-        catch (MailboxMutationUnsupportedException unsupported)
+        catch (MailFathomException refusal) when (IsSettledByTheServer(refusal))
         {
-            // A server that advertises no way to carry the change safely will advertise none tomorrow either, so this
-            // is terminal on its first occurrence rather than after the attempt bound is spent on it.
-            await journal.AbandonAsync(unsupported.ErrorCode, cancellationToken);
+            // A server that advertises no way to carry the change safely will advertise none tomorrow either, and a
+            // folder it does not have is not one it is about to grow, so both are terminal on their first occurrence
+            // rather than after the attempt bound has been spent finding that out one login at a time.
+            await journal.AbandonAsync(refusal.ErrorCode, cancellationToken);
 
             throw;
         }
