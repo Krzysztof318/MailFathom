@@ -119,7 +119,9 @@ public sealed class StoredEmailEmbeddingGeneratorTests
     [Theory]
     [InlineData(EmbeddingGenerationFailure.CredentialRejected)]
     [InlineData(EmbeddingGenerationFailure.RateLimited)]
+    [InlineData(EmbeddingGenerationFailure.RequestTimedOut)]
     [InlineData(EmbeddingGenerationFailure.TransportFaulted)]
+    [InlineData(EmbeddingGenerationFailure.RequestRefused)]
     [InlineData(EmbeddingGenerationFailure.VectorShapeUnexpected)]
     public async Task EmbedAsync_ProviderUnavailable_ReportsTheClassificationWithoutRepeatingTheCall(
         EmbeddingGenerationFailure failure)
