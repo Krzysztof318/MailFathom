@@ -74,6 +74,11 @@ pgvector stores far more than it indexes: a `vector` column holds up to 16000 di
 2000. So a model is not merely large or small — it is indexable, or it is stored and searched exactly, which is
 correct but linear in the number of vectors.
 
+The index that covers it belongs to one profile rather than to the table, which is why a width is a property of a
+generation instead of of the schema. [Stored email
+schema](../architecture/stored-email-schema.md#the-index-no-migration-creates) describes its shape and what maintaining
+one costs.
+
 `AllowTrimVectors` decides which, and it is off by default. With it off, a declared dimension above what an index
 covers is refused at startup, naming the dimension and the ceiling, rather than quietly producing an instance whose
 semantic search never becomes fast. With it on, the declared width is what the profile records and what the stored

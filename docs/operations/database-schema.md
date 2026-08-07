@@ -1,6 +1,6 @@
 # Applying the database schema
 
-<!-- describes: src/Infrastructure/Persistence/Migrations/**, src/AppHost/**, scripts/build-schema-artifact.sh -->
+<!-- describes: src/Infrastructure/Persistence/Migrations/**, src/Infrastructure/Persistence/Embeddings/EmbeddingProfileVectorIndex.cs, src/AppHost/**, scripts/build-schema-artifact.sh -->
 
 MailFathom never applies a schema change while starting, in any environment. It verifies the migration history and
 refuses to serve against a schema it does not recognize, so bringing a new version up *tells* you a migration is
@@ -70,6 +70,39 @@ ALTER DEFAULT PRIVILEGES FOR ROLE mailfathom_migrator IN SCHEMA public
 
 Grant rather than transfer: handing the tables to the service's role would leave the migrator unable to alter them next
 time, and would give the role that serves requests the privilege to drop what it serves.
+
+### The one index MailFathom creates itself
+
+Every index in the script is the migrating role's, with one exception that is not in the script at all. The approximate
+index over stored vectors covers one embedding profile's width, and no migration can know a width that a later
+activation chooses — so MailFathom issues that `CREATE INDEX` itself, under the role it connects as. [Stored email
+schema](../architecture/stored-email-schema.md#the-index-no-migration-creates) describes the index and why it has to be
+per profile.
+
+**Creating an index requires owning the table.** PostgreSQL treats the right to modify an object as inherent in being
+its owner and offers no privilege that grants it separately, so the two roles above need one more arrangement before
+that index can be built:
+
+```sql
+GRANT mailfathom TO mailfathom_migrator;
+ALTER TABLE email_embeddings OWNER TO mailfathom;
+```
+
+The grant comes first because a role may only hand a table to one it is a member of, and it is what keeps the migrator
+able to alter that table in a later migration — it acts there as a member of the role that now owns it. This is the one
+table the serving role owns, and it is the price of an index a migration cannot contain. A deployment where a single
+role both applies the schema and serves requests — which the Docker Compose deployment is — already satisfies this and
+needs neither statement.
+
+**How long it takes depends on when it is built.** The index covers only the rows its predicate selects, so a profile
+indexed before its generation holds any vectors is built in an instant, and every vector written afterwards enters the
+index as it is stored. Building one over a generation that is already embedded takes time proportional to the vectors
+in it, and a non-concurrent `CREATE INDEX` blocks writes to `email_embeddings` for that time — the same caution
+[Locks and timeouts](#locks-and-timeouts) states for the script.
+
+**A refusal costs performance and nothing else.** Where the privilege is missing, or the build fails for any other
+reason, MailFathom reports which profile and why, and the vectors are untouched. Vector search over that profile stays
+exact until an index exists: correct, and linear in the number of vectors it reads.
 
 ## Applying it
 
