@@ -2,11 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Diagnostics.Metrics;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Generation;
-using MailFathom.Common.Observability;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Observability;
@@ -17,9 +16,7 @@ public sealed class EmailEmbeddingTelemetryTests
 
     private const string MessageDurationInstrument = "mailfathom.embedding.message.duration";
 
-    private const string OutcomeTagName = "mailfathom.embedding.outcome";
-
-    private const string FailureTagName = "mailfathom.embedding.failure";
+    private const string PassageCountInstrument = "mailfathom.embedding.passages";
 
     /// <summary>
     /// The tag strings are the whole value of the instrument: an operator diagnoses a falling-behind instance by
@@ -32,24 +29,10 @@ public sealed class EmailEmbeddingTelemetryTests
     {
         // Arrange
         var telemetry = new EmailEmbeddingTelemetry();
-        List<string> recorded = [];
-        using var listener = ListenForCountedMessages(recorded);
-
-        StoredEmailEmbeddingRun[] runs =
-        [
-            StoredEmailEmbeddingRun.Embedded(3),
-            StoredEmailEmbeddingRun.NoActiveProfile(),
-            StoredEmailEmbeddingRun.GeneratorDisagreesWithProfile(),
-            StoredEmailEmbeddingRun.CallBudgetExhausted(7),
-            .. Enum.GetValues<EmbeddingGenerationFailure>()
-                .Select(failure => StoredEmailEmbeddingRun.ProviderFailed(1, failure)),
-        ];
+        using var measurements = new RecordedMailFathomMeasurements(MessageCountInstrument);
 
         // Act
-        foreach (var run in runs)
-        {
-            telemetry.RecordEmbeddedMessage(run, TimeSpan.FromSeconds(2));
-        }
+        RecordEveryOutcome(telemetry);
 
         // Assert
         Assert.Equal(
@@ -65,7 +48,22 @@ public sealed class EmailEmbeddingTelemetryTests
                 "provider_failed/request_refused",
                 "provider_failed/vector_shape_unexpected",
             ],
-            recorded);
+            measurements.TagsOf(MessageCountInstrument));
+    }
+
+    /// <summary>Every turn counts as exactly one message, whatever it produced, or the series would count work instead of messages.</summary>
+    [Fact]
+    public void RecordEmbeddedMessage_AnyOutcome_CountsTheMessageOnce()
+    {
+        // Arrange
+        var telemetry = new EmailEmbeddingTelemetry();
+        using var measurements = new RecordedMailFathomMeasurements(MessageCountInstrument);
+
+        // Act
+        RecordEveryOutcome(telemetry);
+
+        // Assert
+        Assert.All(measurements.ValuesOf(MessageCountInstrument), value => Assert.Equal(1, value));
     }
 
     /// <summary>
@@ -73,94 +71,65 @@ public sealed class EmailEmbeddingTelemetryTests
     /// present on one instrument and absent from the other reads as a gap rather than as an absence.
     /// </summary>
     [Fact]
-    public void RecordEmbeddedMessage_AProviderFailure_TagsTheDurationAsItTagsTheCount()
+    public void RecordEmbeddedMessage_AProviderFailure_TagsTheDurationAsItTagsTheCountAndRecordsTheElapsedSeconds()
     {
         // Arrange
         var telemetry = new EmailEmbeddingTelemetry();
-        List<string> counted = [];
-        List<string> timed = [];
-        using var listener = ListenFor(MessageCountInstrument, counted, MessageDurationInstrument, timed);
+        using var measurements = new RecordedMailFathomMeasurements(
+            MessageCountInstrument,
+            MessageDurationInstrument);
 
         // Act
         telemetry.RecordEmbeddedMessage(
             StoredEmailEmbeddingRun.ProviderFailed(0, EmbeddingGenerationFailure.RateLimited),
-            TimeSpan.FromSeconds(2));
+            TimeSpan.FromMilliseconds(2500));
 
         // Assert
-        Assert.Equal(["provider_failed/rate_limited"], counted);
-        Assert.Equal(counted, timed);
+        Assert.Equal(["provider_failed/rate_limited"], measurements.TagsOf(MessageCountInstrument));
+        Assert.Equal(
+            measurements.TagsOf(MessageCountInstrument),
+            measurements.TagsOf(MessageDurationInstrument));
+        Assert.Equal([2.5], measurements.ValuesOf(MessageDurationInstrument));
     }
 
-    private static MeterListener ListenForCountedMessages(List<string> recorded) =>
-        ListenFor(MessageCountInstrument, recorded, durationInstrumentName: null, timed: null);
-
-    /// <summary>Subscribes to MailFathom's own meter and records the tag pair of every measurement the named instruments take.</summary>
-    /// <remarks>
-    /// A listener rather than an inspection of the type, because the tags are what leaves the process and a test that
-    /// read them from a private member would pass while the instrument published something else.
-    /// </remarks>
-    private static MeterListener ListenFor(
-        string countInstrumentName,
-        List<string> counted,
-        string? durationInstrumentName,
-        List<string>? timed)
+    /// <summary>
+    /// The passage count is what an operator reads as how much of a mailbox has become searchable, so it records the
+    /// passages a turn produced rather than the messages it took — and a turn that produced none adds nothing, because
+    /// a stream of zeroes would make an idle instance look like a working one.
+    /// </summary>
+    [Fact]
+    public void RecordEmbeddedMessage_PassagesEmbedded_RecordsTheirCountAndNothingForATurnThatProducedNone()
     {
-        var listener = new MeterListener
-        {
-            InstrumentPublished = (instrument, subscription) =>
-            {
-                if (instrument.Meter.Name != Telemetry.Name)
-                {
-                    return;
-                }
+        // Arrange
+        var telemetry = new EmailEmbeddingTelemetry();
+        using var measurements = new RecordedMailFathomMeasurements(PassageCountInstrument);
 
-                if (instrument.Name == countInstrumentName
-                    || (durationInstrumentName is not null && instrument.Name == durationInstrumentName))
-                {
-                    subscription.EnableMeasurementEvents(instrument);
-                }
-            },
-        };
+        // Act
+        telemetry.RecordEmbeddedMessage(StoredEmailEmbeddingRun.Embedded(4), TimeSpan.FromSeconds(1));
+        telemetry.RecordEmbeddedMessage(StoredEmailEmbeddingRun.Embedded(0), TimeSpan.FromSeconds(1));
+        telemetry.RecordEmbeddedMessage(StoredEmailEmbeddingRun.NoActiveProfile(), TimeSpan.FromSeconds(1));
+        telemetry.RecordEmbeddedMessage(StoredEmailEmbeddingRun.CallBudgetExhausted(9), TimeSpan.FromSeconds(1));
 
-        listener.SetMeasurementEventCallback<long>((instrument, _, tags, _) =>
-        {
-            if (instrument.Name == countInstrumentName)
-            {
-                counted.Add(DescribeTags(tags));
-            }
-        });
-
-        listener.SetMeasurementEventCallback<double>((instrument, _, tags, _) =>
-        {
-            if (instrument.Name == durationInstrumentName)
-            {
-                timed?.Add(DescribeTags(tags));
-            }
-        });
-
-        listener.Start();
-
-        return listener;
+        // Assert
+        Assert.Equal([4, 9], measurements.ValuesOf(PassageCountInstrument));
     }
 
-    /// <summary>Renders one measurement's outcome and failure tags as a single value a sequence assertion can compare.</summary>
-    private static string DescribeTags(ReadOnlySpan<KeyValuePair<string, object?>> tags)
+    /// <summary>Drives one turn of every shape a run can end in, in the order the outcomes are declared.</summary>
+    private static void RecordEveryOutcome(EmailEmbeddingTelemetry telemetry)
     {
-        string? outcome = null;
-        string? failure = null;
+        StoredEmailEmbeddingRun[] runs =
+        [
+            StoredEmailEmbeddingRun.Embedded(3),
+            StoredEmailEmbeddingRun.NoActiveProfile(),
+            StoredEmailEmbeddingRun.GeneratorDisagreesWithProfile(),
+            StoredEmailEmbeddingRun.CallBudgetExhausted(7),
+            .. Enum.GetValues<EmbeddingGenerationFailure>()
+                .Select(failure => StoredEmailEmbeddingRun.ProviderFailed(1, failure)),
+        ];
 
-        foreach (var tag in tags)
+        foreach (var run in runs)
         {
-            if (tag.Key == OutcomeTagName)
-            {
-                outcome = tag.Value as string;
-            }
-            else if (tag.Key == FailureTagName)
-            {
-                failure = tag.Value as string;
-            }
+            telemetry.RecordEmbeddedMessage(run, TimeSpan.FromSeconds(2));
         }
-
-        return $"{outcome}/{failure}";
     }
 }
