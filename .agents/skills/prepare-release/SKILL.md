@@ -80,10 +80,29 @@ gh pr list --state merged --search 'base:main merged:>=<date of previous tag>' -
   --json number,title,url,closingIssuesReferences
 ```
 
+**The reader is somebody who runs MailFathom** — the person installing it and the administrator keeping it running,
+reading before an upgrade to find out what is new for them, what was fixed, what breaks, and what they have to do about
+it. It is not a reader of this repository, and the section is published where that reader is: the release notes are
+this section, and the documentation site carries the file. That settles both halves of this step, what survives the
+reading and how it is written.
+
 Keep what a consumer of a release would notice — anything reaching the MCP tool contract, the configuration schema, the
 database schema, or the deployment contract, plus a defect that was observable from outside and anything with a
 security consequence. Drop the rest. A refactor, a test, a continuous-integration adjustment, a documentation edit, and
-an internal rename earn no entry, and a changelog that lists them stops being read.
+an internal rename earn no entry. Completeness is not the standard and pursuing it is what makes a changelog stop being
+read: forty entries nobody finishes hide the four that decide an upgrade.
+
+**Then write what survives in the reader's terms rather than in the terms it arrived in.** What this step has in front
+of it is a list of pull requests, each titled by the person who made the change and in the vocabulary of the code it
+touched, so an entry is a translation rather than a copy of one. State the behavior that is observable from outside,
+what it means for an installation already running, and the action to take — the configuration key, the tool argument,
+the default that moved, the failure that stops happening. Leave the mechanism out: the type introduced, the layer
+restructured, the abstraction extracted, the package swapped, the test that proved it. Where a name from inside the
+process has to appear because an operator matches on it — a logger category, a metric, a table — it appears as the
+thing they update rather than as what changed internally.
+
+An entry that resists this is usually an entry that should not exist. A change with nothing to say to that reader is a
+change they cannot observe, and the correct entry for one is none.
 
 **The increment follows from what this reading found**, not the other way round: the highest increment any of the four
 surfaces requires is the release's own. Raise the question with the owner when the entries and the version already
@@ -136,6 +155,12 @@ On a branch off the release branch, and touching nothing else:
 
 - add `## [x.y.z] - YYYY-MM-DD` above the previous section, using the release date in UTC, with the entries from step 2
   grouped into the six Keep a Changelog categories and each referencing the pull request or issue that carried it;
+- open the section with a short paragraph in the reader's own terms: what this release is for, whether the database
+  schema moves, and whether anything the previous release promised is withdrawn. That is what somebody deciding whether
+  to upgrade reads, and it is the one part no list of entries can state;
+- **add no `Unreleased` section.** The file carries none by design: it says what released versions shipped, and a
+  heading standing above the newest one either says nothing or claims something about a release nobody has cut. What
+  has merged since the newest section is what a nightly build carries, and the file's own preamble says so;
 - open a breaking entry with `**Breaking (<surface>)**` and state the operator's action, not only the fact;
 - say, when the database schema moved, whether a migration must be applied, whether it applies while the previous
   version still runs, and whether the release deploys over the previous release's data at all;
