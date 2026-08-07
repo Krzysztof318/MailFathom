@@ -6,10 +6,17 @@ _disableContribution: true
 
 <!-- describes: none -->
 
+**A brain for your mail — self-hosted, AI-native, and yours alone.**
+
 MailFathom is a self-hosted service that synchronizes mail from your IMAP accounts into a local PostgreSQL copy,
 indexes it for search, and serves it to AI agents as read-only tools over the
 [Model Context Protocol](https://modelcontextprotocol.io/). Reading is local, and synchronization never marks anything
 read on the mail server.
+
+![A chat client asked to show the latest mail, answered with a table of the ten most recent messages, their receipt times, and the moment the local copy was last synchronized](https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/mcp-tools/list-recent-emails.png)
+
+*One question, answered from the local copy in an ordinary chat client. The `***` were blacked out by hand before the
+file entered a public repository — MailFathom redacts nothing on its way to a client.*
 
 This page is the front door of the published site. It exists only there: the file GitHub shows when you browse
 `docs/` is [`README.md`](https://github.com/Krzysztof318/MailFathom/blob/main/docs/README.md), which indexes the same
