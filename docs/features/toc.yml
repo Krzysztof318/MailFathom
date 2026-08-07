@@ -17,5 +17,7 @@
   href: message-chunks.md
 - name: Embedding generation
   href: embedding-generation.md
+- name: Automatic embedding
+  href: automatic-embedding.md
 - name: MCP tools
   href: mcp-tools.md

@@ -6,7 +6,8 @@ A chunk is a passage of text. A vector is where that passage lands in a space a 
 space can be compared, which is what makes semantic search possible at all. This page describes how MailFathom turns
 the first into the second: what it declares, what it calls, and what it does when the call fails.
 
-Nothing here decides *when* to embed, and nothing here stores a vector. Those belong to the worker and to the schema.
+Nothing here decides *when* to embed, and nothing here stores a vector. Those belong to the worker and to the schema —
+[automatic embedding](automatic-embedding.md) is what decides that a newly synchronized message should be embedded.
 What this owns is the one boundary that talks to a provider.
 
 ## An instance that embeds nothing is a working instance

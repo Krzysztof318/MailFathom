@@ -67,12 +67,19 @@ impossible rather than merely discouraged: there is no second source to give a d
 because disposing a shared source would silence every other publisher, so a type that reports through them implements
 no disposal on their account.
 
-What publishes to that name is documented with the subsystem that does it, and today one subsystem does. Every change
-MailFathom makes to a remote mailbox opens a span named after the mutation, and is counted along with how long it took,
-broken down by the mutation, the account, the folder alias, and whether it succeeded. It is deliberately **not** broken
-down by which IMAP commands carried the change — a relocation is one operation whether the server offered RFC 6851
-`MOVE` or the copy-flag-expunge sequence was used instead, and a dimension telling the two apart is exactly what would
-make a missing server extension look like a different operation on a dashboard. Which path ran is in the debug log.
+What publishes to that name is documented with the subsystem that does it, and today two subsystems do.
+
+Every change MailFathom makes to a remote mailbox opens a span named after the mutation, and is counted along with how
+long it took, broken down by the mutation, the account, the folder alias, and whether it succeeded. It is deliberately
+**not** broken down by which IMAP commands carried the change — a relocation is one operation whether the server
+offered RFC 6851 `MOVE` or the copy-flag-expunge sequence was used instead, and a dimension telling the two apart is
+exactly what would make a missing server extension look like a different operation on a dashboard. Which path ran is in
+the debug log.
+
+Embedding publishes the depth of its backlog, how many messages the bound turned away, and how many messages and
+passages it embedded and how long that took, broken down by outcome and by the classification of a provider failure.
+[Automatic embedding](../features/automatic-embedding.md#what-an-operator-can-see) names each instrument and what it
+answers; the depth is the one an instance falling behind shows up in first.
 
 What such a signal may carry is bounded by the same rule that governs the log lines, and it is a cardinality rule as
 much as a privacy one. Counts, sizes, durations, outcomes, error codes, and MailFathom's own configured account and

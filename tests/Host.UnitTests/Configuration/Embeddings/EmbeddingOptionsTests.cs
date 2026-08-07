@@ -334,6 +334,27 @@ public sealed class EmbeddingOptionsTests
         Assert.Contains(errors, error => error.ErrorMessage!.Contains("kind ApiKey", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The backlog bound is what stands between an initial synchronization of a large mailbox and unbounded memory, so
+    /// a value that is not positive is refused rather than read as "no bound".
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Validate_MaxQueuedEmailsIsNotPositive_IsRefused(int maxQueuedEmails)
+    {
+        // Arrange
+        var settings = new EmbeddingOptions { MaxQueuedEmails = maxQueuedEmails };
+
+        // Act
+        var errors = ValidateEveryProperty(settings);
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.MemberNames.Contains(nameof(EmbeddingOptions.MaxQueuedEmails), StringComparer.Ordinal));
+    }
+
     private static EmbeddingEndpointOptions Endpoint(
         string alias,
         string address = "https://provider.invalid/v1/") =>
@@ -350,4 +371,13 @@ public sealed class EmbeddingOptionsTests
 
     private static IReadOnlyList<ValidationResult> Validate(EmbeddingOptions settings) =>
         [.. settings.Validate(new ValidationContext(settings))];
+
+    /// <summary>Runs the attribute rules as well, which is what the options framework does with this type on start.</summary>
+    private static List<ValidationResult> ValidateEveryProperty(EmbeddingOptions settings)
+    {
+        List<ValidationResult> errors = [];
+        Validator.TryValidateObject(settings, new ValidationContext(settings), errors, validateAllProperties: true);
+
+        return errors;
+    }
 }

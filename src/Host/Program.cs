@@ -6,6 +6,7 @@ using MailFathom.AI;
 using MailFathom.AI.Embeddings;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Mail;
@@ -285,6 +286,14 @@ try
     // validated on start, where a failure reports every problem at once instead of the first one to be built.
     var declaredEmbeddings = builder.Configuration.GetSection("Embeddings").Get<EmbeddingOptions>();
 
+    // Registered whichever way that reads, because the synchronization run offers every committed message into the
+    // backlog and does not ask whether anything is embedding: an instance with no provider simply holds a backlog nobody
+    // drains, which costs one bounded set of identifiers and keeps the condition in one place.
+    builder.Services.AddSingleton(provider => new EmailEmbeddingBacklogOptions
+    {
+        Capacity = provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value.MaxQueuedEmails,
+    });
+
     if (declaredEmbeddings?.IsConfigured is true)
     {
         builder.Services.AddSingleton<IEmbeddingCredentialSource, ConfiguredEmbeddingCredentialSource>();
@@ -317,6 +326,13 @@ try
     builder.Services.AddHostedService<DatabaseSchemaStartupGate>();
     builder.Services.AddHostedService<MailSynchronizationCoordinator>();
     builder.Services.AddHostedService<MailExtractionBackfillWorker>();
+
+    // Started only where a provider was declared. A deployment that declared none resolves no generator at all, so a
+    // worker registered anyway would fail on the first message the backlog handed it rather than idle harmlessly.
+    if (declaredEmbeddings?.IsConfigured is true)
+    {
+        builder.Services.AddHostedService<MailEmbeddingWorker>();
+    }
     // Registered whether or not the endpoint is enabled, because it is the warning that decides whether it has anything
     // to say. Registering it conditionally would put the same condition in two places.
     builder.Services.AddHostedService<McpTransportAuthenticationWarning>();
