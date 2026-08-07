@@ -959,8 +959,11 @@ no model, and receives the verdict as a string, so the account-wide credential
 never shares a runner with the reviewer session — the same separation that keeps
 the App's token in the one step that makes no model call. Where the secret is
 absent the job says so and ends green: this workflow gates nothing, and a missing
-credential must not turn a review red. A pull request that closes no issue and a
-board item that is not on the project end the same way, with a notice.
+credential must not turn a review red. A pull request that closes no issue ends
+the same way, with a notice, because a change opened without a contract is an
+ordinary shape. An issue that is not on the board ends green too, but as a
+warning: every issue this project opens is placed there by a built-in workflow,
+so one that is missing has something wrong with it rather than nothing.
 
 `scripts/test-agent-workflow.sh` runs the step against a fake `gh` the way it
 runs the gate, the settle loop, and the submission: it asserts which option each
