@@ -160,6 +160,7 @@ public sealed class MailboxSynchronizer
         var relocatedCount = 0;
         var hasMore = true;
         var inspectedBatchCount = 0;
+        var suppressedChanges = new List<SuppressedMailboxChange>();
 
         while (hasMore && inspectedBatchCount < this.options.MaxMetadataBatchesPerRun)
         {
@@ -170,7 +171,7 @@ public sealed class MailboxSynchronizer
                 this.options.MaxMetadataBatchSize,
                 synchronizationWindow,
                 cancellationToken);
-            var relocations = await this.ReadRelocationsPlacedInBatchAsync(
+            var placements = await this.ReadPlacementsInBatchAsync(
                 accountId,
                 folder,
                 uidValidity,
@@ -179,14 +180,29 @@ public sealed class MailboxSynchronizer
 
             foreach (var metadata in batch.Emails.OrderBy(email => email.OccurrenceId.Uid.Value))
             {
-                if (await this.TryCarryRelocatedEmailAsync(relocations, folder, metadata, cancellationToken))
+                var placement = FindPlacementOf(placements, folder, metadata.OccurrenceId);
+
+                if (placement is { } relocation
+                    && relocation.Request.Mutation == MailboxMutation.Relocate
+                    && await this.TryCarryRelocatedEmailAsync(relocation, metadata.OccurrenceId, cancellationToken))
                 {
                     relocatedCount++;
+                    suppressedChanges.Add(new SuppressedMailboxChange(
+                        MailboxChangeKind.EmailAppearedInFolder,
+                        relocation.Request.Mutation,
+                        relocation.Request.StoredEmailId,
+                        relocation.Id));
 
                     continue;
                 }
 
-                var occurrence = await this.StoreOccurrenceAsync(mailboxSession, metadata, cancellationToken);
+                // A copy is stored like any other discovery, because the email it duplicates stays where it was and
+                // nothing is carried across. What the record settles is only whose act the arrival was.
+                var copy = placement is { } candidate && candidate.Request.Mutation == MailboxMutation.Copy
+                    ? candidate
+                    : null;
+
+                var occurrence = await this.StoreOccurrenceAsync(mailboxSession, metadata, copy, cancellationToken);
                 if (occurrence.Availability == StoredEmailContentAvailability.Available)
                 {
                     storedCount++;
@@ -199,6 +215,15 @@ public sealed class MailboxSynchronizer
                 if (occurrence.MimeCouldNotBeRead)
                 {
                     unreadableMimeCount++;
+                }
+
+                if (copy is not null)
+                {
+                    suppressedChanges.Add(new SuppressedMailboxChange(
+                        MailboxChangeKind.EmailAppearedInFolder,
+                        copy.Request.Mutation,
+                        occurrence.StoredEmailId,
+                        copy.Id));
                 }
             }
 
@@ -247,15 +272,16 @@ public sealed class MailboxSynchronizer
             relocatedCount,
             hasMore,
             checkpoint,
-            reconciliation);
+            reconciliation,
+            [.. suppressedChanges, .. reconciliation.SuppressedChanges]);
     }
 
-    /// <summary>Reads the relocations whose destination is this folder and whose placement is one of the UIDs this batch discovered.</summary>
+    /// <summary>Reads the mutations whose destination is this folder and whose placement is one of the UIDs this batch discovered.</summary>
     /// <remarks>
     /// A batch that discovered nothing asks nothing. The read is otherwise made once for the whole batch, so recognizing
-    /// MailFathom's own work costs one query per batch on a folder nobody relocates into and never one per message.
+    /// MailFathom's own work costs one query per batch on a folder nobody writes into and never one per message.
     /// </remarks>
-    private async Task<IReadOnlyList<MailboxMutationRecord>> ReadRelocationsPlacedInBatchAsync(
+    private async Task<IReadOnlyList<MailboxMutationRecord>> ReadPlacementsInBatchAsync(
         MailAccountId accountId,
         MailFolderResolution folder,
         ImapUidValidity uidValidity,
@@ -267,13 +293,25 @@ public sealed class MailboxSynchronizer
             return [];
         }
 
-        return await this.mutationStore.ReadRelocationsPlacedAtAsync(
+        return await this.mutationStore.ReadPlacementsAtAsync(
             accountId,
             folder.RemotePath,
             uidValidity,
             [.. batch.Emails.Select(static email => email.OccurrenceId.Uid)],
             cancellationToken);
     }
+
+    /// <summary>Finds the mutation whose reported placement is the occurrence this discovery sits at, if any is.</summary>
+    /// <remarks>
+    /// The first match is taken. Every condition of the read is restated by the record itself rather than trusted, so a
+    /// query widened later cannot quietly widen what counts as MailFathom's own work.
+    /// </remarks>
+    private static MailboxMutationRecord? FindPlacementOf(
+        IReadOnlyList<MailboxMutationRecord> placements,
+        MailFolderResolution folder,
+        EmailOccurrenceId occurrenceId) =>
+        placements.FirstOrDefault(candidate =>
+            candidate.AccountsForPlacementAt(folder.RemotePath, occurrenceId.UidValidity, occurrenceId.Uid));
 
     /// <summary>Carries the local email a relocation moved onto the occurrence it was discovered at, rather than storing a second one.</summary>
     /// <returns><see langword="true" /> when the discovery was this mutation's own and needs nothing further; otherwise, <see langword="false" />.</returns>
@@ -284,26 +322,17 @@ public sealed class MailboxSynchronizer
     /// carried across rather than by the occurrence it sits at.
     /// </para>
     /// <para>
-    /// A discovery that matches nothing, and one whose destination occurrence another row already occupies, both fall
-    /// through to the ordinary path. That is the same treatment mail a person moved in their own client gets, which is
-    /// what keeps this change invisible to every mailbox MailFathom is not writing to.
+    /// A discovery whose destination occurrence another row already occupies falls through to the ordinary path, as one
+    /// that matches nothing does. That is the same treatment mail a person moved in their own client gets, which is
+    /// what keeps this change invisible to every mailbox MailFathom is not writing to — and it leaves the record
+    /// unobserved, so nothing claims a change was accounted for that no local row reflects.
     /// </para>
     /// </remarks>
     private async Task<bool> TryCarryRelocatedEmailAsync(
-        IReadOnlyList<MailboxMutationRecord> relocations,
-        MailFolderResolution folder,
-        RemoteEmailMetadata metadata,
+        MailboxMutationRecord record,
+        EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken)
     {
-        var occurrenceId = metadata.OccurrenceId;
-        var record = relocations.FirstOrDefault(candidate =>
-            candidate.IsPlacementOf(folder.RemotePath, occurrenceId.UidValidity, occurrenceId.Uid));
-
-        if (record is null)
-        {
-            return false;
-        }
-
         var carried = false;
 
         await this.concurrencyRetryPolicy.CommitAsync(
@@ -365,14 +394,21 @@ public sealed class MailboxSynchronizer
         return reconciledCheckpoint;
     }
 
+    /// <summary>Stores one discovered occurrence, settling the copy that placed it in the same transaction where there was one.</summary>
+    /// <remarks>
+    /// The placement observation belongs in the write that stores the email rather than beside it. A copy whose arrival
+    /// was recorded but whose row was rolled back would answer for a change no local state reflects, and the next run
+    /// would store the message as an arrival nobody accounted for.
+    /// </remarks>
     private async Task<OccurrenceSynchronizationOutcome> StoreOccurrenceAsync(
         IMailboxSession mailboxSession,
         RemoteEmailMetadata metadata,
+        MailboxMutationRecord? placement,
         CancellationToken cancellationToken)
     {
         if (metadata.SizeOctets > this.options.MaxRawMimeBytes)
         {
-            return await this.RecordOversizedOccurrenceAsync(metadata, cancellationToken);
+            return await this.RecordOversizedOccurrenceAsync(metadata, placement, cancellationToken);
         }
 
         var fetch = await mailboxSession.FetchEmailContentWithoutSettingSeenAsync(metadata.OccurrenceId, this.options.MaxRawMimeBytes, cancellationToken);
@@ -380,7 +416,7 @@ public sealed class MailboxSynchronizer
         {
             // The advertised size understated the payload, so the occurrence is recorded without content instead of
             // being silently skipped past by the checkpoint.
-            return await this.RecordOversizedOccurrenceAsync(metadata, cancellationToken);
+            return await this.RecordOversizedOccurrenceAsync(metadata, placement, cancellationToken);
         }
 
         // Enrichment reads the payload this run already fetched, so it costs no second IMAP round trip and cannot reach
@@ -388,10 +424,12 @@ public sealed class MailboxSynchronizer
         // only what the server's envelope reported, and the folder checkpoint still advances past it.
         var extraction = await this.mimeReader.ReadMetadataAsync(content, cancellationToken);
 
+        var storedEmailId = default(StoredEmailId);
+
         await this.concurrencyRetryPolicy.CommitAsync(
             async (persistenceSession, attemptCancellationToken) =>
             {
-                var storedEmailId = await this.metadataRepository.UpsertMetadataAsync(
+                storedEmailId = await this.metadataRepository.UpsertMetadataAsync(
                     persistenceSession,
                     metadata,
                     extraction.Metadata,
@@ -402,35 +440,62 @@ public sealed class MailboxSynchronizer
                     storedEmailId,
                     content,
                     attemptCancellationToken);
+
+                await this.ObservePlacementAsync(persistenceSession, placement, attemptCancellationToken);
             },
             cancellationToken);
 
         return new OccurrenceSynchronizationOutcome(
+            storedEmailId,
             StoredEmailContentAvailability.Available,
             extraction.Outcome != EmailMimeExtractionOutcome.Extracted);
     }
 
     private async Task<OccurrenceSynchronizationOutcome> RecordOversizedOccurrenceAsync(
         RemoteEmailMetadata metadata,
+        MailboxMutationRecord? placement,
         CancellationToken cancellationToken)
     {
+        var storedEmailId = default(StoredEmailId);
+
         await this.concurrencyRetryPolicy.CommitAsync(
             async (persistenceSession, attemptCancellationToken) =>
             {
-                await this.metadataRepository.UpsertMetadataAsync(
+                storedEmailId = await this.metadataRepository.UpsertMetadataAsync(
                     persistenceSession,
                     metadata,
                     extractedMetadata: null,
                     StoredEmailContentAvailability.ExceededSizeLimit,
                     attemptCancellationToken);
+
+                await this.ObservePlacementAsync(persistenceSession, placement, attemptCancellationToken);
             },
             cancellationToken);
 
         // An occurrence whose content was never retrieved has no MIME to read, so it is neither enriched nor counted as
         // unreadable.
         return new OccurrenceSynchronizationOutcome(
+            storedEmailId,
             StoredEmailContentAvailability.ExceededSizeLimit,
             MimeCouldNotBeRead: false);
+    }
+
+    /// <summary>Writes down that the occurrence a copy created has been met, where this discovery was one.</summary>
+    private async Task ObservePlacementAsync(
+        IPersistenceSession persistenceSession,
+        MailboxMutationRecord? placement,
+        CancellationToken cancellationToken)
+    {
+        if (placement is null)
+        {
+            return;
+        }
+
+        await this.mutationStore.RecordPlacementObservedAsync(
+            persistenceSession,
+            placement.Id,
+            this.timeProvider.GetUtcNow(),
+            cancellationToken);
     }
 
     // A checkpoint advance is attempted once rather than retried: the intended progress was derived from the state read
@@ -461,9 +526,11 @@ public sealed class MailboxSynchronizer
     }
 
     /// <summary>States what one occurrence's turn through the run produced.</summary>
+    /// <param name="StoredEmailId">The local email the occurrence was stored as, which a suppressed arrival is named by.</param>
     /// <param name="Availability">Whether the occurrence was stored with its content or as metadata only.</param>
     /// <param name="MimeCouldNotBeRead">Whether enrichment refused the payload that was stored.</param>
     private readonly record struct OccurrenceSynchronizationOutcome(
+        StoredEmailId StoredEmailId,
         StoredEmailContentAvailability Availability,
         bool MimeCouldNotBeRead);
 }
@@ -495,6 +562,11 @@ public enum MailboxSynchronizationOutcome
 /// <param name="HasMoreEmails">Whether the folder still held unprocessed emails when the run's batch budget ran out.</param>
 /// <param name="Checkpoint">The progress the run ended on, which is present exactly when <paramref name="Outcome" /> is <see cref="MailboxSynchronizationOutcome.Synchronized" />.</param>
 /// <param name="Reconciliation">What the run's backward pass found among the emails already stored for this folder.</param>
+/// <param name="SuppressedChanges">
+/// Every change this run discovered and did not raise, because a durable mutation record said MailFathom had made it —
+/// both passes together, since one relocation arrives as an appearance in the forward pass and a disappearance in the
+/// backward one. Without it a rule that files mail would match the mail it had just filed, indefinitely.
+/// </param>
 /// <remarks>
 /// The binding is reported because resolution happens inside the run and a caller that wants to keep watching the
 /// folder afterwards must watch the remote folder the alias actually resolved to. Re-resolving it outside the run would
@@ -510,7 +582,8 @@ public sealed record MailboxSynchronizationResult(
     int RelocatedEmailCount,
     bool HasMoreEmails,
     SynchronizationCheckpoint? Checkpoint,
-    MailboxReconciliationResult Reconciliation)
+    MailboxReconciliationResult Reconciliation,
+    IReadOnlyList<SuppressedMailboxChange> SuppressedChanges)
 {
     /// <summary>Reports a run that reached its folder.</summary>
     /// <param name="folder">The binding the run worked under.</param>
@@ -521,8 +594,9 @@ public sealed record MailboxSynchronizationResult(
     /// <param name="hasMoreEmails">Whether unprocessed emails remain.</param>
     /// <param name="checkpoint">The progress the run ended on.</param>
     /// <param name="reconciliation">What the run's backward pass found.</param>
+    /// <param name="suppressedChanges">The changes the run recognized as MailFathom's own and did not raise.</param>
     /// <returns>A synchronized result.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="folder" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="folder" /> or <paramref name="suppressedChanges" /> is <see langword="null" />.</exception>
     public static MailboxSynchronizationResult Synchronized(
         MailFolderResolution folder,
         int storedEmailCount,
@@ -531,9 +605,11 @@ public sealed record MailboxSynchronizationResult(
         int relocatedEmailCount,
         bool hasMoreEmails,
         SynchronizationCheckpoint checkpoint,
-        MailboxReconciliationResult reconciliation)
+        MailboxReconciliationResult reconciliation,
+        IReadOnlyList<SuppressedMailboxChange> suppressedChanges)
     {
         ArgumentNullException.ThrowIfNull(folder);
+        ArgumentNullException.ThrowIfNull(suppressedChanges);
 
         return new MailboxSynchronizationResult(
             MailboxSynchronizationOutcome.Synchronized,
@@ -544,7 +620,8 @@ public sealed record MailboxSynchronizationResult(
             relocatedEmailCount,
             hasMoreEmails,
             checkpoint,
-            reconciliation);
+            reconciliation,
+            suppressedChanges);
     }
 
     /// <summary>Reports a configured alias that named no single advertised folder.</summary>
@@ -576,6 +653,7 @@ public sealed record MailboxSynchronizationResult(
             0,
             HasMoreEmails: false,
             Checkpoint: null,
-            MailboxReconciliationResult.NothingToReconcile);
+            MailboxReconciliationResult.NothingToReconcile,
+            SuppressedChanges: []);
     }
 }

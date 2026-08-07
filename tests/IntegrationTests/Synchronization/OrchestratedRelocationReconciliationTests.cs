@@ -30,6 +30,16 @@ namespace MailFathom.IntegrationTests.Synchronization;
 /// reconciled first — which is the second test, and also the out-of-order case an operator's mailbox will produce
 /// whenever the destination folder is not one MailFathom synchronizes on the same schedule.
 /// </para>
+/// <para>
+/// Both also assert what each half was withheld from, and the third test is the control that makes those assertions
+/// mean anything: the mailbox owner performs the same move by hand, over a connection MailFathom never sees, and the
+/// same two events are raised rather than withheld. An absence proves nothing unless the same observation would report
+/// it present, and the two tests differ in exactly one thing — whether a record was written before the command.
+/// </para>
+/// <para>
+/// The same mechanism applied to a <c>\Seen</c> flag is proved by <c>OrchestratedSeenStateProvenanceTests</c>, which
+/// this class deliberately leaves alone: nothing about a flag is a folder change, and neither run here would observe it.
+/// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 [TestCaseOrderer(typeof(MailboxStateSequenceOrderer))]
@@ -39,6 +49,10 @@ public sealed class OrchestratedRelocationReconciliationTests(MailFathomOrchestr
 
     private const string TargetFolderName = "RelocationTarget";
 
+    private const string ManualSourceFolderName = "ManualMoveSource";
+
+    private const string ManualTargetFolderName = "ManualMoveTarget";
+
     private static readonly MailFolderMapping SourceMapping = MailFolderMapping.ToRemotePath(
         MailFolderAlias.Create("relocation-source"),
         RemoteFolderPath.Create(SourceFolderName, hierarchyDelimiter: '.'));
@@ -46,6 +60,14 @@ public sealed class OrchestratedRelocationReconciliationTests(MailFathomOrchestr
     private static readonly MailFolderMapping TargetMapping = MailFolderMapping.ToRemotePath(
         MailFolderAlias.Create("relocation-target"),
         RemoteFolderPath.Create(TargetFolderName, hierarchyDelimiter: '.'));
+
+    private static readonly MailFolderMapping ManualSourceMapping = MailFolderMapping.ToRemotePath(
+        MailFolderAlias.Create("manual-move-source"),
+        RemoteFolderPath.Create(ManualSourceFolderName, hierarchyDelimiter: '.'));
+
+    private static readonly MailFolderMapping ManualTargetMapping = MailFolderMapping.ToRemotePath(
+        MailFolderAlias.Create("manual-move-target"),
+        RemoteFolderPath.Create(ManualTargetFolderName, hierarchyDelimiter: '.'));
 
     private static readonly RemoteFolderPath TargetPath =
         RemoteFolderPath.Create(TargetFolderName, hierarchyDelimiter: '.');
@@ -96,6 +118,13 @@ public sealed class OrchestratedRelocationReconciliationTests(MailFathomOrchestr
         var record = await ReadRecordAsync(services, outcome.RecordId, cancellationToken);
         Assert.NotNull(record.PlacementObservedAt);
         Assert.NotNull(record.SourceRemovalObservedAt);
+
+        // The arrival was MailFathom's own, so it is withheld from rule evaluation. Raising it is what would let a rule
+        // that files mail match the mail it has just filed, on every interval, for as long as the folder is watched.
+        var suppressed = Assert.Single(result.SuppressedChanges);
+        Assert.Equal(MailboxChangeKind.EmailAppearedInFolder, suppressed.Kind);
+        Assert.Equal(MailboxMutation.Relocate, suppressed.Mutation);
+        Assert.Equal(outcome.RecordId, suppressed.MutationRecordId);
     }
 
     /// <summary>The source occurrence vanishing is the relocation completing, not a deletion somebody else made.</summary>
@@ -133,6 +162,60 @@ public sealed class OrchestratedRelocationReconciliationTests(MailFathomOrchestr
         var record = await ReadRecordAsync(services, outcome.RecordId, cancellationToken);
         Assert.NotNull(record.SourceRemovalObservedAt);
         Assert.Null(record.PlacementObservedAt);
+
+        var suppressed = Assert.Single(result.SuppressedChanges);
+        Assert.Equal(MailboxChangeKind.EmailLeftFolder, suppressed.Kind);
+        Assert.Equal(MailboxMutation.Relocate, suppressed.Mutation);
+        Assert.Equal(stored.StoredEmailId, suppressed.StoredEmailId);
+        Assert.Equal(outcome.RecordId, suppressed.MutationRecordId);
+    }
+
+    /// <summary>The mailbox owner moving mail by hand produces the same two events, and both stay changes to react to.</summary>
+    /// <remarks>
+    /// <para>
+    /// This is the control for the two tests above. The server reports the identical arrival and the identical
+    /// disappearance whichever side issued the command, so an assertion that MailFathom's own were withheld says nothing
+    /// until the same runs raise the owner's. It also proves the suppression is scoped to the occurrence a record names
+    /// rather than to the folders a rule happens to write to.
+    /// </para>
+    /// <para>
+    /// It owns a folder pair of its own rather than reusing the one above, because the tests above deliberately leave a
+    /// relocation half-observed: the message the second test moved is still waiting to be met in the target folder, and
+    /// its source occurrence is still recorded as MailFathom's. Reusing those folders would let this test's runs meet
+    /// that message and report a withheld change this test never made.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    [MailboxStateStep(3)]
+    public async Task SynchronizeAsync_AfterAFolderChangeMadeOutsideMailFathom_RaisesBothHalvesOfIt()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var mailbox = new OrchestratedMailbox(orchestration.MailServer);
+        await mailbox.RecreateFolderAsync(ManualSourceFolderName, cancellationToken);
+        await mailbox.RecreateFolderAsync(ManualTargetFolderName, cancellationToken);
+
+        var subject = $"relocation-by-hand-{Guid.NewGuid():N}";
+        await mailbox.AppendAsync(ManualSourceFolderName, subject, cancellationToken);
+
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        Assert.Equal(1, (await SynchronizeAsync(services, ManualSourceMapping, cancellationToken)).StoredEmailCount);
+
+        var stored = await ReadStoredEmailAsync(services, subject, cancellationToken);
+        await mailbox.MoveAsync(ManualSourceFolderName, ManualTargetFolderName, stored.Uid, cancellationToken);
+
+        // Act
+        var sourceRun = await SynchronizeAsync(services, ManualSourceMapping, cancellationToken);
+        var targetRun = await SynchronizeAsync(services, ManualTargetMapping, cancellationToken);
+
+        // Assert
+        Assert.Empty(sourceRun.SuppressedChanges);
+        Assert.Equal(1, sourceRun.Reconciliation.RemotelyDeletedEmailCount);
+        Assert.Equal(0, sourceRun.Reconciliation.OwnMutationCompletedEmailCount);
+
+        Assert.Empty(targetRun.SuppressedChanges);
+        Assert.Equal(1, targetRun.StoredEmailCount);
+        Assert.Equal(0, targetRun.RelocatedEmailCount);
     }
 
     private static Task<MailboxSynchronizationResult> SynchronizeAsync(

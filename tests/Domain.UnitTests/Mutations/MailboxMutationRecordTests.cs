@@ -27,6 +27,9 @@ public sealed class MailboxMutationRecordTests
 
     private static readonly ImapUid PlacedUid = ImapUid.Create(77);
 
+    /// <summary>The last reading of an occurrence's flags taken before the store this class builds went out.</summary>
+    private static readonly DateTimeOffset ObservedBeforeTheStore = RecordedAt.AddMinutes(-1);
+
     /// <summary>A discovered occurrence the server itself named as the destination of a completed relocation is that relocation's own.</summary>
     [Fact]
     public void IsPlacementOf_TheOccurrenceCopyUidNamed_IsRecognized()
@@ -130,6 +133,135 @@ public sealed class MailboxMutationRecordTests
 
         // Assert
         Assert.False(isPlacement);
+    }
+
+    /// <summary>Whose act an arrival was is the same question for a copy as for a relocation, whatever the two then do with the local row.</summary>
+    [Fact]
+    public void AccountsForPlacementAt_TheOccurrenceACopyPlaced_IsRecognized()
+    {
+        // Arrange
+        var record = CompletedRelocation() with
+        {
+            Request = MailboxMutationRequest.Copy(LocalEmail, SourceOccurrence(), Requester, Archive),
+        };
+
+        // Act
+        var accountsForPlacement = record.AccountsForPlacementAt(Archive, DestinationUidValidity, PlacedUid);
+
+        // Assert
+        Assert.True(accountsForPlacement);
+    }
+
+    /// <summary>A delete and a flag change put the email nowhere, so no discovery is ever theirs.</summary>
+    [Fact]
+    public void AccountsForPlacementAt_AMutationThatPlacesNothing_MatchesNothing()
+    {
+        // Arrange
+        var delete = CompletedRelocation() with
+        {
+            Request = MailboxMutationRequest.Delete(LocalEmail, SourceOccurrence(), Requester),
+        };
+        var setSeen = CompletedRelocation() with
+        {
+            Request = MailboxMutationRequest.SetSeen(LocalEmail, SourceOccurrence(), Requester, isSeen: true),
+        };
+
+        // Act
+        var deleteAccountsForPlacement = delete.AccountsForPlacementAt(Archive, DestinationUidValidity, PlacedUid);
+        var setSeenAccountsForPlacement = setSeen.AccountsForPlacementAt(Archive, DestinationUidValidity, PlacedUid);
+
+        // Assert
+        Assert.False(deleteAccountsForPlacement);
+        Assert.False(setSeenAccountsForPlacement);
+    }
+
+    /// <summary>The flag standing where a completed store put it is that store completing, not the owner reading the message.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AccountsForSeenStateOf_TheDirectionItAskedFor_IsRecognized(bool isSeen)
+    {
+        // Arrange
+        var record = CompletedSeenStateChange(isSeen);
+
+        // Act
+        var accountsForSeenState = record.AccountsForSeenStateOf(SourceOccurrence(), isSeen, ObservedBeforeTheStore);
+
+        // Assert
+        Assert.True(accountsForSeenState);
+    }
+
+    /// <summary>A store that asked for one direction says nothing about the flag moving the other way.</summary>
+    [Fact]
+    public void AccountsForSeenStateOf_TheOppositeDirection_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedSeenStateChange(isSeen: true);
+
+        // Act
+        var accountsForSeenState = record.AccountsForSeenStateOf(
+            SourceOccurrence(),
+            observedSeenState: false,
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.False(accountsForSeenState);
+    }
+
+    /// <summary>An occurrence read since the store is a mailbox somebody else has had the chance to change, so the record stops answering for it.</summary>
+    /// <remarks>
+    /// This is what scopes the suppression to the one change the record describes, and the case it exists for is the
+    /// quiet one: an owner who reverts the flag before the first reading leaves nothing for the record to be marked
+    /// spent by, and would otherwise have their own later change silenced by it months afterwards.
+    /// </remarks>
+    [Fact]
+    public void AccountsForSeenStateOf_AnOccurrenceObservedSinceTheStore_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedSeenStateChange(isSeen: true);
+
+        // Act
+        var accountsForSeenState = record.AccountsForSeenStateOf(
+            SourceOccurrence(),
+            observedSeenState: true,
+            RecordedAt.AddMinutes(1));
+
+        // Assert
+        Assert.False(accountsForSeenState);
+    }
+
+    /// <summary>No STORE has gone out, so the flag standing there was put there by somebody else.</summary>
+    [Fact]
+    public void AccountsForSeenStateOf_AStoreNothingHasBeenIssuedFor_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedSeenStateChange(isSeen: true) with { Stage = MailboxMutationStage.Recorded };
+
+        // Act
+        var accountsForSeenState = record.AccountsForSeenStateOf(
+            SourceOccurrence(),
+            observedSeenState: true,
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.False(accountsForSeenState);
+    }
+
+    /// <summary>A relocation and a delete write no flag, so neither answers for one that moved.</summary>
+    [Fact]
+    public void AccountsForSeenStateOf_AMutationThatWritesNoFlag_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedRelocation();
+
+        // Act
+        var accountsForSeenState = record.AccountsForSeenStateOf(
+            SourceOccurrence(),
+            observedSeenState: true,
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.False(accountsForSeenState);
     }
 
     /// <summary>The source occurrence is written down before any command goes out, so the disappearance needs no COPYUID to be attributed.</summary>
@@ -252,6 +384,9 @@ public sealed class MailboxMutationRecordTests
         // Assert
         Assert.False(delete.IsReconciled);
         Assert.True(deleteObserved.IsReconciled);
+
+        // A flag change moves no occurrence, so there is nothing for synchronization to come back and meet. Its
+        // provenance is settled against the occurrence's own observation rather than against anything on this row.
         Assert.True(setSeen.IsReconciled);
     }
 
@@ -277,5 +412,12 @@ public sealed class MailboxMutationRecordTests
         LastFailure = null,
         PlacementObservedAt = null,
         SourceRemovalObservedAt = null,
+    };
+
+    private static MailboxMutationRecord CompletedSeenStateChange(bool isSeen) => CompletedRelocation() with
+    {
+        Request = MailboxMutationRequest.SetSeen(LocalEmail, SourceOccurrence(), Requester, isSeen),
+        RequiresSourceRemoval = false,
+        Placement = RemoteEmailPlacement.NotReported(),
     };
 }

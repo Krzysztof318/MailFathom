@@ -242,6 +242,267 @@ public sealed class MailboxReconcilerTests
         Assert.Null(row.RemoteExpungeObservedAt);
     }
 
+    /// <summary>A rule that marks mail read must not re-evaluate everything it just marked, which is the cheapest mutation looping hardest.</summary>
+    /// <remarks>
+    /// The flag comes back as a changed modification sequence, indistinguishable in the protocol from a person reading
+    /// the message in their own client. Only the record separates them, so the withheld change names the record that
+    /// accounted for it and the stored snapshot still follows the server.
+    /// </remarks>
+    [Fact]
+    public async Task ReconcileAsync_SeenFlagMailFathomSetItself_WithholdsTheChange()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: false));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        var record = MutationSettingSeen(store.StoredEmailIdOf(10), uid: 10, isSeen: true);
+        mutationStore.Add(record);
+        await using var mailboxSession = CreateSessionReportingSeenState(isSeen: true, 10);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.SeenStateChangedEmailCount);
+        var suppressed = Assert.Single(result.SuppressedChanges);
+        Assert.Equal(MailboxChangeKind.SeenStateChanged, suppressed.Kind);
+        Assert.Equal(MailboxMutation.SetSeen, suppressed.Mutation);
+        Assert.Equal(store.StoredEmailIdOf(10), suppressed.StoredEmailId);
+        Assert.Equal(record.Id, suppressed.MutationRecordId);
+
+        // The stored snapshot still follows the server, because what was withheld is the trigger and never the reading.
+        Assert.True(store.RowOf(10).Snapshot!.IsSeen);
+    }
+
+    /// <summary>Marking mail read by hand is the mailbox owner's act, and it stays a change to react to.</summary>
+    [Fact]
+    public async Task ReconcileAsync_OwnerMarkedMailReadThemselves_RaisesTheChange()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: false));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        await using var mailboxSession = CreateSessionReportingSeenState(isSeen: true, 10);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.SeenStateChangedEmailCount);
+        Assert.Empty(result.SuppressedChanges);
+    }
+
+    /// <summary>The suppression is scoped to the one change the record describes, so the owner setting that flag again later is their act.</summary>
+    /// <remarks>
+    /// This is the case a record that answered forever would get wrong, and it is silent when it happens: a rule
+    /// conditioned on read mail would simply never fire again for a message MailFathom had once marked read.
+    /// </remarks>
+    [Fact]
+    public async Task ReconcileAsync_OwnerRestoresTheFlagMailFathomSetEarlier_RaisesItAsTheirOwnChange()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: false));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        mutationStore.Add(MutationSettingSeen(store.StoredEmailIdOf(10), uid: 10, isSeen: true));
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        await using var afterOwnStore = CreateSessionReportingSeenState(isSeen: true, 10);
+        var ownChange = await reconciler.ReconcileAsync(
+            mailboxSession: afterOwnStore,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        await using var afterOwnerCleared = CreateSessionReportingSeenState(isSeen: false, 10);
+        var clearedByOwner = await reconciler.ReconcileAsync(
+            mailboxSession: afterOwnerCleared,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        await using var afterOwnerSetItAgain = CreateSessionReportingSeenState(isSeen: true, 10);
+        var setAgainByOwner = await reconciler.ReconcileAsync(
+            mailboxSession: afterOwnerSetItAgain,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Single(ownChange.SuppressedChanges);
+        Assert.Equal(0, ownChange.SeenStateChangedEmailCount);
+        Assert.Empty(clearedByOwner.SuppressedChanges);
+        Assert.Equal(1, clearedByOwner.SeenStateChangedEmailCount);
+        Assert.Empty(setAgainByOwner.SuppressedChanges);
+        Assert.Equal(1, setAgainByOwner.SeenStateChangedEmailCount);
+    }
+
+    /// <summary>A record stops answering once the occurrence has been read, whether or not that reading found the flag where it put it.</summary>
+    /// <remarks>
+    /// This is the case that decides where the expiry is recorded. The owner reverts the flag before any window sees it,
+    /// so the first window finds nothing changed and there is no matching change to mark a record spent by — and if the
+    /// expiry lived on the record, the owner marking the message read weeks later would be silently withheld. Anchoring
+    /// it to the occurrence's own last observation is what makes that window count.
+    /// </remarks>
+    [Fact]
+    public async Task ReconcileAsync_OwnerRevertedTheFlagBeforeAnyWindowSawIt_StillRaisesTheirLaterChange()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: false));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        mutationStore.Add(MutationSettingSeen(store.StoredEmailIdOf(10), uid: 10, isSeen: true));
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        await using var afterTheOwnerReverted = CreateSessionReportingSeenState(isSeen: false, 10);
+        var sawNothingChanged = await reconciler.ReconcileAsync(
+            mailboxSession: afterTheOwnerReverted,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        await using var afterTheOwnerMarkedItRead = CreateSessionReportingSeenState(isSeen: true, 10);
+        var ownerMarkedItRead = await reconciler.ReconcileAsync(
+            mailboxSession: afterTheOwnerMarkedItRead,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, sawNothingChanged.SeenStateChangedEmailCount);
+        Assert.Empty(sawNothingChanged.SuppressedChanges);
+        Assert.Equal(1, ownerMarkedItRead.SeenStateChangedEmailCount);
+        Assert.Empty(ownerMarkedItRead.SuppressedChanges);
+    }
+
+    /// <summary>A record whose <c>STORE</c> never went out accounts for nothing, because the flag standing there is somebody else's doing.</summary>
+    [Fact]
+    public async Task ReconcileAsync_SeenStoreThatNeverReachedTheServer_RaisesTheChange()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: false));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        mutationStore.Add(MutationSettingSeen(
+            store.StoredEmailIdOf(10),
+            uid: 10,
+            isSeen: true,
+            MailboxMutationStage.Recorded));
+        await using var mailboxSession = CreateSessionReportingSeenState(isSeen: true, 10);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.SeenStateChangedEmailCount);
+        Assert.Empty(result.SuppressedChanges);
+    }
+
+    /// <summary>A record answers for the direction it asked for and never for the opposite one.</summary>
+    [Fact]
+    public async Task ReconcileAsync_FlagMovedOppositeToWhatWasAsked_RaisesTheChange()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: false));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        mutationStore.Add(MutationSettingSeen(store.StoredEmailIdOf(10), uid: 10, isSeen: false));
+        await using var mailboxSession = CreateSessionReportingSeenState(isSeen: true, 10);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.SeenStateChangedEmailCount);
+        Assert.Empty(result.SuppressedChanges);
+    }
+
+    /// <summary>The first reading of an occurrence's flags is an observation rather than a change, and a window where nothing moved asks nothing.</summary>
+    /// <remarks>
+    /// Both halves guard the same mistake from opposite sides. Treating a first reading as a change would raise a
+    /// trigger for every message a backfill stores, and asking the database about a window in which nothing moved would
+    /// put a query on every run of every folder for an answer that is always empty.
+    /// </remarks>
+    [Fact]
+    public async Task ReconcileAsync_NoFlagHasMoved_ReportsNoChangeAndAsksNothing()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10, 11));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        await using var mailboxSession = CreateSessionReportingSeenState(isSeen: true, 10, 11);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.SeenStateChangedEmailCount);
+        Assert.Empty(result.SuppressedChanges);
+        Assert.Equal(0, mutationStore.SeenStateChangeReadCount);
+        Assert.True(store.RowOf(10).Snapshot!.IsSeen);
+    }
+
     /// <summary>A large folder is reconciled across runs rather than scanned in one, and the run says so.</summary>
     [Fact]
     public async Task ReconcileAsync_MoreEmailsThanTheWindowHolds_BoundsTheWindowAndReportsRemainingWork()
@@ -671,6 +932,35 @@ public sealed class MailboxReconcilerTests
         return mailboxSession;
     }
 
+    /// <summary>Builds a session whose folder holds the named UIDs and reports one <c>\Seen</c> value for all of them.</summary>
+    private static IMailboxSession CreateSessionReportingSeenState(bool isSeen, params uint[] presentUids)
+    {
+        var mailboxSession = Substitute.For<IMailboxSession>();
+        IReadOnlyList<RemoteEmailFlagObservation> observations =
+        [
+            .. presentUids.Select(uid => new RemoteEmailFlagObservation(
+                ImapUid.Create(uid),
+                new RemoteEmailFlagSnapshot(
+                    RunInstant,
+                    isSeen,
+                    IsAnswered: false,
+                    IsFlagged: false,
+                    IsDraft: false,
+                    IsDeleted: false))),
+        ];
+
+        mailboxSession
+            .ObserveWindowWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<ulong?>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(RemoteFolderWindowObservation.FromDescribedOccurrences(
+                [
+                    .. observations.Where(observation =>
+                        call.Arg<IReadOnlyList<ImapUid>>()!.Contains(observation.Uid)),
+                ],
+                folderHighestModSeq: null)));
+
+        return mailboxSession;
+    }
+
     /// <summary>Builds a session whose folder still holds exactly the named UIDs, and says nothing about the rest.</summary>
     private static IMailboxSession CreateSessionHolding(params uint[] presentUids) =>
         CreateSessionHolding(folderHighestModSeq: null, presentUids);
@@ -762,6 +1052,35 @@ public sealed class MailboxReconcilerTests
         };
     }
 
+    /// <summary>Builds the record a completed <c>\Seen</c> store against one stored occurrence would have left behind.</summary>
+    private static MailboxMutationRecord MutationSettingSeen(
+        StoredEmailId storedEmailId,
+        uint uid,
+        bool isSeen,
+        MailboxMutationStage stage = MailboxMutationStage.Completed)
+    {
+        var occurrence = EmailOccurrenceId.Create(Account, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid));
+
+        return new MailboxMutationRecord
+        {
+            Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(RunInstant)),
+            Request = MailboxMutationRequest.SetSeen(
+                storedEmailId,
+                occurrence,
+                MailboxMutationRequester.Rule("mark-newsletters-read", 1),
+                isSeen),
+            Stage = stage,
+            RequiresSourceRemoval = false,
+            Placement = RemoteEmailPlacement.NotReported(),
+            AttemptCount = 1,
+            RecordedAt = RunInstant,
+            StageChangedAt = RunInstant,
+            LastFailure = null,
+            PlacementObservedAt = null,
+            SourceRemovalObservedAt = null,
+        };
+    }
+
     private static IReadOnlyList<StoredOccurrence> StoredOccurrences(params uint[] uids) =>
     [
         .. uids.Select(uid => new StoredOccurrence(
@@ -769,8 +1088,27 @@ public sealed class MailboxReconcilerTests
             uid)),
     ];
 
+    /// <summary>Builds one stored occurrence whose remote flags an earlier run already read, so a later reading can differ from them.</summary>
+    private static IReadOnlyList<StoredOccurrence> ObservedOccurrence(uint uid, bool isSeen) =>
+    [
+        new StoredOccurrence(
+            StoredEmailId.Create(Guid.CreateVersion7(RunInstant.AddSeconds(uid))),
+            uid,
+            isSeen),
+    ];
+
     /// <summary>One locally stored occurrence a test arranged, before any run has touched it.</summary>
-    private sealed record StoredOccurrence(StoredEmailId StoredEmailId, uint Uid);
+    /// <param name="StoredEmailId">The local identity the outcome is written against.</param>
+    /// <param name="Uid">The UID the folder holds it at.</param>
+    /// <param name="PreviouslyObservedSeenState">
+    /// The remote <c>\Seen</c> value an earlier run recorded, or <see langword="null" /> when no run has read this
+    /// occurrence's flags. Supplying one is what makes the row previously observed, exactly as the column pair does in
+    /// the database.
+    /// </param>
+    private sealed record StoredOccurrence(
+        StoredEmailId StoredEmailId,
+        uint Uid,
+        bool? PreviouslyObservedSeenState = null);
 
     /// <summary>
     /// Holds the reconciliation queue the way the database does, because the queue is the mechanism under test: the
@@ -785,7 +1123,7 @@ public sealed class MailboxReconcilerTests
         {
             this.rowsById = storedOccurrences.ToDictionary(
                 occurrence => occurrence.StoredEmailId,
-                occurrence => new ReconciledRow(occurrence.Uid));
+                static occurrence => new ReconciledRow(occurrence.Uid, occurrence.PreviouslyObservedSeenState));
         }
 
         public List<uint> AskedAboutUids { get; } = [];
@@ -843,7 +1181,12 @@ public sealed class MailboxReconcilerTests
             [
                 .. neverObserved
                     .Concat(previouslyObserved.Take(maxEmailCount - neverObserved.Length))
-                    .Select(entry => new StoredEmailAwaitingReconciliation(entry.Key, ImapUid.Create(entry.Value.Uid))),
+                    .Select(static entry => new StoredEmailAwaitingReconciliation(
+                        entry.Key,
+                        ImapUid.Create(entry.Value.Uid),
+                        entry.Value.ObservedAt is { } observedAt
+                            ? new RemoteSeenStateObservation(observedAt, entry.Value.Snapshot?.IsSeen ?? false)
+                            : null)),
             ];
 
             this.AskedAboutUids.AddRange(window.Select(candidate => candidate.Uid.Value));
@@ -916,9 +1259,35 @@ public sealed class MailboxReconcilerTests
     }
 
     /// <summary>The columns reconciliation writes on one stored email.</summary>
-    private sealed class ReconciledRow(uint uid)
+    /// <remarks>
+    /// A seeded <c>\Seen</c> value arrives as an observation rather than as a bare flag, because that is the only shape
+    /// the database can hold: the stored flags and the timestamp saying they were read move together, and a fake that
+    /// let them disagree would answer a window with a previous value nobody had ever observed.
+    /// </remarks>
+    private sealed class ReconciledRow
     {
-        public uint Uid { get; } = uid;
+        public ReconciledRow(uint uid, bool? previouslyObservedSeenState = null)
+        {
+            this.Uid = uid;
+
+            if (previouslyObservedSeenState is not { } seenState)
+            {
+                return;
+            }
+
+            var seededAt = RunInstant.AddHours(-1);
+
+            this.ObservedAt = seededAt;
+            this.Snapshot = new RemoteEmailFlagSnapshot(
+                seededAt,
+                seenState,
+                IsAnswered: false,
+                IsFlagged: false,
+                IsDraft: false,
+                IsDeleted: false);
+        }
+
+        public uint Uid { get; }
 
         public DateTimeOffset? ObservedAt { get; set; }
 

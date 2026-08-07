@@ -176,6 +176,16 @@ occurrences the change moved and recognized them as this record's own. A relocat
 in the destination folder later as a discovery something has to join to the email already stored, and its source
 occurrence still vanishes from the folder it left — and left alone, that pair is a new message and a deleted one.
 
+Both are written once and never moved afterwards, and that is what scopes an arrival's provenance to the one change the
+record describes: a record whose placement has been met answers for no later discovery at the same UID.
+
+A `\Seen` store carries no such column and needs none, because it moves no occurrence for a run to come back and meet.
+Its provenance is settled against the stored email's own `remote_flags_observed_at` instead: a store accounts for a flag
+reading only while that column still predates the moment the store completed. Every window advances it for every
+occurrence it asked about, so the first reading after the store is the whole of what the record can answer for. A column
+here would answer only for the readings that happened to *differ* — and an owner who reverted the flag before the first
+reading would leave it unwritten and have their own later change silenced by it.
+
 The join is the server's own `COPYUID` answer for the placement and the record's own source occurrence for the
 disappearance. A relocation whose server named no placement matches no discovery at all, and `PlacementObservedAt` stays
 null instead: finding the message by searching the destination folder for something that looks like it would replace a
@@ -210,7 +220,7 @@ assembled at the failure site.
 | `ix_email_embeddings_profile` | `(EmbeddingProfileId, Dimension)` | Reading a whole generation, which is how a superseded one is removed |
 | `ix_mailbox_mutations_identity` | `(MailFolderId, UidValidity, Uid, RequesterOrigin, RequesterIdentity, Mutation)`, unique | A mutation's idempotency identity, which is what makes the same request twice perform one change |
 | `ix_mailbox_mutations_outstanding` | `(MailboxAccountId, RecordedAt)` where the stage is not `Completed` | The changes an operator asks about: those in flight and those given up on |
-| `ix_mailbox_mutations_placement` | `(MailboxAccountId, DestinationFolderPath, PlacementUidValidity, PlacementUid)` where `PlacementObservedAt` is null | The question the forward pass asks of every batch it discovers: is one of these UIDs where a relocation put an email |
+| `ix_mailbox_mutations_placement` | `(MailboxAccountId, DestinationFolderPath, PlacementUidValidity, PlacementUid)` where `PlacementObservedAt` is null | The question the forward pass asks of every batch it discovers: is one of these UIDs where a relocation or a copy put an email |
 
 The recipient and search-vector indexes are GIN rather than B-tree because both serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 

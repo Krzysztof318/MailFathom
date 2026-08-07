@@ -780,20 +780,26 @@ and the mailbox holds a duplicate as far as MailFathom is concerned.
 The [durable mutation record](https://github.com/Krzysztof318/MailFathom/blob/main/docs/architecture/stored-email-schema.md#recorded-mailbox-mutations)
 is what tells the two apart, and both halves are joined to it by a recorded fact rather than by a guess at a header:
 
-- **A discovered occurrence** is matched against relocations that named this folder as their destination and that the
-  server answered with a `COPYUID` naming this UIDVALIDITY and this UID. A match carries the existing local email onto
-  the new occurrence instead of storing a second one — no fetch, no MIME read, and no new row, because the message is
-  the one already stored and its content, extracted metadata, search document, and passages are all keyed by the local
-  identity being carried across. Only the occurrence identity moves, and the flags become unobserved so the destination
-  folder's own window is what says what holds there now.
+- **A discovered occurrence** is matched against relocations and copies that named this folder as their destination and
+  that the server answered with a `COPYUID` naming this UIDVALIDITY and this UID. A relocation carries the existing
+  local email onto the new occurrence instead of storing a second one — no fetch, no MIME read, and no new row, because
+  the message is the one already stored and its content, extracted metadata, search document, and passages are all
+  keyed by the local identity being carried across. Only the occurrence identity moves, and the flags become unobserved
+  so the destination folder's own window is what says what holds there now. A copy is stored like any other discovery,
+  because the message it duplicates stayed where it was; what the record settles for it is only whose act the arrival
+  was.
 - **A disappearance** is matched against the source occurrence the record names, which was written down before the
   first IMAP command went out. A match is the relocation or the delete completing, so the disposition below is never
   reached for it: the row keeps its place and only its position in the reconciliation queue moves.
+- **A remote `\Seen` flag standing somewhere new** is matched against the `\Seen` stores issued against that occurrence,
+  and the direction is compared as well: a store that asked for the flag to be set answers for the flag becoming set and
+  never for it becoming clear. The stored snapshot still follows the server either way — what the match decides is whose
+  act it was, not what is recorded.
 
-A relocation whose server named no placement is joined to no discovery at all. Searching the destination folder for
-something that looks like the message would replace a fact the server gave with a guess, and guessing by `Message-ID`
-or a content hash is wrong in both directions — a message legitimately appears twice with one `Message-ID`, and a
-provider may rewrite headers on copy. The record then stays visibly unjoined instead.
+A relocation or a copy whose server named no placement is joined to no discovery at all. Searching the destination
+folder for something that looks like the message would replace a fact the server gave with a guess, and guessing by
+`Message-ID` or a content hash is wrong in both directions — a message legitimately appears twice with one `Message-ID`,
+and a provider may rewrite headers on copy. The record then stays visibly unjoined instead.
 
 The order the two halves arrive in is not fixed, because the destination folder is not necessarily one MailFathom
 synchronizes on the same schedule. A source disappearance seen first settles that half and leaves the row where it is
@@ -802,6 +808,35 @@ takes the email out of the source folder locally and no later window could obser
 
 A discovery or a disappearance that matches no record is treated exactly as it is below. Nothing here changes what
 happens to mail a person moved or deleted in their own client.
+
+#### A change MailFathom made is not a change to react to
+
+The join above is one reader of the record. The other is provenance: a change MailFathom performed must not come back
+as something to act on. Once rules can write to a mailbox, that stops being tidiness. A rule matching on folder would
+file a message, meet it in its new folder, match again, and go round for as long as the folder is watched — an IMAP
+command a lap — and two rules with overlapping conditions would do the same to each other. `\Seen` is the case that
+makes it unavoidable: a flag change reaches synchronization as a changed modification sequence, which is precisely the
+signal a person marking mail read in their own client produces, so a rule conditioned on unread mail that marks mail
+read would re-evaluate everything it had just acted on.
+
+A run therefore **withholds** every change a mutation record accounts for, and raises everything else. There is no
+cycle counter, no depth limit, and no rate limit involved, and that is deliberate: a cycle limit stops a loop only
+after it has already run several times, and a rate limit stops legitimate work at the same threshold. The record
+answers the question exactly.
+
+The suppression is scoped to the one change the record describes and expires with it. A relocation or a copy is written
+down as observed the first time synchronization meets the occurrence it placed, and answers for no discovery afterwards.
+A `\Seen` store moves no occurrence, so it expires against the message's own flag observation instead: it accounts for a
+reading only while the last one predates the moment the store completed, and every window advances that for every
+occurrence it asked about. So the mailbox owner setting by hand the same flag MailFathom set months earlier, or moving
+the message back themselves, reaches rule evaluation as the change it is — including when they reverted the flag before
+any window had seen MailFathom's own change at all.
+
+A withheld change is visible rather than silent, because a rule that appears not to have fired is otherwise
+indistinguishable from a rule that never matched. Each folder's run reports how many changes it withheld at
+`Information`, and names each one at `Debug` with its kind, the mutation, the local email, and the record that
+accounted for it. Nothing derived from a message appears in either line. A folder MailFathom never writes to emits
+neither.
 
 ### What becomes of a message the server no longer holds
 

@@ -25,24 +25,64 @@ namespace MailFathom.Application.Mail.Mutations;
 /// </remarks>
 public interface IMailboxMutationReconciliationStore
 {
-    /// <summary>Reads the relocations that named one folder as their destination and placed an email at one of these UIDs.</summary>
+    /// <summary>Reads the mutations that named one folder as their destination and placed an email at one of these UIDs.</summary>
     /// <param name="accountId">The account whose mutations are read.</param>
-    /// <param name="destinationPath">The remote folder being synchronized, which is the destination those relocations named.</param>
+    /// <param name="destinationPath">The remote folder being synchronized, which is the destination those mutations named.</param>
     /// <param name="uidValidity">The UIDVALIDITY that folder reports now.</param>
     /// <param name="uids">The UIDs one batch of the forward pass discovered.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>Every record whose reported placement is one of those occurrences, which may be none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="uids" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// A whole batch of discoveries is asked about at once, so a folder that has no relocation pending — which is nearly
+    /// <para>
+    /// A whole batch of discoveries is asked about at once, so a folder that has no placement pending — which is nearly
     /// every folder on nearly every run — costs one query rather than one per message. The batch's own UIDs bound the
     /// answer, so no limit has to be invented for it and no candidate can be missed by one. Which record a given
-    /// occurrence belongs to is then decided by <see cref="MailboxMutationRecord.IsPlacementOf" />, which restates every
-    /// condition of the read rather than trusting it.
+    /// occurrence belongs to is then decided by <see cref="MailboxMutationRecord.AccountsForPlacementAt" />, which
+    /// restates every condition of the read rather than trusting it.
+    /// </para>
+    /// <para>
+    /// A relocation and a copy are both read, because both put a message where the forward pass will meet it and the
+    /// discovery is MailFathom's own act either way. What the two then do differs — a relocation carries the local email
+    /// onto the new occurrence and a copy does not — and that is the caller's decision rather than this read's.
+    /// </para>
     /// </remarks>
-    Task<IReadOnlyList<MailboxMutationRecord>> ReadRelocationsPlacedAtAsync(
+    Task<IReadOnlyList<MailboxMutationRecord>> ReadPlacementsAtAsync(
         MailAccountId accountId,
         RemoteFolderPath destinationPath,
+        ImapUidValidity uidValidity,
+        IReadOnlyCollection<ImapUid> uids,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads the <c>\Seen</c> stores issued against any of the occurrences a reconciliation window read flags for.</summary>
+    /// <param name="accountId">The account whose mutations are read.</param>
+    /// <param name="folderResolutionId">The alias binding the occurrences were stored under.</param>
+    /// <param name="uidValidity">The UIDVALIDITY the window was opened for.</param>
+    /// <param name="uids">The UIDs whose remote <c>\Seen</c> flag the window found standing somewhere new.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Every <c>\Seen</c> store issued against one of those occurrences, which may be none.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="uids" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// This is the read the whole issue turns on. A flag change reaches synchronization as a changed modification
+    /// sequence, which is exactly what a person marking mail read in their own client produces, so nothing in the
+    /// server's answer distinguishes the two and only the record does. A rule conditioned on unread mail that marks mail
+    /// read would otherwise re-evaluate every message it had just acted on.
+    /// </para>
+    /// <para>
+    /// Only the occurrences whose flag actually moved are asked about, so a window that found the mailbox unchanged —
+    /// which is most windows — asks nothing. The answer is bounded by <paramref name="uids" /> and by the idempotency
+    /// identity, which admits one record per occurrence, requester, and mutation.
+    /// </para>
+    /// <para>
+    /// Every such record is returned, spent or not, because whether one still accounts for anything is settled against
+    /// the occurrence's own last observation rather than against a mark on the row. That comparison belongs to
+    /// <see cref="MailboxMutationRecord.AccountsForSeenStateOf" />, which the caller applies to what this returns.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<MailboxMutationRecord>> ReadSeenStateChangesOnAsync(
+        MailAccountId accountId,
+        MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
         CancellationToken cancellationToken);
@@ -87,11 +127,18 @@ public interface IMailboxMutationReconciliationStore
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="recordId" />.</exception>
     /// <remarks>
-    /// It settles the source half as well, where nothing has settled it already. Carrying the row across is what takes
-    /// the email out of the source folder locally, so no later window can select it there and no later run can observe
-    /// the disappearance the record is otherwise still waiting for. The stage this is only ever reached from is
+    /// <para>
+    /// It settles the source half as well, for a mutation that has one. Carrying the row across is what takes the email
+    /// out of the source folder locally, so no later window can select it there and no later run can observe the
+    /// disappearance the record is otherwise still waiting for. The stage this is only ever reached from is
     /// <see cref="MailboxMutationStage.Completed" />, which is the server's own statement that the source occurrence is
-    /// already gone.
+    /// already gone. A copy leaves its source where it was and settles nothing about it.
+    /// </para>
+    /// <para>
+    /// Writing it is also what expires the suppression. A record whose placement has been observed answers for no later
+    /// discovery, which is what keeps a folder recreated under a reused UID from being attributed to a mutation made
+    /// against the previous one.
+    /// </para>
     /// </remarks>
     Task RecordPlacementObservedAsync(
         IPersistenceSession session,

@@ -102,10 +102,13 @@ public sealed record MailboxMutationRecord
 
     /// <summary>Gets whether this mutation puts the email somewhere synchronization will later discover it.</summary>
     /// <remarks>
-    /// A copy places one too, and is deliberately absent: whether a second live occurrence of one message is one local
-    /// row or two is the copy action's decision rather than this join's, so nothing here carries a row across for one.
+    /// A copy places an occurrence exactly as a relocation does, and is included for that reason: the discovery is
+    /// MailFathom's own act either way. What a copy does not do is carry the local row across — whether a second live
+    /// occurrence of one message is one local row or two is the copy action's decision rather than this join's — which
+    /// is why <see cref="IsPlacementOf" /> narrows to a relocation and this does not.
     /// </remarks>
-    public bool ExpectsPlacementObservation => this.Request.Mutation == MailboxMutation.Relocate;
+    public bool ExpectsPlacementObservation =>
+        this.Request.Mutation == MailboxMutation.Relocate || this.Request.Mutation == MailboxMutation.Copy;
 
     /// <summary>Gets whether this mutation takes the source occurrence out of the folder it was in.</summary>
     public bool ExpectsSourceRemovalObservation =>
@@ -121,6 +124,64 @@ public sealed record MailboxMutationRecord
     public bool IsReconciled =>
         (!this.ExpectsPlacementObservation || this.PlacementObservedAt is not null)
         && (!this.ExpectsSourceRemovalObservation || this.SourceRemovalObservedAt is not null);
+
+    /// <summary>Reports whether a newly discovered occurrence is one this mutation put there.</summary>
+    /// <param name="discoveredFolderPath">The remote path of the folder the occurrence was discovered in.</param>
+    /// <param name="discoveredUidValidity">The UIDVALIDITY that folder reports now.</param>
+    /// <param name="discoveredUid">The UID the discovered occurrence carries.</param>
+    /// <returns><see langword="true" /> when the server itself named this occurrence as where it put the email.</returns>
+    /// <remarks>
+    /// This is the provenance question, and it is asked of every mutation that places an occurrence rather than only of
+    /// the one that also carries the local row across. A message MailFathom put in a folder arrives at the forward pass
+    /// as an ordinary discovery, and whether it was moved or copied there changes nothing about whose act it was.
+    /// </remarks>
+    public bool AccountsForPlacementAt(
+        RemoteFolderPath discoveredFolderPath,
+        ImapUidValidity discoveredUidValidity,
+        ImapUid discoveredUid) =>
+        this.ExpectsPlacementObservation
+        && this.PlacementObservedAt is null
+        && this.Stage == MailboxMutationStage.Completed
+        && this.Request.DestinationPath is { } destinationPath
+        && string.Equals(destinationPath.Value, discoveredFolderPath.Value, StringComparison.Ordinal)
+        && this.Placement is { UidValidity: { } placedUidValidity, Uid: { } placedUid }
+        && placedUidValidity == discoveredUidValidity
+        && placedUid == discoveredUid;
+
+    /// <summary>Reports whether the remote <c>\Seen</c> flag a folder just reported stands where this mutation set it.</summary>
+    /// <param name="occurrence">The occurrence whose flag changed.</param>
+    /// <param name="observedSeenState">The <c>\Seen</c> value the server has now reported.</param>
+    /// <param name="previouslyObservedAt">When synchronization last read this occurrence's flags before the reading being judged.</param>
+    /// <returns><see langword="true" /> when this mutation is what moved the flag to that value.</returns>
+    /// <remarks>
+    /// <para>
+    /// The direction is compared as well as the occurrence, so a record that asked for the flag to be set accounts for
+    /// the flag becoming set and never for it becoming clear. A rule that marks mail read is therefore not re-triggered
+    /// by its own store, while the owner clearing that flag afterwards reaches evaluation as the change it is.
+    /// </para>
+    /// <para>
+    /// A record still at <see cref="MailboxMutationStage.Recorded" /> matches nothing, because no <c>STORE</c> has
+    /// reached the server for it and the flag standing where it would have put it is somebody else's doing.
+    /// </para>
+    /// <para>
+    /// <paramref name="previouslyObservedAt" /> is what scopes the answer to the one change this record describes, and
+    /// it is the occurrence's own observation rather than a mark on this row. A <c>\Seen</c> store reaches
+    /// synchronization only as a value the flag now stands at, so the reading that first sees the mailbox after the
+    /// store is the whole of what this record can account for — every reading after that is a mailbox somebody else has
+    /// had the chance to change. Anchoring on the row instead would answer only for the readings that happened to
+    /// differ: an owner who reverted the flag before the first reading would leave the record unspent and have their
+    /// own later change silenced by it.
+    /// </para>
+    /// </remarks>
+    public bool AccountsForSeenStateOf(
+        EmailOccurrenceId occurrence,
+        bool observedSeenState,
+        DateTimeOffset previouslyObservedAt) =>
+        this.Request.Mutation == MailboxMutation.SetSeen
+        && this.Stage != MailboxMutationStage.Recorded
+        && previouslyObservedAt < this.StageChangedAt
+        && this.Request.Occurrence == occurrence
+        && this.Request.DesiredSeenState == observedSeenState;
 
     /// <summary>Reports whether a newly discovered occurrence is the one this mutation's placement created.</summary>
     /// <param name="discoveredFolderPath">The remote path of the folder the occurrence was discovered in.</param>
@@ -146,19 +207,17 @@ public sealed record MailboxMutationRecord
     /// local row into the destination then would leave the source occurrence with nothing local pointing at it while
     /// convergence still has to remove it.
     /// </para>
+    /// <para>
+    /// A copy is placed by <see cref="AccountsForPlacementAt" /> and never by this, because a copy leaves the email
+    /// where it was: carrying its row across would move an email that never moved.
+    /// </para>
     /// </remarks>
     public bool IsPlacementOf(
         RemoteFolderPath discoveredFolderPath,
         ImapUidValidity discoveredUidValidity,
         ImapUid discoveredUid) =>
-        this.ExpectsPlacementObservation
-        && this.PlacementObservedAt is null
-        && this.Stage == MailboxMutationStage.Completed
-        && this.Request.DestinationPath is { } destinationPath
-        && string.Equals(destinationPath.Value, discoveredFolderPath.Value, StringComparison.Ordinal)
-        && this.Placement is { UidValidity: { } placedUidValidity, Uid: { } placedUid }
-        && placedUidValidity == discoveredUidValidity
-        && placedUid == discoveredUid;
+        this.Request.Mutation == MailboxMutation.Relocate
+        && this.AccountsForPlacementAt(discoveredFolderPath, discoveredUidValidity, discoveredUid);
 
     /// <summary>Reports whether an occurrence that has left its folder left it because of this mutation.</summary>
     /// <param name="sourceOccurrence">The occurrence the folder no longer holds.</param>

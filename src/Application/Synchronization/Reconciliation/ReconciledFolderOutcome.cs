@@ -15,9 +15,14 @@ public sealed record ObservedEmailFlags(StoredEmailId StoredEmailId, RemoteEmail
 /// <summary>Pairs one occurrence the folder no longer holds with the change MailFathom made that took it out.</summary>
 /// <param name="StoredEmailId">The local identity whose occurrence has gone.</param>
 /// <param name="MutationRecordId">The durable record of the change that removed it.</param>
+/// <param name="Mutation">
+/// Which change it was, carried here so the suppression a run reports names the same word its log line and its counter
+/// already use rather than sending a reader back to the record to find out.
+/// </param>
 public sealed record MutationAttributedDisappearance(
     StoredEmailId StoredEmailId,
-    MailboxMutationRecordId MutationRecordId);
+    MailboxMutationRecordId MutationRecordId,
+    MailboxMutation Mutation);
 
 /// <summary>Everything one reconciliation window learned, as one thing to apply.</summary>
 /// <param name="StillPresent">The emails the folder still holds, with the flags to write onto them.</param>
