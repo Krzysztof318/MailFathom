@@ -197,6 +197,30 @@ public readonly record struct MailFathomErrorCode
 
     #endregion
 
+    #region Category 6 — Embedding providers
+
+    /// <summary>Gets subcategory 1, credentials: an embedding provider refused the credential this deployment presented.</summary>
+    /// <remarks>
+    /// Separate from every availability failure because the two ask opposite things of the operator: an unreachable
+    /// endpoint is waited out, while a refused credential stays refused until somebody rotates it. It is also the one
+    /// provider failure that must never be repeated, since repeating a rejected key spends the account's request
+    /// budget to receive the same answer.
+    /// </remarks>
+    public static MailFathomErrorCode EmbeddingProviderCredentialRejected { get; } = new(61001);
+
+    /// <summary>Gets subcategory 2, availability: no endpoint of the declared chain served an embedding request within the budget configured for it.</summary>
+    /// <remarks>A rate limit, a timeout, and an unreachable endpoint collapse into this one code, because each says the same thing to the work that asked: the vectors belong to a later run.</remarks>
+    public static MailFathomErrorCode EmbeddingProviderUnavailable { get; } = new(62001);
+
+    /// <summary>Gets subcategory 3, answer shape: a provider returned a vector the declared geometry does not describe.</summary>
+    /// <remarks>
+    /// Raised at the adapter rather than left to the database's dimension check, so a width the model was never asked
+    /// for is named where the model was called instead of surfacing later as a rejected row with no provider in sight.
+    /// </remarks>
+    public static MailFathomErrorCode EmbeddingVectorShapeUnexpected { get; } = new(63001);
+
+    #endregion
+
     /// <summary>Gets every allocated code.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
     public static IReadOnlyList<MailFathomErrorCode> All { get; } =
@@ -231,6 +255,9 @@ public readonly record struct MailFathomErrorCode
         StoredEmailNotFound,
         McpToolFailedUnexpectedly,
         EmailContentUnavailable,
+        EmbeddingProviderCredentialRejected,
+        EmbeddingProviderUnavailable,
+        EmbeddingVectorShapeUnexpected,
     ];
 
     /// <summary>Gets the five-digit code.</summary>

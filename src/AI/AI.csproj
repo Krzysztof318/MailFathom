@@ -1,8 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <PackageReference Include="Azure.Identity" />
     <PackageReference Include="Microsoft.Agents.AI" />
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <!-- The client factory and the one call that opts the embedding transport out of the standard resilience handler,
+         for the reason `docs/architecture/outbound-resilience.md` states: that call already runs under the
+         AiProviderInvocation pipeline, and keeping both would put two retry layers around one request. -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="OpenAI" />
   </ItemGroup>
 
   <ItemGroup>
@@ -12,5 +20,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="MailFathom.AI.UnitTests" />
+    <InternalsVisibleTo Include="MailFathom.IntegrationTests" />
   </ItemGroup>
 </Project>

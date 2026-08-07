@@ -6,7 +6,7 @@ A message is often too big to be the unit a search answers with. A forwarded thr
 one paragraph that answers a question is somewhere inside it. MailFathom therefore cuts every message's extracted text
 into overlapping passages — chunks — and stores each of them with the span it came from and a hash that identifies it.
 
-Nothing retrieves chunks yet. They exist because the passage, not the message, is what a vector will later be produced
+Nothing retrieves chunks yet. They exist because the passage, not the message, is what a vector is produced
 for, and because deriving them is free: chunking reaches no provider, opens no connection, and costs an instance with no
 embedding provider configured nothing but the rows. [Body text and the lexical index](imap-synchronization.md#body-text-and-the-lexical-index)
 describes the text they are cut from, and [Stored email schema](../architecture/stored-email-schema.md#message-chunks)
@@ -117,4 +117,4 @@ from markup and read from a plain-text part are worth different amounts, so they
 
 ## What is not here
 
-Producing an embedding of any kind. The table a vector hangs on exists — [Stored vectors](../architecture/stored-email-schema.md#stored-vectors) describes it, and a vector is keyed on the chunk it was produced for — but nothing fills it, no index is built over it, and no embedding provider is reached. Ranking of any kind, and any change to what `search_emails` returns. Chunking attachment payloads, which extraction never opens in the first place.
+Deciding when to embed a chunk, and storing the vector that results. The table a vector hangs on exists — [Stored vectors](../architecture/stored-email-schema.md#stored-vectors) describes it, and a vector is keyed on the chunk it was produced for — and the boundary that turns a passage into a vector exists too, in [Embedding generation](embedding-generation.md). What is still missing between them is the worker that calls the second and writes the first, and the index built over the column. Ranking of any kind, and any change to what `search_emails` returns. Chunking attachment payloads, which extraction never opens in the first place.

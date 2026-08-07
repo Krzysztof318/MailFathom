@@ -1,6 +1,6 @@
 # Outbound resilience
 
-<!-- describes: src/Application/Resilience/**, src/Infrastructure/Resilience/**, src/Domain/Transport/**, src/Host/ServiceDefaultsExtensions.cs, src/Infrastructure/ServiceCollectionExtensions.cs -->
+<!-- describes: src/Application/Resilience/**, src/Infrastructure/Resilience/**, src/Domain/Transport/**, src/Host/ServiceDefaultsExtensions.cs, src/Infrastructure/ServiceCollectionExtensions.cs, src/AI/AiServiceCollectionExtensions.cs -->
 
 MailFathom calls dependencies it does not control: IMAP servers, SMTP servers, PostgreSQL, and chat and embedding
 providers. Each of them fails in ways that clear on their own and in ways that never will, and the difference decides
@@ -101,9 +101,13 @@ without depending on Polly. `Infrastructure` implements it per protocol family:
   recipient's mailbox. Everything that is not a temporary rejection is therefore terminal and left to the outbox.
 - **Database** — the provider answers through `DbException.IsTransient`, so MailFathom keeps no second SQLSTATE table.
   A `PersistenceConcurrencyConflictException` is terminal here on purpose; see the single-layer rule below.
-- **Provider** — the HTTP status is the provider's own statement about whether the request may be sent again. `408`,
-  `429`, and the `5xx` class are transient, an absent status means the response never arrived, and everything else is
-  terminal.
+- **Provider** — the adapter has already classified the answer and this defers to its verdict, because the provider
+  client libraries surface a refusal as their own result type rather than as an HTTP failure, and re-deriving the
+  question from a status this side never sees would produce a second opinion for the pipeline to disagree with. The
+  adapter's own rule is the same one: `408`, `429`, and the `5xx` class are worth repeating, an absent status means the
+  response never arrived, and everything else — a refused credential, a rejected request, an answer of the wrong shape
+  — is terminal. [Embedding generation](../features/embedding-generation.md#what-a-failing-call-is-classified-as)
+  carries the whole table.
 
 A caller's own cancellation is never transient, in any family. Anything unrecognized is terminal, because an
 unrecognized rejection repeated against a mail server is exactly what locks a mailbox account.
@@ -128,12 +132,18 @@ is the layer rather than something MailFathom re-implements:
   pipeline. An adapter that wants the pipeline instead removes the handler from its own registration with
   `RemoveAllResilienceHandlers`; it may not have both.
 
-  One client does that today: the transport a mailbox token request is sent over. `MailOAuthAccessTokenSource` already
-  runs the exchange under `MailAuthorizationServerInvocation`, keyed per account, so leaving the handler on would put
-  three attempts inside three and send nine token requests to an authorization server that is refusing. The removal
-  takes out what was registered before it, so it holds only while the host adds the service defaults ahead of the
-  infrastructure; `MailOAuthTokenTransportTests` is what fails if that order is ever swapped, because neither
-  registration would.
+  Two clients do that today. The first is the transport a mailbox token request is sent over.
+  `MailOAuthAccessTokenSource` already runs the exchange under `MailAuthorizationServerInvocation`, keyed per account,
+  so leaving the handler on would put three attempts inside three and send nine token requests to an authorization
+  server that is refusing. The removal takes out what was registered before it, so it holds only while the host adds
+  the service defaults ahead of the infrastructure; `MailOAuthTokenTransportTests` is what fails if that order is ever
+  swapped, because neither registration would.
+
+  The second is the transport an embedding request is sent over. `ProviderTextEmbeddingGenerator` runs the call under
+  `AiProviderInvocation`, keyed per endpoint alias so one unreachable provider does not open the circuit the others are
+  served through. There is a third layer to switch off here rather than two: the provider client library retries `408`,
+  `429`, and the `5xx` class on its own, and its retry policy is therefore set to zero attempts at construction — a
+  layer beneath the pipeline would be invisible to the classification that decides what may be repeated at all.
 - **EF Core.** `EnableRetryOnFailure` is deliberately not configured. The obstacle is not the unit of work: with a
   retrying execution strategy each query and each `SaveChangesAsync` is already replayed as its own retriable unit. It
   is the *user-initiated* transaction. `PersistenceSessionFactory` opens one with `BeginTransactionAsync` for every
