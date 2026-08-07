@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Chunking;
+using MailFathom.Application.Emails.Embeddings;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Connections;
@@ -49,6 +50,32 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal const string EmailChunkOrdinalUniqueIndexName = "ix_email_chunks_email_ordinal";
 
+    /// <summary>The unique index over an embedding profile's identity, which is what makes activation idempotent.</summary>
+    /// <remarks>
+    /// Named because a losing writer is recognized by the constraint its insert violated: two operators activating the
+    /// same declaration is a race that resolves to the profile already registered, not a failure to report.
+    /// </remarks>
+    internal const string EmbeddingProfileFingerprintUniqueIndexName = "ix_embedding_profiles_identity_fingerprint";
+
+    /// <summary>The alternate key a vector row's dimension is checked against.</summary>
+    internal const string EmbeddingProfileDimensionAlternateKeyName = "ak_embedding_profiles_id_dimension";
+
+    /// <summary>The key an idempotent vector upsert conflicts on.</summary>
+    internal const string EmailEmbeddingPrimaryKeyConstraintName = "pk_email_embeddings";
+
+    /// <summary>The constraint that ties a stored vector's length to the width its profile declares.</summary>
+    internal const string EmailEmbeddingDimensionCheckConstraintName = "ck_email_embeddings_dimension";
+
+    /// <summary>The composite foreign key that refuses a width the named profile never declared.</summary>
+    /// <remarks>
+    /// Named because EF's convention would compose one from both column names and PostgreSQL would truncate it at 63
+    /// characters, leaving a permanent identifier ending in a tilde.
+    /// </remarks>
+    internal const string EmailEmbeddingProfileForeignKeyName = "fk_email_embeddings_embedding_profiles";
+
+    /// <summary>The index a whole generation is read by when it is removed.</summary>
+    internal const string EmailEmbeddingProfileIndexName = "ix_email_embeddings_profile";
+
     internal const string MailboxRefreshTokenKeyIndexName = "ix_mailbox_refresh_tokens_data_encryption_key";
 
     private readonly PostgresTextSearchConfiguration textSearchConfiguration;
@@ -84,6 +111,10 @@ internal sealed class MailFathomDbContext : DbContext
     internal DbSet<EmailSearchDocumentEntity> EmailSearchDocuments => this.Set<EmailSearchDocumentEntity>();
 
     internal DbSet<EmailChunkEntity> EmailChunks => this.Set<EmailChunkEntity>();
+
+    internal DbSet<EmbeddingProfileEntity> EmbeddingProfiles => this.Set<EmbeddingProfileEntity>();
+
+    internal DbSet<EmailEmbeddingEntity> EmailEmbeddings => this.Set<EmailEmbeddingEntity>();
 
     internal DbSet<EmailContentRepairRequestEntity> EmailContentRepairRequests => this.Set<EmailContentRepairRequestEntity>();
 
@@ -219,6 +250,9 @@ internal sealed class MailFathomDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        ConfigureEmbeddingProfile(modelBuilder);
+        ConfigureEmailEmbedding(modelBuilder);
+
         // One row per email whose stored content a read found unusable, keyed by that email so a reader meeting the
         // same damage repeatedly leaves one outstanding request rather than a row per attempt. It is deliberately a
         // table of its own rather than columns on the email: the requests are sparse, they are read as a work list,
@@ -321,6 +355,110 @@ internal sealed class MailFathomDbContext : DbContext
                 .HasIndex(document => document.SearchVector)
                 .HasDatabaseName(EmailSearchDocumentVectorIndexName)
                 .HasMethod("GIN");
+        });
+
+    /// <summary>Declares the vector spaces this deployment has embedded into.</summary>
+    /// <remarks>
+    /// <para>
+    /// The identity columns are fixed at insertion and the fingerprint over them carries a unique index, so activating a
+    /// declaration whose geometry already exists resolves to the existing row rather than inserting a second one that
+    /// would be re-embedded from scratch. Nothing in the schema stops an update of an identity column; what the schema
+    /// owns is the consequence, since a changed identity would collide with its own fingerprint or leave one describing
+    /// nothing.
+    /// </para>
+    /// <para>
+    /// The alternate key over the identifier and the dimension exists for one reader: <see cref="EmailEmbeddingEntity" />
+    /// points a composite foreign key at it, which is the only way a check constraint — which sees one row — can be made
+    /// to enforce a width this table declares.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureEmbeddingProfile(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<EmbeddingProfileEntity>(entity =>
+        {
+            entity.ToTable("embedding_profiles");
+            entity.HasKey(profile => profile.Id);
+            entity.Property(profile => profile.Id).ValueGeneratedNever();
+
+            entity.Property(profile => profile.Provider)
+                .HasMaxLength(EmbeddingProfileIdentity.MaximumProviderLength)
+                .IsRequired();
+            entity.Property(profile => profile.ModelIdentifier)
+                .HasMaxLength(EmbeddingProfileIdentity.MaximumModelIdentifierLength)
+                .IsRequired();
+            entity.Property(profile => profile.ModelVersion)
+                .HasMaxLength(EmbeddingProfileIdentity.MaximumModelVersionLength);
+            entity.Property(profile => profile.PassageInstruction)
+                .HasMaxLength(EmbeddingInputPreparation.MaximumPassageInstructionLength);
+
+            // Stored as text for the reason every other enum column here is: the value stays readable in an ad-hoc audit
+            // query and survives any later reordering of the enum.
+            entity.Property(profile => profile.DistanceMetric).HasConversion<string>().HasMaxLength(64).IsRequired();
+            entity.Property(profile => profile.LifecycleState).HasConversion<string>().HasMaxLength(64).IsRequired();
+
+            // Fixed length because a SHA-256 digest has one, and text rather than `bytea` because activation compares
+            // this value and an operator reading a profile reads it.
+            entity.Property(profile => profile.IdentityFingerprint)
+                .HasMaxLength(EmbeddingProfileFingerprint.Length)
+                .IsFixedLength()
+                .IsRequired();
+
+            entity.HasIndex(profile => profile.IdentityFingerprint)
+                .IsUnique()
+                .HasDatabaseName(EmbeddingProfileFingerprintUniqueIndexName);
+
+            entity.HasAlternateKey(profile => new { profile.Id, profile.Dimension })
+                .HasName(EmbeddingProfileDimensionAlternateKeyName);
+        });
+
+    /// <summary>Declares the vector column and the two constraints that keep a stored vector meaning what its profile says.</summary>
+    /// <remarks>
+    /// <para>
+    /// The column is pgvector's dimensionless <c>vector</c>, so two profiles of different widths coexist in one table and
+    /// each is served by an expression index created when it is activated. The width is enforced instead by a pair: a
+    /// composite foreign key onto the profile's own dimension, which refuses a width the profile never declared, and a
+    /// check constraint comparing that column against the stored vector's actual length. Neither half works alone —
+    /// PostgreSQL evaluates a check against one row, so without the foreign key the check would only prove a vector
+    /// agrees with a number beside it.
+    /// </para>
+    /// <para>
+    /// The chunk cascades and the profile does not. Deleting a message must reach every vector derived from it, which is
+    /// what the cascade makes structural rather than a rule somebody has to remember; a profile, by contrast, is what a
+    /// stored vector's attribution points at, so the schema refuses to remove one while a vector still names it.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureEmailEmbedding(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<EmailEmbeddingEntity>(entity =>
+        {
+            entity.ToTable(
+                "email_embeddings",
+                table => table.HasCheckConstraint(
+                    EmailEmbeddingDimensionCheckConstraintName,
+                    $"vector_dims(\"{nameof(EmailEmbeddingEntity.Embedding)}\") = \"{nameof(EmailEmbeddingEntity.Dimension)}\""));
+
+            // The chunk and the profile together, because that pair is what a vector is: re-embedding a passage under
+            // the profile already serving it replaces the row rather than adding one. Named so an idempotent upsert has
+            // a constraint to conflict on.
+            entity.HasKey(embedding => new { embedding.EmailChunkId, embedding.EmbeddingProfileId })
+                .HasName(EmailEmbeddingPrimaryKeyConstraintName);
+
+            entity.Property(embedding => embedding.Embedding).HasColumnType("vector").IsRequired();
+
+            entity.HasOne(embedding => embedding.EmailChunk)
+                .WithMany(chunk => chunk.Embeddings)
+                .HasForeignKey(embedding => embedding.EmailChunkId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Declared rather than left to the foreign key's own convention, because a superseded generation is deleted
+            // in bounded batches read by profile, and that read would otherwise scan every vector in the table.
+            entity.HasIndex(embedding => new { embedding.EmbeddingProfileId, embedding.Dimension })
+                .HasDatabaseName(EmailEmbeddingProfileIndexName);
+
+            entity.HasOne(embedding => embedding.EmbeddingProfile)
+                .WithMany(profile => profile.Embeddings)
+                .HasForeignKey(embedding => new { embedding.EmbeddingProfileId, embedding.Dimension })
+                .HasPrincipalKey(profile => new { profile.Id, profile.Dimension })
+                .HasConstraintName(EmailEmbeddingProfileForeignKeyName)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
     /// <summary>Declares the indexes mailbox reads are planned against, and with them the timeline ordering contract.</summary>

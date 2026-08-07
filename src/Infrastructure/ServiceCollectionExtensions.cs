@@ -149,6 +149,9 @@ public static class ServiceCollectionExtensions
             var connectionStringProvider = provider.GetRequiredService<PostgresConnectionStringProvider>();
             var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionStringProvider.ConnectionString);
             connectionStringProvider.SupplyThePasswordPerConnection(dataSourceBuilder);
+            // The vector type is resolved per data source rather than per context, so a pool built without this reads a
+            // stored embedding as an unknown type at the first query instead of failing where the mapping was declared.
+            dataSourceBuilder.UseVector();
 
             return dataSourceBuilder.Build();
         });
@@ -158,7 +161,7 @@ public static class ServiceCollectionExtensions
         // unit of work to Database.CreateExecutionStrategy().ExecuteAsync so the strategy can replay it whole, and
         // dropping OutboundDependency.DatabaseCommandExecution from those paths so the two never stack.
         services.AddDbContext<MailFathomDbContext>((provider, options) =>
-            options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()));
+            options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>(), npgsql => npgsql.UseVector()));
         services.AddScoped<IPersistenceSessionFactory, PersistenceSessionFactory>();
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();
         // Registered here rather than beside the chunker it calls, because what it is is a table: it decides which

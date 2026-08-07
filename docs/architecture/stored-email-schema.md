@@ -1,6 +1,6 @@
 # Stored email schema
 
-<!-- describes: src/Infrastructure/Persistence/**, src/Domain/Emails/** -->
+<!-- describes: src/Infrastructure/Persistence/**, src/Domain/Emails/**, src/Application/Emails/Embeddings/** -->
 
 `stored_emails` holds the normalized metadata a mailbox timeline is read from. Its raw MIME lives in a separate one-to-one table, `email_message_contents`, and the text derived from that MIME lives in a third, `email_search_documents`, so nothing that lists or filters mail ever loads a `bytea` value, a body's worth of text, or a search vector — let alone tracks one in the change tracker.
 
@@ -66,6 +66,45 @@ The key is a surrogate UUIDv7 rather than the email and the ordinal together, be
 
 Only a message that yielded text has rows here, and deleting a message cascades to them.
 
+## Embedding profiles
+
+`embedding_profiles` holds one row per vector space this deployment has embedded into. Nothing writes one yet — the row is created by the activation that takes a declared model up and starts spending against it — but the columns are what a stored vector's attribution will point at, and they are permanent from this migration onwards.
+
+A profile is **the geometry of a vector space and nothing else**: `Provider`, `ModelIdentifier`, `ModelVersion` where the provider exposes one, `Dimension`, `DistanceMetric`, and the three columns that make up the input preparation — `InputCharacterLimit`, `PassageInstruction`, and `NormalizesVector`. Those are exactly the properties that decide whether two vectors can be compared. [ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md) is where each of them was argued.
+
+Three things about that list are decisions rather than defaults.
+
+**The chunk boundary rules are not part of it.** They belong to the chunk's own content hash, so a vector is attributable to both halves of what produced it — the chunk row says what text was embedded and under which rules, this row says what embedded it. Folding the rules in here would price a boundary change, which reaches no network, as a full paid re-embed of the mailbox. [Message chunks](../features/message-chunks.md#what-the-hash-covers) describes the half this table does not carry.
+
+**`Provider` names the vendor whose model defines the space, not the endpoint it is reached through.** That is what lets one profile be served by a chain of endpoints offering the same model, where the endpoint can fail over without the vector space changing underneath vectors already stored. It is a vendor-supplied name stored verbatim, like `ModelIdentifier`, because neither set is MailFathom's to close.
+
+**`Dimension` is the width the stored vectors actually have**, never the model's nominal one. Where a model is narrowed to what the database can index, the narrowed number is what belongs here; a profile claiming the nominal width would be describing vectors that do not exist.
+
+`IdentityFingerprint` is a SHA-256 digest over every column above, written as sixty-four lowercase hexadecimal characters, and `ix_embedding_profiles_identity_fingerprint` is unique over it. That index is what makes activation idempotent: re-declaring a geometry that is already registered resolves to the row that exists rather than inserting a second one whose vectors would be produced from scratch for nothing, so returning to a previous model is a switch rather than a duplicate. Every field of the digest is length-prefixed and every number is big-endian, and an absent optional value is written as a presence marker rather than skipped, so the encoding is one-to-one.
+
+What stays mutable is the lifecycle: `LifecycleState` — building, active, or superseded — with `RegisteredAt`, and `ActivatedAt` and `SupersededAt`, each null until its event has happened. **There is no generation counter.** The profile *is* the generation, so two generations coexisting while a new one is built are two rows, and no read path has a second field it must remember to consult.
+
+Nothing operational reaches this table. The endpoint address, the credential, the batch size, the request rate, the concurrency, and the spending ceilings are configuration, which is what makes rotating a key or raising a rate limit an edit rather than a re-embed — and what means no column here can be edited into disagreeing with the vectors it describes.
+
+## Stored vectors
+
+`email_embeddings` holds one vector per chunk per profile. Its key is `(EmailChunkId, EmbeddingProfileId)`, named `pk_email_embeddings`, because that pair is what a vector *is*: re-embedding a passage under the profile already serving it replaces the row rather than adding one, and the constraint is what an idempotent upsert conflicts on. Nothing references a vector row, so unlike a chunk it needs no identifier of its own.
+
+`Embedding` is pgvector's **dimensionless `vector`** rather than `vector(N)`. That is what lets two profiles of different widths share one table, each reachable by an expression index built when that profile is activated; declaring a width on the column would fix the whole table to one profile's geometry. Before such an index exists, exact vector search remains correct and slower.
+
+Dropping the width from the column does not drop it from the schema, and the pair of constraints that replaces it is the point of the table's shape:
+
+| Constraint | What it refuses |
+|---|---|
+| `ck_email_embeddings_dimension` | A vector whose actual length disagrees with the `Dimension` column beside it |
+| `fk_email_embeddings_embedding_profiles` on `(EmbeddingProfileId, Dimension)` → `ak_embedding_profiles_id_dimension` | A `Dimension` the named profile never declared |
+
+Neither half works alone. PostgreSQL evaluates a check constraint against one row, so without the foreign key the check would only prove that a vector agrees with a number nobody constrained; without the check, the foreign key would only prove that a number matches a profile. Together they mean a provider returning a vector of an unexpected width fails at the write instead of corrupting a search. That is deliberately enforced by the database rather than by the code that writes, because a wrong-length vector is a defect no query would report — it would return a plausible-looking distance rather than an error.
+
+The two references behave differently on delete, and that is the whole erasure story. **The chunk cascades**: a vector hangs on a chunk, a chunk hangs on a stored email, so deleting a message reaches every vector derived from it without a rule anybody has to remember. **The profile restricts**: a profile is what a stored vector's attribution points at, so the schema refuses to remove one while a vector still names it. `ix_email_embeddings_profile` is what a whole generation is read by when a superseded one is removed in bounded batches; without it that read would scan every vector in the table.
+
+`GeneratedAt` records when the vector was produced, which tells a re-embed from an original one apart.
+
 ## Outstanding content repair requests
 
 `email_content_repair_requests` is one-to-one with `stored_emails` and exists only while a read has found an email's
@@ -94,10 +133,12 @@ removes a request with the email it is about.
 | `ix_stored_emails_reply_to_addresses` | `(reply_to_addresses)`, GIN | Containment tests over the `Reply-To` addresses |
 | `ix_email_search_documents_search_vector` | `(search_vector)`, GIN | Lexical search over subject, participants, and body text |
 | `ix_email_chunks_email_ordinal` | `(StoredEmailId, Ordinal)`, unique | One message's passages in reading order, and the constraint a re-cut cannot write an ordinal twice past |
+| `ix_embedding_profiles_identity_fingerprint` | `(IdentityFingerprint)`, unique | One row per vector space, which is what makes activation idempotent |
+| `ix_email_embeddings_profile` | `(EmbeddingProfileId, Dimension)` | Reading a whole generation, which is how a superseded one is removed |
 
 The recipient and search-vector indexes are GIN rather than B-tree because both serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 
-One index the architecture draft lists is still deliberately absent: the partial indexes excluding remotely deleted messages wait for specification 10, which introduces the state they would filter on.
+Two indexes the architecture draft lists are still deliberately absent. The partial indexes excluding remotely deleted messages wait for specification 10, which introduces the state they would filter on. The per-profile HNSW index over the vector column is not created by any migration at all: it is tied to one profile's dimension, so it is built when that profile is activated and dropped when the generation it serves is removed.
 
 ## The timeline ordering contract
 
@@ -120,6 +161,10 @@ Participants, subject, and thread identifiers are personal data. They are stored
 The derived search document is not a lesser classification of the same data. Body text, the copied subject and addresses, and the search vector built from them are mail content, and none of them is anonymous merely because it was derived; they inherit the retention, access, export, and erasure obligations of the message they came from. The cascade from `stored_emails` is what makes that structural rather than a rule somebody has to remember.
 
 The same holds for `email_chunks`, and one thing about it is deliberate: a chunk records the message it came from and the span inside it, and nothing else. The account, folder, sender, recipients, date, and subject a retrieval will want to cite are reached through that message rather than copied onto the passage, so cutting mail into chunks widens no access, export, or erasure surface — it only adds rows the same cascade erases.
+
+`email_embeddings` is the same again, one step further out. A vector is derived from mail content and inherits the source message's classification, retention, access, export, and erasure obligations whole; nothing about being a list of numbers makes it a lesser copy of the words it stands for, and it is not anonymous because it cannot be read back by eye. It carries no text and no coordinates of its own — the chunk it hangs on answers both — and the cascade from that chunk is what makes erasure structural rather than a rule somebody has to remember. No vector, no chunk text, and no digest reaches a log, a metric, a trace, or an error message.
+
+`embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 
 ## How this schema reaches a database
 
@@ -146,4 +191,5 @@ Every claim on this page that is a claim about PostgreSQL rather than about the 
 - The timeline indexes return rows in the order `EmailTimelinePosition.NewestFirst` describes, over data with shared and absent timestamps, and a keyset walk over that order visits every row exactly once. The `uuid` tiebreaker is the part only a server can settle.
 - The [mailbox listing read model](../features/mailbox-queries.md) issues that walk over the same data in both directions and gets the same order back, every one of its filters translates to SQL — including the array containment a recipient filter needs and the escaped pattern a subject fragment needs — and its projection leaves the change tracker empty. A predicate that does not translate is a runtime failure rather than a compiler error, which is why the read model's queries belong here as well as in the unit suite.
 - The generated search vector is computed by PostgreSQL from the subject, participants, and body beside it; the GIN index serves the query shape search issues; and query text carrying SQL statements and `tsquery` operators is read as words, matching documents whose text holds those words and leaving the table intact.
+- A stored vector cannot disagree with its profile: a vector whose length differs from the `Dimension` beside it, and a `Dimension` the named profile never declared, are both refused at the write, while the matching width is stored. Two profiles of different widths coexist in the one dimensionless column, re-registering a geometry already present is refused by the fingerprint index, and deleting a message erases the vectors derived from it while the profile they named survives.
 - The [lexical search read model](../features/lexical-email-search.md) composes that vector, `websearch_to_tsquery`, `ts_rank`, and `ts_headline` into one command PostgreSQL accepts — a malformed headline option list is a runtime failure rather than a compiler error — ranks the window it returns, cuts snippets inside the configured bounds, and leaves the change tracker empty across both of the queries it issues.

@@ -95,7 +95,7 @@ internal sealed class MailFathomDbContextDesignTimeFactory : IDesignTimeDbContex
             ?? LocalDevelopmentConnectionString;
 
         return new DbContextOptionsBuilder<MailFathomDbContext>()
-            .UseNpgsql(connectionString)
+            .UseNpgsql(connectionString, npgsql => npgsql.UseVector())
             .Options;
     }
 }
