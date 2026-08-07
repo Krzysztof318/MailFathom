@@ -1216,7 +1216,7 @@ jobs:
         shell: bash
         env:
           # The workflow token reads the pull request body; the board token is used for the project
-          # calls and nothing else, so the account-wide credential is named on the two commands that
+          # calls and nothing else, so the account-wide credential is named on each command that
           # cannot be made without it rather than on the whole step.
           GH_TOKEN: ${{ github.token }}
           BOARD_TOKEN: ${{ secrets.BOARD_PROJECT_TOKEN }}
