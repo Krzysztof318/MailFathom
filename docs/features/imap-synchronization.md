@@ -261,6 +261,37 @@ records in full — and the push session is never taken out of `IDLE` to carry a
 Nothing in this release asks for a change yet, so an account nobody has written to holds no such connection and this
 setting costs nothing.
 
+### Every change is written down before it is issued
+
+A change to a mailbox is recorded in `mailbox_mutations` before the first IMAP command goes out, and the record is
+advanced as the sequence proceeds. That ordering is the whole mechanism rather than bookkeeping beside it: a relocation
+on a server without `MOVE` is a copy, a flag, and an expunge, and a process that dies between any two of them leaves a
+mailbox nothing can interpret afterwards. A second run reads the record and continues from the stage it names, so the
+message ends up filed once whichever command the stop landed between.
+
+The record answers three questions with one row.
+
+**Whether asking again is the same request.** Its identity is the email occurrence, the mutation, and who asked — a rule
+together with the revision of it that matched, or the identity of one invocation. Two callers asking for the same change
+at the same moment both reach the database and the unique index refuses one of them, so the same request twice performs
+one change rather than two. That is enforced by the constraint rather than by a check, because no check made between
+reading and writing closes the window two concurrent writers fall through.
+
+**Where to continue from.** A relocation whose copy is confirmed removes its source without copying again; a delete
+whose flag landed reissues only the expunge; a `\Seen` change simply repeats, because the store is idempotent on the
+wire. The one case that is never retried is a placement command whose answer was never read: `COPY` issued twice is a
+second message, and nothing in the destination folder afterwards says whether the first attempt landed. Such a mutation
+is reported as an unknown outcome and stays visible for a person to resolve.
+
+**What became of it.** `MaxMutationAttempts` bounds how many attempts one change may spend, counted before each attempt
+so one that kills the process still counts. A change that spends them, or that a server has no safe way to carry, stops
+being attempted and stays readable as stuck rather than looking busy forever.
+
+The record holds no mail. A folder path, a UID, a mutation name, a requester identity, and a five-digit failure code are
+all it carries, and it is removed with the email it describes — including when the change it recorded was that email's
+deletion. [Stored email schema](../architecture/stored-email-schema.md#recorded-mailbox-mutations) states the columns and
+the stages in full.
+
 ### Renewal
 
 **`PushRenewalInterval` is not a polling interval, despite its name.** It bounds the lifetime of a *single* `IDLE`

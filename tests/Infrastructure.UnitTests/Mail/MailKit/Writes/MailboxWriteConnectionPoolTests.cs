@@ -41,12 +41,12 @@ public sealed class MailboxWriteConnectionPoolTests
         // Act
         await using (var first = await harness.OpenSessionAsync())
         {
-            await first.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, CancellationToken.None);
+            await first.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, new RecordingMailboxMutationJournal(), CancellationToken.None);
         }
 
         await using (var second = await harness.OpenSessionAsync())
         {
-            await second.SetSeenAsync(CreateOccurrenceId(43U), isSeen: true, CancellationToken.None);
+            await second.SetSeenAsync(CreateOccurrenceId(43U), isSeen: true, new RecordingMailboxMutationJournal(), CancellationToken.None);
         }
 
         // Assert
@@ -75,7 +75,7 @@ public sealed class MailboxWriteConnectionPoolTests
 
         await using (var first = await harness.OpenSessionAsync())
         {
-            await first.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, CancellationToken.None);
+            await first.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, new RecordingMailboxMutationJournal(), CancellationToken.None);
         }
 
         // Act
@@ -83,7 +83,7 @@ public sealed class MailboxWriteConnectionPoolTests
 
         await using (var second = await harness.OpenSessionAsync())
         {
-            await second.SetSeenAsync(CreateOccurrenceId(43U), isSeen: true, CancellationToken.None);
+            await second.SetSeenAsync(CreateOccurrenceId(43U), isSeen: true, new RecordingMailboxMutationJournal(), CancellationToken.None);
         }
 
         // Assert
@@ -113,7 +113,7 @@ public sealed class MailboxWriteConnectionPoolTests
 
         await using (var armingSession = await harness.OpenSessionAsync())
         {
-            await armingSession.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, CancellationToken.None);
+            await armingSession.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, new RecordingMailboxMutationJournal(), CancellationToken.None);
         }
 
         // Act
@@ -123,7 +123,7 @@ public sealed class MailboxWriteConnectionPoolTests
         // The eviction runs from a timer callback nothing awaits, so without waiting for it here the assertions below
         // would run before a wrongly-scheduled close had touched anything and pass whatever it went on to do.
         await harness.Pool.WaitForPendingEvictionsAsync();
-        await heldSession.SetSeenAsync(CreateOccurrenceId(43U), isSeen: true, CancellationToken.None);
+        await heldSession.SetSeenAsync(CreateOccurrenceId(43U), isSeen: true, new RecordingMailboxMutationJournal(), CancellationToken.None);
 
         // Assert
         Assert.Equal(0, client.DisconnectCount);
@@ -203,7 +203,7 @@ public sealed class MailboxWriteConnectionPoolTests
         await heldSession.DisposeAsync();
 
         await using var resumedSession = await contendingSession;
-        await resumedSession.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, CancellationToken.None);
+        await resumedSession.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, new RecordingMailboxMutationJournal(), CancellationToken.None);
 
         Assert.Equal(1, client.ConnectCount);
         Assert.Equal(0, client.DisconnectCount);
@@ -230,12 +230,12 @@ public sealed class MailboxWriteConnectionPoolTests
         // Act
         await using (var inbox = await harness.OpenSessionAsync())
         {
-            await inbox.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, CancellationToken.None);
+            await inbox.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, new RecordingMailboxMutationJournal(), CancellationToken.None);
         }
 
         await using (var drafts = await harness.OpenSessionAsync(DraftsFolder))
         {
-            await drafts.SetSeenAsync(CreateOccurrenceIn(DraftsFolder, 43U), isSeen: true, CancellationToken.None);
+            await drafts.SetSeenAsync(CreateOccurrenceIn(DraftsFolder, 43U), isSeen: true, new RecordingMailboxMutationJournal(), CancellationToken.None);
         }
 
         // Assert
@@ -265,7 +265,7 @@ public sealed class MailboxWriteConnectionPoolTests
 
         await using (var session = await harness.OpenSessionAsync())
         {
-            await session.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, CancellationToken.None);
+            await session.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, new RecordingMailboxMutationJournal(), CancellationToken.None);
         }
 
         client.DisconnectException = new IOException("the server reset the idle connection");
@@ -296,7 +296,7 @@ public sealed class MailboxWriteConnectionPoolTests
 
         await using (var session = await harness.OpenSessionAsync())
         {
-            await session.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, CancellationToken.None);
+            await session.SetSeenAsync(CreateOccurrenceId(42U), isSeen: true, new RecordingMailboxMutationJournal(), CancellationToken.None);
         }
 
         // Act

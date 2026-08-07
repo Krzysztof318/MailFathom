@@ -180,6 +180,14 @@ try
         ConnectionIdlePeriod = provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>()
             .Current.WriteConnectionIdlePeriod,
     });
+    // A singleton for the same reason: the bound is one answer for the process, and a mutation's attempts are counted
+    // across runs rather than within one, so reading it per scope would let two runs of the same change disagree about
+    // when it has had enough.
+    builder.Services.AddSingleton(provider => new MailboxMutationOptions
+    {
+        MaximumAttempts = provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>()
+            .Current.MaxMutationAttempts,
+    });
     builder.Services.AddScoped(provider =>
     {
         var synchronizationSettings = provider.GetRequiredService<MailSynchronizationOptions>();

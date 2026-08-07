@@ -30,8 +30,16 @@ namespace MailFathom.Application.Mail.Mutations;
 /// </para>
 /// <para>
 /// A relocation and a delete are not atomic on a server that lacks <c>MOVE</c>, and nothing here makes them so. A crash
-/// between the commands leaves the mailbox in a state this session cannot describe, which is why a caller records its
-/// intent durably before it calls and reconciles afterwards rather than relying on the return value.
+/// between the commands leaves the mailbox in a state this session cannot describe, which is why every operation takes
+/// an <see cref="IMailboxMutationJournal" />: the caller has written the change down before calling, the session
+/// announces each stage of the sequence as it passes it, and a resumed attempt reads
+/// <see cref="IMailboxMutationJournal.Stage" /> and continues from there instead of starting over.
+/// </para>
+/// <para>
+/// Resuming is decided here rather than by the caller because it depends on what the connection advertises, which is
+/// this adapter's business and deliberately reaches no layer above. What the caller decides is the one thing the
+/// protocol cannot: a mutation whose placement command was issued and never acknowledged never reaches this session at
+/// all, because issuing it again would put a second message in the destination folder.
 /// </para>
 /// <para>
 /// One session is used by one caller at a time and is not safe for concurrent use. It is short-lived by design: it
@@ -43,9 +51,11 @@ public interface IMailboxWriteSession : IAsyncDisposable
     /// <summary>Moves one email out of this session's folder and into another folder of the same account.</summary>
     /// <param name="occurrenceId">The occurrence to move, which must belong to this session's account, folder, and UIDVALIDITY.</param>
     /// <param name="destinationPath">The remote path of the folder to move it into.</param>
+    /// <param name="journal">The durable record of this relocation, which the session announces each stage to and resumes from.</param>
     /// <param name="cancellationToken">Cancels the relocation.</param>
     /// <returns>Where the destination folder put the email, when the server named it.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="occurrenceId" /> does not belong to this session.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="journal" /> is <see langword="null" />.</exception>
     /// <exception cref="MailboxMutationUnsupportedException">Thrown when the server advertises neither <c>MOVE</c> nor the <c>UIDPLUS</c> the fallback needs to remove only the moved message.</exception>
     /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the relocation within its configured resilience budget.</exception>
     /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
@@ -56,13 +66,16 @@ public interface IMailboxWriteSession : IAsyncDisposable
     Task<RemoteEmailPlacement> RelocateAsync(
         EmailOccurrenceId occurrenceId,
         RemoteFolderPath destinationPath,
+        IMailboxMutationJournal journal,
         CancellationToken cancellationToken);
 
     /// <summary>Removes one email from this session's folder on the server.</summary>
     /// <param name="occurrenceId">The occurrence to remove, which must belong to this session's account, folder, and UIDVALIDITY.</param>
+    /// <param name="journal">The durable record of this deletion, which the session announces each stage to and resumes from.</param>
     /// <param name="cancellationToken">Cancels the deletion.</param>
     /// <returns>A task that completes when the server has removed the email.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="occurrenceId" /> does not belong to this session.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="journal" /> is <see langword="null" />.</exception>
     /// <exception cref="MailboxMutationUnsupportedException">Thrown when the server advertises no <c>UIDPLUS</c>, so no message-scoped expunge exists.</exception>
     /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the deletion within its configured resilience budget.</exception>
     /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
@@ -71,14 +84,19 @@ public interface IMailboxWriteSession : IAsyncDisposable
     /// nothing else, so an account's disposition for mail somebody else deleted never silently governs mail MailFathom
     /// deleted. The remote <c>\Seen</c> flag is untouched.
     /// </remarks>
-    Task DeleteAsync(EmailOccurrenceId occurrenceId, CancellationToken cancellationToken);
+    Task DeleteAsync(
+        EmailOccurrenceId occurrenceId,
+        IMailboxMutationJournal journal,
+        CancellationToken cancellationToken);
 
     /// <summary>Sets or clears the remote <c>\Seen</c> flag of one email in this session's folder.</summary>
     /// <param name="occurrenceId">The occurrence to flag, which must belong to this session's account, folder, and UIDVALIDITY.</param>
     /// <param name="isSeen"><see langword="true" /> to mark the email read; <see langword="false" /> to mark it unread.</param>
+    /// <param name="journal">The durable record of this flag change, which exists for provenance rather than for retry safety.</param>
     /// <param name="cancellationToken">Cancels the flag write.</param>
     /// <returns>A task that completes when the server has recorded the flag.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="occurrenceId" /> does not belong to this session.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="journal" /> is <see langword="null" />.</exception>
     /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the flag write within its configured resilience budget.</exception>
     /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
     /// <remarks>
@@ -86,14 +104,20 @@ public interface IMailboxWriteSession : IAsyncDisposable
     /// only operation in MailFathom that writes <c>\Seen</c>; the stored value stays a snapshot of what the server
     /// reports, written by synchronization observing the result rather than by this call.
     /// </remarks>
-    Task SetSeenAsync(EmailOccurrenceId occurrenceId, bool isSeen, CancellationToken cancellationToken);
+    Task SetSeenAsync(
+        EmailOccurrenceId occurrenceId,
+        bool isSeen,
+        IMailboxMutationJournal journal,
+        CancellationToken cancellationToken);
 
     /// <summary>Puts a second live occurrence of one email into another folder of the same account.</summary>
     /// <param name="occurrenceId">The occurrence to copy, which must belong to this session's account, folder, and UIDVALIDITY.</param>
     /// <param name="destinationPath">The remote path of the folder to copy it into.</param>
+    /// <param name="journal">The durable record of this copy, which is announced before the command goes out.</param>
     /// <param name="cancellationToken">Cancels the copy.</param>
     /// <returns>Where the destination folder put the email, when the server named it.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="occurrenceId" /> does not belong to this session.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="journal" /> is <see langword="null" />.</exception>
     /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the copy within its configured resilience budget.</exception>
     /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
     /// <remarks>
@@ -103,5 +127,6 @@ public interface IMailboxWriteSession : IAsyncDisposable
     Task<RemoteEmailPlacement> CopyAsync(
         EmailOccurrenceId occurrenceId,
         RemoteFolderPath destinationPath,
+        IMailboxMutationJournal journal,
         CancellationToken cancellationToken);
 }

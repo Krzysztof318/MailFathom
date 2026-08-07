@@ -94,6 +94,24 @@ internal sealed class MailSynchronizationOptions
     [Range(typeof(TimeSpan), "00:00:05", "00:30:00")]
     public TimeSpan WriteConnectionIdlePeriod { get; set; } = TimeSpan.FromMinutes(2);
 
+    /// <summary>Gets or sets how many attempts one recorded change to a mailbox may spend before it is given up on.</summary>
+    /// <remarks>
+    /// <para>
+    /// A change MailFathom is asked to make is written down before it is issued and attempted again from that record
+    /// until it succeeds. This is where that stops. A mail server that is refusing, a destination folder somebody
+    /// deleted, and a message another client already removed all fail identically on the next run, and repeating them
+    /// costs a login and a round trip each time while hiding the problem behind an operation that always looks busy.
+    /// </para>
+    /// <para>
+    /// It bounds attempts of the whole change rather than retries inside one, which the account's resilience pipeline
+    /// already bounds; separate attempts may be minutes or days apart. A change that spends them stops being attempted
+    /// and stays visible as stuck rather than disappearing, so raising this buys patience with a failing server and
+    /// lowering it surfaces a broken one sooner.
+    /// </para>
+    /// </remarks>
+    [Range(1, 100)]
+    public int MaxMutationAttempts { get; set; } = 5;
+
     /// <summary>Gets or sets how long shutdown waits for the work units already under way before cancelling them.</summary>
     /// <remarks>
     /// Shutdown stops scheduling immediately and only then waits, so this bounds the drain rather than delaying every
