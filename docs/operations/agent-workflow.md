@@ -316,8 +316,8 @@ That same limit is why `Queue: Next` is written by a skill rather than by an
 automation. No project workflow can set a custom single-select field, and the
 board is user-owned, which leaves only a classic account-wide token as a
 credential a GitHub Actions run could use — so the write stays where a token
-that already exists is already in use, and a pull request opened outside
-`finish-change` moves nothing.
+that already exists is already in use, and a pull request opened by neither
+`finish-change` nor `prepare-release` moves nothing.
 
 Those rules describe an issue an agent opened. A public repository also receives
 issues nobody here opened, and one arrives with no `type:*` label and no board

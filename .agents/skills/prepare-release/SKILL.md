@@ -141,7 +141,7 @@ gh api -X POST repos/Krzysztof318/MailFathom/milestones -f title='<next>'       
 gh issue list --repo Krzysztof318/MailFathom --milestone '<next>' --state all \
   --search 'Cut and publish in:title' --json number,title
 gh issue create --repo Krzysztof318/MailFathom --title 'Cut and publish the <next> release' \
-  --label type:workflow --milestone '<next>' --body-file <body>
+  --label type:workflow --milestone '<next>' --body-file <body>    # only when the search found none
 
 # What to move: open issues in the milestone being released, minus the tracking issue. `/issues` returns pull
 # requests as well, so both exclusions are the query's rather than the reader's to remember.
