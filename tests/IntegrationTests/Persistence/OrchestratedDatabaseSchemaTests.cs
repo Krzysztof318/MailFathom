@@ -84,6 +84,7 @@ public sealed class OrchestratedDatabaseSchemaTests(MailFathomOrchestrationFixtu
         PostgresTextSearchConfiguration textSearchConfiguration)
     {
         var builder = new HostApplicationBuilder();
+        builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),
