@@ -42,6 +42,7 @@ public sealed class OrchestratedDatabaseHealthTests(MailFathomOrchestrationFixtu
         var cancellationToken = TestContext.Current.CancellationToken;
 
         var builder = new HostApplicationBuilder();
+        builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),

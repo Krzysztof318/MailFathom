@@ -147,6 +147,7 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
     private static IHost ComposeHost(string connectionString)
     {
         var builder = new HostApplicationBuilder();
+        builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(connectionString, null, null),
