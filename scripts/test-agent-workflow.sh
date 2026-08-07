@@ -35,6 +35,7 @@ typo_check_bin_directory="$test_directory/typo-check-bin"
 fathom_review_bin_directory="$test_directory/fathom-review-bin"
 settle_bin_directory="$test_directory/fathom-review-settle-bin"
 submit_bin_directory="$test_directory/fathom-review-submit-bin"
+board_bin_directory="$test_directory/fathom-review-board-bin"
 invocation_log="$test_directory/dotnet-invocations.log"
 workflow_invocation_log="$test_directory/workflow-invocations.log"
 fixture_branch='agent/workflow-fixture'
@@ -1441,9 +1442,12 @@ run_fathom_review_submit() {
   local step_script="$test_directory/fathom-review-submit.sh"
   local review_directory="$test_directory/fathom-review-submit-review"
 
+  submit_step_output_file="$test_directory/fathom-review-submit-step-output"
+
   extract_fathom_review_step 'submit' "$step_script"
   write_fathom_review_collection "$review_directory"
   rm -f "$payload_file"
+  : > "$submit_step_output_file"
 
   set +e
   (
@@ -1459,6 +1463,9 @@ run_fathom_review_submit() {
     export FINDINGS="$findings"
     export REVIEW_DIRECTORY="$review_directory"
     export FAKE_REVIEW_PAYLOAD="$payload_file"
+    # The verdict the board job reads. It is written only where a review was posted, so a contract
+    # that asserts on an empty file is asserting that nothing was published.
+    export GITHUB_OUTPUT="$submit_step_output_file"
     bash "$step_script"
   ) > "$output_file" 2>&1
   submit_status=$?
@@ -1480,6 +1487,7 @@ fathom_review_anchors_a_finding_to_its_line() {
   assert_json '["RIGHT"]' '[.comments[].side]' "$payload_file"
   assert_contains '# NEEDS CHANGES' "$payload_file"
   assert_contains '**Findings** — P1: 1' "$payload_file"
+  assert_contains 'verdict=changes_requested' "$submit_step_output_file"
 }
 
 fathom_review_moves_a_finding_with_no_line_into_the_body() {
@@ -1512,6 +1520,7 @@ fathom_review_approves_when_it_finds_nothing() {
   assert_json '"APPROVE"' '.event' "$payload_file"
   assert_contains '# APPROVED' "$payload_file"
   assert_contains 'nothing above the bar' "$payload_file"
+  assert_contains 'verdict=approved' "$submit_step_output_file"
 }
 
 fathom_review_publishes_nothing_when_the_reviewer_returned_no_answer() {
@@ -1526,6 +1535,9 @@ fathom_review_publishes_nothing_when_the_reviewer_returned_no_answer() {
   ((submit_status == 0))
   [[ ! -e "$payload_file" ]]
   assert_contains 'no findings to submit' "$output_file"
+  # No review was posted, so no verdict is stated and the board job never starts. This is the half
+  # of that contract the workflow expression cannot assert on its own.
+  [[ ! -s "$submit_step_output_file" ]]
 }
 
 fathom_review_fails_when_a_finished_reviewer_returned_no_answer() {
@@ -1554,6 +1566,164 @@ fathom_review_refuses_findings_that_carry_a_credential() {
   ((submit_status == 1))
   [[ ! -e "$payload_file" ]]
   assert_contains 'shaped like a credential' "$output_file"
+}
+
+# The board step turns a published verdict into the one field the owner's views group by. Its inputs
+# are a verdict, a pull request body, and the item's current status, and every decision it takes is
+# taken from those three: which issues it reaches, which option it writes, and which statuses it
+# refuses to write over. The fake `gh` below answers the calls it makes and records the mutation
+# rather than sending it, so a contract asserts on the option id the board would have received.
+mkdir -p "$board_bin_directory"
+cat > "$board_bin_directory/gh" <<'FAKE_GH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${FAKE_BOARD_DIRECTORY:?FAKE_BOARD_DIRECTORY must identify where the board state is recorded}"
+
+arguments="$*"
+
+# The mutation is matched before the item query, because the reply to one names the field the other
+# reads and a looser order would answer the wrong call.
+if [[ "$arguments" == *'/pulls/'* ]]; then
+  cat "$FAKE_BOARD_DIRECTORY/body.txt"
+elif [[ "$arguments" == *'updateProjectV2ItemFieldValue'* ]]; then
+  printf '%s\n' "$arguments" >> "$FAKE_BOARD_DIRECTORY/mutations.txt"
+  echo '{"data":{"updateProjectV2ItemFieldValue":{"projectV2Item":{"id":"PVTI_item"}}}}'
+elif [[ "$arguments" == *'projectItems'* ]]; then
+  cat "$FAKE_BOARD_DIRECTORY/item.json"
+elif [[ "$arguments" == *'ProjectV2SingleSelectField'* ]]; then
+  cat "$FAKE_BOARD_DIRECTORY/field.json"
+else
+  echo "The board step made a call these contracts do not answer: $arguments" >&2
+  exit 1
+fi
+FAKE_GH
+chmod +x "$board_bin_directory/gh"
+
+run_fathom_review_board() {
+  local verdict="$1"
+  local body="$2"
+  local current_status="$3"
+  local output_file="$4"
+  # The ordinary case is a configured board; the contract about an unconfigured one names the empty
+  # token itself.
+  local board_token="${5-classic-token-that-is-not-real}"
+  local step_script="$test_directory/fathom-review-board.sh"
+
+  board_directory="$test_directory/fathom-review-board-state"
+  board_mutations_file="$board_directory/mutations.txt"
+
+  extract_fathom_review_step 'board' "$step_script"
+
+  rm -rf "$board_directory"
+  mkdir -p "$board_directory"
+  printf '%s' "$body" > "$board_directory/body.txt"
+  : > "$board_mutations_file"
+
+  cat > "$board_directory/field.json" <<'BOARD_FIELD'
+{"data":{"user":{"projectV2":{"id":"PVT_board","field":{"id":"PVTSSF_status","options":[
+  {"id":"option-todo","name":"Todo"},
+  {"id":"option-changes","name":"Changes requested"},
+  {"id":"option-ready","name":"Ready to merge"},
+  {"id":"option-done","name":"Done"}
+]}}}}}
+BOARD_FIELD
+
+  jq -n --arg status "$current_status" \
+    '{data: {repository: {issue: {projectItems: {nodes: [
+       {id: "PVTI_item", project: {id: "PVT_board"},
+        status: (if $status == "" then null else {name: $status} end)}
+     ]}}}}}' > "$board_directory/item.json"
+
+  set +e
+  (
+    export PATH="$board_bin_directory:$PATH"
+    export GH_TOKEN='ghs_workflowtokenthatisnotreal'
+    export BOARD_TOKEN="$board_token"
+    export REPOSITORY='Krzysztof318/MailFathom'
+    export PULL_REQUEST_NUMBER='1'
+    export VERDICT="$verdict"
+    export BOARD_OWNER='Krzysztof318'
+    export BOARD_NUMBER='4'
+    export STATUS_FIELD='Status'
+    export CLOSING_REFERENCES_SCRIPT="$source_repository_root/.github/fathom-review/collect-closing-references.sh"
+    export CLOSING_REFERENCE_LIMIT='5'
+    export APPROVED_STATUS='Ready to merge'
+    export CHANGES_REQUESTED_STATUS='Changes requested'
+    export PRESERVED_STATUSES='Done,Blocked'
+    export FAKE_BOARD_DIRECTORY="$board_directory"
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+  board_status=$?
+  set -e
+}
+
+fathom_review_moves_an_approved_pull_request_to_ready_to_merge() {
+  local output_file="$test_directory/fathom-review-board-approved-output"
+
+  run_fathom_review_board 'approved' 'Closes #12' 'In progress' "$output_file"
+
+  ((board_status == 0))
+  assert_contains 'option=option-ready' "$board_mutations_file"
+  assert_contains 'Issue 12 moved from In progress to Ready to merge' "$output_file"
+}
+
+fathom_review_records_findings_as_changes_requested() {
+  local output_file="$test_directory/fathom-review-board-changes-output"
+
+  run_fathom_review_board 'changes_requested' 'Fixes #12' 'In progress' "$output_file"
+
+  ((board_status == 0))
+  assert_contains 'option=option-changes' "$board_mutations_file"
+  assert_contains 'to Changes requested' "$output_file"
+}
+
+# A verdict that arrives after the merge must not reopen a finished item, and `Blocked` is the one
+# status a hand writes — a review says nothing about whether the issue is waiting on something
+# outside the project, so it does not get to erase that statement.
+fathom_review_leaves_a_finished_item_alone() {
+  local output_file="$test_directory/fathom-review-board-done-output"
+
+  run_fathom_review_board 'approved' 'Closes #12' 'Done' "$output_file"
+
+  ((board_status == 0))
+  [[ ! -s "$board_mutations_file" ]]
+  assert_contains 'which a review verdict does not overwrite' "$output_file"
+}
+
+fathom_review_leaves_a_blocked_item_alone() {
+  local output_file="$test_directory/fathom-review-board-blocked-output"
+
+  run_fathom_review_board 'changes_requested' 'Closes #12' 'Blocked' "$output_file"
+
+  ((board_status == 0))
+  [[ ! -s "$board_mutations_file" ]]
+  assert_contains 'Issue 12 is Blocked' "$output_file"
+}
+
+# A bare mention is not a contract, and GitHub closes nothing on one, so neither does this. The
+# reviewer's own collection reads the same script, which is what keeps the two readings identical.
+fathom_review_moves_nothing_for_a_pull_request_that_closes_no_issue() {
+  local output_file="$test_directory/fathom-review-board-unlinked-output"
+
+  run_fathom_review_board 'approved' 'Follows #12 and refactors the loop.' 'Todo' "$output_file"
+
+  ((board_status == 0))
+  [[ ! -s "$board_mutations_file" ]]
+  assert_contains 'closes no issue' "$output_file"
+}
+
+# Writing a user-owned project needs a classic token with the `project` scope, which is account-wide.
+# Until one is stored the job says so and ends green: the workflow gates nothing, so a missing
+# credential must not turn a review red.
+fathom_review_writes_no_status_without_the_board_token() {
+  local output_file="$test_directory/fathom-review-board-untokened-output"
+
+  run_fathom_review_board 'approved' 'Closes #12' 'In progress' "$output_file" ''
+
+  ((board_status == 0))
+  [[ ! -s "$board_mutations_file" ]]
+  assert_contains 'BOARD_PROJECT_TOKEN is not set' "$output_file"
 }
 
 # The `describes:` marker is what tells a reviewer which pages a change to the code obliges, and it is
@@ -3277,6 +3447,12 @@ run_test fathom_review_approves_when_it_finds_nothing
 run_test fathom_review_publishes_nothing_when_the_reviewer_returned_no_answer
 run_test fathom_review_fails_when_a_finished_reviewer_returned_no_answer
 run_test fathom_review_refuses_findings_that_carry_a_credential
+run_test fathom_review_moves_an_approved_pull_request_to_ready_to_merge
+run_test fathom_review_records_findings_as_changes_requested
+run_test fathom_review_leaves_a_finished_item_alone
+run_test fathom_review_leaves_a_blocked_item_alone
+run_test fathom_review_moves_nothing_for_a_pull_request_that_closes_no_issue
+run_test fathom_review_writes_no_status_without_the_board_token
 run_test every_documentation_page_declares_what_it_describes
 run_test every_describes_pattern_matches_something_that_exists
 run_test every_published_documentation_page_is_in_a_table_of_contents
