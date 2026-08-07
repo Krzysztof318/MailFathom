@@ -80,6 +80,30 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode MailboxMutationUnsupported { get; } = new(25001);
 
+    /// <summary>Gets subcategory 5, mutation support: a command that must never be issued twice went out and its answer never came back.</summary>
+    /// <remarks>
+    /// It is its own code because it is the one mutation failure that must not be retried. <c>UID COPY</c> issued twice
+    /// puts two messages in the destination folder, and nothing in the mailbox afterwards distinguishes a copy
+    /// MailFathom made from one a person made, so the mutation is left in its recorded stage for a person or for
+    /// convergence to resolve rather than attempted again.
+    /// </remarks>
+    public static MailFathomErrorCode MailboxMutationOutcomeUnknown { get; } = new(25002);
+
+    /// <summary>Gets subcategory 5, mutation support: a mutation spent its bounded attempts without completing.</summary>
+    /// <remarks>
+    /// The code names the bound rather than whatever failed on the way, which stays on the record as the last failure.
+    /// A mutation reaching this is visible as stuck instead of being retried forever.
+    /// </remarks>
+    public static MailFathomErrorCode MailboxMutationAttemptsExhausted { get; } = new(25003);
+
+    /// <summary>Gets subcategory 5, mutation support: a mutation ended in a failure this system does not classify.</summary>
+    /// <remarks>
+    /// A mutation record needs a code for every failure it can end in, because that field is what an operator reads. A
+    /// failure MailFathom did not raise itself has none of its own, and one generic code is the honest answer rather
+    /// than borrowing the nearest classified one.
+    /// </remarks>
+    public static MailFathomErrorCode MailboxMutationFailedUnexpectedly { get; } = new(25004);
+
     #endregion
 
     #region Category 3 — Persistence
@@ -187,6 +211,9 @@ public readonly record struct MailFathomErrorCode
         MailboxFolderRecreated,
         MailboxAnswerIncomplete,
         MailboxMutationUnsupported,
+        MailboxMutationOutcomeUnknown,
+        MailboxMutationAttemptsExhausted,
+        MailboxMutationFailedUnexpectedly,
         PersistenceConcurrencyConflict,
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,

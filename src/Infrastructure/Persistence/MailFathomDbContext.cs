@@ -6,6 +6,7 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -78,6 +79,17 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal const string MailboxRefreshTokenKeyIndexName = "ix_mailbox_refresh_tokens_data_encryption_key";
 
+    /// <summary>The constraint a mutation's idempotency identity is enforced by, and which a losing writer is recognized from.</summary>
+    /// <remarks>
+    /// Named because the name is how the same request arriving twice is told apart from a genuine failure. Two callers
+    /// asking for the same change reach the database together and one of them violates this index; that is the second
+    /// caller learning the first got there, not a fault, and the session translates it into the conflict the retry
+    /// policy loops on.
+    /// </remarks>
+    internal const string MailboxMutationIdentityUniqueIndexName = "ix_mailbox_mutations_identity";
+
+    internal const string MailboxMutationOutstandingIndexName = "ix_mailbox_mutations_outstanding";
+
     private readonly PostgresTextSearchConfiguration textSearchConfiguration;
 
     /// <summary>Initializes a new MailFathom EF Core context.</summary>
@@ -123,6 +135,8 @@ internal sealed class MailFathomDbContext : DbContext
     internal DbSet<SynchronizationCheckpointEntity> SynchronizationCheckpoints => this.Set<SynchronizationCheckpointEntity>();
 
     internal DbSet<MailboxRefreshTokenEntity> MailboxRefreshTokens => this.Set<MailboxRefreshTokenEntity>();
+
+    internal DbSet<MailboxMutationEntity> MailboxMutations => this.Set<MailboxMutationEntity>();
 
     /// <inheritdoc />
     /// <remarks>
@@ -314,6 +328,101 @@ internal sealed class MailFathomDbContext : DbContext
             // holding a value under the old one, and without this it would read every row to answer that.
             entity.HasIndex(token => token.DataEncryptionKeyId).HasDatabaseName(MailboxRefreshTokenKeyIndexName);
         });
+
+        ConfigureMailboxMutation(modelBuilder);
+    }
+
+    /// <summary>Declares the durable record every change to a remote mailbox is written to before it is issued.</summary>
+    /// <remarks>
+    /// <para>
+    /// The row hangs on the local email and cascades from it, which is what makes the mutation history reachable by that
+    /// email's deletion path rather than by a second erasure rule somebody has to remember. A mutation history says
+    /// where a person's mail has been and what was done to it, so it inherits the retention and deletion obligations of
+    /// the mail it describes — including when the mutation recorded was the deletion.
+    /// </para>
+    /// <para>
+    /// The source occurrence is stored beside that association rather than read back through it. The email moves; the
+    /// command that was issued was aimed at one folder, UIDVALIDITY, and UID, and a record that followed the email would
+    /// stop describing it.
+    /// </para>
+    /// <para>
+    /// Nothing here is mail content. A folder path, a UID, a mutation name, and a requester identity are the server's
+    /// own or MailFathom's own names for things, which is what lets the record be written without the message.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureMailboxMutation(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<MailboxMutationEntity>(entity =>
+        {
+            entity.ToTable("mailbox_mutations");
+            entity.HasKey(mutation => mutation.Id);
+            entity.Property(mutation => mutation.Id).ValueGeneratedNever();
+            entity.Property(mutation => mutation.MailboxAccountId).HasMaxLength(128);
+            entity.Property(mutation => mutation.Mutation).HasMaxLength(64).IsRequired();
+            entity.Property(mutation => mutation.RequesterIdentity)
+                .HasMaxLength(MailboxMutationRequester.MaximumIdentityLength)
+                .IsRequired();
+            entity.Property(mutation => mutation.DestinationFolderPath)
+                .HasMaxLength(MailboxMutationEntity.MaximumDestinationPathLength);
+            entity.Property(mutation => mutation.DestinationHierarchyDelimiter).HasMaxLength(1);
+
+            // Stored as text for the reason the content-availability reason is: both stay readable in an ad-hoc audit
+            // query and survive any later reordering of their enum.
+            entity.Property(mutation => mutation.RequesterOrigin).HasConversion<string>().HasMaxLength(64).IsRequired();
+            entity.Property(mutation => mutation.Stage).HasConversion<string>().HasMaxLength(64).IsRequired();
+
+            // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
+            entity.Property(mutation => mutation.ConcurrencyVersion).IsRowVersion();
+
+            ConfigureMailboxMutationIndexes(entity);
+
+            entity.HasOne(mutation => mutation.StoredEmail)
+                .WithMany(email => email.Mutations)
+                .HasForeignKey(mutation => mutation.StoredEmailId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(mutation => mutation.MailFolder)
+                .WithMany()
+                .HasForeignKey(mutation => mutation.MailFolderId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+    /// <summary>Declares the uniqueness a mutation's idempotency rests on, and the index its unfinished work is read through.</summary>
+    /// <remarks>
+    /// <para>
+    /// The unique index is the idempotency guarantee itself rather than a support for one. Two callers asking for the
+    /// same change at the same moment both pass any check the application could make between reading and writing, and
+    /// only the database closes that window; the same request twice therefore performs one mutation because the second
+    /// insert is refused, not because the code declined to attempt it.
+    /// </para>
+    /// <para>
+    /// Its columns are exactly the identity the issue settled: the email occurrence, the requester, and the mutation.
+    /// The occurrence is the folder binding with its UIDVALIDITY and UID rather than the local email, so an email that
+    /// has moved is a new occurrence and the same rule asking about it again asks afresh.
+    /// </para>
+    /// <para>
+    /// The second index answers the operator's question — which changes are in flight and which are stuck — and is
+    /// filtered to the rows that can be either. A completed mutation never is, so keeping it in the structure would
+    /// grow the index with the mailbox's whole mutation history rather than with what is outstanding. An abandoned one
+    /// stays in, deliberately: giving up on a change is what makes it stop being retried, and it would be worth nothing
+    /// if it also made the change stop being seen.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureMailboxMutationIndexes(EntityTypeBuilder<MailboxMutationEntity> entity)
+    {
+        entity.HasIndex(mutation => new
+        {
+            mutation.MailFolderId,
+            mutation.UidValidity,
+            mutation.Uid,
+            mutation.RequesterOrigin,
+            mutation.RequesterIdentity,
+            mutation.Mutation,
+        })
+            .IsUnique()
+            .HasDatabaseName(MailboxMutationIdentityUniqueIndexName);
+
+        entity.HasIndex(mutation => new { mutation.MailboxAccountId, mutation.RecordedAt })
+            .HasDatabaseName(MailboxMutationOutstandingIndexName)
+            .HasFilter($"\"{nameof(MailboxMutationEntity.Stage)}\" <> '{nameof(MailboxMutationStage.Completed)}'");
     }
 
     /// <summary>Declares the derived search document and the lexical index built over it.</summary>

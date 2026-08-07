@@ -120,6 +120,59 @@ rather than a retry's: two readers meeting the same damaged message concurrently
 Nothing drains the table yet — performing the repair belongs to the synchronizer — and the cascade from `stored_emails`
 removes a request with the email it is about.
 
+## Recorded mailbox mutations
+
+`mailbox_mutations` holds one row per change MailFathom has been asked to make to a remote mailbox, written **before**
+the first IMAP command is issued and advanced as the sequence proceeds. A move over IMAP without the `MOVE` extension is
+three commands — copy, flag deleted, expunge — and a process can die between any two of them; retrying from the
+beginning would put a second copy in the destination folder, and skipping the retry would leave the message in both.
+Neither state is recoverable by looking at the mailbox afterwards, because both are indistinguishable from a move
+somebody made by hand. Writing the intent down first is what makes the sequence resumable.
+
+Each row carries the local email, the source occurrence it was aimed at — the folder binding with its `UidValidity` and
+`Uid` — the `Mutation` by name, the requester, the parameters that mutation takes, and how far it has got. The source
+occurrence is stored beside the `StoredEmailId` rather than read back through it, because the email moves: the command
+that was issued was aimed at one folder and one UID, and a record that followed the email would stop describing it.
+
+`Stage` is the sequence's own vocabulary rather than a generic pending and done, because it is what a retry resumes
+from:
+
+| Stage | What it says | Which mutations reach it |
+|---|---|---|
+| `Recorded` | The intent is durable and nothing has reached the server | all four |
+| `PlacementIssued` | The command that would place the email has gone out and its answer was never read | relocate, copy |
+| `PlacementConfirmed` | The server acknowledged the placement, and named it where it supplied `COPYUID` | relocate, copy |
+| `SourceFlaggedDeleted` | The source carries `\Deleted` and only the expunge remains | relocate over the fallback, delete |
+| `Completed` | The change is made, and asking again performs nothing | all four |
+| `Abandoned` | Nothing will attempt it again, and `LastFailureCode` says what ended it | all four |
+
+`PlacementIssued` is the one stage a retry may not act on. A `COPY` issued twice is a second message rather than a
+repeat of the first, so a mutation found there is reported as an unknown outcome, has
+`MailboxMutationOutcomeUnknown` (25002) written to `LastFailureCode` so an operator reading the row sees why it is
+stuck, and is left for a person to resolve. Every other stage resumes: a relocation found at `PlacementConfirmed`
+removes its source without copying again, and a delete found at `SourceFlaggedDeleted` reissues only the expunge. A
+`\Seen` change never leaves `Recorded` until it completes — the store is idempotent on the wire, and its record exists
+for provenance rather than for retry safety.
+
+`RequiresSourceRemoval` is what makes that resumption safe, and it is written together with `PlacementIssued` rather
+than worked out later. `MOVE` removes the source as part of the same command and a copy does not, so
+`PlacementConfirmed` means opposite things depending on which ran — and the connection a retry lands on is not required
+to be the one that answered the first. A fallback relocation resumed against a server that now advertises `MOVE` would
+otherwise be read as already finished, leaving the email in both folders permanently with nothing left to surface it.
+That is the duplication the record exists to prevent, so the answer is durable rather than inferred. It is a fact about
+the sequence rather than a name for the operation: which protocol path carried a relocation still reaches no log above
+`Debug`, no span, and no metric dimension, exactly as [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+requires.
+
+`AttemptCount` is written before each attempt rather than after it, which is what makes an attempt that kills the
+process count against `MailSynchronization:MaxMutationAttempts`. Spending that bound moves the row to `Abandoned`, and a
+row that is not `Completed` stays in the answer an operator reads — being given up on is what stops a change being
+retried, and it would be worth nothing if it also stopped the change being seen.
+
+No mail content is here. A folder path, a UID, a mutation name, and a requester identity are the server's own or
+MailFathom's own names for things, and a failure is kept as its five-digit code rather than as the message text
+assembled at the failure site.
+
 ## Indexes
 
 | Index | Columns | Purpose |
@@ -135,6 +188,8 @@ removes a request with the email it is about.
 | `ix_email_chunks_email_ordinal` | `(StoredEmailId, Ordinal)`, unique | One message's passages in reading order, and the constraint a re-cut cannot write an ordinal twice past |
 | `ix_embedding_profiles_identity_fingerprint` | `(IdentityFingerprint)`, unique | One row per vector space, which is what makes activation idempotent |
 | `ix_email_embeddings_profile` | `(EmbeddingProfileId, Dimension)` | Reading a whole generation, which is how a superseded one is removed |
+| `ix_mailbox_mutations_identity` | `(MailFolderId, UidValidity, Uid, RequesterOrigin, RequesterIdentity, Mutation)`, unique | A mutation's idempotency identity, which is what makes the same request twice perform one change |
+| `ix_mailbox_mutations_outstanding` | `(MailboxAccountId, RecordedAt)` where the stage is not `Completed` | The changes an operator asks about: those in flight and those given up on |
 
 The recipient and search-vector indexes are GIN rather than B-tree because both serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 
@@ -159,6 +214,8 @@ Unit tests pin the contract, including where an undated message lands. That the 
 Participants, subject, and thread identifiers are personal data. They are stored because a timeline and a filter cannot work without them, and the columns above are the minimum that supports the planned queries — which is why display names other than the sender's, and the attachment list, are not among them. No projection introduced here selects raw MIME, and the content relationship stays unloaded by default so a mailbox query cannot pull a `bytea` value into the change tracker by accident.
 
 The derived search document is not a lesser classification of the same data. Body text, the copied subject and addresses, and the search vector built from them are mail content, and none of them is anonymous merely because it was derived; they inherit the retention, access, export, and erasure obligations of the message they came from. The cascade from `stored_emails` is what makes that structural rather than a rule somebody has to remember.
+
+`mailbox_mutations` is derived personal data too, and for a reason worth stating plainly: a mutation history says where a person's mail has been and what was done to it. It therefore inherits the retention and deletion obligations of the email it describes rather than outliving it, and the cascade from `stored_emails` is what makes that structural — including where the recorded mutation was the deletion itself.
 
 The same holds for `email_chunks`, and one thing about it is deliberate: a chunk records the message it came from and the span inside it, and nothing else. The account, folder, sender, recipients, date, and subject a retrieval will want to cite are reached through that message rather than copied onto the passage, so cutting mail into chunks widens no access, export, or erasure surface — it only adds rows the same cascade erases.
 

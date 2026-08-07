@@ -87,6 +87,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // Registered by the composition root rather than by AddInfrastructure, so the write-connection pool would fail
         // to resolve here for the same reason every bound setting above is supplied: the suite does not start the host.
         builder.Services.AddSingleton(new MailboxWriteSessionOptions());
+        builder.Services.AddSingleton(new MailboxMutationOptions());
         builder.Services.AddSingleton(new PersistenceConcurrencyOptions { MaximumCommitAttempts = 3 });
 
         // Registered by a composition root rather than by AddInfrastructure, because persistence writes what the AI

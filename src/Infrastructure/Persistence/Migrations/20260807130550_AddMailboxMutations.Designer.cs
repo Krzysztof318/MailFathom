@@ -3,19 +3,21 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
-using Pgvector;
 
 #nullable disable
 
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260807130550_AddMailboxMutations")]
+    partial class AddMailboxMutations
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -108,36 +110,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("email_content_repair_requests", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailEmbeddingEntity", b =>
-                {
-                    b.Property<Guid>("EmailChunkId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("EmbeddingProfileId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Dimension")
-                        .HasColumnType("integer");
-
-                    b.Property<Vector>("Embedding")
-                        .IsRequired()
-                        .HasColumnType("vector");
-
-                    b.Property<DateTimeOffset>("GeneratedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("EmailChunkId", "EmbeddingProfileId")
-                        .HasName("pk_email_embeddings");
-
-                    b.HasIndex("EmbeddingProfileId", "Dimension")
-                        .HasDatabaseName("ix_email_embeddings_profile");
-
-                    b.ToTable("email_embeddings", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_email_embeddings_dimension", "vector_dims(\"Embedding\") = \"Dimension\"");
-                        });
-                });
-
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailMessageContentEntity", b =>
                 {
                     b.Property<Guid>("StoredEmailId")
@@ -203,75 +175,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchVector"), "GIN");
 
                     b.ToTable("email_search_documents", (string)null);
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmbeddingProfileEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("ActivatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Dimension")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("DistanceMetric")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("IdentityFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character(64)")
-                        .IsFixedLength();
-
-                    b.Property<int>("InputCharacterLimit")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("LifecycleState")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("ModelIdentifier")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("ModelVersion")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<bool>("NormalizesVector")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("PassageInstruction")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<DateTimeOffset>("RegisteredAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset?>("SupersededAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasAlternateKey("Id", "Dimension")
-                        .HasName("ak_embedding_profiles_id_dimension");
-
-                    b.HasIndex("IdentityFingerprint")
-                        .IsUnique()
-                        .HasDatabaseName("ix_embedding_profiles_identity_fingerprint");
-
-                    b.ToTable("embedding_profiles", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", b =>
@@ -384,9 +287,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
-
-                    b.Property<bool>("RequiresSourceRemoval")
-                        .HasColumnType("boolean");
 
                     b.Property<string>("Stage")
                         .IsRequired()
@@ -656,27 +556,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("StoredEmail");
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailEmbeddingEntity", b =>
-                {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.EmailChunkEntity", "EmailChunk")
-                        .WithMany("Embeddings")
-                        .HasForeignKey("EmailChunkId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.EmbeddingProfileEntity", "EmbeddingProfile")
-                        .WithMany("Embeddings")
-                        .HasForeignKey("EmbeddingProfileId", "Dimension")
-                        .HasPrincipalKey("Id", "Dimension")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_email_embeddings_embedding_profiles");
-
-                    b.Navigation("EmailChunk");
-
-                    b.Navigation("EmbeddingProfile");
-                });
-
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailMessageContentEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", "StoredEmail")
@@ -749,16 +628,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("MailFolder");
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailChunkEntity", b =>
-                {
-                    b.Navigation("Embeddings");
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmbeddingProfileEntity", b =>
-                {
-                    b.Navigation("Embeddings");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", b =>

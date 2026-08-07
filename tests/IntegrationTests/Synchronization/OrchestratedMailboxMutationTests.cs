@@ -80,7 +80,7 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
                         scope.GetRequiredService<IMailTransportSecurityPolicyReader>().GetPolicy(account),
                         token);
 
-                return await session.RelocateAsync(occurrence, ArchivePath, token);
+                return await session.RelocateAsync(occurrence, ArchivePath, new InMemoryMailboxMutationJournal(), token);
             },
             cancellationToken);
 
@@ -122,7 +122,11 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
 
         // Act
         var placement = await services.InScopeAsync(
-            (scope, token) => RelocateWithoutMoveExtensionAsync(scope, occurrence, token),
+            (scope, token) => RelocateWithoutMoveExtensionAsync(
+                scope,
+                occurrence,
+                new InMemoryMailboxMutationJournal(),
+                token),
             cancellationToken);
 
         // Assert
@@ -172,7 +176,7 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
                         scope.GetRequiredService<IMailTransportSecurityPolicyReader>().GetPolicy(account),
                         token);
 
-                await session.DeleteAsync(target, token);
+                await session.DeleteAsync(target, new InMemoryMailboxMutationJournal(), token);
 
                 return true;
             },
@@ -195,6 +199,7 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
     private static async Task<Domain.Mutations.RemoteEmailPlacement> RelocateWithoutMoveExtensionAsync(
         IServiceProvider scope,
         EmailOccurrenceId occurrence,
+        InMemoryMailboxMutationJournal journal,
         CancellationToken cancellationToken)
     {
         var account = SyntheticMailAccount.AccountId;
@@ -218,7 +223,7 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
             scope.GetRequiredService<IMailTransportSecurityPolicyReader>().GetPolicy(account),
             cancellationToken);
 
-        return await session.RelocateAsync(occurrence, ArchivePath, cancellationToken);
+        return await session.RelocateAsync(occurrence, ArchivePath, journal, cancellationToken);
     }
 
     /// <summary>Delivers one synthetic message and reads back the occurrence identity the server gave it.</summary>

@@ -46,8 +46,9 @@ internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) :
         public Task RollbackTransactionAsync(CancellationToken cancellationToken) =>
             transaction.RollbackAsync(cancellationToken);
 
-        /// <summary>Recognizes the three inserts a competing writer can win, and nothing else.</summary>
+        /// <summary>Recognizes the four inserts a competing writer can win, and nothing else.</summary>
         /// <remarks>
+        /// <para>
         /// Each names a constraint whose violation means "another run got here first" rather than "this data is
         /// wrong": the first checkpoint of a folder, the first binding of an alias to a remote folder, and the account
         /// row that first binding creates on its way. The account is listed because it is part of that same insert:
@@ -55,6 +56,13 @@ internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) :
         /// before they ever reach the alias, and reporting only one half of one race would leave the other half an
         /// unhandled failure. Every other unique violation stays a failure, because treating an unnamed collision as a
         /// race would retry a write that will never succeed.
+        /// </para>
+        /// <para>
+        /// The fourth is the mutation identity, and it is the one where losing the race is the mechanism rather than an
+        /// accident. Two callers asking for the same change reach the database together, one of them is refused here,
+        /// and the retry reads back the record the winner wrote — which is exactly how the same request twice performs
+        /// one mutation.
+        /// </para>
         /// </remarks>
         public bool IsConcurrencyConflict(DbUpdateException exception) =>
             exception.InnerException is PostgresException
@@ -62,7 +70,8 @@ internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) :
                 SqlState: PostgresErrorCodes.UniqueViolation,
                 ConstraintName: MailFathomDbContext.SynchronizationCheckpointPrimaryKeyConstraintName
                     or MailFathomDbContext.MailFolderBindingUniqueIndexName
-                    or MailFathomDbContext.MailboxAccountPrimaryKeyConstraintName,
+                    or MailFathomDbContext.MailboxAccountPrimaryKeyConstraintName
+                    or MailFathomDbContext.MailboxMutationIdentityUniqueIndexName,
             };
 
         public void ClearTrackedState() => dbContext.ChangeTracker.Clear();

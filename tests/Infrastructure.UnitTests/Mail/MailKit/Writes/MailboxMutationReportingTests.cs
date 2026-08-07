@@ -96,7 +96,7 @@ public sealed class MailboxMutationReportingTests
 
         // Act
         await Assert.ThrowsAsync<MailboxMutationUnsupportedException>(
-            () => session.RelocateAsync(CreateOccurrenceId(42U), Archive, CancellationToken.None));
+            () => session.RelocateAsync(CreateOccurrenceId(42U), Archive, new RecordingMailboxMutationJournal(), CancellationToken.None));
 
         // Assert
         var failureRecord = Assert.Single(
@@ -125,7 +125,7 @@ public sealed class MailboxMutationReportingTests
         await using var harness = CreateHarness(resilience, client, openFolder);
         await using (var session = await harness.OpenSessionAsync())
         {
-            await session.RelocateAsync(CreateOccurrenceId(42U), Archive, CancellationToken.None);
+            await session.RelocateAsync(CreateOccurrenceId(42U), Archive, new RecordingMailboxMutationJournal(), CancellationToken.None);
         }
 
         return [.. harness.RecordedLogs.Records];

@@ -158,4 +158,15 @@ internal sealed class StoredEmailEntity
     /// has run for it and stay empty for a message whose body yielded no text.
     /// </summary>
     public ICollection<EmailChunkEntity> Chunks { get; } = [];
+
+    /// <summary>
+    /// Gets the changes MailFathom recorded against this email before asking a mail server to make them, which are
+    /// removed with it.
+    /// </summary>
+    /// <remarks>
+    /// The association is what carries a mutation history through this email's deletion path. A history of where a
+    /// person's mail has been is derived personal data about that mail, so it inherits the mail's retention and deletion
+    /// obligations rather than outliving it — including where the recorded mutation was the deletion itself.
+    /// </remarks>
+    public ICollection<MailboxMutationEntity> Mutations { get; } = [];
 }

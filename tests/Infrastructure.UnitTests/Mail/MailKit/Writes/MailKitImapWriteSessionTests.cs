@@ -51,7 +51,7 @@ public sealed class MailKitImapWriteSessionTests
         await using var session = await harness.OpenSessionAsync();
 
         // Act
-        var placement = await session.RelocateAsync(CreateOccurrenceId(42U), Archive, CancellationToken.None);
+        var placement = await session.RelocateAsync(CreateOccurrenceId(42U), Archive, new RecordingMailboxMutationJournal(), CancellationToken.None);
 
         // Assert
         await openFolder.Received(1).MoveToAsync(
@@ -83,7 +83,7 @@ public sealed class MailKitImapWriteSessionTests
         await using var session = await harness.OpenSessionAsync();
 
         // Act
-        var placement = await session.RelocateAsync(CreateOccurrenceId(42U), Archive, CancellationToken.None);
+        var placement = await session.RelocateAsync(CreateOccurrenceId(42U), Archive, new RecordingMailboxMutationJournal(), CancellationToken.None);
 
         // Assert
         await openFolder.Received(1).CopyToAsync(
@@ -117,7 +117,7 @@ public sealed class MailKitImapWriteSessionTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailboxMutationUnsupportedException>(
-            () => session.RelocateAsync(CreateOccurrenceId(42U), Archive, CancellationToken.None));
+            () => session.RelocateAsync(CreateOccurrenceId(42U), Archive, new RecordingMailboxMutationJournal(), CancellationToken.None));
 
         // Assert
         Assert.Equal(MailboxMutation.Relocate, refusal.Mutation);
@@ -147,7 +147,7 @@ public sealed class MailKitImapWriteSessionTests
         await using var session = await harness.OpenSessionAsync();
 
         // Act
-        var placement = await session.RelocateAsync(CreateOccurrenceId(42U), Archive, CancellationToken.None);
+        var placement = await session.RelocateAsync(CreateOccurrenceId(42U), Archive, new RecordingMailboxMutationJournal(), CancellationToken.None);
 
         // Assert
         Assert.Equal(4242U, placement.UidValidity?.Value);
@@ -167,7 +167,7 @@ public sealed class MailKitImapWriteSessionTests
         await using var session = await harness.OpenSessionAsync();
 
         // Act
-        var placement = await session.RelocateAsync(CreateOccurrenceId(42U), Archive, CancellationToken.None);
+        var placement = await session.RelocateAsync(CreateOccurrenceId(42U), Archive, new RecordingMailboxMutationJournal(), CancellationToken.None);
 
         // Assert
         Assert.False(placement.IsReported);
@@ -185,7 +185,7 @@ public sealed class MailKitImapWriteSessionTests
         await using var session = await harness.OpenSessionAsync();
 
         // Act
-        var placement = await session.RelocateAsync(CreateOccurrenceId(42U), Archive, CancellationToken.None);
+        var placement = await session.RelocateAsync(CreateOccurrenceId(42U), Archive, new RecordingMailboxMutationJournal(), CancellationToken.None);
 
         // Assert
         Assert.False(placement.IsReported);
@@ -204,7 +204,7 @@ public sealed class MailKitImapWriteSessionTests
         await using var session = await harness.OpenSessionAsync();
 
         // Act
-        await session.DeleteAsync(CreateOccurrenceId(42U), CancellationToken.None);
+        await session.DeleteAsync(CreateOccurrenceId(42U), new RecordingMailboxMutationJournal(), CancellationToken.None);
 
         // Assert
         await openFolder.Received(1).StoreAsync(
@@ -233,7 +233,7 @@ public sealed class MailKitImapWriteSessionTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailboxMutationUnsupportedException>(
-            () => session.DeleteAsync(CreateOccurrenceId(42U), CancellationToken.None));
+            () => session.DeleteAsync(CreateOccurrenceId(42U), new RecordingMailboxMutationJournal(), CancellationToken.None));
 
         // Assert
         Assert.Equal(MailboxMutation.Delete, refusal.Mutation);
@@ -257,7 +257,7 @@ public sealed class MailKitImapWriteSessionTests
         await using var session = await harness.OpenSessionAsync();
 
         // Act
-        await session.SetSeenAsync(CreateOccurrenceId(42U), isSeen, CancellationToken.None);
+        await session.SetSeenAsync(CreateOccurrenceId(42U), isSeen, new RecordingMailboxMutationJournal(), CancellationToken.None);
 
         // Assert
         await openFolder.Received(1).StoreAsync(
@@ -278,7 +278,7 @@ public sealed class MailKitImapWriteSessionTests
         await using var session = await harness.OpenSessionAsync();
 
         // Act
-        var placement = await session.CopyAsync(CreateOccurrenceId(42U), Archive, CancellationToken.None);
+        var placement = await session.CopyAsync(CreateOccurrenceId(42U), Archive, new RecordingMailboxMutationJournal(), CancellationToken.None);
 
         // Assert
         await openFolder.Received(1).CopyToAsync(
@@ -309,9 +309,9 @@ public sealed class MailKitImapWriteSessionTests
         await using var session = await harness.OpenSessionAsync();
 
         // Act
-        await session.RelocateAsync(CreateOccurrenceId(42U), Archive, CancellationToken.None);
-        await session.DeleteAsync(CreateOccurrenceId(43U), CancellationToken.None);
-        await session.CopyAsync(CreateOccurrenceId(44U), Archive, CancellationToken.None);
+        await session.RelocateAsync(CreateOccurrenceId(42U), Archive, new RecordingMailboxMutationJournal(), CancellationToken.None);
+        await session.DeleteAsync(CreateOccurrenceId(43U), new RecordingMailboxMutationJournal(), CancellationToken.None);
+        await session.CopyAsync(CreateOccurrenceId(44U), Archive, new RecordingMailboxMutationJournal(), CancellationToken.None);
 
         // Assert
         await openFolder.DidNotReceive().StoreAsync(
@@ -339,7 +339,7 @@ public sealed class MailKitImapWriteSessionTests
 
         // Act
         await Assert.ThrowsAsync<ArgumentException>(
-            () => session.RelocateAsync(staleOccurrence, Archive, CancellationToken.None));
+            () => session.RelocateAsync(staleOccurrence, Archive, new RecordingMailboxMutationJournal(), CancellationToken.None));
 
         // Assert
         await openFolder.DidNotReceive().MoveToAsync(
@@ -370,7 +370,7 @@ public sealed class MailKitImapWriteSessionTests
 
         // Act
         await Assert.ThrowsAsync<ArgumentException>(
-            () => session.RelocateAsync(foreignOccurrence, Archive, CancellationToken.None));
+            () => session.RelocateAsync(foreignOccurrence, Archive, new RecordingMailboxMutationJournal(), CancellationToken.None));
 
         // Assert
         await openFolder.DidNotReceive().MoveToAsync(
