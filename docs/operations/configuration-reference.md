@@ -256,6 +256,22 @@ reaches an interactive browser credential and the developer-tool credentials of 
 | `…:CertificatePath` | string | *(empty)* | required for `ClientCertificate`; a PKCS#12 file the process account can read | restart |
 | `…:CertificatePassword` | secret block | *(absent)* | where the certificate file has one | restart |
 
+## `EmbeddingBackfill`
+
+The sweep that gives mail stored before the active profile its passages and its vectors. A root of its own rather than
+a block inside `Embeddings`, because what an instance embeds with is a commitment and how fast it works through the
+mail it already had is a rate an operator changes while watching a bill. Every key here is a pacing control:
+`BatchSize` × `MaxBatchesPerRun` is the most one run may spend, and `Interval` is how often that is paid.
+[Embedding backfill](../features/embedding-backfill.md) describes what it reaches and why it repeats.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `EmbeddingBackfill:Enabled` | bool | `true` | turning it off stops the spending within one interval and loses nothing already embedded | restart |
+| `EmbeddingBackfill:Interval` | TimeSpan | `00:00:30` | 1 s – 24 h; the pause between runs while messages still await embedding | restart |
+| `EmbeddingBackfill:IdleSweepInterval` | TimeSpan | `00:15:00` | 1 s – 24 h; the pause before a sweep starts again after one reached the end | restart |
+| `EmbeddingBackfill:BatchSize` | int | `20` | 1 – 500 | restart |
+| `EmbeddingBackfill:MaxBatchesPerRun` | int | `5` | 1 – 1000 | restart |
+
 ## `MailExtractionBackfill`
 
 The worker that extracts text for messages stored before extraction existed or before a limit was raised.

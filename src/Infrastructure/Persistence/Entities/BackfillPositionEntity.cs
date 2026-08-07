@@ -18,6 +18,14 @@ internal sealed class BackfillPositionEntity
     /// <summary>The name the extraction backfill records its progress under.</summary>
     internal const string StoredEmailExtractionName = "stored-email-extraction";
 
+    /// <summary>The name the embedding backfill records its progress under.</summary>
+    /// <remarks>
+    /// A row this backfill writes is removed rather than parked at the end, because its walk is a repeating sweep: the
+    /// absence of a row means the next run starts at the beginning, which is what the extraction backfill's absence of
+    /// a row means as well.
+    /// </remarks>
+    internal const string StoredEmailEmbeddingName = "stored-email-embedding";
+
     /// <summary>The greatest length a backfill name may have, which bounds the key column.</summary>
     internal const int MaximumNameLength = 64;
 

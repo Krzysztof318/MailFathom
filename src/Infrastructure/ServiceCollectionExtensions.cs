@@ -7,6 +7,7 @@ using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Extraction;
@@ -182,17 +183,25 @@ public static class ServiceCollectionExtensions
         // worker that finds nothing to do.
         services.AddSingleton<IEmailEmbeddingBacklog, BoundedEmailEmbeddingBacklog>();
         services.AddSingleton<EmailEmbeddingTelemetry>();
+        // A singleton for the reason the backlog is: the sweep's outstanding count is one figure about the whole
+        // instance, and a gauge answering per scope would publish whichever scope observed it last.
+        services.AddSingleton<EmailEmbeddingBackfillTelemetry>();
         services.AddScoped<IActiveEmbeddingProfileReader, ActiveEmbeddingProfileReader>();
         services.AddScoped<IEmailEmbeddingStore, EmailEmbeddingStore>();
         // The only registration here that changes the schema. It is scoped like every other store so that a caller
         // which has opened a persistence session gets its statement inside that session's transaction rather than
         // beside it.
         services.AddScoped<IEmbeddingProfileVectorIndex, EmbeddingProfileVectorIndex>();
+        services.AddScoped<IStoredEmailEmbeddingBackfillStore, StoredEmailEmbeddingBackfillStore>();
         // Registered here beside the store it writes through, for the reason the chunk writer above is: its
         // `ITextEmbeddingGenerator` comes from the AI boundary, which this project may not reference, so a composition
         // root that registers persistence without an embedding provider resolves nothing — which is correct, because
         // such a deployment starts no worker to ask for one.
         services.AddScoped<StoredEmailEmbeddingGenerator>();
+        // Beside the generator it drives, and conditional on the same thing: the backfill's unit of work is one message
+        // brought up to date, which is the generator's, so a deployment that resolves no generator starts no backfill
+        // either.
+        services.AddScoped<StoredEmailEmbeddingBackfill>();
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
         services.AddScoped<IDatabaseSchemaInspector, EfCoreDatabaseSchemaInspector>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();

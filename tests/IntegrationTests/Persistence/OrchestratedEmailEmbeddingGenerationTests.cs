@@ -44,7 +44,7 @@ public sealed class OrchestratedEmailEmbeddingGenerationTests(MailFathomOrchestr
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var storedEmailId = await StoreOneMessageAsync(services, uid: 9201, cancellationToken);
-        var profileId = await ActivateDeterministicProfileAsync(services, cancellationToken);
+        var profileId = await OrchestratedEmbeddingProfile.EnsureActiveDeterministicAsync(services, cancellationToken);
 
         // The control the "nothing more was written" assertion needs: a message with no outstanding passages and one
         // whose passages were never embedded are indistinguishable unless the first run is seen to produce vectors.
@@ -159,18 +159,6 @@ public sealed class OrchestratedEmailEmbeddingGenerationTests(MailFathomOrchestr
                 .AsNoTracking()
                 .CountAsync(embedding => embedding.EmbeddingProfileId == profileId.Value, token),
             cancellationToken);
-
-    /// <summary>Registers the geometry the deterministic generator produces, and makes it the one this instance reads.</summary>
-    private static async Task<EmbeddingProfileId> ActivateDeterministicProfileAsync(
-        OrchestratedMailFathomServices services,
-        CancellationToken cancellationToken)
-    {
-        var identity = await services.InScopeAsync(
-            (scope, _) => Task.FromResult(scope.GetRequiredService<ITextEmbeddingGenerator>().Identity),
-            cancellationToken);
-
-        return await InsertProfileAsync(services, identity, EmbeddingProfileLifecycleState.Active, cancellationToken);
-    }
 
     /// <summary>Registers a geometry no generator in this process produces, which is what a superseded one looks like.</summary>
     private static Task<EmbeddingProfileId> RegisterProfileAsync(

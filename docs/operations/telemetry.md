@@ -91,6 +91,14 @@ passages it embedded and how long that took, broken down by outcome and by the c
 [Automatic embedding](../features/automatic-embedding.md#what-an-operator-can-see) names each instrument and what it
 answers; the depth is the one an instance falling behind shows up in first.
 
+The backfill over mail stored before a profile existed publishes its own family beside that one, under
+`mailfathom.embedding.backfill.*`: how many messages awaited embedding when the current sweep began, how each bounded
+run ended, and how many messages it cut into passages, brought up to date, and gave vectors to. The instruments are
+separate and the tag keys are shared, because a rate an instance settles at and a finite amount of work an operator
+started are different questions about one provider bill.
+[Embedding backfill](../features/embedding-backfill.md#what-an-operator-can-see) names each of them, and says why the
+outstanding figure is a sweep old rather than live.
+
 What such a signal may carry is bounded by the same rule that governs the log lines, and it is a cardinality rule as
 much as a privacy one. Counts, sizes, durations, outcomes, error codes, and MailFathom's own configured account and
 folder aliases are permitted. Mail content, an address, a subject, a remote folder path, a message identifier, a UID, a

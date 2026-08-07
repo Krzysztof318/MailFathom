@@ -6,6 +6,7 @@ using MailFathom.AI;
 using MailFathom.AI.Embeddings;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
+using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Search;
@@ -137,6 +138,14 @@ try
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
+    // Beside the declaration rather than inside it: what an instance embeds with is a commitment, and how fast it works
+    // through the mail it already had is a rate an operator changes while watching a provider bill.
+    builder.Services.AddOptions<EmbeddingBackfillOptions>()
+        .Bind(
+            builder.Configuration.GetSection("EmbeddingBackfill"),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
     // A configuration root of its own rather than a section of Persistence: the database is the first thing sealed
     // under the ring and there is no reason it is the last, and a root is also what gives the key material its own
     // secret-name uniqueness scope. ADR 0005 records the whole decision.
@@ -250,6 +259,15 @@ try
             MaxBatchesPerRun = backfillSettings.MaxBatchesPerRun,
         };
     });
+    builder.Services.AddScoped(provider =>
+    {
+        var embeddingBackfillSettings = provider.GetRequiredService<IOptions<EmbeddingBackfillOptions>>().Value;
+        return new StoredEmailEmbeddingBackfillOptions
+        {
+            BatchSize = embeddingBackfillSettings.BatchSize,
+            MaxBatchesPerRun = embeddingBackfillSettings.MaxBatchesPerRun,
+        };
+    });
     builder.Services.AddSingleton(provider => new PersistenceConcurrencyOptions
     {
         MaximumCommitAttempts = provider.GetRequiredService<IOptions<PersistenceOptions>>().Value.MaximumConcurrencyCommitAttempts,
@@ -342,6 +360,11 @@ try
     if (declaredEmbeddings?.IsConfigured is true)
     {
         builder.Services.AddHostedService<MailEmbeddingWorker>();
+
+        // The same condition, because the backfill's unit of work is one message brought up to date by that same
+        // generator. Whether it does anything is decided again at run time by whether a profile is active, which is the
+        // state ADR 0006 makes the switch rather than a setting.
+        builder.Services.AddHostedService<MailEmbeddingBackfillWorker>();
     }
     // Registered whether or not the endpoint is enabled, because it is the warning that decides whether it has anything
     // to say. Registering it conditionally would put the same condition in two places.
