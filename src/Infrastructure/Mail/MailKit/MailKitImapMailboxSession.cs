@@ -41,7 +41,7 @@ internal sealed class MailKitImapMailboxSessionFactory(
     {
         ArgumentNullException.ThrowIfNull(folder);
 
-        var connection = new MailKitImapConnection(
+        var connection = MailKitImapConnection.ForReading(
             clientFactory,
             settingsProvider,
             accessTokenSource,

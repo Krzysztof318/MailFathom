@@ -235,6 +235,32 @@ subscription, by `MaxSubscribedFolders`, because that bound belongs to a command
 An account with many folders on a server that offers `IDLE` alone and a tight connection limit is therefore a
 configuration to reconsider, and the log says which folders lost push.
 
+### The third connection: writing
+
+An account can hold one more connection than the two kinds above, and it is the only one able to change the mailbox.
+MailFathom opens it the first time something asks to relocate, delete, copy, or mark a message read, keeps it for
+`WriteConnectionIdlePeriod` after the last change it carried, and closes it when that elapses. There is **at most one
+per account**, whatever is happening: a second caller waits for the first rather than opening a second connection, so a
+burst of changes never becomes a burst of logins against a server that counts them.
+
+| Bound | Setting | Default | What it decides |
+| --- | --- | --- | --- |
+| Write connections, per account | none — fixed at one | 1 | Never more than one, whichever folder is being changed and however many changes are in flight |
+| How long one is kept | `WriteConnectionIdlePeriod` | 2 min | The idle time after the last change before the slot is given back |
+
+Setting the period lower gives the slot back sooner and makes the next change pay for a fresh connection, a TLS
+handshake, and an authentication. Setting it higher does the opposite. It is read once at startup, which is why the
+[configuration reference](../operations/configuration-reference.md) marks it *restart* rather than *reload*.
+
+A write connection is pinned to the folder it selected, the way any IMAP selection is, so changing a message in a second
+folder replaces the connection rather than adding one. Nothing on the read side can open, borrow, or reach it — the
+guarantee that synchronization and content retrieval never mark mail read is a property of the types they hold, which
+[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+records in full — and the push session is never taken out of `IDLE` to carry a change.
+
+Nothing in this release asks for a change yet, so an account nobody has written to holds no such connection and this
+setting costs nothing.
+
 ### Renewal
 
 **`PushRenewalInterval` is not a polling interval, despite its name.** It bounds the lifetime of a *single* `IDLE`

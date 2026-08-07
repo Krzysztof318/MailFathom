@@ -390,13 +390,14 @@ Remote expunge marks the message as deleted; its raw MIME is retained for a conf
 
 ### 11.1 Never mark mail as read
 
-This is a system invariant, not an option.
+This is a system invariant, not an option. It is scoped to reading rather than to the process: a read path can never set the flag, and an act the mailbox owner authored may. ADR 0007 records that distinction and the mutations it admits.
 
 - Synchronization opens folders with `FolderAccess.ReadOnly`, causing IMAP `EXAMINE` semantics.
 - Message bodies and headers are retrieved with PEEK semantics.
 - Synchronization interfaces expose no operation that writes flags.
-- No code path calls `AddFlags`, `SetFlags`, or equivalent methods.
-- Stored `\Seen` is a snapshot of remote state only.
+- No read path can obtain a session capable of writing. The write-capable session is a separate type reached through a separate factory, and the folder access a connection selects with is fixed when the connection is created, so a reconnection cannot widen it.
+- The only code that calls a flag-writing method is the write session, and the only flags it writes are `\Seen`, for the one operation whose purpose is to write it, and the `\Deleted` that removing a message is made of.
+- Stored `\Seen` is a snapshot of remote state only. An authored change is a request made of the server, so the stored value still has exactly one writer: synchronization observing what the server reports back.
 - MCP reads local data and therefore cannot affect the remote flag.
 
 ### 11.2 Initial synchronization

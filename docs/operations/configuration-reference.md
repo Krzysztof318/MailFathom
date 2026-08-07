@@ -79,6 +79,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `MailSynchronization:MaxFailureBackoff` | TimeSpan | `00:30:00` | 10 s – 1 day, and never below `Interval` | reload |
 | `MailSynchronization:MaxConcurrentAccounts` | int | `4` | 1 – 100 | restart |
 | `MailSynchronization:MaxConcurrentFoldersPerAccount` | int | `1` | 1 – 20 | reload |
+| `MailSynchronization:WriteConnectionIdlePeriod` | TimeSpan | `00:02:00` | 5 s – 30 min; how long an account's single write connection keeps its slot after the last change it carried | restart |
 | `MailSynchronization:ShutdownDrainTimeout` | TimeSpan | `00:00:10` | 0 – 2 min | restart |
 | `MailSynchronization:MaxMetadataBatchSize` | int | `100` | 1 – 1000 | reload |
 | `MailSynchronization:MaxRawMimeBytes` | long | `26214400` (25 MiB) | 1024 – 104857600; larger messages are stored without content | reload |

@@ -19,13 +19,18 @@ using MailKit.Net.Imap;
 
 namespace MailFathom.Infrastructure.Mail.MailKit;
 
-/// <summary>Keeps one account authenticated for as long as a mailbox session or a folder discovery needs it.</summary>
+/// <summary>Keeps one account authenticated for as long as a mailbox session, a folder discovery, or a mutation needs it.</summary>
 /// <remarks>
 /// <para>
 /// The connection is what makes a retried read possible. A mail server that drops a socket mid-run leaves the client
-/// unusable, so an attempt that finds no live connection establishes a new one before it reads. A connection opened
-/// for a folder selects it with <see cref="FolderAccess.ReadOnly" /> every single time. There is no code path that
-/// selects it any other way, which is what keeps the remote <c>\Seen</c> flag untouched across a recovery.
+/// unusable, so an attempt that finds no live connection establishes a new one before it reads.
+/// </para>
+/// <para>
+/// How a connection selects its folder is fixed when it is created and can never change afterwards, which is what
+/// keeps the remote <c>\Seen</c> flag untouched across a recovery. <see cref="ForReading" /> selects with
+/// <see cref="FolderAccess.ReadOnly" /> on every establishment and on every reconnection, and a connection created
+/// that way refuses <see cref="ExecuteMutationAsync" /> outright rather than relying on its callers not to ask.
+/// <see cref="ForWriting" /> is the one path that selects otherwise, and only the write session reaches it.
 /// </para>
 /// <para>
 /// A connection may also be opened for no folder at all, which is what folder discovery uses: an IMAP <c>LIST</c>
@@ -53,23 +58,14 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     private readonly ITransientFailureClassifier transientFailureClassifier;
     private readonly MailAccountId accountId;
     private readonly MailFolderResolution? folder;
+    private readonly FolderAccess folderAccess;
     private readonly MailTransportSecurityPolicy transportSecurityPolicy;
 
     private IImapClient? client;
     private IMailFolder? selectedFolder;
     private ImapUidValidity? sessionUidValidity;
 
-    /// <summary>Initializes a connection that has not been established yet.</summary>
-    /// <param name="clientFactory">Creates one IMAP client per establishment attempt.</param>
-    /// <param name="settingsProvider">Resolves the endpoint and the credential material of the account, per attempt.</param>
-    /// <param name="accessTokenSource">Supplies the access token when the account's policy authenticates with one.</param>
-    /// <param name="operationExecutor">Runs establishment and retrieval under their configured pipelines.</param>
-    /// <param name="transientFailureClassifier">Decides whether a failure left the connection worth keeping.</param>
-    /// <param name="accountId">The account this connection belongs to, which also isolates its pipeline state.</param>
-    /// <param name="folder">The alias binding every establishment selects read-only, or <see langword="null" /> for a connection that selects no folder.</param>
-    /// <param name="transportSecurityPolicy">The connection and authentication policy each attempt must obey.</param>
-    /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
-    internal MailKitImapConnection(
+    private MailKitImapConnection(
         Func<IImapClient> clientFactory,
         IImapAccountSettingsProvider settingsProvider,
         IMailAccessTokenSource accessTokenSource,
@@ -77,6 +73,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
         ITransientFailureClassifier transientFailureClassifier,
         MailAccountId accountId,
         MailFolderResolution? folder,
+        FolderAccess folderAccess,
         MailTransportSecurityPolicy transportSecurityPolicy)
     {
         ArgumentNullException.ThrowIfNull(clientFactory);
@@ -93,8 +90,108 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
         this.transientFailureClassifier = transientFailureClassifier;
         this.accountId = accountId;
         this.folder = folder;
+        this.folderAccess = folderAccess;
         this.transportSecurityPolicy = transportSecurityPolicy;
     }
+
+    /// <summary>Creates a connection that selects one folder read-only and can never write to it.</summary>
+    /// <param name="clientFactory">Creates one IMAP client per establishment attempt.</param>
+    /// <param name="settingsProvider">Resolves the endpoint and the credential material of the account, per attempt.</param>
+    /// <param name="accessTokenSource">Supplies the access token when the account's policy authenticates with one.</param>
+    /// <param name="operationExecutor">Runs establishment and retrieval under their configured pipelines.</param>
+    /// <param name="transientFailureClassifier">Decides whether a failure left the connection worth keeping.</param>
+    /// <param name="accountId">The account this connection belongs to, which also isolates its pipeline state.</param>
+    /// <param name="folder">The alias binding every establishment selects read-only.</param>
+    /// <param name="transportSecurityPolicy">The connection and authentication policy each attempt must obey.</param>
+    /// <returns>A connection that has not been established yet.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
+    /// <remarks>
+    /// This is the connection every read path uses: synchronization, reconciliation, content retrieval, and the
+    /// notification session. It selects with <see cref="FolderAccess.ReadOnly" />, which is IMAP <c>EXAMINE</c>
+    /// semantics, and <see cref="ExecuteMutationAsync" /> refuses to run on it.
+    /// </remarks>
+    internal static MailKitImapConnection ForReading(
+        Func<IImapClient> clientFactory,
+        IImapAccountSettingsProvider settingsProvider,
+        IMailAccessTokenSource accessTokenSource,
+        OutboundOperationExecutor operationExecutor,
+        ITransientFailureClassifier transientFailureClassifier,
+        MailAccountId accountId,
+        MailFolderResolution folder,
+        MailTransportSecurityPolicy transportSecurityPolicy) => new(
+            clientFactory,
+            settingsProvider,
+            accessTokenSource,
+            operationExecutor,
+            transientFailureClassifier,
+            accountId,
+            folder,
+            FolderAccess.ReadOnly,
+            transportSecurityPolicy);
+
+    /// <summary>Creates a connection that selects one folder for writing, for the write session alone.</summary>
+    /// <param name="clientFactory">Creates one IMAP client per establishment attempt.</param>
+    /// <param name="settingsProvider">Resolves the endpoint and the credential material of the account, per attempt.</param>
+    /// <param name="accessTokenSource">Supplies the access token when the account's policy authenticates with one.</param>
+    /// <param name="operationExecutor">Runs establishment and mutation under their configured pipelines.</param>
+    /// <param name="transientFailureClassifier">Decides whether a failure left the connection worth keeping.</param>
+    /// <param name="accountId">The account this connection belongs to, which also isolates its pipeline state.</param>
+    /// <param name="folder">The alias binding every establishment selects for writing.</param>
+    /// <param name="transportSecurityPolicy">The connection and authentication policy each attempt must obey.</param>
+    /// <returns>A connection that has not been established yet.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A connection created here selects with <see cref="FolderAccess.ReadWrite" />, which is IMAP <c>SELECT</c>
+    /// semantics, and is the only kind <see cref="ExecuteMutationAsync" /> will run on. It is reached from exactly one
+    /// place — the write session's own factory — and an account holds at most one of them at a time.
+    /// </remarks>
+    internal static MailKitImapConnection ForWriting(
+        Func<IImapClient> clientFactory,
+        IImapAccountSettingsProvider settingsProvider,
+        IMailAccessTokenSource accessTokenSource,
+        OutboundOperationExecutor operationExecutor,
+        ITransientFailureClassifier transientFailureClassifier,
+        MailAccountId accountId,
+        MailFolderResolution folder,
+        MailTransportSecurityPolicy transportSecurityPolicy) => new(
+            clientFactory,
+            settingsProvider,
+            accessTokenSource,
+            operationExecutor,
+            transientFailureClassifier,
+            accountId,
+            folder,
+            FolderAccess.ReadWrite,
+            transportSecurityPolicy);
+
+    /// <summary>Creates a connection that selects no folder at all, which is what folder discovery needs.</summary>
+    /// <param name="clientFactory">Creates one IMAP client per establishment attempt.</param>
+    /// <param name="settingsProvider">Resolves the endpoint and the credential material of the account, per attempt.</param>
+    /// <param name="accessTokenSource">Supplies the access token when the account's policy authenticates with one.</param>
+    /// <param name="operationExecutor">Runs establishment and retrieval under their configured pipelines.</param>
+    /// <param name="transientFailureClassifier">Decides whether a failure left the connection worth keeping.</param>
+    /// <param name="accountId">The account this connection belongs to, which also isolates its pipeline state.</param>
+    /// <param name="transportSecurityPolicy">The connection and authentication policy each attempt must obey.</param>
+    /// <returns>A connection that has not been established yet.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
+    /// <remarks>An IMAP <c>LIST</c> selects nothing, so there is no folder to pin and no message whose flags could change.</remarks>
+    internal static MailKitImapConnection ForFolderDiscovery(
+        Func<IImapClient> clientFactory,
+        IImapAccountSettingsProvider settingsProvider,
+        IMailAccessTokenSource accessTokenSource,
+        OutboundOperationExecutor operationExecutor,
+        ITransientFailureClassifier transientFailureClassifier,
+        MailAccountId accountId,
+        MailTransportSecurityPolicy transportSecurityPolicy) => new(
+            clientFactory,
+            settingsProvider,
+            accessTokenSource,
+            operationExecutor,
+            transientFailureClassifier,
+            accountId,
+            folder: null,
+            FolderAccess.ReadOnly,
+            transportSecurityPolicy);
 
     /// <summary>Gets whether the established connection is still in the state its owner needs.</summary>
     private bool IsUsable => this.client is { IsConnected: true }
@@ -188,7 +285,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
 
     /// <summary>Runs one operation against the selected folder exactly once, under no retry of its own.</summary>
     /// <typeparam name="TResult">The result the operation produces.</typeparam>
-    /// <param name="operation">The operation, which must never change remote state and is never repeated.</param>
+    /// <param name="operation">The operation, which is never repeated.</param>
     /// <param name="cancellationToken">Cancels establishing the session and the operation itself.</param>
     /// <returns>The result of the single attempt.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="operation" /> is <see langword="null" />.</exception>
@@ -196,10 +293,12 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
     /// <remarks>
     /// <para>
-    /// This exists for the one operation the retrieval pipeline cannot cover: a long wait for the server to say
-    /// something. That pipeline's per-attempt timeout is measured in seconds because a read that stops answering is
-    /// broken, while a wait that answers nothing for twenty minutes is a wait behaving exactly as designed — running it
-    /// there would abandon it at every attempt boundary and spend the whole budget in under a minute.
+    /// Two unrelated operations need exactly one attempt, for opposite reasons, and both arrive here. A long wait for
+    /// the server to say something is one: the retrieval pipeline's per-attempt timeout is measured in seconds because
+    /// a read that stops answering is broken, while a wait that answers nothing for twenty minutes is a wait behaving
+    /// exactly as designed — running it there would abandon it at every attempt boundary and spend the whole budget in
+    /// under a minute. A mutation is the other, and it reaches this method only through
+    /// <see cref="ExecuteMutationAsync" />, because repeating a change is not the same as repeating a question.
     /// </para>
     /// <para>
     /// Establishment still runs under its own pipeline, so a dropped connection is rebuilt before the operation begins
@@ -234,6 +333,45 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
 
             throw;
         }
+    }
+
+    /// <summary>Runs one operation that changes the mailbox, and only on a connection created to be able to.</summary>
+    /// <typeparam name="TResult">The result the mutation produces.</typeparam>
+    /// <param name="mutation">The change, which is issued exactly once.</param>
+    /// <param name="cancellationToken">Cancels establishing the session and the mutation itself.</param>
+    /// <returns>The result of the single attempt.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="mutation" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the connection was created for reading, so it selects folders read-only and can change nothing.</exception>
+    /// <exception cref="MailboxUnavailableException">Thrown when establishment stopped at a configured limit, or when the mutation failed on something transient.</exception>
+    /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
+    /// <remarks>
+    /// <para>
+    /// The guard is the point of the method. Every read path in MailFathom holds a connection from
+    /// <see cref="ForReading" />, and asking one of those to change something fails here rather than reaching a server
+    /// that would answer it — a folder selected read-only would refuse the command anyway, but a refusal that arrives
+    /// as an IMAP error is a bug discovered in production, and this one is a bug discovered on the first test that
+    /// makes the mistake.
+    /// </para>
+    /// <para>
+    /// A change is never repeated on the caller's behalf. A <c>COPY</c> issued twice is a second message rather than a
+    /// repeat of the first, and a failure that leaves the outcome unknown is exactly the case a caller has to
+    /// reconcile against the server instead of guessing at — so this runs the mutation once and reports a transient
+    /// failure as an unavailable mailbox, discarding the connection so the next call establishes its own.
+    /// </para>
+    /// </remarks>
+    internal Task<TResult> ExecuteMutationAsync<TResult>(
+        Func<IImapClient, IMailFolder, CancellationToken, Task<TResult>> mutation,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(mutation);
+
+        if (this.folderAccess is not FolderAccess.ReadWrite)
+        {
+            throw new InvalidOperationException(
+                "This connection selects its folder read-only and cannot change the mailbox.");
+        }
+
+        return this.ExecuteUnrepeatedFolderOperationAsync(mutation, cancellationToken);
     }
 
     /// <summary>Closes and releases the connection, reporting the first cleanup failure.</summary>
@@ -419,12 +557,17 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
         }
     }
 
-    /// <summary>Selects the pinned folder read-only, once it is confirmed to be the one the session started on.</summary>
+    /// <summary>Selects the pinned folder with this connection's fixed access, once it is confirmed to be the one the session started on.</summary>
     /// <remarks>
     /// A server answers a reselection with its current UIDVALIDITY, and a changed one means the UIDs already handed
     /// out name different emails now. Adopting such a folder would attach the recovered folder's emails to the
     /// previous folder's checkpoint, so the session refuses it and lets the next run start the folder over. A
     /// connection opened for discovery pins no folder and selects nothing here.
+    /// <para>
+    /// The access is the one fixed when the connection was created, so a recovered connection reselects the folder
+    /// exactly as the original selection did. A read connection cannot acquire the ability to write by losing its
+    /// socket.
+    /// </para>
     /// </remarks>
     private async Task AdoptSelectedFolderAsync(
         IImapClient establishedClient,
@@ -436,7 +579,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
         }
 
         var openedFolder = await establishedClient.GetFolderAsync(pinnedFolder.RemotePath.Value, cancellationToken);
-        await openedFolder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+        await openedFolder.OpenAsync(this.folderAccess, cancellationToken);
 
         var reselectedUidValidity = ImapUidValidity.Create(openedFolder.UidValidity);
         if (this.sessionUidValidity is { } openedUidValidity && openedUidValidity != reselectedUidValidity)
