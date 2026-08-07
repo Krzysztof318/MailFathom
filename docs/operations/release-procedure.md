@@ -125,11 +125,18 @@ the milestones, opens both pull requests, and prints the ordering. It is manual-
 it — because when a version becomes real is a decision rather than a consequence of work looking finished.
 
 **Settling the milestones comes before the pull requests**, because the milestone is the release's gate: the next
-milestone is created if it does not exist, whatever is still open in the one being released moves into it *except the
-issue tracking this release*, and the one being released is closed. That is the one place a milestone is opened, which
-is what keeps exactly one open at a time; `docs/operations/issue-tracking.md` holds the rule and the reasoning. The
-tracking issue is open and in that milestone at this point, so it is what a query for what to move returns; it stays
-where it is and stays open, because the merge below closes it.
+milestone is created if it does not exist, the issue tracking the *next* release is opened in it unless one already is,
+whatever is still open in the one being released moves into it *except the issue tracking this release*, and the one
+being released is closed. That is the one place a milestone is opened, which is what keeps exactly one open at a time;
+`docs/operations/issue-tracking.md` holds the rule and the reasoning. The tracking issue is open and in that milestone
+at this point, so it is what a query for what to move returns; it stays where it is and stays open, because the last of
+the three steps below closes it.
+
+A milestone and the issue that tracks its release are therefore opened together, which is what keeps a release from
+depending on somebody remembering to open one. The issue is deliberately short: it states the ordering, what gets
+published, and what follows the tag, and leaves what the release *carries* to the changelog section written when it is
+cut. Nothing about it is a precondition either — what is still open in the milestone moves as part of this same step,
+so a release never waits on a cleared milestone.
 
 The sequence the skill prints is the whole of what follows, and it is recorded here so it survives the skill being
 unavailable:
@@ -174,10 +181,12 @@ unavailable:
    stays down. [Applying the database schema](database-schema.md) is what the artifact is; the release notes record its
    name, its checksum, and the migrations it carries.
 
-3. **Merge the version-bump pull request, titled `Bump main version to <next>`.** It raises `VersionPrefix` to the
-   next version, and carries no issue prefix because it closes none. It merges after the tag, so
-   `main` returns to naming the next release. Skipping it fails loudly rather than silently: the next tag push repeats
-   a version that already exists, and step 2 rejects it.
+3. **Merge the version-bump pull request, titled `[#<issue>] Bump main version to <next>`.** It raises `VersionPrefix`
+   to the next version, and it names the same issue the changelog pull request does and carries the `Closes` line for
+   it, because a release is one unit of work and is finished when `main` names the next version rather than when the
+   changelog merged. It merges after the tag, so `main` returns to naming the next release. Skipping it fails loudly
+   rather than silently: the next tag push repeats a version that already exists, and step 2 rejects it — and the
+   release's tracking issue is still open, which is the same failure visible a step earlier.
 
    It also brings the lock files with it. Each `packages.lock.json` records the version of every `MailFathom.*`
    project it references, so raising the declaration leaves them naming the release just published;

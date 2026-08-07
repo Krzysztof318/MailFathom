@@ -288,11 +288,15 @@ The canonical skills are:
   prose describing the release state without naming one, because both go stale
   at the tag and neither is reached by `<VersionPrefix>`. Before either pull
   request it settles the milestones — creating the next one if it does not
-  exist, moving what is still open into it, and closing the one being released
-  — which is the only place a milestone is opened. It is one of the two skills
-  an agent cannot invoke — its frontmatter sets `disable-model-invocation`, so
-  only the owner reaches it, because when a version becomes real is their
-  decision. It pushes no tag and merges nothing;
+  exist, opening the issue that tracks that release in it, moving what is still
+  open into it, and closing the one being released — which is the only place a
+  milestone is opened, and the reason a milestone never stands without the issue
+  that closes it. Both of its pull requests name the tracking issue for the
+  release being cut, and the version-bump one closes it, because a release is
+  finished when `main` names the next version rather than when the changelog
+  merged. It is one of the two skills an agent cannot invoke — its frontmatter
+  sets `disable-model-invocation`, so only the owner reaches it, because when a
+  version becomes real is their decision. It pushes no tag and merges nothing;
   `docs/operations/release-procedure.md` records the same sequence for a reader
   without the skill.
 
@@ -312,8 +316,8 @@ That same limit is why `Queue: Next` is written by a skill rather than by an
 automation. No project workflow can set a custom single-select field, and the
 board is user-owned, which leaves only a classic account-wide token as a
 credential a GitHub Actions run could use — so the write stays where a token
-that already exists is already in use, and a pull request opened outside
-`finish-change` moves nothing.
+that already exists is already in use, and a pull request opened by neither
+`finish-change` nor `prepare-release` moves nothing.
 
 Those rules describe an issue an agent opened. A public repository also receives
 issues nobody here opened, and one arrives with no `type:*` label and no board

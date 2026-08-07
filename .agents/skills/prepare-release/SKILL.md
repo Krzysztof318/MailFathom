@@ -1,6 +1,6 @@
 ---
 name: prepare-release
-description: Manual only. Invoked by the owner to cut a MailFathom release — composes the changelog, raises the declared version, and states the order the two pull requests and the tag have to land in.
+description: Manual only. Invoked by the owner to cut a MailFathom release — composes the changelog, raises the declared version, settles the milestones and the next release's tracking issue, and states the order the two pull requests and the tag have to land in.
 disable-model-invocation: true
 license: Apache-2.0
 metadata:
@@ -21,7 +21,8 @@ between the two, and nothing inside a pull request can express that ordering —
 prints it rather than automating it.
 
 **This skill pushes no tag and merges nothing.** Tagging is the moment a release becomes real and stays a deliberate act
-by the owner. Everything here is reversible by closing two pull requests.
+by the owner. Everything here is reversible by closing two pull requests and the issue tracking the release that did
+not happen.
 
 ## What the version is
 
@@ -118,17 +119,29 @@ ask before moving anything unless they already said what to do with it.
    **What the version is**. `docs/operations/issue-tracking.md` forbids opening a further milestone beside the open
    one — the next is created *when that one closes*, which is this step and nowhere else, so creating it here
    satisfies that rule rather than bending it.
-2. **Move what is still open into it, except the issue tracking this release.** A release cut over an open milestone
+2. **Open the next release's tracking issue in it, unless one already exists.** `Cut and publish the <next> release`
+   is what the next run of this skill closes, and this is the moment it has a milestone to belong to — a milestone
+   created without it is a release nothing tracks until somebody remembers. It is a no-op when the issue exists, which
+   is what makes running this step against a milestone opened before this rule existed safe.
+3. **Move what is still open into it, except the issue tracking this release.** A release cut over an open milestone
    item releases the gap; moving the item says the work is still accepted and names the release it now belongs to. An
    item the owner would rather drop is closed as `not planned` on its own issue instead, which is their call and not
    one to make on their behalf. **The tracking issue is the one exception and it is not incidental**: it is open at
    this point in the sequence and it is in this milestone, so a query for what to move returns it, and moving it would
-   file the release under the release *after* it.
-3. **Close the milestone being released.**
+   file the release under the release *after* it. The issue step 2 just opened is already in the *next* milestone, so
+   the same query never sees it.
+4. **Close the milestone being released.**
 
 ```bash
 gh api 'repos/Krzysztof318/MailFathom/milestones?state=all' --jq '.[] | "\(.number) \(.title) \(.state)"'
 gh api -X POST repos/Krzysztof318/MailFathom/milestones -f title='<next>'          # only when it does not exist
+
+# The next release's tracking issue. Search the milestone first: an issue opened by a previous run must not be opened
+# a second time, and a second one would be two issues closing one release.
+gh issue list --repo Krzysztof318/MailFathom --milestone '<next>' --state all \
+  --search 'Cut and publish in:title' --json number,title
+gh issue create --repo Krzysztof318/MailFathom --title 'Cut and publish the <next> release' \
+  --label type:workflow --milestone '<next>' --body-file <body>    # only when the search found none
 
 # What to move: open issues in the milestone being released, minus the tracking issue. `/issues` returns pull
 # requests as well, so both exclusions are the query's rather than the reader's to remember.
@@ -139,17 +152,65 @@ gh api -X PATCH "repos/Krzysztof318/MailFathom/issues/<n>" -F milestone=<new-num
 gh api -X PATCH "repos/Krzysztof318/MailFathom/milestones/<old>" -f state=closed
 ```
 
-**That exception is why the milestone is closed holding one open issue.** The tracking issue closes on the merge in
-step 4, which happens after this, so a closed milestone with one open item is the expected shape here rather than an
-oversight, and it resolves itself.
+The new issue is placed like any other, through the calls `docs/operations/issue-tracking.md` § *Board fields* holds:
+`Area: Release`, `Queue: Later` — it names a release nobody is cutting yet, and step 6 is what moves it to `Next` when
+its pull requests exist — and `Size: S`, because both diffs together are a changelog section, three prose files, one
+property, and the lock files.
+
+#### What the tracking issue says
+
+The body is short by design. What the release *carries* is read at the moment it is cut, in step 2, and written in
+`CHANGELOG.md` by the pull request in step 4; an issue opened a release earlier cannot know it, and a second list
+written later would be a claim about the release that nothing keeps true. So the issue states what is fixed about
+every release — the ordering, what gets published, and what follows the tag — and links the changelog for the rest:
+
+```markdown
+## Context
+
+**No numbered specification backs this issue.** It is the release itself: cutting, tagging, and publishing `x.y.z`
+from the work placed in the `x.y.z` milestone. #<the previous release's issue> was the same issue for the release
+before it.
+
+The procedure is decided and recorded:
+[ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
+settles what the number means and where it comes from, `docs/operations/release-procedure.md` records the sequence, and
+`$prepare-release` prepares the two pull requests and prints the order they and the tag between them have to land in.
+
+## What this release carries
+
+Whatever is placed in this milestone. It is read from what merged since the previous tag at the moment the release is
+cut, and stated in the `CHANGELOG.md` section the release pull request writes; this issue does not restate it.
+
+## Acceptance
+
+- The changelog pull request `[#<issue>] Prepare release x.y.z` merges first; **its merge commit is what is tagged and
+  published**, so the tagged tree carries the released changelog and the prose files naming the release they ship in.
+- An annotated `vx.y.z` tag is pushed on that merge commit, by the owner. Nothing else pushes it.
+- The multi-architecture image reaches **both** GHCR and Docker Hub under one digest, tagged `x.y.z`, with `latest`
+  moved onto that digest in both; the packaged chart states `appVersion: x.y.z`; the GitHub release carries
+  `mailfathom-schema-x.y.z.sql` with its checksum and the `mfctl` binaries with theirs; the release notes are the
+  changelog section rather than a list of pull-request titles.
+- `SECURITY.md` names `x.y` as the supported line, and the line it replaces moves down a row.
+- The version-bump pull request `[#<issue>] Bump main version to <next>` merges after the tag and closes this issue.
+- The published image and chart are installed and verified against a real deployment before the release is announced.
+```
+
+**An open milestone item is not a precondition of any of that.** The move above carries what is still open into the
+next milestone as part of cutting the release, so the issue does not repeat it as something to do first: a release
+waiting on a cleared milestone would be waiting on a step the release itself performs.
+
+**That exception is why the milestone is closed holding one open issue.** The tracking issue closes on the version-bump
+merge, which is the last of the three steps this skill prints and therefore long after this, so a closed milestone with
+one open item is the expected shape here rather than an oversight, and it resolves itself.
 
 This step belongs to the owner's checkout alone. In the fork role a milestone write returns a permission error, which
 is the correct outcome rather than a partial one: nobody but the owner cuts a release of this repository.
 
 ### 4. Open the changelog pull request
 
-**Its title is `[#<issue>] Prepare release x.y.z`**, naming the issue that tracks the release, per the repository's
-own rule that a pull request title opens with the issue it closes.
+**Its title is `[#<issue>] Prepare release x.y.z`**, naming the issue that tracks the release. **It carries no `Closes`
+line**, because the release is not finished when this merges: the tag is not pushed and `main` still names the version
+being released. The version-bump pull request closes the issue, for the reason step 5 gives.
 
 On a branch off the release branch, and touching nothing else:
 
@@ -258,9 +319,12 @@ pass happened without re-running it. A release that corrects nothing is an ordin
 
 ### 5. Open the version-bump pull request
 
-**Its title is `Bump main version to <next>`**, and it carries no issue prefix, because it closes no issue. The pair
-therefore reads as `Prepare release 0.2.0` and `Bump main version to 0.3.0` in the pull-request list, which says which
-one is the release and which one follows it without either being opened.
+**Its title is `[#<issue>] Bump main version to <next>`, naming the same issue the changelog pull request does, and it
+carries `Closes #<issue>`.** One release is one unit of work, and it is finished when `main` names the next version
+rather than when the changelog merged — a tracking issue closed before the tag says the release happened while the two
+steps it exists to track are still outstanding. The pair therefore reads as `[#398] Prepare release 0.3.0` and
+`[#398] Bump main version to 0.4.0` in the pull-request list, which says which one is the release and which one follows
+it without either being opened.
 
 On a second branch off the release branch, raise `<VersionPrefix>` in `Directory.Build.props` to the next version from
 the table above. That property is the only place a version is *written*: the image's tags and labels arrive as build
@@ -316,9 +380,26 @@ Step 4 owns them.
 
 ### 6. Open both, and cross-reference them
 
-Each body names the other by number, so neither is merged alone by accident. The changelog pull request carries
-`Closes #<issue>` for the issue that tracks this release; the version-bump one closes nothing, because bumping is what
-follows a release rather than what the release was for.
+Each body names the other by number, so neither is merged alone by accident. Both name the issue that tracks this
+release in their titles, and the version-bump one carries the `Closes #<issue>` line, so the issue stays open across
+the tag and closes when the release is actually finished.
+
+**Then set `Queue: Next` on the tracking issue.** `docs/operations/issue-tracking.md` § *Linking a pull request to its
+issue* makes that write part of opening a pull request, and it is this skill's to perform: `$finish-change` is what
+writes it everywhere else, and no step here invokes it. Without the write the release is the one piece of work in
+flight that the board's `Now` view cannot see, for exactly the weeks it is being cut. It sits outside the owner's
+five-slot cap, as every write triggered by a pull request does.
+
+```bash
+gh project field-list 4 --owner Krzysztof318 --format json   # field ids and option ids
+gh project item-list  4 --owner Krzysztof318 --format json   # item id for the tracking issue
+gh project item-edit --project-id <project-id> --id <item-id> \
+  --field-id <Queue field-id> --single-select-option-id <Next option-id>
+```
+
+Confirm the value landed, as that page requires: nothing else writes the field, so one that did not land is an
+incomplete step rather than a detail. Where the board probe returned read access this write does not exist; say so
+rather than reporting it as skipped.
 
 ### 7. Print the ordering, and stop
 
@@ -341,7 +422,10 @@ Release x.y.z is prepared. Merge in this order — the tag has to land between t
    the digest the image publication produced, at the same version.
 
 3. Merge the version-bump pull request (#B).
-   After the tag, so main returns to naming the next release rather than the one just published.
+   After the tag, so main returns to naming the next release rather than the one just published. This is what
+   closes the tracking issue (#C): the release is finished here rather than at the changelog merge.
+
+The next milestone <next> is open and carries its own tracking issue (#D), which the next release closes.
 ```
 
 ## When a step fails
@@ -350,14 +434,16 @@ Release x.y.z is prepared. Merge in this order — the tag has to land between t
   two disagree for another reason. Check out the tagged commit and compare `scripts/read-declared-version.sh` against
   the tag. Do not force the tag; delete it, fix the disagreement, and tag again.
 - **The tag names a version that already exists on its line.** The bump pull request from a previous release never
-  merged. Merge it, then re-cut.
+  merged, which is visible before the tag as well: that release's tracking issue is still open. Merge it, then re-cut.
 - **Publication fails partway.** Re-run the `Release` workflow on the same tag rather than rebuilding anything. It
   reconciles: a version both registries already carry from this commit is left alone, and one only a single registry
   carries is copied across by digest, so the artifact that reaches the second registry is the one the first published.
   A rebuild would produce a second artifact for one version, which is what the immutability assertion exists to
   prevent. `docs/operations/release-procedure.md` records the whole sequence and what each failure means.
 - **The release is abandoned before the tag.** Close both pull requests. Nothing was published and no tag exists, so
-  there is nothing to undo.
+  there is nothing to undo. The tracking issue stays open and keeps its milestone: the release it names has not
+  happened, and the run that eventually cuts it is what closes it. The milestone work of step 3 is not undone either —
+  the next milestone and its own tracking issue already exist, and a later run finds both and creates neither.
 - **The release is abandoned after the tag.** It is not abandoned; it is released. Cut a patch from the release branch.
 
 `docs/operations/release-procedure.md` records the same sequence for a reader who does not have this skill.
