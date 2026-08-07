@@ -42,27 +42,41 @@ than describing less than the change while looking complete.
 
 The fast script restores the solution, builds it in Release configuration, runs
 all unit tests without rebuilding, and formats the C# files the branch changed.
-Formatting runs in both scripts on purpose: style diagnostics such as `IDE0005`
-come from `dotnet format` rather than from the build, and leaving them to the
-final gate means discovering them only after tool restore and the whole coverage
-collection have run.
+It is the only one that rewrites source files, and the one `dotnet format` pass
+it runs is a repairing one.
 
-The fast script is the only one that rewrites source files. It runs
-`dotnet format` twice over the changed files: a repairing pass applies every
-available code fix, and a `--verify-no-changes` pass names by file and line what
-had none. Neither pass replaces the other, because the repairing pass exits `0`
-and identifies no file when a diagnostic such as `IDE0060` has no code fix.
-Restricting both passes to the changed files is what keeps the loop usable:
-`dotnet format` reloads the MSBuild workspace on every invocation, which costs
-roughly 15 seconds, and analyzing the whole solution costs about 70 seconds
-against about 30 for a handful of files. The final gate still formats the whole
-solution, so a defect outside the changed files cannot merge.
+Nothing behind it verifies, because the build in front of it already reported.
+`Directory.Build.props` sets `EnforceCodeStyleInBuild` beside
+`TreatWarningsAsErrors` and `.editorconfig` gives the IDE rules severity
+`warning`, so `IDE0005`, `IDE0055`, `IDE0073`, and `IDE0060` are build errors
+naming their file and line — a diagnostic with no code fix fails the script
+several steps before formatting is reached. What the repairing pass adds is what
+no build sees: the ordering of using directives and a missing final newline are
+`dotnet format`'s own passes rather than analyzer rules, and both have code
+fixes, so rewriting them is the whole answer.
 
-The full script additionally restores repository tools,
-runs the workflow contract suite, executes the aggregate coverage gate, and
-checks the Git diff. It rejects remaining untracked files, so inspect the
-staged diff before running it. See [Agent workflow](agent-workflow.md) for the
-workspace inspection command and shared skills.
+Restricting the pass to the changed files is what keeps the loop usable.
+`dotnet format` reloads the MSBuild workspace on every invocation at a cost that
+does not depend on scope, and the analysis after it does: the whole solution
+costs several times what a handful of files costs, on any machine.
+
+The full script additionally restores repository tools, runs the workflow
+contract suite where the change can have moved something it asserts, executes the
+aggregate coverage gate, verifies formatting, and checks the Git diff. It rejects
+remaining untracked files, so inspect the staged diff before running it. See
+[Agent workflow](agent-workflow.md) for the workspace inspection command and
+shared skills.
+
+Two of its steps read the change rather than the tree, and
+[Agent workflow](agent-workflow.md#entry-points) carries the argument for each.
+Formatting is verified over the C# files the branch changed, and over the whole
+solution only when a shared style or build input changed or was removed — an
+`.editorconfig` at any depth, `Directory.Build.props`,
+`Directory.Build.targets`, `Directory.Packages.props`, `global.json`, or
+`MailFathom.slnx` — which is the list `ci.yml` gives its own `format:` filter. The contract suite is skipped when
+every path the branch touched is a C# file it added or edited, and runs whenever
+one was removed or moved. `CI` asks both questions unconditionally, so the local
+narrowing withholds an earlier verdict rather than the verdict.
 
 The full script fetches the base branch and refuses to continue when the branch
 does not contain it, so it needs access to the remote and cannot run offline.
@@ -513,7 +527,7 @@ Four workflows run for every pull request targeting `main`. Two of them always r
 - `Build and unit test` runs when the change touches production code, tests, the solution or SDK selection, shared build and package configuration, coverage tooling, or the workflow file. It restores `MailFathom.slnx` in locked mode and repository-local tools, builds the solution in Release configuration, runs all unit-test projects through Microsoft Testing Platform with unique coverage prefixes, merges their Cobertura reports, and fails below 85% aggregate line coverage for the complete configured production scope. It uploads raw and merged coverage artifacts and TRX results even when the threshold fails.
 - `dotnet format` runs when the change touches `src/**`, `tests/**`, `.editorconfig`, the workflow file, the shared build files, `Directory.Packages.props`, `MailFathom.slnx`, or `global.json`. It restores `MailFathom.slnx` in locked mode and verifies repository formatting without applying changes. The command runs its analyzer pass as well as its whitespace and style passes, so a centrally pinned analyzer version, a property set in a shared build file, a project added to the solution, or a different SDK can move its verdict without a single C# file changing; the trigger covers all four. `.config/**` and `NuGet.config` stay out, because they decide what the build rejects, restores, runs, and measures rather than how code is written.
 - `Pending model changes` runs when the change touches `src/**`, `.config/dotnet-tools.json`, the workflow file, or `Directory.Packages.props`. It restores in locked mode, restores local tools, builds `src/Host` in Release configuration, and runs `dotnet ef migrations has-pending-model-changes`, which fails when the EF Core model has moved without a migration recording it. The command opens no connection — it compares the compiled model against the committed model snapshot — so no database is provisioned for this job. Production code is the only thing that can move the model, which is why tests and documentation are not triggers; `Directory.Packages.props` is one because raising the EF Core version can change what the generator emits for an unchanged model. `Persistence__TextSearchConfiguration` is deliberately left unset, so a migration generated under a non-default configuration fails here by design rather than by accident.
-- `Workflow contracts` runs `scripts/test-agent-workflow.sh`, and it is the only job that reads the part of the repository the build, formatting, and model jobs cannot: the workflows, the verification scripts, the fathom-review helpers, the skills, the licensing header outside the solution, and the `describes:` marker on every page under `docs/`. It has no trigger condition of any kind — no path filter, no draft exemption, no event condition, no dependency — so it starts with `Detect changes`, runs beside the expensive jobs rather than after them, and runs on a push to `main` as well as on a pull request. It checks the repository out shallowly with `persist-credentials: false` and runs the suite; nothing else is provisioned, because the suite fakes `dotnet` with a symlink to itself, builds the Git repositories it tests under a temporary directory, and reaches no network. The whole job takes about twenty seconds on a GitHub-hosted runner, of which the suite itself is fifteen. It takes longer than that under `scripts/verify-full.sh` on a developer machine, which is a different measurement rather than a contradiction: there it competes with whatever else that machine is doing, and it is one step of a gate whose build and coverage run dominate it either way. [Entry points](agent-workflow.md#entry-points) describes the suite itself and the local gate that runs it as well.
+- `Workflow contracts` runs `scripts/test-agent-workflow.sh`, and it is the only job that reads the part of the repository the build, formatting, and model jobs cannot: the workflows, the verification scripts, the fathom-review helpers, the skills, the licensing header outside the solution, and the `describes:` marker on every page under `docs/`. It has no trigger condition of any kind — no path filter, no draft exemption, no event condition, no dependency — so it starts with `Detect changes`, runs beside the expensive jobs rather than after them, and runs on a push to `main` as well as on a pull request. It checks the repository out shallowly with `persist-credentials: false` and runs the suite; nothing else is provisioned, because the suite fakes `dotnet` with a symlink to itself, builds the Git repositories it tests under a temporary directory, and reaches no network. The whole job takes about twenty seconds on a GitHub-hosted runner, of which the suite itself is fifteen. It takes longer than that under `scripts/verify-full.sh` on a developer machine, which is a different measurement rather than a contradiction: there it competes with whatever else that machine is doing, and the gate is one run of many rather than the one that decides a merge. That is also why the local gate asks first whether the change can have moved anything the suite asserts and skips it when it cannot, while this job asks nothing and runs always: a skipped run costs a verdict that arrives minutes later, and there is no later here. [Entry points](agent-workflow.md#entry-points) describes the suite itself and the local gate that runs it as well.
 - `Required CI` is this workflow's one required status check, and the only conclusion the ruleset reads from it. It depends on the other five, runs under `if: always()` so a cancelled or skipped dependency cannot skip it in turn, and reads their results: `Detect changes` and `Workflow contracts` must have succeeded, and each of the other three must have either succeeded or been skipped. `failure` and `cancelled` fail it. The contract job is held to the stricter rule because it has no way to skip on the events this job runs for: a path filter and a draft exemption are what produce a legitimate `skipped`, and it has neither, so the conclusion could only come from a job that failed to start. This job itself does not run on a push to `main`, for the reason [`CI` after a merge to `main`](#ci-after-a-merge-to-main) gives.
 
 The second workflow, `Protected paths`, carries one job of the same name and answers a different question: not whether the change builds, but whether its author may make it at all. It reads the pull request's changed files through the GitHub REST API, checks nothing out, and fails when the pull request adds, modifies, deletes, or renames a protected path and its author is not the repository owner. A rename is read from both ends, so moving a file out of a protected directory counts as changing it. A pull request larger than the 3000 files that endpoint reports fails rather than passing on a list that may be missing the change it was asked about. Everything else it sees passes in seconds, including drafts, which run it for the same reason: the fact it reports is worth having in the first minute rather than at the moment a draft is marked ready.

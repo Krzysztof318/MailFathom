@@ -22,8 +22,8 @@ metadata:
    - unrelated edits, generated files, and secrets.
 4. Run `scripts/review-obligations.sh` and work through what it reports. It names what the change obliges the rest of the repository to do — the tests naming each changed type, the pages whose `describes:` marker covers each changed path, the registers whose trigger moved — which is the part of a review no diff contains, because there the defect *is* the absence of a second file. It reports and never gates, and it costs a second, so run it on every change rather than on the ones that look like they need it.
 5. Apply the recurring-findings checklist below to the changed code.
-6. Run `scripts/verify-fast.sh` when executable or test code changed since its last successful run. A green run that nothing has invalidated is already evidence; repeating it costs a Release build, the whole test suite, and two formatting passes to reprove the same thing. Report the run you are relying on. If it cannot run, state why.
-7. Never invoke `dotnet format` directly to act on a finding. The fast loop repairs the changed files and reports what has no code fix; fix that and rerun the loop.
+6. Run `scripts/verify-fast.sh` when executable or test code changed since its last successful run. A green run that nothing has invalidated is already evidence; repeating it costs a Release build, the whole test suite, and a formatting pass to reprove the same thing. Report the run you are relying on. If it cannot run, state why.
+7. Never invoke `dotnet format` directly to act on a finding. The fast loop repairs the changed files, and the Release build in front of it names by file and line whatever no rewrite fixes; fix that and rerun the loop.
 
 ## Recurring findings
 

@@ -23,25 +23,39 @@ bash scripts/verify-fast.sh
 The fast loop restores, builds Release, runs the unit tests, and then formats the
 C# files the branch changed: everything committed since `origin/main`, staged,
 modified, or newly added. It is the only workflow script that rewrites source
-files, and it does so twice over that scope. The repairing `dotnet format` pass
-applies every available code fix, and the following `--verify-no-changes` pass
-reports by file and line what had none, because the repairing pass exits `0` and
-identifies no file when a diagnostic such as `IDE0060` cannot be fixed
-automatically. Formatting is skipped when the branch changed no C# file.
+files, and the single `dotnet format` pass it runs is a repairing one.
+Formatting is skipped when the branch changed no C# file.
+
+There is no verifying pass behind it, because the build in front of it has
+already made that report. `Directory.Build.props` sets `EnforceCodeStyleInBuild`
+beside `TreatWarningsAsErrors`, and `.editorconfig` gives the IDE rules severity
+`warning`, so a file with an unnecessary using, a missing licensing header, or
+formatting the rules reject fails the Release build with `error IDE0005`,
+`error IDE0073`, and `error IDE0055`, each naming its file and line. A
+diagnostic with no code fix — `IDE0060` is the usual one — is therefore not
+something a formatting pass has to surface: it failed the build several steps
+earlier and the script never reached formatting at all.
+
+What the repairing pass is for is the remainder, which is real and is invisible
+to a build: the ordering of using directives and a missing final newline are
+`dotnet format`'s own passes rather than analyzer rules, and no build reports
+either. They also have code fixes, which is why repairing them is the whole
+answer and verifying them again afterwards adds nothing.
 
 Nobody runs `dotnet format` by hand. Both of its modes already run where they
-belong, so a hand-run pass either repeats about 30 seconds of workspace loading
-and analysis to reproduce what the loop just reported, or, over the whole
-solution, spends 70 seconds and can rewrite files the change never touched. Fix
-what the loop reported and run it again.
+belong, so a hand-run pass either repeats a full workspace load to reproduce
+what the build named, or, over the whole solution, costs several times that and
+can rewrite files the change never touched. Fix what the build named and run the
+loop again.
 
-Scoping the loop is what makes running `dotnet format` twice cheaper than
-running it once over the solution. Each invocation reloads the MSBuild
-workspace, which costs roughly 15 seconds regardless of scope, and the analysis
-that follows scales with the files in scope: about 70 seconds for the whole
-solution against about 30 for a handful of files. Splitting the run into the
-`whitespace`, `style`, and `analyzers` subcommands is slower still, because it
-pays the workspace load three times for work one invocation already does.
+Scoping is what makes the pass affordable at all. Each invocation reloads the
+MSBuild workspace, which costs the same regardless of scope, and the analysis
+that follows scales with the files in it: the whole solution costs several times
+what a handful of files does, and the ratio is what the two gates are built
+around rather than any particular number, which follows the machine. Splitting
+the run into the `whitespace`, `style`, and `analyzers` subcommands is slower
+still, because it pays the workspace load three times for work one invocation
+already does.
 
 Ask what the change obliges elsewhere while reviewing it:
 
@@ -66,13 +80,41 @@ bash scripts/verify-full.sh
 
 The full gate rejects remaining untracked files, fetches `origin main` and
 requires the branch to contain that freshly fetched base, runs the workflow
-contract suite, restores repository tools and the solution, builds Release,
-executes all unit tests through the aggregate 85% coverage target, verifies
-formatting, and checks committed branch changes, staged changes, and unstaged
-changes for whitespace errors. It stops at the first failure. Restore, build,
-test, coverage, and formatting can create ignored local artifacts, and the fetch
-updates `refs/remotes/origin/main`, but the scripts do not commit, push, or
-change branches.
+contract suite where the change can have moved something it asserts, restores
+repository tools and the solution, builds Release, executes all unit tests
+through the aggregate 85% coverage target, verifies formatting, and checks
+committed branch changes, staged changes, and unstaged changes for whitespace
+errors. It stops at the first failure. Restore, build, test, coverage, and
+formatting can create ignored local artifacts, and the fetch updates
+`refs/remotes/origin/main`, but the scripts do not commit, push, or change
+branches.
+
+Two of those steps read what the branch changed rather than running over
+everything, and both read it from `scripts/list-branch-changes.sh`, which the
+fast loop reads too so the two gates cannot disagree about what a change is.
+
+Formatting is verified over the C# files the branch changed. Formatting is a
+property of a file, so those are the files this branch can have broken, and
+everything else was verified by whatever change last touched it — the same
+argument `ci.yml` makes when it asks a pull request rather than a push. The one
+change that moves the answer for a file nobody opened is a change to a shared
+style input: an `.editorconfig` at any depth, `Directory.Build.props`,
+`Directory.Build.targets`, `Directory.Packages.props`, `global.json`, or
+`MailFathom.slnx`. Removing one counts, and is the half a list of the files that
+still exist cannot see: the rules a nested `.editorconfig` carried stop applying
+the moment it is gone, and every file beneath it is then read against the ones
+above without having been touched. That case, and only it, still verifies the
+whole solution
+here — the same list `ci.yml` gives its `format:` filter, for the same reason.
+The gate verifies rather than repairs, which is the whole difference from the
+loop: a change that never went through the loop is caught before it is committed
+rather than quietly rewritten as it is.
+
+Whether a step can be skipped and whether its verdict can be skipped are
+different questions. `CI` runs `dotnet format` over the whole solution on every
+pull request whose change can affect it, and runs the contract suite on every
+pull request there is, so what the narrower local scope withholds is an earlier
+verdict rather than the verdict.
 
 Both scripts refuse to run on `main` or `master`, before the fetch and before
 any `dotnet` invocation. The integration branch is never the subject of a
@@ -132,6 +174,17 @@ script without knowing what asserts it. What the full gate
 above keeps is the earlier verdict — a contract broken here is answered before the
 push rather than after it — and the job is the same command against the same tree,
 so the two cannot disagree.
+
+That is also what decides when the full gate runs it. Every invariant the suite
+asserts is carried by a file no C# change can move: a licensing header outside
+`.cs`, a `describes:` marker, a table-of-contents entry, a link. So a branch that
+only added or edited C# files has nothing here to break, and the gate skips the
+suite for it. A path the branch removed or moved runs it whatever the path was,
+because a marker and an entry name a path and the files that remain say nothing
+about one that left. So does a change list the script cannot determine, which is
+a repository state to fix rather than a verdict to guess at. `CI` is
+unconditional either way, which is what makes this an earlier verdict withheld
+rather than a verdict lost.
 
 ## Which remote is the base
 
