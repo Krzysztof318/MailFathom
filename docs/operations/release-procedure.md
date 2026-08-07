@@ -113,6 +113,12 @@ question per surface and settles the recurring ambiguous cases.
 The reading that answers it happens at release time, from what merged since the previous tag, and it is the same
 reading that produces the changelog section.
 
+**The increment is judged on what those four surfaces actually moved, whether or not the feature a change belongs to is
+finished.** A release delivering three of a feature's ten parts still moves the database schema when one of the three
+added a table, and an increment lowered because the capability is not usable yet would understate an upgrade the
+operator has to plan for. Incompleteness governs how the changelog *describes* a release, which `$prepare-release`
+holds; it never governs the number.
+
 **`CHANGELOG.md` is written by the release pull request and by nothing else.** Ordinary work never touches it: a
 changelog is a statement about a release, and until someone decides to cut one there is no release for a line to belong
 to. The file is a protected path, so an edit arriving through ordinary work is visible as the exception it is, and

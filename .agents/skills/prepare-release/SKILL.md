@@ -105,6 +105,54 @@ thing they update rather than as what changed internally.
 An entry that resists this is usually an entry that should not exist. A change with nothing to say to that reader is a
 change they cannot observe, and the correct entry for one is none.
 
+#### A feature the release delivers only part of
+
+That last sentence deletes the entry for a change too small to be noticed. This is the case it does not reach: a change
+large enough to matter that is one part of a feature still being assembled. `docs/operations/issue-tracking.md` splits
+such a feature across a parent issue's children, so it arrives here as several closed issues whose own titles name
+pieces — and the instruction to drop the mechanism and state the capability then has exactly one capability-shaped
+sentence within reach, which is the parent's. That sentence is a claim about the whole feature, and the release
+delivered part of it. Nothing in a pull request says which case it is in, which is why the parents are read rather than
+inferred.
+
+Resolve each issue the merged pull requests closed against its parent. The sub-issue links are the source of truth for
+the hierarchy — the `parent` label mirrors them for the board and can be stale — so the lookup follows the link, and
+only GraphQL exposes it:
+
+```bash
+for issue in <the numbers closingIssuesReferences returned above>; do
+  gh api graphql -f query="{ repository(owner: \"Krzysztof318\", name: \"MailFathom\") {
+    issue(number: $issue) { number parent { number title state subIssuesSummary { total completed } } } } }" \
+    --jq '.data.repository.issue | select(.parent != null)
+          | "#\(.number)\t#\(.parent.number) \(.parent.state) \(.parent.subIssuesSummary.completed)/\(.parent.subIssuesSummary.total)\t\(.parent.title)"'
+done
+```
+
+Read each closed issue against what that returns. Two cases decide how far the entry may reach:
+
+- **It has no parent, or its parent has no child left open.** The feature is whole, and the entry names the capability
+  exactly as everything above describes. Ask the same question of the level above when that parent is a sub-parent: the
+  hierarchy is two deep at most, and a finished part of an unfinished feature is still a part.
+- **Its parent still holds open children.** The release carries a part of the feature. The entry states what the reader
+  can do *now* and nothing past it, and where nothing they can do moved, the entry is none — the same answer the
+  paragraph above gives, arrived at for a different reason. **The parent's capability is never written as an entry**, in
+  any tense: a sentence about what a release lays the ground for is read as a sentence about what it ships.
+
+**A third case cuts across both rather than standing beside them: the issue carries an action for the operator.** A
+break, a migration, a new required configuration key, a default that moved. That entry follows from the action alone
+and is written whether or not anything can yet use the feature around it — which is what keeps this from being a rule
+that only deletes, because the groundwork for a capability nobody can invoke is still a table somebody has to migrate
+onto. Write the action, and no more of the feature than the case above allows.
+
+**A parent left open is the expected shape here rather than a fault to correct.** A release never waits for one to
+close, and `cross-milestone` beside `Queue: Parent` says that feature was always going to arrive in stages. Nothing in
+this reading blocks the release or moves an issue either: step 3 is what carries whatever is still open into the next
+milestone, and it does so for every open item rather than for a parent's children in particular.
+
+**The withheld sentence is not lost, it is early.** The release that closes the last child is where the capability is
+named, in the reader's terms and truthfully, and that is the release they would act on anyway. Writing it sooner buys
+them nothing and costs the file the only thing it has, which is that an entry in it can be believed.
+
 **The increment follows from what this reading found**, not the other way round: the highest increment any of the four
 surfaces requires is the release's own. Raise the question with the owner when the entries and the version already
 declared disagree — an unnecessary major costs one careful upgrade, an unmarked break costs an outage.
@@ -218,7 +266,9 @@ On a branch off the release branch, and touching nothing else:
   grouped into the six Keep a Changelog categories and each referencing the pull request or issue that carried it;
 - open the section with a short paragraph in the reader's own terms: what this release is for, whether the database
   schema moves, and whether anything the previous release promised is withdrawn. That is what somebody deciding whether
-  to upgrade reads, and it is the one part no list of entries can state;
+  to upgrade reads, and it is the one part no list of entries can state. It names no capability the parent reading in
+  step 2 found still being assembled — a summarizing paragraph is where a half-delivered feature is easiest to promise
+  and where the qualification reads worst;
 - **add no `Unreleased` section.** The file carries none by design: it says what released versions shipped, and a
   heading standing above the newest one either says nothing or claims something about a release nobody has cut. What
   has merged since the newest section is what a nightly build carries, and the file's own preamble says so;
