@@ -165,6 +165,71 @@ public sealed class MailboxSynchronizerTests
         Assert.True(observed.IsReconciled);
     }
 
+    /// <summary>An occurrence another local email already occupies is stored rather than carried, because only the mailbox could say which of the two is right.</summary>
+    /// <remarks>
+    /// Falling through is what leaves the duplicate visible instead of failing the run, and the record stays unobserved
+    /// so the relocation is still something an operator can find. The two together are what a regression that quietly
+    /// marked the mutation observed, or threw, would cost.
+    /// </remarks>
+    [Fact]
+    public async Task SynchronizeAsync_DiscoveredPlacementAlreadyOccupiedByAnotherEmail_StoresTheDiscoveryAndLeavesTheRecordUnobserved()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var uid = ImapUid.Create(10);
+        var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, uid);
+        var relocatedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        var record = RelocationPlacedInInbox(accountId, relocatedEmailId, uidValidity, uid);
+        mutationStore.Add(record);
+        var metadataRepository = Substitute.For<IEmailMetadataRepository>();
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+        sessionScopeFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(persistenceSession);
+        persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
+        metadataRepository
+            .TryCarryToOccurrenceAsync(persistenceSession, relocatedEmailId, occurrence, Arg.Any<CancellationToken>())
+            .Returns(false);
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 7, 12, 0, 0, TimeSpan.Zero));
+        await using var session = CreateSessionDiscovering(occurrence, uidValidity);
+        session
+            .FetchEmailContentWithoutSettingSeenAsync(occurrence, Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(RemoteEmailContentFetchResult.Retrieved(
+                new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]))));
+        var synchronizer = CreateSynchronizer(
+            CreateSessionFactoryFor(accountId, session),
+            CreateCheckpointStoreAt(accountId, uidValidity),
+            sessionScopeFactory,
+            metadataRepository,
+            contentStore: Substitute.For<IEmailContentStore>(),
+            clock,
+            new MailboxSynchronizationOptions(),
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.RelocatedEmailCount);
+        Assert.Equal(1, result.StoredEmailCount);
+        await metadataRepository.Received(1).TryCarryToOccurrenceAsync(
+            persistenceSession,
+            relocatedEmailId,
+            occurrence,
+            Arg.Any<CancellationToken>());
+        await metadataRepository.Received(1).UpsertMetadataAsync(
+            persistenceSession,
+            Arg.Any<RemoteEmailMetadata>(),
+            Arg.Any<ExtractedEmailMetadata?>(),
+            StoredEmailContentAvailability.Available,
+            Arg.Any<CancellationToken>());
+
+        var unobserved = mutationStore.RecordOf(record.Id);
+        Assert.Null(unobserved.PlacementObservedAt);
+        Assert.Null(unobserved.SourceRemovalObservedAt);
+    }
+
     /// <summary>A server that named no placement is joined to nothing, so the discovery is stored exactly as it is today.</summary>
     [Fact]
     public async Task SynchronizeAsync_RelocationWhoseServerNamedNoPlacement_StoresTheDiscoveryAsAnyOtherNewMessage()

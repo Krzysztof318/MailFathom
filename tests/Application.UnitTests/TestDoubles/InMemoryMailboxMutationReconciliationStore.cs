@@ -13,9 +13,17 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 
 /// <summary>Holds mutation records in memory and answers the two questions a synchronization run asks of them.</summary>
 /// <remarks>
+/// <para>
 /// The reads reproduce the filters the port documents rather than returning everything and leaving the domain predicate
 /// to sort it out. A fake that answered more broadly than the real query would let a record the database never returns
 /// still decide a test, so the narrowing is part of what is being reproduced.
+/// </para>
+/// <para>
+/// They reproduce its ordering for the same reason. Attributing one disappearance to the oldest of several records is
+/// the first match in that order, so a fake ordering by the timestamp alone would decide a tied-timestamp test on
+/// whatever order the dictionary happened to enumerate — behavior the real store does not have, because it breaks the
+/// tie on the identifier.
+/// </para>
 /// </remarks>
 internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutationReconciliationStore
 {
@@ -48,7 +56,8 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
                     && record.Placement.UidValidity == uidValidity
                     && record.Placement.Uid is { } placedUid
                     && uids.Contains(placedUid))
-                .OrderBy(record => record.RecordedAt),
+                .OrderBy(record => record.RecordedAt)
+                .ThenBy(record => record.Id.Value),
         ];
 
         return Task.FromResult(placed);
@@ -73,7 +82,8 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
                     && uids.Contains(record.Request.Occurrence.Uid)
                     && (record.Request.Mutation == MailboxMutation.Relocate
                         || record.Request.Mutation == MailboxMutation.Delete))
-                .OrderBy(record => record.RecordedAt),
+                .OrderBy(record => record.RecordedAt)
+                .ThenBy(record => record.Id.Value),
         ];
 
         return Task.FromResult(removing);

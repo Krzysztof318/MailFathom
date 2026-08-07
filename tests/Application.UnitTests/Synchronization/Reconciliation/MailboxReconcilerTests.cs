@@ -123,6 +123,50 @@ public sealed class MailboxReconcilerTests
         Assert.Equal(RunInstant, store.RowOf(11).ObservedAt);
     }
 
+    /// <summary>One occurrence can carry several records, and the disappearance is credited to the one that has been outstanding longest.</summary>
+    /// <remarks>
+    /// The case is real rather than theoretical: a record matches at every stage past <c>Recorded</c>, abandoned
+    /// included, so a completed relocation and a later mutation that gave up on the same source occurrence both
+    /// qualify. Which one is credited changes nothing about the local row — the point is that the disappearance is
+    /// attributed once, and to the record that describes the change that actually moved the message.
+    /// </remarks>
+    [Fact]
+    public async Task ReconcileAsync_OccurrenceCarryingSeveralRecords_AttributesTheDisappearanceToTheOldestOnlyOnce()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(11));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        var storedEmailId = store.StoredEmailIdOf(11);
+        var oldest = MutationRemoving(storedEmailId, uid: 11, isRelocation: true);
+        var later = MutationRemoving(storedEmailId, uid: 11, isRelocation: false, RunInstant.AddMinutes(5))
+            with
+        {
+            Stage = MailboxMutationStage.Abandoned,
+        };
+        mutationStore.Add(oldest);
+        mutationStore.Add(later);
+        await using var mailboxSession = CreateSessionHolding();
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.OwnMutationCompletedEmailCount);
+        Assert.Equal(0, result.RemotelyDeletedEmailCount);
+        Assert.Equal(RunInstant, mutationStore.RecordOf(oldest.Id).SourceRemovalObservedAt);
+        Assert.Null(mutationStore.RecordOf(later.Id).SourceRemovalObservedAt);
+    }
+
     /// <summary>A disappearance seen before the destination folder is synchronized settles one half and leaves the other owing.</summary>
     [Fact]
     public async Task ReconcileAsync_RelocationSourceSeenBeforeItsPlacement_LeavesThePlacementStillAwaited()
@@ -684,14 +728,19 @@ public sealed class MailboxReconcilerTests
     }
 
     /// <summary>Builds the record a completed relocation or delete of one stored occurrence would have left behind.</summary>
-    private static MailboxMutationRecord MutationRemoving(StoredEmailId storedEmailId, uint uid, bool isRelocation)
+    private static MailboxMutationRecord MutationRemoving(
+        StoredEmailId storedEmailId,
+        uint uid,
+        bool isRelocation,
+        DateTimeOffset? recordedAt = null)
     {
         var occurrence = EmailOccurrenceId.Create(Account, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid));
         var requester = MailboxMutationRequester.Rule("file-newsletters", 1);
+        var opened = recordedAt ?? RunInstant;
 
         return new MailboxMutationRecord
         {
-            Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(RunInstant)),
+            Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(opened)),
             Request = isRelocation
                 ? MailboxMutationRequest.Relocate(
                     storedEmailId,
@@ -705,8 +754,8 @@ public sealed class MailboxReconcilerTests
                 ? RemoteEmailPlacement.Reported(ImapUidValidity.Create(99), ImapUid.Create(4))
                 : RemoteEmailPlacement.NotReported(),
             AttemptCount = 1,
-            RecordedAt = RunInstant,
-            StageChangedAt = RunInstant,
+            RecordedAt = opened,
+            StageChangedAt = opened,
             LastFailure = null,
             PlacementObservedAt = null,
             SourceRemovalObservedAt = null,
