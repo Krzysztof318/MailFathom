@@ -226,6 +226,36 @@ public sealed class StoredEmailEmbeddingBackfillTests
         Assert.Equal(2, world.TextEmbeddingGenerator.RequestedBatches.Count);
     }
 
+    /// <summary>
+    /// A message needing more calls than one turn allows keeps the walk going, because it says something about that
+    /// message's length and nothing about the provider — but it is counted, because the walk steps past it and a
+    /// mailbox where several sweeps go by before one message finishes would otherwise look like one that is finishing
+    /// them.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_MessageNeedingMoreCallsThanOneTurnAllows_CountsItAndCarriesOn()
+    {
+        // Arrange
+        const int callBudget = 512;
+        var world = CreateWorld(maximumPassagesPerCall: 1);
+        var longMessage = NextEmail();
+        world.BackfillStore.AddEmailAwaitingEmbedding(longMessage, passageCount: callBudget + 3);
+        var messageBehindIt = NextEmail();
+        world.BackfillStore.AddEmailAwaitingEmbedding(messageBehindIt, passageCount: 1);
+        var backfill = world.CreateBackfill();
+
+        // Act
+        var result = await backfill.RunAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, result.CallBudgetExhaustedEmailCount);
+
+        // The message behind it was still reached, and the truncated one is not counted as brought up to date.
+        Assert.Equal(1, result.EmbeddedEmailCount);
+        Assert.Equal(callBudget + 1, result.EmbeddedChunkCount);
+        Assert.Contains(messageBehindIt, world.BackfillStore.SavedPositions);
+    }
+
     /// <summary>Cancellation ends the run at the next message and leaves the position it already committed durable.</summary>
     [Fact]
     public async Task RunAsync_CancelledAfterOneMessage_StopsThereAndLeavesThatPositionDurable()
@@ -297,7 +327,8 @@ public sealed class StoredEmailEmbeddingBackfillTests
 
     private static BackfillWorld CreateWorld(
         string generatorModelIdentifier = "a-model",
-        bool profileActive = true)
+        bool profileActive = true,
+        int maximumPassagesPerCall = 8)
     {
         var activeProfile = profileActive
             ? new ActiveEmbeddingProfile(ProfileId, CreateIdentity("a-model"))
@@ -306,7 +337,7 @@ public sealed class StoredEmailEmbeddingBackfillTests
         var backfillStore = new InMemoryStoredEmailEmbeddingBackfillStore(embeddingStore);
         var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(
             CreateIdentity(generatorModelIdentifier),
-            maximumPassagesPerCall: 8);
+            maximumPassagesPerCall);
 
         var profileReader = Substitute.For<IActiveEmbeddingProfileReader>();
         profileReader.FindActiveProfileAsync(Arg.Any<CancellationToken>()).Returns(activeProfile);

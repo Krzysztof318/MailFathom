@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
@@ -84,6 +85,49 @@ public sealed class MailEmbeddingBackfillWorkerTests
             TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    /// A message that spends every call one turn allows stops nothing, so the run reports it beside its ending rather
+    /// than as one — and it still reaches an operator, because the walk steps past such a message and a mailbox
+    /// finishing one across several sweeps would otherwise look like one finishing them outright.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_AMessageSpentEveryCallOneTurnAllows_WarnsAboutTheBatchBound()
+    {
+        // Arrange
+        // One message per run, because exhausting a turn's budget costs the generator's whole 512-call ceiling and the
+        // default bounds would pay that five times over before the run this test is waiting on ended.
+        using var world = CreateWorld(new EmbeddingBackfillOptions { BatchSize = 1, MaxBatchesPerRun = 1 });
+        var message = StoredEmailId.Create(Guid.CreateVersion7());
+
+        // A store that keeps reporting the same passage outstanding is what spends a turn's whole call budget.
+        world.BackfillStore
+            .GetEmailsAwaitingEmbeddingAsync(
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<EmbeddingProfileId>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingEmbedding>>(
+                [new StoredEmailAwaitingEmbedding(message, RequiresChunking: false)]));
+        world.EmbeddingStore
+            .GetChunksAwaitingEmbeddingAsync(
+                Arg.Any<StoredEmailId>(),
+                Arg.Any<EmbeddingProfileId>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<EmailChunkAwaitingEmbedding>>(
+                [new EmailChunkAwaitingEmbedding(EmailChunkId.Create(Guid.CreateVersion7()), "a passage")]));
+
+        // Act
+        await world.Worker.StartAsync(CancellationToken.None);
+        await world.Logger.WaitForOccurrences("spent every provider call a turn is allowed", occurrences: 1);
+        await world.Worker.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Contains(
+            world.Logger.Messages,
+            message => message.Contains("MaxPassagesPerRequest", StringComparison.Ordinal));
+    }
+
     /// <summary>A failed run says nothing about whether messages remain, so the worker stays alive to resume next interval.</summary>
     [Fact]
     public async Task ExecuteAsync_RunFails_LogsItWithoutEndingTheWorker()
@@ -164,7 +208,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
         services.AddSingleton<TimeProvider>(world.TimeProvider);
         services.AddSingleton(world.BackfillStore);
         services.AddSingleton(profileReader);
-        services.AddSingleton(Substitute.For<IEmailEmbeddingStore>());
+        services.AddSingleton(world.EmbeddingStore);
         services.AddSingleton(textEmbeddingGenerator);
         services.AddSingleton(Substitute.For<IPersistenceSessionFactory>());
         services.AddSingleton(new PersistenceConcurrencyOptions());
@@ -202,6 +246,8 @@ public sealed class MailEmbeddingBackfillWorkerTests
 
         public IStoredEmailEmbeddingBackfillStore BackfillStore { get; } =
             Substitute.For<IStoredEmailEmbeddingBackfillStore>();
+
+        public IEmailEmbeddingStore EmbeddingStore { get; } = Substitute.For<IEmailEmbeddingStore>();
 
         public MailEmbeddingBackfillWorker Worker => this.worker!;
 

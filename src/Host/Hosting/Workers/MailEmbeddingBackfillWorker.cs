@@ -153,6 +153,15 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
             this.LogSweepStarted(outstanding);
         }
 
+        // Reported beside the run's ending rather than as one, because a message needing more calls than a turn allows
+        // says something about that message's length and stops nothing. It still needs an operator: the walk steps past
+        // it, so a mailbox where several sweeps go by before one message is finished is otherwise indistinguishable from
+        // one that is finishing them.
+        if (result.CallBudgetExhaustedEmailCount > 0)
+        {
+            this.LogCallBudgetExhausted(result.CallBudgetExhaustedEmailCount);
+        }
+
         if (result.ChunkedEmailCount > 0 || result.EmbeddedEmailCount > 0)
         {
             this.LogBackfillProgressed(
@@ -202,6 +211,11 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "An embedding provider call failed with {Failure} and ended the backfill run after {EmbeddedChunkCount} passages; the next interval resumes past the message it failed on.")]
     private partial void LogProviderFailed(EmbeddingGenerationFailure failure, int embeddedChunkCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "{CallBudgetExhaustedEmailCount} messages each spent every provider call a turn is allowed and are still not fully embedded; a later sweep reaches the rest. A message needing that many calls means Embeddings:MaxPassagesPerRequest is far below what one message of this length carries.")]
+    private partial void LogCallBudgetExhausted(int callBudgetExhaustedEmailCount);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

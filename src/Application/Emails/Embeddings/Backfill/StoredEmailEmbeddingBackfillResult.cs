@@ -9,17 +9,27 @@ namespace MailFathom.Application.Emails.Embeddings.Backfill;
 /// <param name="ChunkedEmailCount">How many messages this run had to cut into passages before anything could be embedded.</param>
 /// <param name="EmbeddedEmailCount">How many messages this run brought up to date, or spent a provider call on.</param>
 /// <param name="EmbeddedChunkCount">How many passages this run committed vectors for.</param>
+/// <param name="CallBudgetExhaustedEmailCount">How many messages this run left part-way through because one turn spent every provider call a turn is allowed.</param>
 /// <param name="OutstandingEmailCountAtSweepStart">How many messages awaited embedding when this sweep began, or <see langword="null" /> when the run resumed a sweep somebody else measured.</param>
 /// <param name="Failure">Why a provider call produced nothing, present exactly when <paramref name="Outcome" /> is <see cref="StoredEmailEmbeddingBackfillOutcome.ProviderFailed" />.</param>
 /// <remarks>
+/// <para>
 /// Counts and classifications only. Every message this run touched, every passage it cut, and every vector it stored is
 /// mail content or derived from it, and none of that belongs in something a worker logs.
+/// </para>
+/// <para>
+/// The exhausted count is carried separately rather than folded into the ordinary progress, because it is the one thing
+/// a run does that an operator has to act on and that no other number here would show: the walk steps past such a
+/// message and keeps going, so without its own count a mailbox needing several sweeps to finish one message would look
+/// exactly like one that is finishing them.
+/// </para>
 /// </remarks>
 public sealed record StoredEmailEmbeddingBackfillResult(
     StoredEmailEmbeddingBackfillOutcome Outcome,
     int ChunkedEmailCount,
     int EmbeddedEmailCount,
     int EmbeddedChunkCount,
+    int CallBudgetExhaustedEmailCount,
     int? OutstandingEmailCountAtSweepStart,
     EmbeddingGenerationFailure? Failure)
 {

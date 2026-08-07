@@ -135,6 +135,11 @@ public sealed class StoredEmailEmbeddingBackfill
                         outstandingAtSweepStart,
                         turn.Failure);
                 }
+
+                // A turn that spent every call it is allowed carries on to the next message rather than ending the run,
+                // because it says something about that one message's length and nothing about the provider. It is
+                // counted rather than passed over: the walk steps past such a message, so without a number of its own a
+                // mailbox needing several sweeps to finish one message would look exactly like one finishing them.
             }
         }
 
@@ -184,6 +189,7 @@ public sealed class StoredEmailEmbeddingBackfill
             progress.ChunkedEmailCount,
             progress.EmbeddedEmailCount,
             progress.EmbeddedChunkCount,
+            progress.CallBudgetExhaustedEmailCount,
             outstandingAtSweepStart,
             failure);
 
@@ -200,9 +206,17 @@ public sealed class StoredEmailEmbeddingBackfill
     /// allowed keeps the passages it did get — which the passage count carries — and is deliberately not counted as a
     /// message brought up to date, because a later sweep still has to reach it.
     /// </remarks>
-    private sealed record RunProgress(int ChunkedEmailCount, int EmbeddedEmailCount, int EmbeddedChunkCount)
+    private sealed record RunProgress(
+        int ChunkedEmailCount,
+        int EmbeddedEmailCount,
+        int EmbeddedChunkCount,
+        int CallBudgetExhaustedEmailCount)
     {
-        public static RunProgress Empty { get; } = new(ChunkedEmailCount: 0, EmbeddedEmailCount: 0, EmbeddedChunkCount: 0);
+        public static RunProgress Empty { get; } = new(
+            ChunkedEmailCount: 0,
+            EmbeddedEmailCount: 0,
+            EmbeddedChunkCount: 0,
+            CallBudgetExhaustedEmailCount: 0);
 
         public RunProgress Add(StoredEmailAwaitingEmbedding email, StoredEmailEmbeddingRun turn) => this with
         {
@@ -210,6 +224,8 @@ public sealed class StoredEmailEmbeddingBackfill
             EmbeddedEmailCount = this.EmbeddedEmailCount
                 + (turn.Outcome == StoredEmailEmbeddingOutcome.Embedded ? 1 : 0),
             EmbeddedChunkCount = this.EmbeddedChunkCount + turn.EmbeddedChunkCount,
+            CallBudgetExhaustedEmailCount = this.CallBudgetExhaustedEmailCount
+                + (turn.Outcome == StoredEmailEmbeddingOutcome.CallBudgetExhausted ? 1 : 0),
         };
     }
 }

@@ -20,6 +20,8 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
 
     private const string PassageCountInstrument = "mailfathom.embedding.backfill.passages";
 
+    private const string ExhaustedCountInstrument = "mailfathom.embedding.backfill.exhausted";
+
     private const string OutstandingGauge = "mailfathom.embedding.backfill.outstanding";
 
     /// <summary>
@@ -82,20 +84,25 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
         using var measurements = new RecordedMailFathomMeasurements(
             ChunkedCountInstrument,
             MessageCountInstrument,
-            PassageCountInstrument);
+            PassageCountInstrument,
+            ExhaustedCountInstrument);
 
         // Act
         telemetry.RecordRun(CreateResult(
             StoredEmailEmbeddingBackfillOutcome.BatchBudgetSpent,
             chunkedEmailCount: 2,
             embeddedEmailCount: 5,
-            embeddedChunkCount: 31));
+            embeddedChunkCount: 31,
+            callBudgetExhaustedEmailCount: 1));
         telemetry.RecordRun(CreateResult(StoredEmailEmbeddingBackfillOutcome.SweepCompleted));
 
         // Assert
         Assert.Equal([2], measurements.ValuesOf(ChunkedCountInstrument));
         Assert.Equal([5], measurements.ValuesOf(MessageCountInstrument));
         Assert.Equal([31], measurements.ValuesOf(PassageCountInstrument));
+
+        // The signal that a message needs several sweeps to finish, which no other number here would show.
+        Assert.Equal([1], measurements.ValuesOf(ExhaustedCountInstrument));
     }
 
     /// <summary>
@@ -151,6 +158,7 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
         int chunkedEmailCount = 0,
         int embeddedEmailCount = 0,
         int embeddedChunkCount = 0,
+        int callBudgetExhaustedEmailCount = 0,
         int? outstandingEmailCountAtSweepStart = null,
         EmbeddingGenerationFailure? failure = null) =>
         new(
@@ -158,6 +166,7 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
             chunkedEmailCount,
             embeddedEmailCount,
             embeddedChunkCount,
+            callBudgetExhaustedEmailCount,
             outstandingEmailCountAtSweepStart,
             failure);
 }

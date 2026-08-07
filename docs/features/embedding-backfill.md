@@ -47,7 +47,15 @@ backfill](imap-synchronization.md#backfilling-messages-stored-earlier) makes abo
 nothing may block the walk. The run itself ends there — a provider that has just refused is not one to spend the rest
 of a batch against — and the next run resumes past it.
 
-How long that next run waits depends on which refusal it was, read from the classification
+A message that spends every provider call [one turn is
+allowed](automatic-embedding.md#embedding-one-message) is treated differently, because it says something about that
+message's length rather than about the provider: the walk counts it, warns, and carries on to the next message. The
+passages that turn did not reach stay without a vector and a later sweep takes them, so such a message finishes across
+several sweeps rather than in one — which is exactly what the count and the warning exist to make visible, since the
+walk steps past it and no other number here would show it. A message needing that many calls means
+`Embeddings:MaxPassagesPerRequest` is far below what one message of its length carries.
+
+How long the next run waits after a *provider failure* depends on which refusal it was, read from the classification
 [embedding generation](embedding-generation.md#what-a-failing-call-is-classified-as) assigns. A rate limit, a timeout,
 and a transport fault are remote conditions to wait out, so the short interval follows and is the backoff. A rejected
 credential, a refused request, and a vector the declared geometry does not describe are terminal: repeating them buys
@@ -83,6 +91,7 @@ active profile records writes nothing and warns, for the reason
 | `mailfathom.embedding.backfill.chunked` | Messages that had to be cut into passages first, which is how much of the mailbox predates chunking |
 | `mailfathom.embedding.backfill.messages` | Messages brought up to date with the active profile |
 | `mailfathom.embedding.backfill.passages` | Passages given a vector |
+| `mailfathom.embedding.backfill.exhausted` | Messages left part-way through because one turn spent every provider call it is allowed |
 
 The outstanding count is measured once at the start of a sweep and held until the next sweep measures again, so the
 gauge is a figure a sweep established rather than a live one. That is deliberate: an exact live count is an unbounded

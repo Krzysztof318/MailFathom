@@ -39,6 +39,7 @@ public sealed class EmailEmbeddingBackfillTelemetry
     private readonly Counter<long> chunkedEmailCount;
     private readonly Counter<long> embeddedEmailCount;
     private readonly Counter<long> passageCount;
+    private readonly Counter<long> callBudgetExhaustedEmailCount;
     private int outstandingEmailCount;
 
     /// <summary>Initializes the instruments every backfill run reports through.</summary>
@@ -60,6 +61,10 @@ public sealed class EmailEmbeddingBackfillTelemetry
             "mailfathom.embedding.backfill.passages",
             unit: "{passage}",
             description: "Passages the backfill gave a vector under the active profile.");
+        this.callBudgetExhaustedEmailCount = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.embedding.backfill.exhausted",
+            unit: "{message}",
+            description: "Messages the backfill left part-way through because one turn spent every provider call it is allowed.");
         Telemetry.Meter.CreateObservableGauge(
             "mailfathom.embedding.backfill.outstanding",
             () => Volatile.Read(ref this.outstandingEmailCount),
@@ -97,6 +102,11 @@ public sealed class EmailEmbeddingBackfillTelemetry
         if (result.EmbeddedChunkCount > 0)
         {
             this.passageCount.Add(result.EmbeddedChunkCount);
+        }
+
+        if (result.CallBudgetExhaustedEmailCount > 0)
+        {
+            this.callBudgetExhaustedEmailCount.Add(result.CallBudgetExhaustedEmailCount);
         }
 
         if (result.OutstandingEmailCountAtSweepStart is { } outstanding)
