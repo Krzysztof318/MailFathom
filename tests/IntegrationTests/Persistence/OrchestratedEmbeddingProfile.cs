@@ -54,8 +54,12 @@ internal static class OrchestratedEmbeddingProfile
 
                     context.EmbeddingProfiles.Add(registered);
                 }
-                else if (registered.LifecycleState != EmbeddingProfileLifecycleState.Active)
+                else
                 {
+                    // Re-activated rather than left alone even when it is already active, because other classes in this
+                    // suite register active profiles of their own and the reader serves whichever was activated last.
+                    // Without this, a caller would get the deterministic geometry only when nothing else had claimed
+                    // that position since — which is a dependency on the order xUnit happened to choose.
                     registered.LifecycleState = EmbeddingProfileLifecycleState.Active;
                     registered.ActivatedAt = activatedAt;
                 }
