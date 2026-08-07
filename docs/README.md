@@ -43,7 +43,7 @@ below for depth instead of duplicating them.
 
 - [IMAP synchronization](features/imap-synchronization.md)
 - [Mailbox queries](features/mailbox-queries.md) documents the `ListEmails` request contract, cursor semantics, freshness reporting, and attachment-presence rule.
-- [Lexical email search](features/lexical-email-search.md) documents the `SearchEmails` query contract, the snippet bounds, the bounded-window rationale, and what the index does not cover.
+- [Email search](features/email-search.md) documents the `SearchEmails` query contract, when retrieval is hybrid and what the fusion does, the snippet bounds, the bounded-window rationale, and what the index does not cover.
 - [Email content](features/email-content.md) documents the `GetEmailContent` representations, the HTML sanitization policy, the truncation contract, and what happens when a local copy is unusable.
 - [MCP tools](features/mcp-tools.md) documents the tool descriptor conventions, the `list_emails` tool that publishes that use case, and the stable error codes.
 

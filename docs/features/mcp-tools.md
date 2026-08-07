@@ -347,7 +347,7 @@ come back beside it.
 
 Searches the local mailbox copy for text and returns one bounded window of matches ranked by relevance, each carrying
 the summary a listing would show, a relevance rank, and bounded extracts of the body around what matched.
-[Lexical email search](lexical-email-search.md) documents the use case behind it — what is indexed, what the rank means,
+[Email search](email-search.md) documents the use case behind it — what is indexed, what the rank means,
 how the extracts are cut, and why there is no cursor — where those are enforced. This section describes the surface.
 
 ### Arguments
@@ -381,14 +381,15 @@ because an argument added later would be the one thing that quietly changes what
 | Field | Meaning |
 |---|---|
 | `matches` | The matched emails, most relevant first, ties broken by the newest received. Empty when nothing matched |
-| `retrievalMode` | How the results were retrieved — `lexical` today |
+| `retrievalMode` | How this call's results were ranked — `lexical` or `hybrid` |
 | `folderFreshness` | How current the local copy of each covered folder is, exactly as a listing reports it |
 
 Each match carries `summary`, which is the same shape `list_emails` publishes and is documented above, together with
 `relevanceRank` and `snippets`.
 
 - **`relevanceRank` is comparable within one response and nowhere else.** It is computed for the query that produced it,
-  so storing it or comparing it with a rank from another call compares two different scales.
+  so storing it or comparing it with a rank from another call compares two different scales — and the scale itself
+  depends on `retrievalMode`, a full-text rank under `lexical` and a fused rank score under `hybrid`.
 - **`snippets` are message text and are returned as data.** Each matched run is wrapped in `**` and nothing else is
   added: no interpretation, no summary, and no formatting that would let mail somebody else wrote read as instruction or
   as one of MailFathom's own fields. A caller passing them to a model treats them as untrusted input, as it would any other
@@ -397,17 +398,24 @@ Each match carries `summary`, which is the same shape `list_emails` publishes an
   because the summary publishes both whole, and an email with no indexed body text — encrypted mail, or mail whose
   content lives inside an attachment — carries none either.
 
-### The retrieval mode is a field from the first release
+### The retrieval mode is read per response, not per server
 
-`retrievalMode` reports `lexical` and is the only value it can report today. It exists anyway, because retrieval becomes
-hybrid when the RAG work lands and a client given no way to tell the two apart would either infer it from a server
-version or discover the change by reasoning wrongly about the results. Publishing it now costs one field and makes the
-later work widen an enumeration rather than reshape a response.
+`retrievalMode` names how the call in front of you was ranked, and both values are advertised by every server.
 
-Lexical means what it says on the descriptor: the words a query contains are matched against the words the mail is
-written in, so a query term that appears nowhere in a message will not find it however close its meaning. Words that
-appear only inside an attachment payload are not searchable at all, which is a limit of the index rather than of this
-tool.
+- **`lexical`** means the words a query contains were matched against the words the mail is written in, so a query term
+  that appears nowhere in a message did not find it however close its meaning.
+- **`hybrid`** means that ranking was combined with a search by embedding similarity, so a message can appear without
+  carrying the query's words. [Email search](email-search.md#hybrid-retrieval) records what the combination does and
+  what it does not promise.
+
+It is a property of the response rather than of the deployment because the answer can differ between two calls to one
+server: an instance configured for hybrid retrieval reports `lexical` while its embedding provider is unreachable, and
+while it has activated no profile. Reading a server's configuration instead would leave a client concluding the wrong
+thing about why a message it expected is missing.
+
+Neither mode reaches a chat model, rewrites the query, or expands it; under `hybrid` the query is embedded and compared,
+never interpreted. Words that appear only inside an attachment payload are not searchable under either mode, which is a
+limit of what is indexed rather than of this tool.
 
 ### What the boundary bounds, and why it bounds it again
 

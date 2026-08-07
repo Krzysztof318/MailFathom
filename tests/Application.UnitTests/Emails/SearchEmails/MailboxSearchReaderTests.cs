@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
@@ -15,10 +16,13 @@ using Xunit;
 
 namespace MailFathom.Application.UnitTests.Emails.SearchEmails;
 
-/// <summary>Covers the lexical search use case: what it validates, how it orders, and what it bounds.</summary>
+/// <summary>Covers the search use case: what it validates, how it ranks, how it orders, and what it bounds.</summary>
 public sealed class MailboxSearchReaderTests
 {
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
+
+    private static readonly EmbeddingProfileId ProfileId =
+        EmbeddingProfileId.Create(new Guid("6f2f1f0e-6a1a-4a2a-9d1f-0f5a1b2c3d4e"));
 
     private static readonly MailAccountId[] EveryAccountTheSyntheticIndexUses =
     [
@@ -94,7 +98,7 @@ public sealed class MailboxSearchReaderTests
 
         // Assert
         Assert.Equal(3, result.Matches.Count);
-        Assert.Equal(3, Assert.Single(index.Calls).Limit);
+        Assert.Equal(3, Assert.Single(index.RankedCandidatesCalls).Limit);
     }
 
     [Fact]
@@ -108,7 +112,7 @@ public sealed class MailboxSearchReaderTests
         await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(EmailSearchResultLimit.DefaultValue, Assert.Single(index.Calls).Limit);
+        Assert.Equal(EmailSearchResultLimit.DefaultValue, Assert.Single(index.RankedCandidatesCalls).Limit);
     }
 
     /// <summary>Refused rather than clamped: a clamped window looks exactly like the one the caller asked for.</summary>
@@ -131,7 +135,7 @@ public sealed class MailboxSearchReaderTests
 
         // Assert
         Assert.Equal(requestedResultLimit, failure.RequestedResultLimit);
-        Assert.Empty(index.Calls);
+        Assert.Empty(index.RankedCandidatesCalls);
     }
 
     /// <summary>A search with no text is a listing, and answering it here would return an arbitrary ranked window.</summary>
@@ -151,7 +155,7 @@ public sealed class MailboxSearchReaderTests
 
         // Assert
         Assert.Equal("search query", failure.FilterName);
-        Assert.Empty(index.Calls);
+        Assert.Empty(index.RankedCandidatesCalls);
     }
 
     /// <summary>Nothing matching is an answer, not a failure, so search cannot be used to probe for what exists.</summary>
@@ -228,7 +232,7 @@ public sealed class MailboxSearchReaderTests
 
         // Assert
         Assert.Equal("sender address", failure.FilterName);
-        Assert.Empty(index.Calls);
+        Assert.Empty(index.RankedCandidatesCalls);
     }
 
     /// <summary>An empty window would confirm the identifier, so an account nobody serves is refused instead.</summary>
@@ -247,7 +251,7 @@ public sealed class MailboxSearchReaderTests
 
         // Assert
         Assert.Equal("someone-elses", failure.AccountId.Value);
-        Assert.Empty(index.Calls);
+        Assert.Empty(index.RankedCandidatesCalls);
     }
 
     /// <summary>Removing an account from configuration leaves its rows stored, so an unscoped search must not reach them.</summary>
@@ -267,7 +271,7 @@ public sealed class MailboxSearchReaderTests
         Assert.Equal(served.StoredEmailId, Assert.Single(result.Matches).Summary.StoredEmailId);
         Assert.Equal(
             [MailAccountId.Create("primary")],
-            Assert.Single(index.Calls).Selection.Scope.AccountIds);
+            Assert.Single(index.RankedCandidatesCalls).Selection.Scope.AccountIds);
     }
 
     /// <summary>Every filter is validated first, so a refusal never depends on how many accounts happen to be configured.</summary>
@@ -284,7 +288,7 @@ public sealed class MailboxSearchReaderTests
         // Assert
         Assert.Empty(result.Matches);
         Assert.Empty(result.FolderFreshness);
-        Assert.Empty(index.Calls);
+        Assert.Empty(index.RankedCandidatesCalls);
     }
 
     /// <summary>The bounds are a deployment control, so the use case supplies them rather than the request.</summary>
@@ -300,7 +304,7 @@ public sealed class MailboxSearchReaderTests
         await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Same(configuredBounds, Assert.Single(index.Calls).SnippetBounds);
+        Assert.Same(configuredBounds, Assert.Single(index.MatchesCalls).SnippetBounds);
     }
 
     /// <summary>A search is answered from the local copy, so a folder nobody has synchronized has to be visible as such.</summary>
@@ -329,16 +333,186 @@ public sealed class MailboxSearchReaderTests
             reader.SearchEmailsAsync(null!, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>An instance that embeds nothing answers exactly as it did before hybrid retrieval existed, and says so.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_NoEmbeddingProviderConfigured_RanksLexicallyAndReportsThatMode()
+    {
+        // Arrange
+        var index = new InMemoryEmailSearchIndex().With(SyntheticEmailSummaries.Create(FirstJuly));
+        var reader = ReaderOver(index);
+
+        // Act
+        var result = await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(EmailSearchRetrievalMode.Lexical, result.RetrievalMode);
+        Assert.Equal(EmailSearchResultLimit.DefaultValue, Assert.Single(index.RankedCandidatesCalls).Limit);
+    }
+
+    /// <summary>Mail whose words the query never used is unreachable lexically, which is the whole point of the second ranking.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_ActiveProfile_ReturnsMailTheLexicalRankingNeverMatched()
+    {
+        // Arrange
+        var lexicalMatch = SyntheticEmailSummaries.Create(FirstJuly);
+        var semanticMatch = SyntheticEmailSummaries.Create(FirstJuly.AddDays(1));
+
+        // Both are stored mail; only one of them is written in the query's words.
+        var index = new InMemoryEmailSearchIndex()
+            .With(lexicalMatch, matchedText: "water damage")
+            .With(semanticMatch, matchedText: "the roof is leaking again");
+        var vectorIndex = new InMemoryEmailVectorSearchIndex().With(semanticMatch, distance: 0.1f);
+
+        var reader = ReaderOver(index, semanticSearch: SemanticSearchOver(vectorIndex));
+
+        // Act
+        var result = await reader.SearchEmailsAsync(
+            RequestFor("water damage"),
+            TestContext.Current.CancellationToken);
+
+        // Assert: each ranking placed one email first, so the timeline tiebreaker settles the fused order.
+        Assert.Equal(EmailSearchRetrievalMode.Hybrid, result.RetrievalMode);
+        Assert.Equal(
+            [semanticMatch.StoredEmailId, lexicalMatch.StoredEmailId],
+            result.Matches.Select(match => match.Summary.StoredEmailId));
+    }
+
+    /// <summary>Fusion rewards agreement, so mail both rankings found outranks mail only one of them did.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_MailBothRankingsFound_OutranksMailOnlyOneOfThemFound()
+    {
+        // Arrange
+        var agreedUpon = SyntheticEmailSummaries.Create(FirstJuly);
+        var lexicalOnly = SyntheticEmailSummaries.Create(FirstJuly.AddDays(1));
+        var semanticOnly = SyntheticEmailSummaries.Create(FirstJuly.AddDays(2));
+        var index = new InMemoryEmailSearchIndex()
+            .With(lexicalOnly, relevanceRank: 0.9f)
+            .With(agreedUpon, relevanceRank: 0.8f)
+            .With(semanticOnly, matchedText: "nothing this query asks about");
+        var vectorIndex = new InMemoryEmailVectorSearchIndex()
+            .With(semanticOnly, distance: 0.1f)
+            .With(agreedUpon, distance: 0.2f);
+
+        var reader = ReaderOver(index, semanticSearch: SemanticSearchOver(vectorIndex));
+
+        // Act
+        var result = await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(agreedUpon.StoredEmailId, result.Matches[0].Summary.StoredEmailId);
+    }
+
+    /// <summary>Fusion needs more than the window from each side, or a message either ranking placed late never scores twice.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_HybridRetrieval_AsksBothRankingsPastTheWindowItReturns()
+    {
+        // Arrange
+        var index = new InMemoryEmailSearchIndex();
+        var vectorIndex = new InMemoryEmailVectorSearchIndex();
+        var reader = ReaderOver(index, semanticSearch: SemanticSearchOver(vectorIndex));
+
+        // Act
+        var result = await reader.SearchEmailsAsync(
+            RequestFor("invoice") with { ResultLimit = 5 },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(EmailSearchRetrievalMode.Hybrid, result.RetrievalMode);
+        Assert.True(Assert.Single(index.RankedCandidatesCalls).Limit > 5);
+        Assert.Equal(
+            Assert.Single(index.RankedCandidatesCalls).Limit,
+            Assert.Single(vectorIndex.Calls).Limit);
+    }
+
+    /// <summary>The fused window is still bounded by what the caller asked for, however deep the two rankings reached.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_HybridRetrieval_ReturnsNoMoreThanTheRequestedCount()
+    {
+        // Arrange
+        var index = new InMemoryEmailSearchIndex();
+        var vectorIndex = new InMemoryEmailVectorSearchIndex();
+        var distance = 0.1f;
+        foreach (var email in SyntheticEmailSummaries.CreateDailyRun(10, FirstJuly))
+        {
+            index.With(email);
+            vectorIndex.With(email, distance += 0.01f);
+        }
+
+        var reader = ReaderOver(index, semanticSearch: SemanticSearchOver(vectorIndex));
+
+        // Act
+        var result = await reader.SearchEmailsAsync(
+            RequestFor("invoice") with { ResultLimit = 3 },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(3, result.Matches.Count);
+    }
+
+    /// <summary>An unreachable provider costs a search its second ranking and nothing else, which the mode reports honestly.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_ProviderFailure_FallsBackToTheLexicalRankingAndReportsIt()
+    {
+        // Arrange
+        var matched = SyntheticEmailSummaries.Create(FirstJuly);
+        var index = new InMemoryEmailSearchIndex().With(matched);
+        var generator = GeneratorOf(ProfileIdentity());
+        generator.Failure = EmbeddingGenerationFailure.TransportFaulted;
+
+        var reader = ReaderOver(
+            index,
+            semanticSearch: SemanticSearchOver(new InMemoryEmailVectorSearchIndex(), generator));
+
+        // Act
+        var result = await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(EmailSearchRetrievalMode.Lexical, result.RetrievalMode);
+        Assert.Equal(matched.StoredEmailId, Assert.Single(result.Matches).Summary.StoredEmailId);
+    }
+
     private static SearchEmailsRequest RequestFor(string? queryText) => new() { QueryText = queryText };
 
     private static MailboxSearchReader ReaderOver(
         InMemoryEmailSearchIndex index,
         IMailAccountCatalog? accountCatalog = null,
-        EmailSearchSnippetBounds? snippetBounds = null) => new(
+        EmailSearchSnippetBounds? snippetBounds = null,
+        SemanticEmailSearch? semanticSearch = null) => new(
         index,
+        semanticSearch ?? LexicalOnlySemanticSearch(),
         FreshnessReaderReturning(InboxFreshness),
         new MailboxScopeResolver(accountCatalog ?? CatalogServing(EveryAccountTheSyntheticIndexUses)),
         snippetBounds ?? EmailSearchSnippetBounds.Default);
+
+    /// <summary>Builds the semantic half of a deployment that configured no embedding provider.</summary>
+    private static SemanticEmailSearch LexicalOnlySemanticSearch() => new(
+        Substitute.For<IActiveEmbeddingProfileReader>(),
+        new InMemoryEmailVectorSearchIndex(),
+        textEmbeddingGenerator: null);
+
+    /// <summary>Builds the semantic half of a deployment that has activated a profile its generator agrees with.</summary>
+    private static SemanticEmailSearch SemanticSearchOver(
+        InMemoryEmailVectorSearchIndex vectorIndex,
+        ScriptedTextEmbeddingGenerator? generator = null)
+    {
+        var identity = ProfileIdentity();
+        var profileReader = Substitute.For<IActiveEmbeddingProfileReader>();
+        profileReader.FindActiveProfileAsync(Arg.Any<CancellationToken>())
+            .Returns(new ActiveEmbeddingProfile(ProfileId, identity));
+
+        return new SemanticEmailSearch(profileReader, vectorIndex, generator ?? GeneratorOf(identity));
+    }
+
+    private static ScriptedTextEmbeddingGenerator GeneratorOf(EmbeddingProfileIdentity identity) =>
+        new(identity, maximumPassagesPerCall: 8);
+
+    private static EmbeddingProfileIdentity ProfileIdentity() => EmbeddingProfileIdentity.Create(
+        "a-provider",
+        "a-model",
+        modelVersion: null,
+        dimension: 8,
+        EmbeddingDistanceMetric.Cosine,
+        EmbeddingInputPreparation.Create(2_000, passageInstruction: null, normalizesVector: true));
 
     /// <summary>Builds a catalog that serves exactly the accounts named, in the order the port promises.</summary>
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)

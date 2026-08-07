@@ -1428,5 +1428,6 @@ synchronized but whose text extraction has not run yet answers an empty window r
 does not distinguish that case: it is computed from synchronization checkpoints alone, so such a folder reports a recent
 `synchronizedAt` and `wasSynchronized` true exactly as a fully indexed one does. An empty window from a freshly
 synchronized folder is therefore worth checking against extraction progress in the server log before it is read as a
-statement about the mailbox. Its `retrievalMode` reports `lexical`, and a request that asks for more than 50 ranked
-results is refused with `51003` rather than served a smaller window.
+statement about the mailbox. Its `retrievalMode` reports `hybrid` on an instance with a healthy embedding profile and
+`lexical` otherwise — including for the length of a provider outage on an instance that is otherwise hybrid — and a
+request that asks for more than 50 ranked results is refused with `51003` rather than served a smaller window.

@@ -10,7 +10,7 @@ never touches the remote `\Seen` flag, because it speaks no mail protocol at all
 The protocol adapter is not part of this: `MailboxTimelineReader` is an application use case, and the `list_emails` MCP
 tool that publishes it is described by [MCP tools](mcp-tools.md).
 
-[Lexical email search](lexical-email-search.md) is the second read use case and applies the same structured filters
+[Email search](email-search.md) is the second read use case and applies the same structured filters
 this page documents, so nothing about what a filter means is restated there.
 
 ## The request contract

@@ -22,6 +22,12 @@ namespace MailFathom.Application.Emails.SearchEmails;
 /// copy is instead of pretending it is live.
 /// </para>
 /// <para>
+/// It answers lexically or hybridly according to what the instance can do at the moment of the call, and reports which
+/// in the result. Nothing about the request selects between them: retrieval quality is a deployment's decision, and a
+/// caller able to ask for the lexical ranking of a hybrid instance would be asking for worse results with no way to
+/// know it.
+/// </para>
+/// <para>
 /// Because the index covers body text only, a word that appears solely inside an attachment payload matches nothing
 /// here. That is the deliberate limit the extraction specification records rather than something this use case works
 /// around, and the feature documentation states it so the behavior is not surprising.
@@ -29,29 +35,51 @@ namespace MailFathom.Application.Emails.SearchEmails;
 /// </remarks>
 public sealed class MailboxSearchReader
 {
+    /// <summary>How many candidates each ranking contributes to a fusion, as a multiple of the window being returned.</summary>
+    /// <remarks>
+    /// <para>
+    /// Fusion has nothing to work with beyond what each ranking hands it, so asking both for exactly the window would
+    /// make the whole method decorative: a message ranked first semantically and twenty-first lexically would arrive
+    /// from one side only, scoring as though the other side had never seen it. Reaching past the window is what lets
+    /// agreement between the two rankings be observed at all.
+    /// </para>
+    /// <para>
+    /// Four is deep enough for that and shallow enough to stay a bounded cost: the deepest window a search serves is
+    /// fifty, so no query ranks more than two hundred candidates per side, and neither ranking cuts a snippet — that
+    /// happens once, for the fused window. A deployment setting would be a third number an operator has to reason
+    /// about to predict what a search returns.
+    /// </para>
+    /// </remarks>
+    private const int FusionCandidateDepthMultiplier = 4;
+
     private readonly IEmailSearchIndexReader searchIndexReader;
+    private readonly SemanticEmailSearch semanticSearch;
     private readonly ISynchronizationFreshnessReader freshnessReader;
     private readonly MailboxScopeResolver scopeResolver;
     private readonly EmailSearchSnippetBounds snippetBounds;
 
     /// <summary>Initializes the use case.</summary>
-    /// <param name="searchIndexReader">Reads bounded ranked windows out of the lexical index.</param>
+    /// <param name="searchIndexReader">Ranks mail against the query text and reads the window a ranking selected.</param>
+    /// <param name="semanticSearch">Ranks mail by meaning, or reports that this instance cannot.</param>
     /// <param name="freshnessReader">Reads how current the local copy of each folder is.</param>
     /// <param name="scopeResolver">Decides which accounts and folders the search runs against.</param>
     /// <param name="snippetBounds">How much of a message's body one result may show.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxSearchReader(
         IEmailSearchIndexReader searchIndexReader,
+        SemanticEmailSearch semanticSearch,
         ISynchronizationFreshnessReader freshnessReader,
         MailboxScopeResolver scopeResolver,
         EmailSearchSnippetBounds snippetBounds)
     {
         ArgumentNullException.ThrowIfNull(searchIndexReader);
+        ArgumentNullException.ThrowIfNull(semanticSearch);
         ArgumentNullException.ThrowIfNull(freshnessReader);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(snippetBounds);
 
         this.searchIndexReader = searchIndexReader;
+        this.semanticSearch = semanticSearch;
         this.freshnessReader = freshnessReader;
         this.scopeResolver = scopeResolver;
         this.snippetBounds = snippetBounds;
@@ -60,7 +88,7 @@ public sealed class MailboxSearchReader
     /// <summary>Searches for one window of ranked emails.</summary>
     /// <param name="request">What the caller asked for.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The ranked window and the scope's synchronization freshness.</returns>
+    /// <returns>The ranked window, how it was ranked, and the scope's synchronization freshness.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when the query text is blank or unusable, or a structured filter carries a value, a count, or a length the query does not accept.</exception>
     /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account this deployment does not serve.</exception>
@@ -85,21 +113,68 @@ public sealed class MailboxSearchReader
         // refusals a deployment that serves several does, and only then reports that it holds nothing to search.
         if (selection.Scope.AccountIds.Count is 0)
         {
-            return new SearchEmailsResult([], []);
+            return new SearchEmailsResult([], EmailSearchRetrievalMode.Lexical, []);
         }
 
-        var matches = await this.searchIndexReader.ReadRankedMatchesAsync(
+        var (rankedCandidates, retrievalMode) =
+            await this.RankAsync(selection, queryText, resultLimit.Value, cancellationToken);
+
+        var matches = await this.searchIndexReader.ReadMatchesAsync(
             selection,
             queryText,
             this.snippetBounds,
-            resultLimit.Value,
+            rankedCandidates,
             cancellationToken);
 
         // Read after the window rather than beside it: both reads reach the same scoped EF Core context, which serves
         // one operation at a time, so starting them together would fault instead of overlapping.
         var folderFreshness = await this.freshnessReader.ReadAsync(selection.Scope, cancellationToken);
 
-        return new SearchEmailsResult(matches, folderFreshness);
+        return new SearchEmailsResult(matches, retrievalMode, folderFreshness);
+    }
+
+    /// <summary>Ranks the eligible mail by whichever method this instance can apply to this query.</summary>
+    /// <remarks>
+    /// The semantic ranking is asked for first, because its answer decides how deep the lexical one has to reach: a
+    /// lexical-only search ranks exactly the window it returns, while a fusion needs both sides deeper than the window
+    /// for the fusion to mean anything. Asking the other way round would either rank four times too much mail on every
+    /// lexical-only instance or discover the fused window was drawn from a truncated ranking.
+    /// </remarks>
+    private async Task<(IReadOnlyList<RankedEmailCandidate> Candidates, EmailSearchRetrievalMode RetrievalMode)>
+        RankAsync(
+            MailboxEmailSelection selection,
+            EmailSearchQueryText queryText,
+            int resultLimit,
+            CancellationToken cancellationToken)
+    {
+        var candidateDepth = resultLimit * FusionCandidateDepthMultiplier;
+
+        var semanticCandidates = await this.semanticSearch.FindNearestCandidatesAsync(
+            selection,
+            queryText,
+            candidateDepth,
+            cancellationToken);
+
+        if (semanticCandidates is null)
+        {
+            var lexicalWindow = await this.searchIndexReader.ReadRankedCandidatesAsync(
+                selection,
+                queryText,
+                resultLimit,
+                cancellationToken);
+
+            return (lexicalWindow, EmailSearchRetrievalMode.Lexical);
+        }
+
+        var lexicalCandidates = await this.searchIndexReader.ReadRankedCandidatesAsync(
+            selection,
+            queryText,
+            candidateDepth,
+            cancellationToken);
+
+        var fused = ReciprocalRankFusion.Fuse(lexicalCandidates, semanticCandidates, resultLimit);
+
+        return (fused, EmailSearchRetrievalMode.Hybrid);
     }
 
     /// <summary>Validates the request's structured filters and restricts the search to the accounts this deployment serves.</summary>

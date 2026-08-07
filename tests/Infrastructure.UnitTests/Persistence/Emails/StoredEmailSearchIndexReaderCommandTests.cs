@@ -42,7 +42,6 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
     [Theory]
     [InlineData("@@")]
     [InlineData("ts_rank")]
-    [InlineData("ts_headline")]
     public void RankedHitsQuery_EveryFullTextOperator_ReadsTheParameterizedQuery(string sqlOperator)
     {
         // Act
@@ -51,6 +50,19 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
         // Assert
         Assert.Contains(sqlOperator, statement, StringComparison.Ordinal);
         Assert.DoesNotContain(HostileQueryText, statement, StringComparison.Ordinal);
+    }
+
+    /// <summary>The extract query reads the same parameter, so cutting snippets is not a second path a query text reaches SQL by.</summary>
+    [Fact]
+    public void HeadlinesQuery_HostileQueryText_ReachesTheHeadlineFunctionAsAParameter()
+    {
+        // Act
+        var command = GeneratedHeadlineCommand(QueryTextFor(HostileQueryText));
+
+        // Assert
+        Assert.Contains("ts_headline", CommandBody(command), StringComparison.Ordinal);
+        Assert.Contains(HostileQueryText, ParameterDeclarations(command), StringComparison.Ordinal);
+        Assert.DoesNotContain(HostileQueryText, CommandBody(command), StringComparison.Ordinal);
     }
 
     /// <summary>The configuration is the deployment's schema setting, so it is written into the command rather than taken from a request.</summary>
@@ -76,12 +88,24 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
         Assert.Contains("LIMIT", command, StringComparison.Ordinal);
     }
 
-    /// <summary>The body is cut into extracts by the server, so no column holding it is part of what crosses the boundary.</summary>
+    /// <summary>The ranking query reads no body at all: it decides an order, and an order needs no extract.</summary>
     [Fact]
-    public void RankedHitsQuery_AnyQuery_SelectsTheHeadlineRatherThanTheBodyText()
+    public void RankedHitsQuery_AnyQuery_CutsNoExtractAndReadsNoBodyText()
     {
         // Act
         var command = GeneratedCommand(QueryTextFor("invoice"));
+
+        // Assert
+        Assert.DoesNotContain("ts_headline", command, StringComparison.Ordinal);
+        Assert.DoesNotContain(nameof(EmailSearchDocumentEntity.BodyTextBeforeTrimming), command, StringComparison.Ordinal);
+    }
+
+    /// <summary>The body is cut into extracts by the server, so no column holding it is part of what crosses the boundary.</summary>
+    [Fact]
+    public void HeadlinesQuery_AnyWindow_SelectsTheHeadlineRatherThanTheBodyText()
+    {
+        // Act
+        var command = GeneratedHeadlineCommand(QueryTextFor("invoice"));
         var statement = CommandBody(command);
         var selectList = statement[..statement.IndexOf("FROM", StringComparison.Ordinal)];
 
@@ -92,13 +116,13 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
 
     /// <summary>The bounds reach the server as the option list that cuts the extracts, so PostgreSQL applies them.</summary>
     [Fact]
-    public void RankedHitsQuery_ConfiguredSnippetBounds_ReachTheHeadlineOptions()
+    public void HeadlinesQuery_ConfiguredSnippetBounds_ReachTheHeadlineOptions()
     {
         // Arrange
         var bounds = EmailSearchSnippetBounds.Create(snippetsPerEmail: 2, wordsPerSnippet: 15);
 
         // Act
-        var command = GeneratedCommand(QueryTextFor("invoice"), bounds);
+        var command = GeneratedHeadlineCommand(QueryTextFor("invoice"), bounds);
 
         // Assert
         Assert.Contains("MaxFragments=2", command, StringComparison.Ordinal);
@@ -113,10 +137,10 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
     /// every control character except the tab and the newline, so an indexed body cannot imitate these.
     /// </summary>
     [Fact]
-    public void RankedHitsQuery_HighlightMarkers_AreControlCharactersRatherThanPublishedMarkup()
+    public void HeadlinesQuery_HighlightMarkers_AreControlCharactersRatherThanPublishedMarkup()
     {
         // Act
-        var command = GeneratedCommand(QueryTextFor("invoice"));
+        var command = GeneratedHeadlineCommand(QueryTextFor("invoice"));
 
         // Assert
         Assert.Contains("StartSel=\"\u0002\"", command, StringComparison.Ordinal);
@@ -178,10 +202,38 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
         Assert.Contains(nameof(StoredEmailEntity.AttachmentCount), command, StringComparison.Ordinal);
     }
 
+    /// <summary>Gets the selection that narrows nothing, which is what a command test uses unless the filters are its subject.</summary>
+    private static MailboxEmailSelection UnfilteredSelection => MailboxEmailSelection.Create(
+        MailboxScope.Unrestricted,
+        senderAddress: null,
+        recipientAddress: null,
+        subjectFragment: null,
+        receivedOnOrAfter: null,
+        receivedBefore: null,
+        isRemotelySeen: null,
+        hasAttachments: null);
+
     private static EmailSearchQueryText QueryTextFor(string text) => EmailSearchQueryText.Create(text);
 
     /// <summary>Generates the command the adapter would send, without opening a connection.</summary>
     private static string GeneratedCommand(
+        EmailSearchQueryText queryText,
+        MailboxEmailSelection? selection = null)
+    {
+        using var context = new MailFathomDbContextDesignTimeFactory().CreateDbContext([]);
+
+        var reader = new StoredEmailSearchIndexReader(context, PostgresTextSearchConfiguration.Default);
+
+        return reader
+            .RankedHitsQuery(
+                selection ?? UnfilteredSelection,
+                queryText,
+                EmailSearchResultLimit.DefaultValue)
+            .ToQueryString();
+    }
+
+    /// <summary>Generates the extract command the adapter would send for an already ranked window.</summary>
+    private static string GeneratedHeadlineCommand(
         EmailSearchQueryText queryText,
         EmailSearchSnippetBounds? snippetBounds = null,
         MailboxEmailSelection? selection = null)
@@ -191,19 +243,11 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
         var reader = new StoredEmailSearchIndexReader(context, PostgresTextSearchConfiguration.Default);
 
         return reader
-            .RankedHitsQuery(
-                selection ?? MailboxEmailSelection.Create(
-                    MailboxScope.Unrestricted,
-                    senderAddress: null,
-                    recipientAddress: null,
-                    subjectFragment: null,
-                    receivedOnOrAfter: null,
-                    receivedBefore: null,
-                    isRemotelySeen: null,
-                    hasAttachments: null),
+            .HeadlinesQuery(
+                selection ?? UnfilteredSelection,
                 queryText,
                 snippetBounds ?? EmailSearchSnippetBounds.Default,
-                EmailSearchResultLimit.DefaultValue)
+                [Guid.NewGuid()])
             .ToQueryString();
     }
 

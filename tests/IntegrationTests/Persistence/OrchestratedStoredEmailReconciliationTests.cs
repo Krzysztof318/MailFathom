@@ -389,8 +389,10 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
         OrchestratedMailFathomServices services,
         MailFolderResolution binding,
         CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IEmailSearchIndexReader>().ReadRankedMatchesAsync(
-                MailboxEmailSelection.Create(
+            async (scope, token) =>
+            {
+                var reader = scope.GetRequiredService<IEmailSearchIndexReader>();
+                var selection = MailboxEmailSelection.Create(
                     ScopeOf(binding),
                     senderAddress: null,
                     recipientAddress: null,
@@ -398,11 +400,18 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
                     receivedOnOrAfter: null,
                     receivedBefore: null,
                     isRemotelySeen: null,
-                    hasAttachments: null),
-                EmailSearchQueryText.Create(ReconciledTerm),
-                EmailSearchSnippetBounds.Default,
-                limit: 50,
-                token),
+                    hasAttachments: null);
+                var queryText = EmailSearchQueryText.Create(ReconciledTerm);
+
+                var candidates = await reader.ReadRankedCandidatesAsync(selection, queryText, limit: 50, token);
+
+                return await reader.ReadMatchesAsync(
+                    selection,
+                    queryText,
+                    EmailSearchSnippetBounds.Default,
+                    candidates,
+                    token);
+            },
             cancellationToken);
 
     private static MailboxScope ScopeOf(MailFolderResolution binding) =>

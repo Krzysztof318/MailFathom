@@ -165,8 +165,9 @@ public sealed class SearchEmailsToolMetadataTests
     }
 
     /// <summary>
-    /// The retrieval mode is advertised as a closed set of named values, so a client can write a branch on it today and
-    /// see the later hybrid work widen the set rather than reshape the response.
+    /// The retrieval mode is advertised as a closed set of named values, so a client can branch on it rather than
+    /// inferring how a server retrieves from its version. Both values are advertised by every server, because which one
+    /// a call reports depends on that call rather than on how the instance is configured.
     /// </summary>
     [Fact]
     public void AddMailFathomServer_AdvertisesTheRetrievalModeAsItsNamedValues()
@@ -180,7 +181,7 @@ public sealed class SearchEmailsToolMetadataTests
 
         // Assert
         var advertisedValues = retrievalMode.GetProperty("enum").EnumerateArray().Select(value => value.ToString()).ToArray();
-        Assert.Equal(["lexical"], advertisedValues);
+        Assert.Equal(["lexical", "hybrid"], advertisedValues);
     }
 
     private static Tool AdvertisedSearchEmailsTool() =>

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
@@ -15,6 +16,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Results;
 using MailFathom.Mcp.UnitTests.TestDoubles;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Mcp.UnitTests.Tools;
@@ -488,6 +490,17 @@ public sealed class SearchEmailsToolTests
         MailFolderAlias.Create(folderAlias),
         synchronizedAt);
 
+    /// <summary>Builds the semantic half of a deployment that configured no embedding provider.</summary>
+    /// <remarks>
+    /// This suite is about what the protocol boundary publishes, and the retrieval mode it publishes for a
+    /// lexical-only instance is one of those things. A generator here would make every assertion below depend on a
+    /// provider call the boundary neither makes nor sees.
+    /// </remarks>
+    private static SemanticEmailSearch LexicalOnlySemanticSearch() => new(
+        Substitute.For<IActiveEmbeddingProfileReader>(),
+        Substitute.For<IEmailVectorSearchIndexReader>(),
+        textEmbeddingGenerator: null);
+
     private static SearchEmailsTool ToolOver(
         StubEmailSearchIndexReader index,
         StubSynchronizationFreshnessReader? freshness = null,
@@ -500,6 +513,7 @@ public sealed class SearchEmailsToolTests
         return new SearchEmailsTool(
             new MailboxSearchReader(
                 index,
+                LexicalOnlySemanticSearch(),
                 freshness ?? new StubSynchronizationFreshnessReader(),
                 new MailboxScopeResolver(new StubMailAccountCatalog(ServedAccountId)),
                 bounds),

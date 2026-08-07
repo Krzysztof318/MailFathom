@@ -210,6 +210,15 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStoredEmailTimelineReader, StoredEmailTimelineReader>();
         services.AddScoped<IStoredEmailSummaryReader, StoredEmailSummaryReader>();
         services.AddScoped<IEmailSearchIndexReader, StoredEmailSearchIndexReader>();
+        services.AddScoped<IEmailVectorSearchIndexReader, EmailVectorSearchIndexReader>();
+        // The one read-path service built by hand, because its embedding generator is the one dependency a supported
+        // deployment may not have: an instance that declared no endpoint chain registers no `ITextEmbeddingGenerator`,
+        // and a constructor injection of one would make lexical-only search fail to resolve rather than run. Asking the
+        // provider keeps that decision where the composition root made it and out of the use case.
+        services.AddScoped(provider => new SemanticEmailSearch(
+            provider.GetRequiredService<IActiveEmbeddingProfileReader>(),
+            provider.GetRequiredService<IEmailVectorSearchIndexReader>(),
+            provider.GetService<ITextEmbeddingGenerator>()));
         services.AddScoped<ISynchronizationFreshnessReader, SynchronizationFreshnessReader>();
         // The one write a read path performs. It joins no session for the reason its port states, so it is registered
         // beside the readers rather than with the repositories that take one.

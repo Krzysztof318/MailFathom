@@ -45,8 +45,8 @@ internal sealed record SearchedEmailMatch
     [Description("The matched email as a listing would show it. Contains no body text, no raw MIME, and no attachment content.")]
     public required ListedEmailSummary Summary { get; init; }
 
-    /// <summary>Gets what the full-text ranking scored this email against this query.</summary>
-    [Description("What the full-text ranking scored this email against this query, higher being more relevant. Comparable only within this response: it is computed per query and means nothing across two of them, so do not store it or compare it with a rank from another call.")]
+    /// <summary>Gets what the ranking that produced this window scored this email against this query.</summary>
+    [Description("What the ranking scored this email against this query, higher being more relevant. Its scale depends on retrievalMode — a full-text rank under 'lexical', a fused rank score under 'hybrid' — so it is comparable only within this response: it is computed per query and means nothing across two of them, so do not store it or compare it with a rank from another call.")]
     public required float RelevanceRank { get; init; }
 
     /// <summary>Gets the highlighted extracts of the body around what matched.</summary>
