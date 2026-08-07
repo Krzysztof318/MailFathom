@@ -82,38 +82,54 @@ internal static class McpTransportSecurityExtensions
             ? McpAuthenticationDefaults.AuthenticationScheme
             : TransportSurface.Mcp.ApiKeySchemeName;
 
+        var oauthMethods = endpointSettings.OAuthMethods();
+
         var authentication = services.AddTransportAuthentication(
             TransportSurface.Mcp,
-            endpointSettings.Authentication,
-            [.. endpointSettings.ApiKeys],
-            endpointSettings.OAuth,
+            endpointSettings.ApiKeys(),
+            oauthMethods,
             challengeSchemeName);
 
-        if (endpointSettings.AllowsOAuth)
+        if (oauthMethods.Count > 0)
         {
-            AddProtectedResourceMetadataScheme(authentication, endpointSettings.OAuth);
-            AddInsufficientScopeRefusal(services, endpointSettings.OAuth);
+            AddProtectedResourceMetadataScheme(authentication, oauthMethods);
+            AddInsufficientScopeRefusal(services, oauthMethods);
         }
 
         return services;
     }
 
     /// <summary>Registers the scheme publishing the RFC 9728 document an MCP client discovers its authorization server through.</summary>
+    /// <remarks>
+    /// One document however many entries are configured, because the document describes one protected resource and is
+    /// published at an address derived from that resource's identifier. Every entry names the same resource, which
+    /// configuration validation is what guarantees, so the document composes from the first and lists what all of them
+    /// accept: every configured issuer, and every scope any entry asks for.
+    /// </remarks>
     private static void AddProtectedResourceMetadataScheme(
         AuthenticationBuilder authentication,
-        OAuthValidationOptions oauthSettings) =>
+        IReadOnlyList<OAuthValidationOptions> oauthMethods) =>
         authentication.AddMcp(mcpOptions =>
         {
+            var resource = oauthMethods[0].CanonicalResource();
+
             // Absolute and configured, never derived from the request. Left unset, the SDK composes both this address
             // and the resource it advertises from the request's scheme and Host header, so a deployment behind a proxy
             // would tell each client to authenticate for whichever name that client arrived under.
-            mcpOptions.ResourceMetadataUri = new Uri(
-                ProtectedResourceMetadataAddress.AddressFor(oauthSettings.CanonicalResource()));
+            mcpOptions.ResourceMetadataUri = new Uri(ProtectedResourceMetadataAddress.AddressFor(resource));
             mcpOptions.ResourceMetadata = new ProtectedResourceMetadata
             {
-                Resource = oauthSettings.CanonicalResource(),
-                AuthorizationServers = [.. oauthSettings.AuthorizationServers.Select(server => server.ValidatedIssuer())],
-                ScopesSupported = [.. oauthSettings.RequiredScopes],
+                Resource = resource,
+                AuthorizationServers =
+                [
+                    .. oauthMethods
+                        .SelectMany(oauthMethod => oauthMethod.AuthorizationServers)
+                        .Select(server => server.ValidatedIssuer()),
+                ],
+                ScopesSupported =
+                [
+                    .. oauthMethods.SelectMany(oauthMethod => oauthMethod.RequiredScopes).Distinct(StringComparer.Ordinal),
+                ],
                 BearerMethodsSupported = ["header"],
                 ResourceName = "MailFathom",
             };
@@ -124,17 +140,19 @@ internal static class McpTransportSecurityExtensions
     /// Only a required scope can turn an authenticated caller away, so this is registered only where one exists. Without
     /// it the endpoint answers every failure with a challenge, and there would be nothing for this to say.
     /// </remarks>
-    private static void AddInsufficientScopeRefusal(IServiceCollection services, OAuthValidationOptions oauthSettings)
+    private static void AddInsufficientScopeRefusal(
+        IServiceCollection services,
+        IReadOnlyList<OAuthValidationOptions> oauthMethods)
     {
-        if (oauthSettings.RequiredScopes.Count == 0)
+        if (oauthMethods.All(oauthMethod => oauthMethod.RequiredScopes.Count == 0))
         {
             return;
         }
 
         services.AddSingleton<IAuthorizationMiddlewareResultHandler>(
             new InsufficientScopeResultHandler(
-                [.. oauthSettings.RequiredScopes],
-                ProtectedResourceMetadataAddress.AddressFor(oauthSettings.CanonicalResource())));
+                TransportAuthenticationConfiguration.RequiredScopesByIssuer(oauthMethods),
+                ProtectedResourceMetadataAddress.AddressFor(oauthMethods[0].CanonicalResource())));
     }
 
     /// <summary>Builds the CORS policy from the configured origins.</summary>

@@ -29,7 +29,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         var oauthSettings = Configured();
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For(oauthSettings);
+        var document = ProtectedResourceMetadataDocument.For([oauthSettings]);
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -44,7 +44,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
     public void For_AnySettings_OffersTheHeaderAsTheOnlyWayToPresentAToken()
     {
         // Act
-        var document = ProtectedResourceMetadataDocument.For(Configured());
+        var document = ProtectedResourceMetadataDocument.For([Configured()]);
 
         // Assert
         Assert.Equal(["header"], document.BearerMethodsSupported);
@@ -55,7 +55,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
     public void Serialized_TheDocument_CarriesTheNamesRfc9728Defines()
     {
         // Arrange
-        var document = ProtectedResourceMetadataDocument.For(Configured());
+        var document = ProtectedResourceMetadataDocument.For([Configured()]);
 
         // Act
         using var serialized = JsonDocument.Parse(JsonSerializer.Serialize(document));

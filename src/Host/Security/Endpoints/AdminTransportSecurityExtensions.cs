@@ -46,9 +46,8 @@ internal static class AdminTransportSecurityExtensions
 
         services.AddTransportAuthentication(
             TransportSurface.Admin,
-            endpointSettings.Authentication,
-            [.. endpointSettings.ApiKeys],
-            endpointSettings.OAuth,
+            endpointSettings.ApiKeys(),
+            endpointSettings.OAuthMethods(),
             ChallengeSchemeFor(endpointSettings));
 
         return services;
@@ -72,5 +71,6 @@ internal static class AdminTransportSecurityExtensions
     private static string ChallengeSchemeFor(AdminEndpointOptions endpointSettings) =>
         endpointSettings.AllowsApiKey
             ? TransportSurface.Admin.ApiKeySchemeName
-            : TransportSurface.Admin.OAuthSchemeNameFor(endpointSettings.OAuth.AuthorizationServers[0].Name!);
+            : TransportSurface.Admin.OAuthSchemeNameFor(
+                endpointSettings.OAuthMethods()[0].AuthorizationServers[0].Name!);
 }

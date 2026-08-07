@@ -17,11 +17,12 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
 {
   "McpEndpoint": {
     "Enabled": true,
-    "Authentication": "ApiKey",
-    "ApiKeys": [
+    "Authentication": [
       {
-        "Name": "workstation",
-        "SecretReference": "systemd-credential:mailfathom-mcp-workstation-key"
+        "ApiKey": {
+          "Name": "workstation",
+          "SecretReference": "systemd-credential:mailfathom-mcp-workstation-key"
+        }
       }
     ]
   }
@@ -31,11 +32,11 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
 | Setting | Default | Meaning |
 |---|---|---|
 | `Enabled` | `false` | Whether the Streamable HTTP endpoint is mapped at all |
-| `Authentication` | `None` | Which credentials are accepted: `ApiKey`, `OAuth`, both separated by a comma, or `None` |
-| `ApiKeys` | empty | The keys a client may present, each a named secret with its own lifetime |
-| `OAuth.Resource` | none | The canonical public URL this deployment is known by in OAuth terms |
-| `OAuth.RequiredScopes` | empty | The scopes an access token must carry |
-| `OAuth.AuthorizationServers` | empty | The external authorization servers whose tokens are accepted |
+| `Authentication` | empty | The accepted credentials, one entry per credential, each carrying its own method's block |
+| `Authentication[].ApiKey` | — | One key a client may present, a named secret with its own lifetime |
+| `Authentication[].OAuth.Resource` | — | The canonical public URL this deployment is known by in OAuth terms |
+| `Authentication[].OAuth.RequiredScopes` | empty | The scopes an access token from *this entry's* servers must carry |
+| `Authentication[].OAuth.AuthorizationServers` | — | The external authorization servers whose tokens this entry accepts |
 | `Cors.AllowedOrigins` | `["*"]` | The browser origins served: `*` for every one, a list for exactly those, an empty list for none |
 | `ClientCertificateProfiles` | empty | The client applications whose certificates are accepted, each with its own authorities and expected names |
 | `RateLimiting` | bounded — see [Rate limiting](#rate-limiting) | How much traffic the endpoint accepts, per process and per client |
@@ -66,31 +67,45 @@ configured key is a separate matter and is re-read on every request, which is wh
 
 ## Authentication
 
-**`Authentication` is a set, not a choice.** The two methods identify different kinds of caller — a key belongs to a client
+**`Authentication` is a list of credentials.** The two methods identify different kinds of caller — a key belongs to a client
 the operator provisioned, a token belongs to a person an external authorization server signed in — so a deployment serving
-both writes both:
+both carries an entry for each:
 
 ```json
 {
-  "McpEndpoint": { "Enabled": true, "Authentication": "ApiKey, OAuth" }
+  "McpEndpoint": {
+    "Enabled": true,
+    "Authentication": [
+      { "ApiKey": { "Name": "nightly-digest", "SecretReference": "systemd-credential:mailfathom-mcp-digest-key" } },
+      { "OAuth": { "Resource": "https://mail.example.test/mcp", "AuthorizationServers": [ { "Name": "workforce", "Issuer": "https://sso.example.test/realms/mailfathom", "AuthorizedSubjects": [ "9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04" ] } ] } }
+    ]
+  }
 }
 ```
 
-A request is served when it satisfies **any one** of the methods named. The credentials are told apart by shape: an access
+**An entry states its method by carrying that method's block**, and nothing names the method a second time. That is what
+makes a method impossible to select without configuring it, or to configure without selecting it: a key is the entry that
+turns keys on. There is no limit on how many entries state either method — a second key is a second entry, and a second
+authorization server may be either — and an entry may carry both blocks at once, which is a matter of how you group what
+you wrote rather than a distinction the endpoint draws. Exactly one shape of entry fails startup, named by its position:
+one carrying neither block. So does a value written where the list belongs, because a value contributes no entries and
+would otherwise leave the endpoint served with no credential at all.
+
+A request is served when it satisfies **any one** of the entries. The credentials are told apart by shape: an access
 token is a JSON Web Token naming its issuer, an API key is anything else, and each reaches only the check that understands
 it. That is also why **an API key must not itself be a token of a configured authorization server**: such a key would be
 judged as an access token by that server and never compared as a key, so no client could authenticate with it. Startup
-refuses the combination by position — `McpEndpoint:ApiKeys:0` — rather than letting a deployment start with a key nothing
-can ever use. A token-shaped key naming an issuer this deployment does not configure selects no validator and is compared
-like any other opaque key, so it is accepted; issue opaque keys and the question does not arise.
+refuses the combination by position — `McpEndpoint:Authentication:0:ApiKey` — rather than letting a deployment start
+with a key nothing can ever use. A token-shaped key naming an issuer this deployment does not configure selects no
+validator and is compared like any other opaque key, so it is accepted; issue opaque keys and the question does not arise.
 
-**Authentication is turned on, not chosen.** An enabled endpoint that names no method is the unauthenticated posture and
+**Authentication is turned on, not chosen.** An enabled endpoint whose list is empty is the unauthenticated posture and
 starts, because the loopback and reverse-proxy deployment is the ordinary one and making it need extra settings would be
 backwards. What keeps that from being silent is the startup warning below rather than a refusal. The near misses are still
-startup failures: the section binds strictly, so a misspelled `Authentcation` fails, and a value naming no method — a typo
-such as `ApiKye`, or a number no member declares — fails too.
+startup failures: the section binds strictly, so a misspelled `Authentcation` fails, and so does a block naming no method —
+a typo such as `ApiKye` is an unknown key rather than a method nobody configured.
 
-### `ApiKey`
+### API keys
 
 A client presents a key as an ordinary HTTP bearer credential:
 
@@ -104,25 +119,29 @@ session — and the check runs before any protocol handling. The readiness respo
 [health endpoints](health-endpoints.md), which are served on a listener of their own and deliberately carry no
 credential at all.
 
-Each entry is an ordinary [named secret](secret-provisioning.md#the-secret-block): the key material is provisioned like
+Each key is an ordinary [named secret](secret-provisioning.md#the-secret-block): the key material is provisioned like
 every other credential, the `Name` is what a diagnostic and an audit record correlate on, and the `Lifetime` is enforced.
-Several entries are supported, which is what makes rotation an overlap rather than an outage:
+One key per entry, and as many entries as the deployment has clients — which is what makes rotation an overlap rather
+than an outage:
 
 ```json
 {
   "McpEndpoint": {
     "Enabled": true,
-    "Authentication": "ApiKey",
-    "ApiKeys": [
+    "Authentication": [
       {
-        "Name": "workstation",
-        "SecretReference": "systemd-credential:mailfathom-mcp-workstation-key",
-        "Lifetime": "NoLimit"
+        "ApiKey": {
+          "Name": "workstation",
+          "SecretReference": "systemd-credential:mailfathom-mcp-workstation-key",
+          "Lifetime": "NoLimit"
+        }
       },
       {
-        "Name": "chatgpt-connector",
-        "SecretReference": "file:/run/secrets/mailfathom-mcp-chatgpt-key",
-        "Lifetime": "2027-01-31T00:00:00Z"
+        "ApiKey": {
+          "Name": "chatgpt-connector",
+          "SecretReference": "file:/run/secrets/mailfathom-mcp-chatgpt-key",
+          "Lifetime": "2027-01-31T00:00:00Z"
+        }
       }
     ]
   }
@@ -157,7 +176,7 @@ same request is answered `429 Too Many Requests` with no body and never reaches 
 That is deliberate — it is what makes a flood of bad credentials cost the sender something — and it means a client
 retrying against an exhausted partition sees `429` where it expected `401`. See [Rate limiting](#rate-limiting).
 
-### `OAuth`
+### OAuth
 
 MailFathom acts as an [OAuth 2.1 protected resource](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization).
 An external authorization server the operator already runs signs users in and issues tokens; MailFathom verifies what that
@@ -168,21 +187,35 @@ authorization code, holds no refresh token, and has no login page.
 {
   "McpEndpoint": {
     "Enabled": true,
-    "Authentication": "OAuth",
-    "OAuth": {
-      "Resource": "https://mail.example.test/mcp",
-      "RequiredScopes": [ "mailfathom.read" ],
-      "AuthorizationServers": [
-        {
-          "Name": "workforce",
-          "Issuer": "https://sso.example.test/realms/mailfathom",
-          "AuthorizedSubjects": [ "9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04" ]
+    "Authentication": [
+      {
+        "OAuth": {
+          "Resource": "https://mail.example.test/mcp",
+          "RequiredScopes": [ "mailfathom.read" ],
+          "AuthorizationServers": [
+            {
+              "Name": "workforce",
+              "Issuer": "https://sso.example.test/realms/mailfathom",
+              "AuthorizedSubjects": [ "9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04" ]
+            }
+          ]
         }
-      ]
-    }
+      }
+    ]
   }
 }
 ```
+
+**Several OAuth entries are supported, and each states its own terms.** `RequiredScopes` and `AuthorizationServers` belong
+to the entry that carries them, so a token is judged against what *its own* issuer's entry asks for — one tenant may be
+required to carry a scope while another is not, without either being weakened to match the other. What every entry must
+agree on is `Resource`, and startup refuses two that disagree: the endpoint publishes one protected resource metadata
+document, at an address derived from that identifier, so a second resource would leave one entry's clients reading a
+document that describes somebody else and asking their authorization server for the wrong audience.
+
+An authorization server's `Name` and `Issuer` are each unique across the whole list, not just within an entry. The name
+composes the scheme its token validator registers under, and the issuer is what selects that validator, so a repeat of
+either would leave the key set a token is trusted against decided by configuration order.
 
 **`Resource` is the canonical URL clients reach this deployment at**, and it is configuration rather than something derived
 from the request. It is published in the metadata document, a client copies it into the `resource` parameter when asking for
@@ -320,29 +353,31 @@ yet implement Resource Indicators ([RFC 8707](https://www.rfc-editor.org/rfc/rfc
 audience mapping — Keycloak, for example, through a client scope carrying an audience mapper. **Do not answer such a server by
 relaxing audience validation**; there is no setting for it, deliberately.
 
-### `None`
+### Requiring no credential
 
-An enabled endpoint with no method turned on requires no credential. Writing `None` says so explicitly and is exactly
-equivalent:
+An enabled endpoint whose `Authentication` list is empty requires no credential. Writing the empty list says so
+explicitly and is exactly equivalent to leaving the setting out:
 
 ```json
 {
-  "McpEndpoint": { "Enabled": true, "Authentication": "None" }
+  "McpEndpoint": { "Enabled": true, "Authentication": [] }
 }
 ```
 
-Configuring keys or authorization servers alongside it is a startup failure rather than a silent no-op, because settings
-nothing checks are a deployment believing it is protected — which is worse than one that knows it is not.
+There is nothing to configure alongside it, which is the point of the shape: keys and authorization servers live inside
+the entry that turns their method on, so a deployment cannot end up carrying settings nothing checks — believing it is
+protected, which is worse than knowing it is not.
 
 Whenever an enabled endpoint requires no credential, startup logs one warning:
 
 ```text
 warn: MailFathom.Host.Hosting.Warnings.McpTransportAuthenticationWarning
-      The MCP endpoint is enabled on /mcp with no authentication method turned on, so anything that can reach this
-      address can read the synchronized mailboxes. Set McpEndpoint:Authentication to ApiKey, to OAuth, or to both unless
-      the address is reachable only from this machine or from a network you control. Neither an origin policy nor a
-      client certificate substitutes for this: the first restricts which page a browser will let call, the second names
-      the application calling, and neither identifies the person whose mail is served.
+      The MCP endpoint is enabled on /mcp with no authentication method configured, so anything that can reach this
+      address can read the synchronized mailboxes. Add an entry to McpEndpoint:Authentication carrying an ApiKey block,
+      an OAuth block, or one of each, unless the address is reachable only from this machine or from a network you
+      control. Neither an origin policy nor a client certificate substitutes for this: the first restricts which page a
+      browser will let call, the second names the application calling, and neither identifies the person whose mail is
+      served.
 ```
 
 Leaving `Cors.AllowedOrigins` at its default of `["*"]` with no credential required — which is what makes the endpoint
@@ -508,8 +543,9 @@ A profile names the domain clients connect to, the socket to bind, and where the
 {
   "McpEndpoint": {
     "Enabled": true,
-    "Authentication": "ApiKey",
-    "ApiKeys": [{ "Name": "workstation", "SecretReference": "systemd-credential:mailfathom-mcp-workstation-key" }],
+    "Authentication": [
+      { "ApiKey": { "Name": "workstation", "SecretReference": "systemd-credential:mailfathom-mcp-workstation-key" } }
+    ],
     "Https": {
       "Endpoints": [
         {
@@ -982,7 +1018,9 @@ trust profile exists, reaches whichever listener is actually serving.
 {
   "McpEndpoint": {
     "Enabled": true,
-    "Authentication": "ApiKey",
+    "Authentication": [
+      { "ApiKey": { "Name": "workstation", "SecretReference": "systemd-credential:mailfathom-mcp-workstation-key" } }
+    ],
     "ClientCertificateProfiles": [
       {
         "Name": "chatgpt-connector",
@@ -1069,7 +1107,7 @@ of the deployment holds a certificate.
 
 **Compose the profile with OAuth rather than relying on it alone.** A certificate says which application is connecting and
 never whose mailbox is being read, so the connector's own OAuth 2.1 flow answers the second question — write
-`"Authentication": "OAuth"` beside this profile, configure the authorization server as [`OAuth`](#oauth) describes, and
+an `OAuth` entry beside this profile, configure the authorization server as [OAuth](#oauth) describes, and
 name the owner in its `AuthorizedSubjects`. The two run independently: the certificate is judged before any credential is
 read, and a request satisfying one and not the other is refused. What remains outside MailFathom is the connector-side
 arrangement — registering the client with your authorization server and having it issue `Resource` as the audience — which

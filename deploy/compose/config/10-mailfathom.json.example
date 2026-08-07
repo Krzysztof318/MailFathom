@@ -63,16 +63,16 @@
   },
   "McpEndpoint": {
     "Enabled": true,
-    "Authentication": "ApiKey",
-    "ApiKeys": [
+    "Authentication": [
       {
-        "Name": "workstation",
-        "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key",
-        "Lifetime": "NoLimit"
+        "ApiKey": {
+          "Name": "workstation",
+          "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key",
+          "Lifetime": "NoLimit"
+        }
       }
     ],
     "Cors": {
-      "AllowAnyOrigin": false,
       "AllowedOrigins": []
     }
   }

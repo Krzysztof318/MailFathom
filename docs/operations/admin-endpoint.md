@@ -19,9 +19,8 @@ A deployment that configures nothing serves no administrative surface. Enabling 
     "Enabled": true,
     "BindAddress": "127.0.0.1",
     "Port": 8090,
-    "Authentication": "ApiKey",
-    "ApiKeys": [
-      { "Name": "workstation", "SecretReference": "systemd-credential:admin-workstation-key" }
+    "Authentication": [
+      { "ApiKey": { "Name": "workstation", "SecretReference": "systemd-credential:admin-workstation-key" } }
     ]
   }
 }
@@ -42,11 +41,11 @@ there. Reading a mailbox and administering the service that reads it are differe
 mechanical rather than conventional: each endpoint registers its own authentication schemes and its own authorization
 policy, and a policy consults only its own schemes.
 
-`Authentication` takes the same values `McpEndpoint:Authentication` takes — `ApiKey`, `OAuth`, both separated by a
-comma, or `None` — and the section that configures them is separate all the way down. A misspelled key fails startup
-rather than binding a default.
+`Authentication` takes the same entries `McpEndpoint:Authentication` takes — one entry per credential, each carrying an
+`ApiKey` block, an `OAuth` block, or one of each — and every one of them is this endpoint's own. A misspelled key fails
+startup rather than binding a default.
 
-**With `OAuth` turned on, `AdminEndpoint:OAuth:Resource` must end in `/api/admin`** — the path these routes answer
+**With an `OAuth` entry configured, every one of them must name a `Resource` ending in `/api/admin`** — the path these routes answer
 beneath. Startup refuses anything else, naming the setting. The reason is discovery rather than OAuth: `mfctl` is handed
 a host and a port and finds the metadata document by appending that prefix, which reaches the document's RFC 9728
 location exactly when the resource names the same one. A deployment whose resource said something else would publish a
@@ -150,7 +149,7 @@ default port differs, so enabling TLS on both surfaces opens two clear-text port
 ## Behind a TLS-terminating reverse proxy
 
 If a proxy holds your certificate, the request states the public name it arrived under, which is what lets
-`AdminEndpoint:OAuth` discovery complete over a proxied address. `ReverseProxy:TrustedProxies` is what limits who may
+the endpoint's OAuth discovery complete over a proxied address. `ReverseProxy:TrustedProxies` is what limits who may
 state it; left empty it is anybody.
 [Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) documents that in
 full, including what the unnamed default gives up; three things are worth stating from this endpoint's side.
@@ -158,7 +157,7 @@ full, including what the unnamed default gives up; three things are worth statin
 - **It is one process-wide setting, not one per endpoint.** This surface is a separate listener over the same request
   pipeline, so naming your proxy once covers it along with the MCP and probe listeners. There is no
   `AdminEndpoint:ReverseProxy`, deliberately.
-- **`AdminEndpoint:OAuth:Resource` is unaffected.** It stays the value you wrote, still ends in `/api/admin`, and is
+- **The OAuth entry's `Resource` is unaffected.** It stays the value you wrote, still ends in `/api/admin`, and is
   still what a token's audience is compared against. The mode never derives it from a header.
 - **A proxy that authenticates its own callers is not this endpoint's authentication.** `AdminEndpoint:Authentication`
   still decides who may administer the service, and the clear-text warning above still fires, because the hop between
@@ -418,7 +417,7 @@ encryption answers the copy. Holding the credential in the platform's own secret
 | `did not accept the code the redirect carried` | The authorization code was already redeemed or had expired by the time it was exchanged, which is what a redirect answered twice or approved long after it was opened looks like. Run `login` again. |
 | `The device code is no longer valid` | Nobody finished at the verification address before the code expired, or the authorization server withdrew it. Run `login --mode device` again. |
 | `not a usable web address` | The authorization server published a `verification_uri` that is not an absolute `http` or `https` address, so there is nothing to put in front of the person signing in. This is a fault at the authorization server rather than in its configuration here. |
-| `publishes no OAuth metadata` | The endpoint accepts API keys only. Sign in with one, or ask the operator to add `OAuth` to `AdminEndpoint:Authentication`. |
+| `publishes no OAuth metadata` | The endpoint accepts API keys only. Sign in with one, or ask the operator to add an `OAuth` entry to `AdminEndpoint:Authentication`. |
 | `accepts tokens from several authorization servers` | More than one is configured and only you know which population you belong to. Name it with `--issuer`. |
 | `issued no refresh token` | The client was not granted offline access, so the session would end within the hour. Grant it at the authorization server. |
 | `no device authorization endpoint` | That authorization server offers no device grant. Sign in from a machine with a browser. |

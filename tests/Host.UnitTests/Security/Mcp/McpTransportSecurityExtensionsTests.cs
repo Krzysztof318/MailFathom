@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Mcp;
 using Microsoft.AspNetCore.Cors.Infrastructure;
@@ -49,7 +48,6 @@ public sealed class McpTransportSecurityExtensionsTests
         var endpointSettings = new McpEndpointOptions
         {
             Enabled = true,
-            Authentication = TransportAuthenticationMethods.None,
         };
 
         endpointSettings.Cors.AllowedOrigins.Add("https://client.example.test");

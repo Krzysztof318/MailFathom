@@ -194,9 +194,8 @@ public sealed class TransportSecurityExtensionsTests
         services.AddLogging();
         services.AddTransportAuthentication(
             TransportSurface.Mcp,
-            TransportAuthenticationMethods.OAuth,
             [],
-            AnAuthorizationServer(),
+            [AnAuthorizationServer()],
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
 
         using var composed = services.BuildServiceProvider();
@@ -228,9 +227,8 @@ public sealed class TransportSecurityExtensionsTests
         services.AddLogging();
         services.AddTransportAuthentication(
             TransportSurface.Mcp,
-            TransportAuthenticationMethods.OAuth,
             [],
-            AnAuthorizationServer(),
+            [AnAuthorizationServer()],
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
 
         using var composed = services.BuildServiceProvider();
@@ -260,9 +258,8 @@ public sealed class TransportSecurityExtensionsTests
         services.AddLogging();
         services.AddTransportAuthentication(
             TransportSurface.Mcp,
-            TransportAuthenticationMethods.OAuth,
             [],
-            AnAuthorizationServer(),
+            [AnAuthorizationServer()],
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
 
         using var composed = services.BuildServiceProvider();
@@ -298,9 +295,8 @@ public sealed class TransportSecurityExtensionsTests
         {
             services.AddTransportAuthentication(
                 surface,
-                TransportAuthenticationMethods.OAuth,
                 [],
-                AnAuthorizationServer(),
+                [AnAuthorizationServer()],
                 surface.OAuthSchemeNameFor("workforce"));
         }
 
@@ -344,9 +340,8 @@ public sealed class TransportSecurityExtensionsTests
     private static void AddApiKeyAuthentication(IServiceCollection services, TransportSurface surface) =>
         services.AddTransportAuthentication(
             surface,
-            TransportAuthenticationMethods.ApiKey,
             [new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:not-a-real-key" }],
-            new OAuthValidationOptions(),
+            oauthMethods: [],
             surface.IsSpecified ? surface.ApiKeySchemeName : "unused");
 
     private static MessageReceivedContext MessageReceivedOver(string scheme)

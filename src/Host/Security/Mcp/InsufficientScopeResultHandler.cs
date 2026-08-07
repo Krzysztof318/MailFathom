@@ -34,25 +34,33 @@ internal sealed class InsufficientScopeResultHandler : IAuthorizationMiddlewareR
 {
     private static readonly AuthorizationMiddlewareResultHandler FrameworkHandler = new();
 
-    private readonly IReadOnlyCollection<string> requiredScopes;
+    private readonly IReadOnlyDictionary<string, IReadOnlyCollection<string>> requiredScopesByIssuer;
 
-    private readonly string insufficientScopeChallenge;
+    private readonly Dictionary<string, string> challengesByIssuer;
 
     /// <summary>Initializes a new handler for the scopes this deployment requires.</summary>
-    /// <param name="requiredScopes">The scopes an access token must carry.</param>
+    /// <param name="requiredScopesByIssuer">The scopes an access token must carry, keyed by the issuer whose entry asks for them.</param>
     /// <param name="protectedResourceMetadataAddress">Where the protected resource metadata document is published.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="requiredScopes" /> or <paramref name="protectedResourceMetadataAddress" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="requiredScopesByIssuer" /> or <paramref name="protectedResourceMetadataAddress" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// One challenge per issuer, composed once, because each configured entry states the scopes asked of the servers it
+    /// configures. Naming the union instead would send a client to ask its own authorization server for a scope some
+    /// other server's entry requires, which that server has no reason to issue.
+    /// </remarks>
     internal InsufficientScopeResultHandler(
-        IReadOnlyCollection<string> requiredScopes,
+        IReadOnlyDictionary<string, IReadOnlyCollection<string>> requiredScopesByIssuer,
         string protectedResourceMetadataAddress)
     {
-        ArgumentNullException.ThrowIfNull(requiredScopes);
+        ArgumentNullException.ThrowIfNull(requiredScopesByIssuer);
         ArgumentNullException.ThrowIfNull(protectedResourceMetadataAddress);
 
-        this.requiredScopes = requiredScopes;
-        this.insufficientScopeChallenge =
-            $"Bearer error=\"insufficient_scope\", scope=\"{string.Join(' ', requiredScopes)}\", "
-            + $"resource_metadata=\"{protectedResourceMetadataAddress}\"";
+        this.requiredScopesByIssuer = requiredScopesByIssuer;
+        this.challengesByIssuer = requiredScopesByIssuer.ToDictionary(
+            issuerScopes => issuerScopes.Key,
+            issuerScopes =>
+                $"Bearer error=\"insufficient_scope\", scope=\"{string.Join(' ', issuerScopes.Value)}\", "
+                + $"resource_metadata=\"{protectedResourceMetadataAddress}\"",
+            StringComparer.Ordinal);
     }
 
     /// <inheritdoc />
@@ -67,14 +75,18 @@ internal sealed class InsufficientScopeResultHandler : IAuthorizationMiddlewareR
 
         // A caller refused for who they are, rather than for what their token was issued for, receives the framework's
         // plain 403. Naming scopes there would send a client to ask its authorization server for something that would
-        // change nothing, and would say that the scopes are all that stands between it and the mailbox.
-        if (!authorizeResult.Forbidden || OAuthIdentity.CarriesEveryScope(context.User, this.requiredScopes))
+        // change nothing, and would say that the scopes are all that stands between it and the mailbox. So does a caller
+        // whose issuer this deployment configures no entry for, which no validated token can be.
+        if (!authorizeResult.Forbidden
+            || context.User.FindFirst(OAuthIdentity.IssuerClaimType)?.Value is not { } issuer
+            || !this.requiredScopesByIssuer.TryGetValue(issuer, out var requiredScopes)
+            || OAuthIdentity.CarriesEveryScope(context.User, requiredScopes))
         {
             return FrameworkHandler.HandleAsync(next, context, policy, authorizeResult);
         }
 
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        context.Response.Headers[HeaderNames.WWWAuthenticate] = this.insufficientScopeChallenge;
+        context.Response.Headers[HeaderNames.WWWAuthenticate] = this.challengesByIssuer[issuer];
 
         return Task.CompletedTask;
     }

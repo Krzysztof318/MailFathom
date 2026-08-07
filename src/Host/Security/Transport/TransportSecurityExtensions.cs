@@ -41,9 +41,8 @@ internal static class TransportSecurityExtensions
     /// <summary>Adds one surface's authentication schemes and its authorization requirement.</summary>
     /// <param name="services">The container to add to.</param>
     /// <param name="surface">The surface being protected, which names every scheme and the policy.</param>
-    /// <param name="methods">The credentials this surface accepts.</param>
-    /// <param name="apiKeys">The API key references a request may present one of, consulted only when <paramref name="methods" /> includes them.</param>
-    /// <param name="oauthSettings">The authorization servers and token requirements, consulted only when <paramref name="methods" /> includes OAuth.</param>
+    /// <param name="apiKeys">The keys a request may present one of, empty where the surface accepts none.</param>
+    /// <param name="oauthMethods">What a token must prove, one entry per configured OAuth block, empty where the surface accepts no access token.</param>
     /// <param name="challengeSchemeName">The scheme answering a request that presented no credential at all.</param>
     /// <returns>The authentication builder, so a surface can add schemes only it needs.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any reference argument is <see langword="null" />.</exception>
@@ -65,14 +64,13 @@ internal static class TransportSecurityExtensions
     internal static AuthenticationBuilder AddTransportAuthentication(
         this IServiceCollection services,
         TransportSurface surface,
-        TransportAuthenticationMethods methods,
         IReadOnlyList<ConfiguredSecret> apiKeys,
-        OAuthValidationOptions oauthSettings,
+        IReadOnlyList<OAuthValidationOptions> oauthMethods,
         string challengeSchemeName)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(apiKeys);
-        ArgumentNullException.ThrowIfNull(oauthSettings);
+        ArgumentNullException.ThrowIfNull(oauthMethods);
         ArgumentNullException.ThrowIfNull(challengeSchemeName);
 
         if (!surface.IsSpecified)
@@ -80,14 +78,11 @@ internal static class TransportSecurityExtensions
             throw new ArgumentException("A transport surface is required to name the schemes and the policy.", nameof(surface));
         }
 
-        var allowsApiKey = methods.HasFlag(TransportAuthenticationMethods.ApiKey);
-        var allowsOAuth = methods.HasFlag(TransportAuthenticationMethods.OAuth);
-
         var authentication = services.AddAuthentication(surface.RoutingSchemeName);
 
-        AddRoutingScheme(authentication, surface, allowsApiKey, allowsOAuth, oauthSettings, challengeSchemeName);
+        AddRoutingScheme(authentication, surface, apiKeys, oauthMethods, challengeSchemeName);
 
-        if (allowsApiKey)
+        if (apiKeys.Count > 0)
         {
             // Added once however many surfaces accept a key, because the authenticator holds no surface state: which
             // keys it compares against arrive as an argument on every call. A second registration would resolve the
@@ -102,11 +97,16 @@ internal static class TransportSecurityExtensions
                 });
         }
 
-        if (allowsOAuth)
+        if (oauthMethods.Count > 0)
         {
             AddMetadataBackchannel(services);
+        }
 
-            foreach (var authorizationServer in oauthSettings.AuthorizationServers)
+        // Each entry's own servers are registered against that entry's resource, which is what makes an entry the unit
+        // a token is judged by rather than one merged set the whole endpoint shares.
+        foreach (var oauthMethod in oauthMethods)
+        {
+            foreach (var authorizationServer in oauthMethod.AuthorizationServers)
             {
                 var schemeName = surface.OAuthSchemeNameFor(authorizationServer.Name!);
 
@@ -116,12 +116,12 @@ internal static class TransportSecurityExtensions
                         ConfigureAuthorizationServer(
                             jwtOptions,
                             authorizationServer,
-                            oauthSettings,
+                            oauthMethod,
                             transportFactory));
             }
         }
 
-        AddAuthorizationPolicy(services, surface, allowsOAuth, oauthSettings);
+        AddAuthorizationPolicy(services, surface, oauthMethods);
 
         return authentication;
     }
@@ -155,21 +155,20 @@ internal static class TransportSecurityExtensions
     private static void AddRoutingScheme(
         AuthenticationBuilder authentication,
         TransportSurface surface,
-        bool allowsApiKey,
-        bool allowsOAuth,
-        OAuthValidationOptions oauthSettings,
+        IReadOnlyList<ConfiguredSecret> apiKeys,
+        IReadOnlyList<OAuthValidationOptions> oauthMethods,
         string challengeSchemeName)
     {
-        var oauthSchemesByIssuer = allowsOAuth
-            ? oauthSettings.AuthorizationServers.ToDictionary(
+        var oauthSchemesByIssuer = oauthMethods
+            .SelectMany(oauthMethod => oauthMethod.AuthorizationServers)
+            .ToDictionary(
                 authorizationServer => authorizationServer.ValidatedIssuer(),
                 authorizationServer => surface.OAuthSchemeNameFor(authorizationServer.Name!),
-                StringComparer.Ordinal)
-            : [];
+                StringComparer.Ordinal);
 
         var schemeSelector = new CredentialSchemeSelector(
             oauthSchemesByIssuer,
-            allowsApiKey ? surface.ApiKeySchemeName : null,
+            apiKeys.Count > 0 ? surface.ApiKeySchemeName : null,
             challengeSchemeName);
 
         authentication.AddPolicyScheme(
@@ -312,20 +311,19 @@ internal static class TransportSecurityExtensions
     private static void AddAuthorizationPolicy(
         IServiceCollection services,
         TransportSurface surface,
-        bool allowsOAuth,
-        OAuthValidationOptions oauthSettings)
+        IReadOnlyList<OAuthValidationOptions> oauthMethods)
     {
-        var requiredScopes = allowsOAuth ? oauthSettings.RequiredScopes.ToArray() : [];
+        var requiredScopesByIssuer = TransportAuthenticationConfiguration.RequiredScopesByIssuer(oauthMethods);
 
-        var authorizedIdentities = allowsOAuth
-            ? oauthSettings.AuthorizedIdentities()
-            : new HashSet<string>(StringComparer.Ordinal);
+        var authorizedIdentities = oauthMethods
+            .SelectMany(oauthMethod => oauthMethod.AuthorizedIdentities())
+            .ToHashSet(StringComparer.Ordinal);
 
         services.AddAuthorization(authorizationOptions => authorizationOptions.AddPolicy(
             surface.AccessPolicyName,
             policy => policy
                 .AddAuthenticationSchemes(surface.RoutingSchemeName)
                 .RequireAssertion(context =>
-                    TransportAccessPolicy.IsAuthorized(context.User, authorizedIdentities, requiredScopes))));
+                    TransportAccessPolicy.IsAuthorized(context.User, authorizedIdentities, requiredScopesByIssuer))));
     }
 }

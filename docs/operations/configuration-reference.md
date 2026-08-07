@@ -290,9 +290,9 @@ names both sections.
 - `MinimumTlsVersion`, per profile. The TLS floor is settled per connection, after the server name is known, so profiles
   on one socket may each keep their own.
 - Different **domains** on one TLS socket, which is what sharing one is for.
-- Everything decided per request rather than per socket: `Authentication`, `ApiKeys`, `OAuth`, `Cors`, `RateLimiting`,
-  origin validation, and the route prefix. An API key provisioned for an agent still authenticates nothing under
-  `/api/admin`, whichever port both are reached on.
+- Everything decided per request rather than per socket: `Authentication` and every method it carries, `Cors`,
+  `RateLimiting`, origin validation, and the route prefix. An API key provisioned for an agent still authenticates
+  nothing under `/api/admin`, whichever port both are reached on.
 
 Two specific addresses on one port are two sockets and are accepted; none of the rules above applies between them.
 
@@ -311,8 +311,8 @@ carries is who they are believed from, and **an unconfigured section believes ev
 | `ReverseProxy:TrustedProxies` | string list | empty, which trusts `0.0.0.0/0` and `::/0` | Each entry an IP address or a CIDR network whose host bits are clear — not a DNS name. What is named replaces the default rather than adding to it, and the framework's loopback default is cleared rather than inherited. Left empty, or written as `0.0.0.0/0` and `::/0`, it trusts every peer and so disables the refusal of an OAuth token that arrived without TLS — see [what the default costs](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) | restart |
 | `ReverseProxy:MaximumForwardedHops` | int | `1` | At least 1; how far right-to-left through each header a value is believed | restart |
 
-`X-Forwarded-For` is never read, so the peer MailFathom observes stays the one that opened the connection, and
-`McpEndpoint:OAuth:Resource` stays a configured value rather than anything derived from a header.
+`X-Forwarded-For` is never read, so the peer MailFathom observes stays the one that opened the connection, and the
+configured OAuth `Resource` stays a value you wrote rather than anything derived from a header.
 
 ## `McpEndpoint`
 
@@ -327,22 +327,28 @@ routing and listeners — while key and certificate material is read per request
 | `McpEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; binds the clear-text socket, which `HttpsOnly` does not open | restart |
 | `McpEndpoint:Port` | int | `8080` | 1–65535. The administrative endpoint's default as well — see [sharing a socket](#sharing-a-socket) | restart |
 | `McpEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — see [`Transport`](#transport) | restart |
-| `McpEndpoint:Authentication` | flag set | `None` | `ApiKey`, `OAuth`, both comma-separated, or `None`; `None` warns at startup | restart |
-| `McpEndpoint:ApiKeys` | list of secret blocks | empty | Required non-empty when `ApiKey` is named; refused when configured while it is not | restart; material per request |
+| `McpEndpoint:Authentication` | list of credentials | empty | One entry per accepted credential; empty warns at startup. A value written here rather than a list fails startup | restart |
 
-### OAuth — `McpEndpoint:OAuth`
+### The accepted credentials — `McpEndpoint:Authentication:<n>`
 
-MailFathom is a protected resource only; an external authorization server signs users in.
-[`OAuth`](mcp-endpoint.md#oauth) records what a token must prove.
+Each entry carries the block of whichever method judges it, and the block's presence is what selects that method — there
+is no separate setting naming it. As many entries may state either method as a deployment needs, and one entry may carry
+both blocks; the only entry that fails startup is one carrying neither, named by its position. Both endpoints take the
+same entries; the administrative one adds a single rule, stated with it below.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `…:Resource` | string | — | Required; the canonical `https` URL clients reach this endpoint at — behind a proxy, the proxy's public URL | restart |
-| `…:RequiredScopes` | string list | empty | Scopes every access token must carry; empty accepts any token the configured servers issued for this resource | restart |
-| `…:AuthorizationServers:<n>:Name` | string | — | Required; the identity diagnostics use | restart |
-| `…:AuthorizationServers:<n>:Issuer` | string | — | Required; a well-formed `https` issuer, compared against `iss` exactly | restart |
-| `…:AuthorizationServers:<n>:MetadataAddress` | string | unset | An absolute `https` URL on the issuer's own host; overrides issuer-derived discovery | restart |
-| `…:AuthorizationServers:<n>:AuthorizedSubjects` | string list | — | At least one; a token whose `sub` is not listed is refused, so every user the server can sign in does not automatically read this mailbox | restart |
+| `…:<n>:ApiKey` | secret block | — | One [named secret](secret-provisioning.md#the-secret-block) with its own `Lifetime`; a second key is a second entry | restart; material per request |
+| `…:<n>:OAuth:Resource` | string | — | Required; the canonical `https` URL clients reach this endpoint at — behind a proxy, the proxy's public URL. Every OAuth entry names the same one, because the endpoint publishes one metadata document at an address derived from it | restart |
+| `…:<n>:OAuth:RequiredScopes` | string list | empty | Scopes a token from *this entry's* servers must carry; empty accepts any token they issued for this resource | restart |
+| `…:<n>:OAuth:AuthorizationServers:<m>:Name` | string | — | Required; the identity diagnostics use, and unique across every entry because it composes the scheme its validator registers under | restart |
+| `…:<n>:OAuth:AuthorizationServers:<m>:Issuer` | string | — | Required; a well-formed `https` issuer, compared against `iss` exactly, and unique across every entry | restart |
+| `…:<n>:OAuth:AuthorizationServers:<m>:MetadataAddress` | string | unset | An absolute `https` URL on the issuer's own host; overrides issuer-derived discovery | restart |
+| `…:<n>:OAuth:AuthorizationServers:<m>:AuthorizedSubjects` | string list | — | At least one; a token whose `sub` is not listed is refused, so every user the server can sign in does not automatically read this mailbox | restart |
+
+MailFathom is a protected resource only; an external authorization server signs users in.
+[`OAuth`](mcp-endpoint.md#oauth) records what a token must prove, and
+[API keys](mcp-endpoint.md#api-keys) what a key is compared against.
 
 ### Browser origins — `McpEndpoint:Cors`
 
@@ -437,9 +443,7 @@ request or per handshake. [Administering a deployment](admin-endpoint.md) is the
 | `AdminEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; binds the clear-text socket, which `HttpsOnly` does not open | restart |
 | `AdminEndpoint:Port` | int | `8080` | 1–65535. The MCP endpoint's default as well, so enabling both without stating a port publishes one shared socket — see [sharing a socket](#sharing-a-socket) | restart |
 | `AdminEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — the same setting the MCP endpoint carries, read the same way | restart |
-| `AdminEndpoint:Authentication` | flag set | `None` | `ApiKey`, `OAuth`, both comma-separated, or `None`; `None` warns at startup | restart |
-| `AdminEndpoint:ApiKeys` | list of secret blocks | empty | Required non-empty when `ApiKey` is named; refused when configured while it is not | restart; material per request |
-| `AdminEndpoint:OAuth` | block | empty | Same shape and rules as `McpEndpoint:OAuth`, with one addition: `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document. Refused when configured while `OAuth` is not named | restart |
+| `AdminEndpoint:Authentication` | list of credentials | empty | Same shape and rules as [`McpEndpoint:Authentication:<n>`](#the-accepted-credentials--mcpendpointauthenticationn), with one addition: every `OAuth` block's `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document | restart; material per request |
 | `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`, read under the two `Transport` modes that terminate TLS | restart; material per handshake |
 | `AdminEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port`, so terminating TLS on both surfaces opens two clear-text ports that do not collide | restart |
 | `AdminEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as `McpEndpoint:RateLimiting` above; applied whether or not it is written | restart |

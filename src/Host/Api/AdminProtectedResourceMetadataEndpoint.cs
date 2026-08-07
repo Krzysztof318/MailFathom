@@ -32,19 +32,27 @@ internal static class AdminProtectedResourceMetadataEndpoint
 {
     /// <summary>Maps the document at the address its resource identifier places it.</summary>
     /// <param name="endpoints">The route builder.</param>
-    /// <param name="oauthSettings">The endpoint's authorization servers and token requirements.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoints" /> or <paramref name="oauthSettings" /> is <see langword="null" />.</exception>
+    /// <param name="oauthMethods">The endpoint's authorization servers and token requirements, one entry per configured OAuth block.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoints" /> or <paramref name="oauthMethods" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="oauthMethods" /> is empty, which is a surface accepting no token at all.</exception>
     internal static void MapAdminProtectedResourceMetadata(
         this IEndpointRouteBuilder endpoints,
-        OAuthValidationOptions oauthSettings)
+        IReadOnlyList<OAuthValidationOptions> oauthMethods)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
-        ArgumentNullException.ThrowIfNull(oauthSettings);
+        ArgumentNullException.ThrowIfNull(oauthMethods);
 
-        var document = ProtectedResourceMetadataDocument.For(oauthSettings);
+        if (oauthMethods.Count == 0)
+        {
+            throw new ArgumentException(
+                "A protected resource metadata document describes the configured OAuth methods, and none was configured.",
+                nameof(oauthMethods));
+        }
+
+        var document = ProtectedResourceMetadataDocument.For(oauthMethods);
 
         endpoints.MapGet(
-            ProtectedResourceMetadataAddress.PathFor(oauthSettings.CanonicalResource()),
+            ProtectedResourceMetadataAddress.PathFor(document.Resource),
             () => Results.Ok(document));
     }
 }
@@ -69,17 +77,27 @@ internal sealed record ProtectedResourceMetadataDocument(
     [property: JsonPropertyName("resource_name")] string ResourceName)
 {
     /// <summary>Describes what one endpoint's OAuth settings publish.</summary>
-    /// <param name="oauthSettings">The endpoint's authorization servers and token requirements.</param>
+    /// <param name="oauthMethods">The endpoint's authorization servers and token requirements, one entry per configured OAuth block.</param>
     /// <returns>The document.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="oauthSettings" /> is <see langword="null" />.</exception>
-    internal static ProtectedResourceMetadataDocument For(OAuthValidationOptions oauthSettings)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="oauthMethods" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// One document however many entries are configured, because it describes one protected resource and is published at
+    /// an address derived from that resource's identifier. Every entry names the same resource, which configuration
+    /// validation is what guarantees, so the resource comes from the first and the two lists carry what all of them
+    /// accept: every configured issuer, and every scope any entry asks for.
+    /// </remarks>
+    internal static ProtectedResourceMetadataDocument For(IReadOnlyList<OAuthValidationOptions> oauthMethods)
     {
-        ArgumentNullException.ThrowIfNull(oauthSettings);
+        ArgumentNullException.ThrowIfNull(oauthMethods);
 
         return new ProtectedResourceMetadataDocument(
-            oauthSettings.CanonicalResource(),
-            [.. oauthSettings.AuthorizationServers.Select(authorizationServer => authorizationServer.ValidatedIssuer())],
-            [.. oauthSettings.RequiredScopes],
+            oauthMethods[0].CanonicalResource(),
+            [
+                .. oauthMethods
+                    .SelectMany(oauthMethod => oauthMethod.AuthorizationServers)
+                    .Select(authorizationServer => authorizationServer.ValidatedIssuer()),
+            ],
+            [.. oauthMethods.SelectMany(oauthMethod => oauthMethod.RequiredScopes).Distinct(StringComparer.Ordinal)],
             ["header"],
             "MailFathom");
     }
