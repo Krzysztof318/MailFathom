@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Mutations;
 
 namespace MailFathom.Application.Synchronization.Reconciliation;
 
@@ -11,13 +12,27 @@ namespace MailFathom.Application.Synchronization.Reconciliation;
 /// <param name="Snapshot">What the server reported, and when it was read.</param>
 public sealed record ObservedEmailFlags(StoredEmailId StoredEmailId, RemoteEmailFlagSnapshot Snapshot);
 
+/// <summary>Pairs one occurrence the folder no longer holds with the change MailFathom made that took it out.</summary>
+/// <param name="StoredEmailId">The local identity whose occurrence has gone.</param>
+/// <param name="MutationRecordId">The durable record of the change that removed it.</param>
+public sealed record MutationAttributedDisappearance(
+    StoredEmailId StoredEmailId,
+    MailboxMutationRecordId MutationRecordId);
+
 /// <summary>Everything one reconciliation window learned, as one thing to apply.</summary>
 /// <param name="StillPresent">The emails the folder still holds, with the flags to write onto them.</param>
 /// <param name="ConfirmedUnchanged">
 /// The emails the folder still holds and reported no change to, so the stored flags already describe them and only the
 /// record of when they were last asked about moves.
 /// </param>
-/// <param name="Disappeared">The emails the folder no longer holds.</param>
+/// <param name="Disappeared">The emails the folder no longer holds and nothing MailFathom did accounts for.</param>
+/// <param name="RemovedByOwnMutation">
+/// The emails the folder no longer holds because MailFathom itself relocated or deleted them, each named with the record
+/// that says so. They are separated from <paramref name="Disappeared" /> before the disposition is reached, because the
+/// disposition answers what becomes of mail somebody else deleted and these are not that. Applying one is applying an
+/// observation and nothing else: the queue timestamp moves so the window can reach further into the folder, and the row
+/// itself is left for the relocation to carry across or for the delete action to decide about.
+/// </param>
 /// <param name="Disposition">What becomes of the local copy of each disappeared email.</param>
 /// <param name="ObservedAt">When this window was read, which orders it against what other writers have recorded.</param>
 /// <remarks>
@@ -42,5 +57,6 @@ public sealed record ReconciledFolderOutcome(
     IReadOnlyList<ObservedEmailFlags> StillPresent,
     IReadOnlyList<StoredEmailId> ConfirmedUnchanged,
     IReadOnlyList<StoredEmailId> Disappeared,
+    IReadOnlyList<MutationAttributedDisappearance> RemovedByOwnMutation,
     RemotelyDeletedEmailDisposition Disposition,
     DateTimeOffset ObservedAt);

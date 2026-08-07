@@ -31,17 +31,7 @@ internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider, E
 
         var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
         var occurrenceId = metadata.OccurrenceId;
-        var alias = occurrenceId.FolderResolutionId.Alias.Value;
-        var generation = occurrenceId.FolderResolutionId.Generation.Value;
-        var entity = await TrackedEntityLookup.SinglePendingOrPersistedAsync(
-            dbContext.StoredEmails,
-            dbContext.StoredEmails.Include(candidate => candidate.MailFolder),
-            candidate => candidate.MailFolder.MailboxAccountId == occurrenceId.AccountId.Value
-                && candidate.MailFolder.Alias == alias
-                && candidate.MailFolder.ResolutionGeneration == generation
-                && candidate.UidValidity == occurrenceId.UidValidity.Value
-                && candidate.Uid == occurrenceId.Uid.Value,
-            cancellationToken);
+        var entity = await FindByOccurrenceAsync(dbContext, occurrenceId, cancellationToken);
 
         if (entity is null)
         {
@@ -97,5 +87,67 @@ internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider, E
         }
 
         return StoredEmailId.Create(entity.Id);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> TryCarryToOccurrenceAsync(
+        IPersistenceSession session,
+        StoredEmailId storedEmailId,
+        EmailOccurrenceId occurrenceId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(occurrenceId);
+
+        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var occupant = await FindByOccurrenceAsync(dbContext, occurrenceId, cancellationToken);
+
+        // A row already sitting on the occurrence is either this same email, which a previous attempt of this commit
+        // already carried, or a different one, which only the mailbox could say is the wrong occupant.
+        if (occupant is not null)
+        {
+            return occupant.Id == storedEmailId.Value;
+        }
+
+        var entity = await dbContext.StoredEmails.FindAsync([storedEmailId.Value], cancellationToken)
+            ?? throw new InvalidOperationException(
+                $"No stored email carries the identifier {storedEmailId}, so no occurrence can be carried onto it.");
+        var folder = await MailFolderEntityResolver.GetRequiredAsync(
+            dbContext,
+            occurrenceId.AccountId,
+            occurrenceId.FolderResolutionId,
+            cancellationToken);
+
+        entity.MailFolder = folder;
+        entity.MailFolderId = folder.Id;
+        entity.UidValidity = occurrenceId.UidValidity.Value;
+        entity.Uid = occurrenceId.Uid.Value;
+
+        // The stored flags were read in the folder the email has left, and the tombstone, if the source disappearance
+        // was seen first, described an occurrence that no longer exists. Both are cleared so the destination folder's
+        // own window is what says what holds there now.
+        entity.RemoteFlagsObservedAt = null;
+        entity.RemoteExpungeObservedAt = null;
+
+        return true;
+    }
+
+    /// <summary>Reads whatever row already occupies one occurrence, including one this session has staged and not committed.</summary>
+    private static Task<StoredEmailEntity?> FindByOccurrenceAsync(
+        MailFathomDbContext dbContext,
+        EmailOccurrenceId occurrenceId,
+        CancellationToken cancellationToken)
+    {
+        var alias = occurrenceId.FolderResolutionId.Alias.Value;
+        var generation = occurrenceId.FolderResolutionId.Generation.Value;
+
+        return TrackedEntityLookup.SinglePendingOrPersistedAsync(
+            dbContext.StoredEmails,
+            dbContext.StoredEmails.Include(candidate => candidate.MailFolder),
+            candidate => candidate.MailFolder.MailboxAccountId == occurrenceId.AccountId.Value
+                && candidate.MailFolder.Alias == alias
+                && candidate.MailFolder.ResolutionGeneration == generation
+                && candidate.UidValidity == occurrenceId.UidValidity.Value
+                && candidate.Uid == occurrenceId.Uid.Value,
+            cancellationToken);
     }
 }

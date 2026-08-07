@@ -42,4 +42,36 @@ public interface IEmailMetadataRepository
         ExtractedEmailMetadata? extractedMetadata,
         StoredEmailContentAvailability contentAvailability,
         CancellationToken cancellationToken);
+
+    /// <summary>Moves one stored email onto the occurrence a relocation put it at, instead of storing a second email there.</summary>
+    /// <param name="session">The explicit persistence session this write participates in.</param>
+    /// <param name="storedEmailId">The email that was relocated, named by the mutation record.</param>
+    /// <param name="occurrenceId">Where the destination folder now holds it.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns><see langword="true" /> when the row was carried across; <see langword="false" /> when another row already occupies the occurrence.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrenceId" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no stored email carries <paramref name="storedEmailId" />, or when the occurrence names a folder binding that is not stored.</exception>
+    /// <remarks>
+    /// <para>
+    /// Only the occurrence identity moves. The raw MIME, the extracted metadata, the search document, and the passages
+    /// are all keyed by the local identity and describe a message that a relocation did not change, so re-deriving any
+    /// of them would spend a fetch and a parse to arrive back where they already are.
+    /// </para>
+    /// <para>
+    /// The flags become unobserved rather than being carried over as observed. What is stored still describes the
+    /// message, but it was read in the folder the email has left, and the destination folder's own reconciliation window
+    /// is what says whether it still holds.
+    /// </para>
+    /// <para>
+    /// An occurrence another row already occupies is reported rather than written, because the occurrence identity is
+    /// unique and a caller cannot decide for the mailbox which of two local emails is the one the server holds there.
+    /// The caller then stores the discovery as it would any other, which leaves a duplicate visible instead of failing
+    /// the run.
+    /// </para>
+    /// </remarks>
+    Task<bool> TryCarryToOccurrenceAsync(
+        IPersistenceSession session,
+        StoredEmailId storedEmailId,
+        EmailOccurrenceId occurrenceId,
+        CancellationToken cancellationToken);
 }

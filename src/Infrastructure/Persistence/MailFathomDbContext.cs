@@ -90,6 +90,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal const string MailboxMutationOutstandingIndexName = "ix_mailbox_mutations_outstanding";
 
+    internal const string MailboxMutationPlacementIndexName = "ix_mailbox_mutations_placement";
+
     private readonly PostgresTextSearchConfiguration textSearchConfiguration;
 
     /// <summary>Initializes a new MailFathom EF Core context.</summary>
@@ -405,6 +407,14 @@ internal sealed class MailFathomDbContext : DbContext
     /// stays in, deliberately: giving up on a change is what makes it stop being retried, and it would be worth nothing
     /// if it also made the change stop being seen.
     /// </para>
+    /// <para>
+    /// The third answers the forward pass of synchronization, which asks of every batch it discovers whether any of
+    /// those UIDs is where a relocation put an email. It is filtered to the records that can still answer yes, so it
+    /// holds one row per relocation in flight rather than one per relocation ever made — and on a mailbox nobody
+    /// relocates into it holds nothing at all, which is what makes the question free to ask on every batch. Reading a
+    /// disappearance back needs no index of its own: it is asked by folder, UIDVALIDITY, and UID, which is the prefix
+    /// the identity index already leads with.
+    /// </para>
     /// </remarks>
     private static void ConfigureMailboxMutationIndexes(EntityTypeBuilder<MailboxMutationEntity> entity)
     {
@@ -423,6 +433,16 @@ internal sealed class MailFathomDbContext : DbContext
         entity.HasIndex(mutation => new { mutation.MailboxAccountId, mutation.RecordedAt })
             .HasDatabaseName(MailboxMutationOutstandingIndexName)
             .HasFilter($"\"{nameof(MailboxMutationEntity.Stage)}\" <> '{nameof(MailboxMutationStage.Completed)}'");
+
+        entity.HasIndex(mutation => new
+        {
+            mutation.MailboxAccountId,
+            mutation.DestinationFolderPath,
+            mutation.PlacementUidValidity,
+            mutation.PlacementUid,
+        })
+            .HasDatabaseName(MailboxMutationPlacementIndexName)
+            .HasFilter($"\"{nameof(MailboxMutationEntity.PlacementObservedAt)}\" IS NULL");
     }
 
     /// <summary>Declares the derived search document and the lexical index built over it.</summary>

@@ -1,0 +1,106 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
+using MailFathom.Infrastructure.Persistence.Entities;
+
+namespace MailFathom.Infrastructure.Persistence.Mutations;
+
+/// <summary>Rebuilds the domain record one stored mutation row describes.</summary>
+/// <remarks>
+/// It is shared rather than owned by one store because two adapters read the same rows for different questions — the
+/// performer's, which asks what a mutation still owes, and synchronization's, which asks whether an occurrence it just
+/// met is one MailFathom created. A second mapping would be a second reading of the same row, and the two would drift.
+/// </remarks>
+internal static class MailboxMutationRecordMapping
+{
+    /// <summary>Rebuilds the record a row and its folder binding describe.</summary>
+    /// <param name="entity">The stored row.</param>
+    /// <param name="folder">The binding the source occurrence was read under, which turns a folder key back into an alias and generation.</param>
+    /// <returns>The record that row states.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the row names a mutation or a destination folder path that no longer parses.</exception>
+    internal static MailboxMutationRecord ToRecord(MailboxMutationEntity entity, MailFolderEntity folder)
+    {
+        if (!MailboxMutation.TryParseName(entity.Mutation, out var mutation))
+        {
+            throw new InvalidOperationException(
+                $"Mailbox mutation record {entity.Id} names '{entity.Mutation}', which is not a permitted mutation.");
+        }
+
+        var occurrence = EmailOccurrenceId.Create(
+            MailAccountId.Create(entity.MailboxAccountId),
+            new MailFolderResolutionId(
+                MailFolderAlias.Create(folder.Alias),
+                MailFolderResolutionGeneration.Create(folder.ResolutionGeneration)),
+            ImapUidValidity.Create(entity.UidValidity),
+            ImapUid.Create(entity.Uid));
+
+        return new MailboxMutationRecord
+        {
+            Id = MailboxMutationRecordId.Create(entity.Id),
+            Request = MailboxMutationRequest.Create(
+                StoredEmailId.Create(entity.StoredEmailId),
+                occurrence,
+                mutation,
+                MailboxMutationRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
+                ToDestinationPath(entity),
+                entity.DesiredSeenState),
+            Stage = entity.Stage,
+            RequiresSourceRemoval = entity.RequiresSourceRemoval,
+            Placement = ToPlacement(entity),
+            AttemptCount = entity.AttemptCount,
+            RecordedAt = entity.RecordedAt,
+            StageChangedAt = entity.StageChangedAt,
+            LastFailure = ToFailure(entity),
+            PlacementObservedAt = entity.PlacementObservedAt,
+            SourceRemovalObservedAt = entity.SourceRemovalObservedAt,
+        };
+    }
+
+    /// <summary>Restores the destination folder a relocation or a copy named, exactly as it was stored.</summary>
+    /// <remarks>
+    /// The text is not trimmed on the way back, for the reason it was not trimmed on the way in: IMAP permits a quoted
+    /// mailbox name bounded by a space, and normalizing one would name a different mailbox or none at all.
+    /// </remarks>
+    private static RemoteFolderPath? ToDestinationPath(MailboxMutationEntity entity)
+    {
+        if (entity.DestinationFolderPath is null)
+        {
+            return null;
+        }
+
+        return RemoteFolderPath.TryCreate(
+            entity.DestinationFolderPath,
+            entity.DestinationHierarchyDelimiter is { Length: > 0 } delimiter ? delimiter[0] : null,
+            out var destinationPath)
+            ? destinationPath
+            : throw new InvalidOperationException(
+                $"Mailbox mutation record {entity.Id} carries a destination folder path that names no folder.");
+    }
+
+    private static RemoteEmailPlacement ToPlacement(MailboxMutationEntity entity) =>
+        entity is { PlacementUidValidity: { } uidValidity, PlacementUid: { } uid }
+            ? RemoteEmailPlacement.Reported(ImapUidValidity.Create(uidValidity), ImapUid.Create(uid))
+            : RemoteEmailPlacement.NotReported();
+
+    /// <summary>Reads back the code of the failure the last attempt ended in.</summary>
+    /// <remarks>
+    /// A number this build does not recognize is a row written by one that allocated a code since. It is diagnostic
+    /// detail rather than something acted on, so it is reported as absent instead of failing the read of every other
+    /// mutation the account has.
+    /// </remarks>
+    private static MailFathomErrorCode? ToFailure(MailboxMutationEntity entity)
+    {
+        if (entity.LastFailureCode is not { } failureCode)
+        {
+            return null;
+        }
+
+        return MailFathomErrorCode.TryParse(failureCode, out var failure) ? failure : null;
+    }
+}

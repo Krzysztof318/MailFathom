@@ -317,6 +317,15 @@ internal sealed partial class AccountSynchronizationSupervisor
             result.UnreadableMimeEmailCount,
             result.HasMoreEmails);
 
+        if (result.RelocatedEmailCount > 0 || result.Reconciliation.OwnMutationCompletedEmailCount > 0)
+        {
+            this.LogOwnMutationsRecognized(
+                this.accountId.Value,
+                folderAlias,
+                result.RelocatedEmailCount,
+                result.Reconciliation.OwnMutationCompletedEmailCount);
+        }
+
         this.ReportReconciliation(folderAlias, remotelyDeletedEmailDisposition, result.Reconciliation);
     }
 
@@ -407,6 +416,21 @@ internal sealed partial class AccountSynchronizationSupervisor
         string folderAlias,
         int observedEmailCount,
         bool emailsRemain);
+
+    /// <summary>Reports the changes MailFathom made to the mailbox arriving back through an ordinary run.</summary>
+    /// <remarks>
+    /// It is the line that says a message which moved is the same message. Without it an operator reading the counts
+    /// would see mail arriving in one folder and vanishing from another, which is exactly what the join exists to stop
+    /// the system itself from concluding. Counts and MailFathom's own configured names only, as everywhere else here.
+    /// </remarks>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Recognized MailFathom's own changes in {AccountId}/{FolderAlias}; {RelocatedEmailCount} discovered messages kept the local email they were relocated from, and {OwnMutationCompletedEmailCount} source occurrences left the folder because MailFathom moved or deleted them rather than because somebody else did.")]
+    private partial void LogOwnMutationsRecognized(
+        string accountId,
+        string folderAlias,
+        int relocatedEmailCount,
+        int ownMutationCompletedEmailCount);
 
     /// <summary>Records mail leaving the local copy, which is the one reconciliation outcome an operator has to be able to find afterwards.</summary>
     /// <remarks>

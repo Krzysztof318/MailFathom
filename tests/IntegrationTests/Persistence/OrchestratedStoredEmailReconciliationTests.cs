@@ -120,6 +120,7 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
                 ],
                 ConfirmedUnchanged: [],
                 Disappeared: [],
+                RemovedByOwnMutation: [],
                 RemotelyDeletedEmailDisposition.RetainTombstone,
                 EarlierObservation),
             cancellationToken);
@@ -131,6 +132,7 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
                 StillPresent: [],
                 ConfirmedUnchanged: [storedEmailIds[ConfirmedUid]],
                 Disappeared: [storedEmailIds[DisappearedUid]],
+                RemovedByOwnMutation: [],
                 RemotelyDeletedEmailDisposition.RetainTombstone,
                 LaterObservation),
             cancellationToken);
@@ -227,6 +229,7 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
                 StillPresent: [],
                 ConfirmedUnchanged: [],
                 Disappeared: [erasedId, storedEmailIds[SparedUid]],
+                RemovedByOwnMutation: [],
                 RemotelyDeletedEmailDisposition.EraseLocalCopy,
                 EarlierObservation),
             cancellationToken);
@@ -323,6 +326,7 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
                     [new ObservedEmailFlags(StoredEmailId.Create(rows[uid].Id), SeenAt(recordedAt))],
                     ConfirmedUnchanged: [],
                     Disappeared: [],
+                    RemovedByOwnMutation: [],
                     RemotelyDeletedEmailDisposition.RetainTombstone,
                     recordedAt),
                 cancellationToken);

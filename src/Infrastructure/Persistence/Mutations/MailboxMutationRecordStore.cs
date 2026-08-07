@@ -6,9 +6,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
-using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
-using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
@@ -53,7 +51,7 @@ internal sealed class MailboxMutationRecordStore(MailFathomDbContext readContext
         var existing = await FindByIdentityAsync(writeContext, request, folder.Id, cancellationToken);
         if (existing is not null)
         {
-            return ToRecord(existing, folder);
+            return MailboxMutationRecordMapping.ToRecord(existing, folder);
         }
 
         var storedEmail = await writeContext.StoredEmails.FindAsync([request.StoredEmailId.Value], cancellationToken)
@@ -86,7 +84,7 @@ internal sealed class MailboxMutationRecordStore(MailFathomDbContext readContext
 
         writeContext.MailboxMutations.Add(entity);
 
-        return ToRecord(entity, folder);
+        return MailboxMutationRecordMapping.ToRecord(entity, folder);
     }
 
     /// <inheritdoc />
@@ -174,7 +172,7 @@ internal sealed class MailboxMutationRecordStore(MailFathomDbContext readContext
             .Take(limit)
             .ToArrayAsync(cancellationToken);
 
-        return [.. entities.Select(entity => ToRecord(entity, entity.MailFolder))];
+        return [.. entities.Select(entity => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder))];
     }
 
     /// <summary>Refuses a stage that would pull the record backwards or move it out of a terminal one.</summary>
@@ -218,84 +216,6 @@ internal sealed class MailboxMutationRecordStore(MailFathomDbContext readContext
                 mutation.RequesterIdentity == identity &&
                 mutation.Mutation == mutationName,
             cancellationToken);
-    }
-
-    private static MailboxMutationRecord ToRecord(MailboxMutationEntity entity, MailFolderEntity folder)
-    {
-        if (!MailboxMutation.TryParseName(entity.Mutation, out var mutation))
-        {
-            throw new InvalidOperationException(
-                $"Mailbox mutation record {entity.Id} names '{entity.Mutation}', which is not a permitted mutation.");
-        }
-
-        var occurrence = EmailOccurrenceId.Create(
-            MailAccountId.Create(entity.MailboxAccountId),
-            new MailFolderResolutionId(
-                MailFolderAlias.Create(folder.Alias),
-                MailFolderResolutionGeneration.Create(folder.ResolutionGeneration)),
-            ImapUidValidity.Create(entity.UidValidity),
-            ImapUid.Create(entity.Uid));
-
-        return new MailboxMutationRecord
-        {
-            Id = MailboxMutationRecordId.Create(entity.Id),
-            Request = MailboxMutationRequest.Create(
-                StoredEmailId.Create(entity.StoredEmailId),
-                occurrence,
-                mutation,
-                MailboxMutationRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
-                ToDestinationPath(entity),
-                entity.DesiredSeenState),
-            Stage = entity.Stage,
-            RequiresSourceRemoval = entity.RequiresSourceRemoval,
-            Placement = ToPlacement(entity),
-            AttemptCount = entity.AttemptCount,
-            RecordedAt = entity.RecordedAt,
-            StageChangedAt = entity.StageChangedAt,
-            LastFailure = ToFailure(entity),
-        };
-    }
-
-    /// <summary>Restores the destination folder a relocation or a copy named, exactly as it was stored.</summary>
-    /// <remarks>
-    /// The text is not trimmed on the way back, for the reason it was not trimmed on the way in: IMAP permits a quoted
-    /// mailbox name bounded by a space, and normalizing one would name a different mailbox or none at all.
-    /// </remarks>
-    private static RemoteFolderPath? ToDestinationPath(MailboxMutationEntity entity)
-    {
-        if (entity.DestinationFolderPath is null)
-        {
-            return null;
-        }
-
-        return RemoteFolderPath.TryCreate(
-            entity.DestinationFolderPath,
-            entity.DestinationHierarchyDelimiter is { Length: > 0 } delimiter ? delimiter[0] : null,
-            out var destinationPath)
-            ? destinationPath
-            : throw new InvalidOperationException(
-                $"Mailbox mutation record {entity.Id} carries a destination folder path that names no folder.");
-    }
-
-    private static RemoteEmailPlacement ToPlacement(MailboxMutationEntity entity) =>
-        entity is { PlacementUidValidity: { } uidValidity, PlacementUid: { } uid }
-            ? RemoteEmailPlacement.Reported(ImapUidValidity.Create(uidValidity), ImapUid.Create(uid))
-            : RemoteEmailPlacement.NotReported();
-
-    /// <summary>Reads back the code of the failure the last attempt ended in.</summary>
-    /// <remarks>
-    /// A number this build does not recognize is a row written by one that allocated a code since. It is diagnostic
-    /// detail rather than something acted on, so it is reported as absent instead of failing the read of every other
-    /// mutation the account has.
-    /// </remarks>
-    private static MailFathomErrorCode? ToFailure(MailboxMutationEntity entity)
-    {
-        if (entity.LastFailureCode is not { } failureCode)
-        {
-            return null;
-        }
-
-        return MailFathomErrorCode.TryParse(failureCode, out var failure) ? failure : null;
     }
 
     private static async Task<MailboxMutationEntity> RequireEntityAsync(

@@ -30,10 +30,11 @@ MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for 
 - Secrets are re-resolved per operation rather than cached, and the configuration snapshot that names them is republished only after every reference in it has resolved. A rotated credential, trust anchor, or database password therefore reaches the next operation without a restart, and a reload that cannot resolve leaves the previous snapshot active. [Secret rotation](../operations/secret-rotation.md) is the operator procedure.
 - Every message whose raw MIME was stored is also read for normalized metadata — participants by role, sent and received timestamps, subject, thread identifiers, and an attachment summary. The read happens on the payload the run already fetched, so enrichment costs no second IMAP round trip and cannot reach the remote `\Seen` flag. [MIME metadata extraction](#mime-metadata-extraction) describes what is extracted and how each part is classified, and [Stored email schema](../architecture/stored-email-schema.md) describes which of it the row keeps. A message whose MIME no reader could parse is still stored, carrying only what the server's envelope reported; the same holds for one whose payload was never fetched because it exceeded the size limit.
 - The same read also derives the message's searchable text from its body and stores it, together with a bounded copy of the subject and of the normalized participant addresses, in a `email_search_documents` row whose PostgreSQL-generated `tsvector` column carries the GIN index lexical search will query. [Body text and the lexical index](#body-text-and-the-lexical-index) describes which part supplies the text, when a derivation is marked lossy, and what a message with no readable body records instead.
-- Each run ends with a bounded backward pass over mail that is already stored, so a message deleted on the server stops being served locally and a flag changed elsewhere stops being stale. It reuses the run's own read-only session, asks for flags and the UID and nothing that could set `\Seen`, and treats a UID the server declines to answer for as a message that left the folder. What becomes of that message locally is the account's choice between a tombstone every query excludes and erasing the local copy outright; a UIDVALIDITY change selects no window at all and can therefore never delete anything. [Reconciling against the server](#reconciling-against-the-server) describes the window, the ordering that advances it without a cursor, the two dispositions, and the audit lines.
+- Each run ends with a bounded backward pass over mail that is already stored, so a message deleted on the server stops being served locally and a flag changed elsewhere stops being stale. It reuses the run's own read-only session, asks for flags and the UID and nothing that could set `\Seen`, and treats a UID the server declines to answer for as a message that left the folder. What becomes of that message locally is the account's choice between a tombstone every query excludes and erasing the local copy outright — unless the message left because MailFathom itself moved or deleted it, which the bullet below covers and which reaches neither. A UIDVALIDITY change selects no window at all and can therefore never delete anything. [Reconciling against the server](#reconciling-against-the-server) describes the window, the ordering that advances it without a cursor, the two dispositions, and the audit lines.
 - A bounded background backfill re-reads the raw MIME of messages stored before extraction existed, writes the classification markers and the text it finds, and records the position it reached so an interrupted run resumes rather than restarts. It reaches no mail server, and it ends itself once no stored message awaits extraction.
 - `Host` provides typed `MailSynchronization` options, startup validation for enabled account connection settings and their transport security policy, secret resolution and trust anchor loading before any hosted service starts, a validated snapshot every consumer reads instead of the raw bound one, and one supervised synchronization schedule per configured account that isolates failures per account and per folder work unit. [Per-account supervision](#per-account-supervision) describes the coordinator, the two concurrency bounds, the backoff layering, and the shutdown drain. A second worker, configured under `MailExtractionBackfill`, runs the extraction backfill on the same scoped-work-unit terms.
 - An account configured for push keeps its folders watched and starts its next pass as soon as the server reports a change, instead of waiting out the interval. How they are watched is the server's answer: one `NOTIFY` subscription covering the account's folders where the server supports it, one `IDLE` session per folder where it supports only that, and polling where it supports neither. The mode is chosen per folder against what the server advertises, degrades to polling when push keeps failing, and is reported whenever it changes. [Push synchronization](#push-synchronization) describes the fallback matrix, mode selection, renewal, degradation, the rotation boundary a long-lived connection creates, and what an operator can observe.
+- A change MailFathom itself made to the mailbox comes back through an ordinary run, and is recognized rather than reacted to. A message it relocated is discovered in its new folder as the email that was already stored, joined to it by the `COPYUID` the server gave rather than by a guess at a header, and carried across instead of stored a second time; the source occurrence vanishing is that relocation or an authored delete completing rather than a deletion to propagate. A discovery or a disappearance that matches no record is treated exactly as before, so nothing changes for mail a person moved or deleted in their own client. [Changes MailFathom itself made](#changes-mailfathom-itself-made) describes the join, what happens when the server named no placement, and the order the two halves may arrive in.
 - The backward pass asks a capable server only about what changed. Where the server reports modification sequences, the folder's checkpoint records the sequence a completed pass covered it through, and the next pass narrows its flag fetch to what changed since — establishing what still exists from the vanished report `QRESYNC` carries or, without it, from a UID search that returns identifiers and no message data. Every path reaches the same end state; a checkpoint written before sequences were tracked carries none and simply asks about its whole window. [Asking only about what changed](#asking-only-about-what-changed) states the matrix and why a partial pass records nothing.
 
 ## Per-account supervision
@@ -769,9 +770,43 @@ state, so nothing it issues can set the remote `\Seen` flag — and the requeste
 test asserts against, because adding any body or header item to it would silently mark every message the pass inspects
 as read. The pass holds no port that could write a flag back.
 
+### Changes MailFathom itself made
+
+Not every disappearance is somebody else's act, and not every discovery is new mail. MailFathom relocates and deletes
+messages on the server too, and both come back through an ordinary run looking like something to react to: a message
+appears in one folder and vanishes from another. Left alone that is a new message and a deleted one, the history forks,
+and the mailbox holds a duplicate as far as MailFathom is concerned.
+
+The [durable mutation record](https://github.com/Krzysztof318/MailFathom/blob/main/docs/architecture/stored-email-schema.md#recorded-mailbox-mutations)
+is what tells the two apart, and both halves are joined to it by a recorded fact rather than by a guess at a header:
+
+- **A discovered occurrence** is matched against relocations that named this folder as their destination and that the
+  server answered with a `COPYUID` naming this UIDVALIDITY and this UID. A match carries the existing local email onto
+  the new occurrence instead of storing a second one — no fetch, no MIME read, and no new row, because the message is
+  the one already stored and its content, extracted metadata, search document, and passages are all keyed by the local
+  identity being carried across. Only the occurrence identity moves, and the flags become unobserved so the destination
+  folder's own window is what says what holds there now.
+- **A disappearance** is matched against the source occurrence the record names, which was written down before the
+  first IMAP command went out. A match is the relocation or the delete completing, so the disposition below is never
+  reached for it: the row keeps its place and only its position in the reconciliation queue moves.
+
+A relocation whose server named no placement is joined to no discovery at all. Searching the destination folder for
+something that looks like the message would replace a fact the server gave with a guess, and guessing by `Message-ID`
+or a content hash is wrong in both directions — a message legitimately appears twice with one `Message-ID`, and a
+provider may rewrite headers on copy. The record then stays visibly unjoined instead.
+
+The order the two halves arrive in is not fixed, because the destination folder is not necessarily one MailFathom
+synchronizes on the same schedule. A source disappearance seen first settles that half and leaves the row where it is
+until the placement is discovered; a placement discovered first settles both, because carrying the row across is what
+takes the email out of the source folder locally and no later window could observe the disappearance afterwards.
+
+A discovery or a disappearance that matches no record is treated exactly as it is below. Nothing here changes what
+happens to mail a person moved or deleted in their own client.
+
 ### What becomes of a message the server no longer holds
 
-Each account chooses, through `RemotelyDeletedEmailDisposition`:
+This is what happens to a disappearance the previous section did **not** account for — mail that left the folder because
+somebody else removed it. Each account chooses, through `RemotelyDeletedEmailDisposition`:
 
 | Value | What happens locally |
 |---|---|
@@ -803,9 +838,12 @@ this one, and that includes the case where this window would have deleted the em
 
 The counts reach the log and nothing else does. A window that observed something logs how many snapshots it refreshed
 and whether the folder has more to reconcile; a window that found messages gone logs that at warning level, with the
-account, the folder alias, the count, and the disposition that was applied. No subject, address, or fragment of a
-message takes part in deciding whether a message still exists, so none of it is read to decide it and none of it can
-reach an audit line.
+account, the folder alias, the count, and the disposition that was applied. A run that recognized changes of
+MailFathom's own logs them on a line of their own, at information level: how many discoveries carried an existing local
+email across, and how many occurrences left the folder because MailFathom moved or deleted them. Without it an operator
+reading the counts would see mail arriving in one folder and vanishing from another, which is exactly the conclusion the
+join exists to stop the system itself from drawing. No subject, address, or fragment of a message takes part in deciding
+whether a message still exists, so none of it is read to decide it and none of it can reach an audit line.
 
 ## Configuration
 
