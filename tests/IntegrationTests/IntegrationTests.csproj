@@ -39,5 +39,11 @@
     <!-- The local derivations persistence writes but may not reference, which a composition root supplies and which
          this suite therefore has to supply too. -->
     <ProjectReference Include="..\..\src\AI\AI.csproj" />
+
+    <!-- The one implementation of "build a synthetic message" in the repository. This suite is the only consumer of it
+         besides the development command itself, and it references the tool rather than keeping a second builder,
+         because two of them would drift and the mail this suite synchronizes would stop resembling the mail a
+         developer fills a mailbox with. Nothing under src/ references this project and nothing may. -->
+    <ProjectReference Include="..\..\tools\SyntheticMail\SyntheticMail.csproj" />
   </ItemGroup>
 </Project>

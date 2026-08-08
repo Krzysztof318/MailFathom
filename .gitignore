@@ -21,6 +21,13 @@ artifacts/
 docfx/api/
 docfx/_site/
 
+# Local configuration a developer writes for their own machine and for nobody else's, beside the tracked example that
+# shows its shape. `tools/SyntheticMail` reads one of these and it holds the password of a throwaway sending account,
+# so the pattern is by suffix rather than by that one name: the next tool that needs a local credential inherits the
+# rule instead of adding a line to it, and a file that was never meant to leave a machine cannot arrive in a pull
+# request because somebody named it something else.
+*.local.json
+
 # Instructions somebody writes for their own agent sessions and for nobody else's. Claude Code loads
 # `CLAUDE.local.md` from the repository root straight after `CLAUDE.md`, which is where a fork's contributor states
 # that they are one; `docs/operations/agent-workflow.md` § The two roles says what belongs in it. Ignored by suffix

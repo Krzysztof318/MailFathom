@@ -3459,6 +3459,46 @@ a_comment_never_cancels_a_review_in_flight() {
   done
 }
 
+# `tools/` holds development tooling that must never ship. `tools/SyntheticMail` fabricates mail and
+# submits it under a stored credential, which is not an operator capability and has no business in
+# `mfctl`, in the container image, or in a release asset. Being outside `src/` is what makes that true
+# today — the release publishes `src/Cli/Cli.csproj` by name and the image's build context is an
+# allow-list — and this is what keeps it true: three ways the boundary could be crossed, each checked
+# rather than trusted to a convention nobody restates.
+the_development_tooling_never_reaches_a_published_artifact() {
+  local failures=''
+  local offenders
+
+  # A project under src/ referencing one under tools/ would put the tool in whatever that project
+  # publishes, image and command binaries alike.
+  offenders="$(grep -rlE 'ProjectReference[^>]*tools[/\\]' "$source_repository_root/src" || true)"
+
+  if [[ -n "$offenders" ]]; then
+    failures+="these projects under src/ reference tools/: $(tr '\n' ' ' <<< "$offenders"). "
+  fi
+
+  # A workflow *step* naming a path under tools/ would build, publish, or attach it as part of a
+  # channel. A `paths-filter` entry is the one legitimate mention and reads as a quoted glob on a
+  # list item of its own: it decides which jobs a change starts, which is the opposite of publishing.
+  offenders="$(grep -rn 'tools/' "$source_repository_root/.github/workflows" |
+    grep -vE ":[[:space:]]*-[[:space:]]*'tools/\*\*'$" |
+    grep -vE ":[[:space:]]*#" || true)"
+
+  if [[ -n "$offenders" ]]; then
+    failures+="these workflow lines name a path under tools/ outside a change filter: $(tr '\n' ' ' <<< "$offenders"). "
+  fi
+
+  # The image's build context is an allow-list, so the tool reaches it only if a line says so.
+  if grep -qE '^!/tools' "$source_repository_root/deploy/docker/Dockerfile.dockerignore"; then
+    failures+='deploy/docker/Dockerfile.dockerignore admits tools/ into the container build context. '
+  fi
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
 workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
   [[ -x "$source_repository_root/scripts/assert-release-tag.sh" ]]
@@ -3730,6 +3770,7 @@ run_test no_channel_builds_an_artifact_before_the_commit_has_verified
 run_test a_paid_provider_run_is_never_the_default
 run_test only_the_reviewer_workflow_uses_pull_request_target
 run_test a_comment_never_cancels_a_review_in_flight
+run_test the_development_tooling_never_reaches_a_published_artifact
 run_test workflow_scripts_use_flat_manual_layout
 run_test every_yaml_file_carries_the_license_header
 run_test every_browser_asset_carries_the_license_header
