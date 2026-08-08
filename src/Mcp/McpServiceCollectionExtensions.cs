@@ -29,6 +29,7 @@ public static class McpServiceCollectionExtensions
     /// The tools resolve their dependencies per call from the request's scope, so the application ports they read
     /// through may be registered with any lifetime the host chooses.
     /// </remarks>
+    /// <seealso cref="AskMailAdvertisement" />
     public static IMcpServerBuilder AddMailFathomServer(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -42,11 +43,18 @@ public static class McpServiceCollectionExtensions
             .WithHttpTransport(transportOptions => transportOptions.Stateless = true)
             // The SDK's filter delegate is the one signature here that mandates ValueTask, so the conversion happens at
             // that boundary and the reporter itself keeps the Task every other MailFathom method returns.
-            .WithRequestFilters(requestFilters => requestFilters.AddCallToolFilter(next => (request, cancellationToken) =>
-                new ValueTask<CallToolResult>(RequiredReporter(request).ReportAsync(next, request, cancellationToken))))
+            .WithRequestFilters(requestFilters => requestFilters
+                .AddCallToolFilter(next => (request, cancellationToken) =>
+                    new ValueTask<CallToolResult>(RequiredReporter(request).ReportAsync(next, request, cancellationToken)))
+                // The one tool this surface does not always advertise, decided per listing so an operator who repairs a
+                // provider needs no restart to have it offered again.
+                .AddListToolsFilter(next => (request, cancellationToken) =>
+                    new ValueTask<ListToolsResult>(
+                        AskMailAdvertisement.WithoutUnavailableAnsweringAsync(next, request, cancellationToken))))
             .WithTools<ListEmailsTool>(McpToolContractSerialization.Options)
             .WithTools<GetEmailContentTool>(McpToolContractSerialization.Options)
-            .WithTools<SearchEmailsTool>(McpToolContractSerialization.Options);
+            .WithTools<SearchEmailsTool>(McpToolContractSerialization.Options)
+            .WithTools<AskMailTool>(McpToolContractSerialization.Options);
     }
 
     /// <summary>What the server reports about itself when a client initializes a session.</summary>

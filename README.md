@@ -36,28 +36,31 @@ To evaluate MailFathom from the checkout instead of deploying it, the local Aspi
 
 ## What exists today
 
-What is implemented is read-only synchronization and three tools, and this README is split on that line: this section and [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) describe the code as it stands, while [Where it is going](https://github.com/Krzysztof318/MailFathom#where-it-is-going) is the roadmap.
+What is implemented is read-only synchronization and four tools, and this README is split on that line: this section and [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) describe the code as it stands, while [Where it is going](https://github.com/Krzysztof318/MailFathom#where-it-is-going) is the roadmap.
 
 Two properties hold everywhere, and much of the rest of the design follows from them:
 
 - **Reading is local.** A tool call answers from your copy and never contacts a mail server, so it is fast, it works while the server is down, and it cannot change anything remotely. Every result states how fresh the local copy is.
 - **Synchronization never writes to your mailbox.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still shows as unread in your own mail client until you read it there.
 
-What an agent gets is three tools, and they are the whole surface:
+What an agent gets is four tools, and they are the whole surface:
 
 | Tool | What it answers |
 | --- | --- |
 | `list_emails` | A page of the timeline, newest first, filtered by account, folder, sender, recipient, subject, date range, seen state, or attachment presence |
 | `search_emails` | Ranked matches for a text query across subjects, participants, and body text, each with short extracts around what matched |
 | `get_email_content` | Up to ten messages in full: normalized headers, plain-text body, optionally sanitized HTML, and attachment names, types, and sizes — never attachment bytes |
+| `ask_mail` | A question answered from the mail a chat model looks up while answering, citing the identifiers of every message it drew on so each claim can be read for yourself |
 
-The screenshot at the top of this page is `list_emails`. The other two tools, answering the same client over the same mailbox:
+The first three are always there. `ask_mail` needs a chat model and an embedding model you configure and point at, so a deployment with neither does not advertise it at all rather than offering a tool that would fail on first use.
+
+The screenshot at the top of this page is `list_emails`. Two of the other tools, answering the same client over the same mailbox:
 
 ![A search for the word confirmation, answered with three ranked matches, each carrying the fragment of the message that matched](https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/mcp-tools/search-emails.png)
 
 ![One message opened by subject, answered with its sender, recipient, timestamps, folder, attachment state, and full plain-text body](https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/mcp-tools/read-email-content.png)
 
-A connected agent can list, read, and search your mail. It cannot send, delete, move, or mark anything, because no such tool exists on the surface. That describes this stage rather than a permanent limit: writing is on the roadmap, starting with sending, and each write capability will arrive as its own tool behind a reviewed authorization and confirmation flow — never as a setting that loosens a tool you already trust.
+A connected agent can list, read, search, and ask about your mail. It cannot send, delete, move, or mark anything, because no such tool exists on the surface — including inside an answering run, which is composed with one capability and that capability searches. That describes this stage rather than a permanent limit: writing is on the roadmap, starting with sending, and each write capability will arrive as its own tool behind a reviewed authorization and confirmation flow — never as a setting that loosens a tool you already trust.
 
 ## Project status
 
@@ -87,7 +90,7 @@ MailFathom is built as an enterprise-grade system from the first line, even whil
 
 ### Nothing on the surface writes, and no setting changes that
 
-- The MCP surface is three tools — `list_emails`, `get_email_content`, `search_emails` — and that is all of it. There is no write tool to enable.
+- The MCP surface is four tools — `list_emails`, `get_email_content`, `search_emails`, `ask_mail` — and that is all of it. There is no write tool to enable.
 - Synchronization is incapable of marking remote mail as read.
 - Attachment bytes are never returned; a content read reports names, types, and sizes.
 
@@ -179,10 +182,10 @@ None of it depends on somebody else's service. The copy is yours, the database i
 
 ## Where it is going
 
-The three tools are the foundation, not the product. What follows turns a synchronized, searchable copy of your mail into something an agent can reason over and eventually act on. The direction is set and the order is not fixed:
+The four tools are the foundation, not the product. What follows turns a synchronized, searchable copy of your mail into something an agent can reason over and eventually act on. The direction is set and the order is not fixed:
 
 - **Continuous synchronization.** Today a run is periodic reconciliation. Long-lived IMAP `IDLE` and `NOTIFY` connections, with `CONDSTORE` for cheap flag reconciliation, make new mail arrive in seconds instead of on an interval.
-- **Semantic retrieval and answering.** Embeddings in pgvector beside the lexical index, and an `ask_mail` tool that answers a question from retrieved passages rather than making an agent page through a mailbox. This is the step from a searchable archive toward a mail brain, and the chat and embedding providers stay configuration you choose rather than constants compiled in.
+- **Bounding what answering costs.** `ask_mail` is here, and what one question may spend is not yet yours to set: a ceiling on the provider calls a single run makes, and a trace of what a run actually did, are each their own step.
 - **Acting on mail, not only reading it.** Sending is the first write capability: a durable SMTP outbox exists as an application capability before it is ever an MCP tool, and exposing it waits on a reviewed authorization and confirmation flow, because a tool that sends mail is a different security question from one that reads it. Every later write capability takes the same route.
 - **OAuth 2.1 on the endpoint**, alongside the API keys and client certificates that guard it today.
 - **Attachment handling**, from classification and file-name normalization through to retrieval.

@@ -32,8 +32,8 @@ says so and names the release, rather than describing it as though you could alr
    its full guide is.
 2. **[Getting started](getting-started.md)** — from an installed instance to a synchronized mailbox and a first
    successful tool call, including secrets, the schema step, health verification, and connecting an MCP client.
-3. **[Using the tools](usage.md)** — what `list_emails`, `search_emails`, and `get_email_content` do, what they
-   deliberately bound, and how to read a failure.
+3. **[Using the tools](usage.md)** — what `list_emails`, `search_emails`, `get_email_content`, and `ask_mail` do, what
+   they deliberately bound, and how to read a failure.
 4. **[Administering your deployment](administering.md)** — the `mfctl` command: what it is for, signing in to a
    deployment from your own machine, and what it cannot do yet.
 5. **[Configuration reference](../operations/configuration-reference.md)** — every user-settable option in one place,

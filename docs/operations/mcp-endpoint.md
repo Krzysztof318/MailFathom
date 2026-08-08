@@ -1407,10 +1407,18 @@ against a server record without learning what was searched for.
 
 ## Verifying an enabled endpoint
 
-With the endpoint enabled, the Streamable HTTP transport answers on `/mcp` and advertises three tools. Any MCP
+With the endpoint enabled, the Streamable HTTP transport answers on `/mcp` and advertises three tools, or four. Any MCP
 client that speaks Streamable HTTP can list them; `tools/list` should report `list_emails`, `get_email_content`, and
 `search_emails`, each with `readOnlyHint` true, `destructiveHint` false, `idempotentHint` true, and `openWorldHint`
 false.
+
+`ask_mail` is the fourth, and it appears only while this deployment can answer a question: a chat endpoint declared and
+not currently refusing, and an embedding profile whose space a query can be placed in. Its absence from a listing is
+therefore a statement about the deployment rather than a fault — an instance that declared no chat endpoint never
+advertises it, and one whose chat provider refused within the last minute withholds it and offers it again afterwards, so
+a rotated credential is picked up without a restart. Read the health record for the chat role before treating the absence
+as a defect. A client that calls it anyway is refused with `56001`, whose message says whether this deployment answers no
+questions at all or answers them and currently cannot.
 
 A call answers from the local mailbox copy, so what it returns depends on what synchronization has stored rather than on
 whether a mail server is reachable. A deployment whose folders have never synchronized answers an empty page whose
@@ -1434,3 +1442,11 @@ statement about the mailbox. Its `retrievalMode` reports `hybrid` on an instance
 profile, `degraded` on one whose provider or model declaration currently needs an operator, and `available` on one that
 is ranking both ways. A request that asks for more than 50 ranked results is refused with `51003` rather than served a
 smaller window.
+
+`ask_mail` reads that same retrieval and then spends provider calls on top of it, which makes it the one tool whose
+latency and cost an operator has to think about: a run is a conversation, so one question is several calls to the
+declared chat endpoint, each under that endpoint's own deadline and resilience budget. A failure inside the run reaches
+the client as `54001` and reaches the log as the chat-provider code it actually was — `71001` for a refused credential,
+`72001` for an endpoint that did not answer, `73001` for a call that produced no text. Nothing on this path logs the
+question, the answer, the query the model wrote, or any retrieved passage; what a record carries is the endpoint alias,
+how many passages were retrieved, and how many messages they came from.

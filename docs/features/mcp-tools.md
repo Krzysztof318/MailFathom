@@ -15,12 +15,15 @@ serves.
 protocol arguments into the domain identities a use case is expressed in, and the mapping from a use case's result back
 onto the published contract. It holds no query, no persistence, and no mail-protocol code: `list_emails` calls the
 `MailboxTimelineReader` use case and nothing else, `get_email_content` calls the `EmailContentReader` use case and
-nothing else, and `search_emails` calls the `MailboxSearchReader` use case and nothing else.
+nothing else, `search_emails` calls the `MailboxSearchReader` use case and nothing else, and `ask_mail` calls the
+`MailboxQuestionReader` use case and nothing else.
 
 It holds no AI code either, and cannot. The project references `Domain` and `Application` and no other MailFathom assembly,
 which `Mcp.UnitTests` asserts against the compiled reference list rather than against a convention — so no tool on this
-surface can embed a query, rewrite it, or hand anything to a chat model, and a package that would make one able to has
-to be added and reviewed before that changes.
+surface can embed a query, rewrite it, or compose an agent, and a package that would make one able to has to be added and
+reviewed before that changes. `ask_mail` is not an exception to that: it calls an application use case, and everything
+between that use case and a provider — the agent, its tool loop, the retrieval it is bound to — lives behind the
+`IMailQuestionAnswerer` port, in the `AI` project this one cannot see.
 
 The division is deliberate and is what keeps a second entrypoint from bypassing anything. Every filter bound, the
 page-size range, the account authorization, and the cursor's authenticity belong to the use case, so this boundary
@@ -31,16 +34,25 @@ alias, and refusing text that names neither.
 Three properties hold for every tool and are proven by test rather than asserted here:
 
 - A call reads the local mailbox copy only. Nothing in a tool request reaches a mail server, so a request cannot wait on
-  IMAP and cannot set the remote `\Seen` flag.
+  IMAP and cannot set the remote `\Seen` flag. `ask_mail` reaches a chat provider, which is a different thing and the
+  one exception to "a call reaches nothing outside this process": it still reads mail from the local copy alone and
+  still speaks to no mail server.
 - No error and no log line carries a filter value, a mailbox address, a subject, body text, raw MIME, an exception type,
   a stack trace, or an internal identifier. What a boundary withholds is not lost: the detail is logged on the server,
   correlated by the trace the request already carries.
 - No result carries raw MIME or attachment bytes. Message content itself is a result only where the tool exists to
-  return it: `get_email_content` returns bounded bodies, `search_emails` returns bounded extracts of one, and
-  `list_emails` returns summaries and no body text at all.
+  return it: `get_email_content` returns bounded bodies, `search_emails` returns bounded extracts of one, `list_emails`
+  returns summaries and no body text at all, and `ask_mail` returns prose written about mail plus the subjects of the
+  emails it cites.
 - Every tool bounds how much mail one call can draw out of a mailbox, in the count of items and in their volume alike:
-  `list_emails` pages at 100 summaries, `search_emails` windows at 50 ranked matches, and `get_email_content` reads at
-  most 10 emails under a shared character budget. A caller can never raise any of them.
+  `list_emails` pages at 100 summaries, `search_emails` windows at 50 ranked matches, `get_email_content` reads at
+  most 10 emails under a shared character budget, and `ask_mail` publishes at most 20 000 characters of answer citing at
+  most 20 emails. A caller can never raise any of them.
+
+One property holds for three of the four and is stated where it stops. `list_emails`, `get_email_content`, and
+`search_emails` are advertised by every deployment, because the local mailbox copy is all they need. `ask_mail` needs two
+AI providers an operator configures separately, so it is advertised only while both are configured and working; the
+[`ask_mail`](#ask_mail) section records what decides that and what a call meets when it arrives anyway.
 
 ## Descriptor conventions
 
@@ -49,8 +61,8 @@ it calls anything:
 
 | Element | Convention |
 |---|---|
-| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_emails`, `get_email_content`, `search_emails` |
-| `title` | A human-readable label for display — `List emails`, `Get email content`, `Search emails` |
+| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_emails`, `get_email_content`, `search_emails`, `ask_mail` |
+| `title` | A human-readable label for display — `List emails`, `Get email content`, `Search emails`, `Ask about mail` |
 | `description` | States what the tool reads, that it reads the local copy only, that it changes nothing, and what it bounds |
 | `inputSchema` | Every argument is a top-level property carrying its own description, unit, and absence meaning |
 | `outputSchema` | Generated from the result type, whose properties carry descriptions of their own |
@@ -111,8 +123,9 @@ configured name for an account and carries nothing the caller did not already wr
 | `53002` | The call named an email the local mailbox copy holds no row for | An email never synchronized, one expunged and collected, or one of an account this deployment stopped serving — deliberately one answer |
 | `54001` | The call failed for a reason the boundary deliberately does not describe | Anything undiagnosed; the detail is in the server log |
 | `55001` | The email exists locally and its stored content is missing, damaged, or unreadable | A local copy being repaired; the call is worth repeating once repair has run |
+| `56001` | This deployment cannot answer questions about mail, either at all or for now | `ask_mail` called on a server that declared no chat endpoint or embeds no mail, or one whose chat provider is currently refusing; the message says which |
 
-Codes `51001` through `53002` and `55001` are the use cases' own, allocated in the MCP-boundary category because that is
+Codes `51001` through `53002`, `55001`, and `56001` are the use cases' own, allocated in the MCP-boundary category because that is
 where they surface, and every one of them is written for a caller to read. That is the whole rule the boundary applies: a
 failure whose code belongs to that category is published as it stands, and a failure from any other category — a schema
 mismatch, an IMAP authentication refusal, a concurrency conflict — describes MailFathom's internals to whoever asked and
@@ -129,6 +142,12 @@ that the *request* was refused.
 while binding an argument to the advertised schema, for instance — collapses into it too. Those messages are the SDK's,
 not written to the rule above, and may name a rejected value or a CLR type; what a client loses is a description of a
 request it can already compare against the published input schema.
+
+Every provider failure `ask_mail` can end in collapses into `54001` as well, and that is the rule working rather than an
+omission. A refused chat credential is `71001`, an endpoint that did not answer within its budget is `72001`, and a call
+that produced no text is `73001` — none of them in the MCP-boundary category, because each describes an endpoint the
+caller neither configured nor can reach. What a client is told is that the call failed; what an operator reads, in the
+server log and in the health record for the chat role, is which of the three it was.
 
 One call-tool filter wraps the whole surface: it records the tool name, the outcome, the error code where there is one,
 and the duration of every call, and it logs any undiagnosed exception in full on the server, correlated by the trace the
@@ -481,9 +500,96 @@ The query text is never logged and no failure message repeats it. What somebody 
 personal data of a particularly revealing kind, and the refusals this tool raises name the filter and its limit rather
 than the value.
 
+## `ask_mail`
+
+Answers a question about the local mailbox copy and names the emails the answer was drawn from. A chat model conducts
+the run and looks up mail as it decides it needs context; [Mail answering](mail-answering.md) records what that run is,
+what it may reach, and how much of it leaves the process. This section is the protocol surface over it.
+
+It is the one tool that spends money on a call and the one that takes seconds rather than milliseconds. The description
+says so, because the choice between asking and searching is a model's to make: ask when the answer spans several
+messages, search when the messages themselves are what is wanted.
+
+### Arguments
+
+| Argument | Type | Meaning |
+|---|---|---|
+| `question` | `string` | **Required.** The question to answer, up to 1000 characters. It is not a search query: its words are not matched against the mail, and the lookups are written by the model |
+| `accountIds` | `string[]` | Accounts the answer may be drawn from. Omitted draws on every account this deployment serves; an account it does not serve is refused with `53001` |
+| `folderAliases` | `string[]` | MailFathom folder aliases such as `INBOX`. Omitted draws on every folder of the accounts in scope. Case is normalized, so a repeated spelling names one folder |
+
+There is no structured filter beside the scope, and that is a decision rather than an omission. A sender or a date range
+supplied here would narrow every lookup the model makes without the model knowing why its searches were returning
+nothing, and it would be answering a question nobody asked while reporting it as the answer to the one they did.
+
+The scope is the caller's authorization expressed as data, and it is the one part of the run the model cannot reach. It
+is resolved before the run starts and bound into it, and the tool the model is offered takes a query and nothing else, so
+a run that has been talked into asking about another account has the caller's own scope searched for those words. The
+same resolution runs again on every lookup, underneath, because the retrieval is the search `search_emails` answers from.
+
+The two identifier lists are converted and bounded exactly as `list_emails` converts them, by the same code and with the
+same refusals; the section above records that rule once.
+
+### Result
+
+| Field | Meaning |
+|---|---|
+| `answer` | The answer, in prose |
+| `citations` | The emails the run retrieved, one entry per email, in the order it first reached each |
+| `answerTruncated` | Whether the answer was cut to the length one response carries |
+| `citationsTruncated` | Whether the run reached more emails than `citations` names |
+
+Each citation carries the `storedEmailId` a content read is performed by, the account and folder alias, the subject, and
+the received time. It deliberately carries no extract: the passage the run retrieved has already reached a model, and
+returning it here would put mail content into a response whose purpose is an answer. The subject and the received time
+are what let a reader recognize a message before fetching it.
+
+**The citations are what the run retrieved, not what the model demonstrably used.** Nothing outside the model knows which
+of them it drew on, so publishing the narrower set would state something this system cannot observe. What they are good
+for is the thing that makes an answer usable rather than merely fluent: every claim can be checked by reading the
+messages the run had in front of it.
+
+An empty `citations` array is an ordinary answer. The mailbox was searched and held nothing about the question, and the
+answer then says so — which is a real answer rather than a failure.
+
+Both truncation flags are part of the contract rather than diagnostics. A cut this surface made and did not report would
+leave a shortened answer indistinguishable from a complete one, and a claim traced to a message the response no longer
+names cannot be checked. Both are cut rather than refused, which is the opposite of how a request bound behaves: a
+request larger than a limit is the caller's to correct, while an answer larger than one has already been generated and
+paid for.
+
+**The answer and the cited subjects are untrusted text.** The answer is model output written from extracts of mail
+somebody else wrote, and a subject is that person's own words. A client that passes either into another model treats both
+as data, as it would any other message content.
+
+### When the tool is advertised
+
+`ask_mail` appears in `tools/list` only while this deployment can answer a question, and is absent otherwise. A client
+that can see a tool will call it, and a tool that exists only to answer "not configured" costs a round trip to learn
+something the tool list could have said.
+
+Two conditions decide it, and an operator configures them separately:
+
+- **An embedding profile is active and a query can be placed in its space.** This is the same reading `search_emails`
+  publishes as `semanticSearch`, so a server answering `inactive` or `degraded` there advertises no `ask_mail`.
+- **The chat endpoint is declared and is not currently refusing.** A deployment that declared none never advertises the
+  tool. One whose endpoint refused within the last minute withholds it, and offers it again after that so a repaired
+  credential is discovered without a restart.
+
+That recheck exists because nothing else calls the chat endpoint. The embedding provider is called by synchronization and
+by the search path, so its health record renews itself; with the second retrieval pass off, answering a question is the
+only thing that reaches the chat endpoint at all, and a deployment that withheld the tool for as long as the last failure
+was on record would withhold it forever.
+
+The decision is made per listing rather than at startup, so the transition is observable and needs no restart in either
+direction. What it is not is authorization: a client may call a tool it was never offered, and the use case behind this
+one refuses a question the same way whether or not the caller ever read a list. That refusal is `56001`, and its message
+says whether this deployment answers no questions at all or answers them and currently cannot.
+
 ## Pending
 
-`ask_mail`, and the retrieval-augmented generation work behind it, is a later stage. `list_emails`,
-`get_email_content`, and `search_emails` are complete: the PostgreSQL read models, the lexical index, and the content
-store they read through landed with their use cases, so a call against a synchronized mailbox answers from the local
-copy.
+The four read-only tools of the first release are complete. `list_emails`, `get_email_content`, and `search_emails` read
+the PostgreSQL read models, the lexical index, and the content store that landed with their use cases, and `ask_mail`
+answers over the retrieval and the agent composition above them. What is still pending on this surface is the spend
+ceiling an operator sets on one question and the run trace an operator reads afterwards, each its own change, and any
+tool that writes: SMTP delivery is deliberately absent from the first public tool set.
