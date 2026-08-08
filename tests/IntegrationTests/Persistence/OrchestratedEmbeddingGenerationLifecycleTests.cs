@@ -116,6 +116,14 @@ public sealed class OrchestratedEmbeddingGenerationLifecycleTests(MailFathomOrch
 
         // The control the refusal needs: the same row is accepted once it claims nothing the serving generation claims.
         Assert.Null(await InsertSupersededRowAsync(services, "generation-bystander", cancellationToken));
+
+        // And the refusal reaches an application writer as a conflict rather than as a provider exception: two
+        // activations of different geometries collide on this index, and the session is what classifies that.
+        await RegisterAsync(services, "generation-first-to-build", cancellationToken);
+
+        Assert.Equal(
+            PersistenceCommitResult.ConcurrencyConflict,
+            await TryRegisterAsync(services, "generation-second-to-build", cancellationToken));
     }
 
     private static EmbeddingProfileIdentity IdentityOf(string modelIdentifier) => EmbeddingProfileIdentity.Create(
@@ -161,6 +169,19 @@ public sealed class OrchestratedEmbeddingGenerationLifecycleTests(MailFathomOrch
         // arrangement never registered one rather than that the switch merely did nothing.
         Assert.True(switched);
     }
+
+    /// <summary>Registers a generation through the real session, and answers with what the commit reported.</summary>
+    /// <remarks>
+    /// Unlike <c>RegisterAsync</c>, this one asserts nothing about the outcome: it exists to observe a refusal arriving
+    /// as a classified conflict rather than as the provider exception underneath it.
+    /// </remarks>
+    private static Task<PersistenceCommitResult> TryRegisterAsync(
+        OrchestratedMailFathomServices services,
+        string modelIdentifier,
+        CancellationToken cancellationToken) => services.CommitAsync(
+            (scope, session, token) => scope.GetRequiredService<IEmbeddingGenerationStore>()
+                .RegisterBuildingAsync(session, IdentityOf(modelIdentifier), token),
+            cancellationToken);
 
     private static async Task AbandonAsync(
         OrchestratedMailFathomServices services,

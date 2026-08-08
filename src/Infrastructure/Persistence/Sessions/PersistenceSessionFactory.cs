@@ -46,7 +46,7 @@ internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) :
         public Task RollbackTransactionAsync(CancellationToken cancellationToken) =>
             transaction.RollbackAsync(cancellationToken);
 
-        /// <summary>Recognizes the five inserts a competing writer can win, and nothing else.</summary>
+        /// <summary>Recognizes the inserts a competing writer can win, and nothing else.</summary>
         /// <remarks>
         /// <para>
         /// Each names a constraint whose violation means "another run got here first" rather than "this data is
@@ -70,6 +70,15 @@ internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) :
         /// it as an entry the trail could not keep — on the very counter that makes swallowing defensible — while the
         /// trail in fact holds exactly the one entry it should.
         /// </para>
+        /// <para>
+        /// The last two are the embedding profile's, and both are races between two activations. A collision on the
+        /// identity fingerprint is the mutation identity's case again: the retry resolves to the profile the winner
+        /// registered, which is what makes activating one declaration twice register one row. A collision on the
+        /// lifecycle index is two activations of <em>different</em> geometries, where the retry cannot resolve it —
+        /// what recognizing it buys is that the loser meets a first-party conflict rather than a provider exception
+        /// crossing the application boundary, and the activation turns that into the answer the operator needs, which
+        /// is that a different reindex is already running.
+        /// </para>
         /// </remarks>
         public bool IsConcurrencyConflict(DbUpdateException exception) =>
             exception.InnerException is PostgresException
@@ -79,7 +88,9 @@ internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) :
                     or MailFathomDbContext.MailFolderBindingUniqueIndexName
                     or MailFathomDbContext.MailboxAccountPrimaryKeyConstraintName
                     or MailFathomDbContext.MailboxMutationIdentityUniqueIndexName
-                    or MailFathomDbContext.MailboxMutationAuditEntryMutationUniqueIndexName,
+                    or MailFathomDbContext.MailboxMutationAuditEntryMutationUniqueIndexName
+                    or MailFathomDbContext.EmbeddingProfileFingerprintUniqueIndexName
+                    or MailFathomDbContext.EmbeddingProfileLifecycleUniqueIndexName,
             };
 
         public void ClearTrackedState() => dbContext.ChangeTracker.Clear();

@@ -176,6 +176,73 @@ public sealed class EmbeddingProfileActivationTests
         Assert.Equal(EmbeddingProfileLifecycleState.Building, world.GenerationStore.StateOf(superseded.Id));
     }
 
+    /// <summary>
+    /// The check for a running reindex and the registration are not one act, so two activations of different
+    /// geometries can both find nothing being built. The database refuses the second, and no retry resolves that —
+    /// what the operator needs is not that two commands collided but which generation is now being built.
+    /// </summary>
+    [Fact]
+    public async Task ActivateAsync_AnotherActivationWonTheRegistrationRace_ReportsTheReindexThatWon()
+    {
+        // Arrange
+        var winner = new RegisteredEmbeddingProfile(
+            EmbeddingProfileId.Create(Guid.CreateVersion7()),
+            CreateIdentity("the-model-that-won"));
+        var activation = CreateActivation(
+            RacedRegistrationStore(buildingAfterTheRace: winner),
+            Substitute.For<IEmbeddingProfileVectorIndex>());
+
+        // Act
+        var result = await activation.ActivateAsync(
+            CreateIdentity("the-model-that-lost"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(EmbeddingProfileActivationOutcome.DifferentReindexRunning, result.Outcome);
+        Assert.Equal(winner.Id, result.ProfileId);
+    }
+
+    /// <summary>
+    /// A conflict with nothing being built afterwards was some other competing writer, and reporting it as a reindex
+    /// in the way would tell an operator to cancel something that does not exist.
+    /// </summary>
+    [Fact]
+    public async Task ActivateAsync_AConflictThatWasNotAnotherActivation_RaisesItRatherThanInventingAnOutcome()
+    {
+        // Arrange
+        var activation = CreateActivation(
+            RacedRegistrationStore(buildingAfterTheRace: null),
+            Substitute.For<IEmbeddingProfileVectorIndex>());
+
+        // Act
+        var conflict = await Assert.ThrowsAsync<PersistenceConcurrencyConflictException>(
+            () => activation.ActivateAsync(CreateIdentity("a-model"), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Contains("optimistic concurrency", conflict.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A store whose registration always loses the race, and which answers afterwards with what won it.</summary>
+    private static IEmbeddingGenerationStore RacedRegistrationStore(RegisteredEmbeddingProfile? buildingAfterTheRace)
+    {
+        var generationStore = Substitute.For<IEmbeddingGenerationStore>();
+
+        // Substituted rather than hand-written, because what this arranges is the database refusing a write, which the
+        // in-memory store has no way to do: it is the port's failure mode rather than any state it holds.
+        generationStore.ReadGenerationsAsync(Arg.Any<CancellationToken>())
+            .Returns(
+                _ => EmbeddingGenerations.None,
+                _ => new EmbeddingGenerations(Serving: null, buildingAfterTheRace));
+        generationStore.RegisterBuildingAsync(
+                Arg.Any<IPersistenceSession>(),
+                Arg.Any<EmbeddingProfileIdentity>(),
+                Arg.Any<CancellationToken>())
+            .Returns<RegisteredEmbeddingProfile>(_ => throw new PersistenceConcurrencyConflictException(
+                "A local write did not commit within the configured optimistic concurrency attempts."));
+
+        return generationStore;
+    }
+
     private static EmbeddingProfileIdentity CreateIdentity(string modelIdentifier) =>
         EmbeddingProfileIdentity.Create(
             "a-provider",
@@ -190,19 +257,27 @@ public sealed class EmbeddingProfileActivationTests
         var generationStore = new InMemoryEmbeddingGenerationStore(new InMemoryEmailEmbeddingStore());
         var vectorIndex = Substitute.For<IEmbeddingProfileVectorIndex>();
 
+        return new ActivationWorld(
+            generationStore,
+            vectorIndex,
+            CreateActivation(generationStore, vectorIndex));
+    }
+
+    private static EmbeddingProfileActivation CreateActivation(
+        IEmbeddingGenerationStore generationStore,
+        IEmbeddingProfileVectorIndex vectorIndex)
+    {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>())
             .Returns(_ => Substitute.For<IPersistenceSession>());
 
-        var activation = new EmbeddingProfileActivation(
+        return new EmbeddingProfileActivation(
             generationStore,
             vectorIndex,
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
                 new FakeTimeProvider()));
-
-        return new ActivationWorld(generationStore, vectorIndex, activation);
     }
 
     /// <summary>The generations and the collaborators one activation works against.</summary>

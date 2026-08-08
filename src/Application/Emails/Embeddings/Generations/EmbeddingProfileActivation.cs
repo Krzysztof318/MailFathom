@@ -57,7 +57,11 @@ public sealed class EmbeddingProfileActivation
     /// generation is registered and the reindex will run; searching it stays exact until an activation of the same
     /// declaration builds the index, which is why repeating the command is what repairs this.
     /// </exception>
-    /// <exception cref="PersistenceConcurrencyConflictException">Thrown when a competing writer wins a race the bounded retries could not resolve.</exception>
+    /// <exception cref="PersistenceConcurrencyConflictException">
+    /// Thrown when a competing writer wins a race the bounded retries could not resolve and which was not another
+    /// activation: losing to one of those is reported as an outcome rather than raised, because what the operator has
+    /// to know is which generation is being built rather than that two commands collided.
+    /// </exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     public async Task<EmbeddingProfileActivationResult> ActivateAsync(
         EmbeddingProfileIdentity declared,
@@ -86,12 +90,20 @@ public sealed class EmbeddingProfileActivation
                     building.Id);
         }
 
-        var registered = await this.concurrencyRetryPolicy.CommitAsync(
-            (persistenceSession, attemptCancellationToken) => this.generationStore.RegisterBuildingAsync(
-                persistenceSession,
-                declared,
-                attemptCancellationToken),
-            cancellationToken);
+        RegisteredEmbeddingProfile registered;
+        try
+        {
+            registered = await this.concurrencyRetryPolicy.CommitAsync(
+                (persistenceSession, attemptCancellationToken) => this.generationStore.RegisterBuildingAsync(
+                    persistenceSession,
+                    declared,
+                    attemptCancellationToken),
+                cancellationToken);
+        }
+        catch (PersistenceConcurrencyConflictException conflict)
+        {
+            return await this.ReportTheReindexThatWonAsync(conflict, declaredFingerprint, cancellationToken);
+        }
 
         // Built while the generation is empty, which is the cheapest moment it can be built and the reason no migration
         // creates it: the index covers one profile and one width, neither of which exists before this call.
@@ -100,6 +112,32 @@ public sealed class EmbeddingProfileActivation
         return new EmbeddingProfileActivationResult(
             EmbeddingProfileActivationOutcome.ReindexStarted,
             registered.Id);
+    }
+
+    /// <summary>Answers a lost registration race with what the winner made true, or rethrows when nothing did.</summary>
+    /// <remarks>
+    /// The check above and the write are not one act, so two activations can both find nothing being built and both try
+    /// to register. The database refuses the second — one generation may be built at a time — and where the two
+    /// geometries differ no retry resolves it, because the losing row is the same row on every attempt. Re-reading is
+    /// what turns the conflict into the answer the operator needs, and which answer that is follows from whose geometry
+    /// won. A conflict with nothing being built afterwards was not this race at all, and is raised.
+    /// </remarks>
+    private async Task<EmbeddingProfileActivationResult> ReportTheReindexThatWonAsync(
+        PersistenceConcurrencyConflictException conflict,
+        EmbeddingProfileFingerprint declaredFingerprint,
+        CancellationToken cancellationToken)
+    {
+        var generations = await this.generationStore.ReadGenerationsAsync(cancellationToken);
+        if (generations.Building is not { } building)
+        {
+            throw conflict;
+        }
+
+        return Fingerprints(building) == declaredFingerprint
+            ? await this.ResumeBuildingAsync(building, cancellationToken)
+            : new EmbeddingProfileActivationResult(
+                EmbeddingProfileActivationOutcome.DifferentReindexRunning,
+                building.Id);
     }
 
     /// <summary>Reports the reindex already under way, having made sure it has the index it will be read through.</summary>
