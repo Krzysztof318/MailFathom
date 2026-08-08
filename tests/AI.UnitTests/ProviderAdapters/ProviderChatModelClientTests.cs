@@ -14,6 +14,7 @@ using MailFathom.Application.Chat;
 using MailFathom.Application.Resilience;
 using MailFathom.Domain.Failures;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
@@ -30,6 +31,10 @@ namespace MailFathom.AI.UnitTests.ProviderAdapters;
 public sealed class ProviderChatModelClientTests
 {
     private static readonly IReadOnlyList<ChatMessage> Conversation = [new(ChatRole.User, "what did they say")];
+
+    /// <summary>The distinguishing text of each turn the ordering test sends, in the order it sends them.</summary>
+    private static readonly string[] TurnsInOrder =
+        ["answer briefly", "what did they say", "they said yes", "and then"];
 
     [Fact]
     public async Task AnswerAsync_AProviderThatAnswered_ReturnsTheTextAndWhatItCost()
@@ -131,18 +136,23 @@ public sealed class ProviderChatModelClientTests
         provider.HealthRecorder.DidNotReceive().RecordUnavailable(AiProviderRole.Chat);
     }
 
-    /// <summary>The classification is what decides whether repeating buys anything, so each status is proved against it.</summary>
+    /// <summary>
+    /// The classification is what decides whether repeating buys anything, and the error code beside it is the stable
+    /// operator-facing identity ADR 0003 publishes — a log search, an alert, and a support conversation all name it, so
+    /// a wrong entry in the mapping is asserted here rather than discovered from a runbook that stopped matching.
+    /// </summary>
     [Theory]
-    [InlineData(401, ChatGenerationFailure.CredentialRejected, false)]
-    [InlineData(403, ChatGenerationFailure.CredentialRejected, false)]
-    [InlineData(429, ChatGenerationFailure.RateLimited, true)]
-    [InlineData(408, ChatGenerationFailure.RequestTimedOut, true)]
-    [InlineData(500, ChatGenerationFailure.TransportFaulted, true)]
-    [InlineData(400, ChatGenerationFailure.RequestRefused, false)]
+    [InlineData(401, ChatGenerationFailure.CredentialRejected, false, 71001)]
+    [InlineData(403, ChatGenerationFailure.CredentialRejected, false, 71001)]
+    [InlineData(429, ChatGenerationFailure.RateLimited, true, 72001)]
+    [InlineData(408, ChatGenerationFailure.RequestTimedOut, true, 72001)]
+    [InlineData(500, ChatGenerationFailure.TransportFaulted, true, 72001)]
+    [InlineData(400, ChatGenerationFailure.RequestRefused, false, 72001)]
     public async Task AnswerAsync_AProviderRefusal_IsClassifiedAndSaysWhetherRepeatingHelps(
         int status,
         ChatGenerationFailure expected,
-        bool isWorthRepeating)
+        bool isWorthRepeating,
+        int expectedErrorCode)
     {
         // Arrange
         using var provider = ScriptedProvider.Refusing((HttpStatusCode)status);
@@ -155,6 +165,7 @@ public sealed class ProviderChatModelClientTests
         // Assert
         Assert.Equal(expected, failure.Failure);
         Assert.Equal(isWorthRepeating, failure.IsWorthRepeating);
+        Assert.Equal(expectedErrorCode, failure.ErrorCode.Value);
     }
 
     /// <summary>
@@ -291,9 +302,13 @@ public sealed class ProviderChatModelClientTests
         Assert.Equal(0, provider.RequestCount);
     }
 
-    /// <summary>Every role this port publishes has to survive the translation, or a turn would reach the model as the wrong speaker.</summary>
+    /// <summary>
+    /// Every role this port publishes has to survive the translation, and the turns have to arrive in the order they
+    /// were given. A conversation the model receives reordered is a different conversation, and nothing above this
+    /// boundary could tell — so the order is asserted by position rather than by each role merely being present.
+    /// </summary>
     [Fact]
-    public async Task AnswerAsync_AConversationOfEveryRole_SendsEachUnderItsOwnRole()
+    public async Task AnswerAsync_AConversationOfEveryRole_SendsEachUnderItsOwnRoleInOrder()
     {
         // Arrange
         using var provider = ScriptedProvider.Answering(Completion("an answer", "stop"));
@@ -311,10 +326,66 @@ public sealed class ProviderChatModelClientTests
 
         // Assert
         var sent = provider.LastRequestBody;
+        var positions = TurnsInOrder
+            .Select(turn => sent.IndexOf(turn, StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.DoesNotContain(-1, positions);
+        Assert.Equal(positions.Order(), positions);
 
         Assert.Contains("\"role\":\"system\"", sent, StringComparison.Ordinal);
         Assert.Contains("\"role\":\"user\"", sent, StringComparison.Ordinal);
         Assert.Contains("\"role\":\"assistant\"", sent, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The invariant this whole boundary rests on: a prompt is somebody's question and the passages of their mail, an
+    /// answer is written from both, and a provider's own error text quotes the request that produced it. None of it may
+    /// reach a log record — neither the formatted message nor the named values a structured sink would export.
+    /// </summary>
+    /// <remarks>
+    /// The exception is deliberately excluded from the search. The adapter attaches the provider's failure as an inner
+    /// exception, which is what preserves the cause, and a log sink that renders an exception is making its own choice
+    /// about what to write; what this asserts is that MailFathom's own record carries none of it.
+    /// </remarks>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AnswerAsync_WhateverTheCallDid_LogsNoPromptAnswerOrProviderText(bool providerAnswers)
+    {
+        // Arrange
+        const string prompt = "what did the auditors say about the Q3 shortfall";
+        const string answer = "they flagged an unreconciled ledger";
+
+        using var recordingLoggers = new RecordingLoggerProvider();
+        using var provider = providerAnswers
+            ? ScriptedProvider.Answering(Completion(answer, "stop"))
+            : ScriptedProvider.Refusing(HttpStatusCode.BadRequest);
+
+        var client = provider.ClientOver(
+            ChatDeclarations.Plan(),
+            logger: recordingLoggers.CreateLogger(typeof(ProviderChatModelClient).FullName!));
+
+        // Act
+        await Record.ExceptionAsync(() => client.AnswerAsync(
+            [new(ChatRole.User, prompt)],
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.NotEmpty(recordingLoggers.Records);
+
+        var written = recordingLoggers.Records
+            .SelectMany(record => record.Properties
+                .Select(property => property.Value?.ToString() ?? string.Empty)
+                .Append(record.Message))
+            .ToArray();
+
+        Assert.DoesNotContain(written, entry => entry.Contains(prompt, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(written, entry => entry.Contains(answer, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(written, entry => entry.Contains("a-configured-key", StringComparison.OrdinalIgnoreCase));
+
+        // The endpoint alias is the operator's own name for the endpoint and is what a record may carry instead.
+        Assert.Contains(written, entry => entry.Contains("answering", StringComparison.Ordinal));
     }
 
     /// <summary>The parameters are the deployment's, so a request carries the declared budget rather than the library's default.</summary>
@@ -361,6 +432,24 @@ public sealed class ProviderChatModelClientTests
             + "}]"
             + usage
             + "}";
+    }
+
+    /// <summary>Gives an untyped logger the category-typed shape a constructor asks for, writing through to it unchanged.</summary>
+    /// <remarks>A shim rather than a second recorder, so what a test reads is the shared recording provider's records.</remarks>
+    private sealed class TypedLogger<TCategory>(ILogger inner) : ILogger<TCategory>
+    {
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => inner.BeginScope(state);
+
+        public bool IsEnabled(LogLevel logLevel) => inner.IsEnabled(logLevel);
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            inner.Log(logLevel, eventId, state, exception, formatter);
     }
 
     /// <summary>Stands in for whatever the resilience boundary raises when a configured limit stopped an operation.</summary>
@@ -450,7 +539,10 @@ public sealed class ProviderChatModelClientTests
             return provider;
         }
 
-        public ProviderChatModelClient ClientOver(ChatGenerationPlan plan, bool declineTheCall = false)
+        public ProviderChatModelClient ClientOver(
+            ChatGenerationPlan plan,
+            bool declineTheCall = false,
+            ILogger? logger = null)
         {
             var transportFactory = Substitute.For<IHttpClientFactory>();
             transportFactory
@@ -491,7 +583,11 @@ public sealed class ProviderChatModelClientTests
                 transportFactory,
                 operationRunner,
                 this.HealthRecorder,
-                NullLogger<ProviderChatModelClient>.Instance);
+                // Wrapped rather than required, because only the no-log test reads what was written and every other
+                // test would otherwise carry a recorder it never asserts on.
+                logger is null
+                    ? NullLogger<ProviderChatModelClient>.Instance
+                    : new TypedLogger<ProviderChatModelClient>(logger));
         }
 
         public void Dispose() => this.handler.Dispose();

@@ -86,4 +86,75 @@ public sealed class OpenAiCompatibleClientFactoryTests
         // Assert
         Assert.NotNull(generator);
     }
+
+    /// <summary>The other half of what this factory serves: the same construction, opened as a chat client instead.</summary>
+    [Fact]
+    public void OpenChatClient_AnEndpointAuthenticatedWithAKey_OpensAClient()
+    {
+        // Arrange
+        using var handler = new FakeHttpMessageHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
+
+        // Act
+        using var client = this.factory.OpenChatClient(ChatDeclarations.Endpoint(), credential, transport);
+
+        // Assert
+        Assert.NotNull(client);
+    }
+
+    /// <summary>
+    /// A chat endpoint reached with a Microsoft Entra credential is a deployment with no key to provision, and it is
+    /// the path no other test exercises: everything else that opens a chat client supplies a resolved key.
+    /// </summary>
+    [Fact]
+    public void OpenChatClient_AnEndpointAuthenticatedWithAnEntraCredential_OpensAClient()
+    {
+        // Arrange
+        using var handler = new FakeHttpMessageHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = ProviderEndpointCredential.FromEntra(
+            new EntraCredentialDeclaration(
+                ProviderEndpointCredentialKind.ManagedIdentity,
+                "https://ai.example.invalid/.default",
+                TenantId: null,
+                ClientId: null,
+                ClientSecret: null,
+                CertificatePath: null,
+                CertificatePassword: null),
+            resolvedMaterial: null);
+
+        var endpoint = ChatDeclarations.Endpoint(
+            "cloud-deployment",
+            address: "https://resource.cloud.invalid/openai/v1/",
+            routedModelName: "a-chat-deployment");
+
+        // Act
+        using var client = this.factory.OpenChatClient(endpoint, credential, transport);
+
+        // Assert
+        Assert.NotNull(client);
+    }
+
+    /// <summary>An endpoint with no address of its own is the provider's first-party API at the library's default.</summary>
+    [Fact]
+    public void OpenChatClient_AnEndpointWithNoAddress_OpensAClientAtTheProviderDefault()
+    {
+        // Arrange
+        using var handler = new FakeHttpMessageHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
+
+        // Act
+        using var client = this.factory.OpenChatClient(
+            ChatDeclarations.Endpoint(address: null),
+            credential,
+            transport);
+
+        // Assert
+        Assert.NotNull(client);
+    }
 }

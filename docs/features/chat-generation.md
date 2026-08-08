@@ -150,12 +150,19 @@ Each provider records what its last call established, and the two states are kep
 | State | What the last call established | What it asks of an operator |
 | --- | --- | --- |
 | Unobserved | Nothing has been called yet | Nothing. It is the state of a freshly started instance |
-| Serving | The last call produced an answer | Nothing |
+| Serving | The last call reached the model and came back | Nothing |
 | Unavailable | The last call failed for a reason a later attempt may not meet | Wait, or look at the provider's own status |
 | Misconfigured | The last call failed for a reason no later attempt changes | Rotate a credential, or correct the declaration |
 
 The split between the last two is the same property the resilience pipeline reads, so the health state and the retry
 decision can never disagree about whether waiting is the answer.
+
+**Serving is about the provider, not about the answer.** An endpoint that took the request, authenticated it, ran the
+model, and came back with no text is a working endpoint — the credential, the address, and the routed model were all
+right — so an *answer empty* failure records `Serving` rather than moving the state. The consequence is worth stating,
+because it is the one case where a failing capability leaves a healthy-looking provider: a deployment whose model
+answers with nothing every time reports `Serving` indefinitely, and what shows the problem is the failures themselves
+in the log, not this state. Every other classification in the table above moves the state.
 
 **Nothing probes a provider to find out.** A paid call made to answer a health check would spend an operator's money on
 every scrape, and the answer would be about a request nobody asked for. What is reported is the outcome of the last real
