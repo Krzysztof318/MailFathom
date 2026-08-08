@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Transport;
 using MailFathom.Common.OAuth;
 
 namespace MailFathom.Cli.Authorization;
@@ -27,16 +28,28 @@ namespace MailFathom.Cli.Authorization;
 /// </remarks>
 internal sealed class DeploymentAuthorizationDiscovery
 {
-    private readonly HttpClient transport;
+    private readonly DeploymentTransport deployment;
 
-    /// <summary>Initializes discovery over a transport aimed at one deployment.</summary>
-    /// <param name="transport">The transport, whose <see cref="HttpClient.BaseAddress" /> names the deployment.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="transport" /> is <see langword="null" />.</exception>
-    internal DeploymentAuthorizationDiscovery(HttpClient transport)
+    private readonly Func<Uri, DeploymentTransport> openAuthorizationServerTransport;
+
+    /// <summary>Initializes discovery over the deployment's transport and a way to open one at the server it names.</summary>
+    /// <param name="deployment">The transport aimed at the deployment, whose base address names it.</param>
+    /// <param name="openAuthorizationServerTransport">Opens a transport aimed at the authorization server; this type disposes what it opens.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Two transports because the two documents come from two machines. The deployment's transport carries whatever that
+    /// profile accepted about the deployment — a pinned certificate, in particular — and applying that to the
+    /// authorization server would refuse it for presenting a certificate it was never asked to present.
+    /// </remarks>
+    internal DeploymentAuthorizationDiscovery(
+        DeploymentTransport deployment,
+        Func<Uri, DeploymentTransport> openAuthorizationServerTransport)
     {
-        ArgumentNullException.ThrowIfNull(transport);
+        ArgumentNullException.ThrowIfNull(deployment);
+        ArgumentNullException.ThrowIfNull(openAuthorizationServerTransport);
 
-        this.transport = transport;
+        this.deployment = deployment;
+        this.openAuthorizationServerTransport = openAuthorizationServerTransport;
     }
 
     /// <summary>Reads what one deployment and its authorization server publish about signing in.</summary>
@@ -191,11 +204,17 @@ internal sealed class DeploymentAuthorizationDiscovery
         string issuer,
         CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, candidateAddress);
+        if (!Uri.TryCreate(candidateAddress, UriKind.Absolute, out var address))
+        {
+            return null;
+        }
+
+        using var authorizationServer = this.openAuthorizationServerTransport(address);
+        using var request = new HttpRequestMessage(HttpMethod.Get, address);
 
         try
         {
-            using var response = await this.transport.SendAsync(request, cancellationToken);
+            using var response = await authorizationServer.Client.SendAsync(request, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -223,16 +242,17 @@ internal sealed class DeploymentAuthorizationDiscovery
 
         try
         {
-            return await this.transport.SendAsync(request, cancellationToken);
+            return await this.deployment.Client.SendAsync(request, cancellationToken);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new CliFailure($"The deployment at {this.transport.BaseAddress} did not answer in time.");
+            throw new CliFailure($"The deployment at {this.deployment.Client.BaseAddress} did not answer in time.");
         }
         catch (HttpRequestException failure)
         {
             throw new CliFailure(
-                $"The deployment at {this.transport.BaseAddress} could not be reached: {failure.Message}",
+                this.deployment.DescribeRefusal()
+                ?? $"The deployment at {this.deployment.Client.BaseAddress} could not be reached: {failure.Message}",
                 failure);
         }
     }

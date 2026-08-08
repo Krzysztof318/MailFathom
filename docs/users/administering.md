@@ -107,6 +107,26 @@ request, each good for about a minute, and the only thing the service holds is a
 [Signing in with a key pair](../operations/admin-endpoint.md#with-a-key-pair) has the `openssl` commands and the entry
 to add.
 
+If your deployment serves a certificate your workstation does not trust — self-signed, or issued by an authority only
+your organization carries — the sign-in shows you that certificate and asks once whether to trust it, the way an SSH
+client asks about a host key:
+
+```console
+$ mfctl login --endpoint https://mail.internal.example:8443 --name internal
+…
+  Fingerprint: 3B:9A:1C:…:7F
+Trust this certificate for this profile? [y/N]:
+```
+
+Compare the fingerprint against the deployment's own before you answer; nothing has been sent yet. Saying yes stores
+that fingerprint on the profile, which makes the profile **stricter** rather than looser: from then on it accepts that
+one certificate and refuses every other, so a renewal or a substitution stops the profile rather than passing
+unnoticed. You accept a renewed certificate by signing in again. An `http://` address gets a question of its own,
+because the credential and every later request would cross the network in clear text and a redirect to `https://`
+arrives too late to change that.
+[When the connection is weaker than the default](../operations/admin-endpoint.md#when-the-connection-is-weaker-than-the-default)
+has both questions in full, and the two switches a scripted sign-in states the answers with.
+
 What is stored afterwards is one small file per user, with the tokens encrypted and the key beside it — and for a
 key-pair profile, no credential at all;
 [where the credential is kept](../operations/admin-endpoint.md#where-the-credential-is-kept) states the paths, what

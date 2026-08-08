@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using MailFathom.Cli.Transport;
 
 namespace MailFathom.Cli.Administration;
 
@@ -17,12 +18,12 @@ namespace MailFathom.Cli.Administration;
 /// </remarks>
 internal sealed class AdminApiClient
 {
-    private readonly HttpClient transport;
+    private readonly DeploymentTransport transport;
 
     /// <summary>Initializes a client over a transport the caller owns.</summary>
-    /// <param name="transport">The transport, whose <see cref="HttpClient.BaseAddress" /> names the deployment.</param>
+    /// <param name="transport">The transport, whose base address names the deployment.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="transport" /> is <see langword="null" />.</exception>
-    internal AdminApiClient(HttpClient transport)
+    internal AdminApiClient(DeploymentTransport transport)
     {
         ArgumentNullException.ThrowIfNull(transport);
 
@@ -127,20 +128,28 @@ internal sealed class AdminApiClient
     }
 
     /// <summary>Turns a transport failure into something the operator can act on.</summary>
-    /// <remarks>A cancelled request is left alone: the operator interrupted it, and reporting that as a deployment problem would be wrong.</remarks>
+    /// <remarks>
+    /// A cancelled request is left alone: the operator interrupted it, and reporting that as a deployment problem would
+    /// be wrong. A refused certificate is the one transport failure that has a cause worth naming rather than a
+    /// message to repeat, because the platform reports it as an ordinary connection failure and the operator would
+    /// otherwise go looking at the address, the port, and the firewall.
+    /// </remarks>
     private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         try
         {
-            return await this.transport.SendAsync(request, cancellationToken);
+            return await this.transport.Client.SendAsync(request, cancellationToken);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new CliFailure($"The deployment at {this.transport.BaseAddress} did not answer in time.");
+            throw new CliFailure($"The deployment at {this.transport.Client.BaseAddress} did not answer in time.");
         }
         catch (HttpRequestException failure)
         {
-            throw new CliFailure($"The deployment at {this.transport.BaseAddress} could not be reached: {failure.Message}", failure);
+            throw new CliFailure(
+                this.transport.DescribeRefusal()
+                ?? $"The deployment at {this.transport.Client.BaseAddress} could not be reached: {failure.Message}",
+                failure);
         }
     }
 

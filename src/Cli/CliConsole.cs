@@ -21,6 +21,20 @@ internal interface ICliConsole
     /// <param name="prompt">What to ask for, written only when a person is there to read it.</param>
     /// <returns>The credential, empty when none was supplied.</returns>
     string ReadSecret(string prompt);
+
+    /// <summary>Gets a value indicating whether a person is at the terminal to answer a question.</summary>
+    /// <remarks>
+    /// A command that would weaken a protection has to ask, and a command whose input is a pipe has nobody to ask: the
+    /// answer would be read out of whatever the caller piped in, which for the credential mode is the credential itself.
+    /// So the caller checks this first and requires the answer up front instead.
+    /// </remarks>
+    bool CanConfirm { get; }
+
+    /// <summary>Asks a question that is refused unless it is answered yes.</summary>
+    /// <param name="question">The question, written where the answer is typed rather than into a command's output.</param>
+    /// <returns><see langword="true" /> only when the answer was yes.</returns>
+    /// <remarks>Only called where <see cref="CanConfirm" /> reports that somebody is there; the default is no, so an empty line, an interrupted read, and anything unrecognized all decline.</remarks>
+    bool Confirm(string question);
 }
 
 /// <summary>The terminal the command actually runs against.</summary>
@@ -35,6 +49,25 @@ internal sealed class SystemCliConsole : ICliConsole
 
     /// <inheritdoc />
     public void WriteError(string message) => Console.Error.WriteLine(message);
+
+    /// <inheritdoc />
+    public bool CanConfirm => !Console.IsInputRedirected;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The question goes to standard error beside the prompts, and only <c>y</c> or <c>yes</c> accepts. Reading the
+    /// answer as a line rather than as a keystroke is what lets a person correct a typed letter before committing to it,
+    /// which matters more here than for a credential nobody re-reads.
+    /// </remarks>
+    public bool Confirm(string question)
+    {
+        Console.Error.Write(question);
+
+        var answer = Console.In.ReadLine()?.Trim() ?? string.Empty;
+
+        return answer.Equals("y", StringComparison.OrdinalIgnoreCase)
+            || answer.Equals("yes", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <inheritdoc />
     /// <remarks>

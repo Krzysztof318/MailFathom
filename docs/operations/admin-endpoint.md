@@ -337,6 +337,98 @@ the profile, because it is the deployment you just chose to work with.
 When a deployment issues a new credential, sign in again by profile name rather than by address — `mfctl login
 --endpoint production` — and the address it already holds is reused.
 
+## When the connection is weaker than the default
+
+A deployment on an internal host commonly serves a certificate no workstation trusts — self-signed, or issued by an
+authority only your organization carries — and some are reached over `http://` at all. Neither is refused outright and
+neither is waved through: `login` asks about it once, records the answer on the profile, and no later command asks
+again. Both questions default to no, and refusing either stores nothing and signs in to nothing.
+
+### A certificate this machine does not trust
+
+Nothing happens for a deployment whose certificate validates on its own; the question exists only where it does not.
+
+```console
+$ mfctl login --endpoint https://mail.internal.example:8443 --name internal
+
+https://mail.internal.example:8443 presented a certificate this machine does not trust:
+
+  Subject:     CN=mail.internal.example
+  Issuer:      CN=Example internal authority
+  Fingerprint: 3B:9A:1C:…:7F
+  Valid:       2026-01-04 09:12:00Z to 2027-01-04 09:12:00Z
+  Not trusted: this machine does not trust the chain it was presented with (UntrustedRoot)
+
+Accepting it stores this fingerprint on the profile. Every later command then accepts this certificate and refuses any other,
+so a deployment that renews or replaces its certificate is signed in to again rather than trusted silently.
+
+Trust this certificate for this profile? [y/N]: y
+Signed in to https://mail.internal.example:8443 as 'workstation' (MailFathom 0.5.0), saved as profile 'internal' and selected. The connection is protected by a pinned certificate rather than by a chain this machine trusts; the profile now accepts 3B:9A:1C:…:7F and refuses any other.
+```
+
+Read the fingerprint against the deployment's own before answering — `openssl x509 -in server.crt -noout -fingerprint
+-sha256` prints it in the same form. Nothing is sent until you answer: the handshake was refused, so the credential was
+never on the wire.
+
+**A pin is stricter than what it replaces, not weaker.** Ordinary chain validation accepts any certificate a trusted
+authority signed; a pinned profile accepts one certificate and refuses every other, including one your machine would
+have trusted on its own. That is what makes accepting a self-signed certificate once safe to live with — a later
+substitution fails as loudly as an untrusted certificate does today, naming both fingerprints.
+
+The consequence is that a **renewed certificate ends the profile's connection until you accept the new one**. Run
+`mfctl login --endpoint internal` again: the sign-in starts from ordinary validation, presents whatever the deployment
+now serves, and asks again. `mfctl logout` removes the pin with the profile.
+
+The pin covers the deployment and nothing else. An OAuth sign-in reaches an authorization server as well, and every
+request to it goes out under ordinary chain validation, because a fingerprint taken at your deployment says nothing
+about the machine your identity platform runs on.
+
+### An endpoint reached over `http://`
+
+An address is taken as written and no scheme is guessed onto a bare host, so `http://` is a decision — one that is easy
+to make out of habit:
+
+```console
+$ mfctl login --endpoint http://mail.internal.example:8090 --name internal
+
+http://mail.internal.example:8090 is an HTTP address, so nothing protects this connection.
+The credential you are about to present, and every later request from this profile, cross the network in clear text.
+A redirect the deployment might send to an https:// address would not change that: the credential is already on the wire by then.
+
+Sign in over an unprotected connection anyway? [y/N]:
+```
+
+The redirect sentence is the part worth taking seriously. `mfctl` never follows a redirect — that is what stops a
+request carrying a bearer credential from being moved to an address you did not name — and
+[the redirect this endpoint serves](#redirecting-mfctl-after-you-configure-tls) protects the *next* request rather than
+the one that arrived. So the question is asked from the address alone, before anything is sent, and a deployment that
+would have answered `308` never gets to answer it. Sign in to the `https://` address instead wherever there is one.
+
+Accepting is recorded on the profile and widens nothing else: a clear-text profile that later answers over HTTPS with
+an untrusted certificate is still refused.
+
+### Signing in with nobody at the terminal
+
+`--mode key` reads the credential from standard input, so a piped sign-in has no terminal to read an answer from. Both
+questions are therefore stated up front instead, and a sign-in that needed one and did not get it fails naming the
+switch rather than prompting into the pipe:
+
+```console
+$ printf '%s' "$MAILFATHOM_KEY" | mfctl login \
+    --endpoint https://mail.internal.example:8443 --trust-untrusted-certificate
+```
+
+| Switch | What it accepts |
+| --- | --- |
+| `--trust-untrusted-certificate` | Whatever certificate the deployment presents at this sign-in. It is pinned to the profile exactly as an interactively accepted one is, so the switch weakens the one sign-in rather than the profile it produces. |
+| `--allow-clear-text` | That an `http://` endpoint carries the credential and every later request unprotected. |
+
+There is deliberately no fingerprint to pass: somebody who had to obtain the fingerprint first could have installed the
+certificate instead. Neither switch has any effect on a deployment whose transport is already protected.
+
+Nothing on the service side changes for any of this, and no configuration key turns certificate validation or
+clear-text protection off globally. These are the client's decisions about one deployment.
+
 ## How long an OAuth sign-in lasts
 
 An access token is typically minted for an hour, and you should never notice. Every command checks the stored token
@@ -434,6 +526,13 @@ there is no sealed token in the file and nothing an attacker could present even 
 path is not a secret and is stored in clear; what it names is, and it is protected by that file's own permissions rather
 than by anything here.
 
+**A profile that accepted something about its transport records that too**, beside the endpoint and in clear: the
+pinned certificate's SHA-256 fingerprint, and whether the connection is unprotected. Neither is a secret — a fingerprint
+is what the deployment presents to anybody who connects — and what they protect is that the profile keeps talking to the
+same deployment. A profile that accepted nothing beyond the default records nothing, so the presence of the entry is
+itself the statement that something was accepted, and a file written before the entry existed reads as an ordinary
+profile rather than failing.
+
 Be clear about what that buys. A credentials file that leaves the machine — in a backup, a synced folder, a support
 bundle, a screenshot of a directory listing — discloses nothing on its own. Someone already able to read your files on
 your machine can read the key too, and on Linux nothing prevents that; the file mode is what answers that case, and the
@@ -456,6 +555,11 @@ encryption answers the copy. Holding the credential in the platform's own secret
 | `rather than storing the token` | The endpoint answered with neither an acceptance nor an explained refusal. The token was not stored and the account is unchanged. A `500` here is most often a deployment with no `DataEncryption` key ring, which is what a stored token is sealed under; its own log names the cause. |
 | `did not identify itself as MailFathom` | Something else is answering on that port — a proxy, or another service. |
 | `could not be reached` | Nothing is listening, or a firewall is in the way. The endpoint binds only what `BindAddress` names; `127.0.0.1` is unreachable from another machine by design. |
+| `presented a certificate this machine does not trust` | On `login`, the question described in [when the connection is weaker than the default](#when-the-connection-is-weaker-than-the-default). On any other command, a profile that holds no pin met a certificate that stopped validating — sign in again to review it. Nothing was sent either way. |
+| `presented a certificate this profile has not pinned` | The deployment's certificate is not the one this profile accepted. Both fingerprints are named. A renewal is the ordinary cause and `mfctl login` is the answer; anything else is worth finding out about before you accept it. |
+| `The deployment's certificate was refused` | You answered no. Nothing was signed in to and nothing was stored. |
+| `Transport protection was refused` | You answered no to the clear-text question. Sign in to the `https://` address, or accept the unprotected connection. |
+| `there is no terminal to ask on` | A piped or non-interactive `login` met one of the two questions. Pass `--trust-untrusted-certificate` or `--allow-clear-text`, whichever the message names. |
 | `did not answer in time` | The connection was accepted and no answer arrived within 30 seconds, so the address and the port are right and the deployment is what to look at — an overloaded host, a stalled process, or a firewall that drops rather than refuses. |
 | `The stored credential could not be read.` | The credentials file and the key that opens it no longer match, which is what a store copied from another machine or another user looks like. Sign in again to replace it. |
 | `No deployment was named.` | `login` needs an address the first time. Pass `--endpoint`, or set `MAILFATHOM_ENDPOINT`. |

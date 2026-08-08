@@ -4,6 +4,7 @@
 
 using MailFathom.Cli.Authorization;
 using MailFathom.Cli.Credentials;
+using MailFathom.Cli.Transport;
 
 namespace MailFathom.Cli.Administration;
 
@@ -29,7 +30,7 @@ namespace MailFathom.Cli.Administration;
 internal sealed class DeploymentAccess
 {
     private readonly CredentialStore store;
-    private readonly Func<Uri, HttpClient> openTransport;
+    private readonly Func<Uri, StoredTransportTrust, DeploymentTransport> openTransport;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes access over the store, the transport, and the clock a command was given.</summary>
@@ -37,7 +38,10 @@ internal sealed class DeploymentAccess
     /// <param name="openTransport">Opens a transport aimed at one address; this type disposes what it opens.</param>
     /// <param name="timeProvider">Decides whether the stored access token is still usable.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    internal DeploymentAccess(CredentialStore store, Func<Uri, HttpClient> openTransport, TimeProvider timeProvider)
+    internal DeploymentAccess(
+        CredentialStore store,
+        Func<Uri, StoredTransportTrust, DeploymentTransport> openTransport,
+        TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(openTransport);
@@ -82,7 +86,9 @@ internal sealed class DeploymentAccess
         OAuthSession session,
         CancellationToken cancellationToken)
     {
-        using var transport = this.openTransport(session.TokenEndpoint);
+        // The authorization server rather than the deployment, so the profile's own certificate pin does not travel
+        // here: it names the deployment's certificate and would refuse every certificate this host could present.
+        using var transport = this.openTransport(session.TokenEndpoint, StoredTransportTrust.Protected);
 
         var authorization = new DeploymentAuthorization(
             session.Issuer,
@@ -92,7 +98,7 @@ internal sealed class DeploymentAccess
             session.Resource,
             session.Scope);
 
-        var renewed = await new DeploymentAuthorizer(transport, this.timeProvider)
+        var renewed = await new DeploymentAuthorizer(transport.Client, this.timeProvider)
             .RefreshAsync(authorization, session.ClientId, session.RefreshToken, cancellationToken);
 
         this.store.RenewAccessToken(profile.Name, renewed.AccessToken, renewed.AccessTokenExpiresAt);

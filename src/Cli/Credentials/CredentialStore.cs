@@ -112,7 +112,10 @@ internal sealed class CredentialStore
             this.protector.Unprotect(credential.Token, credential.Endpoint),
             credential.Credential,
             this.OpenSession(credential),
-            credential.KeyPair);
+            credential.KeyPair)
+        {
+            Trust = credential.Transport ?? StoredTransportTrust.Protected,
+        };
     }
 
     /// <summary>Settles which profile a command acts on, without opening its token.</summary>
@@ -154,7 +157,8 @@ internal sealed class CredentialStore
     /// <param name="credentialName">The name the deployment reported for the credential.</param>
     /// <param name="session">What an OAuth sign-in left behind, whose refresh token is sealed alongside the access token, or <see langword="null" /> for a presented credential.</param>
     /// <param name="keyPair">Where a key-pair profile's private key lives, or <see langword="null" /> when the profile stores a credential of its own.</param>
-    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="session" /> or <paramref name="keyPair" /> is <see langword="null" />.</exception>
+    /// <param name="trust">What the operator accepted about this deployment's transport, or <see langword="null" /> when they accepted nothing beyond the default.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="session" />, <paramref name="keyPair" />, or <paramref name="trust" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the store cannot be written.</exception>
     /// <remarks>
     /// Signing in makes the new profile the default, because it is the deployment the operator just chose to work with;
@@ -170,7 +174,8 @@ internal sealed class CredentialStore
         string token,
         string credentialName,
         OAuthSession? session = null,
-        StoredKeyPair? keyPair = null)
+        StoredKeyPair? keyPair = null,
+        StoredTransportTrust? trust = null)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(endpoint);
@@ -185,7 +190,8 @@ internal sealed class CredentialStore
             this.protector.Protect(token, address),
             credentialName,
             this.Seal(session, address),
-            keyPair);
+            keyPair,
+            Recorded(trust));
 
         this.Write(stored with { Default = name });
     }
@@ -303,6 +309,11 @@ internal sealed class CredentialStore
     private static string DescribeKnownProfiles(StoredCredentials stored) => stored.Profiles.Count == 0
         ? $"No deployment has been signed in to yet; run '{CliRootCommand.CommandName} login --endpoint https://host:port'."
         : $"Signed in: {string.Join(", ", stored.Profiles.Keys.Order(StringComparer.OrdinalIgnoreCase))}.";
+
+    /// <summary>Reports what a profile has to record about its transport, which is nothing when it accepted nothing.</summary>
+    /// <remarks>Leaving the default out keeps the file of an ordinary HTTPS profile exactly as it was, so the presence of the member is itself the statement that something was accepted.</remarks>
+    private static StoredTransportTrust? Recorded(StoredTransportTrust? trust) =>
+        trust is null || trust == StoredTransportTrust.Protected ? null : trust;
 
     /// <summary>Reduces an endpoint to what identifies the deployment.</summary>
     /// <remarks>The authority without a trailing slash, lowercased by the URI parser, so two spellings of one address are one profile rather than two — and so the value bound into the sealed token is stable across them.</remarks>
