@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
@@ -12,6 +13,7 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -21,6 +23,8 @@ namespace MailFathom.Application.UnitTests.Retrieval;
 public sealed class MailboxKnowledgeSearchTests
 {
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
+
+    private static readonly DateTimeOffset SearchedAt = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly MailAccountId[] EveryServedAccount =
     [
@@ -174,11 +178,15 @@ public sealed class MailboxKnowledgeSearchTests
 
     /// <summary>
     /// The query is written by a model rather than by a caller who could be told to correct it, so unusable text is a
-    /// retrieval that found nothing rather than a failed run.
+    /// retrieval that found nothing rather than a failed run. Every shape the query text refuses is one answer here:
+    /// blank text, text longer than one query carries, and text holding a character no document could — the last two
+    /// being ordinary shapes free-form model output takes.
     /// </summary>
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
+    [InlineData("an invoice\nfrom last week")]
+    [InlineData("an invoice\u0000from last week")]
     public async Task FindPassagesAsync_AQueryWithNoUsableText_FindsNothingWithoutSearching(string queryText)
     {
         // Arrange
@@ -189,6 +197,25 @@ public sealed class MailboxKnowledgeSearchTests
         var passages = await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
             queryText,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(passages);
+        Assert.Empty(index.RankedCandidatesCalls);
+    }
+
+    /// <summary>The length bound is the one an unbounded free-form query meets first, and it cannot be written inline.</summary>
+    [Fact]
+    public async Task FindPassagesAsync_AQueryLongerThanOneSearchCarries_FindsNothingWithoutSearching()
+    {
+        // Arrange
+        var index = new InMemoryEmailSearchIndex().With(SyntheticEmailSummaries.Create(FirstJuly), snippets: "a mention");
+        var search = SearchOver(index);
+
+        // Act
+        var passages = await search.FindPassagesAsync(
+            MailboxScope.Unrestricted,
+            new string('a', EmailSearchQueryText.MaximumLength + 1),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -242,11 +269,26 @@ public sealed class MailboxKnowledgeSearchTests
             EmailSearchSnippetBounds.Default),
         bounds ?? EmailKnowledgeBounds.Default);
 
-    /// <summary>Builds the semantic half of a deployment that configured no embedding provider.</summary>
+    /// <summary>Builds the semantic half of a deployment that configured no embedding provider and activated nothing.</summary>
     private static SemanticEmailSearch LexicalOnlySemanticSearch() => new(
         Substitute.For<IActiveEmbeddingProfileReader>(),
         new InMemoryEmailVectorSearchIndex(),
+        ServingProviderHealth(),
+        new FakeTimeProvider(SearchedAt),
         textEmbeddingGenerator: null);
+
+    /// <summary>Reports every provider as answering, so retrieval is decided by the profile and the generator alone.</summary>
+    private static IAiProviderHealthReader ServingProviderHealth()
+    {
+        var reader = Substitute.For<IAiProviderHealthReader>();
+        reader.Read(Arg.Any<AiProviderRole>())
+            .Returns(call => new AiProviderHealth(
+                call.Arg<AiProviderRole>(),
+                AiProviderHealthState.Serving,
+                SearchedAt));
+
+        return reader;
+    }
 
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {

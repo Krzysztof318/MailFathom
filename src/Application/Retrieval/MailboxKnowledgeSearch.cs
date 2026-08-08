@@ -56,17 +56,14 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        // Written by a model rather than by a caller who could be told to correct it, so unusable text is a retrieval
-        // that found nothing rather than a request to refuse. Checked here so the search use case, whose callers are
-        // people, keeps refusing the same text.
-        if (string.IsNullOrWhiteSpace(queryText))
+        if (UsableQueryText(queryText) is not { } validatedQueryText)
         {
             return [];
         }
 
         var request = new SearchEmailsRequest
         {
-            QueryText = queryText,
+            QueryText = validatedQueryText.Value,
             AccountIds = scope.AccountIds,
             FolderAliases = scope.FolderAliases,
             ResultLimit = this.bounds.MaximumPassages,
@@ -80,6 +77,32 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
                 .Select(this.ToPassage)
                 .Where(static passage => passage.Text.Length is not 0),
         ];
+    }
+
+    /// <summary>Validates the one part of a retrieval a model wrote, treating text no query accepts as no result.</summary>
+    /// <remarks>
+    /// <para>
+    /// The asymmetry this method exists for: the query is free-form model output, while the scope beside it is the
+    /// caller's own authorization. So unusable text is a retrieval that found nothing — nobody can be told to correct
+    /// it, and a run whose lookup found nothing still has an answer to give — while an unusable scope stays a failure
+    /// and still travels to the caller that supplied it.
+    /// </para>
+    /// <para>
+    /// It asks the query text's own type rather than restating its rules, which is why blank text, text longer than one
+    /// query carries, and text holding a character no document could are all one answer here. A rule added there is
+    /// covered here without this method learning about it.
+    /// </para>
+    /// </remarks>
+    private static EmailSearchQueryText? UsableQueryText(string queryText)
+    {
+        try
+        {
+            return EmailSearchQueryText.Create(queryText);
+        }
+        catch (MailboxQueryFilterInvalidException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Reads one match into the passage a model receives.</summary>
