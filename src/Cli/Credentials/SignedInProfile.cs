@@ -29,6 +29,14 @@ internal sealed record SignedInProfile(
     OAuthSession? Session = null,
     StoredKeyPair? KeyPair = null)
 {
+    /// <summary>Gets what this profile's connection to the deployment may accept.</summary>
+    /// <remarks>
+    /// Never absent as a command reads it, unlike the stored member it comes from: a profile written before the member
+    /// existed, and one signed in over an ordinary HTTPS connection, both hold the default rather than nothing, so no
+    /// call site has to decide what an absent value would mean.
+    /// </remarks>
+    internal StoredTransportTrust Trust { get; init; } = StoredTransportTrust.Protected;
+
     /// <inheritdoc />
     /// <remarks>Redacted, so no diagnostic or exception message prints the token by formatting the record it lives in.</remarks>
     public override string ToString() => $"{nameof(SignedInProfile)} {{ {this.Name}, {this.Endpoint}, {this.Credential} }}";

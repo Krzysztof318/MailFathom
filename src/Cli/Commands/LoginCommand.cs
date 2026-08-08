@@ -6,6 +6,7 @@ using System.CommandLine;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Authorization;
 using MailFathom.Cli.Credentials;
+using MailFathom.Cli.Transport;
 using MailFathom.Common.OAuth;
 
 namespace MailFathom.Cli.Commands;
@@ -98,6 +99,16 @@ internal static class LoginCommand
             Description = $"The loopback address registered with the authorization server, which the interactive mode catches the redirect on. Defaults to {DefaultRedirectAddress}.",
         };
 
+        Option<bool> trustUntrustedCertificateOption = new(SignInConnection.AllowanceOption)
+        {
+            Description = "Accept whatever certificate this deployment presents at sign-in and pin it to the profile, without asking. For a sign-in with nobody at the terminal; every later command still refuses any other certificate.",
+        };
+
+        Option<bool> allowClearTextOption = new(ClearTextDecision.AllowanceOption)
+        {
+            Description = "Accept that an http:// endpoint carries the credential and every later request unprotected, without asking. For a sign-in with nobody at the terminal.",
+        };
+
         Command command = new("login", "Sign in to a deployment's administrative endpoint.")
         {
             endpointOption,
@@ -107,6 +118,8 @@ internal static class LoginCommand
             clientIdOption,
             issuerOption,
             redirectUriOption,
+            trustUntrustedCertificateOption,
+            allowClearTextOption,
         };
 
         command.SetAction((result, cancellationToken) => RunAsync(
@@ -118,7 +131,9 @@ internal static class LoginCommand
                 result.GetValue(privateKeyOption),
                 result.GetValue(clientIdOption),
                 result.GetValue(issuerOption),
-                result.GetValue(redirectUriOption)),
+                result.GetValue(redirectUriOption),
+                result.GetValue(trustUntrustedCertificateOption),
+                result.GetValue(allowClearTextOption)),
             cancellationToken));
 
         return command;
@@ -133,14 +148,26 @@ internal static class LoginCommand
     {
         var (endpoint, profileName) = ResolveTarget(context, requestedDeployment, requestedName);
 
-        using var transport = context.OpenTransport(endpoint);
+        // Both questions about the connection belong here: before anything is sent, and at the one command where a
+        // decision about a deployment's transport is actually being taken. The clear-text one is settled from the
+        // address alone; the certificate one can only be settled once the deployment has presented one, which is what
+        // the connection does on its first use.
+        var acceptsClearText = ClearTextDecision.Settle(context.Console, endpoint, request.AllowClearText);
 
-        var (token, session, keyPair) = await ProduceCredentialAsync(context, transport, request, cancellationToken);
+        using SignInConnection connection = new(
+            context.Console,
+            context.OpenTransport,
+            endpoint,
+            acceptsClearText,
+            request.TrustUntrustedCertificate);
+
+        var (token, session, keyPair) = await ProduceCredentialAsync(context, connection, request, cancellationToken);
 
         // Whichever way the credential arrived, the deployment is what decides it is usable. Storing one it has not
         // accepted would turn a wrong client registration or a narrow scope into a failure at some later command. For a
         // key pair it also proves the deployment holds the matching public key, which nothing else on this machine can.
-        var deploymentSession = await new AdminApiClient(transport).ReadSessionAsync(token, cancellationToken);
+        var deploymentSession = await connection.RunAsync(
+            transport => new AdminApiClient(transport).ReadSessionAsync(token, cancellationToken));
         var credentialName = deploymentSession.Credential ?? "unnamed";
 
         // The minted assertion is deliberately not the stored token: it is spent within the minute and every later
@@ -151,10 +178,11 @@ internal static class LoginCommand
             keyPair is null ? token : string.Empty,
             credentialName,
             session,
-            keyPair);
+            keyPair,
+            connection.Trust);
 
         context.Console.WriteLine(
-            $"Signed in to {endpoint.GetLeftPart(UriPartial.Authority)} as '{credentialName}' (MailFathom {deploymentSession.Version}), saved as profile '{profileName}' and selected.");
+            $"Signed in to {endpoint.GetLeftPart(UriPartial.Authority)} as '{credentialName}' (MailFathom {deploymentSession.Version}), saved as profile '{profileName}' and selected.{DescribeTransport(connection.Trust)}");
 
         if (session is not null)
         {
@@ -171,11 +199,30 @@ internal static class LoginCommand
         return CliExitCode.Success;
     }
 
+    /// <summary>Says what the connection this profile was signed in over is not protected by, when it is not.</summary>
+    /// <remarks>On the confirmation line rather than beside it, because it qualifies what just happened: the operator accepted something a moment ago and the line that reports success is where they read what it was.</remarks>
+    private static string DescribeTransport(StoredTransportTrust trust) => trust switch
+    {
+        { AcceptsClearText: true } =>
+            " Nothing protects this connection: the credential and every later request cross the network in clear text.",
+        { PinnedCertificateFingerprint: { } fingerprint } =>
+            $" The connection is protected by a pinned certificate rather than by a chain this machine trusts; the profile now accepts {fingerprint} and refuses any other.",
+        _ => string.Empty,
+    };
+
     /// <summary>Produces the credential this sign-in verifies, in whichever of the four ways the operator asked for.</summary>
-    /// <remarks>A key-pair sign-in returns both a credential to verify with and the key that produced it, because the two answer different questions: one proves the deployment accepts this client now, the other is what every later command will use.</remarks>
+    /// <remarks>
+    /// A key-pair sign-in returns both a credential to verify with and the key that produced it, because the two answer
+    /// different questions: one proves the deployment accepts this client now, the other is what every later command
+    /// will use.
+    /// <para>
+    /// The two ways that need no network run outside the connection, so the credential a person types is read once and
+    /// a settled certificate question never costs them a second prompt for it.
+    /// </para>
+    /// </remarks>
     private static async Task<(string Token, OAuthSession? Session, StoredKeyPair? KeyPair)> ProduceCredentialAsync(
         CliContext context,
-        HttpClient transport,
+        SignInConnection connection,
         SignInRequest request,
         CancellationToken cancellationToken)
     {
@@ -194,7 +241,8 @@ internal static class LoginCommand
                 keyPair);
         }
 
-        var (token, session) = await AuthorizeAsync(context, transport, request, cancellationToken);
+        var (token, session) = await connection.RunAsync(
+            transport => AuthorizeAsync(context, transport, request, cancellationToken));
 
         return (token, session, null);
     }
@@ -235,7 +283,7 @@ internal static class LoginCommand
     /// <summary>Runs an OAuth sign-in against whichever server the deployment names.</summary>
     private static async Task<(string Token, OAuthSession Session)> AuthorizeAsync(
         CliContext context,
-        HttpClient transport,
+        DeploymentTransport transport,
         SignInRequest request,
         CancellationToken cancellationToken)
     {
@@ -245,13 +293,13 @@ internal static class LoginCommand
                 "An OAuth sign-in needs the client identifier registered with the authorization server. Pass --client-id, or use --mode key to present an API key instead.");
         }
 
-        var authorization = await new DeploymentAuthorizationDiscovery(transport)
+        var authorization = await new DeploymentAuthorizationDiscovery(transport, context.OpenUnpinnedTransport)
             .ReadAsync(request.Issuer, cancellationToken);
 
         // Aimed at the authorization server rather than at the deployment, through the same seam every other request
         // goes out by: a bounded per-request timeout, and redirects not followed.
-        using var authorizationServerTransport = context.OpenTransport(authorization.TokenEndpoint);
-        var authorizer = new DeploymentAuthorizer(authorizationServerTransport, context.Clock);
+        using var authorizationServerTransport = context.OpenUnpinnedTransport(authorization.TokenEndpoint);
+        var authorizer = new DeploymentAuthorizer(authorizationServerTransport.Client, context.Clock);
 
         var grant = request.Mode == SignInMode.Device
             ? await AuthorizeWithDeviceAsync(context, authorizer, authorization, clientId, cancellationToken)
@@ -422,10 +470,14 @@ internal static class LoginCommand
     /// <param name="ClientId">The client identifier for an OAuth sign-in, absent from a presented credential.</param>
     /// <param name="Issuer">Which authorization server to use, absent unless the deployment accepts several.</param>
     /// <param name="RedirectAddress">Where an interactive sign-in catches the redirect, absent to use the default.</param>
+    /// <param name="TrustUntrustedCertificate">Whether the invocation stated up front that whatever certificate this deployment presents is to be accepted and pinned.</param>
+    /// <param name="AllowClearText">Whether the invocation stated up front that an unprotected connection to this deployment is acceptable.</param>
     private sealed record SignInRequest(
         SignInMode Mode,
         string? PrivateKeyPath,
         string? ClientId,
         string? Issuer,
-        string? RedirectAddress);
+        string? RedirectAddress,
+        bool TrustUntrustedCertificate,
+        bool AllowClearText);
 }

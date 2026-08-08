@@ -14,4 +14,9 @@
     <Compile Include="..\shared\FakeHttpMessageHandler.cs" Link="FakeHttpMessageHandler.cs" />
     <Compile Include="..\shared\RecordedHttpRequest.cs" Link="RecordedHttpRequest.cs" />
   </ItemGroup>
+
+  <!-- The certificates the transport-trust tests decide about, issued in memory so no key or anchor is committed. -->
+  <ItemGroup>
+    <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
+  </ItemGroup>
 </Project>

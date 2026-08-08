@@ -187,8 +187,8 @@ internal static class AuthorizeMailboxCommand
 
         // The transport is aimed at the authorization server rather than at a deployment, and it is the same seam every
         // other command reaches the network through: a bounded per-request timeout, and redirects not followed.
-        using var transport = context.OpenTransport(preset.TokenEndpoint);
-        var authorizer = new MailboxAuthorizer(transport, TimeProvider.System);
+        using var transport = context.OpenUnpinnedTransport(preset.TokenEndpoint);
+        var authorizer = new MailboxAuthorizer(transport.Client, TimeProvider.System);
 
         // The catch translates failures of the exchange with the authorization server, so what the deployment does with
         // the result is deliberately outside it: a transport failure reaching a deployment would otherwise be reported
@@ -378,7 +378,9 @@ internal static class AuthorizeMailboxCommand
         MailboxAuthorizationGrant grant,
         CancellationToken cancellationToken)
     {
-        using var transport = context.OpenTransport(destination.Deployment.Endpoint);
+        using var transport = context.OpenTransport(
+            destination.Deployment.Endpoint,
+            destination.Deployment.Trust);
 
         await new AdminApiClient(transport).StoreMailboxRefreshTokenAsync(
             destination.Deployment.Token,

@@ -20,6 +20,19 @@ internal sealed class RecordingCliConsole : ICliConsole
     /// <summary>Gets the prompt the command last asked with, or <see langword="null" /> when it asked for nothing.</summary>
     internal string? LastPrompt { get; private set; }
 
+    /// <summary>Gets or sets a value indicating whether a person is at this terminal to answer a question.</summary>
+    /// <remarks>Set to <see langword="false" /> to model the case the flags exist for: input redirected from a pipe, where the answer would otherwise be read out of whatever the caller piped in.</remarks>
+    internal bool AnswersQuestions { get; set; } = true;
+
+    /// <summary>Gets or sets the answer this terminal gives to a question.</summary>
+    internal bool AnswerToGive { get; set; }
+
+    /// <summary>Gets the questions the command asked, in order.</summary>
+    internal List<string> Questions { get; } = [];
+
+    /// <inheritdoc />
+    public bool CanConfirm => this.AnswersQuestions;
+
     /// <inheritdoc />
     public void WriteLine(string message) => this.Lines.Add(message);
 
@@ -32,5 +45,13 @@ internal sealed class RecordingCliConsole : ICliConsole
         this.LastPrompt = prompt;
 
         return this.SecretToSupply;
+    }
+
+    /// <inheritdoc />
+    public bool Confirm(string question)
+    {
+        this.Questions.Add(question);
+
+        return this.AnswerToGive;
     }
 }

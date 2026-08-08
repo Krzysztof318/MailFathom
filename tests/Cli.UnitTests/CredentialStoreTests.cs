@@ -369,6 +369,53 @@ public sealed class CredentialStoreTests : IDisposable
         Assert.Contains("credentials.json", failure.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>What an operator accepted about the transport has to survive the file, or every command would ask again.</summary>
+    [Fact]
+    public void Save_AProfileThatAcceptedSomethingAboutItsTransport_ReadsItBackUnchanged()
+    {
+        // Arrange
+        StoredTransportTrust trust = new("AA:BB:CC", AcceptsClearText: true);
+
+        // Act
+        this.store.Save("production", Production, "not-a-real-token", "workstation", trust: trust);
+
+        // Assert
+        Assert.Equal(trust, this.store.Resolve("production").Trust);
+    }
+
+    /// <summary>An ordinary HTTPS profile records nothing, so the member's presence in the file is itself the statement that something was accepted.</summary>
+    [Fact]
+    public void Save_AProfileThatAcceptedNothingBeyondTheDefault_WritesNoTransportRecord()
+    {
+        // Act
+        this.store.Save("production", Production, "not-a-real-token", "workstation");
+
+        // Assert
+        Assert.Null(this.store.Read().Profiles["production"].Transport);
+        Assert.Equal(StoredTransportTrust.Protected, this.store.Resolve("production").Trust);
+    }
+
+    /// <summary>A store written before the member existed is not a store to fail on: it holds a profile signed in over an ordinary connection.</summary>
+    [Fact]
+    public void Read_AStoreWrittenWithoutATransportRecord_ReadsAsAnOrdinaryProfile()
+    {
+        // Arrange
+        Directory.CreateDirectory(this.storeDirectory);
+        File.WriteAllText(
+            Path.Combine(this.storeDirectory, "credentials.json"),
+            """
+            {"default":"production","profiles":{"production":{"endpoint":"https://mail.example.test:8443","token":"","credential":"workstation"}}}
+            """);
+
+        // Act
+        var (name, credential) = this.store.Locate("production");
+
+        // Assert
+        Assert.Equal("production", name);
+        Assert.Null(credential.Transport);
+        Assert.Equal("workstation", credential.Credential);
+    }
+
     /// <summary>The token is what the file exists to hold, so no diagnostic that formats the record may print it.</summary>
     [Fact]
     public void ToString_AStoredCredential_DoesNotCarryTheToken()

@@ -465,7 +465,7 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
                 new CredentialStore(
                     Path.Combine(this.storeDirectory, "credentials.json"),
                     new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key"))),
-                endpoint => new HttpClient(handler, disposeHandler: false) { BaseAddress = endpoint },
+                (endpoint, trust) => FakeDeploymentTransport.Over(handler, endpoint, trust),
                 awaitRedirect,
                 // Never started in a test: opening a browser is a side effect on the machine running the suite.
                 _ => false,

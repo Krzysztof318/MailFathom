@@ -432,7 +432,7 @@ public sealed class LoginCommandTests : IDisposable
     private CliContext Context(CredentialStore store, FakeHttpMessageHandler handler) => new(
         this.console,
         store,
-        endpoint => new HttpClient(handler, disposeHandler: false) { BaseAddress = endpoint },
+        (endpoint, trust) => FakeDeploymentTransport.Over(handler, endpoint, trust),
         FakeMailboxRedirect.Silent(),
         _ => false,
         this.clock);

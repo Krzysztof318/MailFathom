@@ -12,6 +12,7 @@ namespace MailFathom.Cli.Credentials;
 /// <param name="Credential">The name the deployment reported for the credential, kept so the command can say who it is signed in as without asking again.</param>
 /// <param name="Session">What an OAuth sign-in left behind, absent from a profile holding an API key or a pasted token.</param>
 /// <param name="KeyPair">Where a key-pair profile's private key lives, absent from every other kind of profile.</param>
+/// <param name="Transport">What the operator accepted about this deployment's transport, absent from a profile that accepted nothing beyond the default.</param>
 /// <remarks>
 /// <para>
 /// The ways of signing in leave different amounts behind, and the difference is two nullable members rather than three
@@ -24,13 +25,19 @@ namespace MailFathom.Cli.Credentials;
 /// command mints a fresh assertion from the key named here, which is why the two members are never both present: one
 /// says how a stored credential is renewed and the other says that there is none to renew.
 /// </para>
+/// <para>
+/// <see cref="Transport" /> is orthogonal to all three: it says what the connection carrying the credential is protected
+/// by, whichever kind the credential is. It is absent from a profile signed in over an ordinary HTTPS connection, which
+/// is why a store written before the member existed still reads.
+/// </para>
 /// </remarks>
 internal sealed record StoredCredential(
     [property: JsonPropertyName("endpoint")] string Endpoint,
     [property: JsonPropertyName("token")] string Token,
     [property: JsonPropertyName("credential")] string Credential,
     [property: JsonPropertyName("session")] StoredOAuthSession? Session = null,
-    [property: JsonPropertyName("keyPair")] StoredKeyPair? KeyPair = null)
+    [property: JsonPropertyName("keyPair")] StoredKeyPair? KeyPair = null,
+    [property: JsonPropertyName("transport")] StoredTransportTrust? Transport = null)
 {
     /// <inheritdoc />
     /// <remarks>Redacted, so no diagnostic or exception message prints the token by formatting the record it lives in — even encrypted, which is a value worth not scattering.</remarks>
@@ -50,6 +57,31 @@ internal sealed record StoredCredential(
 /// </remarks>
 internal sealed record StoredKeyPair(
     [property: JsonPropertyName("privateKeyPath")] string PrivateKeyPath);
+
+/// <summary>What an operator accepted about one deployment's transport, beyond what is protected by default.</summary>
+/// <param name="PinnedCertificateFingerprint">The SHA-256 fingerprint of the one certificate this profile accepts, or <see langword="null" /> to require a certificate this machine trusts on its own.</param>
+/// <param name="AcceptsClearText">Whether the operator accepted that this profile's requests cross the network unprotected.</param>
+/// <remarks>
+/// <para>
+/// Both members record a decision taken once, at <c>login</c>, about one deployment. Neither is a switch that turns a
+/// protection off: a pin is stricter than the chain validation it replaces, because the profile then accepts exactly the
+/// certificate the operator was shown and refuses every other, including one that would have validated on its own. The
+/// clear-text member records that the operator was told the credential travels unprotected and said to continue anyway,
+/// so no later command asks again and none of them widens into the other.
+/// </para>
+/// <para>
+/// Neither is a secret and both are stored in clear, like the endpoint beside them. A fingerprint is a public value by
+/// construction — it is what the deployment presents to anybody who connects — and what it protects is that this profile
+/// keeps talking to the same deployment.
+/// </para>
+/// </remarks>
+internal sealed record StoredTransportTrust(
+    [property: JsonPropertyName("pinnedCertificateFingerprint")] string? PinnedCertificateFingerprint = null,
+    [property: JsonPropertyName("clearText")] bool AcceptsClearText = false)
+{
+    /// <summary>Gets the trust a profile holds when it accepted nothing beyond what is protected by default.</summary>
+    internal static StoredTransportTrust Protected { get; } = new();
+}
 
 /// <summary>What an OAuth sign-in has to remember so the next command does not ask the operator to sign in again.</summary>
 /// <param name="RefreshToken">The credential a spent access token is exchanged for a new one with, encrypted; see <see cref="TokenProtector" />.</param>
